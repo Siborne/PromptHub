@@ -5,8 +5,6 @@ import type { Readable } from "stream";
 import {
   closeDatabase,
   FolderDB,
-  getDatabase,
-  isDatabaseEmpty,
   initDatabase,
   PromptDB,
   SkillDB,
@@ -16,6 +14,14 @@ import { rewriteRuleWithAi } from "../rules-rewrite";
 import { coreRulesWorkspaceService } from "../rules-workspace";
 import { coreCliSkillService, type CliSkillService } from "./skill-cli-service";
 import { handleAIConfigCommand } from "./ai-config-command";
+import {
+  clearCliWorkspaceData,
+  createCliWorkspaceBundle,
+  createCliWorkspaceSummary,
+  hasCliWorkspaceData,
+  parseCliWorkspaceBundle,
+  restoreCliWorkspaceSnapshot,
+} from "./workspace-sync";
 import {
   CoreMcpError,
   CoreMcpLibraryService,
@@ -82,15 +88,6 @@ interface PromptDiffResult {
     from: string;
     to: string;
   }>;
-}
-
-interface CliWorkspaceBundle {
-  kind: "prompthub-cli-workspace";
-  version: 1;
-  exportedAt: string;
-  prompts: Prompt[];
-  folders: Folder[];
-  versions: PromptVersion[];
 }
 
 interface CliRulesBundle {
@@ -421,8 +418,8 @@ const WORKSPACE_HELP = [
   "  prompthub workspace import --file <path> [--force-clear]",
   "",
   "说明:",
-  "  当前仅覆盖 prompts、folders、versions 三类核心数据。",
-  "  import 默认要求目标数据库为空；使用 --force-clear 才会先清空现有核心数据。",
+  "  导出 SyncSnapshot 兼容快照，覆盖 prompts、folders、versions、rules、skills、My MCP、My Plugin 和可用媒体文件。",
+  "  import 默认要求目标数据库为空；使用 --force-clear 才会先清空现有本地数据。",
   "",
   "参数:",
   "  --file <path>",
@@ -837,45 +834,6 @@ function writeRequiredTextFile(filePath: string, content: string): void {
       cause: error instanceof Error ? error.message : String(error),
     });
   }
-}
-
-function parseWorkspaceBundle(text: string): CliWorkspaceBundle {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    throw new CliError(
-      "USAGE_ERROR",
-      "workspace import 需要合法 JSON 文件",
-      EXIT_CODES.USAGE,
-      { cause: error instanceof Error ? error.message : String(error) },
-    );
-  }
-
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new CliError(
-      "USAGE_ERROR",
-      "workspace import 文件格式不正确",
-      EXIT_CODES.USAGE,
-    );
-  }
-
-  const record = parsed as Record<string, unknown>;
-  if (
-    record.kind !== "prompthub-cli-workspace" ||
-    record.version !== 1 ||
-    !Array.isArray(record.prompts) ||
-    !Array.isArray(record.folders) ||
-    !Array.isArray(record.versions)
-  ) {
-    throw new CliError(
-      "USAGE_ERROR",
-      "workspace import 文件格式不受支持",
-      EXIT_CODES.USAGE,
-    );
-  }
-
-  return record as unknown as CliWorkspaceBundle;
 }
 
 function parseRulesBundle(text: string): CliRulesBundle {
@@ -1345,23 +1303,6 @@ function normalizeProjectId(input: string): string {
   return input.startsWith("project:") ? input.slice("project:".length) : input;
 }
 
-function createWorkspaceBundle(
-  promptDb: PromptDB,
-  folderDb: FolderDB,
-): CliWorkspaceBundle {
-  const prompts = promptDb.getAll();
-  const versions = prompts.flatMap((prompt) => promptDb.getVersions(prompt.id));
-
-  return {
-    kind: "prompthub-cli-workspace",
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    prompts,
-    folders: folderDb.getAll(),
-    versions,
-  };
-}
-
 function createRulesBundle(records: RuleBackupRecord[]): CliRulesBundle {
   return {
     kind: "prompthub-cli-rules",
@@ -1463,15 +1404,6 @@ function resolveRuleRewriteArgs(
             : "openai",
     },
   };
-}
-
-function clearWorkspaceCoreData(db: ReturnType<typeof getDatabase>): void {
-  const transaction = db.transaction(() => {
-    db.prepare("DELETE FROM prompt_versions").run();
-    db.prepare("DELETE FROM prompts").run();
-    db.prepare("DELETE FROM folders").run();
-  });
-  transaction();
 }
 
 function promptTableRows(prompts: Prompt[]): Array<Record<string, unknown>> {
@@ -2774,20 +2706,20 @@ async function handleWorkspaceCommand(
   const db = databaseHooks.initDatabase();
   const promptDb = new PromptDB(db);
   const folderDb = new FolderDB(db);
+  const skillDb = new SkillDB(db);
 
   if (action === "export") {
     const exportArgs = args.slice(1);
     const filePath = resolveWorkspaceFileOption(exportArgs, "export");
     ensureNoUnknownOptions(exportArgs);
 
-    const bundle = createWorkspaceBundle(promptDb, folderDb);
+    const bundle = await createCliWorkspaceBundle(promptDb, folderDb, skillDb);
+    const summary = createCliWorkspaceSummary(bundle.payload);
     writeRequiredTextFile(filePath, toJson(bundle));
     emitSuccess(context, {
       exported: true,
       filePath: path.resolve(filePath),
-      prompts: bundle.prompts.length,
-      folders: bundle.folders.length,
-      versions: bundle.versions.length,
+      ...summary,
     });
     return;
   }
@@ -2798,8 +2730,18 @@ async function handleWorkspaceCommand(
     const forceClear = takeFlag(importArgs, "--force-clear");
     ensureNoUnknownOptions(importArgs);
 
-    const bundle = parseWorkspaceBundle(readRequiredTextFile(filePath));
-    const hasData = !isDatabaseEmpty(db);
+    let bundle: ReturnType<typeof parseCliWorkspaceBundle>;
+    try {
+      bundle = parseCliWorkspaceBundle(readRequiredTextFile(filePath));
+    } catch (error) {
+      throw new CliError(
+        "USAGE_ERROR",
+        "workspace import 文件格式不受支持",
+        EXIT_CODES.USAGE,
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
+    }
+    const hasData = await hasCliWorkspaceData(db);
     if (hasData && !forceClear) {
       throw new CliError(
         "CONFLICT",
@@ -2809,25 +2751,19 @@ async function handleWorkspaceCommand(
     }
 
     if (forceClear) {
-      clearWorkspaceCoreData(db);
+      clearCliWorkspaceData(db);
     }
 
-    for (const folder of bundle.folders) {
-      folderDb.insertFolderDirect(folder);
-    }
-    for (const prompt of bundle.prompts) {
-      promptDb.insertPromptDirect(prompt);
-    }
-    for (const version of bundle.versions) {
-      promptDb.insertVersionDirect(version);
-    }
+    const summary = await restoreCliWorkspaceSnapshot(bundle.payload, {
+      promptDb,
+      folderDb,
+      skillDb,
+    });
 
     emitSuccess(context, {
       imported: true,
       filePath: path.resolve(filePath),
-      prompts: bundle.prompts.length,
-      folders: bundle.folders.length,
-      versions: bundle.versions.length,
+      ...summary,
       forceCleared: forceClear,
     });
     return;

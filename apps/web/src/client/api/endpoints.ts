@@ -26,7 +26,10 @@ export interface SyncStatus {
   summary: {
     prompts: number;
     folders: number;
+    rules: number;
     skills: number;
+    mcpServers?: number;
+    plugins?: number;
   };
   message: string;
   config: SyncConfig;
@@ -53,6 +56,8 @@ export interface SyncOperationSummary {
   folders: number;
   rules: number;
   skills: number;
+  mcpServers?: number;
+  plugins?: number;
 }
 
 export interface SyncManifest {
@@ -61,7 +66,10 @@ export interface SyncManifest {
   counts: {
     prompts: number;
     folders: number;
+    rules: number;
     skills: number;
+    mcpServers?: number;
+    plugins?: number;
   };
   actor: {
     userId: string;
@@ -75,6 +83,8 @@ export interface SyncPushResult {
   foldersImported: number;
   rulesImported: number;
   skillsImported: number;
+  mcpServersImported?: number;
+  pluginsImported?: number;
   settingsUpdated: boolean;
   summary: SyncOperationSummary;
 }

@@ -45,17 +45,33 @@ export function normalizeSnapshot(input: unknown): SyncSnapshot {
     skills: Array.isArray(value.skills) ? value.skills : [],
     skillVersions: Array.isArray(value.skillVersions) ? value.skillVersions : [],
     skillFiles: value.skillFiles && typeof value.skillFiles === "object" ? value.skillFiles : undefined,
+    mcpLibrary: value.mcpLibrary && typeof value.mcpLibrary === "object" ? value.mcpLibrary : undefined,
+    pluginLibrary: value.pluginLibrary && typeof value.pluginLibrary === "object" ? value.pluginLibrary : undefined,
+    pluginPackages: Array.isArray(value.pluginPackages) ? value.pluginPackages : undefined,
+    storeSources: value.storeSources && typeof value.storeSources === "object" ? value.storeSources : undefined,
+    agentAssetFiles: value.agentAssetFiles && typeof value.agentAssetFiles === "object" ? value.agentAssetFiles : undefined,
     settings: value.settings,
     settingsUpdatedAt: typeof value.settingsUpdatedAt === "string" ? value.settingsUpdatedAt : undefined,
+    images: value.images && typeof value.images === "object" ? value.images : undefined,
+    videos: value.videos && typeof value.videos === "object" ? value.videos : undefined,
   };
 }
 
-function counts(snapshot: SyncSnapshot): { prompts: number; folders: number; rules: number; skills: number } {
+export function snapshotCounts(snapshot: SyncSnapshot): {
+  prompts: number;
+  folders: number;
+  rules: number;
+  skills: number;
+  mcpServers: number;
+  plugins: number;
+} {
   return {
     prompts: snapshot.prompts.length,
     folders: snapshot.folders.length,
     rules: snapshot.rules?.length ?? 0,
     skills: snapshot.skills.length,
+    mcpServers: snapshot.mcpLibrary?.servers.length ?? 0,
+    plugins: snapshot.pluginLibrary?.plugins.length ?? 0,
   };
 }
 
@@ -74,9 +90,9 @@ export async function loadSnapshot(db: D1Database, userId: string): Promise<Sync
   return normalizeSnapshot(JSON.parse(row.payload_json));
 }
 
-export async function saveSnapshot(db: D1Database, userId: string, snapshotInput: SyncSnapshot): Promise<{ prompts: number; folders: number; rules: number; skills: number }> {
+export async function saveSnapshot(db: D1Database, userId: string, snapshotInput: SyncSnapshot): Promise<ReturnType<typeof snapshotCounts>> {
   const snapshot = normalizeSnapshot(snapshotInput);
-  const summary = counts(snapshot);
+  const summary = snapshotCounts(snapshot);
   const updatedAt = Date.now();
 
   await db
@@ -120,17 +136,22 @@ export async function getManifest(c: Context<{ Bindings: Env; Variables: { authU
   const user = c.get("authUser");
   const row = await c.env.DB
     .prepare(
-      "SELECT exported_at, settings_updated_at, prompts_count, folders_count, rules_count, skills_count FROM sync_snapshots WHERE user_id = ?",
+      "SELECT payload_json, exported_at, settings_updated_at, prompts_count, folders_count, rules_count, skills_count FROM sync_snapshots WHERE user_id = ?",
     )
     .bind(user.userId)
     .first<{
       exported_at: string;
+      payload_json: string;
       settings_updated_at: string | null;
       prompts_count: number;
       folders_count: number;
       rules_count: number;
       skills_count: number;
     }>();
+
+  const payloadCounts = row?.payload_json
+    ? snapshotCounts(normalizeSnapshot(JSON.parse(row.payload_json)))
+    : undefined;
 
   return success(c, {
     version: "web-cloudflare-backup-v1",
@@ -140,6 +161,8 @@ export async function getManifest(c: Context<{ Bindings: Env; Variables: { authU
       folders: row?.folders_count ?? 0,
       rules: row?.rules_count ?? 0,
       skills: row?.skills_count ?? 0,
+      mcpServers: payloadCounts?.mcpServers ?? 0,
+      plugins: payloadCounts?.plugins ?? 0,
     },
     settingsUpdatedAt: row?.settings_updated_at ?? undefined,
     actor: {
@@ -166,6 +189,8 @@ export async function putSyncData(c: Context<{ Bindings: Env; Variables: { authU
     foldersImported: summary.folders,
     rulesImported: summary.rules,
     skillsImported: summary.skills,
+    mcpServersImported: summary.mcpServers,
+    pluginsImported: summary.plugins,
     settingsUpdated: !!snapshot.settings,
     summary,
   });
