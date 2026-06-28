@@ -7,6 +7,7 @@ Introduce a small core CLI workspace snapshot helper instead of expanding the le
 ## Boundaries
 
 - `packages/core/src/cli/workspace-sync.ts` owns CLI workspace bundle parsing, export snapshot creation, and import restoration.
+- `packages/core/src/cli/sync-command.ts` owns remote sync HTTP calls against self-hosted or Cloudflare-compatible `/api/sync/*` endpoints.
 - `packages/core/src/cli/run.ts` remains responsible for argument parsing and output.
 - Cloudflare sync keeps the same D1 table but stores the full normalized JSON payload and computes richer summary counts from the payload.
 - Web client API types mirror the richer summary/count shape.
@@ -32,5 +33,6 @@ Desktop renderer-only store-source localStorage cannot be read by standalone CLI
 ## Verification
 
 - CLI command-level tests cover v2 export and import of prompts, rules, skills, MCP, and plugins.
+- CLI command-level tests cover remote sync push, pull, and Cloudflare status fallback.
 - Cloudflare tests cover full snapshot field preservation and richer manifest counts.
 - Typecheck validates web client summary type changes.

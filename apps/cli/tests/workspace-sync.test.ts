@@ -2,7 +2,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   closeDatabase,
@@ -128,6 +128,7 @@ describe("CLI workspace sync snapshots", () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     closeDatabase();
     resetRuntimePaths();
     for (const dir of tempDirs.splice(0)) {
@@ -280,5 +281,205 @@ describe("CLI workspace sync snapshots", () => {
       expect.objectContaining({ id: "plugin-1" }),
     ]);
     expect(libraries.pluginNote).toBe("plugin asset");
+  });
+
+  it("pushes the full workspace snapshot to a remote sync endpoint", async () => {
+    const root = makeTempRoot(tempDirs);
+    let requestBody: any;
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          data: {
+            ok: true,
+            summary: {
+              prompts: 1,
+              folders: 0,
+              rules: 0,
+              skills: 0,
+              mcpServers: 1,
+              plugins: 1,
+            },
+          },
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(
+      (
+        await execCli([
+          ...dataArgs(root),
+          "prompt",
+          "create",
+          "--title",
+          "Remote Push",
+          "--user-prompt",
+          "Push body",
+        ])
+      ).exitCode,
+    ).toBe(0);
+    seedMcpAndPluginLibraries(root);
+
+    const result = await execCli([
+      ...dataArgs(root),
+      "sync",
+      "push",
+      "--endpoint",
+      "https://sync.example.com/",
+      "--token",
+      "token-1",
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://sync.example.com/api/sync/data",
+      expect.objectContaining({
+        method: "PUT",
+        headers: expect.objectContaining({
+          Authorization: "Bearer token-1",
+          "Content-Type": "application/json",
+        }),
+      }),
+    );
+    expect(requestBody.payload).toMatchObject({
+      prompts: [expect.objectContaining({ title: "Remote Push" })],
+      mcpLibrary: { servers: [expect.objectContaining({ name: "docs-mcp" })] },
+      pluginLibrary: { plugins: [expect.objectContaining({ id: "plugin-1" })] },
+    });
+    expect(result.stdout).toMatchObject({
+      pushed: true,
+      localSummary: {
+        prompts: 1,
+        mcpServers: 1,
+        plugins: 1,
+      },
+    });
+  });
+
+  it("falls back to sync manifest when a cloud endpoint has no status route", async () => {
+    const root = makeTempRoot(tempDirs);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { message: "Not found" } }), {
+          status: 404,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              version: "web-cloudflare-backup-v1",
+              exportedAt: "2026-06-28T00:00:00.000Z",
+              counts: {
+                prompts: 1,
+                folders: 0,
+                rules: 0,
+                skills: 0,
+                mcpServers: 1,
+                plugins: 1,
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await execCli([
+      ...dataArgs(root),
+      "sync",
+      "status",
+      "--endpoint",
+      "https://cloud.example.com",
+      "--token",
+      "token-1",
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://cloud.example.com/api/sync/status",
+      expect.any(Object),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://cloud.example.com/api/sync/manifest",
+      expect.any(Object),
+    );
+    expect(result.stdout.counts).toMatchObject({
+      prompts: 1,
+      mcpServers: 1,
+      plugins: 1,
+    });
+  });
+
+  it("pulls a remote sync snapshot into the local workspace", async () => {
+    const sourceRoot = makeTempRoot(tempDirs);
+    const targetRoot = makeTempRoot(tempDirs);
+    const exportFile = path.join(sourceRoot, "workspace.json");
+
+    expect(
+      (
+        await execCli([
+          ...dataArgs(sourceRoot),
+          "prompt",
+          "create",
+          "--title",
+          "Remote Pull",
+          "--user-prompt",
+          "Pull body",
+        ])
+      ).exitCode,
+    ).toBe(0);
+    seedMcpAndPluginLibraries(sourceRoot);
+    expect(
+      (
+        await execCli([
+          ...dataArgs(sourceRoot),
+          "workspace",
+          "export",
+          "--file",
+          exportFile,
+        ])
+      ).exitCode,
+    ).toBe(0);
+
+    const remoteBundle = JSON.parse(fs.readFileSync(exportFile, "utf8"));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ data: remoteBundle.payload }), {
+          status: 200,
+        }),
+      ),
+    );
+
+    const result = await execCli([
+      ...dataArgs(targetRoot),
+      "sync",
+      "pull",
+      "--endpoint",
+      "https://sync.example.com",
+      "--token",
+      "token-1",
+      "--force-clear",
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatchObject({
+      pulled: true,
+      prompts: 1,
+      mcpServers: 1,
+      plugins: 1,
+      forceCleared: true,
+    });
+
+    const promptList = await execCli([...dataArgs(targetRoot), "prompt", "list"]);
+    expect(promptList.stdout).toEqual([
+      expect.objectContaining({ title: "Remote Pull" }),
+    ]);
   });
 });

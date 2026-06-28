@@ -15,6 +15,13 @@ import { coreRulesWorkspaceService } from "../rules-workspace";
 import { coreCliSkillService, type CliSkillService } from "./skill-cli-service";
 import { handleAIConfigCommand } from "./ai-config-command";
 import {
+  CliRemoteSyncError,
+  getRemoteSyncStatus,
+  pullRemoteSyncSnapshot,
+  pushRemoteSyncSnapshot,
+  type CliRemoteSyncOptions,
+} from "./sync-command";
+import {
   clearCliWorkspaceData,
   createCliWorkspaceBundle,
   createCliWorkspaceSummary,
@@ -201,6 +208,7 @@ const ROOT_HELP = [
   "  workspace 管理工作区导入导出",
   "  skill     管理 skills",
   "  mcp       管理 MCP servers",
+  "  sync      同步自部署或云端工作区",
   "  ai        管理 AI providers、models 和模型路由",
   "",
   "全局参数:",
@@ -224,7 +232,23 @@ const ROOT_HELP = [
   "  prompthub rules --help",
   "  prompthub skill --help",
   "  prompthub mcp --help",
+  "  prompthub sync --help",
   "  prompthub ai --help",
+].join("\n");
+
+const SYNC_HELP = [
+  "Sync 命令",
+  "",
+  "用法:",
+  "  prompthub sync status --endpoint <url> --token <token>",
+  "  prompthub sync push --endpoint <url> --token <token>",
+  "  prompthub sync pull --endpoint <url> --token <token> [--force-clear]",
+  "",
+  "说明:",
+  "  endpoint 指向自部署 Web 或 Cloudflare Worker 根地址，例如 https://prompthub.example.com。",
+  "  token 可通过 --token、PROMPTHUB_SYNC_TOKEN 或 PROMPTHUB_TOKEN 提供。",
+  "  endpoint 可通过 --endpoint 或 PROMPTHUB_SYNC_ENDPOINT 提供。",
+  "  push/pull 使用与 workspace export/import 相同的 SyncSnapshot 兼容快照。",
 ].join("\n");
 
 const PROMPT_HELP = [
@@ -1281,6 +1305,33 @@ function resolveWorkspaceFileOption(
     );
   }
   return filePath;
+}
+
+function resolveRemoteSyncOptions(args: string[]): CliRemoteSyncOptions {
+  const endpoint = takeOption(args, "--endpoint") ?? process.env.PROMPTHUB_SYNC_ENDPOINT;
+  const token =
+    takeOption(args, "--token") ??
+    process.env.PROMPTHUB_SYNC_TOKEN ??
+    process.env.PROMPTHUB_TOKEN;
+  const forceClear = takeFlag(args, "--force-clear");
+  ensureNoUnknownOptions(args);
+
+  if (!endpoint?.trim()) {
+    throw new CliError(
+      "USAGE_ERROR",
+      "sync 需要 --endpoint 或 PROMPTHUB_SYNC_ENDPOINT",
+      EXIT_CODES.USAGE,
+    );
+  }
+  if (!token?.trim()) {
+    throw new CliError(
+      "USAGE_ERROR",
+      "sync 需要 --token、PROMPTHUB_SYNC_TOKEN 或 PROMPTHUB_TOKEN",
+      EXIT_CODES.USAGE,
+    );
+  }
+
+  return { endpoint, token, forceClear };
 }
 
 function resolveRulesFileOption(
@@ -2776,6 +2827,56 @@ async function handleWorkspaceCommand(
   );
 }
 
+async function handleSyncCommand(
+  args: string[],
+  context: CliContext,
+  databaseHooks: CliDatabaseHooks,
+): Promise<void> {
+  if (args.length === 0 || takeFlag(args, "--help") || takeFlag(args, "-h")) {
+    context.io.stdout(SYNC_HELP);
+    return;
+  }
+
+  const action = requirePositional(args, 0, "sync 子命令");
+  const options = resolveRemoteSyncOptions(args.slice(1));
+
+  if (action === "status") {
+    emitSuccess(context, await getRemoteSyncStatus(options));
+    return;
+  }
+
+  const db = databaseHooks.initDatabase();
+  const promptDb = new PromptDB(db);
+  const folderDb = new FolderDB(db);
+  const skillDb = new SkillDB(db);
+
+  if (action === "push") {
+    emitSuccess(
+      context,
+      await pushRemoteSyncSnapshot(options, { promptDb, folderDb, skillDb }),
+    );
+    return;
+  }
+
+  if (action === "pull") {
+    emitSuccess(
+      context,
+      await pullRemoteSyncSnapshot(options, db, {
+        promptDb,
+        folderDb,
+        skillDb,
+      }),
+    );
+    return;
+  }
+
+  throw new CliError(
+    "USAGE_ERROR",
+    `不支持的 sync 子命令: ${action}`,
+    EXIT_CODES.USAGE,
+  );
+}
+
 async function handleRulesCommand(
   args: string[],
   context: CliContext,
@@ -3723,6 +3824,10 @@ export async function runCli(
       await handleWorkspaceCommand(commandArgs, context, databaseHooks);
       return EXIT_CODES.OK;
     }
+    if (resource === "sync") {
+      await handleSyncCommand(commandArgs, context, databaseHooks);
+      return EXIT_CODES.OK;
+    }
     if (resource === "skill") {
       await handleSkillCommand(commandArgs, context, databaseHooks);
       return EXIT_CODES.OK;
@@ -3746,6 +3851,12 @@ export async function runCli(
         ? error
         : error instanceof CoreMcpError
           ? mapCoreMcpError(error)
+          : error instanceof CliRemoteSyncError
+            ? new CliError(
+                error.status === 409 ? "CONFLICT" : "SYNC_ERROR",
+                error.message,
+                error.status === 409 ? EXIT_CODES.CONFLICT : EXIT_CODES.IO,
+              )
           : new CliError(
               "INTERNAL_ERROR",
               error instanceof Error ? error.message : String(error),
