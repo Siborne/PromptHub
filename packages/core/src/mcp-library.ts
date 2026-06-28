@@ -170,7 +170,7 @@ export function getMcpTargetPresets(
       target: "kilo",
       scope: "global",
       label: "Kilo Code",
-      path: path.join(homeDir, ".config", "kilo", "kilo.jsonc"),
+      path: path.join(homeDir, ".config", "kilo", "kilo.json"),
       platformId: "kilo",
     },
     {

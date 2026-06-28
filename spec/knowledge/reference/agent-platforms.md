@@ -138,7 +138,7 @@ Stable product rule:
 
 | Platform     | Why it stands out                                                                                                                      | Public local asset evidence                                                                                                                                                   | Suggested PromptHub modeling status                      |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| Kilo Code    | 官方文档已明确 `.kilo/skills/`、`~/.kilo/skills/`、`kilo.jsonc`、`.kilo/rules/`、`AGENTS.md`、`.agents/skills/` 兼容目录 | `.kilo/skills/`, `~/.kilo/skills/`, `.kilo/rules/`, default global `~/.config/kilo/kilo.jsonc`, default project `kilo.jsonc`, compatible `.kilo/kilo.jsonc` custom config path, `AGENTS.md` | Built-in platform; MCP target supported                  |
+| Kilo Code    | Kilo 用户实际 MCP 配置优先使用 `kilo.json`，历史 JSONC 配置仍可通过自定义路径兼容 | `.kilo/skills/`, `~/.kilo/skills/`, `.kilo/rules/`, default global `~/.config/kilo/kilo.json`, default project `kilo.json`, compatible `.config/kilo/kilo.jsonc` / `.kilo/kilo.jsonc` custom config paths, `AGENTS.md` | Built-in platform; MCP target supported                  |
 | TRAE Work    | 国际站下载页和文档入口展示 TRAE Work，与 TRAE IDE 分开展示；本轮已作为独立内置 Agent 平台落入 `trae-work`                              | Product entry available via `trae.ai`; local skills path remains PromptHub inferred                                                                                           | Promoted to built-in platform with isolated default root |
 | TRAE Work CN | 中国站和文档显示 TRAE Work 是独立客户端，不依赖 TRAE IDE；本轮已作为独立内置 Agent 平台落入 `trae-work-cn`                             | Product docs entry available via `docs.trae.cn`; local skills path remains PromptHub inferred                                                                                 | Promoted to built-in platform with isolated default root |
 
@@ -353,8 +353,8 @@ Stable product rule:
 
 - PromptHub tracks Kilo Code as a separate `kilo` Skill/Rules/MCP platform, not as an alias for Kiro.
 - Kilo Code MCP config uses the root `mcp` key. Local servers use `type: "local"` with a combined `command` array and optional `environment`; remote servers use `type: "remote"` with `url` and optional `headers`.
-- Global config: recommended `~/.config/kilo/kilo.jsonc`.
-- Project config: recommended `<projectRoot>/kilo.jsonc`; compatible custom path `<projectRoot>/.kilo/kilo.jsonc`.
+- Global config: default `~/.config/kilo/kilo.json`.
+- Project config: default `<projectRoot>/kilo.json`; compatible custom paths include `~/.config/kilo/kilo.jsonc` and `<projectRoot>/.kilo/kilo.jsonc`.
 - PromptHub's built-in MCP UI exposes one default Kilo Code target per scope. Compatible JSONC/custom paths are supported as parsing/custom-path inputs, not as duplicate Agent MCP or Project MCP cards.
 - Kilo JSONC config reads must tolerate comments and trailing commas, but PromptHub writes normalized JSON.
 

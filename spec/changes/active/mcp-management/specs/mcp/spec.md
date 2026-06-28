@@ -67,7 +67,7 @@ PromptHub MUST project normalized MCP servers into the target agent's config sha
 
 - **GIVEN** a registered PromptHub project with root path `/workspace/app`
 - **WHEN** PromptHub builds visible MCP targets
-- **THEN** it includes one default Kilo Code workspace target at `/workspace/app/kilo.jsonc`
+- **THEN** it includes one default Kilo Code workspace target at `/workspace/app/kilo.json`
 - **AND** applying MCP servers writes Kilo Code's `mcp` object shape into that file
 - **AND** reading Kilo Code JSONC configs tolerates comments and trailing commas
 

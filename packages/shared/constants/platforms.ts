@@ -348,7 +348,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.kilo",
     },
     skillsRelativePath: "skills",
-    mcpRelativePath: "../.config/kilo/kilo.jsonc",
+    mcpRelativePath: "../.config/kilo/kilo.json",
     globalRuleFile: "rules/global.md",
   },
   {

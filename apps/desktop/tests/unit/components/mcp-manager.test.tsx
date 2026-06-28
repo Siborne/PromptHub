@@ -578,7 +578,7 @@ describe("McpManager", () => {
         screen.getAllByText("/workspace/docs/.kiro/settings/mcp.json").length,
       ).toBeGreaterThan(0);
       expect(
-        screen.getAllByText("/workspace/docs/kilo.jsonc").length,
+        screen.getAllByText("/workspace/docs/kilo.json").length,
       ).toBeGreaterThan(0);
     });
     const projectIconShells = screen.getAllByTestId(
@@ -2600,7 +2600,7 @@ describe("McpManager", () => {
           target: "kilo",
           scope: "global",
           label: "Kilo Code",
-          path: "/Users/test/.config/kilo/kilo.jsonc",
+          path: "/Users/test/.config/kilo/kilo.json",
           platformId: "kilo",
         },
       ],
@@ -2613,7 +2613,7 @@ describe("McpManager", () => {
         },
         {
           presetId: "kilo",
-          path: "/Users/test/.config/kilo/kilo.jsonc",
+          path: "/Users/test/.config/kilo/kilo.json",
           exists: false,
           serverNames: [],
         },

@@ -42,7 +42,7 @@ describe("mcp target presets", () => {
         target: "kilo",
         scope: "workspace",
         label: "Docs / Kilo Code",
-        path: "/workspace/docs/kilo.jsonc",
+        path: "/workspace/docs/kilo.json",
         platformId: "kilo",
       },
     ]);
@@ -71,7 +71,7 @@ describe("mcp target presets", () => {
         target: "kilo",
         scope: "global",
         label: "Kilo Code",
-        path: "/Users/test/.config/kilo/kilo.jsonc",
+        path: "/Users/test/.config/kilo/kilo.json",
         platformId: "kilo",
       },
       {

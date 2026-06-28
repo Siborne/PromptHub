@@ -68,7 +68,7 @@
 - [x] Move the My MCP library from app config storage to the `data/mcp/library.json` user-data layout, with legacy reads from `config/mcp-library.json`.
 - [x] Auto-migrate the legacy MCP library path into `data/mcp/library.json` on first read.
 - [x] Treat Settings disabled platforms as the single visible target source for MCP distribution UI.
-- [x] Add project-level MCP targets for registered projects: OpenCode `opencode.json`, Kiro `.kiro/settings/mcp.json`, and one default Kilo Code `kilo.jsonc` target.
+- [x] Add project-level MCP targets for registered projects: OpenCode `opencode.json`, Kiro `.kiro/settings/mcp.json`, and one default Kilo Code `kilo.json` target.
 - [x] Split Project MCP into its own left navigation entry so project targets do not appear in Agent MCP.
 - [x] Collapse Kilo Code UI presets to one platform entry per scope instead of exposing JSON/JSONC/path variants as separate targets.
 - [x] Research Kiro/Kilo naming: support Kiro workspace MCP separately and add Kilo Code MCP using Kilo's own `mcp` JSON/JSONC config shape.

@@ -136,7 +136,7 @@ Implemented first MCP management slice.
 - Added renderer-level MCP target derivation and visibility filtering:
   - Registered PromptHub projects derive OpenCode workspace targets at `<projectRoot>/opencode.json`.
   - Registered PromptHub projects derive Kiro workspace targets at `<projectRoot>/.kiro/settings/mcp.json`.
-  - Registered PromptHub projects derive one default Kilo Code workspace target at `<projectRoot>/kilo.jsonc`; compatible JSONC/custom paths remain parse/custom-path support, not duplicate UI target cards.
+  - Registered PromptHub projects derive one default Kilo Code workspace target at `<projectRoot>/kilo.json`; compatible JSONC/custom paths remain parse/custom-path support, not duplicate UI target cards.
   - Settings `disabledPlatformIds` filters every MCP distribution surface: detail platform panel, batch deploy dialog, My MCP card/list distribution counts, Agent MCP view, and stale Agent deploy dialogs.
   - Desktop `getTargetStatus` IPC now accepts an optional target preset list, allowing the renderer to request status for visible global plus project-level targets without changing existing no-argument callers.
 - Researched the Kiro/Kilo naming issue from the user screenshot. Kiro MCP remains supported through Kiro's `mcpServers` config. Kilo Code is supported as a separate `kilo` MCP target using Kilo's `mcp` JSONC config shape. The visible built-in UI target is one Kilo Code entry per scope; compatible custom paths are compatibility inputs, not extra Agent or Project MCP entries.
@@ -616,7 +616,7 @@ Implemented first MCP management slice.
 - MCP Agent/Project target separation:
   - Agent MCP now receives only global Agent target presets. Project-derived workspace targets are excluded from Agent MCP, My MCP detail distribution panels, and My MCP batch deploy dialogs.
   - Added a separate Project MCP left navigation entry that shows project-derived OpenCode, Kiro, and Kilo Code targets from registered PromptHub projects.
-  - Collapsed visible Kilo Code presets to one default target per scope: global `~/.config/kilo/kilo.jsonc` and project `<projectRoot>/kilo.jsonc`. Compatible JSONC/custom Kilo paths remain parsing/custom-path support, not extra UI cards.
+  - Collapsed visible Kilo Code presets to one default target per scope: global `~/.config/kilo/kilo.json` and project `<projectRoot>/kilo.json`. Compatible JSONC/custom Kilo paths remain parsing/custom-path support, not extra UI cards.
   - Made the shared MCP target view accept Project MCP copy so project config actions do not say "Agent" in the project surface.
 - Verification for MCP Agent/Project target separation:
   - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/renderer/mcp-target-presets.test.ts tests/unit/components/mcp-manager.test.tsx tests/unit/components/sidebar.test.tsx tests/unit/main/mcp-library.test.ts`
@@ -778,14 +778,14 @@ Implemented first MCP management slice.
     - Result: passed.
 
 - Project MCP Kilo Code path correction:
-  - Rechecked Kilo Code's current MCP documentation: global MCP config is `~/.config/kilo/kilo.jsonc`; project-level MCP config is `kilo.jsonc` in the project root, with `.kilo/kilo.jsonc` supported as a custom alternative.
-  - Corrected the built-in Kilo Code global MCP target from `~/.config/kilo/kilo.json` to `~/.config/kilo/kilo.jsonc`.
-  - Corrected registered-project Kilo Code MCP targets from `<projectRoot>/kilo.json` to `<projectRoot>/kilo.jsonc`, which fixes the Project MCP UI path shown before distribution.
+  - Rechecked Kilo Code user feedback and corrected the default MCP target back to `kilo.json`: global MCP config is `~/.config/kilo/kilo.json`; project-level MCP config is `kilo.json` in the project root, with `.kilo/kilo.jsonc` still supported as a custom alternative.
+  - Corrected the built-in Kilo Code global MCP target from `~/.config/kilo/kilo.jsonc` to `~/.config/kilo/kilo.json`.
+  - Corrected registered-project Kilo Code MCP targets from `<projectRoot>/kilo.jsonc` to `<projectRoot>/kilo.json`, which fixes the Project MCP UI path shown before distribution.
   - Corrected the shared Agent platform MCP path metadata so Settings and Agent asset previews use the same Kilo path as MCP distribution.
 - Verification for Project MCP Kilo Code path correction:
   - TDD red run before implementation:
     - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/renderer/mcp-target-presets.test.ts tests/unit/main/mcp-library.test.ts tests/unit/renderer/agent-root-paths.test.ts`
-    - Result: failed as expected because the implementation still returned `kilo.json` for project, global, and platform metadata paths.
+    - Result: failed as expected because the implementation still returned `kilo.jsonc` for project, global, and platform metadata paths.
   - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/renderer/mcp-target-presets.test.ts tests/unit/main/mcp-library.test.ts tests/unit/renderer/agent-root-paths.test.ts tests/unit/main/skill-installer-utils.test.ts`
     - Result: passed (4 files, 111 tests).
   - `NODE_OPTIONS="--localstorage-file=<tmp>" pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/mcp-manager.test.tsx`

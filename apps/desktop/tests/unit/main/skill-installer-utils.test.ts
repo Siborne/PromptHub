@@ -433,7 +433,7 @@ describe("skill-installer-utils", () => {
       expect(skillsDir.startsWith("C:\\Users\\TestUser\\.kilo")).toBe(true);
       expect(skillsDir.endsWith("skills")).toBe(true);
       expect(getDefaultMcpRelativePath("kilo")).toBe(
-        "../.config/kilo/kilo.jsonc",
+        "../.config/kilo/kilo.json",
       );
 
       Object.defineProperty(process, "platform", {
@@ -491,7 +491,7 @@ describe("skill-installer-utils", () => {
         "data/settings/cline_mcp_settings.json",
       );
       expect(getDefaultMcpRelativePath("kilo")).toBe(
-        "../.config/kilo/kilo.jsonc",
+        "../.config/kilo/kilo.json",
       );
       expect(getDefaultMcpRelativePath("trae-work")).toBeUndefined();
     });

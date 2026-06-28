@@ -1190,7 +1190,7 @@ describe("CoreMcpLibraryService", () => {
       '[mcp_servers.filesystem]\ncommand = "npx"\n',
       "utf8",
     );
-    const kiloPath = path.join(userDataPath, "status", "kilo.jsonc");
+    const kiloPath = path.join(userDataPath, "status", "kilo.json");
     fs.writeFileSync(
       kiloPath,
       [
@@ -1315,7 +1315,7 @@ describe("CoreMcpLibraryService", () => {
     expect(byId.opencode.path).toBe(
       "/Users/test/.config/opencode/opencode.json",
     );
-    expect(byId.kilo.path).toBe("/Users/test/.config/kilo/kilo.jsonc");
+    expect(byId.kilo.path).toBe("/Users/test/.config/kilo/kilo.json");
     expect(presets.filter((preset) => preset.platformId === "kilo")).toEqual([
       byId.kilo,
     ]);

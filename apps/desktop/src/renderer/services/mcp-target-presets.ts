@@ -50,7 +50,7 @@ export function deriveProjectMcpTargetPresets(
         target: "kilo",
         scope: "workspace",
         label: `${project.name} / Kilo Code`,
-        path: joinProjectPath(rootPath, "kilo.jsonc"),
+        path: joinProjectPath(rootPath, "kilo.json"),
         platformId: "kilo",
       },
     ];

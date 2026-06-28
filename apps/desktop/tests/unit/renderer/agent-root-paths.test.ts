@@ -24,9 +24,9 @@ describe("agent root paths", () => {
       undefined,
     );
 
-    expect(config.mcpRelativePath).toBe("../.config/kilo/kilo.jsonc");
+    expect(config.mcpRelativePath).toBe("../.config/kilo/kilo.json");
     expect(buildAgentRootAssetPreview(config).mcpConfigPaths).toEqual([
-      "~/.config/kilo/kilo.jsonc",
+      "~/.config/kilo/kilo.json",
     ]);
   });
 
