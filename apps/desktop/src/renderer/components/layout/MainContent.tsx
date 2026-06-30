@@ -124,6 +124,35 @@ function getHighlightTerms(searchQuery: string): string[] {
     .sort((a, b) => b.length - a.length);
 }
 
+function getPromptDescendantIds(prompts: Prompt[], promptId: string): Set<string> {
+  const childrenByParentId = new Map<string, Prompt[]>();
+
+  for (const prompt of prompts) {
+    if (!prompt.parentId || prompt.parentId === prompt.id) {
+      continue;
+    }
+
+    const siblings = childrenByParentId.get(prompt.parentId) ?? [];
+    siblings.push(prompt);
+    childrenByParentId.set(prompt.parentId, siblings);
+  }
+
+  const descendants = new Set<string>();
+  const visit = (parentId: string) => {
+    for (const child of childrenByParentId.get(parentId) ?? []) {
+      if (descendants.has(child.id)) {
+        continue;
+      }
+
+      descendants.add(child.id);
+      visit(child.id);
+    }
+  };
+
+  visit(promptId);
+  return descendants;
+}
+
 function renderHighlightedText(text: string, terms: string[], highlightClassName: string) {
   if (!text || terms.length === 0) return text;
 
@@ -161,6 +190,7 @@ export const PromptCard = memo(function PromptCard({
   isDropTarget,
   dropPosition,
   onSelect,
+  onDoubleClick,
   onContextMenu,
   onDragStart,
   onDragEnd,
@@ -181,6 +211,7 @@ export const PromptCard = memo(function PromptCard({
   isDropTarget: boolean;
   dropPosition: PromptDropPosition | null;
   onSelect: (e: React.MouseEvent) => void;
+  onDoubleClick: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onDragStart: (e: ReactDragEvent<HTMLDivElement>) => void;
   onDragEnd: (e: ReactDragEvent<HTMLDivElement>) => void;
@@ -209,6 +240,7 @@ export const PromptCard = memo(function PromptCard({
       draggable
       aria-pressed={isSelected}
       onClick={onSelect}
+      onDoubleClick={onDoubleClick}
       onKeyDown={(event) => {
         if (event.key !== 'Enter' && event.key !== ' ') {
           return;
@@ -232,13 +264,14 @@ export const PromptCard = memo(function PromptCard({
           ? 'bg-primary text-white'
           : isDropTarget && dropPosition === 'inside'
             ? 'prompt-list-card bg-primary/10'
-            : 'prompt-list-card bg-card hover:bg-accent'
+            : depth > 0
+              ? 'prompt-list-card border-l-2 border-l-primary/30 bg-primary/[0.045] hover:bg-primary/[0.075]'
+              : 'prompt-list-card bg-card hover:bg-accent'
         }
         ${isDragging ? 'opacity-50' : ''}
         ${isDropTarget && dropPosition === 'inside' ? 'ring-2 ring-primary/40 ring-inset' : ''}
         ${isDropTarget && dropPosition === 'before' ? 'border-t-2 border-t-primary' : ''}
         ${isDropTarget && dropPosition === 'after' ? 'border-b-2 border-b-primary' : ''}
-        ${depth > 0 && !isSelected ? 'bg-primary/[0.03]' : ''}
       `}
     >
       <div className="flex items-center justify-between gap-2">
@@ -342,7 +375,10 @@ interface VirtualizedPromptListProps {
   prompts: Prompt[];
   selectedPromptIdSet: Set<string>;
   highlightTerms: string[];
+  collapsedPromptIds: Set<string>;
+  onCollapsedPromptIdsChange: React.Dispatch<React.SetStateAction<Set<string>>>;
   onSelect: (prompt: Prompt, event: React.MouseEvent) => void;
+  onDoubleClick: (prompt: Prompt, event: React.MouseEvent) => void;
   onContextMenu: (event: React.MouseEvent, prompt: Prompt) => void;
   onMovePrompt: (
     promptId: string,
@@ -378,7 +414,10 @@ const VirtualizedPromptList = memo(function VirtualizedPromptList({
   prompts,
   selectedPromptIdSet,
   highlightTerms,
+  collapsedPromptIds,
+  onCollapsedPromptIdsChange,
   onSelect,
+  onDoubleClick,
   onContextMenu,
   onMovePrompt,
 }: VirtualizedPromptListProps) {
@@ -386,7 +425,6 @@ const VirtualizedPromptList = memo(function VirtualizedPromptList({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<PromptDropPosition | null>(null);
-  const [collapsedPromptIds, setCollapsedPromptIds] = useState<Set<string>>(() => new Set());
   const effectiveCollapsedPromptIds = useMemo(
     () => (highlightTerms.length > 0 ? new Set<string>() : collapsedPromptIds),
     [collapsedPromptIds, highlightTerms.length],
@@ -436,7 +474,7 @@ const VirtualizedPromptList = memo(function VirtualizedPromptList({
   }, []);
 
   const togglePromptCollapse = useCallback((promptId: string) => {
-    setCollapsedPromptIds((current) => {
+    onCollapsedPromptIdsChange((current) => {
       const next = new Set(current);
       if (next.has(promptId)) {
         next.delete(promptId);
@@ -445,15 +483,15 @@ const VirtualizedPromptList = memo(function VirtualizedPromptList({
       }
       return next;
     });
-  }, []);
+  }, [onCollapsedPromptIdsChange]);
 
   useEffect(() => {
     const promptIds = new Set(prompts.map((prompt) => prompt.id));
-    setCollapsedPromptIds((current) => {
+    onCollapsedPromptIdsChange((current) => {
       const next = new Set([...current].filter((promptId) => promptIds.has(promptId)));
       return next.size === current.size ? current : next;
     });
-  }, [prompts]);
+  }, [onCollapsedPromptIdsChange, prompts]);
 
   const handleDragStart = useCallback(
     (event: ReactDragEvent<HTMLDivElement>, promptId: string) => {
@@ -582,6 +620,7 @@ const VirtualizedPromptList = memo(function VirtualizedPromptList({
                 isDropTarget={dropTargetId === prompt.id}
                 dropPosition={dropTargetId === prompt.id ? dropPosition : null}
                 onSelect={(e) => onSelect(prompt, e)}
+                onDoubleClick={(e) => onDoubleClick(prompt, e)}
                 onContextMenu={(e) => onContextMenu(e, prompt)}
                 onDragStart={(event) => handleDragStart(event, prompt.id)}
                 onDragEnd={resetDropState}
@@ -659,7 +698,7 @@ function PromptSkillMainContent() {
   const selectedId = usePromptStore((state) => state.selectedId);
   const selectedIds = usePromptStore((state) => state.selectedIds);
   const lastSelectedId = usePromptStore((state) => state.lastSelectedId);
-  const relations = usePromptStore((state) => state.relations);
+  const relations = usePromptStore((state) => state.relations ?? []);
   const selectPrompt = usePromptStore((state) => state.selectPrompt);
   const setSelectedIds = usePromptStore((state) => state.setSelectedIds);
   const createPrompt = usePromptStore((state) => state.createPrompt);
@@ -786,6 +825,7 @@ function PromptSkillMainContent() {
 
   const highlightTerms = useMemo(() => getHighlightTerms(searchQuery), [searchQuery]);
   const selectedPromptIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const [collapsedPromptIds, setCollapsedPromptIds] = useState<Set<string>>(() => new Set());
 
   // Store test states/results by prompt ID (persisted in component state)
   // 按 prompt ID 保存测试状态和结果（持久化）
@@ -1374,6 +1414,14 @@ function PromptSkillMainContent() {
   // kanban 视图各自内部虚拟化。三个消费方都可以安全地拿到完整数据，不再需要
   // 手写的分批渲染补丁。
   const visiblePrompts = sortedPrompts;
+  const visiblePromptIdSet = useMemo(
+    () => new Set(visiblePrompts.map((prompt) => prompt.id)),
+    [visiblePrompts],
+  );
+  const visibleHierarchyMeta = useMemo(
+    () => getPromptHierarchyMeta(visiblePrompts),
+    [visiblePrompts],
+  );
 
   useEffect(() => {
     if (selectedId || !lastSelectedId) {
@@ -1385,6 +1433,15 @@ function PromptSkillMainContent() {
       selectPrompt(lastSelectedId);
     }
   }, [lastSelectedId, selectPrompt, selectedId, visiblePrompts]);
+
+  useEffect(() => {
+    setCollapsedPromptIds((currentIds) => {
+      const nextIds = new Set(
+        Array.from(currentIds).filter((id) => visiblePromptIdSet.has(id)),
+      );
+      return nextIds.size === currentIds.size ? currentIds : nextIds;
+    });
+  }, [visiblePromptIdSet]);
 
   const selectedPrompt = prompts.find((p) => p.id === selectedId);
   const promptById = useMemo(() => new Map(prompts.map((prompt) => [prompt.id, prompt])), [prompts]);
@@ -1545,6 +1602,13 @@ function PromptSkillMainContent() {
     setDetailInlineActiveField(field);
     setIsDetailInlineEditing(true);
   }, [selectedPrompt, showEnglish]);
+
+  const openPromptCardInlineTitleEdit = useCallback((prompt: Prompt) => {
+    selectPrompt(prompt.id);
+    setDetailInlineDraft(createDetailInlineEditDraft(prompt, showEnglish));
+    setDetailInlineActiveField('title');
+    setIsDetailInlineEditing(true);
+  }, [selectPrompt, showEnglish]);
 
   const cancelDetailInlineEdit = useCallback(() => {
     if (selectedPrompt) {
@@ -2006,10 +2070,68 @@ function PromptSkillMainContent() {
     setIsTagDropActive(false);
   }, []);
 
+  const handleCollapseAllPrompts = useCallback(() => {
+    setCollapsedPromptIds(
+      new Set(
+        visiblePrompts
+          .filter((prompt) => (visibleHierarchyMeta.childCountById.get(prompt.id) ?? 0) > 0)
+          .map((prompt) => prompt.id),
+      ),
+    );
+  }, [visibleHierarchyMeta, visiblePrompts]);
+
+  const handleMovePromptToNode = useCallback(
+    async (prompt: Prompt, targetParentId: string | null) => {
+      try {
+        const nextOrder = prompts.filter(
+          (item) => (item.parentId ?? null) === targetParentId && item.id !== prompt.id,
+        ).length;
+
+        await movePrompt(prompt.id, targetParentId, nextOrder);
+        if (targetParentId) {
+          setCollapsedPromptIds((currentIds) => {
+            const nextIds = new Set(currentIds);
+            nextIds.delete(targetParentId);
+            return nextIds;
+          });
+        }
+
+        showToast(t('prompt.moveToNodeSuccess', 'Prompt moved to node'), 'success');
+      } catch (error) {
+        console.error('Failed to move prompt to node:', error);
+        showToast(t('prompt.relationships.moveFailed', 'Failed to move prompt'), 'error');
+      }
+    },
+    [movePrompt, prompts, showToast, t],
+  );
+
   // Memoize context menu items to avoid re-creating the array on every render
   // 使用 useMemo 缓存右键菜单项，避免每次渲染都重新创建数组
   const menuItems: ContextMenuItem[] = useMemo(() => {
     if (!contextMenu) return [];
+
+    const promptDescendantIds = getPromptDescendantIds(prompts, contextMenu.prompt.id);
+    const promptNodeItems: ContextMenuItem[] = [
+      {
+        label: t('prompt.rootNode', 'Root node'),
+        icon: <GitBranchIcon className="w-4 h-4" />,
+        onClick: () => void handleMovePromptToNode(contextMenu.prompt, null),
+        disabled: !contextMenu.prompt.parentId,
+      },
+      ...flattenPromptTree(visiblePrompts, new Set(), { siblingOrder: "input" })
+        .filter((node) =>
+          node.prompt.id !== contextMenu.prompt.id &&
+          !promptDescendantIds.has(node.prompt.id)
+        )
+        .map((node) => ({
+          label: node.prompt.title,
+          description: node.prompt.description || undefined,
+          icon: <GitBranchIcon className="w-4 h-4" />,
+          insetLevel: node.depth,
+          onClick: () => void handleMovePromptToNode(contextMenu.prompt, node.prompt.id),
+          disabled: contextMenu.prompt.parentId === node.prompt.id,
+        })),
+    ];
 
     const moveTargetItems: ContextMenuItem[] = [
       {
@@ -2032,6 +2154,12 @@ function PromptSkillMainContent() {
         label: t('prompt.viewDetail'),
         icon: <CheckIcon className="w-4 h-4" />,
         onClick: () => handleViewDetail(contextMenu.prompt),
+      },
+      {
+        label: t('prompt.collapseAllPrompts', 'Collapse all prompts'),
+        icon: <ChevronRightIcon className="w-4 h-4" />,
+        onClick: handleCollapseAllPrompts,
+        disabled: visibleHierarchyMeta.childCountById.size === 0,
       },
       {
         label: t('prompt.edit'),
@@ -2085,13 +2213,19 @@ function PromptSkillMainContent() {
         childrenClassName: 'max-h-[280px] overflow-y-auto',
       },
       {
+        label: t('prompt.moveToNode', 'Move to node'),
+        icon: <GitBranchIcon className="w-4 h-4" />,
+        children: promptNodeItems,
+        childrenClassName: 'max-h-[320px] overflow-y-auto',
+      },
+      {
         label: t('prompt.delete'),
         icon: <TrashIcon className="w-4 h-4" />,
         variant: 'destructive',
         onClick: () => handleDeletePrompt(contextMenu.prompt),
       },
     ];
-  }, [contextMenu, flattenedFolders, folderPathById, t, toggleFavorite, togglePinned, handleViewDetail, handleCopyPrompt, handleDuplicatePrompt, handleSharePrompt, handleAiTestFromTable, handleVersionHistory, handleDeletePrompt, handleMovePrompt]);
+  }, [contextMenu, flattenedFolders, folderPathById, handleAiTestFromTable, handleCollapseAllPrompts, handleCopyPrompt, handleDeletePrompt, handleDuplicatePrompt, handleMovePrompt, handleMovePromptToNode, handleSharePrompt, handleVersionHistory, prompts, t, toggleFavorite, togglePinned, visibleHierarchyMeta, visiblePrompts]);
 
   const handleAiUsageIncrement = async (id: string, model?: string) => {
     await incrementUsageCount(id);
@@ -2204,6 +2338,8 @@ function PromptSkillMainContent() {
         }}
         tableActions={{
           aiResults: aiResponseCache,
+          collapsedPromptIds,
+          onCollapsedPromptIdsChange: setCollapsedPromptIds,
           onBatchFavorite: handleBatchFavorite,
           onBatchMove: handleBatchMove,
           onBatchDelete: handleBatchDelete,
@@ -2242,7 +2378,10 @@ function PromptSkillMainContent() {
               prompts={visiblePrompts}
               selectedPromptIdSet={selectedPromptIdSet}
               highlightTerms={highlightTerms}
+              collapsedPromptIds={collapsedPromptIds}
+              onCollapsedPromptIdsChange={setCollapsedPromptIds}
               onSelect={handleSelectPrompt}
+              onDoubleClick={openPromptCardInlineTitleEdit}
               onContextMenu={handleContextMenu}
               onMovePrompt={handleMovePromptInTree}
             />
@@ -2338,34 +2477,7 @@ function PromptSkillMainContent() {
 	                      >
 	                         {shared ? <CheckIcon aria-hidden="true" className="w-5 h-5" /> : <Share2Icon aria-hidden="true" className="w-5 h-5" />}
 	                      </button>
-                      {isDetailInlineEditing ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={cancelDetailInlineEdit}
-                            aria-label={t('common.cancel')}
-                            title={t('common.cancel')}
-                            disabled={isDetailInlineSaving}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl app-wallpaper-surface-strong border border-border text-muted-foreground hover:bg-accent/60 hover:text-foreground disabled:opacity-50 transition-colors"
-                          >
-	                            <XIcon aria-hidden="true" className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void saveDetailInlineEdit()}
-                            aria-label={t('common.save')}
-                            title={t('common.save')}
-                            disabled={!canSaveDetailInlineEdit}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                          >
-                            {isDetailInlineSaving ? (
-	                              <LoaderIcon aria-hidden="true" className="w-4 h-4 animate-spin" />
-	                            ) : (
-	                              <SaveIcon aria-hidden="true" className="w-4 h-4" />
-                            )}
-                          </button>
-                        </>
-                      ) : (
+                      {!isDetailInlineEditing && (
                         <button
                           type="button"
                           onClick={() => setEditingPrompt(selectedPrompt)}
@@ -2677,6 +2789,37 @@ function PromptSkillMainContent() {
               {/* 操作按钮 - 固定底部 */}
               <div className="flex-shrink-0 border-t border-border app-wallpaper-panel-strong px-6 py-3">
                 <div className="w-full flex items-center gap-3 flex-wrap">
+                  {isDetailInlineEditing ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={cancelDetailInlineEdit}
+                        aria-label={t('common.cancel')}
+                        title={t('common.cancel')}
+                        disabled={isDetailInlineSaving}
+                        className="flex items-center gap-2 h-9 px-4 rounded-lg app-wallpaper-surface-strong border border-border text-sm font-medium hover:bg-accent/60 disabled:opacity-50 transition-colors"
+                      >
+                        <XIcon aria-hidden="true" className="w-4 h-4" />
+                        <span>{t('common.cancel')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void saveDetailInlineEdit()}
+                        aria-label={t('common.save')}
+                        title={t('common.save')}
+                        disabled={!canSaveDetailInlineEdit}
+                        className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                      >
+                        {isDetailInlineSaving ? (
+                          <LoaderIcon aria-hidden="true" className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <SaveIcon aria-hidden="true" className="w-4 h-4" />
+                        )}
+                        <span>{t('common.save')}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
 	                  <button
 	                    type="button"
 	                    onClick={async () => {
@@ -2729,6 +2872,8 @@ function PromptSkillMainContent() {
 	                    <TrashIcon aria-hidden="true" className="w-4 h-4" />
 	                    <span>{t('prompt.delete')}</span>
 	                  </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

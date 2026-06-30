@@ -8,6 +8,8 @@
 - [x] 4. Prevent conflicting detail-panel actions while inline editing is active
 - [x] 5. Add regression tests for save and cancel flows
 - [x] 6. Update implementation record
+- [x] 7. Move inline save/cancel controls to the bottom action bar
+- [x] 8. Add prompt-card double-click entry into inline title edit
 
 ## Verification
 

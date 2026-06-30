@@ -99,6 +99,8 @@ interface PromptTableViewProps {
   // aiResults: promptId -> AI response
   // aiResults：promptId -> AI 响应结果
   aiResults?: Record<string, string>; // promptId -> AI 响应结果
+  collapsedPromptIds?: Set<string>;
+  onCollapsedPromptIdsChange?: React.Dispatch<React.SetStateAction<Set<string>>>;
   onBatchFavorite?: (ids: string[], favorite: boolean) => void;
   onBatchMove?: (ids: string[], folderId: string | undefined) => void;
   onBatchDelete?: (ids: string[]) => void;
@@ -124,6 +126,8 @@ export function PromptTableView({
   onVersionHistory,
   onViewDetail,
   aiResults = {},
+  collapsedPromptIds: controlledCollapsedPromptIds,
+  onCollapsedPromptIdsChange,
   onBatchFavorite,
   onBatchMove,
   onBatchDelete,
@@ -142,8 +146,10 @@ export function PromptTableView({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<PromptDropPosition | null>(null);
-  const [collapsedPromptIds, setCollapsedPromptIds] = useState<Set<string>>(() => new Set());
+  const [localCollapsedPromptIds, setLocalCollapsedPromptIds] = useState<Set<string>>(() => new Set());
   const folders = useFolderStore((state) => state.folders);
+  const collapsedPromptIds = controlledCollapsedPromptIds ?? localCollapsedPromptIds;
+  const setCollapsedPromptIds = onCollapsedPromptIdsChange ?? setLocalCollapsedPromptIds;
   const promptIds = useMemo(() => new Set(prompts.map((prompt) => prompt.id)), [prompts]);
   const effectiveCollapsedPromptIds = useMemo(
     () => (highlightTerms.length > 0 ? new Set<string>() : collapsedPromptIds),

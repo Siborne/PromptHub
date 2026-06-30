@@ -11,12 +11,18 @@
 - 为 `MainContent` 新增 issue #140 集成测试，并为 Vitest 补充 `@tanstack/react-virtual` stub alias。
 - 调整 Gallery 视图虚拟滚动区域的上下留白，恢复与其他视图一致的呼吸感。
 - 将 Gallery 上下留白落到外层滚动 spacer 的真实 padding / box-sizing 上，避免只改内部位移导致视觉上仍贴边。
+- 补充 Prompt 右键菜单“折叠全部提示词”入口，折叠当前可见提示词树中所有带子节点的 Prompt。
+- 补充 Prompt 右键菜单“移动到节点”二级子菜单，支持移动到根节点或其它 Prompt 节点，并排除自身与后代节点。
+- 将卡片列表与表格视图的 Prompt 折叠状态提升到 `MainContent`，使右键菜单可以统一控制当前提示词树折叠状态。
 
 ## Verification
 
 - `pnpm vitest --run tests/integration/components/main-content-context-move.integration.test.tsx`
 - `pnpm vitest --run tests/unit/components/context-menu.test.tsx tests/unit/components/prompt-gallery-view.test.tsx tests/integration/components/main-content-context-move.integration.test.tsx`
 - `pnpm lint`
+- `pnpm --dir apps/desktop test:run tests/integration/components/main-content-context-move.integration.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `pnpm --filter @prompthub/desktop lint`
 
 ## Synced Docs
 

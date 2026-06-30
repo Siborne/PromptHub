@@ -431,6 +431,30 @@ describe("MainContent inline edit integration", () => {
     expect(screen.getByRole("textbox", { name: "User Prompt" })).toHaveFocus();
   });
 
+  it("opens title inline edit when a prompt card is double-clicked", async () => {
+    const promptState = createPromptState(createPrompt());
+
+    usePromptStoreMock.mockImplementation((selector) => selector(promptState));
+
+    await act(async () => {
+      await renderWithI18n(<MainContent />, { language: "en" });
+    });
+
+    const cardTitle = screen
+      .getAllByTestId("prompt-card-title")
+      .find((title) => title.textContent === "Original Title");
+    const card = cardTitle?.closest('[role="button"]');
+
+    if (!card) {
+      throw new Error("Prompt card was not rendered");
+    }
+
+    fireEvent.doubleClick(card);
+
+    expect(promptState.selectPrompt).toHaveBeenCalledWith("prompt-1");
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveFocus();
+  });
+
   it("keeps inline editors visually unobtrusive", async () => {
     const promptState = createPromptState(createPrompt());
 

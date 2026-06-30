@@ -407,4 +407,126 @@ describe("MainContent context move integration", () => {
     },
     30000,
   );
+
+  it(
+    "moves a prompt to another prompt node from the context menu",
+    async () => {
+      const movePrompt = vi.fn().mockResolvedValue(undefined);
+      const sourcePrompt = createPrompt({ id: "prompt-source", title: "Source Prompt" });
+      const targetPrompt = createPrompt({ id: "prompt-target", title: "Target Node" });
+
+      usePromptStoreMock.mockImplementation((selector) =>
+        selector({
+          prompts: [sourcePrompt, targetPrompt],
+          selectedId: sourcePrompt.id,
+          selectedIds: [sourcePrompt.id],
+          selectPrompt: vi.fn(),
+          setSelectedIds: vi.fn(),
+          createPrompt: vi.fn().mockResolvedValue(sourcePrompt),
+          toggleFavorite: vi.fn().mockResolvedValue(undefined),
+          togglePinned: vi.fn().mockResolvedValue(undefined),
+          deletePrompt: vi.fn().mockResolvedValue(undefined),
+          updatePrompt: vi.fn().mockResolvedValue(undefined),
+          movePrompt,
+          searchQuery: "",
+          filterTags: [],
+          sortBy: "updatedAt",
+          sortOrder: "desc",
+          viewMode: "card",
+          incrementUsageCount: vi.fn().mockResolvedValue(undefined),
+          promptTypeFilter: "all",
+          setPromptTypeFilter: vi.fn(),
+          setViewMode: vi.fn(),
+        }),
+      );
+      useFolderStoreMock.mockImplementation((selector) =>
+        selector({
+          selectedFolderId: null,
+          unlockedFolderIds: new Set<string>(),
+          folders: [],
+        }),
+      );
+
+      await act(async () => {
+        await renderWithI18n(<MainContent />, { language: "en" });
+      });
+
+      fireEvent.contextMenu(screen.getAllByText("Source Prompt")[0]);
+      const moveToNodeButton = await screen.findByRole("button", { name: "Move to node" });
+      fireEvent.mouseEnter(moveToNodeButton.parentElement as HTMLElement);
+
+      const targetButtons = await screen.findAllByRole("button", { name: /Target Node/ });
+      fireEvent.click(targetButtons[targetButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(movePrompt).toHaveBeenCalledWith("prompt-source", "prompt-target", 0);
+      });
+    },
+    30000,
+  );
+
+  it(
+    "collapses all visible prompt tree nodes from the context menu",
+    async () => {
+      const parentPrompt = createPrompt({ id: "prompt-parent", title: "Parent Prompt" });
+      const childPrompt = createPrompt({
+        id: "prompt-child",
+        title: "Child Prompt",
+        parentId: "prompt-parent",
+        order: 0,
+      });
+
+      usePromptStoreMock.mockImplementation((selector) =>
+        selector({
+          prompts: [parentPrompt, childPrompt],
+          selectedId: parentPrompt.id,
+          selectedIds: [parentPrompt.id],
+          selectPrompt: vi.fn(),
+          setSelectedIds: vi.fn(),
+          createPrompt: vi.fn().mockResolvedValue(parentPrompt),
+          toggleFavorite: vi.fn().mockResolvedValue(undefined),
+          togglePinned: vi.fn().mockResolvedValue(undefined),
+          deletePrompt: vi.fn().mockResolvedValue(undefined),
+          updatePrompt: vi.fn().mockResolvedValue(undefined),
+          movePrompt: vi.fn().mockResolvedValue(undefined),
+          searchQuery: "",
+          filterTags: [],
+          sortBy: "updatedAt",
+          sortOrder: "desc",
+          viewMode: "card",
+          incrementUsageCount: vi.fn().mockResolvedValue(undefined),
+          promptTypeFilter: "all",
+          setPromptTypeFilter: vi.fn(),
+          setViewMode: vi.fn(),
+        }),
+      );
+      useFolderStoreMock.mockImplementation((selector) =>
+        selector({
+          selectedFolderId: null,
+          unlockedFolderIds: new Set<string>(),
+          folders: [],
+        }),
+      );
+
+      await act(async () => {
+        await renderWithI18n(<MainContent />, { language: "en" });
+      });
+
+      expect(
+        screen.getAllByTestId("prompt-card-title").some((title) => title.textContent === "Child Prompt"),
+      ).toBe(true);
+
+      fireEvent.contextMenu(screen.getAllByText("Parent Prompt")[0]);
+      fireEvent.click(await screen.findByRole("button", { name: "Collapse all prompts" }));
+
+      await waitFor(() => {
+        expect(
+          screen
+            .queryAllByTestId("prompt-card-title")
+            .some((title) => title.textContent === "Child Prompt"),
+        ).toBe(false);
+      });
+    },
+    30000,
+  );
 });

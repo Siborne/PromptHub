@@ -188,5 +188,7 @@ distinguish children from parents.
 - GIVEN a nested prompt is displayed in the compact card tree
 - WHEN PromptHub renders that prompt at depth N
 - THEN the title row is indented by the configured per-level tree indent
+- AND child prompt cards use a token-based subtle background/border treatment
+  that distinguishes them from root prompt cards in both light and dark themes.
 - AND parent chips stay aligned with the title content instead of collapsing
   back toward the parent row.

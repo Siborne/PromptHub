@@ -15,6 +15,8 @@ Added a lightweight inline edit flow to the desktop card-view detail panel so us
 - Added a focused integration test file covering both save and cancel flows for the inline editor.
 - Added `toast.updateFailed` to all 7 desktop locale files so inline save failures remain localized.
 - Isolated the IDB migration IPC regression test to a temporary user-data directory so full-suite runs do not write into the real desktop profile path.
+- Follow-up: double-clicking a prompt card in the left card list now opens the selected prompt's inline title editor.
+- Follow-up: inline edit save/cancel actions now live in the bottom sticky action bar instead of the title action cluster.
 
 ## Verification
 
@@ -23,6 +25,8 @@ Added a lightweight inline edit flow to the desktop card-view detail panel so us
 - `pnpm --filter @prompthub/desktop lint`
 - `pnpm --filter @prompthub/desktop typecheck`
 - `pnpm --filter @prompthub/desktop test:run`
+- `pnpm --dir apps/desktop test:run tests/integration/components/main-content-inline-edit.integration.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
 
 ## Synced Docs
 

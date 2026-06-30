@@ -26,6 +26,7 @@
 - [x] Rename child-count sort options to explicit node-count high-to-low / low-to-high labels across locales.
 - [x] Default top-bar prompt creation to the selected prompt node as parent.
 - [x] Increase compact child-card indentation so children read more clearly under parents.
+- [x] Add a subtle token-based child-card background/border cue.
 - [x] Preserve hierarchy fields in prompt workspace frontmatter.
 - [x] Sanitize hierarchy fields during backup import.
 - [x] Add DB and UI regression tests.

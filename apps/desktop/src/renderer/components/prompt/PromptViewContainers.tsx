@@ -39,6 +39,8 @@ export interface PromptCardActions {
 /** Extra callbacks/data only the table view consumes. */
 export interface PromptTableActions {
   aiResults: Record<string, string>;
+  collapsedPromptIds: Set<string>;
+  onCollapsedPromptIdsChange: React.Dispatch<React.SetStateAction<Set<string>>>;
   onBatchFavorite: (ids: string[], favorite: boolean) => void;
   onBatchMove: (ids: string[], folderId: string | undefined) => void;
   onBatchDelete: (ids: string[]) => void;
@@ -107,6 +109,8 @@ export function PromptViewContainers({
               onVersionHistory={cardActions.onVersionHistory}
               onViewDetail={cardActions.onViewDetail}
               aiResults={tableActions.aiResults}
+              collapsedPromptIds={tableActions.collapsedPromptIds}
+              onCollapsedPromptIdsChange={tableActions.onCollapsedPromptIdsChange}
               onBatchFavorite={tableActions.onBatchFavorite}
               onBatchMove={tableActions.onBatchMove}
               onBatchDelete={tableActions.onBatchDelete}

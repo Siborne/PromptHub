@@ -46,6 +46,9 @@ Verification:
   dropped by the top-bar orchestration.
 - Increased compact prompt-card child indentation from 12px to 16px per depth
   level and kept parent chips aligned with the deeper title rail.
+- Follow-up: child prompt cards now use a token-based left border and subtle
+  primary-tinted background so parent/child levels are easier to distinguish
+  without hard-coded light-theme colors.
 
 Verification:
 
@@ -55,6 +58,8 @@ Verification:
 - `pnpm --dir apps/desktop exec eslint src/renderer/components/layout/TopBar.tsx src/renderer/components/layout/MainContent.tsx tests/unit/components/top-bar.test.tsx tests/unit/components/prompt-list-header.test.tsx tests/unit/components/prompt-card-layout.test.tsx --max-warnings 0`
 - `pnpm --filter @prompthub/desktop typecheck`
 - `git diff --check`
+- `pnpm --dir apps/desktop test:run tests/integration/components/main-content-inline-edit.integration.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
 
 ## 2026-06-22 Child Count Sorting Follow-up
 
