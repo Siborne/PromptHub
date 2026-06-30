@@ -135,6 +135,43 @@ describe("VariableInputModal", () => {
     });
   });
 
+  it("uses the variable name when a copy variable field is empty", async () => {
+    const onCopy = vi.fn();
+    const writeText = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue(undefined);
+
+    await renderWithI18n(
+      <VariableInputModal
+        isOpen
+        onClose={vi.fn()}
+        promptId="prompt-empty-copy"
+        userPrompt="Write about {{topic}} for {{audience}}."
+        mode="copy"
+        onCopy={onCopy}
+      />,
+      { language: "en" },
+    );
+
+    expect(
+      screen.getByText("Write about topic for audience."),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/topic/u), {
+      target: { value: "release notes" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Copy Result/u }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        "Write about release notes for audience.",
+      );
+      expect(onCopy).toHaveBeenCalledWith(
+        "Write about release notes for audience.",
+      );
+    });
+  });
+
   it("shows image attachment controls when filling variables for AI test", async () => {
     await renderWithI18n(
       <VariableInputModal

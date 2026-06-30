@@ -187,6 +187,18 @@ export function VariableInputModal({
     [],
   );
 
+  const getEffectiveVariableValues = useCallback(() => {
+    if (mode !== 'copy') {
+      return variables;
+    }
+
+    return parsedVariables.reduce<Record<string, string>>((values, variable) => {
+      const currentValue = variables[variable.name]?.trim();
+      values[variable.name] = currentValue || variable.name;
+      return values;
+    }, {});
+  }, [mode, parsedVariables, variables]);
+
   const formatImageSize = (bytes: number): string => {
     if (bytes >= 1024 * 1024) {
       return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -273,12 +285,14 @@ export function VariableInputModal({
       result = `[System]\n${systemPrompt}\n\n[User]\n${userPrompt}`;
     }
 
-    return replacePromptVariables(result, variables);
-  }, [mode, systemPrompt, userPrompt, variables]);
+    return replacePromptVariables(result, getEffectiveVariableValues());
+  }, [getEffectiveVariableValues, mode, systemPrompt, userPrompt]);
 
   // Check if all variables are filled
   // 检查是否所有变量都已填写
-  const allFilled = parsedVariables.every((v) => variables[v.name]?.trim());
+  const allFilled =
+    mode === 'copy' ||
+    parsedVariables.every((v) => variables[v.name]?.trim());
 
   // Replace variables (including system variables)
   // 替换变量（包括系统变量）
@@ -294,7 +308,7 @@ export function VariableInputModal({
 
     // Replace user variables (including default value format)
     // 替换用户变量（包括带默认值的格式）
-    result = replacePromptVariables(result, variables);
+    result = replacePromptVariables(result, getEffectiveVariableValues());
 
     return result;
   };
