@@ -6,10 +6,8 @@ import path from "path";
 import https from "https";
 import http from "http";
 import { createUpgradeDataSnapshot } from "./services/upgrade-backup";
-import {
-  compareVersions,
-  isPrereleaseVersion,
-} from "../utils/version";
+import { getHttpRequestAgent } from "./services/network-proxy";
+import { compareVersions, isPrereleaseVersion } from "../utils/version";
 
 // Simplified update info type (for IPC transmission)
 // 简化的更新信息类型（用于 IPC 传输）
@@ -61,7 +59,10 @@ function getFeedSuffix(channel: UpdateChannel, releaseTag?: string): string {
   return "latest/download";
 }
 
-function getMirrorSources(channel: UpdateChannel, releaseTag?: string): string[] {
+function getMirrorSources(
+  channel: UpdateChannel,
+  releaseTag?: string,
+): string[] {
   const suffix = getFeedSuffix(channel, releaseTag);
   return [
     `https://ghfast.top/https://github.com/legeling/PromptHub/releases/${suffix}`,
@@ -71,7 +72,10 @@ function getMirrorSources(channel: UpdateChannel, releaseTag?: string): string[]
   ];
 }
 
-function getOfficialFeedUrl(channel: UpdateChannel, releaseTag?: string): string {
+function getOfficialFeedUrl(
+  channel: UpdateChannel,
+  releaseTag?: string,
+): string {
   return `https://github.com/${OFFICIAL_REPO.owner}/${OFFICIAL_REPO.repo}/releases/${getFeedSuffix(channel, releaseTag)}`;
 }
 
@@ -93,7 +97,6 @@ function applyMirrorDownloadSettings(useMirror: boolean) {
   updater.useMultipleRangeRequest = !useMirror;
 }
 
-
 interface FeedContext {
   channel: UpdateChannel;
   releaseTag?: string;
@@ -107,6 +110,7 @@ async function fetchLatestPreviewReleaseTag(): Promise<string | null> {
       {
         hostname: "api.github.com",
         path: `/repos/${OFFICIAL_REPO.owner}/${OFFICIAL_REPO.repo}/releases?per_page=20`,
+        agent: getHttpRequestAgent("https://api.github.com"),
         headers: {
           Accept: "application/vnd.github+json",
           "User-Agent": "PromptHub-Updater",
@@ -158,7 +162,9 @@ async function fetchLatestPreviewReleaseTag(): Promise<string | null> {
   });
 }
 
-async function resolveFeedContext(channel: UpdateChannel): Promise<FeedContext> {
+async function resolveFeedContext(
+  channel: UpdateChannel,
+): Promise<FeedContext> {
   if (channel !== "preview") {
     return { channel };
   }
@@ -180,7 +186,10 @@ function applyUpdaterPreferences(channel: UpdateChannel): void {
   autoUpdater.allowDowngrade = false;
 }
 
-function isRemoteVersionNewer(remoteVersion: string, currentVersion: string): boolean {
+function isRemoteVersionNewer(
+  remoteVersion: string,
+  currentVersion: string,
+): boolean {
   return compareVersions(remoteVersion, currentVersion) > 0;
 }
 
@@ -205,12 +214,17 @@ function filterDowngradeStatus(info: ElectronUpdateInfo): boolean {
   return isNewer;
 }
 
-function applyFeedContext(useMirror: boolean, context: FeedContext, mirrorUrl?: string): void {
+function applyFeedContext(
+  useMirror: boolean,
+  context: FeedContext,
+  mirrorUrl?: string,
+): void {
   if (useMirror) {
     autoUpdater.setFeedURL({
       provider: "generic",
       channel: getGenericChannelName(),
-      url: mirrorUrl || getMirrorSources(context.channel, context.releaseTag)[0],
+      url:
+        mirrorUrl || getMirrorSources(context.channel, context.releaseTag)[0],
     });
     return;
   }
@@ -227,9 +241,9 @@ function toCheckResult(result: unknown): {
 } {
   const isUpdateAvailable = Boolean(
     result &&
-      typeof result === "object" &&
-      "isUpdateAvailable" in result &&
-      (result as { isUpdateAvailable?: boolean }).isUpdateAvailable,
+    typeof result === "object" &&
+    "isUpdateAvailable" in result &&
+    (result as { isUpdateAvailable?: boolean }).isUpdateAvailable,
   );
 
   return {
@@ -458,7 +472,9 @@ function normalizeRealPath(inputPath: string): string {
   }
 }
 
-export function detectMacInstallSource(executablePath: string = process.execPath): MacInstallSource {
+export function detectMacInstallSource(
+  executablePath: string = process.execPath,
+): MacInstallSource {
   if (!isMacPlatform()) {
     return "unknown";
   }
@@ -533,7 +549,9 @@ export function initUpdater(win: BrowserWindow) {
   // See AGENTS.md §12 and the v0.5.3 regression analysis.
   autoUpdater.autoInstallOnAppQuit = false;
 
-  applyUpdaterPreferences(isPrereleaseVersion(app.getVersion()) ? "preview" : "stable");
+  applyUpdaterPreferences(
+    isPrereleaseVersion(app.getVersion()) ? "preview" : "stable",
+  );
   console.log(
     `[Updater] Platform: ${process.platform}, Arch: ${process.arch}, currentVersion: ${app.getVersion()}`,
   );
@@ -705,7 +723,9 @@ export function resolveUpdaterDownloadUrl(
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`Unsupported updater download protocol: ${parsed.protocol}`);
+    throw new Error(
+      `Unsupported updater download protocol: ${parsed.protocol}`,
+    );
   }
 
   return parsed.href;
@@ -735,67 +755,74 @@ function downloadFile(
         return;
       }
 
-      const client = new URL(normalizedRequestUrl).protocol === "https:" ? https : http;
-      const req = client.get(normalizedRequestUrl, (res) => {
-        // Handle redirects (301, 302, 303, 307, 308)
-        // 处理重定向
-        if (
-          res.statusCode &&
-          res.statusCode >= 300 &&
-          res.statusCode < 400 &&
-          res.headers.location
-        ) {
-          let redirectUrl: string;
-          try {
-            redirectUrl = resolveUpdaterDownloadUrl(
-              res.headers.location,
-              normalizedRequestUrl,
+      const parsedRequestUrl = new URL(normalizedRequestUrl);
+      const client = parsedRequestUrl.protocol === "https:" ? https : http;
+      const req = client.get(
+        parsedRequestUrl,
+        {
+          agent: getHttpRequestAgent(parsedRequestUrl),
+        },
+        (res) => {
+          // Handle redirects (301, 302, 303, 307, 308)
+          // 处理重定向
+          if (
+            res.statusCode &&
+            res.statusCode >= 300 &&
+            res.statusCode < 400 &&
+            res.headers.location
+          ) {
+            let redirectUrl: string;
+            try {
+              redirectUrl = resolveUpdaterDownloadUrl(
+                res.headers.location,
+                normalizedRequestUrl,
+              );
+            } catch (error) {
+              res.resume();
+              reject(error);
+              return;
+            }
+            console.log(
+              `[Updater/macDMG] Redirect ${res.statusCode} -> ${redirectUrl}`,
             );
-          } catch (error) {
-            res.resume();
-            reject(error);
+            res.resume(); // Drain response to free socket
+            doRequest(redirectUrl, redirectCount + 1);
             return;
           }
-          console.log(
-            `[Updater/macDMG] Redirect ${res.statusCode} -> ${redirectUrl}`,
-          );
-          res.resume(); // Drain response to free socket
-          doRequest(redirectUrl, redirectCount + 1);
-          return;
-        }
 
-        if (res.statusCode !== 200) {
-          res.resume();
-          reject(new Error(`HTTP ${res.statusCode} for ${requestUrl}`));
-          return;
-        }
+          if (res.statusCode !== 200) {
+            res.resume();
+            reject(new Error(`HTTP ${res.statusCode} for ${requestUrl}`));
+            return;
+          }
 
-        const total = parseInt(res.headers["content-length"] || "0", 10);
-        let transferred = 0;
-        const startTime = Date.now();
+          const total = parseInt(res.headers["content-length"] || "0", 10);
+          let transferred = 0;
+          const startTime = Date.now();
 
-        const fileStream = fs.createWriteStream(destPath);
+          const fileStream = fs.createWriteStream(destPath);
 
-        res.on("data", (chunk: Buffer) => {
-          transferred += chunk.length;
-          const elapsed = (Date.now() - startTime) / 1000 || 0.001;
-          const bytesPerSecond = Math.round(transferred / elapsed);
-          const percent = total > 0 ? (transferred / total) * 100 : 0;
-          onProgress({ percent, bytesPerSecond, total, transferred });
-        });
+          res.on("data", (chunk: Buffer) => {
+            transferred += chunk.length;
+            const elapsed = (Date.now() - startTime) / 1000 || 0.001;
+            const bytesPerSecond = Math.round(transferred / elapsed);
+            const percent = total > 0 ? (transferred / total) * 100 : 0;
+            onProgress({ percent, bytesPerSecond, total, transferred });
+          });
 
-        res.pipe(fileStream);
+          res.pipe(fileStream);
 
-        fileStream.on("finish", () => {
-          fileStream.close();
-          resolve();
-        });
+          fileStream.on("finish", () => {
+            fileStream.close();
+            resolve();
+          });
 
-        fileStream.on("error", (err) => {
-          fs.unlink(destPath, () => {}); // Clean up partial file
-          reject(err);
-        });
-      });
+          fileStream.on("error", (err) => {
+            fs.unlink(destPath, () => {}); // Clean up partial file
+            reject(err);
+          });
+        },
+      );
 
       req.on("error", (err) => {
         fs.unlink(destPath, () => {});
@@ -892,7 +919,10 @@ async function macDownloadDmg(
   // Mirror mode: try each mirror in order
   // 镜像模式：依次尝试每个镜像源
   if (useMirror) {
-    for (const mirrorUrl of getMirrorSources(context.channel, context.releaseTag)) {
+    for (const mirrorUrl of getMirrorSources(
+      context.channel,
+      context.releaseTag,
+    )) {
       try {
         await tryDownload(mirrorUrl);
         macDownloadedDmgPath = destPath;
@@ -969,146 +999,167 @@ export function registerUpdaterIPC() {
 
   // 检查更新
   // Check for updates - respect user's mirror preference
-  ipcMain.handle("updater:check", async (_event, request?: boolean | UpdateRequestOptions) => {
-    if (isDev) {
-      return {
-        success: false,
-        error: "Update check disabled in development mode",
-      };
-    }
-
-    const { useMirror, channel } = normalizeUpdateOptions(request);
-    applyUpdaterPreferences(channel);
-    applyMirrorDownloadSettings(useMirror);
-    let context: FeedContext;
-
-    try {
-      context = await resolveFeedContext(channel);
-      lastFeedContext = context;
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-
-    // If mirror is enabled, use mirror sources directly
-    // 如果启用了镜像，直接使用镜像源（不先尝试官方）
-    if (useMirror) {
-      for (const mirrorUrl of getMirrorSources(context.channel, context.releaseTag)) {
-        try {
-          console.log(
-            `[Updater] Using ${context.channel} mirror for check: ${mirrorUrl}`,
-          );
-          applyFeedContext(true, context, mirrorUrl);
-          const result = await autoUpdater.checkForUpdates();
-          console.log(`[Updater] Mirror check succeeded: ${mirrorUrl}`);
-          return toCheckResult(result);
-        } catch (mirrorError) {
-          console.warn(`[Updater] Mirror check failed: ${mirrorUrl}`);
-        }
+  ipcMain.handle(
+    "updater:check",
+    async (_event, request?: boolean | UpdateRequestOptions) => {
+      if (isDev) {
+        return {
+          success: false,
+          error: "Update check disabled in development mode",
+        };
       }
-      // All mirrors failed
-      return {
-        success: false,
-        error:
-          "All mirror sources failed. Please try disabling mirror acceleration.",
-      };
-    }
 
-    // Mirror disabled, use official source
-    // 未启用镜像，使用官方源
-    try {
-      console.log(`[Updater] Using official ${context.channel} source for check`);
-      applyFeedContext(false, context);
-      const result = await autoUpdater.checkForUpdates();
-      return toCheckResult(result);
-    } catch (officialError) {
-      const errMsg = (officialError as Error).message || String(officialError);
-      return { success: false, error: `Update check failed: ${errMsg}` };
-    }
-  });
+      const { useMirror, channel } = normalizeUpdateOptions(request);
+      applyUpdaterPreferences(channel);
+      applyMirrorDownloadSettings(useMirror);
+      let context: FeedContext;
+
+      try {
+        context = await resolveFeedContext(channel);
+        lastFeedContext = context;
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+
+      // If mirror is enabled, use mirror sources directly
+      // 如果启用了镜像，直接使用镜像源（不先尝试官方）
+      if (useMirror) {
+        for (const mirrorUrl of getMirrorSources(
+          context.channel,
+          context.releaseTag,
+        )) {
+          try {
+            console.log(
+              `[Updater] Using ${context.channel} mirror for check: ${mirrorUrl}`,
+            );
+            applyFeedContext(true, context, mirrorUrl);
+            const result = await autoUpdater.checkForUpdates();
+            console.log(`[Updater] Mirror check succeeded: ${mirrorUrl}`);
+            return toCheckResult(result);
+          } catch (mirrorError) {
+            console.warn(`[Updater] Mirror check failed: ${mirrorUrl}`);
+          }
+        }
+        // All mirrors failed
+        return {
+          success: false,
+          error:
+            "All mirror sources failed. Please try disabling mirror acceleration.",
+        };
+      }
+
+      // Mirror disabled, use official source
+      // 未启用镜像，使用官方源
+      try {
+        console.log(
+          `[Updater] Using official ${context.channel} source for check`,
+        );
+        applyFeedContext(false, context);
+        const result = await autoUpdater.checkForUpdates();
+        return toCheckResult(result);
+      } catch (officialError) {
+        const errMsg =
+          (officialError as Error).message || String(officialError);
+        return { success: false, error: `Update check failed: ${errMsg}` };
+      }
+    },
+  );
 
   // Start downloading update
   // 开始下载更新 - respect user's mirror preference
-  ipcMain.handle("updater:download", async (_event, request?: boolean | UpdateRequestOptions) => {
-    if (isDev) {
-      return { success: false, error: "Download disabled in development mode" };
-    }
-
-    const { useMirror, channel } = normalizeUpdateOptions(request);
-    applyUpdaterPreferences(channel);
-    lastPercent = 0;
-    let context: FeedContext;
-
-    try {
-      context =
-        lastFeedContext.channel === channel
-          ? lastFeedContext
-          : await resolveFeedContext(channel);
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-
-    lastFeedContext = context;
-
-    // macOS: bypass Squirrel, download DMG directly to ~/Downloads
-    // macOS: 绕过 Squirrel，直接下载 DMG 到 ~/Downloads
-    if (isMacPlatform()) {
-      if (getMacInstallSource() === "homebrew") {
+  ipcMain.handle(
+    "updater:download",
+    async (_event, request?: boolean | UpdateRequestOptions) => {
+      if (isDev) {
         return {
           success: false,
-          error: getHomebrewUpgradeMessage(),
-          installSource: "homebrew",
+          error: "Download disabled in development mode",
         };
       }
-      console.log("[Updater/macDMG] Using direct DMG download for macOS");
-      return await macDownloadDmg(useMirror, context);
-    }
 
-    // Windows/Linux: use electron-updater's built-in download (Squirrel/NSIS)
-    // Windows/Linux: 使用 electron-updater 内置下载（Squirrel/NSIS）
-    applyMirrorDownloadSettings(useMirror);
+      const { useMirror, channel } = normalizeUpdateOptions(request);
+      applyUpdaterPreferences(channel);
+      lastPercent = 0;
+      let context: FeedContext;
 
-    // If mirror is enabled, use mirror sources directly
-    // 如果启用了镜像，直接使用镜像源
-    if (useMirror) {
-      for (const mirrorUrl of getMirrorSources(context.channel, context.releaseTag)) {
-        try {
-          console.log(
-            `[Updater] Using ${context.channel} mirror for download: ${mirrorUrl}`,
-          );
-          applyFeedContext(true, context, mirrorUrl);
-          await autoUpdater.downloadUpdate();
-          return { success: true };
-        } catch (mirrorError) {
-          console.warn(`[Updater] Mirror download failed: ${mirrorUrl}`);
-          lastPercent = 0; // Reset progress for next attempt
-        }
+      try {
+        context =
+          lastFeedContext.channel === channel
+            ? lastFeedContext
+            : await resolveFeedContext(channel);
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
       }
-      // All mirrors failed
-      return {
-        success: false,
-        error:
-          "All mirror sources failed. Please try disabling mirror acceleration.",
-      };
-    }
 
-    // Mirror disabled, use official source
-    // 未启用镜像，使用官方源
-    try {
-      console.log(`[Updater] Using official ${context.channel} source for download`);
-      applyFeedContext(false, context);
-      await autoUpdater.downloadUpdate();
-      return { success: true };
-    } catch (officialError) {
-      const errMsg = (officialError as Error).message || String(officialError);
-      return { success: false, error: `Download update failed: ${errMsg}` };
-    }
-  });
+      lastFeedContext = context;
+
+      // macOS: bypass Squirrel, download DMG directly to ~/Downloads
+      // macOS: 绕过 Squirrel，直接下载 DMG 到 ~/Downloads
+      if (isMacPlatform()) {
+        if (getMacInstallSource() === "homebrew") {
+          return {
+            success: false,
+            error: getHomebrewUpgradeMessage(),
+            installSource: "homebrew",
+          };
+        }
+        console.log("[Updater/macDMG] Using direct DMG download for macOS");
+        return await macDownloadDmg(useMirror, context);
+      }
+
+      // Windows/Linux: use electron-updater's built-in download (Squirrel/NSIS)
+      // Windows/Linux: 使用 electron-updater 内置下载（Squirrel/NSIS）
+      applyMirrorDownloadSettings(useMirror);
+
+      // If mirror is enabled, use mirror sources directly
+      // 如果启用了镜像，直接使用镜像源
+      if (useMirror) {
+        for (const mirrorUrl of getMirrorSources(
+          context.channel,
+          context.releaseTag,
+        )) {
+          try {
+            console.log(
+              `[Updater] Using ${context.channel} mirror for download: ${mirrorUrl}`,
+            );
+            applyFeedContext(true, context, mirrorUrl);
+            await autoUpdater.downloadUpdate();
+            return { success: true };
+          } catch (mirrorError) {
+            console.warn(`[Updater] Mirror download failed: ${mirrorUrl}`);
+            lastPercent = 0; // Reset progress for next attempt
+          }
+        }
+        // All mirrors failed
+        return {
+          success: false,
+          error:
+            "All mirror sources failed. Please try disabling mirror acceleration.",
+        };
+      }
+
+      // Mirror disabled, use official source
+      // 未启用镜像，使用官方源
+      try {
+        console.log(
+          `[Updater] Using official ${context.channel} source for download`,
+        );
+        applyFeedContext(false, context);
+        await autoUpdater.downloadUpdate();
+        return { success: true };
+      } catch (officialError) {
+        const errMsg =
+          (officialError as Error).message || String(officialError);
+        return { success: false, error: `Download update failed: ${errMsg}` };
+      }
+    },
+  );
 
   // Install update and restart
   // 安装更新并重启
@@ -1189,7 +1240,11 @@ export function registerUpdaterIPC() {
   ipcMain.handle("updater:openDownloadedUpdate", async () => {
     // macOS: show the downloaded DMG in Finder
     // macOS: 在 Finder 中显示已下载的 DMG
-    if (isMacPlatform() && macDownloadedDmgPath && fs.existsSync(macDownloadedDmgPath)) {
+    if (
+      isMacPlatform() &&
+      macDownloadedDmgPath &&
+      fs.existsSync(macDownloadedDmgPath)
+    ) {
       shell.showItemInFolder(macDownloadedDmgPath);
       return { success: true, path: macDownloadedDmgPath };
     }

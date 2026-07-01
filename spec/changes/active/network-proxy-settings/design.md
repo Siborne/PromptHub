@@ -33,6 +33,11 @@ page because it selects an alternate network source.
   helpers use proxy agents. Git child processes inherit manual proxy
   environment variables.
 
+The main process applies the stored proxy setting immediately after database
+initialization during startup, before renderer creation, updater initialization,
+or user-triggered network IPC calls. Renderer settings load/save re-applies the
+same normalized setting so startup and UI edits share one path.
+
 ## Network Coverage
 
 Covered in this change:
@@ -42,19 +47,20 @@ Covered in this change:
 - MCP remote content fetch, because it delegates to SkillInstaller
 - Plugin marketplace fetches via injected main-process fetch function
 - Git commands spawned by Skill and Plugin import helpers
-- AI HTTP IPC requests for HTTP/HTTPS proxy modes
+- AI HTTP IPC requests for HTTP/HTTPS and SOCKS5 proxy modes
+- S3 sync requests via AWS SDK `NodeHttpHandler`
+- Updater-owned GitHub preview lookup and macOS direct DMG downloads
 - Update mirror fallback configuration, using the existing `useUpdateMirror`
   settings field
 
 Tracked limitation:
 
-- S3 and updater may need dedicated adapters in a follow-up because they are
-  owned by third-party client internals. The setting and session proxy still
-  exist, but this change does not claim full S3/updater proxy coverage.
 - SOCKS5 is applied to Node HTTP(S) request helpers through `socks-proxy-agent`.
-  Main-process fetch/streaming paths currently use the HTTP(S) undici proxy
-  dispatcher and need a dedicated SOCKS fetch adapter if SOCKS support is
-  required for those paths.
+  Main-process fetch/streaming paths use a Node HTTP(S) fetch bridge for SOCKS5
+  and undici `ProxyAgent` for HTTP/HTTPS proxy modes.
+- `electron-updater` internal update downloads remain best-effort through
+  Electron session proxy/environment behavior where the library owns the
+  transport. PromptHub-owned updater calls use explicit proxy agents.
 
 ## Security
 

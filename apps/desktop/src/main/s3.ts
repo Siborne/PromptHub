@@ -6,8 +6,10 @@ import {
   S3Client,
   S3ServiceException,
 } from "@aws-sdk/client-s3";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
+import { getHttpRequestAgent } from "./services/network-proxy";
 
 interface S3Config {
   endpoint: string;
@@ -42,6 +44,8 @@ interface S3StatResult {
 }
 
 function createS3Client(config: S3Config): S3Client {
+  const endpoint = new URL(config.endpoint);
+  const agent = getHttpRequestAgent(endpoint);
   return new S3Client({
     region: config.region,
     endpoint: config.endpoint,
@@ -50,6 +54,15 @@ function createS3Client(config: S3Config): S3Client {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     },
+    ...(agent
+      ? {
+          requestHandler: new NodeHttpHandler(
+            endpoint.protocol === "https:"
+              ? { httpsAgent: agent }
+              : { httpAgent: agent },
+          ),
+        }
+      : {}),
   });
 }
 
@@ -133,7 +146,11 @@ export function registerS3IPC(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.S3_DOWNLOAD,
-    async (_event, key: string, config: S3Config): Promise<S3DownloadResult> => {
+    async (
+      _event,
+      key: string,
+      config: S3Config,
+    ): Promise<S3DownloadResult> => {
       try {
         const client = createS3Client(config);
         const response = await client.send(
