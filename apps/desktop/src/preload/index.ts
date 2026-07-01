@@ -167,8 +167,14 @@ contextBridge.exposeInMainWorld("electron", {
   setAutoLaunch: (enabled: boolean, minimizeOnLaunch?: boolean) =>
     ipcRenderer.send("app:setAutoLaunch", enabled, minimizeOnLaunch),
   relaunchApp: () => ipcRenderer.invoke(IPC_CHANNELS.APP_RELAUNCH),
-  getCacheSize: () => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_CACHE_SIZE) as Promise<{ size: number }>,
-  clearCache: () => ipcRenderer.invoke(IPC_CHANNELS.APP_CLEAR_CACHE) as Promise<{ success: boolean }>,
+  getCacheSize: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.APP_GET_CACHE_SIZE) as Promise<{
+      size: number;
+    }>,
+  clearCache: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.APP_CLEAR_CACHE) as Promise<{
+      success: boolean;
+    }>,
   getRuntimePaths: () =>
     ipcRenderer.invoke(IPC_CHANNELS.APP_GET_RUNTIME_PATHS) as Promise<{
       userDataPath: string;
@@ -177,8 +183,19 @@ contextBridge.exposeInMainWorld("electron", {
       promptsDir: string;
       rulesDir: string;
       skillsDir: string;
+      mcpDir: string;
       backupsDir: string;
       logsDir: string;
+      autoSyncLogPath: string;
+    }>,
+  appendAutoSyncLog: (entry: unknown) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.APP_APPEND_AUTO_SYNC_LOG,
+      entry,
+    ) as Promise<{
+      success: boolean;
+      path?: string;
+      error?: string;
     }>,
   setDebugMode: (enabled: boolean) =>
     ipcRenderer.send("app:setDebugMode", enabled),
@@ -247,10 +264,16 @@ contextBridge.exposeInMainWorld("electron", {
   // Updater
   // 更新器
   updater: {
-    check: (options?: boolean | { useMirror?: boolean; channel?: "stable" | "preview" }) =>
-      ipcRenderer.invoke("updater:check", options),
-    download: (options?: boolean | { useMirror?: boolean; channel?: "stable" | "preview" }) =>
-      ipcRenderer.invoke("updater:download", options),
+    check: (
+      options?:
+        | boolean
+        | { useMirror?: boolean; channel?: "stable" | "preview" },
+    ) => ipcRenderer.invoke("updater:check", options),
+    download: (
+      options?:
+        | boolean
+        | { useMirror?: boolean; channel?: "stable" | "preview" },
+    ) => ipcRenderer.invoke("updater:download", options),
     install: () => ipcRenderer.invoke("updater:install"),
     getInstallSource: () => ipcRenderer.invoke("updater:installSource"),
     openDownloadedUpdate: () =>
@@ -275,9 +298,13 @@ contextBridge.exposeInMainWorld("electron", {
     },
   },
   cli: {
-    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.CLI_STATUS) as Promise<CliStatus>,
+    getStatus: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLI_STATUS) as Promise<CliStatus>,
     install: (method?: CliInstallMethod) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CLI_INSTALL, method) as Promise<CliInstallResult>,
+      ipcRenderer.invoke(
+        IPC_CHANNELS.CLI_INSTALL,
+        method,
+      ) as Promise<CliInstallResult>,
   },
   // Images
   // 图片
@@ -462,8 +489,15 @@ declare global {
         promptsDir: string;
         rulesDir: string;
         skillsDir: string;
+        mcpDir: string;
         backupsDir: string;
         logsDir: string;
+        autoSyncLogPath: string;
+      }>;
+      appendAutoSyncLog?: (entry: unknown) => Promise<{
+        success: boolean;
+        path?: string;
+        error?: string;
       }>;
       setDebugMode?: (enabled: boolean) => void;
       toggleDevTools?: () => void;
@@ -500,9 +534,9 @@ declare global {
       ) => Promise<DataPathChangeResult>;
       migrateData?: (newPath: string) => Promise<DataPathChangeResult>;
       // Data recovery
-      checkRecovery?: (options?: RecoveryScanOptions) => Promise<
-        RecoveryCandidate[]
-      >;
+      checkRecovery?: (
+        options?: RecoveryScanOptions,
+      ) => Promise<RecoveryCandidate[]>;
       previewRecovery?: (sourcePath: string) => Promise<RecoveryPreviewResult>;
       performRecovery?: (sourcePath: string) => Promise<{
         success: boolean;
@@ -526,20 +560,21 @@ declare global {
       }) => Promise<{ canceled: boolean; filePath?: string; error?: string }>;
       updater?: {
         check: (
-          options?: boolean | { useMirror?: boolean; channel?: "stable" | "preview" },
+          options?:
+            | boolean
+            | { useMirror?: boolean; channel?: "stable" | "preview" },
         ) => Promise<{ success: boolean; result?: any; error?: string }>;
         download: (
-          options?: boolean | { useMirror?: boolean; channel?: "stable" | "preview" },
+          options?:
+            | boolean
+            | { useMirror?: boolean; channel?: "stable" | "preview" },
         ) => Promise<{ success: boolean; error?: string }>;
-        install: () => Promise<
-          | {
-              success: boolean;
-              manual?: boolean;
-              backupPath?: string;
-              error?: string;
-            }
-          | void
-        >;
+        install: () => Promise<{
+          success: boolean;
+          manual?: boolean;
+          backupPath?: string;
+          error?: string;
+        } | void>;
         openDownloadedUpdate: () => Promise<{
           success: boolean;
           path?: string;

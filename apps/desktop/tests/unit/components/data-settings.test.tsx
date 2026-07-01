@@ -1,5 +1,11 @@
 import type { FormEvent } from "react";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -56,8 +62,8 @@ vi.mock("../../../src/renderer/services/database-backup", () => ({
     }
     return message;
   },
-  pickSupportedBackupFile: vi.fn((files: FileList | File[]) =>
-    Array.from(files)[0] ?? null,
+  pickSupportedBackupFile: vi.fn(
+    (files: FileList | File[]) => Array.from(files)[0] ?? null,
   ),
   previewImportFile: vi.fn(),
   restoreFromFile: vi.fn(),
@@ -242,7 +248,8 @@ describe("DataSettings", { timeout: 60_000 }, () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    delete (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__;
+    delete (window as Window & { __PROMPTHUB_WEB__?: boolean })
+      .__PROMPTHUB_WEB__;
   });
 
   it("shows the real current data path and the pending path after restart", async () => {
@@ -265,6 +272,132 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       screen.getByText("Will switch to this directory after restart:"),
     ).toBeInTheDocument();
     expect(screen.getByText("/next/data")).toBeInTheDocument();
+  });
+
+  it("shows the MCP data directory in local data paths and opens it", async () => {
+    const openPath = vi.fn();
+    installWindowMocks({
+      api: {
+        security: {
+          status: vi.fn().mockResolvedValue({ configured: false }),
+        },
+      },
+      electron: {
+        getDataPathStatus: vi.fn().mockResolvedValue({
+          configuredPath: null,
+          currentPath: "/Users/test/Library/Application Support/PromptHub",
+          needsRestart: false,
+        }),
+        getRuntimePaths: vi.fn().mockResolvedValue({
+          userDataPath: "/Users/test/Library/Application Support/PromptHub",
+          dataDir: "/Users/test/Library/Application Support/PromptHub/data",
+          databasePath:
+            "/Users/test/Library/Application Support/PromptHub/data/prompthub.db",
+          promptsDir:
+            "/Users/test/Library/Application Support/PromptHub/data/prompts",
+          rulesDir:
+            "/Users/test/Library/Application Support/PromptHub/data/rules",
+          skillsDir:
+            "/Users/test/Library/Application Support/PromptHub/data/skills",
+          mcpDir: "/Users/test/Library/Application Support/PromptHub/data/mcp",
+          backupsDir:
+            "/Users/test/Library/Application Support/PromptHub/backups",
+          logsDir: "/Users/test/Library/Application Support/PromptHub/logs",
+          autoSyncLogPath:
+            "/Users/test/Library/Application Support/PromptHub/logs/auto-sync.jsonl",
+        }),
+        openPath,
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<DataSettings activeSubsection="local" />, {
+        language: "en",
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("MCP Directory")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        "/Users/test/Library/Application Support/PromptHub/data/mcp",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Automatic Sync Log")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "/Users/test/Library/Application Support/PromptHub/logs/auto-sync.jsonl",
+      ),
+    ).toBeInTheDocument();
+
+    const mcpPath = screen.getByText(
+      "/Users/test/Library/Application Support/PromptHub/data/mcp",
+    );
+    const row = mcpPath.closest("div.flex");
+    expect(row).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.click(
+        within(row as HTMLElement).getByRole("button", { name: "Open Folder" }),
+      );
+    });
+
+    expect(openPath).toHaveBeenCalledWith(
+      "/Users/test/Library/Application Support/PromptHub/data/mcp",
+    );
+  });
+
+  it("shows recent automatic sync history on cloud sync settings", async () => {
+    installWindowMocks({
+      api: {
+        security: {
+          status: vi.fn().mockResolvedValue({ configured: false }),
+        },
+        settings: {
+          get: vi.fn().mockResolvedValue({
+            autoSyncHistory: [
+              {
+                id: "sync-1",
+                provider: "self-hosted",
+                reason: "startup-resume",
+                status: "success",
+                startedAt: "2026-07-01T00:00:00.000Z",
+                finishedAt: "2026-07-01T00:00:01.000Z",
+                message: "self-hosted pull synced: 2 prompts",
+                localChanged: true,
+              },
+            ],
+          }),
+        },
+      },
+      electron: {
+        getDataPathStatus: vi.fn().mockResolvedValue({
+          configuredPath: null,
+          currentPath: "/actual/data",
+          needsRestart: false,
+        }),
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<DataSettings activeSubsection="webdav" />, {
+        language: "en",
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Automatic sync history")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Self-Hosted PromptHub")).toBeInTheDocument();
+    expect(screen.getByText("Startup resume")).toBeInTheDocument();
+    expect(screen.getByText("Success")).toBeInTheDocument();
+    expect(screen.getByText("Updated local data")).toBeInTheDocument();
+    expect(
+      screen.getByText("self-hosted pull synced: 2 prompts"),
+    ).toBeInTheDocument();
   });
 
   it("keeps rendered data settings actions non-submit with decorative icons hidden", async () => {
@@ -693,12 +826,14 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       await Promise.resolve();
     });
 
-    vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
-      if (tagName === "input") {
-        return input as unknown as HTMLInputElement;
-      }
-      return originalCreateElement(tagName);
-    });
+    vi.spyOn(document, "createElement").mockImplementation(
+      (tagName: string) => {
+        if (tagName === "input") {
+          return input as unknown as HTMLInputElement;
+        }
+        return originalCreateElement(tagName);
+      },
+    );
 
     const importButton = screen.getByRole("button", { name: "Import Data" });
     expect(importButton).toHaveAttribute("aria-label", "Import Data");
@@ -729,7 +864,10 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       expect(createUpgradeBackup).toHaveBeenCalled();
     });
     expect(restoreFromFile).toHaveBeenCalledWith(file);
-    expect(showToast).toHaveBeenCalledWith("Data imported successfully", "success");
+    expect(showToast).toHaveBeenCalledWith(
+      "Data imported successfully",
+      "success",
+    );
   });
 
   it("runs full backup export from the full backup button", async () => {
@@ -787,12 +925,14 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       await Promise.resolve();
     });
 
-    vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
-      if (tagName === "input") {
-        return input as unknown as HTMLInputElement;
-      }
-      return originalCreateElement(tagName);
-    });
+    vi.spyOn(document, "createElement").mockImplementation(
+      (tagName: string) => {
+        if (tagName === "input") {
+          return input as unknown as HTMLInputElement;
+        }
+        return originalCreateElement(tagName);
+      },
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Import Data" }));
 
@@ -829,7 +969,9 @@ describe("DataSettings", { timeout: 60_000 }, () => {
     });
 
     const heading = screen.getByText("Drag to Restore Backup");
-    const dropTarget = heading.closest("div.rounded-xl") as HTMLDivElement | null;
+    const dropTarget = heading.closest(
+      "div.rounded-xl",
+    ) as HTMLDivElement | null;
     expect(dropTarget).not.toBeNull();
 
     const file = new File(["backup"], "prompthub-export.phub.gz", {
@@ -919,9 +1061,7 @@ describe("DataSettings", { timeout: 60_000 }, () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Current sync source" }),
     );
-    fireEvent.click(
-      screen.getByRole("option", { name: "WebDAV" }),
-    );
+    fireEvent.click(screen.getByRole("option", { name: "WebDAV" }));
 
     expect(settingsState.setSyncProvider).toHaveBeenCalledWith("webdav");
   });
@@ -1091,10 +1231,18 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       });
     });
 
-    expect(screen.getByPlaceholderText("https://s3.example.com")).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "Test Connection" })).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "Back up to remote" })).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "Update from remote" })).not.toBeDisabled();
+    expect(
+      screen.getByPlaceholderText("https://s3.example.com"),
+    ).not.toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Test Connection" }),
+    ).not.toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Back up to remote" }),
+    ).not.toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Update from remote" }),
+    ).not.toBeDisabled();
   });
 
   it("runs S3 connection checks from the settings panel", async () => {
@@ -1277,7 +1425,8 @@ describe("DataSettings", { timeout: 60_000 }, () => {
   });
 
   it("keeps web data settings focused on backup flows", async () => {
-    (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__ = true;
+    (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__ =
+      true;
 
     await act(async () => {
       await renderWithI18n(<DataSettings activeSubsection="backup" />, {
@@ -1291,8 +1440,12 @@ describe("DataSettings", { timeout: 60_000 }, () => {
     expect(screen.queryByText("Data Path")).toBeNull();
     expect(screen.queryByRole("button", { name: "Clear Data" })).toBeNull();
     expect(screen.getByText("Backup & Restore")).toBeInTheDocument();
-    expect(screen.queryByText("Will switch to this directory after restart:")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Test Connection" })).toBeNull();
+    expect(
+      screen.queryByText("Will switch to this directory after restart:"),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Test Connection" }),
+    ).toBeNull();
   });
 
   it("keeps desktop data settings free of standalone skill configuration controls", async () => {
@@ -1342,9 +1495,7 @@ describe("DataSettings", { timeout: 60_000 }, () => {
     });
 
     expect(screen.getByText("0.5.3 -> 0.5.4")).toBeInTheDocument();
-    expect(
-      screen.getByText(/包含项目|Included items/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/包含项目|Included items/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Roll back to this snapshot" }),
     ).toBeInTheDocument();
@@ -1485,7 +1636,9 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       ).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Roll back to this snapshot" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Roll back to this snapshot" }),
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Restore upgrade backup")).toBeInTheDocument();

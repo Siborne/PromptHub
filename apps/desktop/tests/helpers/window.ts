@@ -278,6 +278,7 @@ export function createWindowElectronMock(overrides?: DeepPartial<MockRecord>) {
         (file: File & { path?: string }) => file.path ?? "",
       ),
       openPath: vi.fn(),
+      appendAutoSyncLog: vi.fn().mockResolvedValue({ success: true }),
       showNotification: vi.fn(),
       getDataPath: vi.fn(),
       getDataPathStatus: vi.fn(),

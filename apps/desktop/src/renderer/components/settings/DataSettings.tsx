@@ -40,6 +40,11 @@ import {
   runWebDAVDownload,
   runWebDAVUpload,
 } from "../../services/backup-orchestrator";
+import {
+  AUTO_SYNC_HISTORY_UPDATED_EVENT,
+  readAutoSyncHistory,
+  type AutoSyncHistoryEntry,
+} from "../../services/sync-history";
 import { useSettingsStore } from "../../stores/settings.store";
 import { usePromptStore } from "../../stores/prompt.store";
 import { useToast } from "../ui/Toast";
@@ -47,13 +52,12 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DataRecoveryDialog } from "../ui/DataRecoveryDialog";
 import { Select } from "../ui/Select";
 import { Checkbox } from "../ui";
-import {
-  SettingItem,
-  ToggleSwitch,
-  PasswordInput,
-} from "./shared";
+import { SettingItem, ToggleSwitch, PasswordInput } from "./shared";
 import { isWebRuntime } from "../../runtime";
-import type { RecoveryCandidate, UpgradeBackupEntry } from "@prompthub/shared/types";
+import type {
+  RecoveryCandidate,
+  UpgradeBackupEntry,
+} from "@prompthub/shared/types";
 import { useBackupImportController } from "../../hooks/useBackupImportController";
 import { BackupImportConfirmDialog } from "./BackupImportConfirmDialog";
 
@@ -169,7 +173,9 @@ function DataSettingsSection({
 }
 
 function getSyncPanelContentClassName(disabled: boolean): string {
-  return disabled ? "space-y-3 pt-2 border-t border-border opacity-60" : "space-y-3 pt-2 border-t border-border";
+  return disabled
+    ? "space-y-3 pt-2 border-t border-border opacity-60"
+    : "space-y-3 pt-2 border-t border-border";
 }
 
 function getSyncProviderOptionLabel(
@@ -203,7 +209,8 @@ export function DataSettings({
   backupImportController,
 }: DataSettingsProps) {
   const { t } = useTranslation();
-  const translateLabel = (key: string, fallback: string): string => t(key, fallback);
+  const translateLabel = (key: string, fallback: string): string =>
+    t(key, fallback);
   const { showToast } = useToast();
   const webRuntime = isWebRuntime();
   const settings = useSettingsStore();
@@ -213,12 +220,18 @@ export function DataSettings({
   const [currentDataPath, setCurrentDataPath] = useState("");
   const [pendingDataPath, setPendingDataPath] = useState<string | null>(null);
   const [currentVersion, setCurrentVersion] = useState("");
-  const [upgradeBackups, setUpgradeBackups] = useState<UpgradeBackupEntry[]>([]);
+  const [upgradeBackups, setUpgradeBackups] = useState<UpgradeBackupEntry[]>(
+    [],
+  );
   const [loadingUpgradeBackups, setLoadingUpgradeBackups] = useState(false);
-  const [upgradeBackupActionId, setUpgradeBackupActionId] = useState<string | null>(null);
+  const [upgradeBackupActionId, setUpgradeBackupActionId] = useState<
+    string | null
+  >(null);
   const [showAllUpgradeBackups, setShowAllUpgradeBackups] = useState(false);
-  const [restoreCandidate, setRestoreCandidate] = useState<UpgradeBackupEntry | null>(null);
-  const [deleteCandidate, setDeleteCandidate] = useState<UpgradeBackupEntry | null>(null);
+  const [restoreCandidate, setRestoreCandidate] =
+    useState<UpgradeBackupEntry | null>(null);
+  const [deleteCandidate, setDeleteCandidate] =
+    useState<UpgradeBackupEntry | null>(null);
   const [manualRecoveryPaths, setManualRecoveryPaths] = useState<string[]>([]);
   const [manualPathInputValue, setManualPathInputValue] = useState("");
   const [scanningRecoverySources, setScanningRecoverySources] = useState(false);
@@ -228,6 +241,9 @@ export function DataSettings({
   const [showRecoveryBrowser, setShowRecoveryBrowser] = useState(false);
   const [pendingDataPathChange, setPendingDataPathChange] =
     useState<DataPathChangePreview | null>(null);
+  const [autoSyncHistory, setAutoSyncHistory] = useState<
+    AutoSyncHistoryEntry[]
+  >([]);
   const [runtimePaths, setRuntimePaths] = useState<null | {
     userDataPath: string;
     dataDir: string;
@@ -235,19 +251,24 @@ export function DataSettings({
     promptsDir: string;
     rulesDir: string;
     skillsDir: string;
+    mcpDir: string;
     backupsDir: string;
     logsDir: string;
+    autoSyncLogPath: string;
   }>(null);
   const [dataPathActionLoading, setDataPathActionLoading] = useState(false);
   const [cacheSize, setCacheSize] = useState<number | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
-  const [isBackupDropTargetActive, setIsBackupDropTargetActive] = useState(false);
+  const [isBackupDropTargetActive, setIsBackupDropTargetActive] =
+    useState(false);
   const localBackupImportController = useBackupImportController();
   const effectiveBackupImportController =
     backupImportController ?? localBackupImportController;
 
   useEffect(() => {
-    void window.electron?.getCacheSize?.().then((res) => setCacheSize(res.size));
+    void window.electron
+      ?.getCacheSize?.()
+      .then((res) => setCacheSize(res.size));
   }, []);
 
   useEffect(() => {
@@ -260,6 +281,31 @@ export function DataSettings({
         setRuntimePaths(paths);
       }
     });
+  }, [webRuntime]);
+
+  useEffect(() => {
+    if (webRuntime) {
+      return;
+    }
+
+    let mounted = true;
+    const refreshHistory = () => {
+      void readAutoSyncHistory().then((history) => {
+        if (mounted) {
+          setAutoSyncHistory(history);
+        }
+      });
+    };
+
+    refreshHistory();
+    window.addEventListener(AUTO_SYNC_HISTORY_UPDATED_EVENT, refreshHistory);
+    return () => {
+      mounted = false;
+      window.removeEventListener(
+        AUTO_SYNC_HISTORY_UPDATED_EVENT,
+        refreshHistory,
+      );
+    };
   }, [webRuntime]);
 
   const restartApp = async () => {
@@ -330,6 +376,55 @@ export function DataSettings({
         ]
       : []),
   ];
+  const showAutoSyncHistory =
+    !webRuntime &&
+    (activeSubsection === "selfHosted" ||
+      activeSubsection === "webdav" ||
+      activeSubsection === "s3");
+
+  const getAutoSyncProviderLabel = (
+    provider: AutoSyncHistoryEntry["provider"],
+  ) => {
+    if (provider === "webdav") {
+      return t("settings.webdavSyncMenu", "WebDAV");
+    }
+    if (provider === "s3") {
+      return t("settings.s3SyncMenu", "S3 Compatible Storage");
+    }
+    return t("settings.selfHostedSyncMenu", "Self-Hosted PromptHub");
+  };
+
+  const getAutoSyncReasonLabel = (reason: AutoSyncHistoryEntry["reason"]) => {
+    if (reason === "startup") {
+      return t("settings.autoSyncReasonStartup", "Startup");
+    }
+    if (reason === "startup-resume") {
+      return t("settings.autoSyncReasonStartupResume", "Startup resume");
+    }
+    return t("settings.autoSyncReasonInterval", "Interval");
+  };
+
+  const getAutoSyncStatusLabel = (status: AutoSyncHistoryEntry["status"]) => {
+    if (status === "success") {
+      return t("settings.autoSyncStatusSuccess", "Success");
+    }
+    if (status === "failed") {
+      return t("settings.autoSyncStatusFailed", "Failed");
+    }
+    return t("settings.autoSyncStatusSkipped", "Skipped");
+  };
+
+  const getAutoSyncStatusClassName = (
+    status: AutoSyncHistoryEntry["status"],
+  ) => {
+    if (status === "success") {
+      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300";
+    }
+    if (status === "failed") {
+      return "border-destructive/30 bg-destructive/10 text-destructive";
+    }
+    return "border-border bg-muted text-muted-foreground";
+  };
 
   // Export/backup options
   // 数据导出/备份选项
@@ -360,7 +455,10 @@ export function DataSettings({
       setPendingDataPath(
         status.needsRestart ? status.configuredPath || null : null,
       );
-      if (status.configuredPath && status.configuredPath !== persistedDataPath) {
+      if (
+        status.configuredPath &&
+        status.configuredPath !== persistedDataPath
+      ) {
         setDataPath(status.configuredPath);
       }
       return;
@@ -399,7 +497,8 @@ export function DataSettings({
   const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024 * 1024)
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   };
 
@@ -702,13 +801,15 @@ export function DataSettings({
   };
 
   const finishDataPathChange = async (
-    result: {
-      success: boolean;
-      newPath?: string;
-      needsRestart?: boolean;
-      backupPath?: string;
-      error?: string;
-    } | undefined,
+    result:
+      | {
+          success: boolean;
+          newPath?: string;
+          needsRestart?: boolean;
+          backupPath?: string;
+          error?: string;
+        }
+      | undefined,
     action: DataPathChangeAction,
     fallbackPath: string,
   ) => {
@@ -878,9 +979,7 @@ export function DataSettings({
     <>
       <div
         className={
-          webRuntime
-            ? "space-y-6"
-            : "data-settings-shell min-w-0 space-y-6"
+          webRuntime ? "space-y-6" : "data-settings-shell min-w-0 space-y-6"
         }
       >
         {!webRuntime && activeSubsection === "local" ? (
@@ -889,11 +988,14 @@ export function DataSettings({
               <div className="flex items-center gap-3">
                 <FolderIcon className="w-5 h-5 text-muted-foreground" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium">{t("settings.dataPath")}</p>
+                  <p className="text-sm font-medium">
+                    {t("settings.dataPath")}
+                  </p>
                   <button
                     type="button"
                     onClick={() =>
-                      currentDataPath && window.electron?.openPath?.(currentDataPath)
+                      currentDataPath &&
+                      window.electron?.openPath?.(currentDataPath)
                     }
                     className="text-xs text-primary font-mono mt-0.5 hover:underline flex items-center gap-1 cursor-pointer"
                     title={t("settings.openFolder")}
@@ -927,7 +1029,9 @@ export function DataSettings({
         ) : null}
 
         {!webRuntime && activeSubsection === "recovery" ? (
-          <DataSettingsSection title={t("settings.recoveryScanner", "历史数据急救")}>
+          <DataSettingsSection
+            title={t("settings.recoveryScanner", "历史数据急救")}
+          >
             <div className="p-4 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -959,7 +1063,10 @@ export function DataSettings({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium">
-                      {t("settings.recoveryExtraPaths", "Extra scan directories")}
+                      {t(
+                        "settings.recoveryExtraPaths",
+                        "Extra scan directories",
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {t(
@@ -1036,7 +1143,10 @@ export function DataSettings({
                           className="h-7 w-7 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
                           title={t("common.delete", "Delete")}
                         >
-                          <XIcon aria-hidden="true" className="w-4 h-4 mx-auto" />
+                          <XIcon
+                            aria-hidden="true"
+                            className="w-4 h-4 mx-auto"
+                          />
                         </button>
                       </div>
                     ))}
@@ -1048,7 +1158,9 @@ export function DataSettings({
         ) : null}
 
         {!webRuntime && activeSubsection === "selfHosted" ? (
-          <DataSettingsSection title={t("settings.selfHostedSyncMenu", "Self-Hosted PromptHub")}>
+          <DataSettingsSection
+            title={t("settings.selfHostedSyncMenu", "Self-Hosted PromptHub")}
+          >
             <div className="p-4 space-y-4">
               <div className="rounded-xl border border-border bg-muted/30 px-3 py-3">
                 <div className="flex items-center justify-between gap-4">
@@ -1065,7 +1177,10 @@ export function DataSettings({
                   </div>
                   <div className="min-w-[220px]">
                     <Select
-                      ariaLabel={t("settings.syncProviderTitle", "Current sync source")}
+                      ariaLabel={t(
+                        "settings.syncProviderTitle",
+                        "Current sync source",
+                      )}
                       value={settings.syncProvider}
                       onChange={(value) =>
                         settings.setSyncProvider(
@@ -1092,14 +1207,24 @@ export function DataSettings({
                   </p>
                 </div>
                 <ToggleSwitch
-                  ariaLabel={t("settings.selfHostedSyncMenu", "Self-Hosted PromptHub")}
+                  ariaLabel={t(
+                    "settings.selfHostedSyncMenu",
+                    "Self-Hosted PromptHub",
+                  )}
                   checked={settings.selfHostedSyncEnabled}
                   onChange={settings.setSelfHostedSyncEnabled}
                 />
               </div>
 
-              <div className={getSyncPanelContentClassName(!settings.selfHostedSyncEnabled)}>
-                <fieldset disabled={!settings.selfHostedSyncEnabled} className="space-y-3 min-w-0">
+              <div
+                className={getSyncPanelContentClassName(
+                  !settings.selfHostedSyncEnabled,
+                )}
+              >
+                <fieldset
+                  disabled={!settings.selfHostedSyncEnabled}
+                  className="space-y-3 min-w-0"
+                >
                   <div>
                     <label className="text-xs text-muted-foreground mb-1 block">
                       {t(
@@ -1186,8 +1311,8 @@ export function DataSettings({
                           setSelfHostedTesting(false);
                         }
                       }}
-                        disabled={selfHostedTesting || !selfHostedConfigComplete}
-                        className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      disabled={selfHostedTesting || !selfHostedConfigComplete}
+                      className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
                     >
                       <RefreshCwIcon
                         className={`w-4 h-4 ${selfHostedTesting ? "animate-spin" : ""}`}
@@ -1231,8 +1356,10 @@ export function DataSettings({
                           setSelfHostedUploading(false);
                         }
                       }}
-                        disabled={selfHostedUploading || !selfHostedConfigComplete}
-                        className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      disabled={
+                        selfHostedUploading || !selfHostedConfigComplete
+                      }
+                      className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
                     >
                       <UploadIcon className="w-4 h-4" aria-hidden="true" />
                       {t("settings.backupToRemote", "Back up to remote")}
@@ -1276,8 +1403,10 @@ export function DataSettings({
                           setSelfHostedDownloading(false);
                         }
                       }}
-                        disabled={selfHostedDownloading || !selfHostedConfigComplete}
-                        className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      disabled={
+                        selfHostedDownloading || !selfHostedConfigComplete
+                      }
+                      className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
                     >
                       <DownloadIcon className="w-4 h-4" aria-hidden="true" />
                       {t("settings.updateFromRemote", "Update from remote")}
@@ -1404,56 +1533,65 @@ export function DataSettings({
         ) : null}
 
         {!webRuntime && activeSubsection === "webdav" ? (
-        <DataSettingsSection title={t("settings.webdavSyncMenu", "WebDAV")}>
-          <div className="p-4 space-y-4">
-            <div className="flex items-center gap-3">
-              <CloudIcon className="w-5 h-5 text-muted-foreground" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">
-                  {t("settings.webdavSyncMenu", "WebDAV")}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t("settings.webdavEnabledDesc")}
-                </p>
+          <DataSettingsSection title={t("settings.webdavSyncMenu", "WebDAV")}>
+            <div className="p-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <CloudIcon className="w-5 h-5 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">
+                    {t("settings.webdavSyncMenu", "WebDAV")}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t("settings.webdavEnabledDesc")}
+                  </p>
+                </div>
+                <ToggleSwitch
+                  ariaLabel={t("settings.webdavSyncMenu", "WebDAV")}
+                  checked={settings.webdavEnabled}
+                  onChange={settings.setWebdavEnabled}
+                />
               </div>
-              <ToggleSwitch
-                ariaLabel={t("settings.webdavSyncMenu", "WebDAV")}
-                checked={settings.webdavEnabled}
-                onChange={settings.setWebdavEnabled}
-              />
-            </div>
-            <div className={getSyncPanelContentClassName(!settings.webdavEnabled)}>
-              <fieldset disabled={!settings.webdavEnabled} className="space-y-3 min-w-0">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    {t("settings.webdavUrl")}
-                  </label>
-                  <input
-                    type="text"
-                    aria-label={`${t("settings.webdavSyncMenu", "WebDAV")} ${t("settings.webdavUrl")}`}
-                    placeholder="https://dav.example.com/path"
-                    value={settings.webdavUrl}
-                    onChange={(e) => settings.setWebdavUrl(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    {t("settings.webdavUsername")}
-                  </label>
-                  <input
-                    type="text"
-                    aria-label={`${t("settings.webdavSyncMenu", "WebDAV")} ${t("settings.webdavUsername")}`}
-                    placeholder={t("settings.webdavUsername")}
-                    value={settings.webdavUsername}
-                    onChange={(e) => settings.setWebdavUsername(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    {t("settings.webdavPassword")}
-                  </label>
+              <div
+                className={getSyncPanelContentClassName(
+                  !settings.webdavEnabled,
+                )}
+              >
+                <fieldset
+                  disabled={!settings.webdavEnabled}
+                  className="space-y-3 min-w-0"
+                >
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.webdavUrl")}
+                    </label>
+                    <input
+                      type="text"
+                      aria-label={`${t("settings.webdavSyncMenu", "WebDAV")} ${t("settings.webdavUrl")}`}
+                      placeholder="https://dav.example.com/path"
+                      value={settings.webdavUrl}
+                      onChange={(e) => settings.setWebdavUrl(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.webdavUsername")}
+                    </label>
+                    <input
+                      type="text"
+                      aria-label={`${t("settings.webdavSyncMenu", "WebDAV")} ${t("settings.webdavUsername")}`}
+                      placeholder={t("settings.webdavUsername")}
+                      value={settings.webdavUsername}
+                      onChange={(e) =>
+                        settings.setWebdavUsername(e.target.value)
+                      }
+                      className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.webdavPassword")}
+                    </label>
                     <PasswordInput
                       ariaLabel={`${t("settings.webdavSyncMenu", "WebDAV")} ${t("settings.webdavPassword")}`}
                       placeholder={t("settings.webdavPassword")}
@@ -1462,132 +1600,132 @@ export function DataSettings({
                       disabled={!settings.webdavEnabled}
                       className="h-9"
                     />
-                </div>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (
-                        !settings.webdavUrl ||
-                        !settings.webdavUsername ||
-                        !settings.webdavPassword
-                      ) {
-                        return;
-                      }
-                      setWebdavTesting(true);
-                      try {
-                        const result = await runWebDAVConnectionCheck({
-                          url: settings.webdavUrl,
-                          username: settings.webdavUsername,
-                          password: settings.webdavPassword,
-                        });
-                        showToast(
-                          result.success
-                            ? t("toast.connectionSuccess")
-                            : t("toast.connectionFailed"),
-                          result.success ? "success" : "error",
-                        );
-                      } finally {
-                        setWebdavTesting(false);
-                      }
-                    }}
-                    disabled={webdavTesting || !webdavConfigComplete}
-                    className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <RefreshCwIcon
-                      className={`w-4 h-4 ${webdavTesting ? "animate-spin" : ""}`}
-                      aria-hidden="true"
-                    />
-                    {t("settings.testConnection")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (
-                        !settings.webdavUrl ||
-                        !settings.webdavUsername ||
-                        !settings.webdavPassword
-                      ) {
-                        return;
-                      }
-                      setWebdavUploading(true);
-                      try {
-                        const result = await runWebDAVUpload({
-                          config: {
-                            url: settings.webdavUrl,
-                            username: settings.webdavUsername,
-                            password: settings.webdavPassword,
-                          },
-                          options: {
-                            includeImages: settings.webdavIncludeImages,
-                            incrementalSync: settings.webdavIncrementalSync,
-                            encryptionPassword:
-                              settings.webdavEncryptionEnabled &&
-                              settings.webdavEncryptionPassword
-                                ? settings.webdavEncryptionPassword
-                                : undefined,
-                          },
-                        });
-                        showToast(
-                          result.success ? result.message : result.message,
-                          result.success ? "success" : "error",
-                        );
-                      } finally {
-                        setWebdavUploading(false);
-                      }
-                    }}
-                    disabled={webdavUploading || !webdavConfigComplete}
-                    className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <UploadIcon className="w-4 h-4" aria-hidden="true" />
-                    {t("settings.backupToRemote", "Back up to remote")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (
-                        !settings.webdavUrl ||
-                        !settings.webdavUsername ||
-                        !settings.webdavPassword
-                      ) {
-                        return;
-                      }
-                      setWebdavDownloading(true);
-                      try {
-                        const result = await runWebDAVDownload({
-                          config: {
-                            url: settings.webdavUrl,
-                            username: settings.webdavUsername,
-                            password: settings.webdavPassword,
-                          },
-                          options: {
-                            incrementalSync: settings.webdavIncrementalSync,
-                            encryptionPassword:
-                              settings.webdavEncryptionEnabled &&
-                              settings.webdavEncryptionPassword
-                                ? settings.webdavEncryptionPassword
-                                : undefined,
-                          },
-                        });
-                        if (result.success) {
-                          showToast(result.message, "success");
-                          setTimeout(() => window.location.reload(), 1000);
-                        } else {
-                          showToast(result.message, "error");
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (
+                          !settings.webdavUrl ||
+                          !settings.webdavUsername ||
+                          !settings.webdavPassword
+                        ) {
+                          return;
                         }
-                      } finally {
-                        setWebdavDownloading(false);
-                      }
-                    }}
-                    disabled={webdavDownloading || !webdavConfigComplete}
-                    className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <DownloadIcon className="w-4 h-4" aria-hidden="true" />
-                    {t("settings.updateFromRemote", "Update from remote")}
-                  </button>
-                </div>
+                        setWebdavTesting(true);
+                        try {
+                          const result = await runWebDAVConnectionCheck({
+                            url: settings.webdavUrl,
+                            username: settings.webdavUsername,
+                            password: settings.webdavPassword,
+                          });
+                          showToast(
+                            result.success
+                              ? t("toast.connectionSuccess")
+                              : t("toast.connectionFailed"),
+                            result.success ? "success" : "error",
+                          );
+                        } finally {
+                          setWebdavTesting(false);
+                        }
+                      }}
+                      disabled={webdavTesting || !webdavConfigComplete}
+                      className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <RefreshCwIcon
+                        className={`w-4 h-4 ${webdavTesting ? "animate-spin" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {t("settings.testConnection")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (
+                          !settings.webdavUrl ||
+                          !settings.webdavUsername ||
+                          !settings.webdavPassword
+                        ) {
+                          return;
+                        }
+                        setWebdavUploading(true);
+                        try {
+                          const result = await runWebDAVUpload({
+                            config: {
+                              url: settings.webdavUrl,
+                              username: settings.webdavUsername,
+                              password: settings.webdavPassword,
+                            },
+                            options: {
+                              includeImages: settings.webdavIncludeImages,
+                              incrementalSync: settings.webdavIncrementalSync,
+                              encryptionPassword:
+                                settings.webdavEncryptionEnabled &&
+                                settings.webdavEncryptionPassword
+                                  ? settings.webdavEncryptionPassword
+                                  : undefined,
+                            },
+                          });
+                          showToast(
+                            result.success ? result.message : result.message,
+                            result.success ? "success" : "error",
+                          );
+                        } finally {
+                          setWebdavUploading(false);
+                        }
+                      }}
+                      disabled={webdavUploading || !webdavConfigComplete}
+                      className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <UploadIcon className="w-4 h-4" aria-hidden="true" />
+                      {t("settings.backupToRemote", "Back up to remote")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (
+                          !settings.webdavUrl ||
+                          !settings.webdavUsername ||
+                          !settings.webdavPassword
+                        ) {
+                          return;
+                        }
+                        setWebdavDownloading(true);
+                        try {
+                          const result = await runWebDAVDownload({
+                            config: {
+                              url: settings.webdavUrl,
+                              username: settings.webdavUsername,
+                              password: settings.webdavPassword,
+                            },
+                            options: {
+                              incrementalSync: settings.webdavIncrementalSync,
+                              encryptionPassword:
+                                settings.webdavEncryptionEnabled &&
+                                settings.webdavEncryptionPassword
+                                  ? settings.webdavEncryptionPassword
+                                  : undefined,
+                            },
+                          });
+                          if (result.success) {
+                            showToast(result.message, "success");
+                            setTimeout(() => window.location.reload(), 1000);
+                          } else {
+                            showToast(result.message, "error");
+                          }
+                        } finally {
+                          setWebdavDownloading(false);
+                        }
+                      }}
+                      disabled={webdavDownloading || !webdavConfigComplete}
+                      className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <DownloadIcon className="w-4 h-4" aria-hidden="true" />
+                      {t("settings.updateFromRemote", "Update from remote")}
+                    </button>
+                  </div>
 
-                {/* 自动运行（定时同步） */}
+                  {/* 自动运行（定时同步） */}
                   <div className="flex items-center justify-between pt-3 border-t border-border">
                     <div className="flex-1 mr-4">
                       <p className="text-sm font-medium">
@@ -1602,168 +1740,184 @@ export function DataSettings({
                             )}
                       </p>
                     </div>
-                  <div className="min-w-[140px]">
-                    <Select
-                      ariaLabel={`${t("settings.webdavSyncMenu", "WebDAV")} ${t("settings.webdavAutoRun", "Auto Run")}`}
-                      value={String(settings.webdavAutoSyncInterval)}
-                      onChange={(val) =>
-                        settings.setWebdavAutoSyncInterval(Number(val))
-                      }
-                      options={[
-                        { value: "0", label: t("common.off", "关闭") },
-                        {
-                          value: "5",
-                          label: t("settings.every5min", "每 5 分钟"),
-                        },
-                        {
-                          value: "15",
-                          label: t("settings.every15min", "每 15 分钟"),
-                        },
-                        {
-                          value: "30",
-                          label: t("settings.every30min", "每 30 分钟"),
-                        },
-                        {
-                          value: "60",
-                          label: t("settings.every60min", "每 60 分钟"),
-                        },
-                      ]}
-                    />
-                  </div>
-                </div>
-
-                {/* 启动后自动运行一次 */}
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div className="flex-1 mr-4">
-                    <p className="text-sm font-medium">
-                      {t("settings.webdavSyncOnStartup", "启动后自动运行一次")}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t("settings.webdavSyncOnStartupDesc")}
-                    </p>
-                  </div>
-                  <div className="min-w-[180px]">
-                    <Select
-                      ariaLabel={`${t("settings.webdavSyncMenu", "WebDAV")} ${t("settings.webdavSyncOnStartup", "Run Once on Startup")}`}
-                      value={String(
-                        settings.webdavSyncOnStartup
-                          ? settings.webdavSyncOnStartupDelay
-                          : -1,
-                      )}
-                      onChange={(val) => {
-                        const num = Number(val);
-                        if (num === -1) {
-                          settings.setWebdavSyncOnStartup(false);
-                        } else {
-                          settings.setWebdavSyncOnStartup(true);
-                          settings.setWebdavSyncOnStartupDelay(num);
+                    <div className="min-w-[140px]">
+                      <Select
+                        ariaLabel={`${t("settings.webdavSyncMenu", "WebDAV")} ${t("settings.webdavAutoRun", "Auto Run")}`}
+                        value={String(settings.webdavAutoSyncInterval)}
+                        onChange={(val) =>
+                          settings.setWebdavAutoSyncInterval(Number(val))
                         }
-                      }}
-                      options={[
-                        { value: "-1", label: t("common.off", "关闭") },
-                        {
-                          value: "0",
-                          label: t(
-                            "settings.startupImmediate",
-                            "启动后立即运行",
-                          ),
-                        },
-                        {
-                          value: "5",
-                          label: t(
-                            "settings.startupDelay5s",
-                            "启动后第 5 秒运行一次",
-                          ),
-                        },
-                        {
-                          value: "10",
-                          label: t(
-                            "settings.startupDelay10s",
-                            "启动后第 10 秒运行一次",
-                          ),
-                        },
-                        {
-                          value: "30",
-                          label: t(
-                            "settings.startupDelay30s",
-                            "启动后第 30 秒运行一次",
-                          ),
-                        },
-                      ]}
-                    />
+                        options={[
+                          { value: "0", label: t("common.off", "关闭") },
+                          {
+                            value: "5",
+                            label: t("settings.every5min", "每 5 分钟"),
+                          },
+                          {
+                            value: "15",
+                            label: t("settings.every15min", "每 15 分钟"),
+                          },
+                          {
+                            value: "30",
+                            label: t("settings.every30min", "每 30 分钟"),
+                          },
+                          {
+                            value: "60",
+                            label: t("settings.every60min", "每 60 分钟"),
+                          },
+                        ]}
+                      />
+                    </div>
                   </div>
-                </div>
 
-                {/* 保存时同步（实验性质） */}
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div className="flex-1 mr-4">
-                    <p className="text-sm font-medium">
-                      {t("settings.webdavSyncOnSave", "保存时同步（实验性质）")}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {WEBDAV_SYNC_ON_SAVE_AVAILABLE
-                        ? t("settings.webdavSyncOnSaveDesc")
-                        : t("settings.webdavSyncOnSaveUnavailableDesc")}
-                    </p>
+                  {/* 启动后自动运行一次 */}
+                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t(
+                          "settings.webdavSyncOnStartup",
+                          "启动后自动运行一次",
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t("settings.webdavSyncOnStartupDesc")}
+                      </p>
+                    </div>
+                    <div className="min-w-[180px]">
+                      <Select
+                        ariaLabel={`${t("settings.webdavSyncMenu", "WebDAV")} ${t("settings.webdavSyncOnStartup", "Run Once on Startup")}`}
+                        value={String(
+                          settings.webdavSyncOnStartup
+                            ? settings.webdavSyncOnStartupDelay
+                            : -1,
+                        )}
+                        onChange={(val) => {
+                          const num = Number(val);
+                          if (num === -1) {
+                            settings.setWebdavSyncOnStartup(false);
+                          } else {
+                            settings.setWebdavSyncOnStartup(true);
+                            settings.setWebdavSyncOnStartupDelay(num);
+                          }
+                        }}
+                        options={[
+                          { value: "-1", label: t("common.off", "关闭") },
+                          {
+                            value: "0",
+                            label: t(
+                              "settings.startupImmediate",
+                              "启动后立即运行",
+                            ),
+                          },
+                          {
+                            value: "5",
+                            label: t(
+                              "settings.startupDelay5s",
+                              "启动后第 5 秒运行一次",
+                            ),
+                          },
+                          {
+                            value: "10",
+                            label: t(
+                              "settings.startupDelay10s",
+                              "启动后第 10 秒运行一次",
+                            ),
+                          },
+                          {
+                            value: "30",
+                            label: t(
+                              "settings.startupDelay30s",
+                              "启动后第 30 秒运行一次",
+                            ),
+                          },
+                        ]}
+                      />
+                    </div>
                   </div>
+
+                  {/* 保存时同步（实验性质） */}
+                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t(
+                          "settings.webdavSyncOnSave",
+                          "保存时同步（实验性质）",
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {WEBDAV_SYNC_ON_SAVE_AVAILABLE
+                          ? t("settings.webdavSyncOnSaveDesc")
+                          : t("settings.webdavSyncOnSaveUnavailableDesc")}
+                      </p>
+                    </div>
                     <ToggleSwitch
-                      ariaLabel={t("settings.webdavSyncOnSave", "Sync on Save (Experimental)")}
+                      ariaLabel={t(
+                        "settings.webdavSyncOnSave",
+                        "Sync on Save (Experimental)",
+                      )}
                       checked={settings.webdavSyncOnSave}
                       onChange={settings.setWebdavSyncOnSave}
                       disabled={
-                        !settings.webdavEnabled || !WEBDAV_SYNC_ON_SAVE_AVAILABLE
+                        !settings.webdavEnabled ||
+                        !WEBDAV_SYNC_ON_SAVE_AVAILABLE
                       }
                     />
-                </div>
-
-                {/* 包含图片 */}
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div className="flex-1 mr-4">
-                    <p className="text-sm font-medium">
-                      {t("settings.webdavIncludeImages", "包含图片")}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t("settings.webdavIncludeImagesDesc")}
-                    </p>
                   </div>
+
+                  {/* 包含图片 */}
+                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t("settings.webdavIncludeImages", "包含图片")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t("settings.webdavIncludeImagesDesc")}
+                      </p>
+                    </div>
                     <ToggleSwitch
                       ariaLabel={t("settings.webdavIncludeImages", "包含图片")}
                       checked={settings.webdavIncludeImages}
                       onChange={settings.setWebdavIncludeImages}
                       disabled={!settings.webdavEnabled}
                     />
-                </div>
-
-                {/* 增量同步 */}
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div className="flex-1 mr-4">
-                    <p className="text-sm font-medium">
-                      {t("settings.webdavIncrementalSync", "增量同步")}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t("settings.webdavIncrementalSyncDesc")}
-                    </p>
                   </div>
+
+                  {/* 增量同步 */}
+                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t("settings.webdavIncrementalSync", "增量同步")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t("settings.webdavIncrementalSyncDesc")}
+                      </p>
+                    </div>
                     <ToggleSwitch
-                      ariaLabel={t("settings.webdavIncrementalSync", "增量同步")}
+                      ariaLabel={t(
+                        "settings.webdavIncrementalSync",
+                        "增量同步",
+                      )}
                       checked={settings.webdavIncrementalSync}
                       onChange={settings.setWebdavIncrementalSync}
                       disabled={!settings.webdavEnabled}
                     />
-                </div>
-
-                {/* 加密备份（实验性） */}
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div className="flex-1 mr-4">
-                    <p className="text-sm font-medium">
-                      {t("settings.webdavEncryption", "加密备份（实验性）")}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5 text-amber-500">
-                      {t("settings.webdavEncryptionDesc")}
-                    </p>
                   </div>
+
+                  {/* 加密备份（实验性） */}
+                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t("settings.webdavEncryption", "加密备份（实验性）")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5 text-amber-500">
+                        {t("settings.webdavEncryptionDesc")}
+                      </p>
+                    </div>
                     <ToggleSwitch
-                      ariaLabel={t("settings.webdavEncryption", "加密备份（实验性）")}
+                      ariaLabel={t(
+                        "settings.webdavEncryption",
+                        "加密备份（实验性）",
+                      )}
                       checked={settings.webdavEncryptionEnabled}
                       onChange={settings.setWebdavEncryptionEnabled}
                       disabled={!settings.webdavEnabled}
@@ -1771,764 +1925,961 @@ export function DataSettings({
                   </div>
 
                   {/* 加密密码输入框 */}
-                {settings.webdavEncryptionEnabled && (
-                  <div className="pt-2">
-                    <PasswordInput
-                      ariaLabel={t(
-                        "settings.webdavEncryptionPasswordPlaceholder",
-                        "输入加密密码（可选）",
-                      )}
-                      placeholder={t(
-                        "settings.webdavEncryptionPasswordPlaceholder",
-                        "输入加密密码（可选）",
-                      )}
-                      value={settings.webdavEncryptionPassword}
-                      onChange={settings.setWebdavEncryptionPassword}
-                      disabled={!settings.webdavEnabled}
-                      className="h-9"
-                    />
-                  </div>
-                )}
-              </fieldset>
+                  {settings.webdavEncryptionEnabled && (
+                    <div className="pt-2">
+                      <PasswordInput
+                        ariaLabel={t(
+                          "settings.webdavEncryptionPasswordPlaceholder",
+                          "输入加密密码（可选）",
+                        )}
+                        placeholder={t(
+                          "settings.webdavEncryptionPasswordPlaceholder",
+                          "输入加密密码（可选）",
+                        )}
+                        value={settings.webdavEncryptionPassword}
+                        onChange={settings.setWebdavEncryptionPassword}
+                        disabled={!settings.webdavEnabled}
+                        className="h-9"
+                      />
+                    </div>
+                  )}
+                </fieldset>
+              </div>
             </div>
-          </div>
-        </DataSettingsSection>
+          </DataSettingsSection>
         ) : null}
 
         {!webRuntime && activeSubsection === "s3" ? (
-        <DataSettingsSection title={t("settings.s3SyncMenu", "S3 Compatible Storage")}>
-          <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">
-                  {t("settings.s3SyncMenu", "S3 Compatible Storage")}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t(
-                    "settings.s3StorageDesc",
-                    "Configure an S3-compatible object storage backup target such as AWS S3, Cloudflare R2, OSS, or COS.",
-                  )}
-                </p>
-              </div>
-              <ToggleSwitch
-                ariaLabel={t("settings.s3SyncMenu", "S3 Compatible Storage")}
-                checked={settings.s3StorageEnabled}
-                onChange={settings.setS3StorageEnabled}
-              />
-            </div>
-
-            <div className={getSyncPanelContentClassName(s3ControlsDisabled)}>
-              <fieldset disabled={s3ControlsDisabled} className="space-y-3 min-w-0">
+          <DataSettingsSection
+            title={t("settings.s3SyncMenu", "S3 Compatible Storage")}
+          >
+            <div className="p-4 space-y-4">
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  {t("settings.s3Endpoint", "API endpoint")}
-                </label>
-                <input
-                  type="url"
-                  aria-label={t("settings.s3Endpoint", "API endpoint")}
-                  placeholder="https://s3.example.com"
-                  value={settings.s3Endpoint}
-                  onChange={(e) => settings.setS3Endpoint(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  {t("settings.s3Region", "Region")}
-                </label>
-                <input
-                  type="text"
-                  aria-label={t("settings.s3Region", "Region")}
-                  placeholder="us-east-1"
-                  value={settings.s3Region}
-                  onChange={(e) => settings.setS3Region(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  {t("settings.s3Bucket", "Bucket")}
-                </label>
-                <input
-                  type="text"
-                  aria-label={t("settings.s3Bucket", "Bucket")}
-                  placeholder="prompthub-backups"
-                  value={settings.s3Bucket}
-                  onChange={(e) => settings.setS3Bucket(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  {t("settings.s3AccessKeyId", "Access Key ID")}
-                </label>
-                <input
-                  type="text"
-                  aria-label={t("settings.s3AccessKeyId", "Access Key ID")}
-                  placeholder={t("settings.s3AccessKeyId", "Access Key ID")}
-                  value={settings.s3AccessKeyId}
-                  onChange={(e) => settings.setS3AccessKeyId(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  {t("settings.s3SecretAccessKey", "Secret Access Key")}
-                </label>
-                <PasswordInput
-                  ariaLabel={t("settings.s3SecretAccessKey", "Secret Access Key")}
-                  placeholder={t("settings.s3SecretAccessKey", "Secret Access Key")}
-                  value={settings.s3SecretAccessKey}
-                  onChange={settings.setS3SecretAccessKey}
-                  disabled={!settings.s3StorageEnabled}
-                  className="h-9"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  {t("settings.s3BackupPrefix", "Backup directory (optional)")}
-                </label>
-                <input
-                  type="text"
-                  aria-label={t(
-                    "settings.s3BackupPrefix",
-                    "Backup directory (optional)",
-                  )}
-                  placeholder="/prompthub"
-                  value={settings.s3BackupPrefix}
-                  onChange={(e) => settings.setS3BackupPrefix(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-                />
-              </div>
-              </fieldset>
-            </div>
-
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!s3ConfigComplete) {
-                    return;
-                  }
-
-                  setS3Testing(true);
-                  try {
-                    const result = await runS3ConnectionCheck({
-                      endpoint: settings.s3Endpoint,
-                      region: settings.s3Region,
-                      bucket: settings.s3Bucket,
-                      accessKeyId: settings.s3AccessKeyId,
-                      secretAccessKey: settings.s3SecretAccessKey,
-                      backupPrefix: settings.s3BackupPrefix,
-                    });
-                    showToast(result.message, result.success ? "success" : "error");
-                  } finally {
-                    setS3Testing(false);
-                  }
-                }}
-                disabled={s3Testing || !s3ConfigComplete || !settings.s3StorageEnabled}
-                className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                <RefreshCwIcon
-                  className={`w-4 h-4 ${s3Testing ? "animate-spin" : ""}`}
-                  aria-hidden="true"
-                />
-                {t("settings.testConnection")}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!s3ConfigComplete) {
-                    return;
-                  }
-
-                  setS3Uploading(true);
-                  try {
-                    const result = await runS3Upload({
-                      config: {
-                        endpoint: settings.s3Endpoint,
-                        region: settings.s3Region,
-                        bucket: settings.s3Bucket,
-                        accessKeyId: settings.s3AccessKeyId,
-                        secretAccessKey: settings.s3SecretAccessKey,
-                        backupPrefix: settings.s3BackupPrefix,
-                      },
-                      options: {
-                        includeImages: settings.s3IncludeImages,
-                        incrementalSync: settings.s3IncrementalSync,
-                        encryptionPassword:
-                          settings.s3EncryptionEnabled && settings.s3EncryptionPassword
-                            ? settings.s3EncryptionPassword
-                            : undefined,
-                      },
-                    });
-                    showToast(result.message, result.success ? "success" : "error");
-                  } finally {
-                    setS3Uploading(false);
-                  }
-                }}
-                disabled={s3Uploading || !s3ConfigComplete || !settings.s3StorageEnabled}
-                className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                <UploadIcon className="w-4 h-4" aria-hidden="true" />
-                {t("settings.backupToRemote", "Back up to remote")}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!s3ConfigComplete) {
-                    return;
-                  }
-
-                  setS3Downloading(true);
-                  try {
-                    const result = await runS3Download({
-                      config: {
-                        endpoint: settings.s3Endpoint,
-                        region: settings.s3Region,
-                        bucket: settings.s3Bucket,
-                        accessKeyId: settings.s3AccessKeyId,
-                        secretAccessKey: settings.s3SecretAccessKey,
-                        backupPrefix: settings.s3BackupPrefix,
-                      },
-                      options: {
-                        incrementalSync: settings.s3IncrementalSync,
-                        encryptionPassword:
-                          settings.s3EncryptionEnabled && settings.s3EncryptionPassword
-                            ? settings.s3EncryptionPassword
-                            : undefined,
-                      },
-                    });
-                    if (result.success) {
-                      showToast(result.message, "success");
-                      setTimeout(() => window.location.reload(), 1000);
-                    } else {
-                      showToast(result.message, "error");
-                    }
-                  } finally {
-                    setS3Downloading(false);
-                  }
-                }}
-                disabled={s3Downloading || !s3ConfigComplete || !settings.s3StorageEnabled}
-                className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                <DownloadIcon className="w-4 h-4" aria-hidden="true" />
-                {t("settings.updateFromRemote", "Update from remote")}
-              </button>
-            </div>
-
-            <div className={getSyncPanelContentClassName(s3ControlsDisabled)}>
-              <fieldset disabled={s3ControlsDisabled} className="space-y-3 min-w-0">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex-1 mr-4">
-                    <p className="text-sm font-medium">
-                      {t("settings.webdavAutoRun", "Automatic sync")}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {s3IsSyncSource
-                        ? t("settings.webdavAutoRunDesc")
-                        : t(
-                            "settings.syncSourceInactiveDesc",
-                            "This target stays available for manual backup and restore, but automatic sync only runs for the current sync source.",
-                          )}
-                    </p>
-                  </div>
-                <div className="min-w-[140px]">
-                  <Select
-                    ariaLabel={`${t("settings.s3SyncMenu", "S3 Compatible Storage")} ${t("settings.webdavAutoRun", "Auto Run")}`}
-                    value={String(settings.s3AutoSyncInterval)}
-                    onChange={(val) => settings.setS3AutoSyncInterval(Number(val))}
-                    disabled={!settings.s3StorageEnabled}
-                    options={[
-                      { value: "0", label: t("common.off", "Off") },
-                      { value: "5", label: t("settings.every5min", "Every 5 minutes") },
-                      { value: "15", label: t("settings.every15min", "Every 15 minutes") },
-                      { value: "30", label: t("settings.every30min", "Every 30 minutes") },
-                      { value: "60", label: t("settings.every60min", "Every 60 minutes") },
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
-                <div className="flex-1 mr-4">
                   <p className="text-sm font-medium">
-                    {t("settings.webdavSyncOnStartup", "Run Once on Startup")}
+                    {t("settings.s3SyncMenu", "S3 Compatible Storage")}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {t("settings.webdavSyncOnStartupDesc")}
-                  </p>
-                </div>
-                <div className="min-w-[180px]">
-                  <Select
-                    ariaLabel={`${t("settings.s3SyncMenu", "S3 Compatible Storage")} ${t("settings.webdavSyncOnStartup", "Run Once on Startup")}`}
-                    value={String(
-                      settings.s3SyncOnStartup
-                        ? settings.s3SyncOnStartupDelay
-                        : -1,
+                    {t(
+                      "settings.s3StorageDesc",
+                      "Configure an S3-compatible object storage backup target such as AWS S3, Cloudflare R2, OSS, or COS.",
                     )}
-                    onChange={(val) => {
-                      const num = Number(val);
-                      if (num === -1) {
-                        settings.setS3SyncOnStartup(false);
-                      } else {
-                        settings.setS3SyncOnStartup(true);
-                        settings.setS3SyncOnStartupDelay(num);
+                  </p>
+                </div>
+                <ToggleSwitch
+                  ariaLabel={t("settings.s3SyncMenu", "S3 Compatible Storage")}
+                  checked={settings.s3StorageEnabled}
+                  onChange={settings.setS3StorageEnabled}
+                />
+              </div>
+
+              <div className={getSyncPanelContentClassName(s3ControlsDisabled)}>
+                <fieldset
+                  disabled={s3ControlsDisabled}
+                  className="space-y-3 min-w-0"
+                >
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.s3Endpoint", "API endpoint")}
+                    </label>
+                    <input
+                      type="url"
+                      aria-label={t("settings.s3Endpoint", "API endpoint")}
+                      placeholder="https://s3.example.com"
+                      value={settings.s3Endpoint}
+                      onChange={(e) => settings.setS3Endpoint(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.s3Region", "Region")}
+                    </label>
+                    <input
+                      type="text"
+                      aria-label={t("settings.s3Region", "Region")}
+                      placeholder="us-east-1"
+                      value={settings.s3Region}
+                      onChange={(e) => settings.setS3Region(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.s3Bucket", "Bucket")}
+                    </label>
+                    <input
+                      type="text"
+                      aria-label={t("settings.s3Bucket", "Bucket")}
+                      placeholder="prompthub-backups"
+                      value={settings.s3Bucket}
+                      onChange={(e) => settings.setS3Bucket(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.s3AccessKeyId", "Access Key ID")}
+                    </label>
+                    <input
+                      type="text"
+                      aria-label={t("settings.s3AccessKeyId", "Access Key ID")}
+                      placeholder={t("settings.s3AccessKeyId", "Access Key ID")}
+                      value={settings.s3AccessKeyId}
+                      onChange={(e) =>
+                        settings.setS3AccessKeyId(e.target.value)
                       }
-                    }}
-                    disabled={!settings.s3StorageEnabled}
-                    options={[
-                      { value: "-1", label: t("common.off", "Off") },
-                      { value: "0", label: t("settings.startupImmediate", "Run immediately on startup") },
-                      { value: "5", label: t("settings.startupDelay5s", "Run 5 seconds after startup") },
-                      { value: "10", label: t("settings.startupDelay10s", "Run 10 seconds after startup") },
-                      { value: "30", label: t("settings.startupDelay30s", "Run 30 seconds after startup") },
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
-                <div className="flex-1 mr-4">
-                  <p className="text-sm font-medium">
-                    {t("settings.webdavSyncOnSave", "Sync on Save (Experimental)")}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {t("settings.webdavSyncOnSaveDesc")}
-                  </p>
-                </div>
-                <ToggleSwitch
-                  ariaLabel={t("settings.webdavSyncOnSave", "Sync on Save (Experimental)")}
-                  checked={settings.s3SyncOnSave}
-                  onChange={settings.setS3SyncOnSave}
-                  disabled={!settings.s3StorageEnabled}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
-                <div className="flex-1 mr-4">
-                  <p className="text-sm font-medium">
-                    {t("settings.webdavIncludeImages", "Include Images")}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {t("settings.webdavIncludeImagesDesc")}
-                  </p>
-                </div>
-                <ToggleSwitch
-                  ariaLabel={t("settings.webdavIncludeImages", "Include Images")}
-                  checked={settings.s3IncludeImages}
-                  onChange={settings.setS3IncludeImages}
-                  disabled={!settings.s3StorageEnabled}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
-                <div className="flex-1 mr-4">
-                  <p className="text-sm font-medium">
-                    {t("settings.webdavIncrementalSync", "Incremental Sync")}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {t("settings.webdavIncrementalSyncDesc")}
-                  </p>
-                </div>
-                <ToggleSwitch
-                  ariaLabel={t("settings.webdavIncrementalSync", "Incremental Sync")}
-                  checked={settings.s3IncrementalSync}
-                  onChange={settings.setS3IncrementalSync}
-                  disabled={!settings.s3StorageEnabled}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
-                <div className="flex-1 mr-4">
-                  <p className="text-sm font-medium">
-                    {t("settings.webdavEncryption", "Encrypt Backup (Experimental)")}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5 text-amber-500">
-                    {t("settings.webdavEncryptionDesc")}
-                  </p>
-                </div>
-                  <ToggleSwitch
-                    ariaLabel={t("settings.webdavEncryption", "Encrypt Backup (Experimental)")}
-                    checked={settings.s3EncryptionEnabled}
-                    onChange={settings.setS3EncryptionEnabled}
-                    disabled={!settings.s3StorageEnabled}
-                  />
-                </div>
-
-                {settings.s3EncryptionEnabled ? (
-                  <div className="pt-2">
+                      className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.s3SecretAccessKey", "Secret Access Key")}
+                    </label>
                     <PasswordInput
                       ariaLabel={t(
-                        "settings.webdavEncryptionPasswordPlaceholder",
-                        "Enter encryption password (optional, leave empty to skip)",
+                        "settings.s3SecretAccessKey",
+                        "Secret Access Key",
                       )}
                       placeholder={t(
-                        "settings.webdavEncryptionPasswordPlaceholder",
-                        "Enter encryption password (optional, leave empty to skip)",
+                        "settings.s3SecretAccessKey",
+                        "Secret Access Key",
                       )}
-                      value={settings.s3EncryptionPassword}
-                      onChange={settings.setS3EncryptionPassword}
+                      value={settings.s3SecretAccessKey}
+                      onChange={settings.setS3SecretAccessKey}
                       disabled={!settings.s3StorageEnabled}
                       className="h-9"
                     />
                   </div>
-                ) : null}
-              </fieldset>
-            </div>
-          </div>
-        </DataSettingsSection>
-        ) : null}
-
-        {webRuntime || activeSubsection === "backup" ? (
-        <DataSettingsSection title={t("settings.backup")}>
-          {/* 选择性导出（只导出） */}
-          <div className="p-4 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold">
-                  {t("settings.selectiveExport", "选择性导出")}
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {t(
-                    "settings.selectiveExportDesc",
-                    "按需导出指定数据（仅导出，不提供导入）",
-                  )}
-                </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t(
+                        "settings.s3BackupPrefix",
+                        "Backup directory (optional)",
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      aria-label={t(
+                        "settings.s3BackupPrefix",
+                        "Backup directory (optional)",
+                      )}
+                      placeholder="/prompthub"
+                      value={settings.s3BackupPrefix}
+                      onChange={(e) =>
+                        settings.setS3BackupPrefix(e.target.value)
+                      }
+                      className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                </fieldset>
               </div>
-              <button
-                type="button"
-                onClick={handleSelectiveExport}
-                className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
-              >
-                {t("settings.export", "导出")}
-              </button>
-            </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {exportScopeItems.map((item) => {
-                const checked = exportScope[item.key];
-                return (
-	                  <button
-	                    type="button"
-	                    key={item.key}
-	                    aria-pressed={checked}
-	                    onClick={() =>
-	                      setExportScope((prev) => {
-	                        if (item.key === "images") {
-	                          return {
-	                            ...prev,
-	                            images: !checked,
-	                            videos: !checked,
-	                          };
-	                        }
-
-	                        return {
-	                          ...prev,
-	                          [item.key]: !checked,
-	                        };
-	                      })
-	                    }
-	                    className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-colors select-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-	                      checked
-	                        ? "border-primary/40 bg-primary/5"
-	                        : "border-border/60 hover:bg-muted/40"
-	                    }`}
-	                  >
-	                    <div className="pointer-events-none">
-	                      <div aria-hidden="true">
-	                        <Checkbox
-	                          checked={checked}
-	                          onChange={() => {}}
-	                          ariaLabel={item.label}
-	                        />
-	                      </div>
-	                    </div>
-	                    <span className="text-sm">{item.label}</span>
-	                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 全量备份/恢复 */}
-          <div className="p-4 space-y-3 border-t border-border">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold">
-                  {t("settings.fullBackup", "全量备份 / 恢复")}
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {t(
-                    "settings.fullBackupDesc",
-                    "用于迁移/跨设备恢复：包含 prompts、图片、AI 配置、系统设置、规则与 Skill",
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => handleFullBackup()}
-                  className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
-                  title={t("settings.fullBackupExport", "全量备份")}
-                >
-                  {t("settings.fullBackupExport", "全量备份")}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleImportBackup}
-                  title={t("settings.import", "导入数据")}
-                  aria-label={t("settings.import", "导入数据")}
-                  className="h-9 px-4 rounded-lg bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors"
-                >
-                  {t("settings.import", "导入数据")}
-                </button>
-              </div>
-            </div>
+                  onClick={async () => {
+                    if (!s3ConfigComplete) {
+                      return;
+                    }
 
-            <div
-              onDragOver={(event) => {
-                event.preventDefault();
-                if (
-                  Array.from(event.dataTransfer.items).some(
-                    (item) => item.kind === "file",
-                  )
-                ) {
-                  setIsBackupDropTargetActive(true);
-                }
-              }}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                if (
-                  Array.from(event.dataTransfer.items).some(
-                    (item) => item.kind === "file",
-                  )
-                ) {
-                  setIsBackupDropTargetActive(true);
-                }
-              }}
-              onDragLeave={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                  setIsBackupDropTargetActive(false);
-                }
-              }}
-              onDrop={(event) => {
-                void handleBackupDrop(event);
-              }}
-              className={`rounded-xl border border-dashed px-4 py-5 transition-colors ${
-                isBackupDropTargetActive
-                  ? "border-primary bg-primary/8"
-                  : "border-border bg-muted/15"
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                    isBackupDropTargetActive
-                      ? "bg-primary text-white"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  <InboxIcon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="text-sm font-medium text-foreground">
-                    {t("settings.backupDropRestore", "拖拽恢复备份")}
-                  </div>
-                  <div className="text-xs leading-5 text-muted-foreground">
-                    {backupDropDescription}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground/80">
-                    {t(
-                      "settings.backupDropRestoreFormats",
-                      "Supported: .json, .phub.gz, .gz, .zip",
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {!webRuntime ? (
-            <div className="p-4 space-y-3 border-t border-border">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold">
-                    {t("settings.upgradeBackups", "升级备份")}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {t(
-                      "settings.upgradeBackupsDesc",
-                      "升级前自动创建的本地回滚点。恢复某个快照时，会先把当前状态保存为新快照，再回滚并自动重启。",
-                    )}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void refreshUpgradeBackups()}
-                  disabled={loadingUpgradeBackups}
-                  className="h-8 shrink-0 whitespace-nowrap px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    setS3Testing(true);
+                    try {
+                      const result = await runS3ConnectionCheck({
+                        endpoint: settings.s3Endpoint,
+                        region: settings.s3Region,
+                        bucket: settings.s3Bucket,
+                        accessKeyId: settings.s3AccessKeyId,
+                        secretAccessKey: settings.s3SecretAccessKey,
+                        backupPrefix: settings.s3BackupPrefix,
+                      });
+                      showToast(
+                        result.message,
+                        result.success ? "success" : "error",
+                      );
+                    } finally {
+                      setS3Testing(false);
+                    }
+                  }}
+                  disabled={
+                    s3Testing || !s3ConfigComplete || !settings.s3StorageEnabled
+                  }
+                  className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   <RefreshCwIcon
-                    className={`w-4 h-4 shrink-0 ${loadingUpgradeBackups ? "animate-spin" : ""}`}
+                    className={`w-4 h-4 ${s3Testing ? "animate-spin" : ""}`}
                     aria-hidden="true"
                   />
-                  {t("common.refresh", "Refresh")}
+                  {t("settings.testConnection")}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!s3ConfigComplete) {
+                      return;
+                    }
+
+                    setS3Uploading(true);
+                    try {
+                      const result = await runS3Upload({
+                        config: {
+                          endpoint: settings.s3Endpoint,
+                          region: settings.s3Region,
+                          bucket: settings.s3Bucket,
+                          accessKeyId: settings.s3AccessKeyId,
+                          secretAccessKey: settings.s3SecretAccessKey,
+                          backupPrefix: settings.s3BackupPrefix,
+                        },
+                        options: {
+                          includeImages: settings.s3IncludeImages,
+                          incrementalSync: settings.s3IncrementalSync,
+                          encryptionPassword:
+                            settings.s3EncryptionEnabled &&
+                            settings.s3EncryptionPassword
+                              ? settings.s3EncryptionPassword
+                              : undefined,
+                        },
+                      });
+                      showToast(
+                        result.message,
+                        result.success ? "success" : "error",
+                      );
+                    } finally {
+                      setS3Uploading(false);
+                    }
+                  }}
+                  disabled={
+                    s3Uploading ||
+                    !s3ConfigComplete ||
+                    !settings.s3StorageEnabled
+                  }
+                  className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  <UploadIcon className="w-4 h-4" aria-hidden="true" />
+                  {t("settings.backupToRemote", "Back up to remote")}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!s3ConfigComplete) {
+                      return;
+                    }
+
+                    setS3Downloading(true);
+                    try {
+                      const result = await runS3Download({
+                        config: {
+                          endpoint: settings.s3Endpoint,
+                          region: settings.s3Region,
+                          bucket: settings.s3Bucket,
+                          accessKeyId: settings.s3AccessKeyId,
+                          secretAccessKey: settings.s3SecretAccessKey,
+                          backupPrefix: settings.s3BackupPrefix,
+                        },
+                        options: {
+                          incrementalSync: settings.s3IncrementalSync,
+                          encryptionPassword:
+                            settings.s3EncryptionEnabled &&
+                            settings.s3EncryptionPassword
+                              ? settings.s3EncryptionPassword
+                              : undefined,
+                        },
+                      });
+                      if (result.success) {
+                        showToast(result.message, "success");
+                        setTimeout(() => window.location.reload(), 1000);
+                      } else {
+                        showToast(result.message, "error");
+                      }
+                    } finally {
+                      setS3Downloading(false);
+                    }
+                  }}
+                  disabled={
+                    s3Downloading ||
+                    !s3ConfigComplete ||
+                    !settings.s3StorageEnabled
+                  }
+                  className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  <DownloadIcon className="w-4 h-4" aria-hidden="true" />
+                  {t("settings.updateFromRemote", "Update from remote")}
                 </button>
               </div>
 
-              {upgradeBackups.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                  {loadingUpgradeBackups
-                    ? t("settings.upgradeBackupsLoading", "Loading upgrade backups...")
-                    : t("settings.upgradeBackupsEmpty", "No automatic upgrade backups found yet.")}
+              <div className={getSyncPanelContentClassName(s3ControlsDisabled)}>
+                <fieldset
+                  disabled={s3ControlsDisabled}
+                  className="space-y-3 min-w-0"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t("settings.webdavAutoRun", "Automatic sync")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {s3IsSyncSource
+                          ? t("settings.webdavAutoRunDesc")
+                          : t(
+                              "settings.syncSourceInactiveDesc",
+                              "This target stays available for manual backup and restore, but automatic sync only runs for the current sync source.",
+                            )}
+                      </p>
+                    </div>
+                    <div className="min-w-[140px]">
+                      <Select
+                        ariaLabel={`${t("settings.s3SyncMenu", "S3 Compatible Storage")} ${t("settings.webdavAutoRun", "Auto Run")}`}
+                        value={String(settings.s3AutoSyncInterval)}
+                        onChange={(val) =>
+                          settings.setS3AutoSyncInterval(Number(val))
+                        }
+                        disabled={!settings.s3StorageEnabled}
+                        options={[
+                          { value: "0", label: t("common.off", "Off") },
+                          {
+                            value: "5",
+                            label: t("settings.every5min", "Every 5 minutes"),
+                          },
+                          {
+                            value: "15",
+                            label: t("settings.every15min", "Every 15 minutes"),
+                          },
+                          {
+                            value: "30",
+                            label: t("settings.every30min", "Every 30 minutes"),
+                          },
+                          {
+                            value: "60",
+                            label: t("settings.every60min", "Every 60 minutes"),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t(
+                          "settings.webdavSyncOnStartup",
+                          "Run Once on Startup",
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t("settings.webdavSyncOnStartupDesc")}
+                      </p>
+                    </div>
+                    <div className="min-w-[180px]">
+                      <Select
+                        ariaLabel={`${t("settings.s3SyncMenu", "S3 Compatible Storage")} ${t("settings.webdavSyncOnStartup", "Run Once on Startup")}`}
+                        value={String(
+                          settings.s3SyncOnStartup
+                            ? settings.s3SyncOnStartupDelay
+                            : -1,
+                        )}
+                        onChange={(val) => {
+                          const num = Number(val);
+                          if (num === -1) {
+                            settings.setS3SyncOnStartup(false);
+                          } else {
+                            settings.setS3SyncOnStartup(true);
+                            settings.setS3SyncOnStartupDelay(num);
+                          }
+                        }}
+                        disabled={!settings.s3StorageEnabled}
+                        options={[
+                          { value: "-1", label: t("common.off", "Off") },
+                          {
+                            value: "0",
+                            label: t(
+                              "settings.startupImmediate",
+                              "Run immediately on startup",
+                            ),
+                          },
+                          {
+                            value: "5",
+                            label: t(
+                              "settings.startupDelay5s",
+                              "Run 5 seconds after startup",
+                            ),
+                          },
+                          {
+                            value: "10",
+                            label: t(
+                              "settings.startupDelay10s",
+                              "Run 10 seconds after startup",
+                            ),
+                          },
+                          {
+                            value: "30",
+                            label: t(
+                              "settings.startupDelay30s",
+                              "Run 30 seconds after startup",
+                            ),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t(
+                          "settings.webdavSyncOnSave",
+                          "Sync on Save (Experimental)",
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t("settings.webdavSyncOnSaveDesc")}
+                      </p>
+                    </div>
+                    <ToggleSwitch
+                      ariaLabel={t(
+                        "settings.webdavSyncOnSave",
+                        "Sync on Save (Experimental)",
+                      )}
+                      checked={settings.s3SyncOnSave}
+                      onChange={settings.setS3SyncOnSave}
+                      disabled={!settings.s3StorageEnabled}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t("settings.webdavIncludeImages", "Include Images")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t("settings.webdavIncludeImagesDesc")}
+                      </p>
+                    </div>
+                    <ToggleSwitch
+                      ariaLabel={t(
+                        "settings.webdavIncludeImages",
+                        "Include Images",
+                      )}
+                      checked={settings.s3IncludeImages}
+                      onChange={settings.setS3IncludeImages}
+                      disabled={!settings.s3StorageEnabled}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t(
+                          "settings.webdavIncrementalSync",
+                          "Incremental Sync",
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t("settings.webdavIncrementalSyncDesc")}
+                      </p>
+                    </div>
+                    <ToggleSwitch
+                      ariaLabel={t(
+                        "settings.webdavIncrementalSync",
+                        "Incremental Sync",
+                      )}
+                      checked={settings.s3IncrementalSync}
+                      onChange={settings.setS3IncrementalSync}
+                      disabled={!settings.s3StorageEnabled}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t(
+                          "settings.webdavEncryption",
+                          "Encrypt Backup (Experimental)",
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5 text-amber-500">
+                        {t("settings.webdavEncryptionDesc")}
+                      </p>
+                    </div>
+                    <ToggleSwitch
+                      ariaLabel={t(
+                        "settings.webdavEncryption",
+                        "Encrypt Backup (Experimental)",
+                      )}
+                      checked={settings.s3EncryptionEnabled}
+                      onChange={settings.setS3EncryptionEnabled}
+                      disabled={!settings.s3StorageEnabled}
+                    />
+                  </div>
+
+                  {settings.s3EncryptionEnabled ? (
+                    <div className="pt-2">
+                      <PasswordInput
+                        ariaLabel={t(
+                          "settings.webdavEncryptionPasswordPlaceholder",
+                          "Enter encryption password (optional, leave empty to skip)",
+                        )}
+                        placeholder={t(
+                          "settings.webdavEncryptionPasswordPlaceholder",
+                          "Enter encryption password (optional, leave empty to skip)",
+                        )}
+                        value={settings.s3EncryptionPassword}
+                        onChange={settings.setS3EncryptionPassword}
+                        disabled={!settings.s3StorageEnabled}
+                        className="h-9"
+                      />
+                    </div>
+                  ) : null}
+                </fieldset>
+              </div>
+            </div>
+          </DataSettingsSection>
+        ) : null}
+
+        {showAutoSyncHistory ? (
+          <DataSettingsSection
+            title={t("settings.autoSyncHistoryTitle", "Automatic sync history")}
+          >
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "settings.autoSyncHistoryDesc",
+                  "Recent automatic sync attempts. Credentials and remote addresses are never stored here.",
+                )}
+              </p>
+              {autoSyncHistory.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center">
+                  <InboxIcon
+                    aria-hidden="true"
+                    className="mx-auto mb-2 h-5 w-5 text-muted-foreground"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {t(
+                      "settings.autoSyncHistoryEmpty",
+                      "No automatic sync has been recorded yet.",
+                    )}
+                  </p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2.5">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-medium text-foreground">
-                        {t(
-                          "settings.upgradeBackupsSummary",
-                          "{{count}} rollback snapshot(s)",
-                          { count: upgradeBackups.length },
-                        )}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {showAllUpgradeBackups
-                          ? t(
-                              "settings.upgradeBackupsSummaryExpanded",
-                              "Showing full history in a scrollable list",
-                            )
-                          : hiddenUpgradeBackupsCount > 0
-                            ? t(
-                                "settings.upgradeBackupsSummaryCollapsed",
-                                "Latest {{count}} shown by default",
-                                {
-                                  count: DEFAULT_VISIBLE_UPGRADE_BACKUPS,
-                                },
-                              )
-                            : t(
-                                "settings.upgradeBackupsSummaryCompact",
-                                "All snapshots fit in the compact list",
+                <div className="space-y-2">
+                  {autoSyncHistory.slice(0, 8).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-lg border border-border bg-background px-3 py-2.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-foreground">
+                            {getAutoSyncProviderLabel(entry.provider)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {getAutoSyncReasonLabel(entry.reason)}
+                          </span>
+                          {entry.localChanged ? (
+                            <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                              {t(
+                                "settings.autoSyncLocalChanged",
+                                "Updated local data",
                               )}
-                      </span>
-                    </div>
-
-                    {hiddenUpgradeBackupsCount > 0 ? (
-                      <button
-                        type="button"
-                        aria-expanded={showAllUpgradeBackups}
-                        onClick={() =>
-                          setShowAllUpgradeBackups((current) => !current)
-                        }
-                        className="h-8 px-3 rounded-lg bg-background text-sm hover:bg-accent transition-colors inline-flex items-center gap-2"
-                      >
-                        {showAllUpgradeBackups ? (
-                          <ChevronUpIcon
-                            className="w-4 h-4"
-                            aria-hidden="true"
-                          />
-                        ) : (
-                          <ChevronDownIcon
-                            className="w-4 h-4"
-                            aria-hidden="true"
-                          />
-                        )}
-                        {showAllUpgradeBackups
-                          ? t("common.collapse", "Collapse")
-                          : t(
-                              "settings.upgradeBackupsShowAll",
-                              "Show all {{count}}",
-                              { count: upgradeBackups.length },
-                            )}
-                      </button>
-                    ) : null}
-                  </div>
-
-                  <div
-                    className="space-y-2 overflow-y-auto pr-1"
-                    style={{
-                      maxHeight:
-                        showAllUpgradeBackups &&
-                        upgradeBackups.length > DEFAULT_VISIBLE_UPGRADE_BACKUPS
-                          ? `${EXPANDED_UPGRADE_BACKUP_MAX_HEIGHT}px`
-                          : undefined,
-                    }}
-                  >
-                  {visibleUpgradeBackups.map((backup) => {
-                    const busy = upgradeBackupActionId === backup.backupId;
-                    return (
-                      <div
-                        key={backup.backupId}
-                        className="rounded-xl border border-border bg-card/60 p-3 space-y-2"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium truncate">
-                              {backup.manifest.fromVersion}
-                              {backup.manifest.toVersion
-                                ? ` -> ${backup.manifest.toVersion}`
-                                : ""}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1 break-all">
-                              {backup.backupId}
-                            </div>
-                          </div>
-                          <div className="text-xs text-muted-foreground shrink-0">
-                            {formatBytes(backup.sizeBytes)}
-                          </div>
+                            </span>
+                          ) : null}
                         </div>
-
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <div>
-                            {t("settings.upgradeBackupCreatedAt", "快照时间")}：{new Date(backup.manifest.createdAt).toLocaleString()}
-                          </div>
-                          <div>
-                            {t("settings.upgradeBackupItems", "包含项目")}：{backup.manifest.copiedItems
-                              .filter((item) =>
-                                ["prompthub.db", "data", "config", "skills", "workspace"].some(
-                                  (k) => item.includes(k),
-                                ),
-                              )
-                              .join("、") || backup.manifest.copiedItems.join("、")}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-end gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => setDeleteCandidate(backup)}
-                            disabled={busy}
-                            className="h-8 px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors disabled:opacity-50"
-                          >
-                            {t("common.delete", "Delete")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setRestoreCandidate(backup)}
-                            disabled={busy}
-                            className="h-8 px-3 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
-                          >
-                            {busy ? (
-                              <Loader2Icon
-                                className="w-4 h-4 animate-spin"
-                                aria-hidden="true"
-                              />
-                            ) : null}
-                            {t("settings.upgradeBackupRestoreAction", "回滚到此快照")}
-                          </button>
-                        </div>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${getAutoSyncStatusClassName(entry.status)}`}
+                        >
+                          {getAutoSyncStatusLabel(entry.status)}
+                        </span>
                       </div>
-                    );
-                  })}
-                  </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {new Date(entry.finishedAt).toLocaleString()}
+                      </p>
+                      {entry.message ? (
+                        <p className="mt-1 break-words text-xs text-muted-foreground">
+                          {entry.message}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-          ) : null}
+          </DataSettingsSection>
+        ) : null}
 
-        </DataSettingsSection>
+        {webRuntime || activeSubsection === "backup" ? (
+          <DataSettingsSection title={t("settings.backup")}>
+            {/* 选择性导出（只导出） */}
+            <div className="p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">
+                    {t("settings.selectiveExport", "选择性导出")}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {t(
+                      "settings.selectiveExportDesc",
+                      "按需导出指定数据（仅导出，不提供导入）",
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSelectiveExport}
+                  className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
+                >
+                  {t("settings.export", "导出")}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {exportScopeItems.map((item) => {
+                  const checked = exportScope[item.key];
+                  return (
+                    <button
+                      type="button"
+                      key={item.key}
+                      aria-pressed={checked}
+                      onClick={() =>
+                        setExportScope((prev) => {
+                          if (item.key === "images") {
+                            return {
+                              ...prev,
+                              images: !checked,
+                              videos: !checked,
+                            };
+                          }
+
+                          return {
+                            ...prev,
+                            [item.key]: !checked,
+                          };
+                        })
+                      }
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-colors select-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                        checked
+                          ? "border-primary/40 bg-primary/5"
+                          : "border-border/60 hover:bg-muted/40"
+                      }`}
+                    >
+                      <div className="pointer-events-none">
+                        <div aria-hidden="true">
+                          <Checkbox
+                            checked={checked}
+                            onChange={() => {}}
+                            ariaLabel={item.label}
+                          />
+                        </div>
+                      </div>
+                      <span className="text-sm">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 全量备份/恢复 */}
+            <div className="p-4 space-y-3 border-t border-border">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">
+                    {t("settings.fullBackup", "全量备份 / 恢复")}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {t(
+                      "settings.fullBackupDesc",
+                      "用于迁移/跨设备恢复：包含 prompts、图片、AI 配置、系统设置、规则与 Skill",
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleFullBackup()}
+                    className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
+                    title={t("settings.fullBackupExport", "全量备份")}
+                  >
+                    {t("settings.fullBackupExport", "全量备份")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleImportBackup}
+                    title={t("settings.import", "导入数据")}
+                    aria-label={t("settings.import", "导入数据")}
+                    className="h-9 px-4 rounded-lg bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors"
+                  >
+                    {t("settings.import", "导入数据")}
+                  </button>
+                </div>
+              </div>
+
+              <div
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (
+                    Array.from(event.dataTransfer.items).some(
+                      (item) => item.kind === "file",
+                    )
+                  ) {
+                    setIsBackupDropTargetActive(true);
+                  }
+                }}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  if (
+                    Array.from(event.dataTransfer.items).some(
+                      (item) => item.kind === "file",
+                    )
+                  ) {
+                    setIsBackupDropTargetActive(true);
+                  }
+                }}
+                onDragLeave={(event) => {
+                  if (
+                    !event.currentTarget.contains(
+                      event.relatedTarget as Node | null,
+                    )
+                  ) {
+                    setIsBackupDropTargetActive(false);
+                  }
+                }}
+                onDrop={(event) => {
+                  void handleBackupDrop(event);
+                }}
+                className={`rounded-xl border border-dashed px-4 py-5 transition-colors ${
+                  isBackupDropTargetActive
+                    ? "border-primary bg-primary/8"
+                    : "border-border bg-muted/15"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                      isBackupDropTargetActive
+                        ? "bg-primary text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <InboxIcon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="text-sm font-medium text-foreground">
+                      {t("settings.backupDropRestore", "拖拽恢复备份")}
+                    </div>
+                    <div className="text-xs leading-5 text-muted-foreground">
+                      {backupDropDescription}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground/80">
+                      {t(
+                        "settings.backupDropRestoreFormats",
+                        "Supported: .json, .phub.gz, .gz, .zip",
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {!webRuntime ? (
+              <div className="p-4 space-y-3 border-t border-border">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">
+                      {t("settings.upgradeBackups", "升级备份")}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {t(
+                        "settings.upgradeBackupsDesc",
+                        "升级前自动创建的本地回滚点。恢复某个快照时，会先把当前状态保存为新快照，再回滚并自动重启。",
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void refreshUpgradeBackups()}
+                    disabled={loadingUpgradeBackups}
+                    className="h-8 shrink-0 whitespace-nowrap px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <RefreshCwIcon
+                      className={`w-4 h-4 shrink-0 ${loadingUpgradeBackups ? "animate-spin" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {t("common.refresh", "Refresh")}
+                  </button>
+                </div>
+
+                {upgradeBackups.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                    {loadingUpgradeBackups
+                      ? t(
+                          "settings.upgradeBackupsLoading",
+                          "Loading upgrade backups...",
+                        )
+                      : t(
+                          "settings.upgradeBackupsEmpty",
+                          "No automatic upgrade backups found yet.",
+                        )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2.5">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium text-foreground">
+                          {t(
+                            "settings.upgradeBackupsSummary",
+                            "{{count}} rollback snapshot(s)",
+                            { count: upgradeBackups.length },
+                          )}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {showAllUpgradeBackups
+                            ? t(
+                                "settings.upgradeBackupsSummaryExpanded",
+                                "Showing full history in a scrollable list",
+                              )
+                            : hiddenUpgradeBackupsCount > 0
+                              ? t(
+                                  "settings.upgradeBackupsSummaryCollapsed",
+                                  "Latest {{count}} shown by default",
+                                  {
+                                    count: DEFAULT_VISIBLE_UPGRADE_BACKUPS,
+                                  },
+                                )
+                              : t(
+                                  "settings.upgradeBackupsSummaryCompact",
+                                  "All snapshots fit in the compact list",
+                                )}
+                        </span>
+                      </div>
+
+                      {hiddenUpgradeBackupsCount > 0 ? (
+                        <button
+                          type="button"
+                          aria-expanded={showAllUpgradeBackups}
+                          onClick={() =>
+                            setShowAllUpgradeBackups((current) => !current)
+                          }
+                          className="h-8 px-3 rounded-lg bg-background text-sm hover:bg-accent transition-colors inline-flex items-center gap-2"
+                        >
+                          {showAllUpgradeBackups ? (
+                            <ChevronUpIcon
+                              className="w-4 h-4"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <ChevronDownIcon
+                              className="w-4 h-4"
+                              aria-hidden="true"
+                            />
+                          )}
+                          {showAllUpgradeBackups
+                            ? t("common.collapse", "Collapse")
+                            : t(
+                                "settings.upgradeBackupsShowAll",
+                                "Show all {{count}}",
+                                { count: upgradeBackups.length },
+                              )}
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div
+                      className="space-y-2 overflow-y-auto pr-1"
+                      style={{
+                        maxHeight:
+                          showAllUpgradeBackups &&
+                          upgradeBackups.length >
+                            DEFAULT_VISIBLE_UPGRADE_BACKUPS
+                            ? `${EXPANDED_UPGRADE_BACKUP_MAX_HEIGHT}px`
+                            : undefined,
+                      }}
+                    >
+                      {visibleUpgradeBackups.map((backup) => {
+                        const busy = upgradeBackupActionId === backup.backupId;
+                        return (
+                          <div
+                            key={backup.backupId}
+                            className="rounded-xl border border-border bg-card/60 p-3 space-y-2"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-medium truncate">
+                                  {backup.manifest.fromVersion}
+                                  {backup.manifest.toVersion
+                                    ? ` -> ${backup.manifest.toVersion}`
+                                    : ""}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1 break-all">
+                                  {backup.backupId}
+                                </div>
+                              </div>
+                              <div className="text-xs text-muted-foreground shrink-0">
+                                {formatBytes(backup.sizeBytes)}
+                              </div>
+                            </div>
+
+                            <div className="text-xs text-muted-foreground space-y-1">
+                              <div>
+                                {t(
+                                  "settings.upgradeBackupCreatedAt",
+                                  "快照时间",
+                                )}
+                                ：
+                                {new Date(
+                                  backup.manifest.createdAt,
+                                ).toLocaleString()}
+                              </div>
+                              <div>
+                                {t("settings.upgradeBackupItems", "包含项目")}：
+                                {backup.manifest.copiedItems
+                                  .filter((item) =>
+                                    [
+                                      "prompthub.db",
+                                      "data",
+                                      "config",
+                                      "skills",
+                                      "workspace",
+                                    ].some((k) => item.includes(k)),
+                                  )
+                                  .join("、") ||
+                                  backup.manifest.copiedItems.join("、")}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setDeleteCandidate(backup)}
+                                disabled={busy}
+                                className="h-8 px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors disabled:opacity-50"
+                              >
+                                {t("common.delete", "Delete")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRestoreCandidate(backup)}
+                                disabled={busy}
+                                className="h-8 px-3 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+                              >
+                                {busy ? (
+                                  <Loader2Icon
+                                    className="w-4 h-4 animate-spin"
+                                    aria-hidden="true"
+                                  />
+                                ) : null}
+                                {t(
+                                  "settings.upgradeBackupRestoreAction",
+                                  "回滚到此快照",
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </DataSettingsSection>
         ) : null}
 
         {!webRuntime && activeSubsection === "local" ? (
@@ -2544,45 +2895,77 @@ export function DataSettings({
                     },
                     {
                       label: t("settings.databaseFile", "主数据库"),
-                      path: runtimePaths?.databasePath ?? `${normalizedDataPath}/data/prompthub.db`,
+                      path:
+                        runtimePaths?.databasePath ??
+                        `${normalizedDataPath}/data/prompthub.db`,
                       actionLabel: t("settings.openFolder"),
                     },
                     {
                       label: t("settings.promptsData", "Prompt 文件"),
-                      path: runtimePaths?.promptsDir ?? `${normalizedDataPath}/data/prompts`,
+                      path:
+                        runtimePaths?.promptsDir ??
+                        `${normalizedDataPath}/data/prompts`,
                       actionLabel: t("settings.openFolder"),
                     },
                     {
                       label: t("settings.applicationLogs", "应用日志"),
-                      path: runtimePaths?.logsDir ?? `${normalizedDataPath}/logs`,
+                      path:
+                        runtimePaths?.logsDir ?? `${normalizedDataPath}/logs`,
+                      actionLabel: t("settings.openLogs", "打开日志"),
+                    },
+                    {
+                      label: t("settings.autoSyncLogData", "自动同步日志"),
+                      path:
+                        runtimePaths?.autoSyncLogPath ??
+                        `${normalizedDataPath}/logs/auto-sync.jsonl`,
                       actionLabel: t("settings.openLogs", "打开日志"),
                     },
                     {
                       label: t("settings.rulesData", "规则文件"),
-                      path: runtimePaths?.rulesDir ?? `${normalizedDataPath}/data/rules`,
+                      path:
+                        runtimePaths?.rulesDir ??
+                        `${normalizedDataPath}/data/rules`,
                       actionLabel: t("settings.openFolder"),
                     },
                     {
                       label: t("settings.skillsData", "Skills 目录"),
-                      path: runtimePaths?.skillsDir ?? `${normalizedDataPath}/data/skills`,
+                      path:
+                        runtimePaths?.skillsDir ??
+                        `${normalizedDataPath}/data/skills`,
+                      actionLabel: t("settings.openFolder"),
+                    },
+                    {
+                      label: t("settings.mcpData", "MCP 目录"),
+                      path:
+                        runtimePaths?.mcpDir ??
+                        `${normalizedDataPath}/data/mcp`,
                       actionLabel: t("settings.openFolder"),
                     },
                     {
                       label: t("settings.backupsData", "备份目录"),
-                      path: runtimePaths?.backupsDir ?? `${normalizedDataPath}/backups`,
+                      path:
+                        runtimePaths?.backupsDir ??
+                        `${normalizedDataPath}/backups`,
                       actionLabel: t("settings.openFolder"),
                     },
                   ].map((item) => (
-                    <div key={item.label} className="flex items-center justify-between gap-4 px-5 py-3.5">
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between gap-4 px-5 py-3.5"
+                    >
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-foreground">{item.label}</p>
+                        <p className="text-sm font-medium text-foreground">
+                          {item.label}
+                        </p>
                         <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground">
                           {item.path}
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => void window.electron?.openPath?.(item.path)}
+                        onClick={() =>
+                          void window.electron?.openPath?.(item.path)
+                        }
                         className="h-8 shrink-0 rounded-lg border border-border bg-muted px-3 text-sm text-foreground transition-colors hover:bg-muted/80"
                       >
                         {item.actionLabel}
@@ -2602,7 +2985,10 @@ export function DataSettings({
                         )}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {t("settings.cacheDataDesc", "Electron 渲染进程缓存，不影响数据")}
+                        {t(
+                          "settings.cacheDataDesc",
+                          "Electron 渲染进程缓存，不影响数据",
+                        )}
                       </p>
                     </div>
                     <button
@@ -2614,12 +3000,17 @@ export function DataSettings({
                           const res = await window.electron?.getCacheSize?.();
                           setCacheSize(res?.size ?? 0);
                           setClearingCache(false);
-                          showToast(t("settings.cacheClearedToast", "缓存已清除"), "success");
+                          showToast(
+                            t("settings.cacheClearedToast", "缓存已清除"),
+                            "success",
+                          );
                         });
                       }}
                       className="h-8 shrink-0 rounded-lg border border-border bg-muted px-3 text-sm text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
                     >
-                      {clearingCache ? t("common.loading", "Loading...") : t("settings.clearCache", "清除缓存")}
+                      {clearingCache
+                        ? t("common.loading", "Loading...")
+                        : t("settings.clearCache", "清除缓存")}
                     </button>
                   </div>
                 </>
@@ -2635,20 +3026,20 @@ export function DataSettings({
         ) : null}
 
         {!webRuntime && activeSubsection === "backup" ? (
-        <DataSettingsSection title={t("settings.dangerOperation", "Danger")}>
-          <SettingItem
-            label={t("settings.clear")}
-            description={t("settings.clearDesc")}
-          >
-            <button
-              type="button"
-              onClick={handleClearData}
-              className="h-9 px-4 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors"
+          <DataSettingsSection title={t("settings.dangerOperation", "Danger")}>
+            <SettingItem
+              label={t("settings.clear")}
+              description={t("settings.clearDesc")}
             >
-              {t("settings.clear")}
-            </button>
-          </SettingItem>
-        </DataSettingsSection>
+              <button
+                type="button"
+                onClick={handleClearData}
+                className="h-9 px-4 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors"
+              >
+                {t("settings.clear")}
+              </button>
+            </SettingItem>
+          </DataSettingsSection>
         ) : null}
       </div>
 
@@ -2722,7 +3113,10 @@ export function DataSettings({
                 disabled={dataPathActionLoading}
                 className="h-10 px-4 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50"
               >
-                {t("settings.switchToExistingDataPath", "Switch to this directory")}
+                {t(
+                  "settings.switchToExistingDataPath",
+                  "Switch to this directory",
+                )}
               </button>
               <button
                 type="button"
@@ -2743,7 +3137,10 @@ export function DataSettings({
                 disabled={dataPathActionLoading}
                 className="h-10 px-4 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50"
               >
-                {t("settings.overwriteAndMigrateDataPath", "Overwrite and migrate")}
+                {t(
+                  "settings.overwriteAndMigrateDataPath",
+                  "Overwrite and migrate",
+                )}
               </button>
             </div>
           </div>
@@ -2826,7 +3223,10 @@ export function DataSettings({
         onConfirm={() => {
           void handleConfirmRestoreUpgradeBackup();
         }}
-        title={t("settings.upgradeBackupRestoreTitle", "Restore upgrade backup")}
+        title={t(
+          "settings.upgradeBackupRestoreTitle",
+          "Restore upgrade backup",
+        )}
         message={
           restoreCandidate
             ? t(
@@ -2844,7 +3244,10 @@ export function DataSettings({
               )
             : ""
         }
-        confirmText={t("settings.upgradeBackupRestoreAction", "Restore this snapshot")}
+        confirmText={t(
+          "settings.upgradeBackupRestoreAction",
+          "Restore this snapshot",
+        )}
         cancelText={t("common.cancel", "Cancel")}
         variant="destructive"
       />

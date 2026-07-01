@@ -40,6 +40,11 @@ import {
   shouldRunStartupWebDAVSync,
 } from "./services/app-background";
 import { registerPeriodicAutoSyncController } from "./services/periodic-auto-sync";
+import {
+  recordAutoSyncHistory,
+  type AutoSyncProviderKind,
+  type AutoSyncReason,
+} from "./services/sync-history";
 import { useToast } from "./components/ui/Toast";
 import { DndContext, pointerWithin, type DragEndEvent } from "@dnd-kit/core";
 import i18n from "./i18n";
@@ -646,9 +651,40 @@ function App() {
       }
     };
 
+    const recordAutoSyncSkip = (
+      provider: AutoSyncProviderKind,
+      reason: AutoSyncReason,
+      message: string,
+    ) => {
+      void recordAutoSyncHistory({
+        provider,
+        reason,
+        status: "skipped",
+        message,
+      });
+    };
+
+    const getSkipMessage = (state: {
+      isVisible: boolean;
+      isOnline: boolean;
+      isRunning: boolean;
+    }) => {
+      if (!state.isOnline) {
+        return "Skipped because the device is offline.";
+      }
+      if (!state.isVisible) {
+        return "Skipped because the app window is not active.";
+      }
+      if (state.isRunning) {
+        return "Skipped because another sync is already running.";
+      }
+      return "Skipped because the selected provider or configuration is not ready.";
+    };
+
     const runAutoSync = async (
       reason: "startup" | "startup-resume" | "interval",
     ) => {
+      const startedAt = new Date().toISOString();
       const settings = useSettingsStore.getState();
       const state = {
         isVisible: isWindowVisibleRef.current,
@@ -669,6 +705,7 @@ function App() {
         ) {
           pendingStartupSyncRef.current = true;
         }
+        recordAutoSyncSkip("webdav", reason, getSkipMessage(state));
         return;
       }
 
@@ -695,15 +732,39 @@ function App() {
 
         if (!result.success) {
           console.error(`⚠️ ${reason} sync failed:`, result.message);
+          await recordAutoSyncHistory({
+            provider: "webdav",
+            reason,
+            status: "failed",
+            startedAt,
+            message: result.message,
+            localChanged: result.localChanged,
+          });
           return;
         }
 
+        await recordAutoSyncHistory({
+          provider: "webdav",
+          reason,
+          status: "success",
+          startedAt,
+          message: result.message,
+          localChanged: result.localChanged,
+        });
         logWhenDebugEnabled(`✅ ${reason} sync completed:`, result.message);
         if (result.localChanged) {
           await Promise.all([fetchPrompts(), fetchFolders()]);
         }
       } catch (syncError) {
         console.error(`⚠️ ${reason} sync error:`, syncError);
+        await recordAutoSyncHistory({
+          provider: "webdav",
+          reason,
+          status: "failed",
+          startedAt,
+          message:
+            syncError instanceof Error ? syncError.message : String(syncError),
+        });
       } finally {
         isWebDAVSyncInFlightRef.current = false;
       }
@@ -740,6 +801,7 @@ function App() {
     const runS3AutoSyncTask = async (
       reason: "startup" | "startup-resume" | "interval",
     ) => {
+      const startedAt = new Date().toISOString();
       const settings = useSettingsStore.getState();
       const state = {
         isVisible: isWindowVisibleRef.current,
@@ -760,6 +822,7 @@ function App() {
         ) {
           pendingS3StartupSyncRef.current = true;
         }
+        recordAutoSyncSkip("s3", reason, getSkipMessage(state));
         return;
       }
 
@@ -788,15 +851,39 @@ function App() {
 
         if (!result.success) {
           console.error(`⚠️ S3 ${reason} sync failed:`, result.message);
+          await recordAutoSyncHistory({
+            provider: "s3",
+            reason,
+            status: "failed",
+            startedAt,
+            message: result.message,
+            localChanged: result.localChanged,
+          });
           return;
         }
 
+        await recordAutoSyncHistory({
+          provider: "s3",
+          reason,
+          status: "success",
+          startedAt,
+          message: result.message,
+          localChanged: result.localChanged,
+        });
         logWhenDebugEnabled(`✅ S3 ${reason} sync completed:`, result.message);
         if (result.localChanged) {
           await Promise.all([fetchPrompts(), fetchFolders()]);
         }
       } catch (syncError) {
         console.error(`⚠️ S3 ${reason} sync error:`, syncError);
+        await recordAutoSyncHistory({
+          provider: "s3",
+          reason,
+          status: "failed",
+          startedAt,
+          message:
+            syncError instanceof Error ? syncError.message : String(syncError),
+        });
       } finally {
         isS3SyncInFlightRef.current = false;
       }
@@ -805,6 +892,7 @@ function App() {
     const runSelfHostedAutoSync = async (
       reason: "startup" | "startup-resume" | "interval",
     ) => {
+      const startedAt = new Date().toISOString();
       const settings = useSettingsStore.getState();
       const state = {
         isVisible: isWindowVisibleRef.current,
@@ -825,6 +913,7 @@ function App() {
         ) {
           pendingSelfHostedStartupSyncRef.current = true;
         }
+        recordAutoSyncSkip("self-hosted", reason, getSkipMessage(state));
         return;
       }
 
@@ -840,15 +929,39 @@ function App() {
 
         if (!result.success) {
           console.error(`⚠️ self-hosted ${reason} sync error:`, result.message);
+          await recordAutoSyncHistory({
+            provider: "self-hosted",
+            reason,
+            status: "failed",
+            startedAt,
+            message: result.message,
+            localChanged: result.localChanged,
+          });
           return;
         }
 
+        await recordAutoSyncHistory({
+          provider: "self-hosted",
+          reason,
+          status: "success",
+          startedAt,
+          message: result.message,
+          localChanged: result.localChanged,
+        });
         logWhenDebugEnabled(`✅ ${result.message}`);
         if (result.localChanged) {
           await Promise.all([fetchPrompts(), fetchFolders()]);
         }
       } catch (syncError) {
         console.error(`⚠️ self-hosted ${reason} sync error:`, syncError);
+        await recordAutoSyncHistory({
+          provider: "self-hosted",
+          reason,
+          status: "failed",
+          startedAt,
+          message:
+            syncError instanceof Error ? syncError.message : String(syncError),
+        });
       } finally {
         isSelfHostedSyncInFlightRef.current = false;
       }
@@ -929,6 +1042,15 @@ function App() {
         startupSyncTimer = setTimeout(() => {
           if (!isWindowVisibleRef.current || navigator.onLine === false) {
             pendingStartupSyncRef.current = true;
+            recordAutoSyncSkip(
+              "webdav",
+              "startup",
+              getSkipMessage({
+                isVisible: isWindowVisibleRef.current,
+                isOnline: navigator.onLine !== false,
+                isRunning: isWebDAVSyncInFlightRef.current,
+              }),
+            );
             return;
           }
           void runAutoSync("startup");
@@ -945,6 +1067,15 @@ function App() {
         s3StartupSyncTimer = setTimeout(() => {
           if (!isWindowVisibleRef.current || navigator.onLine === false) {
             pendingS3StartupSyncRef.current = true;
+            recordAutoSyncSkip(
+              "s3",
+              "startup",
+              getSkipMessage({
+                isVisible: isWindowVisibleRef.current,
+                isOnline: navigator.onLine !== false,
+                isRunning: isS3SyncInFlightRef.current,
+              }),
+            );
             return;
           }
           void runS3AutoSyncTask("startup");
@@ -963,6 +1094,15 @@ function App() {
         selfHostedStartupSyncTimer = setTimeout(() => {
           if (!isWindowVisibleRef.current || navigator.onLine === false) {
             pendingSelfHostedStartupSyncRef.current = true;
+            recordAutoSyncSkip(
+              "self-hosted",
+              "startup",
+              getSkipMessage({
+                isVisible: isWindowVisibleRef.current,
+                isOnline: navigator.onLine !== false,
+                isRunning: isSelfHostedSyncInFlightRef.current,
+              }),
+            );
             return;
           }
           void runSelfHostedAutoSync("startup");

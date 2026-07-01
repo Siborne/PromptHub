@@ -14,14 +14,15 @@
 - 桌面端可以同时启用多个备份目标用于手动上传、下载与恢复，但自动同步在任一时刻只能由一个 `syncProvider` 驱动，避免多源竞争写入。
 - 桌面端数据设置中的云备份导航应使用 provider 导向命名，并直接显示每个 provider 是否已启用。
 - 对 `webdav` push/pull 的编排必须通过路由/页面外的 orchestrator 服务完成，避免在入口层直接堆叠远端流程细节。
+- 桌面端必须记录最近的自动同步尝试，覆盖 WebDAV、S3、自部署 Web 的启动、恢复启动和定时同步。记录只包含 provider、触发原因、状态、时间、是否更新本地数据和脱敏摘要，不得保存凭据、远端地址、token、bucket、remote path 或 payload。最近记录保存在设置摘要中，同时追加写入单个本地日志文件 `logs/auto-sync.jsonl`，不是每条记录一个文件。
 
 ### 1.1 Stable Web Sync Response Shape
 
 - Web `sync` 主操作接口（`PUT /sync/data`、`POST /sync/push`、`POST /sync/pull`）必须返回统一 `summary` 对象，包含：
-	- `prompts`
-	- `folders`
-	- `rules`
-	- `skills`
+  - `prompts`
+  - `folders`
+  - `rules`
+  - `skills`
 - 为保持兼容，可同时返回历史字段（例如 `promptsImported` / `promptsExported`），但 `summary` 作为统一消费入口。
 - Web push/pull 失败路径必须走统一错误映射（当前为 `VALIDATION_ERROR`），并保留可诊断消息（例如连接失败 HTTP 状态、payload 非法原因）。
 - WebDAV 结构化备份必须保持可恢复：`data.json`、`manifest.json`、以及被 Prompt 引用的媒体文件必须一起参与 push/pull；仅 `404` 可视为远端备份缺失并触发 legacy fallback，其他 HTTP 失败必须原样暴露为诊断错误。
@@ -61,6 +62,15 @@ When desktop users enable more than one cloud backup target:
 - manual backup, download, and restore actions can remain available for every enabled target
 - startup sync, interval sync, and save-triggered sync run only for the selected `syncProvider`
 - settings navigation keeps provider-oriented labels and shows which providers are enabled without entering each panel
+
+### Scenario: Desktop user checks automatic sync history
+
+When desktop automatic sync is enabled for WebDAV, S3, or self-hosted Web:
+
+- each automatic attempt records success, failure, or skipped state
+- skipped state explains common reasons such as offline, hidden window, in-flight sync, inactive provider, or incomplete config
+- the data settings UI shows recent entries so users can confirm background sync activity without opening developer tools
+- the local data paths UI exposes `logs/auto-sync.jsonl` so users can open the durable local log file directly
 
 ### Scenario: User needs deployment-level sync guidance
 

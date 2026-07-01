@@ -2,7 +2,7 @@
  * Settings type definitions
  */
 
-import type { SkillProject } from './skill';
+import type { SkillProject } from "./skill";
 
 export interface AgentAssetConfig {
   rootPath?: string;
@@ -31,9 +31,9 @@ export interface CustomAgentConfig {
   configRelativePaths?: string[];
 }
 
-export type NetworkProxyMode = 'system' | 'direct' | 'manual';
+export type NetworkProxyMode = "system" | "direct" | "manual";
 
-export type NetworkProxyProtocol = 'http' | 'https' | 'socks5';
+export type NetworkProxyProtocol = "http" | "https" | "socks5";
 
 export interface NetworkProxySettings {
   mode: NetworkProxyMode;
@@ -49,7 +49,7 @@ export interface Settings {
   theme: Theme;
   language: Language;
   autoSave: boolean;
-  tagFilterMode?: 'single' | 'multi';
+  tagFilterMode?: "single" | "multi";
   promptTagCatalog?: string[];
   defaultFolderId?: string;
   backgroundImageFileName?: string;
@@ -65,6 +65,7 @@ export interface Settings {
   skillProjects?: SkillProject[];
   lastManualBackupAt?: string;
   lastManualBackupVersion?: string;
+  autoSyncHistory?: AutoSyncHistoryEntry[];
   sync?: SyncSettings;
   device?: DeviceManagementSettings;
   updateChannel?: UpdateChannel;
@@ -83,7 +84,6 @@ export interface Settings {
   security?: {
     masterPasswordConfigured: boolean;
     unlocked: boolean;
-  
   };
 }
 
@@ -98,37 +98,50 @@ export interface SyncSettings {
   lastSyncAt?: string;
 }
 
-export type SyncProviderKind =
-  | 'manual'
-  | 'webdav'
-  | 'self-hosted'
-  | 's3';
+export type SyncProviderKind = "manual" | "webdav" | "self-hosted" | "s3";
 
-export interface DeviceManagementSettings {
-  syncCadence?: 'manual' | '15m' | '1h' | '1d';
-  storeAutoSync?: boolean;
-  storeSyncCadence?: 'manual' | '1h' | '1d';
+export type AutoSyncProviderKind = Exclude<SyncProviderKind, "manual">;
+
+export type AutoSyncReason = "startup" | "startup-resume" | "interval";
+
+export type AutoSyncStatus = "success" | "failed" | "skipped";
+
+export interface AutoSyncHistoryEntry {
+  id: string;
+  provider: AutoSyncProviderKind;
+  reason: AutoSyncReason;
+  status: AutoSyncStatus;
+  startedAt: string;
+  finishedAt: string;
+  message: string;
+  localChanged?: boolean;
 }
 
-export type Theme = 'light' | 'dark' | 'system';
-export type Language = 'en' | 'zh' | 'zh-TW' | 'ja' | 'fr' | 'de' | 'es';
-export type UpdateChannel = 'stable' | 'preview';
+export interface DeviceManagementSettings {
+  syncCadence?: "manual" | "15m" | "1h" | "1d";
+  storeAutoSync?: boolean;
+  storeSyncCadence?: "manual" | "1h" | "1d";
+}
+
+export type Theme = "light" | "dark" | "system";
+export type Language = "en" | "zh" | "zh-TW" | "ja" | "fr" | "de" | "es";
+export type UpdateChannel = "stable" | "preview";
 
 export const DEFAULT_NETWORK_PROXY_SETTINGS: NetworkProxySettings = {
-  mode: 'system',
-  protocol: 'http',
-  host: '',
+  mode: "system",
+  protocol: "http",
+  host: "",
   port: 7890,
-  username: '',
-  password: '',
-  bypass: '<local>,localhost,127.0.0.1,::1',
+  username: "",
+  password: "",
+  bypass: "<local>,localhost,127.0.0.1,::1",
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: 'system',
-  language: 'zh',
+  theme: "system",
+  language: "zh",
   autoSave: true,
-  tagFilterMode: 'multi',
+  tagFilterMode: "multi",
   promptTagCatalog: [],
   backgroundImageOpacity: 0.22,
   backgroundImageBlur: 14,
@@ -142,14 +155,14 @@ export const DEFAULT_SETTINGS: Settings = {
   skillProjects: [],
   sync: {
     enabled: false,
-    provider: 'manual',
+    provider: "manual",
     autoSync: false,
   },
   device: {
-    syncCadence: 'manual',
+    syncCadence: "manual",
     storeAutoSync: true,
-    storeSyncCadence: '1d',
+    storeSyncCadence: "1d",
   },
-  updateChannel: 'stable',
+  updateChannel: "stable",
   networkProxy: DEFAULT_NETWORK_PROXY_SETTINGS,
 };
