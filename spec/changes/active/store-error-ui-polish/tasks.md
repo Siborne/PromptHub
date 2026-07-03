@@ -11,9 +11,13 @@
 - [x] 7. Keep Skill Store source list expanded when switching to other Skill sections
 - [x] 8. Separate Skill Store detail update-check and update-apply actions
 - [x] 9. Link imported Skill Store detail status to the installed My Skills detail
+- [x] 10. Clarify successfully loaded empty custom store sources
+- [x] 11. Disable CLI one-click install when no package manager is detected
+- [x] 12. Validate Marketplace JSON custom sources before add/save
 
 ## Verification
 
 - [x] Run targeted desktop tests
 - [x] Run desktop lint
-- [ ] Sync stable specs if behavior contract changed
+- [x] Run CLI settings and empty custom store targeted tests
+- [x] Sync stable specs if behavior contract changed

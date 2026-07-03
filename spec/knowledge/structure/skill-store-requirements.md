@@ -194,6 +194,8 @@ Add sub-navigation in the Skill area:
 }
 ```
 
+Custom Marketplace JSON sources must use HTTPS and return a valid JSON document. The document is considered usable when it contains at least one top-level `skills` entry or at least one nested registry reference under `marketplaces`, `sources`, or `registries`. Empty documents such as `{ "total": 0, "skills": [] }` should be rejected during custom-source add/save, while already-saved empty sources should render a clear `Loaded 0` empty-state explanation instead of looking like a search miss.
+
 ### 3.3 Content Sources
 
 Priority:

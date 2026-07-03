@@ -19,6 +19,9 @@ Polished two desktop warning/error surfaces: the About settings preview-channel 
 - Decoupled the Skill Store source-list expansion state from `storeView`, so opening the store keeps official, Claude Code, OpenAI Codex, custom stores, and the add-store entry visible after users switch to My Skills, Project Skills, or Agent Skills.
 - Separated Skill Store detail update actions so imported Skills initially show only `Check update`; `Update` appears only after a check confirms a store update is available, and the check action becomes `Recheck update` after a status has been resolved.
 - Converted the imported status in Skill Store detail into an `Open in My Skills` action when the store entry can be matched to an installed library Skill. The action switches to My Skills, selects the installed Skill detail, and closes the store modal.
+- Clarified the custom marketplace JSON empty-state copy so a valid source returning `skills: []` is presented as a successful load with zero skills, not as a generic search miss.
+- Added Marketplace JSON preflight validation on custom-source add/save: valid documents must include at least one `skills` entry or at least one nested reference under `marketplaces`, `sources`, or `registries`; malformed, invalid-shape, and empty registries now show localized error toasts.
+- Disabled CLI one-click install buttons when desktop cannot detect `pnpm` or `npm`, added a user-facing hint, and added a main-process guard that returns a stable missing-package-manager error code before attempting an install.
 
 ## Verification
 
@@ -39,6 +42,12 @@ Polished two desktop warning/error surfaces: the About settings preview-channel 
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-store-remote.test.tsx`
 - JSON parse validation for all desktop locales (`en`, `zh`, `zh-TW`, `ja`, `fr`, `de`, `es`)
 - `pnpm --filter @prompthub/desktop typecheck`
+- `pnpm --dir apps/desktop test:run tests/unit/components/cli-settings.test.tsx`
+- `pnpm --dir apps/desktop test:run tests/unit/components/skill-store-empty-source.test.tsx`
+- `pnpm --dir apps/desktop test:run tests/unit/main/cli-installer.test.ts`
+- `pnpm --dir apps/desktop test:run tests/unit/services/skill-store-source.test.ts`
+- `pnpm --dir apps/desktop test:run tests/unit/components/skill-store-custom-sources.test.tsx`
+- JSON parse validation for all desktop locales (`en`, `zh`, `zh-TW`, `ja`, `fr`, `de`, `es`)
 
 ## Follow-Up
 
