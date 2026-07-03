@@ -152,4 +152,51 @@ describe("CLISettings", () => {
     );
     expect(onSubmit).not.toHaveBeenCalled();
   });
+
+  it("does not attempt one-click install when no package manager is detected", async () => {
+    const install = vi.fn();
+
+    installWindowMocks({
+      electron: {
+        cli: {
+          getStatus: vi.fn().mockResolvedValue({
+            installed: false,
+            command: "prompthub",
+            version: null,
+            packageManager: null,
+            packageManagerVersion: null,
+            releaseTag: "v0.5.8-beta.2",
+            installCommand: null,
+            installSource:
+              "https://github.com/legeling/PromptHub/releases/download/v0.5.8-beta.2/prompthub-cli-0.5.8-beta.2.tgz",
+          }),
+          install,
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<CLISettings />, { language: "en" });
+    });
+
+    const installWithPnpm = await screen.findByRole("button", {
+      name: "Install with pnpm",
+    });
+    const installWithNpm = screen.getByRole("button", {
+      name: "Install with npm",
+    });
+
+    expect(installWithPnpm).toBeDisabled();
+    expect(installWithNpm).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Install pnpm or npm, then refresh status before using one-click install.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(installWithPnpm);
+
+    expect(install).not.toHaveBeenCalled();
+    expect(showToast).not.toHaveBeenCalled();
+  });
 });

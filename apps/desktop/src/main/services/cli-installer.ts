@@ -6,6 +6,7 @@ import type { CliInstallMethod, CliInstallResult, CliStatus } from "@prompthub/s
 const execFileAsync = promisify(execFile);
 
 const CLI_COMMAND = "prompthub";
+const PACKAGE_MANAGER_NOT_FOUND_ERROR = "CLI_PACKAGE_MANAGER_NOT_FOUND";
 
 function getReleaseTag(): string {
   return `v${app.getVersion()}`;
@@ -111,6 +112,16 @@ export async function installCli(
       ? ["add", "-g", installSource]
       : ["install", "-g", installSource];
   const command = `${installMethod} ${args.join(" ")}`;
+  const packageManagerInfo = await detectPackageManager(installMethod);
+
+  if (!packageManagerInfo.version) {
+    return {
+      success: false,
+      method: installMethod,
+      command,
+      error: PACKAGE_MANAGER_NOT_FOUND_ERROR,
+    };
+  }
 
   try {
     const { stdout, stderr } = await runCommand(installMethod, args);

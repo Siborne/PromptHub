@@ -1,4 +1,7 @@
-import type { SkillStoreSource } from "@prompthub/shared/types";
+import type {
+  MarketplaceRegistryDocument,
+  SkillStoreSource,
+} from "@prompthub/shared/types";
 
 import {
   parseGitHubTreeLocation,
@@ -14,6 +17,11 @@ export interface NormalizedStoreSourceInput {
   url: string;
   branch?: string;
   directory?: string;
+}
+
+export interface MarketplaceStoreDocumentValidation {
+  referenceCount: number;
+  skillCount: number;
 }
 
 function normalizeWindowsPath(path: string) {
@@ -77,6 +85,50 @@ function normalizeOptionalBranch(input?: string): string | undefined {
 function normalizeOptionalDirectory(input?: string): string | undefined {
   const trimmed = input?.trim().replace(/^\/+|\/+$/g, "");
   return trimmed ? trimmed : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getArrayFieldCount(record: Record<string, unknown>, key: string): number {
+  if (!(key in record)) {
+    return 0;
+  }
+
+  const value = record[key];
+  if (!Array.isArray(value)) {
+    throw new Error("MARKETPLACE_STORE_INVALID_SHAPE");
+  }
+
+  return value.length;
+}
+
+export function validateMarketplaceStoreDocument(
+  raw: string,
+): MarketplaceStoreDocumentValidation {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as MarketplaceRegistryDocument;
+  } catch {
+    throw new Error("MARKETPLACE_STORE_INVALID_JSON");
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error("MARKETPLACE_STORE_INVALID_SHAPE");
+  }
+
+  const skillCount = getArrayFieldCount(parsed, "skills");
+  const referenceCount =
+    getArrayFieldCount(parsed, "marketplaces") +
+    getArrayFieldCount(parsed, "sources") +
+    getArrayFieldCount(parsed, "registries");
+
+  if (skillCount === 0 && referenceCount === 0) {
+    throw new Error("MARKETPLACE_STORE_EMPTY");
+  }
+
+  return { referenceCount, skillCount };
 }
 
 export function normalizeGitStoreSourceInput(

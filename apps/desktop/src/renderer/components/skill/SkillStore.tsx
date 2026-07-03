@@ -60,7 +60,11 @@ import {
 } from "../../services/skill-store-update";
 import { filterRegistrySkills } from "../../services/skill-store-search";
 import { useSkillStoreRemoteSync } from "./store-remote-sync";
-import { normalizeGitStoreSourceInput } from "../../services/skill-store-source";
+import {
+  normalizeGitStoreSourceInput,
+  validateMarketplaceStoreDocument,
+  validateStoreSourceInput,
+} from "../../services/skill-store-source";
 import {
   getRemoteStoreSkillCount,
   getRemoteStoreSkills,
@@ -173,6 +177,10 @@ function buildStoreCatalogRows(options: {
 }
 
 function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getStoreSourceErrorCode(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -549,6 +557,44 @@ export function SkillStore() {
   );
 
   const selectedRemoteEntry = remoteStoreEntries[selectedStoreSourceId];
+  const formatStoreSourceValidationError = useCallback(
+    (error: unknown) => {
+      const code = getStoreSourceErrorCode(error);
+      if (code === "STORE_SOURCE_HTTPS_REQUIRED") {
+        return t("skill.storeSourceHttpsRequired", "Store URL must use HTTPS");
+      }
+      if (code === "MARKETPLACE_STORE_INVALID_JSON") {
+        return t(
+          "skill.storeSourceMarketplaceInvalidJson",
+          "Marketplace URL must return a valid JSON document.",
+        );
+      }
+      if (code === "MARKETPLACE_STORE_INVALID_SHAPE") {
+        return t(
+          "skill.storeSourceMarketplaceInvalidShape",
+          "Marketplace JSON must include a skills array or nested registries.",
+        );
+      }
+      if (code === "MARKETPLACE_STORE_EMPTY") {
+        return t(
+          "skill.storeSourceMarketplaceEmpty",
+          "Marketplace JSON loaded, but it contains no skills or nested registries.",
+        );
+      }
+      if (code === "INVALID_STORE_SOURCE_URL") {
+        return t("skill.storeSourceInvalidUrl", "Invalid store URL format");
+      }
+      return t(
+        "skill.storeSourceMarketplaceLoadFailed",
+        "Could not load or validate this marketplace JSON URL.",
+      );
+    },
+    [t],
+  );
+  const validateMarketplaceSource = useCallback(async (url: string) => {
+    const raw = await window.api.skill.fetchRemoteContent(url);
+    validateMarketplaceStoreDocument(raw);
+  }, []);
   const activeSkillsShFilterKey =
     selectedStoreSourceId === "community"
       ? normalizeSkillsShFilterKey(String(storeCategory))
@@ -674,7 +720,7 @@ export function SkillStore() {
   );
 
   const updateCustomStoreSource = useCallback(
-    (payload: {
+    async (payload: {
       id: string;
       name: string;
       type: Extract<
@@ -685,37 +731,47 @@ export function SkillStore() {
       branch?: string;
       directory?: string;
     }) => {
-      const trimmedName = payload.name.trim();
-      const normalizedGitSource =
-        payload.type === "git-repo"
-          ? normalizeGitStoreSourceInput(
-              payload.url.trim(),
-              payload.branch,
-              payload.directory,
-            )
-          : null;
-      const trimmedUrl = normalizedGitSource?.url ?? payload.url.trim();
-      if (!trimmedName || !trimmedUrl) {
-        return;
-      }
+      try {
+        const trimmedName = payload.name.trim();
+        const normalizedGitSource =
+          payload.type === "git-repo"
+            ? normalizeGitStoreSourceInput(
+                payload.url.trim(),
+                payload.branch,
+                payload.directory,
+              )
+            : null;
+        const trimmedUrl =
+          normalizedGitSource?.url ??
+          validateStoreSourceInput(payload.url.trim(), payload.type);
+        if (!trimmedName || !trimmedUrl) {
+          return;
+        }
 
-      useSkillStore.setState((state) => ({
-        customStoreSources: state.customStoreSources.map((source) =>
-          source.id === payload.id
-            ? {
-                ...source,
-                name: trimmedName,
-                type: payload.type,
-                url: trimmedUrl,
-                branch: normalizedGitSource?.branch,
-                directory: normalizedGitSource?.directory,
-              }
-            : source,
-        ),
-      }));
-      setEditingCustomSourceId(null);
+        if (payload.type === "marketplace-json") {
+          await validateMarketplaceSource(trimmedUrl);
+        }
+
+        useSkillStore.setState((state) => ({
+          customStoreSources: state.customStoreSources.map((source) =>
+            source.id === payload.id
+              ? {
+                  ...source,
+                  name: trimmedName,
+                  type: payload.type,
+                  url: trimmedUrl,
+                  branch: normalizedGitSource?.branch,
+                  directory: normalizedGitSource?.directory,
+                }
+              : source,
+          ),
+        }));
+        setEditingCustomSourceId(null);
+      } catch (error) {
+        showToast(formatStoreSourceValidationError(error), "error");
+      }
     },
-    [],
+    [formatStoreSourceValidationError, showToast, validateMarketplaceSource],
   );
 
   const requestDeleteCustomSource = useCallback((sourceId: string) => {
@@ -1099,6 +1155,14 @@ export function SkillStore() {
     }
 
     try {
+      const normalizedSourceUrl = validateStoreSourceInput(
+        sourceUrl.trim(),
+        sourceType,
+      );
+      if (sourceType === "marketplace-json") {
+        await validateMarketplaceSource(normalizedSourceUrl);
+      }
+
       if (sourceType === "git-repo") {
         addCustomStoreSource(sourceName, sourceUrl, sourceType, {
           branch: sourceBranch,
@@ -1118,12 +1182,7 @@ export function SkillStore() {
         void loadStoreSource(createdId, true);
       }
     } catch (error: unknown) {
-      const message =
-        error instanceof Error &&
-        error.message === "STORE_SOURCE_HTTPS_REQUIRED"
-          ? t("skill.storeSourceHttpsRequired", "Store URL must use HTTPS")
-          : t("skill.storeSourceInvalidUrl", "Invalid store URL format");
-      showToast(message, "error");
+      showToast(formatStoreSourceValidationError(error), "error");
     }
   };
 

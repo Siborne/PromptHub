@@ -1029,9 +1029,7 @@ describe("SkillStore custom sources", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Enabled")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
-    expect(
-      screen.getByText("No skills in this custom store yet"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("This store contains 0 skills")).toBeInTheDocument();
     expect(screen.queryByText("No skills found")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Try a different search or category"),
@@ -1273,9 +1271,7 @@ describe("SkillStore custom sources", () => {
       await renderWithI18n(<SkillStore />, { language: "en" });
     });
 
-    expect(
-      screen.getByText("No skills in this custom store yet"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("This store contains 0 skills")).toBeInTheDocument();
     expect(screen.queryByText("No skills found")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Try a different search or category"),

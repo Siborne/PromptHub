@@ -70,7 +70,7 @@ interface SkillStoreSourceEditModalProps {
     url: string;
     branch?: string;
     directory?: string;
-  }) => void;
+  }) => Promise<void> | void;
   onToggleEnabled: (sourceId: string) => void;
   onRefresh: (sourceId: string) => void;
   refreshingSourceId?: string | null;
@@ -376,7 +376,7 @@ export function SkillStoreSourceEditModal({
               if (!canSave) {
                 return;
               }
-              onSave({
+              void onSave({
                 id: source.id,
                 name,
                 type,

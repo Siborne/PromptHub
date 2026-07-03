@@ -25,6 +25,8 @@ const FALLBACK_STATUS: CliStatus = {
   installSource: "",
 };
 
+const PACKAGE_MANAGER_NOT_FOUND_ERROR = "CLI_PACKAGE_MANAGER_NOT_FOUND";
+
 export function CLISettings() {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -52,12 +54,20 @@ export function CLISettings() {
   }, []);
 
   const handleInstall = async (method?: CliInstallMethod) => {
+    const installMethod = method ?? status.packageManager;
+    if (!installMethod) {
+      showToast(t("settings.cliPackageManagerInstallUnavailable"), "error");
+      return;
+    }
+
     setIsInstalling(true);
     try {
-      const result = await window.electron?.cli?.install?.(method);
+      const result = await window.electron?.cli?.install?.(installMethod);
       if (!result?.success) {
         showToast(
-          result?.error || t("settings.cliInstallFailed"),
+          result?.error === PACKAGE_MANAGER_NOT_FOUND_ERROR
+            ? t("settings.cliPackageManagerInstallUnavailable")
+            : result?.error || t("settings.cliInstallFailed"),
           "error",
         );
         return;
@@ -73,7 +83,13 @@ export function CLISettings() {
     }
   };
 
+  const hasDetectedPackageManager = Boolean(status.packageManager);
   const primaryInstallMethod = status.packageManager ?? "pnpm";
+  const canInstallCli =
+    !isLoading &&
+    !isInstalling &&
+    !status.installed &&
+    hasDetectedPackageManager;
 
   return (
     <div className="space-y-6">
@@ -135,8 +151,10 @@ export function CLISettings() {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => void handleInstall(primaryInstallMethod)}
-              disabled={isInstalling || status.installed}
+              onClick={() =>
+                void handleInstall(status.packageManager ?? undefined)
+              }
+              disabled={!canInstallCli}
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isInstalling ? (
@@ -155,7 +173,7 @@ export function CLISettings() {
               <button
                 type="button"
                 onClick={() => void handleInstall("npm")}
-                disabled={isInstalling || status.installed}
+                disabled={!canInstallCli}
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <DownloadIcon aria-hidden="true" className="h-4 w-4" />
@@ -175,6 +193,11 @@ export function CLISettings() {
               {t("settings.cliRefreshStatus")}
             </button>
           </div>
+          {!isLoading && !status.installed && !hasDetectedPackageManager ? (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              {t("settings.cliPackageManagerInstallUnavailable")}
+            </p>
+          ) : null}
           <div className="rounded-xl bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
             <p className="font-medium text-foreground">{t("settings.cliFeatureTitle")}</p>
             <p className="mt-1.5 whitespace-pre-line">{t("settings.cliFeatureDesc")}</p>

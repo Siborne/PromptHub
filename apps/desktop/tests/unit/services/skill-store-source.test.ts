@@ -5,6 +5,7 @@ import {
   isSupportedGitRepoSource,
   normalizeGitStoreSourceInput,
   normalizeLocalSourcePath,
+  validateMarketplaceStoreDocument,
   validateStoreSourceInput,
 } from "../../../src/renderer/services/skill-store-source";
 
@@ -63,5 +64,47 @@ describe("skill-store-source", () => {
       branch: "release",
       directory: "skills/custom",
     });
+  });
+
+  it("accepts marketplace JSON documents with direct skills", () => {
+    expect(
+      validateMarketplaceStoreDocument(
+        JSON.stringify({
+          skills: [
+            {
+              name: "Docs Helper",
+              content_url: "https://example.com/docs-helper/SKILL.md",
+            },
+          ],
+        }),
+      ),
+    ).toEqual({ referenceCount: 0, skillCount: 1 });
+  });
+
+  it("accepts marketplace JSON documents with nested registry references", () => {
+    expect(
+      validateMarketplaceStoreDocument(
+        JSON.stringify({
+          sources: ["https://example.com/child-store.json"],
+        }),
+      ),
+    ).toEqual({ referenceCount: 1, skillCount: 0 });
+  });
+
+  it("rejects empty marketplace JSON documents", () => {
+    expect(() =>
+      validateMarketplaceStoreDocument(
+        JSON.stringify({
+          total: 0,
+          skills: [],
+        }),
+      ),
+    ).toThrow("MARKETPLACE_STORE_EMPTY");
+  });
+
+  it("rejects malformed marketplace JSON responses", () => {
+    expect(() => validateMarketplaceStoreDocument("<html>not json</html>")).toThrow(
+      "MARKETPLACE_STORE_INVALID_JSON",
+    );
   });
 });
