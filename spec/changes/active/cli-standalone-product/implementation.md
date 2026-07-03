@@ -119,6 +119,11 @@
   - 输出层不再直接访问 `skill.safetyReport.findings.length`。
   - 当扫描结果携带 legacy/partial safety report 且缺少 `findings` 数组时，表格输出把 findings 计为 `0`。
   - `apps/cli/tests/run.test.ts` 新增回归，注入缺失 `findings` 的 safety report，覆盖 `prompthub --output table skill scan <path>` 不应以内部错误退出。
+- 修正 standalone CLI 数据库路径与桌面端统一数据布局不一致的问题：
+  - `packages/core/src/runtime-paths.ts` 新增 `getDatabasePath()` 与 `getLegacyDatabasePath()`。
+  - core 数据库解析现在优先使用 `userData/data/prompthub.db`，并在仅存在旧根库时兼容读取 `userData/prompthub.db`。
+  - `packages/core/src/database.ts` 改为通过 shared runtime path 初始化 SQLite，避免 CLI 继续创建或读取旧根目录数据库。
+  - `apps/cli/tests/run.test.ts` 增加回归，覆盖新 CLI 数据目录创建 unified DB，以及只有 legacy root DB 时仍可读取旧数据。
 
 ## Verification
 
@@ -170,6 +175,10 @@
 - `pnpm --filter @prompthub/cli test -- tests/run.test.ts --run -t "lists, reads, restores, and deletes rule versions"`（排查默认完整单文件运行中 5s timeout 夹带失败）
 - `pnpm --filter @prompthub/cli test -- tests/run.test.ts --run -t "rewrites a rule through explicit AI config"`（排查默认完整单文件运行中 timeout 后的夹带失败）
 - `pnpm --filter @prompthub/cli test -- tests/run.test.ts --run --testTimeout 10000`（41 条通过）
+- CLI 数据库路径修复后重新运行：
+- `pnpm --filter @prompthub/cli test -- tests/run.test.ts --run --testTimeout 10000`
+- `pnpm --filter @prompthub/cli typecheck`
+- `pnpm --filter @prompthub/core typecheck`
 
 说明：`pnpm --filter @prompthub/desktop test -- --run` 当前仍有与本次 CLI 拆分无关的历史失败项，本次改动已对 desktop 受影响范围做 lint/typecheck/定点 UI 测试与 build 验证。
 

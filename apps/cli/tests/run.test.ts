@@ -147,6 +147,61 @@ describe("standalone cli wiring", () => {
     expect(listRes.json[0].title).toBe("CLI Prompt");
   });
 
+  it("creates new CLI databases under the unified data directory", async () => {
+    const root = makeTempRoot(tempDirs);
+    const userDataDir = path.join(root, "user-data");
+
+    const createRes = await execCli([
+      "--data-dir",
+      userDataDir,
+      "prompt",
+      "create",
+      "--title",
+      "Unified DB",
+      "--user-prompt",
+      "Stored in data",
+    ]);
+
+    expect(createRes.exitCode).toBe(0);
+    expect(fs.existsSync(path.join(userDataDir, "data", "prompthub.db"))).toBe(
+      true,
+    );
+    expect(fs.existsSync(path.join(userDataDir, "prompthub.db"))).toBe(false);
+  });
+
+  it("keeps reading an existing legacy root database when no unified database exists", async () => {
+    const root = makeTempRoot(tempDirs);
+    const userDataDir = path.join(root, "user-data");
+    const unifiedDbPath = path.join(userDataDir, "data", "prompthub.db");
+    const legacyDbPath = path.join(userDataDir, "prompthub.db");
+
+    const createRes = await execCli([
+      "--data-dir",
+      userDataDir,
+      "prompt",
+      "create",
+      "--title",
+      "Legacy DB",
+      "--user-prompt",
+      "Still readable",
+    ]);
+    expect(createRes.exitCode).toBe(0);
+    fs.renameSync(unifiedDbPath, legacyDbPath);
+    fs.rmSync(path.dirname(unifiedDbPath), { recursive: true, force: true });
+
+    const listRes = await execCli([
+      "--data-dir",
+      userDataDir,
+      "prompt",
+      "list",
+    ]);
+
+    expect(listRes.exitCode).toBe(0);
+    expect(listRes.json).toHaveLength(1);
+    expect(listRes.json[0].title).toBe("Legacy DB");
+    expect(fs.existsSync(legacyDbPath)).toBe(true);
+  });
+
   it("copies prompts by title query and reports ambiguous matches", async () => {
     const root = makeTempRoot(tempDirs);
 
@@ -2257,65 +2312,67 @@ describe("standalone cli wiring", () => {
     const targetRoot = makeTempRoot(tempDirs);
     const exportFile = path.join(sourceRoot, "workspace-export.json");
 
-    const folderRes = await execCli([
-      ...withDataDir(sourceRoot),
-      "folder",
-      "create",
-      "--name",
-      "Workspace Folder",
-    ]);
-    expect(folderRes.exitCode).toBe(0);
+    await withTempHome(sourceRoot, async () => {
+      const folderRes = await execCli([
+        ...withDataDir(sourceRoot),
+        "folder",
+        "create",
+        "--name",
+        "Workspace Folder",
+      ]);
+      expect(folderRes.exitCode).toBe(0);
 
-    const promptRes = await execCli([
-      ...withDataDir(sourceRoot),
-      "prompt",
-      "create",
-      "--title",
-      "Workspace Prompt",
-      "--user-prompt",
-      "Export me",
-      "--folder-id",
-      folderRes.json.id as string,
-    ]);
-    expect(promptRes.exitCode).toBe(0);
+      const promptRes = await execCli([
+        ...withDataDir(sourceRoot),
+        "prompt",
+        "create",
+        "--title",
+        "Workspace Prompt",
+        "--user-prompt",
+        "Export me",
+        "--folder-id",
+        folderRes.json.id as string,
+      ]);
+      expect(promptRes.exitCode).toBe(0);
 
-    const exportRes = await execCli([
-      ...withDataDir(sourceRoot),
-      "workspace",
-      "export",
-      "--file",
-      exportFile,
-    ]);
-    expect(exportRes.exitCode).toBe(0);
-    expect(fs.existsSync(exportFile)).toBe(true);
+      const exportRes = await execCli([
+        ...withDataDir(sourceRoot),
+        "workspace",
+        "export",
+        "--file",
+        exportFile,
+      ]);
+      expect(exportRes.exitCode).toBe(0);
+      expect(fs.existsSync(exportFile)).toBe(true);
 
-    const importRes = await execCli([
-      ...withDataDir(targetRoot),
-      "workspace",
-      "import",
-      "--file",
-      exportFile,
-    ]);
-    expect(importRes.exitCode).toBe(0);
-    expect(importRes.json.imported).toBe(true);
+      const importRes = await execCli([
+        ...withDataDir(targetRoot),
+        "workspace",
+        "import",
+        "--file",
+        exportFile,
+      ]);
+      expect(importRes.exitCode).toBe(0);
+      expect(importRes.json.imported).toBe(true);
 
-    const importedPrompts = await execCli([
-      ...withDataDir(targetRoot),
-      "prompt",
-      "list",
-    ]);
-    expect(importedPrompts.exitCode).toBe(0);
-    expect(importedPrompts.json).toHaveLength(1);
-    expect(importedPrompts.json[0].title).toBe("Workspace Prompt");
+      const importedPrompts = await execCli([
+        ...withDataDir(targetRoot),
+        "prompt",
+        "list",
+      ]);
+      expect(importedPrompts.exitCode).toBe(0);
+      expect(importedPrompts.json).toHaveLength(1);
+      expect(importedPrompts.json[0].title).toBe("Workspace Prompt");
 
-    const importedFolders = await execCli([
-      ...withDataDir(targetRoot),
-      "folder",
-      "list",
-    ]);
-    expect(importedFolders.exitCode).toBe(0);
-    expect(importedFolders.json).toHaveLength(1);
-    expect(importedFolders.json[0].name).toBe("Workspace Folder");
+      const importedFolders = await execCli([
+        ...withDataDir(targetRoot),
+        "folder",
+        "list",
+      ]);
+      expect(importedFolders.exitCode).toBe(0);
+      expect(importedFolders.json).toHaveLength(1);
+      expect(importedFolders.json[0].name).toBe("Workspace Folder");
+    });
   });
 
   it("requires force clear when importing into a non-empty workspace", async () => {

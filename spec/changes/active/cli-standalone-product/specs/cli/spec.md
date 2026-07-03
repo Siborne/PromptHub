@@ -21,6 +21,13 @@ PromptHub MUST keep runtime path resolution in a shared module consumed by both 
 - **WHEN** desktop and CLI run against the same appData / userData roots
 - **THEN** `skills`, `rules`, `prompts`, and asset directories resolve to the same absolute paths.
 
+#### Scenario: Desktop and CLI resolve the same database file
+
+- **WHEN** desktop has migrated the PromptHub database to `userData/data/prompthub.db`
+- **THEN** the standalone CLI reads and writes that same unified database path.
+- **AND** a fresh CLI data directory creates `data/prompthub.db`, not the legacy root-level `prompthub.db`.
+- **AND** an existing legacy root-level `prompthub.db` remains readable when no unified database file exists.
+
 ### Requirement: Desktop Stops Shipping a CLI Entry
 
 PromptHub desktop MUST stop exposing and packaging any CLI entry once `apps/cli` becomes the standalone CLI product.

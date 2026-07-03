@@ -1,5 +1,3 @@
-import path from "path";
-
 import {
   DatabaseAdapter,
   closeDatabase,
@@ -16,14 +14,10 @@ import {
 } from "@prompthub/db";
 import type { InitDatabaseHooks } from "@prompthub/db";
 
-import { getUserDataPath } from "./runtime-paths";
-
-function getDbPath(): string {
-  return path.join(getUserDataPath(), "prompthub.db");
-}
+import { getDatabasePath } from "./runtime-paths";
 
 export function initDatabase(hooks?: InitDatabaseHooks): DatabaseAdapter.Database {
-  return dbInit(getDbPath(), hooks);
+  return dbInit(getDatabasePath(), hooks);
 }
 
 export {

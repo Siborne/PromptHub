@@ -83,6 +83,25 @@ export function getDataDir(): string {
   return path.join(getUserDataPath(), "data");
 }
 
+export function getLegacyDatabasePath(): string {
+  return path.join(getUserDataPath(), "prompthub.db");
+}
+
+export function getDatabasePath(): string {
+  const unifiedDbPath = path.join(getDataDir(), "prompthub.db");
+  const legacyDbPath = getLegacyDatabasePath();
+
+  if (fs.existsSync(unifiedDbPath)) {
+    return unifiedDbPath;
+  }
+
+  if (fs.existsSync(legacyDbPath)) {
+    return legacyDbPath;
+  }
+
+  return unifiedDbPath;
+}
+
 export function getConfigDir(): string {
   return path.join(getUserDataPath(), "config");
 }
