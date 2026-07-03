@@ -32,6 +32,12 @@ The Agent Skills view uses a two-step layout, not a persistent side detail pane:
 - Clicking a Skill card opens the shared full-width `SkillFullDetailPage` surface with preview/source/files tabs and a back action, so Agent detail reuses the same Skill header, markdown preview, source view, files view, and transition style as My Skills and Project Skills.
 - The Agent/platform list uses the shared `PlatformIcon` assets so known Agents show real product icons.
 
+Built-in platform metadata is shared with Settings, MCP, and main-process scan/install code:
+
+- WorkBuddy uses `workbuddy` with root `~/.workbuddy`, `skills/`, and documented MCP config `mcp.json`.
+- CodeBuddy keeps the existing `codebuddy` id, but its asset model now includes `skills/`, `CODEBUDDY.md`, `.mcp.json`, `settings.json`, `agents/`, and `commands/`.
+- QClaw uses `qclaw` with PromptHub's compatibility root `~/.qclaw`, `skills/`, and OpenClaw-compatible `workspace/SOUL.md`; no MCP path is exposed until an official local config path is confirmed.
+
 Each card shows:
 
 - name, description, path.

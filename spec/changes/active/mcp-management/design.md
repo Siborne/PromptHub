@@ -36,8 +36,10 @@ This avoids adding a DB migration while keeping MCP state out of React-only loca
 - OpenCode: JSON `mcp` object in either global `~/.config/opencode/opencode.json` or project `<projectRoot>/opencode.json`.
 - Kiro: JSON `mcpServers` object in either global `~/.kiro/settings/mcp.json` or workspace `<projectRoot>/.kiro/settings/mcp.json`.
 - Kilo Code: JSON `mcp` object in global `~/.config/kilo/kilo.json` and project `<projectRoot>/kilo.json`. The UI exposes one default Kilo Code target per scope so Kilo is one platform, not multiple path/format variants. Compatible JSONC custom paths such as `.config/kilo/kilo.jsonc` and `.kilo/kilo.jsonc` are handled by static parsing and lower-level custom path flows, not by duplicating Agent or Project MCP cards.
+- Tencent WorkBuddy: JSON `mcpServers` object in global `~/.workbuddy/mcp.json` and project `<projectRoot>/.workbuddy/mcp.json`.
+- CodeBuddy: JSON / JSONC `mcpServers` object in global `~/.codebuddy/.mcp.json` and project `<projectRoot>/.mcp.json`.
 
-First version models apply targets by path and target type. Built-in path helpers cover common global locations; registered PromptHub projects derive workspace targets for OpenCode, Kiro, and one default Kilo Code `kilo.json` target. Users can still apply to a custom path through lower-level CLI/API flows.
+First version models apply targets by path and target type. Built-in path helpers cover common global locations; registered PromptHub projects derive workspace targets for OpenCode, Kiro, one default Kilo Code `kilo.json` target, WorkBuddy `.workbuddy/mcp.json`, and CodeBuddy `.mcp.json`. Users can still apply to a custom path through lower-level CLI/API flows.
 
 ## Safety
 

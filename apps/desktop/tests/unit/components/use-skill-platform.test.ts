@@ -36,6 +36,9 @@ describe("use-skill-platform helpers", () => {
       { id: "trae-work-cn", name: "TRAE Work CN" },
       { id: "kilo", name: "Kilo Code" },
       { id: "kiro", name: "Kiro" },
+      { id: "qclaw", name: "QClaw" },
+      { id: "workbuddy", name: "Tencent WorkBuddy" },
+      { id: "codebuddy", name: "CodeBuddy" },
       { id: "hermes", name: "Hermes Agent" },
       { id: "opencode", name: "OpenCode" },
     ] as any;
@@ -58,6 +61,9 @@ describe("use-skill-platform helpers", () => {
       "trae-cn",
       "trae-work-cn",
       "openclaw",
+      "qclaw",
+      "workbuddy",
+      "codebuddy",
       "hermes",
     ]);
   });
@@ -78,6 +84,9 @@ describe("use-skill-platform helpers", () => {
       { id: "trae-work-cn", name: "TRAE Work CN" },
       { id: "kilo", name: "Kilo Code" },
       { id: "kiro", name: "Kiro" },
+      { id: "qclaw", name: "QClaw" },
+      { id: "workbuddy", name: "Tencent WorkBuddy" },
+      { id: "codebuddy", name: "CodeBuddy" },
       { id: "hermes", name: "Hermes Agent" },
       { id: "opencode", name: "OpenCode" },
     ] as any;
@@ -100,6 +109,9 @@ describe("use-skill-platform helpers", () => {
       "trae-cn",
       "trae-work-cn",
       "openclaw",
+      "qclaw",
+      "workbuddy",
+      "codebuddy",
       "hermes",
     ]);
   });

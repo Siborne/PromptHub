@@ -73,12 +73,20 @@ Implemented.
   - New `trae-work` uses an isolated PromptHub-inferred default root of `~/.trae-work` and `skills/`.
   - New `trae-work-cn` uses an isolated PromptHub-inferred default root of `~/.trae-work-cn` and `skills/`.
   - The renderer platform icon map reuses the existing Trae icon for both new platforms.
+- Added Tencent ecosystem platform updates:
+  - `workbuddy` uses `~/.workbuddy`, `skills/`, and documented MCP config `mcp.json`.
+  - `codebuddy` keeps the existing id but now exposes `CODEBUDDY.md`, `.mcp.json`, `settings.json`, `skills/`, `agents/`, and `commands/` defaults.
+  - `qclaw` is a separate OpenClaw-compatible platform with `~/.qclaw`, `skills/`, and `workspace/SOUL.md`; no MCP path is exposed until public docs confirm one.
+  - Platform icon fallback maps QClaw to the OpenClaw icon family and WorkBuddy to the generic Agent icon.
 
 ## Verification
 
 - Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-agents-view.test.tsx tests/unit/components/sidebar.test.tsx tests/unit/main/skill-platform-ipc.test.ts tests/unit/main/skill-installer.test.ts`
   - 4 files passed
   - 176 tests passed
+- Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/renderer/mcp-target-presets.test.ts tests/unit/renderer/agent-root-paths.test.ts tests/unit/services/mcp-config.test.ts tests/unit/main/mcp-library.test.ts tests/unit/components/use-skill-platform.test.ts tests/unit/main/skill-installer-utils.test.ts`
+  - 6 files passed
+  - 133 tests passed
 - Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-agents-view.test.tsx tests/unit/components/sidebar.test.tsx`
   - 2 files passed
   - 22 tests passed

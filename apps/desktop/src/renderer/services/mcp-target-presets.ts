@@ -53,6 +53,22 @@ export function deriveProjectMcpTargetPresets(
         path: joinProjectPath(rootPath, "kilo.json"),
         platformId: "kilo",
       },
+      {
+        id: `project:${project.id}:workbuddy`,
+        target: "workbuddy",
+        scope: "workspace",
+        label: `${project.name} / Tencent WorkBuddy`,
+        path: joinProjectPath(rootPath, ".workbuddy/mcp.json"),
+        platformId: "workbuddy",
+      },
+      {
+        id: `project:${project.id}:codebuddy`,
+        target: "codebuddy",
+        scope: "workspace",
+        label: `${project.name} / CodeBuddy`,
+        path: joinProjectPath(rootPath, ".mcp.json"),
+        platformId: "codebuddy",
+      },
     ];
   });
 }

@@ -1326,6 +1326,8 @@ describe("CoreMcpLibraryService", () => {
     expect(byId.cline.path).toBe(
       "/Users/test/.cline/data/settings/cline_mcp_settings.json",
     );
+    expect(byId.workbuddy.path).toBe("/Users/test/.workbuddy/mcp.json");
+    expect(byId.codebuddy.path).toBe("/Users/test/.codebuddy/.mcp.json");
     expect(byId["claude-desktop"].path).toBe(
       "/Users/test/Library/Application Support/Claude/claude_desktop_config.json",
     );

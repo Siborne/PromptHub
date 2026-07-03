@@ -145,6 +145,8 @@ describe("mcp-config", () => {
     expect(getMcpServersJsonKey("gemini")).toBe("mcpServers");
     expect(getMcpServersJsonKey("windsurf")).toBe("mcpServers");
     expect(getMcpServersJsonKey("kiro")).toBe("mcpServers");
+    expect(getMcpServersJsonKey("workbuddy")).toBe("mcpServers");
+    expect(getMcpServersJsonKey("codebuddy")).toBe("mcpServers");
     expect(getMcpServersJsonKey("claude-desktop")).toBe("mcpServers");
     expect(getMcpServersJsonKey("vscode")).toBe("servers");
     expect(getMcpServersJsonKey("opencode")).toBe("mcp");
@@ -291,7 +293,9 @@ describe("mcp-config", () => {
     expect(removed).toContain("[mcp_servers.playwright-extra]");
     expect(removed).toContain("[mcp_servers.playwright-extra.tools.keep]");
     expect(removed).not.toContain("[mcp_servers.playwright]");
-    expect(removed).not.toContain("[mcp_servers.playwright.tools.browser_click]");
+    expect(removed).not.toContain(
+      "[mcp_servers.playwright.tools.browser_click]",
+    );
     expect(removed).not.toContain('command = "npx"');
     expect(removed).not.toContain("weird name");
   });

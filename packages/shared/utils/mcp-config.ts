@@ -28,6 +28,8 @@ export const MCP_JSON_TARGETS: McpTargetKind[] = [
   "windsurf",
   "kiro",
   "kilo",
+  "workbuddy",
+  "codebuddy",
   "custom-json",
 ];
 

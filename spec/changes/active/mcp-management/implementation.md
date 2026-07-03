@@ -12,7 +12,7 @@ Implemented first MCP management slice.
   leaving orphan `[mcp_servers.<name>.tools.*]` tables that make Codex CLI
   reject the config with `invalid transport`.
 - Added `CoreMcpLibraryService`, storing the local MCP library at `data/mcp/library.json` with legacy reads from `config/mcp-library.json`.
-- Added target presets for Codex, Claude Code, Cursor, VS Code, Cline, Gemini, Windsurf, Kiro, OpenCode, and custom JSON/TOML targets.
+- Added target presets for Codex, Claude Code, Cursor, VS Code, Cline, Gemini, Windsurf, Kiro, OpenCode, WorkBuddy, CodeBuddy, and custom JSON/TOML targets.
 - Added desktop MCP IPC and preload API for library read, market listing, target presets, CRUD, template install, preview, apply, JSON import, and Codex TOML import.
 - Added a desktop file-picker bridge for MCP config import.
 - Added renderer MCP store and `McpManager` with Library, Market, and Targets tabs.
@@ -36,10 +36,13 @@ Implemented first MCP management slice.
 - Added import, new MCP, market install, selected-MCP apply, disabled-state guard, and bulk enabled-only apply paths to the renderer UI tests.
 - Removed empty target bindings when a distributed MCP server is deleted.
 - Synced MCP target format/path notes into `spec/knowledge/reference/agent-platforms.md`.
+- Added WorkBuddy MCP target support using official user `~/.workbuddy/mcp.json` and project `.workbuddy/mcp.json` paths.
+- Added CodeBuddy MCP target support using official user `~/.codebuddy/.mcp.json` and project `.mcp.json` paths, with JSON / JSONC `mcpServers` projection.
 
 ## Verification
 
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/mcp-config.test.ts tests/unit/main/mcp-library.test.ts tests/unit/stores/settings-desktop-workspace.test.ts tests/unit/stores/ui-columns.test.ts`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/renderer/mcp-target-presets.test.ts tests/unit/renderer/agent-root-paths.test.ts tests/unit/services/mcp-config.test.ts tests/unit/main/mcp-library.test.ts tests/unit/components/use-skill-platform.test.ts tests/unit/main/skill-installer-utils.test.ts`
 - `pnpm --filter @prompthub/desktop test -- --run tests/unit/services/mcp-config.test.ts tests/unit/main/mcp-library.test.ts`
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/sidebar.test.tsx tests/unit/stores/settings-desktop-workspace.test.ts tests/unit/stores/ui-columns.test.ts tests/unit/services/mcp-config.test.ts tests/unit/main/mcp-library.test.ts`
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/mcp-manager.test.tsx tests/unit/components/sidebar.test.tsx tests/unit/stores/settings-desktop-workspace.test.ts tests/unit/services/mcp-config.test.ts tests/unit/main/mcp-library.test.ts`

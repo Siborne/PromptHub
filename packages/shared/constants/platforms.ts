@@ -139,6 +139,9 @@ export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "trae-cn",
   "trae-work-cn",
   "openclaw",
+  "qclaw",
+  "workbuddy",
+  "codebuddy",
   "hermes",
 ] as const;
 
@@ -376,6 +379,18 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     globalRuleFile: "workspace/SOUL.md",
   },
   {
+    id: "qclaw",
+    name: "QClaw",
+    icon: "Bot",
+    rootDir: {
+      darwin: "~/.qclaw",
+      win32: "%USERPROFILE%\\.qclaw",
+      linux: "~/.qclaw",
+    },
+    skillsRelativePath: "skills",
+    globalRuleFile: "workspace/SOUL.md",
+  },
+  {
     id: "qoder",
     name: "Qoder",
     icon: "Bot",
@@ -419,6 +434,22 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.codebuddy",
     },
     skillsRelativePath: "skills",
+    mcpRelativePath: ".mcp.json",
+    globalRuleFile: "CODEBUDDY.md",
+    configFiles: ["settings.json", ".mcp.json", "CODEBUDDY.md"],
+  },
+  {
+    id: "workbuddy",
+    name: "Tencent WorkBuddy",
+    icon: "Bot",
+    rootDir: {
+      darwin: "~/.workbuddy",
+      win32: "%USERPROFILE%\\.workbuddy",
+      linux: "~/.workbuddy",
+    },
+    skillsRelativePath: "skills",
+    mcpRelativePath: "mcp.json",
+    configFiles: ["mcp.json"],
   },
 ];
 

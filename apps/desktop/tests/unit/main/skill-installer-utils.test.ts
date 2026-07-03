@@ -493,6 +493,8 @@ describe("skill-installer-utils", () => {
       expect(getDefaultMcpRelativePath("kilo")).toBe(
         "../.config/kilo/kilo.json",
       );
+      expect(getDefaultMcpRelativePath("workbuddy")).toBe("mcp.json");
+      expect(getDefaultMcpRelativePath("codebuddy")).toBe(".mcp.json");
       expect(getDefaultMcpRelativePath("trae-work")).toBeUndefined();
     });
 

@@ -42,6 +42,14 @@ PromptHub SHALL provide an Agent-dimension Skill management view that scans each
 - When the Agent list is rendered
 - Then PromptHub SHALL render the shared platform icon asset for that Agent instead of a text initial placeholder.
 
+#### Scenario: Tencent ecosystem built-in platforms
+
+- Given PromptHub lists built-in Agent platforms
+- When the user opens Agent Skills or Agent settings
+- Then PromptHub SHALL include Tencent WorkBuddy, CodeBuddy, and QClaw as built-in platforms.
+- And CodeBuddy SHALL expose its documented memory, settings, MCP, skills, agents, and command asset defaults instead of only a `skills/` directory.
+- And QClaw SHALL be modeled as a separate OpenClaw-compatible platform without inventing an unconfirmed MCP config path.
+
 #### Scenario: Agent-local actions
 
 - Given a scanned Agent-local Skill is open in the detail surface

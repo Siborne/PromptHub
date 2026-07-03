@@ -62,6 +62,64 @@ describe("agent root paths", () => {
     expect(buildAgentRootAssetPreview(config).mcpConfigPaths).toEqual([]);
   });
 
+  it("uses Tencent WorkBuddy's documented user MCP config path", () => {
+    const platform = getPlatformById("workbuddy");
+    expect(platform).toBeDefined();
+
+    const config = getEffectiveBuiltinAgentConfig(
+      platform!,
+      "~/.workbuddy",
+      undefined,
+    );
+
+    expect(config.skillsRelativePath).toBe("skills");
+    expect(config.mcpRelativePath).toBe("mcp.json");
+    expect(buildAgentRootAssetPreview(config).mcpConfigPaths).toEqual([
+      "~/.workbuddy/mcp.json",
+    ]);
+  });
+
+  it("uses CodeBuddy's documented user assets instead of skills-only defaults", () => {
+    const platform = getPlatformById("codebuddy");
+    expect(platform).toBeDefined();
+
+    const config = getEffectiveBuiltinAgentConfig(
+      platform!,
+      "~/.codebuddy",
+      undefined,
+    );
+
+    expect(config.skillsRelativePath).toBe("skills");
+    expect(config.rulesRelativePath).toBe("CODEBUDDY.md");
+    expect(config.mcpRelativePath).toBe(".mcp.json");
+    expect(config.agentsRelativePath).toBe("agents");
+    expect(config.commandsRelativePath).toBe("commands");
+    expect(config.configRelativePaths).toEqual([
+      "settings.json",
+      ".mcp.json",
+      "CODEBUDDY.md",
+    ]);
+    expect(buildAgentRootAssetPreview(config).mcpConfigPaths).toEqual([
+      "~/.codebuddy/.mcp.json",
+    ]);
+  });
+
+  it("keeps QClaw as an OpenClaw-compatible platform without an unconfirmed MCP path", () => {
+    const platform = getPlatformById("qclaw");
+    expect(platform).toBeDefined();
+
+    const config = getEffectiveBuiltinAgentConfig(
+      platform!,
+      "~/.qclaw",
+      undefined,
+    );
+
+    expect(config.skillsRelativePath).toBe("skills");
+    expect(config.rulesRelativePath).toBe("workspace/SOUL.md");
+    expect(config.mcpRelativePath).toBeUndefined();
+    expect(buildAgentRootAssetPreview(config).mcpConfigPaths).toEqual([]);
+  });
+
   it("keeps plugin package directories only on supported built-in targets", () => {
     const claude = getPlatformById("claude");
     const cline = getPlatformById("cline");

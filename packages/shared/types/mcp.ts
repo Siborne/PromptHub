@@ -11,6 +11,8 @@ export const MCP_TARGET_KINDS = [
   "windsurf",
   "kiro",
   "kilo",
+  "workbuddy",
+  "codebuddy",
   "opencode",
   "custom-json",
   "custom-toml",

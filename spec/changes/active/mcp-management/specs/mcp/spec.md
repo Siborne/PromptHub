@@ -71,6 +71,22 @@ PromptHub MUST project normalized MCP servers into the target agent's config sha
 - **AND** applying MCP servers writes Kilo Code's `mcp` object shape into that file
 - **AND** reading Kilo Code JSONC configs tolerates comments and trailing commas
 
+#### Scenario: Project to Tencent WorkBuddy configs
+
+- **GIVEN** a registered PromptHub project with root path `/workspace/app`
+- **WHEN** PromptHub builds visible MCP targets
+- **THEN** it includes a WorkBuddy workspace target at `/workspace/app/.workbuddy/mcp.json`
+- **AND** the global WorkBuddy preset points at `~/.workbuddy/mcp.json`
+- **AND** applying MCP servers writes the standard `mcpServers` object shape into those files
+
+#### Scenario: Project to CodeBuddy configs
+
+- **GIVEN** a registered PromptHub project with root path `/workspace/app`
+- **WHEN** PromptHub builds visible MCP targets
+- **THEN** it includes a CodeBuddy workspace target at `/workspace/app/.mcp.json`
+- **AND** the global CodeBuddy preset points at `~/.codebuddy/.mcp.json`
+- **AND** applying MCP servers writes the standard `mcpServers` object shape into those files
+
 #### Scenario: Keep Agent MCP and Project MCP separate
 
 - **GIVEN** registered PromptHub projects derive project-level MCP targets
