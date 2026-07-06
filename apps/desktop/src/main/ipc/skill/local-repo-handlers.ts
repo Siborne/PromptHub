@@ -26,12 +26,15 @@ async function resolveManagedRepoPath(
   }
 
   const ensuredRepoPath = await ensureLocalRepoPath(context.db, skillId);
-  if (
-    ensuredRepoPath &&
-    (await SkillInstaller.isManagedRepoPath(ensuredRepoPath))
-  ) {
-    await SkillInstaller.materializeManagedRepoSymlink(ensuredRepoPath);
+  if (ensuredRepoPath) {
+    if (await SkillInstaller.isManagedRepoPath(ensuredRepoPath)) {
+      await SkillInstaller.materializeManagedRepoSymlink(ensuredRepoPath);
+    }
     return ensuredRepoPath;
+  }
+
+  if (skill.local_repo_path) {
+    throw new Error(`Unable to resolve local repo for skill: ${skillId}`);
   }
 
   const managedRepoPath =

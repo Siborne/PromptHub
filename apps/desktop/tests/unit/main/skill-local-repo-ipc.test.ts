@@ -13,6 +13,8 @@ const getRemoteGitSkillPackageFingerprintMock = vi
 const computeRepoDirectoryFingerprintMock = vi
   .fn()
   .mockResolvedValue("fingerprint-after-copy");
+const isManagedRepoPathMock = vi.fn().mockResolvedValue(true);
+const ensureLocalRepoPathMock = vi.fn().mockResolvedValue("/managed/writer/repo");
 const renameLocalRepoPathByPathMock = vi.fn().mockResolvedValue(true);
 const writeLocalRepoFileByPathMock = vi.fn().mockResolvedValue(true);
 const deleteLocalRepoFileByPathMock = vi.fn().mockResolvedValue(true);
@@ -39,7 +41,7 @@ vi.mock("../../../src/main/services/skill-installer", () => ({
     writeLocalRepoFileByPath: writeLocalRepoFileByPathMock,
     deleteLocalRepoFileByPath: deleteLocalRepoFileByPathMock,
     createLocalRepoDirByPath: createLocalRepoDirByPathMock,
-    isManagedRepoPath: vi.fn().mockResolvedValue(true),
+    isManagedRepoPath: isManagedRepoPathMock,
     materializeManagedRepoSymlink: vi.fn().mockResolvedValue(undefined),
     getPreferredLocalRepoPathForSkill: vi.fn(
       (skill: { id: string }) => `/managed/${skill.id}/repo`,
@@ -53,7 +55,7 @@ vi.mock("../../../src/main/services/skill-repo-sync", () => ({
 }));
 
 vi.mock("../../../src/main/ipc/skill/shared", () => ({
-  ensureLocalRepoPath: vi.fn().mockResolvedValue("/managed/writer/repo"),
+  ensureLocalRepoPath: ensureLocalRepoPathMock,
   readCurrentFilesSnapshot: vi.fn().mockResolvedValue([]),
 }));
 
@@ -77,6 +79,10 @@ async function setupSkillLocalRepoIpc() {
   saveRemoteZipSkillToLocalRepoBySkillIdMock.mockClear();
   getRemoteGitSkillPackageFingerprintMock.mockClear();
   computeRepoDirectoryFingerprintMock.mockClear();
+  isManagedRepoPathMock.mockReset();
+  isManagedRepoPathMock.mockResolvedValue(true);
+  ensureLocalRepoPathMock.mockReset();
+  ensureLocalRepoPathMock.mockResolvedValue("/managed/writer/repo");
   renameLocalRepoPathByPathMock.mockClear();
   writeLocalRepoFileByPathMock.mockClear();
   deleteLocalRepoFileByPathMock.mockClear();
@@ -105,6 +111,10 @@ describe("skill local repo IPC", () => {
     saveRemoteZipSkillToLocalRepoBySkillIdMock.mockClear();
     getRemoteGitSkillPackageFingerprintMock.mockClear();
     computeRepoDirectoryFingerprintMock.mockClear();
+    isManagedRepoPathMock.mockReset();
+    isManagedRepoPathMock.mockResolvedValue(true);
+    ensureLocalRepoPathMock.mockReset();
+    ensureLocalRepoPathMock.mockResolvedValue("/managed/writer/repo");
     renameLocalRepoPathByPathMock.mockClear();
     writeLocalRepoFileByPathMock.mockClear();
     deleteLocalRepoFileByPathMock.mockClear();
@@ -328,6 +338,43 @@ describe("skill local repo IPC", () => {
       expect(db.createVersion).not.toHaveBeenCalled();
     },
   );
+
+  it("writes linked external repo files without converting them to a managed path", async () => {
+    const { db, handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
+    db.getById.mockReturnValue({
+      id: "skill-linked",
+      name: "linked",
+      local_repo_path: "/external/linked",
+    });
+    isManagedRepoPathMock.mockImplementation(async (repoPath: string) =>
+      repoPath.startsWith("/managed/"),
+    );
+    ensureLocalRepoPathMock.mockResolvedValueOnce("/external/linked");
+
+    await expect(
+      handlers[IPC_CHANNELS.SKILL_WRITE_LOCAL_FILE](
+        null,
+        "skill-linked",
+        "SKILL.md",
+        "# Linked",
+      ),
+    ).resolves.toBe(true);
+
+    expect(writeLocalRepoFileByPathMock).toHaveBeenCalledWith(
+      "/external/linked",
+      "SKILL.md",
+      "# Linked",
+    );
+    expect(db.update).toHaveBeenCalledWith("skill-linked", {
+      content: "# Linked",
+      instructions: "# Linked",
+      directory_fingerprint: "fingerprint-after-copy",
+    });
+    expect(db.update).not.toHaveBeenCalledWith(
+      "skill-linked",
+      expect.objectContaining({ local_repo_path: "/managed/skill-linked/repo" }),
+    );
+  });
 
   it("updates skill metadata for SKILL.md saves without creating an automatic version", async () => {
     const { db, handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();

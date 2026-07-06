@@ -24,6 +24,11 @@
 
 - PromptHub 必须支持 DB 与本地 Skill 仓库之间的双向同步。
 - UI 编辑元数据后，需要同步 frontmatter；文件系统变更后，需要同步回 DB。
+- My Skills 的本地 package source 有两种合法形态：
+  - 复制导入：`local_repo_path` 指向 PromptHub 托管 package，托管 package 是 My Skills 的内容真相源。
+  - 链接导入：`local_repo_path` 指向用户选择的外部本地 Skill 目录，外部目录是 My Skills 的内容真相源。
+- 链接导入的 My Skills 文件浏览、读取、编辑、同步与 fingerprint 刷新必须使用该外部目录；不得在解析路径时静默复制为托管 package。
+- 删除链接导入的 My Skills 记录时，只能删除 PromptHub 记录和 PromptHub 拥有的分发链接；不得删除外部源目录。
 
 ### 3. Versioning Contract
 

@@ -373,6 +373,70 @@ describe("CreateSkillModal GitHub import", () => {
     expect(importScannedSkills).not.toHaveBeenCalled();
   });
 
+  it("passes link mode when importing local scan results", async () => {
+    const importScannedSkills = vi.fn().mockResolvedValue({
+      importedCount: 1,
+      importedSkills: [],
+      skipped: [],
+      failed: [],
+    });
+    const scannedSkill = {
+      name: "writer",
+      description: "Local writer",
+      author: "PromptHub",
+      tags: ["writing"],
+      instructions: "# Writer",
+      filePath: "/Users/demo/skills/writer/SKILL.md",
+      localPath: "/Users/demo/skills/writer",
+      platforms: ["Local"],
+      installMode: "copy",
+      directory_fingerprint: "fingerprint-writer",
+    };
+    const scanLocalPreview = vi.fn().mockResolvedValue([scannedSkill]);
+
+    useSkillStore.setState({
+      skills: [],
+      importScannedSkills,
+    } as never);
+    installWindowMocks({
+      api: {
+        skill: {
+          scanLocalPreview,
+        },
+      },
+      electron: {
+        selectFolder: vi.fn().mockResolvedValue("/Users/demo/skills"),
+      },
+    });
+
+    const view = await renderWithI18n(
+      <CreateSkillModal isOpen={true} onClose={vi.fn()} />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Scan Local"));
+    });
+    await act(async () => {
+      fireEvent.click(view.getByText("Choose Folder and Import"));
+    });
+
+    await waitFor(() => {
+      expect(view.getByText("writer")).toBeTruthy();
+    });
+
+    fireEvent.click(view.getByRole("button", { name: "Link" }));
+    fireEvent.click(view.getByRole("button", { name: /Import Selected/u }));
+
+    await waitFor(() => {
+      expect(importScannedSkills).toHaveBeenCalledWith(
+        [expect.objectContaining(scannedSkill)],
+        { "/Users/demo/skills/writer": [] },
+        "symlink",
+      );
+    });
+  });
+
   it("scans a GitHub repo and lets users import multiple discovered skills", async () => {
     const installRegistrySkill = vi
       .fn()

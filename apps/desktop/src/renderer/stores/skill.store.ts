@@ -1564,6 +1564,7 @@ export const useSkillStore = create<SkillState>()(
                 typeof scanned.platforms?.[0] === "string"
                   ? scanned.platforms[0]
                   : undefined;
+              const linkedRepoPath = scanned.localPath;
               const newSkill = await window.api.skill.create({
                 name: scanned.name,
                 description: scanned.description,
@@ -1577,12 +1578,14 @@ export const useSkillStore = create<SkillState>()(
                 is_favorite: false,
                 source_url: scanned.localPath,
                 source_label: scannedPlatformName,
-                local_repo_path: scanned.localPath,
+                local_repo_path: linkedRepoPath,
+                directory_fingerprint: scanned.directory_fingerprint,
               });
 
-              // Copy skill files from original location into local repo
+              // Copy imports become managed PromptHub packages. Link imports keep
+              // the scanned directory as the active My Skills source.
               // localPath is the parent directory of SKILL.md (skill folder path)
-              if (scanned.localPath) {
+              if (scanned.localPath && importMode === "copy") {
                 try {
                   const repoPath = await window.api.skill.saveToRepo(
                     newSkill.id,

@@ -1748,6 +1748,64 @@ description: Use this skill for PDF tasks.
     );
   });
 
+  it("imports scanned local skills in link mode without copying into a managed repo", async () => {
+    const linkedPath = "/Users/demo/skills/local-writer";
+    const create = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-local-writer",
+        name: "local-writer",
+        source_url: linkedPath,
+        local_repo_path: linkedPath,
+      }),
+    );
+    const update = vi.fn();
+    const saveToRepo = vi.fn().mockResolvedValue("/managed/local-writer/repo");
+    const getAll = vi.fn().mockResolvedValue([
+      createSkillFixture({
+        id: "skill-local-writer",
+        name: "local-writer",
+        source_url: linkedPath,
+        local_repo_path: linkedPath,
+      }),
+    ]);
+
+    (window as any).api.skill.create = create;
+    (window as any).api.skill.update = update;
+    (window as any).api.skill.saveToRepo = saveToRepo;
+    (window as any).api.skill.getAll = getAll;
+
+    const result = await useSkillStore.getState().importScannedSkills(
+      [
+        {
+          name: "local-writer",
+          description: "Local writer",
+          author: "Local",
+          tags: ["writing"],
+          instructions: "# Local Writer",
+          filePath: `${linkedPath}/SKILL.md`,
+          localPath: linkedPath,
+          platforms: ["Claude"],
+          directory_fingerprint: "fingerprint-linked",
+        },
+      ],
+      {},
+      "symlink",
+    );
+
+    expect(result.importedCount).toBe(1);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "local-writer",
+        source_url: linkedPath,
+        local_repo_path: linkedPath,
+        directory_fingerprint: "fingerprint-linked",
+      }),
+    );
+    expect(saveToRepo).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(getAll).toHaveBeenCalled();
+  });
+
   it("installs a custom Git store skill by cloning the package instead of writing only SKILL.md", async () => {
     const create = vi.fn().mockResolvedValue(
       createSkillFixture({

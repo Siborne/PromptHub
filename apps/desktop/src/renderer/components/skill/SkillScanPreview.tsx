@@ -11,9 +11,11 @@ import {
   CheckCircle2Icon,
   SearchIcon,
   TagsIcon,
+  CopyIcon,
+  Link2Icon,
 } from "lucide-react";
 import { useState, useMemo } from "react";
-import type { ScannedSkill } from "@prompthub/shared/types";
+import type { ScannedSkill, SkillInstallMode } from "@prompthub/shared/types";
 
 interface SkillScanPreviewProps {
   scannedSkills: ScannedSkill[];
@@ -27,10 +29,20 @@ interface SkillScanPreviewProps {
   onImport: (
     skills: ScannedSkill[],
     userTagsByPath?: Record<string, string[]>,
+    importMode?: SkillInstallMode,
   ) => Promise<number>;
   /** Re-scan with optional extra paths */
   onRescan: (customPaths: string[]) => Promise<boolean>;
   onClose: () => void;
+}
+
+function getImportModeButtonStyle(isActive: boolean) {
+  return {
+    backgroundColor: isActive ? "hsl(var(--primary))" : "transparent",
+    color: isActive
+      ? "hsl(var(--primary-foreground))"
+      : "hsl(var(--muted-foreground))",
+  };
 }
 
 /**
@@ -59,6 +71,7 @@ export function SkillScanPreview({
   const [tagDrafts, setTagDrafts] = useState<Record<string, string[]>>({});
   const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
   const [isImporting, setIsImporting] = useState(false);
+  const [importMode, setImportMode] = useState<SkillInstallMode>("copy");
 
   // Custom path state
   // 自定义路径状态
@@ -154,7 +167,7 @@ export function SkillScanPreview({
           tagDrafts[skill.localPath] || [],
         ]),
       );
-      await onImport(skillsToImport, userTagsByPath);
+      await onImport(skillsToImport, userTagsByPath, importMode);
       onClose();
     } catch (err) {
       console.error("Import failed:", err);
@@ -613,7 +626,52 @@ export function SkillScanPreview({
 
         {/* Footer */}
         {allSkills.length > 0 && (
-          <div className="h-16 px-6 border-t border-border flex items-center justify-end gap-3 shrink-0 app-wallpaper-surface/50">
+          <div className="min-h-16 px-6 py-3 border-t border-border flex flex-col gap-3 shrink-0 app-wallpaper-surface/50 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("skill.importMode", "Import Mode")}
+              </span>
+              <div className="inline-flex rounded-lg border border-border app-wallpaper-surface p-0.5">
+                <button
+                  type="button"
+                  aria-pressed={importMode === "copy"}
+                  aria-label={t("skill.copyMode", "Copy")}
+                  onClick={() => setImportMode("copy")}
+                  style={getImportModeButtonStyle(importMode === "copy")}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                    importMode === "copy"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                  title={t(
+                    "skill.mySkillsCopyModeHint",
+                    "Copy a standalone snapshot into My Skills.",
+                  )}
+                >
+                  <CopyIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                  {t("skill.copyMode", "Copy")}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={importMode === "symlink"}
+                  aria-label={t("skill.linkMode", "Link")}
+                  onClick={() => setImportMode("symlink")}
+                  style={getImportModeButtonStyle(importMode === "symlink")}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                    importMode === "symlink"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                  title={t(
+                    "skill.mySkillsLinkModeHint",
+                    "Link My Skills to the original local source folder.",
+                  )}
+                >
+                  <Link2Icon aria-hidden="true" className="h-3.5 w-3.5" />
+                  {t("skill.linkMode", "Link")}
+                </button>
+              </div>
+            </div>
             <button
               type="button"
               onClick={handleImport}

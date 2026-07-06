@@ -20,6 +20,8 @@ import {
   FileTextIcon,
   CheckSquareIcon,
   SquareIcon,
+  CopyIcon,
+  Link2Icon,
 } from "lucide-react";
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
@@ -41,6 +43,7 @@ import { matchScannedSkillToLibrary } from "../../services/skill-scan-status";
 import type {
   RegistrySkill,
   ScannedSkill,
+  SkillInstallMode,
 } from "@prompthub/shared/types/skill";
 import { getRuntimeCapabilities } from "../../runtime";
 
@@ -94,6 +97,15 @@ function buildStarterSkillContent(name: string, description: string): string {
     "- Put deterministic helper code in scripts/ when repeated execution matters.",
     "- Put templates or reusable output files in assets/.",
   ].join("\n");
+}
+
+function getImportModeButtonStyle(isActive: boolean) {
+  return {
+    backgroundColor: isActive ? "hsl(var(--primary))" : "transparent",
+    color: isActive
+      ? "hsl(var(--primary-foreground))"
+      : "hsl(var(--muted-foreground))",
+  };
 }
 
 export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
@@ -169,6 +181,8 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
   const [scanSearchQuery, setScanSearchQuery] = useState("");
   const [scanRootPaths, setScanRootPaths] = useState<string[]>([]);
   const [showScanOptionalTags, setShowScanOptionalTags] = useState(false);
+  const [scanImportMode, setScanImportMode] =
+    useState<SkillInstallMode>("copy");
   const [scanTagDrafts, setScanTagDrafts] = useState<Record<string, string[]>>(
     {},
   );
@@ -342,6 +356,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     setImportingCount(0);
     setScanImportNotice(null);
     setScanRootPaths([]);
+    setScanImportMode("copy");
     setScanTagDrafts({});
     setScanTagInputs({});
     onClose();
@@ -858,7 +873,11 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
           scanTagDrafts[skill.localPath] || [],
         ]),
       );
-      const importResult = await importScannedSkills(toImport, userTagsByPath);
+      const importResult = await importScannedSkills(
+        toImport,
+        userTagsByPath,
+        scanImportMode,
+      );
       setImportingCount(importResult.importedCount);
 
       const summary = t(
@@ -1951,6 +1970,61 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                         ? t("skill.hideOptionalTags", "隐藏可选标签")
                         : t("skill.showOptionalTags", "需要时再加标签")}
                     </button>
+                  </div>
+
+                  <div className="flex flex-col gap-2 rounded-xl border border-border bg-background/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-xs font-medium text-foreground">
+                        {t("skill.importMode", "Import Mode")}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {scanImportMode === "copy"
+                          ? t(
+                              "skill.mySkillsCopyModeHint",
+                              "Copy a standalone snapshot into My Skills.",
+                            )
+                          : t(
+                              "skill.mySkillsLinkModeHint",
+                              "Link My Skills to the original local source folder.",
+                            )}
+                      </div>
+                    </div>
+                    <div className="inline-flex rounded-lg border border-border app-wallpaper-surface p-0.5">
+                      <button
+                        type="button"
+                        aria-pressed={scanImportMode === "copy"}
+                        aria-label={t("skill.copyMode", "Copy")}
+                        onClick={() => setScanImportMode("copy")}
+                        style={getImportModeButtonStyle(
+                          scanImportMode === "copy",
+                        )}
+                        className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                          scanImportMode === "copy"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-transparent text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <CopyIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                        {t("skill.copyMode", "Copy")}
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={scanImportMode === "symlink"}
+                        aria-label={t("skill.linkMode", "Link")}
+                        onClick={() => setScanImportMode("symlink")}
+                        style={getImportModeButtonStyle(
+                          scanImportMode === "symlink",
+                        )}
+                        className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                          scanImportMode === "symlink"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-transparent text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Link2Icon aria-hidden="true" className="h-3.5 w-3.5" />
+                        {t("skill.linkMode", "Link")}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Results header with count and select-all */}

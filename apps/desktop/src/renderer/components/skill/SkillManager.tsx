@@ -703,8 +703,13 @@ export function SkillManager() {
   const handleImportScanned = async (
     skillsToImport: ScannedSkill[],
     userTagsByPath?: Record<string, string[]>,
+    importMode: "copy" | "symlink" = "copy",
   ) => {
-    const result = await importScannedSkills(skillsToImport, userTagsByPath);
+    const result = await importScannedSkills(
+      skillsToImport,
+      userTagsByPath,
+      importMode,
+    );
     // Refresh deployed status after import
     if (runtimeCapabilities.skillDistribution) {
       await loadDeployedStatus({ force: true });

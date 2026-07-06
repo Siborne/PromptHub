@@ -11,12 +11,30 @@ export interface SkillIPCContext {
   db: SkillDB;
 }
 
+async function isExistingDirectory(repoPath: string): Promise<boolean> {
+  try {
+    const repoStat = await fs.stat(repoPath);
+    return repoStat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureLocalRepoPath(
   db: SkillDB,
   skillId: string,
 ): Promise<string | null> {
   const skill = db.getById(skillId);
   if (!skill) return null;
+
+  if (
+    skill.local_repo_path &&
+    !(await SkillInstaller.isManagedRepoPath(skill.local_repo_path))
+  ) {
+    return (await isExistingDirectory(skill.local_repo_path))
+      ? skill.local_repo_path
+      : null;
+  }
 
   const managedRepoPath = SkillInstaller.getPreferredLocalRepoPathForSkill(skill);
   const candidateRepoPath =
@@ -36,27 +54,6 @@ export async function ensureLocalRepoPath(
     }
   } catch {
     // fall through to bootstrap from DB content
-  }
-
-  if (
-    skill.local_repo_path &&
-    !(await SkillInstaller.isManagedRepoPath(skill.local_repo_path))
-  ) {
-    try {
-      const externalRepoStat = await fs.stat(skill.local_repo_path);
-      if (externalRepoStat.isDirectory()) {
-        const savedRepoPath = await SkillInstaller.saveToLocalRepoBySkillId(
-          skill,
-          skill.local_repo_path,
-        );
-        if (skill.local_repo_path !== savedRepoPath) {
-          db.update(skillId, { local_repo_path: savedRepoPath });
-        }
-        return savedRepoPath;
-      }
-    } catch {
-      // fall through to bootstrap from DB content
-    }
   }
 
   const repoContent = skill.instructions || skill.content || "";
@@ -151,6 +148,15 @@ export async function resolveRepoPath(
 
   const skill = db.getById(skillId);
   if (!skill) return null;
+
+  if (
+    skill.local_repo_path &&
+    !(await SkillInstaller.isManagedRepoPath(skill.local_repo_path))
+  ) {
+    return (await isExistingDirectory(skill.local_repo_path))
+      ? skill.local_repo_path
+      : null;
+  }
 
   const repoPath =
     skill.local_repo_path &&

@@ -621,6 +621,42 @@ describe("skill i18n smoke", () => {
     expect(addPath).toHaveAttribute("type", "button");
   });
 
+  it("passes the selected linked import mode from scan preview imports", async () => {
+    const scannedSkill: ScannedSkill = {
+      name: "local-helper",
+      description: "Local helper",
+      author: "Local",
+      tags: ["local"],
+      instructions: "# Local Helper",
+      filePath: "/Users/demo/skills/local-helper/SKILL.md",
+      localPath: "/Users/demo/skills/local-helper",
+      platforms: ["Claude"],
+    };
+    const onImport = vi.fn().mockResolvedValue(1);
+
+    render(
+      <SkillScanPreview
+        scannedSkills={[scannedSkill]}
+        installedPaths={new Set()}
+        onImport={onImport}
+        onRescan={vi.fn().mockResolvedValue(true)}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select All" }));
+    fireEvent.click(screen.getByRole("button", { name: /Import/u }));
+
+    await waitFor(() => {
+      expect(onImport).toHaveBeenCalledWith(
+        [expect.objectContaining(scannedSkill)],
+        { "/Users/demo/skills/local-helper": [] },
+        "symlink",
+      );
+    });
+  });
+
   it("lets users choose the skill gallery card column count", async () => {
     const setGalleryColumns = vi.fn();
     const skillStoreState = createSkillStoreState({ setGalleryColumns });
