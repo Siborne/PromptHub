@@ -365,6 +365,7 @@ Use one or more domain spec files under `specs/` when the change spans multiple 
 - Do not treat `implementation.md` as optional for substantial changes; it is the executed record of what really landed.
 - Do not close a change folder without updating its verification status and follow-up notes.
 - Repository-facing documentation should live under `docs/` unless it must remain at the repository root for tooling or platform conventions, such as `README.md`, `CHANGELOG.md`, or `AGENTS.md`. Internal SSD, specs, and architecture records belong in `spec/`.
+- PromptHub's `spec-init` rule surface is adapted under `spec/rules/`: bug-fix, clarification, coding standards, issue management, document routing, testing, doc sync, change management, definition of done, agent boundary, TDD/design gate, code quality, and submission traceability. Use these project rules instead of copying generic `docs/rules/*` templates into the repository.
 
 ### 6.2 Engineering Flow
 

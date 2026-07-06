@@ -49,3 +49,6 @@ Recommended order:
 2. Delta specs must live under `specs/<domain>/spec.md`, not as a flat top-level `spec.md` file.
 3. `implementation.md` should describe what actually landed, not just restate the original plan.
 4. When the change ships, sync durable truth into `spec/workflow/*`, `spec/knowledge/*`, `spec/rules/`, `spec/releases/`, or `spec/adr/` before archiving.
+5. New active change directories use semantic lowercase kebab-case and no serial number prefix.
+6. GitHub issue changes should include the issue number in the change key, preferably as `<surface>-issue-<number>-<slug>`.
+7. Requirement, design, verification, and task IDs belong inside the markdown files as `FR-###`, `DES-###`, `TEST-###`, and `T-###`, not in folder names.

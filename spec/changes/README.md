@@ -23,5 +23,15 @@ PromptHub 当前仍以 `spec/changes/archive/` 作为已完成 change 的真实�
 ## Routing Rule
 
 - 新需求、bugfix、重构、流程变化 -> `spec/changes/active/<change-key>/`
-- 已完成或已放弃的 change -> `spec/changes/archive/`
+- 已完成或已放弃的 change -> `spec/changes/archive/<YYYY>/<MM>/<YYYY-MM-DD>-<change-key>/`
 - 旧平铺内部文档、历史遗留资料 -> `spec/changes/legacy/`
+- `active/` 不是历史 backlog；任务全部完成、已发布、已放弃或被后续变更取代的目录应及时移入 `archive/`。
+
+## Change Key Naming
+
+- Active change 目录使用语义化小写 kebab-case：`<area>-<scope>-<outcome>`。
+- 不给 active change 加流水号前缀；排序由文件系统或 Git 历史处理，不写进目录名。
+- 关联 GitHub issue 时优先使用 `<surface>-issue-<number>-<slug>`，例如 `desktop-issue-161-skill-store-batch`。
+- 无法确定 surface 时才使用 `issue-<number>-<slug>`，后续触碰该 change 时应评估是否补齐 surface。
+- 归档目录使用 `spec/changes/archive/<YYYY>/<MM>/<YYYY-MM-DD>-<change-key>/`，日期表示归档时间，年/月目录用于避免 archive 根目录继续平铺膨胀。
+- `FR-###`、`DES-###`、`TEST-###`、`T-###` 是文档内追踪编号，不是目录编号。

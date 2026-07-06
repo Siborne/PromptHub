@@ -76,7 +76,7 @@ Official references:
 - Plugin 当前 active change: `spec/changes/active/plugin-management/`
 - Codex extension surface reference: `spec/knowledge/reference/codex-extension-surfaces.md`
 - Existing Skill boundary: `spec/knowledge/behavior/skills.md`
-- Existing MCP boundary: `spec/changes/active/mcp-management/`
+- Existing MCP boundary: `spec/changes/archive/2026/07/2026-07-06-mcp-management/`
 
 ### 7. Current Desktop MVP Boundary
 

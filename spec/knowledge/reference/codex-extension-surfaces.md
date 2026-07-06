@@ -106,5 +106,5 @@ For every source shape, PromptHub should first perform a static scan and show a 
 - Plugin active change: `spec/changes/active/plugin-management/`
 - Plugin Agent adapter matrix: `spec/knowledge/reference/plugin-agent-adapter-matrix.md`
 - Skill behavior: `spec/knowledge/behavior/skills.md`
-- MCP management: `spec/changes/active/mcp-management/`
+- MCP management: `spec/changes/archive/2026/07/2026-07-06-mcp-management/`
 - Agent platforms: `spec/knowledge/reference/agent-platforms.md`

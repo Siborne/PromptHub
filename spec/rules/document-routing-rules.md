@@ -30,7 +30,7 @@
 
 - 单次需求、bugfix、重构、流程变化：`spec/changes/active/<change-key>/`
 - 已完成 change 语义入口：`spec/changes/completed/`
-- PromptHub 当前真实归档目录：`spec/changes/archive/`
+- PromptHub 当前真实归档目录：`spec/changes/archive/<YYYY>/<MM>/<YYYY-MM-DD>-<change-key>/`
 - 仅保留历史价值的旧变更资料：`spec/changes/legacy/`
 
 ### Records
@@ -40,6 +40,22 @@
 - 版本级交付摘要：`spec/releases/`
 - 架构决策记录：`spec/adr/`
 - 项目级归档入口：`spec/archive/`
+
+### Rules
+
+- bug 修复工作流、根因、回归要求：`spec/rules/bug-fix-rules.md`
+- 需求澄清、设计冲突、待确认记录：`spec/rules/clarification-rules.md`
+- 编码标准、错误处理、安全和结构要求入口：`spec/rules/coding-standards.md`
+- 文档语义到路径映射：`spec/rules/document-routing-rules.md`
+- issue、技术债、本地交付状态和归档：`spec/rules/issue-management-rules.md`
+- 测试方法、覆盖、UI 操作验证和回归矩阵：`spec/rules/testing-standards.md`
+- 文档同步要求：`spec/rules/doc-sync-rules.md`
+- active change、发布和变更记录：`spec/rules/change-management-rules.md`
+- 完成定义：`spec/rules/definition-of-done.md`
+- agent 边界保护：`spec/rules/agent-boundary-guardrails.md`
+- TDD 和设计门禁：`spec/rules/tdd-design-gate.md`
+- 代码质量和架构边界：`spec/rules/code-quality-architecture.md`
+- 提交、编号、PR 和发布引用：`spec/rules/submission-traceability-rules.md`
 
 ## PromptHub 当前稳定真相源
 
@@ -57,6 +73,17 @@ PromptHub 已经完成第一轮稳定文档迁移，当前长期真相源直接�
 - 新增项目级文档统一写入 `spec/workflow/*`
 - 根目录下不再保留重复的 `00-intake` ~ `05-tasks` 目录
 - 根目录下不再保留 `spec/domains/`、`spec/architecture/`、`spec/logic/`、`spec/assets/` 旧稳定层
+- 从 `spec-init` 同步规则时必须改写通用 `docs/*` 路由，不能在 PromptHub 内新增平行内部 `docs/workflow/*`、`docs/issues/*` 或 `docs/rules/*` 真相源
+
+## 目录命名与编号规则
+
+- 只有有固定执行顺序的 workflow 阶段目录使用两位数字前缀：`00-intake`、`01-requirements`、`02-design`、`03-implementation`、`04-verification`、`05-tasks`。
+- `spec/knowledge/*`、`spec/rules/*`、`spec/issues/*`、`spec/releases/*`、`spec/adr/*`、`spec/archive/*` 使用语义化小写 kebab-case 名称；不要为了排序给这些目录新增数字前缀。
+- `spec/changes/active/<change-key>/` 使用语义化小写 kebab-case 变更 key，不使用流水号前缀。
+- 关联 GitHub issue 的 change key 优先使用 `<surface>-issue-<number>-<slug>`，例如 `desktop-issue-161-skill-store-batch`；只有无法确定 surface 时才使用 `issue-<number>-<slug>`。
+- 已完成或放弃的 change 归档到 `spec/changes/archive/<YYYY>/<MM>/<YYYY-MM-DD>-<change-key>/`，日期前缀只用于归档时间，不用于 active 排序；`archive/` 根目录不平铺 date-prefixed change folder。
+- 需求、设计、验证、任务编号写在文件内容里：`FR-###`、`DES-###`、`TEST-###`、`T-###`；不要把这些编号编码进文件夹名。
+- 重命名已有 active change 目录必须作为单独整理任务处理，并同步更新所有仓库引用，不能在无引用检查的情况下批量改路径。
 
 ## 同步要求
 
@@ -64,3 +91,4 @@ PromptHub 已经完成第一轮稳定文档迁移，当前长期真相源直接�
 - 目录结构变化时，必须同步更新 `README.md`
 - 目录结构变化时，必须同步更新 `AGENTS.md`
 - 文档边界变化时，必须同步更新本文件
+- 规则分类变化时，必须同步更新 `spec/rules/README.md`、本文件和相关 active change

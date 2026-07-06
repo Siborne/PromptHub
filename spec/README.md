@@ -116,7 +116,17 @@ spec/
 - `spec/archive/`：项目级归档入口
 - `spec/adr/`：关键架构决策入口
 - `spec/rules/document-routing-rules.md`：文档语义到目录路径的显式路由规则
+- `spec/rules/bug-fix-rules.md`：bug 修复、根因、回归测试和 active change 记录规则
+- `spec/rules/clarification-rules.md`：需求澄清、设计冲突和待确认记录规则
+- `spec/rules/coding-standards.md`：编码标准、错误处理、安全和结构要求入口
+- `spec/rules/issue-management-rules.md`：issue、本地交付状态、技术债和归档规则
 - `spec/rules/submission-traceability-rules.md`：提交、commit、文档编号、引用关联和 PR 说明规则
+
+目录命名规则：
+
+- `spec/workflow/00-*` 到 `05-*` 是唯一固定阶段编号目录。
+- 其他长期目录使用语义化 kebab-case，不靠数字前缀排序。
+- `spec/changes/active/<change-key>/` 使用语义化 change key；`FR / DES / TEST / T` 编号写在文件内容里。
 
 ### PromptHub 当前长期真相源
 
@@ -170,4 +180,4 @@ spec/
 - 发布与文档同步：`spec/releases/release-rules.md`
 - Issue 跟踪入口：`spec/issues/README.md`
 - `spec-init` 项目级入口：`spec/workflow/`、`spec/knowledge/`、`spec/rules/`、`spec/releases/`、`spec/archive/`、`spec/adr/`
-- 当前这次恢复工作：`spec/changes/active/restore-spec-lowercase/`
+- 当前这次恢复工作：`spec/changes/archive/2026/07/2026-07-06-restore-spec-lowercase/`

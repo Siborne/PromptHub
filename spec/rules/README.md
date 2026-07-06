@@ -10,7 +10,11 @@
 
 当前已补充的规则入口：
 
+- `spec/rules/bug-fix-rules.md`
+- `spec/rules/clarification-rules.md`
+- `spec/rules/coding-standards.md`
 - `spec/rules/document-routing-rules.md`
+- `spec/rules/issue-management-rules.md`
 - `spec/rules/testing-standards.md`
 - `spec/rules/doc-sync-rules.md`
 - `spec/rules/change-management-rules.md`
@@ -26,3 +30,11 @@
 - `spec/knowledge/reference/skill-regression-test-matrix.md`
 
 后续如果要把长期稳定的规则逐步从 `AGENTS.md` 拆分出来，可以优先沉淀到本目录。
+
+## 与 `spec-init` 规则模板的关系
+
+PromptHub 使用 `spec-init` 的规则分类，但不逐字复制通用模板：
+
+- 通用模板中的 `docs/*` 路由在 PromptHub 内改写为 `spec/*`。
+- PromptHub 保留现有 active change 结构：`proposal.md`、`specs/<domain>/spec.md`、`design.md`、`tasks.md`、`implementation.md`。
+- 已经更严格的规则，例如测试、架构质量、提交追踪，继续以 PromptHub 现有文件为准。

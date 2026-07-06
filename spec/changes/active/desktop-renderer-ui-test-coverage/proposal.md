@@ -47,7 +47,7 @@ Out of scope:
 - Visual regression testing (no Chromatic / Percy).
 - Heavy DOM painting / layout assertions; jsdom is enough for what we're after.
 - E2E coverage uplift — handled separately under
-  `spec/changes/active/desktop-unit-regression-hardening/` if needed.
+  `spec/changes/archive/2026/07/2026-07-06-desktop-unit-regression-hardening/` if needed.
 - Renaming or restructuring components.
 
 ## Risks & rollback

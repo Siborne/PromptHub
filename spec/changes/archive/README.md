@@ -2,4 +2,8 @@
 
 已完成、已发布、已放弃或被后续变更取代的 change folder 统一归档到这里。
 
-命名建议：`<date>-<change-key>`。
+命名规则：`<YYYY>/<MM>/<YYYY-MM-DD>-<change-key>`。
+
+示例：`spec/changes/archive/2026/07/2026-07-06-spec-init-rule-sync/`。
+
+`archive/` 根目录只放年度目录和本 README，不直接平铺 date-prefixed change folder。
