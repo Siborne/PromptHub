@@ -23,6 +23,45 @@ describe("PlatformIcon", () => {
     );
   });
 
+  it("renders the QClaw icon instead of reusing the OpenClaw icon", () => {
+    render(<PlatformIcon platformId="qclaw" size={20} />);
+
+    const icon = screen.getByRole("img", { name: "qclaw icon" });
+    expect(icon).toHaveAttribute("src", expect.stringContaining("qclaw.png"));
+    expect(icon).not.toHaveAttribute(
+      "src",
+      expect.stringContaining("openclaw.png"),
+    );
+  });
+
+  it("keeps TRAE IDE and TRAE Work variants on the TRAE brand icon", () => {
+    for (const platformId of [
+      "trae",
+      "trae-work",
+      "trae-cn",
+      "trae-work-cn",
+    ]) {
+      const { unmount } = render(
+        <PlatformIcon platformId={platformId} size={20} />,
+      );
+
+      expect(screen.getByRole("img", { name: `${platformId} icon` }))
+        .toHaveAttribute("src", expect.stringContaining("trae.png"));
+
+      unmount();
+    }
+  });
+
+  it("renders the WorkBuddy icon instead of the generic fallback", () => {
+    render(<PlatformIcon platformId="workbuddy" size={20} />);
+
+    const icon = screen.getByRole("img", { name: "workbuddy icon" });
+    expect(icon).toHaveAttribute(
+      "src",
+      expect.stringContaining("workbuddy.svg"),
+    );
+  });
+
   it("keeps bundled platform PNG assets as real PNG files", () => {
     const invalidPngFiles = readdirSync(platformAssetsDir)
       .filter((fileName) => fileName.endsWith(".png"))
