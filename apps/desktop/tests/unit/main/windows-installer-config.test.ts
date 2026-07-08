@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 
 describe("windows installer config", () => {
   it("pins a stable NSIS guid and custom include", () => {
-    const configPath = path.join(process.cwd(), "electron-builder.json");
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
+    const configPath = path.join(process.cwd(), "electron-builder.config.cjs");
+    const config = require(configPath) as {
       nsis?: { guid?: string; include?: string };
     };
 

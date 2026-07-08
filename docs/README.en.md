@@ -90,9 +90,11 @@ brew install --cask prompthub
 
 For upgrades, use `brew upgrade --cask prompthub`. Don't mix Homebrew with the in-app updater, or Homebrew's recorded version may drift away from what's actually installed.
 
-### macOS first launch warning
+### macOS security verification
 
-The app isn't notarized, so the first launch may say "PromptHub is damaged" or "developer cannot be verified". From a terminal:
+macOS packages are signed with Developer ID and notarized by Apple. Install from GitHub Releases, the official mirror, or Homebrew. If macOS still cannot verify the app, download the current Release DMG again and reinstall.
+
+Early `0.5.9` preview builds and older historical builds may not be signed and notarized. If you intentionally downloaded one of those builds and macOS reports that PromptHub is damaged or the developer cannot be verified, run:
 
 ```bash
 sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app

@@ -90,9 +90,11 @@ brew install --cask prompthub
 
 Para actualizar usa `brew upgrade --cask prompthub`. No mezcles Homebrew con el actualizador interno o la versión registrada por Homebrew dejará de coincidir con la realmente instalada.
 
-### Aviso al primer arranque en macOS
+### Verificación de seguridad en macOS
 
-La app no está notarizada, así que el primer arranque puede mostrar «PromptHub está dañado» o «no se puede verificar al desarrollador». Desde la terminal:
+Los paquetes para macOS se firman con Developer ID y se notarizan con Apple. Instala desde GitHub Releases, el espejo oficial o Homebrew. Si macOS aún no puede verificar la app, vuelve a descargar el DMG de la versión actual e instálalo de nuevo.
+
+Las primeras previews de `0.5.9` y compilaciones históricas anteriores pueden no estar firmadas ni notarizadas. Si descargaste intencionalmente una de esas versiones y macOS indica que PromptHub está dañado o que no se puede verificar al desarrollador, ejecuta:
 
 ```bash
 sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app

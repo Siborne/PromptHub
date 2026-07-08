@@ -124,6 +124,18 @@ Design quality gates:
 - Before adding UI behavior, define the source selector/state that list, detail, badge, count, and action surfaces must share.
 - If a change violates these rules, stop and either refactor first or record a design conflict for user confirmation.
 
+### 0.8 Documentation and Product Copy Hygiene Rule
+
+Project documents and product surfaces must describe the product, code, decisions, verification, and user-facing behavior. They must not contain agent process narration, private reasoning, inner monologue, draft thinking, or chat-style self-reporting.
+
+Do not write phrases like "I am analyzing", "I think", "I will first", "my reasoning", or hidden chain-of-thought summaries into:
+
+- user-facing UI text, toasts, placeholders, empty states, mock data, screenshots, or release notes
+- public repository docs such as `README.md`, localized README files, `docs/*`, `CHANGELOG.md`, and website copy
+- internal persistent project records such as `spec/*`, `AGENTS.md`, proposals, designs, tasks, implementation notes, and rules
+
+Docs may record concise decisions, shipped changes, assumptions, risks, commands run, and verification results. They should not preserve the agent's conversational process. Maintainer-only operational details, such as signing certificates, release credentials, or secret-handling steps, belong in internal `spec/` records or secure secret stores, not public README files unless they are explicitly intended for contributors or users.
+
 ## 1. Project Overview
 
 **PromptHub** is a local-first prompt and AI-skill management monorepo. It includes a cross-platform Electron desktop app, a standalone CLI, a self-hosted web app, and a Cloudflare Worker backend. It allows users to organize, version-control, sync, recover, and test prompts and reusable AI skill definitions.

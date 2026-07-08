@@ -90,9 +90,11 @@ brew install --cask prompthub
 
 Für Updates `brew upgrade --cask prompthub` verwenden. Mische Homebrew nicht mit dem In-App-Updater, sonst weicht die von Homebrew erfasste Version vom tatsächlich installierten Stand ab.
 
-### macOS-Warnung beim ersten Start
+### macOS-Sicherheitsprüfung
 
-Die App ist nicht notarisiert, daher kann der erste Start mit „PromptHub ist beschädigt" oder „Entwickler kann nicht überprüft werden" enden. Im Terminal:
+Die macOS-Pakete werden mit Developer ID signiert und von Apple notarisiert. Installiere PromptHub über GitHub Releases, den offiziellen Spiegel oder Homebrew. Wenn macOS die App weiterhin nicht verifizieren kann, lade die aktuelle Release-DMG erneut herunter und installiere sie neu.
+
+Frühe `0.5.9`-Preview-Builds und ältere historische Builds sind möglicherweise noch nicht signiert und notarisiert. Wenn du bewusst eine solche historische Version heruntergeladen hast und macOS „PromptHub ist beschädigt" oder „Entwickler kann nicht überprüft werden" meldet, führe aus:
 
 ```bash
 sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app

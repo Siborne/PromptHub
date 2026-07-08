@@ -90,9 +90,11 @@ brew install --cask prompthub
 
 アップグレードは `brew upgrade --cask prompthub` を使用します。Homebrew とアプリ内自動更新を併用しないでください。Homebrew 側のバージョン記録と実際のインストールがずれる可能性があります。
 
-### macOS で「壊れている」と表示される場合
+### macOS セキュリティ検証
 
-アプリは Apple ノータライズ署名がないため、初回起動時に「PromptHub は壊れています」または「開発元を検証できません」と表示されることがあります。ターミナルから:
+macOS パッケージは Developer ID で署名され、Apple のノータリゼーションを通過します。GitHub Releases、公式ミラー、または Homebrew からインストールしてください。macOS が引き続き検証できない場合は、現在の Release DMG を再ダウンロードして再インストールしてください。
+
+初期の `0.5.9` プレビュー版やそれ以前の履歴ビルドは、署名とノータリゼーションが完了していない場合があります。これらの履歴ビルドを意図してダウンロードし、macOS が「壊れている」または「開発元を検証できません」と表示する場合は、次を実行してください:
 
 ```bash
 sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app

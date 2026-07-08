@@ -94,15 +94,17 @@ brew install --cask prompthub
 
 后续升级请用 `brew upgrade --cask prompthub`，**不要**和应用内自动更新混用，否则可能出现 Homebrew 记录的版本和实际安装不一致。
 
-### macOS 首次启动提示「已损坏」
+### macOS 安全验证
 
-应用没有 Apple 公证签名，第一次打开可能会弹「无法验证开发者」。打开终端执行：
+macOS 安装包会使用 Developer ID 签名并完成 Apple 公证。请优先从 GitHub Release、官网镜像或 Homebrew 安装；如果系统仍提示无法验证，请重新下载当前 Release 的 DMG 后再安装。
+
+`0.5.9` 早期预览包和更早的历史包可能尚未完成签名公证。如果你明确下载的是这些历史版本，并且 macOS 提示「已损坏」或「无法验证开发者」，可以在终端执行：
 
 ```bash
 sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 ```
 
-然后重新打开就行。如果应用安装在其他位置，把路径替换成实际安装路径。
+然后重新打开应用。如果应用安装在其他位置，把路径替换成实际安装路径。
 
 <div align="center">
   <img src="./docs/imgs/install.png" width="60%" alt="macOS 安装提示"/>
