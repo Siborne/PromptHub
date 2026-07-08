@@ -30,16 +30,31 @@ import type {
 import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import {
   buildSkillSourceId,
-  computeDirectoryFingerprint,
-  computeDirectoryFingerprintFromHashes,
   shouldIgnoreSkillDirectoryEntry,
 } from "@prompthub/shared/utils/skill-identity";
+import {
+  computeSkillPackageFingerprintV1Sync,
+  SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+} from "@prompthub/shared/utils/skill-source-update";
 import { installSkillFromSource } from "../../../../../packages/core/src/skills/install-flow";
 import { initDatabase } from "@/main/database";
 import { SkillDB } from "@/main/database/skill";
 import { readGithubTokenSetting } from "@/main/settings/settings-readers";
 import { parseSkillMd } from "./skill-validator";
 import { sanitizeImportedSkillDraft } from "./skill-import-sanitize";
+
+function buildSkillFingerprintFields(directoryFingerprint: string) {
+  return {
+    directory_fingerprint: directoryFingerprint,
+    fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+  };
+}
+
+function computePackageDirectoryFingerprint(
+  entries: Parameters<typeof computeSkillPackageFingerprintV1Sync>[0],
+): string {
+  return computeSkillPackageFingerprintV1Sync(entries).fingerprint;
+}
 import {
   getPlatformSkillsDir,
   gitClone,
@@ -77,6 +92,68 @@ function toTitleCase(value: string): string {
   return value
     .replace(/[-_]+/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+type RemoteSkillPackageSafetyScanOptions = {
+  aiConfig?: SafetyScanAIConfig;
+  scan?: typeof scanSkillSafety;
+  preflightScan?: typeof scanSkillSafetyPreflight;
+};
+
+type StagedRemoteSkillPackageSafetyInput = {
+  skill: Pick<Skill, "name">;
+  skillDir: string;
+  sourceUrl: string;
+  safetyScan?: RemoteSkillPackageSafetyScanOptions;
+};
+
+function isBlockingSafetyLevel(
+  report: Pick<SkillSafetyPreflightReport, "level">,
+): boolean {
+  return report.level === "blocked" || report.level === "high-risk";
+}
+
+function createSafetyScanBlockedUpdateError(
+  report: Pick<SkillSafetyPreflightReport, "level" | "summary">,
+): Error {
+  return new Error(
+    `SAFETY_SCAN_BLOCKED_UPDATE: staged remote Skill package was flagged as ${report.level}: ${report.summary}`,
+  );
+}
+
+async function assertStagedRemoteSkillPackageSafe(
+  input: StagedRemoteSkillPackageSafetyInput,
+): Promise<void> {
+  const content = await fs.readFile(
+    path.join(input.skillDir, "SKILL.md"),
+    "utf-8",
+  );
+  const preflightReport = await (
+    input.safetyScan?.preflightScan ?? scanSkillSafetyPreflight
+  )({
+    name: input.skill.name,
+    content,
+    sourceUrl: input.sourceUrl,
+    localRepoPath: input.skillDir,
+  });
+  if (isBlockingSafetyLevel(preflightReport)) {
+    throw createSafetyScanBlockedUpdateError(preflightReport);
+  }
+
+  if (!input.safetyScan?.aiConfig) {
+    return;
+  }
+
+  const aiReport = await (input.safetyScan.scan ?? scanSkillSafety)({
+    name: input.skill.name,
+    content,
+    sourceUrl: input.sourceUrl,
+    localRepoPath: input.skillDir,
+    aiConfig: input.safetyScan.aiConfig,
+  });
+  if (isBlockingSafetyLevel(aiReport)) {
+    throw createSafetyScanBlockedUpdateError(aiReport);
+  }
 }
 
 function normalizeSkillLookupValue(value: string | null | undefined): string {
@@ -186,34 +263,6 @@ function isRemoteTreeEntry(
 
 function isSkillMarkdownPath(filePath: string): boolean {
   return filePath === "SKILL.md" || filePath.endsWith("/SKILL.md");
-}
-
-function getTreeBackedDirectoryFingerprint(
-  treeEntries: Array<
-    GitHubTreeEntry & { path: string; type: string; sha?: string }
-  >,
-  skillFilePath: string,
-): string | undefined {
-  const normalizedSkillPath = skillFilePath.replace(/^\/+|\/+$/g, "");
-  const skillDir =
-    normalizedSkillPath.toLowerCase() === "skill.md"
-      ? ""
-      : normalizedSkillPath.slice(0, normalizedSkillPath.lastIndexOf("/"));
-  const prefix = skillDir ? `${skillDir}/` : "";
-  const scopedEntries = treeEntries
-    .filter((entry) => entry.type === "blob")
-    .filter((entry) =>
-      prefix ? entry.path.startsWith(prefix) : !entry.path.includes("/"),
-    )
-    .filter((entry) => typeof entry.sha === "string" && entry.sha.length > 0)
-    .map((entry) => ({
-      path: prefix ? entry.path.slice(prefix.length) : entry.path,
-      contentHash: entry.sha!,
-    }));
-
-  return scopedEntries.length > 0
-    ? computeDirectoryFingerprintFromHashes(scopedEntries)
-    : undefined;
 }
 
 function buildRemoteGitStoreUrls(
@@ -327,7 +376,11 @@ import {
   exportAsSkillMd,
   importFromJson,
 } from "./skill-installer-export";
-import { scanSkillSafety } from "./skill-safety-scan";
+import {
+  scanSkillSafety,
+  scanSkillSafetyPreflight,
+  type SkillSafetyPreflightReport,
+} from "./skill-safety-scan";
 
 // ========================================================================
 // Facade class — every static method delegates to the appropriate sub-module
@@ -611,15 +664,13 @@ export class SkillInstaller {
       );
     }
 
-    let createdSkill:
-      | {
-          id: string;
-          name: string;
-          source_id?: string | null;
-          variant_key?: string | null;
-          local_repo_path?: string | null;
-        }
-      | null = null;
+    let createdSkill: {
+      id: string;
+      name: string;
+      source_id?: string | null;
+      variant_key?: string | null;
+      local_repo_path?: string | null;
+    } | null = null;
     let managedRepoPath: string | null = null;
 
     try {
@@ -681,7 +732,7 @@ export class SkillInstaller {
           ? `${sourceDirectory}/SKILL.md`
           : "SKILL.md",
         local_repo_path: installDir,
-        directory_fingerprint: computeDirectoryFingerprint(repoFiles),
+        ...buildSkillFingerprintFields(computePackageDirectoryFingerprint(repoFiles)),
         is_favorite: false,
         tags: [],
         original_tags: manifest.tags || ["github"],
@@ -715,7 +766,10 @@ export class SkillInstaller {
         try {
           db.delete(createdSkill.id);
         } catch (rollbackError) {
-          console.error("Failed to roll back created skill row:", rollbackError);
+          console.error(
+            "Failed to roll back created skill row:",
+            rollbackError,
+          );
         }
       }
       // Clean up
@@ -881,13 +935,13 @@ export class SkillInstaller {
         await this.readLocalRepoFileBuffersByPath(localRepoPath);
       db.update(createdSkill.id, {
         local_repo_path: localRepoPath,
-        directory_fingerprint: computeDirectoryFingerprint(repoFiles),
+        ...buildSkillFingerprintFields(computePackageDirectoryFingerprint(repoFiles)),
       });
     } else if (localRepoPath) {
       const repoFiles =
         await this.readLocalRepoFileBuffersByPath(localRepoPath);
       db.update(createdSkill.id, {
-        directory_fingerprint: computeDirectoryFingerprint(repoFiles),
+        ...buildSkillFingerprintFields(computePackageDirectoryFingerprint(repoFiles)),
       });
     }
 
@@ -910,6 +964,7 @@ export class SkillInstaller {
       repoUrl: string;
       branch?: string;
       directory?: string;
+      safetyScan?: RemoteSkillPackageSafetyScanOptions;
     },
   ): Promise<string> {
     await this.init();
@@ -954,6 +1009,12 @@ export class SkillInstaller {
         skillDir = await this.resolveSkillDirFromRepo(repoDir, skill);
       }
 
+      await assertStagedRemoteSkillPackageSafe({
+        skill,
+        skillDir,
+        sourceUrl: options.repoUrl,
+        safetyScan: options.safetyScan,
+      });
       return await saveToLocalRepoBySkillId(skill, skillDir, "copy");
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
@@ -1008,7 +1069,7 @@ export class SkillInstaller {
       }
 
       const repoFiles = await this.readLocalRepoFileBuffersByPath(skillDir);
-      return computeDirectoryFingerprint(repoFiles);
+      return computePackageDirectoryFingerprint(repoFiles);
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
     }
@@ -1028,6 +1089,7 @@ export class SkillInstaller {
     >,
     options: {
       zipUrl: string;
+      safetyScan?: RemoteSkillPackageSafetyScanOptions;
     },
   ): Promise<string> {
     await this.init();
@@ -1037,7 +1099,9 @@ export class SkillInstaller {
       throw new Error("Remote skill package URL is required");
     }
 
-    const tempRoot = await fs.mkdtemp(path.join(this.skillsDir, ".remote-zip-"));
+    const tempRoot = await fs.mkdtemp(
+      path.join(this.skillsDir, ".remote-zip-"),
+    );
     const extractDir = path.join(tempRoot, "package");
 
     try {
@@ -1079,6 +1143,12 @@ export class SkillInstaller {
       }
 
       const skillDir = await this.resolveSkillDirFromRepo(extractDir, skill);
+      await assertStagedRemoteSkillPackageSafe({
+        skill,
+        skillDir,
+        sourceUrl: zipUrl,
+        safetyScan: options.safetyScan,
+      });
       return await saveToLocalRepoBySkillId(skill, skillDir, "copy");
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
@@ -1388,10 +1458,7 @@ export class SkillInstaller {
           source_branch: normalizedBranch,
           source_directory: sourceDirectory,
           canonical_skill_path: canonicalSkillPath,
-          directory_fingerprint: getTreeBackedDirectoryFingerprint(
-            treeEntries,
-            canonicalSkillPath,
-          ),
+          directory_fingerprint: undefined,
           description,
           category: builtin?.category || "general",
           icon_url: builtin?.icon_url,
@@ -1461,16 +1528,25 @@ export class SkillInstaller {
       const scannedSkills = await Promise.all(
         skillDirs.map(async (skillDir): Promise<RegistrySkill | null> => {
           const skillMdPath = path.join(skillDir, "SKILL.md");
-          const content = await fs.readFile(skillMdPath, "utf-8").catch(() => "");
+          const content = await fs
+            .readFile(skillMdPath, "utf-8")
+            .catch(() => "");
           if (!content.trim()) {
             return null;
           }
 
           const parsedSkill = parseSkillMd(content);
-          const sourceDirectory = path.relative(repoDir, skillDir).replace(/\\/g, "/");
-          const canonicalSkillPath = path.posix.join(sourceDirectory, "SKILL.md");
+          const sourceDirectory = path
+            .relative(repoDir, skillDir)
+            .replace(/\\/g, "/");
+          const canonicalSkillPath = path.posix.join(
+            sourceDirectory,
+            "SKILL.md",
+          );
           const slug = slugifySkillName(
-            parsedSkill?.frontmatter.name || path.basename(skillDir) || parsedRepo.repo,
+            parsedSkill?.frontmatter.name ||
+              path.basename(skillDir) ||
+              parsedRepo.repo,
           );
           const builtin = registrySkills.find((item) => item.slug === slug);
           const name =
@@ -1504,7 +1580,7 @@ export class SkillInstaller {
             source_branch: normalizedBranch,
             source_directory: sourceDirectory,
             canonical_skill_path: canonicalSkillPath,
-            directory_fingerprint: computeDirectoryFingerprint(
+            directory_fingerprint: computePackageDirectoryFingerprint(
               await this.readLocalRepoFileBuffersByPath(skillDir),
             ),
             description,
@@ -1738,7 +1814,7 @@ export class SkillInstaller {
                 await this.getScannedSkillInstallMetadata(skillFolderPath);
 
               skillMap.set(skillFolderPath, {
-                directory_fingerprint: computeDirectoryFingerprint(
+                directory_fingerprint: computePackageDirectoryFingerprint(
                   await this.readLocalRepoFileBuffersByPath(skillFolderPath),
                 ),
                 name: sanitized.name!,
@@ -1749,8 +1825,7 @@ export class SkillInstaller {
                 instructions: sanitized.instructions || instructions,
                 filePath: skillMdPath,
                 installMode: installMetadata.installMode,
-                isPromptHubManagedLink:
-                  installMetadata.isPromptHubManagedLink,
+                isPromptHubManagedLink: installMetadata.isPromptHubManagedLink,
                 localPath: skillFolderPath,
                 platforms: [platformName],
                 symlinkTargetPath: installMetadata.symlinkTargetPath,

@@ -27,6 +27,8 @@ const CLAWHUB_FIXTURE_ZIP_BASE64 =
   "UEsDBBQAAAAIABeExFzcZ6wxHgAAACEAAAAIAAAAU0tJTEwubWTT1dXlykvMTbVSSM9MSy9KLeACiXApK7hnprmDuABQSwMEFAAAAAgAF4TEXDWwbU4JAAAABwAAAA0AAABza2lsbC1jYXJkLm1kU1ZwTixK4QIAUEsDBBQAAAAIABeExFwbtNTNFgAAABQAAAAKAAAAX21ldGEuanNvbqtWKkstKs7Mz1OyUjLUM9AzVKrlAgBQSwMEFAAAAAgAF4TEXBqhbbAeAAAAHAAAABEAAABzY3JpcHRzL3NlYXJjaC50c0utKMgvKlFIzs8rLlEoTk0sSs5QsFUoKSpNteYCAFBLAQIUABQAAAAIABeExFzcZ6wxHgAAACEAAAAIAAAAAAAAAAAAAAAAAAAAAABTS0lMTC5tZFBLAQIUABQAAAAIABeExFw1sG1OCQAAAAcAAAANAAAAAAAAAAAAAAAAAEQAAABza2lsbC1jYXJkLm1kUEsBAhQAFAAAAAgAF4TEXBu01M0WAAAAFAAAAAoAAAAAAAAAAAAAAAAAeAAAAF9tZXRhLmpzb25QSwECFAAUAAAACAAXhMRcGqFtsB4AAAAcAAAAEQAAAAAAAAAAAAAAAAC2AAAAc2NyaXB0cy9zZWFyY2gudHNQSwUGAAAAAAQABADoAAAAAwEAAAAA";
 const UNSAFE_ZIP_BASE64 =
   "UEsDBBQAAAAIABeExFwEQPI4CQAAAAcAAAAOAAAALi4vb3V0c2lkZS50eHRLLU5OLEjlAgBQSwMEFAAAAAgAF4TEXLOr/W4LAAAACQAAAAgAAABTS0lMTC5tZFNWCM0rTkxL5QIAUEsBAhQAFAAAAAgAF4TEXARA8jgJAAAABwAAAA4AAAAAAAAAAAAAAAAAAAAAAC4uL291dHNpZGUudHh0UEsBAhQAFAAAAAgAF4TEXLOr/W4LAAAACQAAAAgAAAAAAAAAAAAAAAAANQAAAFNLSUxMLm1kUEsFBgAAAAACAAIAcgAAAGYAAAAAAA==";
+const UNSAFE_SKILL_ZIP_BASE64 =
+  "UEsDBBQAAAAIAEeR51yEnAO/RQAAAEMAAAAIAAAAU0tJTEwubWRTVgjNK05MS1UIzs7MyeHiCirNU0hILi3KUcgoKSkottLXTy3LzNFLrUjMLchJ1c/MKy5JzMnRK85QqFFISizOSNDjAgBQSwECFAMUAAAACABHkedchJwDv0UAAABDAAAACAAAAAAAAAAAAAAAgAEAAAAAU0tJTEwubWRQSwUGAAAAAAEAAQA2AAAAawAAAAAA";
 
 async function listRelativeFiles(baseDir: string): Promise<string[]> {
   const files: string[] = [];
@@ -328,11 +330,7 @@ describe("SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId", () => {
 
     vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(
       async (_url, destDir) => {
-        const reactDir = path.join(
-          destDir,
-          "skills",
-          "react-best-practices",
-        );
+        const reactDir = path.join(destDir, "skills", "react-best-practices");
         const nextDir = path.join(destDir, "skills", "next-best-practices");
         await fs.mkdir(reactDir, { recursive: true });
         await fs.mkdir(nextDir, { recursive: true });
@@ -484,5 +482,81 @@ describe("SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId", () => {
       ),
     ).rejects.toThrow(/Path traversal detected/);
     expect(await listRemoteZipTempDirs()).toEqual([]);
+  });
+
+  it("blocks unsafe staged remote zip packages before replacing the managed repo", async () => {
+    await SkillInstaller.init();
+
+    const skill = {
+      id: "skill-unsafe-update",
+      name: "unsafe-update",
+      source_id: "source-unsafe-update",
+      source_url: "https://clawhub.ai/unsafe/update",
+      directory_fingerprint: "remote-fingerprint",
+    };
+    const originalRepoPath =
+      await SkillInstaller.saveContentToLocalRepoBySkillId(
+        skill,
+        "# Safe Skill\n\nKeep this content.\n",
+      );
+    const archive = Buffer.from(UNSAFE_SKILL_ZIP_BASE64, "base64");
+    vi.spyOn(SkillInstaller, "fetchRemoteBytes").mockResolvedValue(archive);
+
+    await expect(
+      SkillInstaller.saveRemoteZipSkillToLocalRepoBySkillId(skill, {
+        zipUrl: "https://clawhub.ai/api/v1/download?slug=unsafe-update",
+      }),
+    ).rejects.toThrow(/SAFETY_SCAN_BLOCKED_UPDATE/);
+
+    await expect(
+      fs.readFile(path.join(originalRepoPath, "SKILL.md"), "utf-8"),
+    ).resolves.toBe("# Safe Skill\n\nKeep this content.\n");
+    expect(await listRemoteZipTempDirs()).toEqual([]);
+  });
+
+  it("keeps the previous managed repo when remote git copy fails mid-apply", async () => {
+    await SkillInstaller.init();
+
+    const skill = {
+      id: "skill-partial-copy",
+      name: "partial-copy",
+      source_id: "source-partial-copy",
+      source_url: "https://gitea.example.com/team/skills",
+      source_directory: "skills/partial-copy",
+      directory_fingerprint: "remote-fingerprint",
+    };
+    const originalRepoPath =
+      await SkillInstaller.saveContentToLocalRepoBySkillId(
+        skill,
+        "# Original Skill\n\nDo not remove.\n",
+      );
+
+    vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(
+      async (_url, destDir) => {
+        const skillDir = path.join(destDir, "skills", "partial-copy");
+        await fs.mkdir(skillDir, { recursive: true });
+        await fs.writeFile(
+          path.join(skillDir, "SKILL.md"),
+          "---\nname: partial-copy\n---\n\n# Remote Skill\n",
+          "utf-8",
+        );
+        const unreadableFile = path.join(skillDir, "blocked.txt");
+        await fs.writeFile(unreadableFile, "blocked\n", "utf-8");
+        await fs.chmod(unreadableFile, 0o000);
+      },
+    );
+
+    await expect(
+      SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(skill, {
+        repoUrl: "https://gitea.example.com/team/skills",
+        branch: "main",
+        directory: "skills/partial-copy",
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      fs.readFile(path.join(originalRepoPath, "SKILL.md"), "utf-8"),
+    ).resolves.toBe("# Original Skill\n\nDo not remove.\n");
+    expect(await listRemoteImportTempDirs()).toEqual([]);
   });
 });

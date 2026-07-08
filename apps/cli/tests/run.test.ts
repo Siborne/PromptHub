@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { closeDatabase } from "@prompthub/core";
 import { createCliSkillService, runCli } from "@prompthub/core";
 import type { SkillSafetyReport } from "@prompthub/shared/types";
+import { SKILL_PACKAGE_FINGERPRINT_ALGORITHM } from "@prompthub/shared/utils/skill-source-update";
 
 function makeTempRoot(tempDirs: string[]): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-cli-app-"));
@@ -1290,7 +1291,15 @@ describe("standalone cli wiring", () => {
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
     expect(gitCloneImpl).toHaveBeenCalled();
-    expect(JSON.parse(stdout.join("\n")).name).toBe("github-skill");
+    const installed = JSON.parse(stdout.join("\n"));
+    expect(installed).toMatchObject({
+      name: "github-skill",
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+      source_binding_state: "bound",
+    });
+    expect(installed.installed_directory_fingerprint).toBe(
+      installed.directory_fingerprint,
+    );
   });
 
   it("installs only the nested directory that contains SKILL.md from a github repo", async () => {
@@ -1565,6 +1574,13 @@ describe("standalone cli wiring", () => {
     ]);
     expect(installRes.exitCode).toBe(0);
     expect(installRes.json.name).toBe("writer-skill");
+    expect(installRes.json).toMatchObject({
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+      source_binding_state: "bound",
+    });
+    expect(installRes.json.installed_directory_fingerprint).toBe(
+      installRes.json.directory_fingerprint,
+    );
 
     const createVersionRes = await execCli([
       ...withDataDir(root),

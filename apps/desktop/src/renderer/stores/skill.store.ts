@@ -16,13 +16,17 @@ import type {
   SkillSafetyLevel,
   SkillSafetyReport,
   SafetyScanAIConfig,
+  SkillSourceStaleTarget,
 } from "@prompthub/shared/types";
 import { SKILL_CATEGORIES } from "@prompthub/shared/constants/skill-categories";
-import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import {
   buildSkillSourceId,
   shouldIgnoreSkillDirectoryEntry,
 } from "@prompthub/shared/utils/skill-identity";
+import {
+  getSkillSourceUpdateActionPolicy,
+  SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+} from "@prompthub/shared/utils/skill-source-update";
 import { resolveScenarioAIConfig } from "../services/ai-defaults";
 import {
   filterVisibleScannedSkills,
@@ -32,10 +36,18 @@ import { normalizeSkill, normalizeSkills } from "../services/skill-normalize";
 import {
   normalizeGitStoreSourceInput,
   validateStoreSourceInput,
-  isLikelyLocalSource,
-  normalizeLocalSkillDirectoryPath,
   type CustomStoreSourceType,
 } from "../services/skill-store-source";
+import {
+  getRegistrySkillDirectory,
+  getRegistrySkillSourceResolverKind,
+  isLinkedLocalSkill,
+  isLocalRegistrySkill,
+  normalizeLocalRegistryDirectory,
+  normalizeRemoteDirectoryFingerprint,
+  parseGitHubSkillLocation,
+  shouldCloneRegistrySkillPackage,
+} from "../services/skill-source-resolver";
 import {
   computeSkillContentFingerprint,
   computeSkillContentHash,
@@ -85,11 +97,9 @@ const DEPLOYED_STATUS_CACHE_TTL_MS = 30_000;
 
 let deployedStatusRefreshPromise: Promise<void> | null = null;
 let deployedStatusLoadedAt = 0;
-let skillTranslationAIPromise:
-  | Promise<{
-      chatCompletion: typeof import("../services/ai").chatCompletion;
-    }>
-  | null = null;
+let skillTranslationAIPromise: Promise<{
+  chatCompletion: typeof import("../services/ai").chatCompletion;
+}> | null = null;
 
 function loadSkillTranslationAI() {
   skillTranslationAIPromise ??= import("../services/ai").then((aiService) => ({
@@ -99,17 +109,9 @@ function loadSkillTranslationAI() {
 }
 
 async function loadBuiltinSkillRegistry(): Promise<RegistrySkill[]> {
-  const { BUILTIN_SKILL_REGISTRY } = await import(
-    "@prompthub/shared/constants/skill-registry"
-  );
+  const { BUILTIN_SKILL_REGISTRY } =
+    await import("@prompthub/shared/constants/skill-registry");
   return BUILTIN_SKILL_REGISTRY.map(ensureRegistrySkillSourceId);
-}
-
-interface ParsedGitHubSkillLocation {
-  owner: string;
-  repo: string;
-  branch: string;
-  directoryPath: string;
 }
 
 interface TranslationCacheEntry {
@@ -213,9 +215,24 @@ function sanitizePersistedAgentScanState(
 
 export type RegistrySkillUpdateResult =
   | { status: "updated"; skill: Skill; check: RegistrySkillUpdateCheck }
-  | { status: "up-to-date"; skill?: Skill | null; check: RegistrySkillUpdateCheck }
   | {
-      status: "conflict" | "local-modified" | "not-installed";
+      status: "up-to-date";
+      skill?: Skill | null;
+      check: RegistrySkillUpdateCheck;
+    }
+  | {
+      status: "linked-local-blocked";
+      check: RegistrySkillUpdateCheck;
+      recommendedAction: "convert-to-managed-copy";
+    }
+  | {
+      status:
+        | "conflict"
+        | "local-modified"
+        | "not-installed"
+        | "no-source"
+        | "source-unavailable"
+        | "baseline-missing";
       check: RegistrySkillUpdateCheck;
     };
 
@@ -275,6 +292,36 @@ function getTranslationStateFromCache(
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+const MAX_SOURCE_UPDATE_ERROR_LENGTH = 300;
+
+function redactSourceErrorUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    parsed.username = "";
+    parsed.password = "";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, parsed.pathname === "/" ? "/" : "");
+  } catch {
+    return "[redacted-url]";
+  }
+}
+
+function sanitizeSourceUpdateError(error: unknown): string {
+  const withoutQuerySecrets = getErrorMessage(error).replace(
+    /https?:\/\/[^\s"'<>]+/g,
+    (url) => redactSourceErrorUrl(url),
+  );
+  const redacted = withoutQuerySecrets.replace(
+    /\b(token|key|secret|password|authorization)=([^\s&]+)/gi,
+    "$1=[redacted]",
+  );
+  const normalized = redacted.replace(/\s+/g, " ").trim();
+  return (
+    normalized.slice(0, MAX_SOURCE_UPDATE_ERROR_LENGTH) || "Source check failed"
+  );
 }
 
 const DEFAULT_PROJECT_SCAN_SUBDIRECTORIES = [
@@ -474,30 +521,6 @@ function ensureRegistrySkillSourceId(skill: RegistrySkill): RegistrySkill {
   };
 }
 
-function isLocalRegistrySkill(
-  skill: Pick<RegistrySkill, "content_url" | "source_url">,
-): boolean {
-  return Boolean(
-    (typeof skill.content_url === "string" &&
-      isLikelyLocalSource(skill.content_url)) ||
-    (typeof skill.source_url === "string" &&
-      isLikelyLocalSource(skill.source_url)),
-  );
-}
-
-function normalizeLocalRegistryDirectory(
-  regSkill: Pick<RegistrySkill, "content_url" | "source_url">,
-): string {
-  const candidates = [regSkill.content_url, regSkill.source_url]
-    .filter(
-      (value): value is string =>
-        typeof value === "string" && value.trim().length > 0,
-    )
-    .map((value) => normalizeLocalSkillDirectoryPath(value));
-
-  return candidates[0] ?? "";
-}
-
 async function syncLocalRegistrySkillRepo(
   skillId: string,
   regSkill: RegistrySkill,
@@ -519,10 +542,7 @@ async function syncLocalRegistrySkillRepo(
 async function resolveRegistrySkillContent(
   regSkill: RegistrySkill,
 ): Promise<string> {
-  if (
-    typeof regSkill.content_url === "string" &&
-    isLikelyLocalSource(regSkill.content_url)
-  ) {
+  if (isLocalRegistrySkill(regSkill)) {
     const localDir = normalizeLocalRegistryDirectory(regSkill);
     const localSkillMd = await window.api.skill.readLocalFileByPath(
       localDir,
@@ -568,155 +588,199 @@ function isGitHubTreeEntry(
   );
 }
 
-function parseGitHubSkillLocation(
-  sourceUrl?: string,
-  contentUrl?: string,
-): ParsedGitHubSkillLocation | null {
-  if (sourceUrl) {
-    try {
-      const parsed = new URL(sourceUrl);
-      if (parsed.hostname.toLowerCase() === "github.com") {
-        const parts = parsed.pathname.split("/").filter(Boolean);
-        if (parts.length >= 4 && parts[2] === "tree") {
-          return {
-            owner: parts[0],
-            repo: parts[1],
-            branch: parts[3],
-            directoryPath: parts.slice(4).join("/"),
-          };
-        }
-      }
-    } catch {
-      // Ignore invalid source URL and try contentUrl fallback.
-    }
-  }
-
-  if (contentUrl) {
-    try {
-      const parsed = new URL(contentUrl);
-      if (parsed.hostname.toLowerCase() === "raw.githubusercontent.com") {
-        const parts = parsed.pathname.split("/").filter(Boolean);
-        if (parts.length >= 4) {
-          return {
-            owner: parts[0],
-            repo: parts[1],
-            branch: parts[2],
-            directoryPath: parts.slice(3, -1).join("/"),
-          };
-        }
-      }
-    } catch {
-      // Ignore invalid content URL.
-    }
-  }
-
-  return null;
-}
-
 async function resolveRemoteRegistryDirectoryFingerprint(
   regSkill: RegistrySkill,
+  options: {
+    remoteContentHash?: string;
+    installedSkill?: Skill | null;
+  } = {},
 ): Promise<string | undefined> {
   const sourceUrl = regSkill.source_url;
-  if (!sourceUrl || isLikelyLocalSource(sourceUrl) || !parseGitRepo(sourceUrl)) {
-    return regSkill.directory_fingerprint;
+  if (!sourceUrl || !shouldCloneRegistrySkillPackage(regSkill)) {
+    return normalizeRemoteDirectoryFingerprint(regSkill, {
+      remoteContentHash: options.remoteContentHash,
+      installedSkill: options.installedSkill,
+    });
   }
   const treeLocation = parseGitHubSkillLocation(sourceUrl);
 
-  return (
-    (await window.api.skill.getRemoteGitPackageFingerprint({
+  const resolvedDirectoryFingerprint =
+    await window.api.skill.getRemoteGitPackageFingerprint({
       repoUrl: sourceUrl,
       branch: regSkill.source_branch || treeLocation?.branch,
       directory:
         getRegistrySkillDirectory(regSkill) || treeLocation?.directoryPath,
-    })) || regSkill.directory_fingerprint
+    });
+  return normalizeRemoteDirectoryFingerprint(regSkill, {
+    remoteContentHash: options.remoteContentHash,
+    resolvedDirectoryFingerprint,
+    installedSkill: options.installedSkill,
+  });
+}
+
+function buildSourceBaselineFields(options: {
+  contentHash: string;
+  directoryFingerprint?: string;
+  checkedAt: number;
+}): Pick<
+  UpdateSkillParams,
+  | "installed_directory_fingerprint"
+  | "fingerprint_algorithm"
+  | "source_last_checked_at"
+  | "source_last_error"
+  | "source_binding_state"
+> {
+  return {
+    installed_directory_fingerprint:
+      options.directoryFingerprint?.trim() || options.contentHash,
+    fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+    source_last_checked_at: options.checkedAt,
+    source_last_error: null,
+    source_binding_state: "bound",
+  };
+}
+
+function getRegistrySkillInstallPackageFingerprint(
+  regSkill: RegistrySkill,
+  installedContentHash: string,
+): string {
+  return getRegistrySkillSourceResolverKind(regSkill) === "content-url"
+    ? installedContentHash
+    : regSkill.directory_fingerprint?.trim() || installedContentHash;
+}
+
+function getLinkedLocalRemoteUpdateBlock(
+  skill: Skill,
+  check: RegistrySkillUpdateCheck,
+): RegistrySkillUpdateResult | null {
+  if (!isLinkedLocalSkill(skill)) {
+    return null;
+  }
+  if (check.status === "not-installed") {
+    return null;
+  }
+
+  const policy = getSkillSourceUpdateActionPolicy({
+    status: check.status,
+    sourceMode: "local-linked",
+  });
+  if (
+    policy.canApplyRemoteUpdate ||
+    policy.recommendedAction !== "convert-to-managed-copy"
+  ) {
+    return null;
+  }
+
+  return {
+    status: "linked-local-blocked",
+    check,
+    recommendedAction: "convert-to-managed-copy",
+  };
+}
+
+function getSkillSourceStaleTargets(
+  state: Pick<SkillState, "projectScanState" | "agentScanState">,
+  skill: Skill,
+): SkillSourceStaleTarget[] {
+  const expectedFingerprint = skill.directory_fingerprint?.trim();
+  if (!expectedFingerprint) {
+    return [];
+  }
+
+  const skillName = skill.name.trim().toLowerCase();
+  const staleTargets: SkillSourceStaleTarget[] = [];
+  const addTarget = (
+    targetType: SkillSourceStaleTarget["targetType"],
+    targetId: string,
+    scannedSkill: {
+      name: string;
+      localPath: string;
+      installMode?: "copy" | "symlink";
+      directory_fingerprint?: string;
+    },
+  ) => {
+    const currentFingerprint = scannedSkill.directory_fingerprint?.trim();
+    if (
+      scannedSkill.name.trim().toLowerCase() !== skillName ||
+      (scannedSkill.installMode ?? "copy") !== "copy" ||
+      !currentFingerprint ||
+      currentFingerprint === expectedFingerprint
+    ) {
+      return;
+    }
+
+    staleTargets.push({
+      targetType,
+      targetId: `${targetId}:${scannedSkill.localPath}`,
+      installMode: "copy",
+      currentFingerprint,
+      expectedFingerprint,
+    });
+  };
+
+  for (const [projectId, scanState] of Object.entries(state.projectScanState)) {
+    for (const scannedSkill of scanState.scannedSkills) {
+      addTarget("project", projectId, scannedSkill);
+    }
+  }
+
+  for (const [platformId, scanState] of Object.entries(state.agentScanState)) {
+    for (const scannedSkill of scanState.result?.scannedSkills ?? []) {
+      addTarget("agent", platformId, scannedSkill);
+    }
+  }
+
+  return staleTargets;
+}
+
+function getRemoteUpdateSafetyScanOptions():
+  | { aiConfig: SafetyScanAIConfig }
+  | undefined {
+  const settings = useSettingsStore.getState();
+  if (!settings.autoScanStoreSkillsBeforeInstall) {
+    return undefined;
+  }
+
+  const aiConfig = getSafetyScanAIConfig(settings.aiModels);
+  return aiConfig ? { aiConfig } : undefined;
+}
+
+function isBlockingSafetyReport(report: Pick<SkillSafetyReport, "level">) {
+  return report.level === "blocked" || report.level === "high-risk";
+}
+
+function createRawContentSafetyBlockedError(
+  report: Pick<SkillSafetyReport, "level" | "summary">,
+): Error {
+  return new Error(
+    `SAFETY_SCAN_BLOCKED_UPDATE: staged remote Skill content was flagged as ${report.level}: ${report.summary || "review required"}`,
   );
+}
+
+async function assertRemoteContentUrlSkillSafe(
+  regSkill: RegistrySkill,
+  content: string,
+): Promise<void> {
+  const safetyScan = getRemoteUpdateSafetyScanOptions();
+  if (!safetyScan) {
+    return;
+  }
+
+  const report = await window.api.skill.scanSafety({
+    name: regSkill.install_name || regSkill.name || regSkill.slug,
+    content,
+    sourceUrl: regSkill.source_url,
+    contentUrl: regSkill.content_url,
+    securityAudits: regSkill.security_audits,
+    aiConfig: safetyScan.aiConfig,
+  });
+  if (isBlockingSafetyReport(report)) {
+    throw createRawContentSafetyBlockedError(report);
+  }
 }
 
 function shouldSkipRemoteRepoFile(relativePath: string): boolean {
   return shouldIgnoreSkillDirectoryEntry(relativePath);
-}
-
-function getRegistrySkillDirectory(
-  regSkill: Pick<RegistrySkill, "source_directory" | "canonical_skill_path">,
-): string | undefined {
-  const explicitDirectory = regSkill.source_directory
-    ?.trim()
-    .replace(/^\/+|\/+$/g, "");
-  if (explicitDirectory) {
-    return explicitDirectory;
-  }
-
-  const canonicalPath = regSkill.canonical_skill_path
-    ?.trim()
-    .replace(/^\/+|\/+$/g, "");
-  if (!canonicalPath || canonicalPath.toLowerCase() === "skill.md") {
-    return undefined;
-  }
-
-  const parts = canonicalPath.split("/");
-  parts.pop();
-  return parts.join("/") || undefined;
-}
-
-function shouldCloneRegistrySkillPackage(
-  regSkill: Pick<
-    RegistrySkill,
-    | "source_url"
-    | "content_url"
-    | "package_url"
-    | "store_url"
-    | "source_label"
-    | "source_directory"
-    | "canonical_skill_path"
-    | "directory_fingerprint"
-  >,
-): boolean {
-  const publicDirectoryStoreValues = [
-    regSkill.store_url,
-    regSkill.content_url,
-    regSkill.source_label,
-  ]
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.toLowerCase());
-  if (
-    publicDirectoryStoreValues.some(
-      (value) => value.includes("clawhub.ai"),
-    ) &&
-    !getRegistrySkillDirectory(regSkill)
-  ) {
-    return false;
-  }
-
-  if (!regSkill.source_url || isLikelyLocalSource(regSkill.source_url)) {
-    return false;
-  }
-
-  const parsedRepo = parseGitRepo(regSkill.source_url);
-  if (!parsedRepo) {
-    return false;
-  }
-
-  if (
-    publicDirectoryStoreValues.some((value) => value.includes("skills.sh"))
-  ) {
-    return true;
-  }
-
-  const hasPackageMetadata = Boolean(
-    getRegistrySkillDirectory(regSkill) ||
-      regSkill.canonical_skill_path ||
-      regSkill.directory_fingerprint,
-  );
-
-  if (
-    regSkill.content_url &&
-    isGitHubHost(parsedRepo.host) &&
-    !hasPackageMetadata
-  ) {
-    return false;
-  }
-
-  return hasPackageMetadata;
 }
 
 async function syncRemoteGitHubSkillRepo(
@@ -743,9 +807,7 @@ async function syncRemoteGitHubSkillRepo(
         (entry): entry is { path: string; type: string } =>
           isGitHubTreeEntry(entry) &&
           entry.type === "blob" &&
-          (directoryPrefix
-            ? entry.path.startsWith(directoryPrefix)
-            : true),
+          (directoryPrefix ? entry.path.startsWith(directoryPrefix) : true),
       )
     : [];
 
@@ -784,12 +846,19 @@ async function syncRemoteRegistrySkillRepo(
   skillId: string,
   regSkill: RegistrySkill,
   effectiveContent: string,
+  options: { refreshBaseline?: boolean } = {},
 ): Promise<Skill | null> {
+  const shouldRefreshBaseline = options.refreshBaseline !== false;
   if (regSkill.package_url?.trim()) {
+    const safetyScan = getRemoteUpdateSafetyScanOptions();
     await window.api.skill.saveRemoteZipToRepo(skillId, {
       zipUrl: regSkill.package_url,
+      ...(safetyScan ? { safetyScan } : {}),
     });
     const syncedSkill = await window.api.skill.syncFromRepo(skillId);
+    if (!shouldRefreshBaseline) {
+      return syncedSkill ?? null;
+    }
     return refreshInstalledContentHashFromSyncedSkill(
       skillId,
       syncedSkill,
@@ -798,12 +867,17 @@ async function syncRemoteRegistrySkillRepo(
   }
 
   if (shouldCloneRegistrySkillPackage(regSkill)) {
+    const safetyScan = getRemoteUpdateSafetyScanOptions();
     await window.api.skill.saveRemoteGitToRepo(skillId, {
       repoUrl: regSkill.source_url,
       branch: regSkill.source_branch,
       directory: getRegistrySkillDirectory(regSkill),
+      ...(safetyScan ? { safetyScan } : {}),
     });
     const syncedSkill = await window.api.skill.syncFromRepo(skillId);
+    if (!shouldRefreshBaseline) {
+      return syncedSkill ?? null;
+    }
     return refreshInstalledContentHashFromSyncedSkill(
       skillId,
       syncedSkill,
@@ -811,6 +885,7 @@ async function syncRemoteRegistrySkillRepo(
     );
   }
 
+  await assertRemoteContentUrlSkillSafe(regSkill, effectiveContent);
   await window.api.skill.writeLocalFile(skillId, "SKILL.md", effectiveContent, {
     skipVersionSnapshot: true,
   });
@@ -833,10 +908,46 @@ async function refreshInstalledContentHashFromSyncedSkill(
   }
 
   const installedContentHash = await computeSkillContentHash(syncedContent);
+  const now = Date.now();
   return window.api.skill.update(skillId, {
     installed_content_hash: installedContentHash,
     installed_version: regSkill.version,
+    ...buildSourceBaselineFields({
+      contentHash: installedContentHash,
+      directoryFingerprint:
+        syncedSkill?.directory_fingerprint ||
+        syncedSkill?.installed_directory_fingerprint,
+      checkedAt: now,
+    }),
   });
+}
+
+function getCreatedSkillVersionNumber(version: unknown): number | null {
+  if (
+    typeof version === "object" &&
+    version !== null &&
+    "version" in version &&
+    typeof version.version === "number" &&
+    Number.isFinite(version.version)
+  ) {
+    return version.version;
+  }
+  return null;
+}
+
+async function rollbackMaterializedSourceUpdate(
+  skillId: string,
+  createdVersion: unknown,
+): Promise<void> {
+  const version = getCreatedSkillVersionNumber(createdVersion);
+  if (version === null) {
+    return;
+  }
+  try {
+    await window.api.skill.versionRollback(skillId, version);
+  } catch (error) {
+    console.warn(`Failed to roll back source update for "${skillId}":`, error);
+  }
 }
 
 async function runWithConcurrency<T>(
@@ -1083,7 +1194,8 @@ function normalizeRemoteRegistrySkill(
   customStoreSources: SkillStoreSource[],
 ): RegistrySkill {
   const source = customStoreSources.find((item) => item.id === sourceId);
-  const skillPath = skill.canonical_skill_path || skill.content_url || skill.slug;
+  const skillPath =
+    skill.canonical_skill_path || skill.content_url || skill.slug;
 
   if (source?.type === "git-repo") {
     try {
@@ -1183,54 +1295,95 @@ async function applyRegistrySkillUpdateToInstalledSkill(
     updateSkill: SkillState["updateSkill"];
   },
 ): Promise<Skill | null> {
-  await window.api.skill.versionCreate(
+  const createdVersion = await window.api.skill.versionCreate(
     installedSkill.id,
     `${options.notePrefix}: ${installedSkill.version || "unknown"} -> ${regSkill.version}`,
   );
   scheduleAllSaveSync("skill:create-version");
 
-  const now = Date.now();
-  const updatedSkill = await options.updateSkill(installedSkill.id, {
-    description: regSkill.description,
-    instructions: check.remoteContent,
-    content: check.remoteContent,
-    version: regSkill.version,
-    author: regSkill.author,
-    source_url: regSkill.source_url,
-    source_id: regSkill.source_id,
-    source_label: installedSkill.source_label || regSkill.source_label,
-    source_branch: regSkill.source_branch,
-    source_directory: regSkill.source_directory,
-    canonical_skill_path: regSkill.canonical_skill_path,
-    icon_url: regSkill.icon_url,
-    icon_emoji: regSkill.icon_emoji,
-    icon_background: regSkill.icon_background,
-    category: regSkill.category,
-    is_builtin: options.markAsBuiltin ? true : installedSkill.is_builtin,
-    registry_slug: regSkill.slug,
-    directory_fingerprint: regSkill.directory_fingerprint,
-    content_url: regSkill.content_url,
-    original_tags: regSkill.tags,
-    prerequisites: regSkill.prerequisites,
-    compatibility: regSkill.compatibility,
-    installed_content_hash: check.remoteHash,
-    installed_version: regSkill.version,
-    updated_from_store_at: now,
-  });
+  let didMaterializeRemoteSource = false;
+  try {
+    const now = Date.now();
+    const shouldSyncRemoteSourceBeforeMetadata = !isLocalRegistrySkill(regSkill);
+    const preSyncedSkill = shouldSyncRemoteSourceBeforeMetadata
+      ? await syncRemoteRegistrySkillRepo(
+          installedSkill.id,
+          regSkill,
+          check.remoteContent,
+          { refreshBaseline: false },
+        )
+      : null;
+    didMaterializeRemoteSource = shouldSyncRemoteSourceBeforeMetadata;
+    const nextContent =
+      preSyncedSkill?.content ??
+      preSyncedSkill?.instructions ??
+      check.remoteContent;
+    const nextContentHash = await computeSkillContentHash(nextContent);
+    const remoteDirectoryFingerprint =
+      preSyncedSkill?.directory_fingerprint ||
+      preSyncedSkill?.installed_directory_fingerprint ||
+      check.remoteDirectoryFingerprint ||
+      regSkill.directory_fingerprint;
+    const updatedSkill = await options.updateSkill(installedSkill.id, {
+      description: regSkill.description,
+      instructions: nextContent,
+      content: nextContent,
+      version: regSkill.version,
+      author: regSkill.author,
+      source_url: regSkill.source_url,
+      source_id: regSkill.source_id,
+      source_label: installedSkill.source_label || regSkill.source_label,
+      source_branch: regSkill.source_branch,
+      source_directory: regSkill.source_directory,
+      canonical_skill_path: regSkill.canonical_skill_path,
+      icon_url: regSkill.icon_url,
+      icon_emoji: regSkill.icon_emoji,
+      icon_background: regSkill.icon_background,
+      category: regSkill.category,
+      is_builtin: options.markAsBuiltin ? true : installedSkill.is_builtin,
+      registry_slug: regSkill.slug,
+      directory_fingerprint: remoteDirectoryFingerprint,
+      content_url: regSkill.content_url,
+      original_tags: regSkill.tags,
+      prerequisites: regSkill.prerequisites,
+      compatibility: regSkill.compatibility,
+      installed_content_hash: nextContentHash,
+      installed_version: regSkill.version,
+      updated_from_store_at: now,
+      ...buildSourceBaselineFields({
+        contentHash: nextContentHash,
+        directoryFingerprint: remoteDirectoryFingerprint,
+        checkedAt: now,
+      }),
+    });
 
-  if (!updatedSkill) {
-    return null;
+    if (!updatedSkill) {
+      if (didMaterializeRemoteSource) {
+        await rollbackMaterializedSourceUpdate(
+          installedSkill.id,
+          createdVersion,
+        );
+      }
+      return null;
+    }
+
+    const syncedSkill = shouldSyncRemoteSourceBeforeMetadata
+      ? null
+      : isLocalRegistrySkill(regSkill)
+        ? await syncLocalRegistrySkillRepo(installedSkill.id, regSkill)
+        : await syncRemoteRegistrySkillRepo(
+            installedSkill.id,
+            regSkill,
+            check.remoteContent,
+          );
+
+    return syncedSkill ?? updatedSkill;
+  } catch (error) {
+    if (didMaterializeRemoteSource) {
+      await rollbackMaterializedSourceUpdate(installedSkill.id, createdVersion);
+    }
+    throw error;
   }
-
-  const syncedSkill = isLocalRegistrySkill(regSkill)
-    ? await syncLocalRegistrySkillRepo(installedSkill.id, regSkill)
-    : await syncRemoteRegistrySkillRepo(
-      installedSkill.id,
-      regSkill,
-      check.remoteContent,
-    );
-
-  return syncedSkill ?? updatedSkill;
 }
 
 async function refreshRegistrySkillBaselineIfNeeded(
@@ -1248,14 +1401,112 @@ async function refreshRegistrySkillBaselineIfNeeded(
     installedSkill,
     check.registrySkill,
   );
-  if (!needsHashRefresh && !needsVersionRefresh) {
+  const nextInstalledDirectoryFingerprint =
+    check.remoteDirectoryFingerprint ||
+    installedSkill.directory_fingerprint ||
+    check.remoteHash;
+  const needsDirectoryBaselineRefresh =
+    installedSkill.installed_directory_fingerprint !==
+    nextInstalledDirectoryFingerprint;
+  const needsFingerprintAlgorithmRefresh =
+    installedSkill.fingerprint_algorithm !==
+    SKILL_PACKAGE_FINGERPRINT_ALGORITHM;
+  const needsBindingRefresh =
+    installedSkill.source_binding_state !== "bound" ||
+    installedSkill.source_last_error != null;
+  if (
+    !needsHashRefresh &&
+    !needsVersionRefresh &&
+    !needsDirectoryBaselineRefresh &&
+    !needsFingerprintAlgorithmRefresh &&
+    !needsBindingRefresh
+  ) {
     return null;
   }
 
+  const now = Date.now();
   return updateSkill(installedSkill.id, {
     installed_content_hash: check.remoteHash,
     installed_version: check.registrySkill.version,
+    ...buildSourceBaselineFields({
+      contentHash: check.remoteHash,
+      directoryFingerprint: nextInstalledDirectoryFingerprint,
+      checkedAt: now,
+    }),
   });
+}
+
+async function buildSourceUnavailableCheck(
+  registrySkill: RegistrySkill,
+  installedSkill: Skill | null,
+  staleTargets: SkillSourceStaleTarget[] = [],
+): Promise<RegistrySkillUpdateCheck> {
+  const localContent = installedSkill
+    ? (installedSkill.content ?? installedSkill.instructions ?? "")
+    : "";
+  const localHash = installedSkill
+    ? await computeSkillContentHash(localContent)
+    : undefined;
+  const remoteContent = registrySkill.content || "";
+  const remoteHash =
+    installedSkill?.installed_content_hash ||
+    (remoteContent
+      ? await computeSkillContentHash(remoteContent)
+      : localHash || "");
+
+  return {
+    status: "source-unavailable",
+    skillId: installedSkill?.id || registrySkill.source_id || registrySkill.slug,
+    ...(registrySkill.source_id || installedSkill?.source_id
+      ? { sourceIdentity: registrySkill.source_id || installedSkill?.source_id }
+      : {}),
+    ...(installedSkill ? { installedSkill } : {}),
+    registrySkill,
+    ...(localHash ? { localHash } : {}),
+    installedHash: installedSkill?.installed_content_hash,
+    remoteHash,
+    remoteContent,
+    localModified: false,
+    remoteChanged: false,
+    shouldInitializeBaseline: false,
+    hasStaleTargets: staleTargets.length > 0,
+    ...(staleTargets.length > 0 ? { staleTargets } : {}),
+  };
+}
+
+async function recordSourceUnavailableCheck(options: {
+  registrySkill: RegistrySkill;
+  installedSkill: Skill | null;
+  error: unknown;
+  updateSkill: SkillState["updateSkill"];
+  staleTargets?: SkillSourceStaleTarget[];
+}): Promise<RegistrySkillUpdateCheck> {
+  const sourceLastError = sanitizeSourceUpdateError(options.error);
+  let installedSkill = options.installedSkill;
+  if (installedSkill) {
+    installedSkill =
+      (await options.updateSkill(installedSkill.id, {
+        source_last_checked_at: Date.now(),
+        source_last_error: sourceLastError,
+        source_binding_state: installedSkill.source_binding_state || "bound",
+      })) ?? installedSkill;
+  }
+
+  return buildSourceUnavailableCheck(
+    options.registrySkill,
+    installedSkill,
+    options.staleTargets,
+  );
+}
+
+function isDeferredSourceUpdateStatus(
+  status: RegistrySkillUpdateCheck["status"],
+): status is "no-source" | "source-unavailable" | "baseline-missing" {
+  return (
+    status === "no-source" ||
+    status === "source-unavailable" ||
+    status === "baseline-missing"
+  );
 }
 
 export const useSkillStore = create<SkillState>()(
@@ -1966,19 +2217,49 @@ export const useSkillStore = create<SkillState>()(
       computeRegistrySkillHash: computeSkillContentHash,
 
       getRegistrySkillUpdateStatus: async (regSkill) => {
-        const remoteDirectoryFingerprint =
-          await resolveRemoteRegistryDirectoryFingerprint(regSkill);
-        const effectiveRegSkill = {
-          ...regSkill,
-          directory_fingerprint: remoteDirectoryFingerprint,
-        };
-        const remoteContent =
-          await resolveRegistrySkillContent(effectiveRegSkill);
+        let effectiveRegSkill = regSkill;
+        let installedSkill = findInstalledRegistrySkill(
+          get().skills,
+          effectiveRegSkill,
+        );
+        let staleTargets = installedSkill
+          ? getSkillSourceStaleTargets(get(), installedSkill)
+          : [];
+        let remoteContent: string;
+        try {
+          remoteContent = await resolveRegistrySkillContent(effectiveRegSkill);
+          const remoteContentHash = await computeSkillContentHash(remoteContent);
+          const remoteDirectoryFingerprint =
+            await resolveRemoteRegistryDirectoryFingerprint(regSkill, {
+              remoteContentHash,
+              installedSkill,
+            });
+          effectiveRegSkill = {
+            ...regSkill,
+            directory_fingerprint: remoteDirectoryFingerprint,
+          };
+          installedSkill = findInstalledRegistrySkill(
+            get().skills,
+            effectiveRegSkill,
+          );
+          staleTargets = installedSkill
+            ? getSkillSourceStaleTargets(get(), installedSkill)
+            : [];
+        } catch (error) {
+          return recordSourceUnavailableCheck({
+            registrySkill: effectiveRegSkill,
+            installedSkill,
+            error,
+            updateSkill: get().updateSkill,
+            staleTargets,
+          });
+        }
 
         const check = await getRegistrySkillUpdateStatus(
-          findInstalledRegistrySkill(get().skills, effectiveRegSkill),
+          installedSkill,
           effectiveRegSkill,
           remoteContent,
+          { staleTargets },
         );
         await refreshRegistrySkillBaselineIfNeeded(check, get().updateSkill);
         return check;
@@ -1992,7 +2273,8 @@ export const useSkillStore = create<SkillState>()(
 
         if (installedSkill.local_repo_path) {
           installedSkill =
-            (await get().syncSkillFromRepo(installedSkill.id)) ?? installedSkill;
+            (await get().syncSkillFromRepo(installedSkill.id)) ??
+            installedSkill;
         }
 
         const regSkill = findInstalledSkillSourceCandidate(
@@ -2003,18 +2285,35 @@ export const useSkillStore = create<SkillState>()(
           return null;
         }
 
-        const remoteDirectoryFingerprint =
-          await resolveRemoteRegistryDirectoryFingerprint(regSkill);
-        const effectiveRegSkill = {
-          ...regSkill,
-          directory_fingerprint: remoteDirectoryFingerprint,
-        };
-        const remoteContent =
-          await resolveRegistrySkillContent(effectiveRegSkill);
+        let effectiveRegSkill = regSkill;
+        const staleTargets = getSkillSourceStaleTargets(get(), installedSkill);
+        let remoteContent: string;
+        try {
+          remoteContent = await resolveRegistrySkillContent(effectiveRegSkill);
+          const remoteContentHash = await computeSkillContentHash(remoteContent);
+          const remoteDirectoryFingerprint =
+            await resolveRemoteRegistryDirectoryFingerprint(regSkill, {
+              remoteContentHash,
+              installedSkill,
+            });
+          effectiveRegSkill = {
+            ...regSkill,
+            directory_fingerprint: remoteDirectoryFingerprint,
+          };
+        } catch (error) {
+          return recordSourceUnavailableCheck({
+            registrySkill: effectiveRegSkill,
+            installedSkill,
+            error,
+            updateSkill: get().updateSkill,
+            staleTargets,
+          });
+        }
         const check = await getRegistrySkillUpdateStatus(
           installedSkill,
           effectiveRegSkill,
           remoteContent,
+          { staleTargets },
         );
         await refreshRegistrySkillBaselineIfNeeded(check, get().updateSkill);
         return check;
@@ -2026,7 +2325,15 @@ export const useSkillStore = create<SkillState>()(
 
         const check = await get().getRegistrySkillUpdateStatus(regSkill);
         if (!check.installedSkill) {
-          return { status: "not-installed", check };
+          return {
+            status: isDeferredSourceUpdateStatus(check.status)
+              ? check.status
+              : "not-installed",
+            check,
+          };
+        }
+        if (isDeferredSourceUpdateStatus(check.status)) {
+          return { status: check.status, check };
         }
         if (check.status === "up-to-date") {
           const refreshedSkill = await refreshRegistrySkillBaselineIfNeeded(
@@ -2034,6 +2341,13 @@ export const useSkillStore = create<SkillState>()(
             get().updateSkill,
           );
           return { status: "up-to-date", skill: refreshedSkill, check };
+        }
+        const linkedLocalBlock = getLinkedLocalRemoteUpdateBlock(
+          check.installedSkill,
+          check,
+        );
+        if (linkedLocalBlock) {
+          return linkedLocalBlock;
         }
         if (
           (check.status === "conflict" || check.status === "local-modified") &&
@@ -2072,12 +2386,22 @@ export const useSkillStore = create<SkillState>()(
         if (!check.installedSkill) {
           return { status: "not-installed", check };
         }
+        if (isDeferredSourceUpdateStatus(check.status)) {
+          return { status: check.status, check };
+        }
         if (check.status === "up-to-date") {
           const refreshedSkill = await refreshRegistrySkillBaselineIfNeeded(
             check,
             get().updateSkill,
           );
           return { status: "up-to-date", skill: refreshedSkill, check };
+        }
+        const linkedLocalBlock = getLinkedLocalRemoteUpdateBlock(
+          check.installedSkill,
+          check,
+        );
+        if (linkedLocalBlock) {
+          return linkedLocalBlock;
         }
         if (
           (check.status === "conflict" || check.status === "local-modified") &&
@@ -2127,6 +2451,8 @@ export const useSkillStore = create<SkillState>()(
           }
 
           const installedHash = await computeSkillContentHash(effectiveContent);
+          const installedPackageFingerprint =
+            getRegistrySkillInstallPackageFingerprint(regSkill, installedHash);
           const installedAt = Date.now();
           const newSkill = await window.api.skill.create({
             name: regSkill.install_name || regSkill.slug,
@@ -2150,12 +2476,17 @@ export const useSkillStore = create<SkillState>()(
             category: regSkill.category,
             is_builtin: true,
             registry_slug: regSkill.slug,
-            directory_fingerprint: regSkill.directory_fingerprint,
+            directory_fingerprint: installedPackageFingerprint,
             content_url: regSkill.content_url,
             installed_content_hash: installedHash,
             installed_version: regSkill.version,
             installed_at: installedAt,
             updated_from_store_at: installedAt,
+            ...buildSourceBaselineFields({
+              contentHash: installedHash,
+              directoryFingerprint: installedPackageFingerprint,
+              checkedAt: installedAt,
+            }),
             prerequisites: regSkill.prerequisites,
             compatibility: regSkill.compatibility,
           });
@@ -2560,7 +2891,10 @@ Rules:
         const persistedAgentScanState = isObjectRecord(
           persistedState.agentScanState,
         )
-          ? (persistedState.agentScanState as Record<string, AgentSkillScanState>)
+          ? (persistedState.agentScanState as Record<
+              string,
+              AgentSkillScanState
+            >)
           : currentState.agentScanState;
         const persistedTranslationCache = isObjectRecord(
           persistedState.translationCache,

@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SKILL_PACKAGE_FINGERPRINT_ALGORITHM } from "@prompthub/shared/utils/skill-source-update";
 
 const handleMock = vi.fn();
 const deleteAllLocalReposMock = vi.fn().mockResolvedValue(undefined);
-const readCurrentFilesSnapshotMock = vi.fn().mockResolvedValue([
-  { relativePath: "SKILL.md", content: "# Current Skill" },
-]);
+const readCurrentFilesSnapshotMock = vi
+  .fn()
+  .mockResolvedValue([
+    { relativePath: "SKILL.md", content: "# Current Skill" },
+  ]);
 const replaceRepoFilesMock = vi.fn().mockResolvedValue("/managed/skill-1/repo");
 const computeRepoDirectoryFingerprintMock = vi
   .fn()
@@ -58,10 +61,11 @@ async function setupSkillVersionIpc() {
     "fingerprint-after-rollback",
   );
 
-  const [{ registerSkillVersionHandlers }, { IPC_CHANNELS }] = await Promise.all([
-    import("../../../src/main/ipc/skill/version-handlers"),
-    import("@prompthub/shared/constants/ipc-channels"),
-  ]);
+  const [{ registerSkillVersionHandlers }, { IPC_CHANNELS }] =
+    await Promise.all([
+      import("../../../src/main/ipc/skill/version-handlers"),
+      import("@prompthub/shared/constants/ipc-channels"),
+    ]);
 
   const db = createSkillDbMock();
   registerSkillVersionHandlers({ db } as never);
@@ -137,6 +141,7 @@ describe("skill version IPC", () => {
       content: "# Restored Skill",
       instructions: "# Restored Skill",
       directory_fingerprint: "fingerprint-after-rollback",
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
     });
     expect(db.update.mock.calls[0][1]).not.toHaveProperty("source_id");
     expect(result).toEqual(

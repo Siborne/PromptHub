@@ -517,6 +517,132 @@ describe("SkillFullDetailPage async actions", () => {
     );
   });
 
+  it.each([
+    {
+      status: "up-to-date" as const,
+      toastText: "Already up to date",
+      toastType: "success" as const,
+      showsUpdate: false,
+      showsOverwrite: false,
+    },
+    {
+      status: "update-available" as const,
+      toastText: "Update available",
+      toastType: "info" as const,
+      showsUpdate: true,
+      showsOverwrite: false,
+    },
+    {
+      status: "conflict" as const,
+      toastText: "Source and local content both changed",
+      toastType: "warning" as const,
+      showsUpdate: false,
+      showsOverwrite: true,
+    },
+    {
+      status: "baseline-missing" as const,
+      toastText: "Unable to reconcile history",
+      toastType: "warning" as const,
+      showsUpdate: false,
+      showsOverwrite: false,
+    },
+    {
+      status: "source-unavailable" as const,
+      toastText: "Source is unavailable",
+      toastType: "error" as const,
+      showsUpdate: false,
+      showsOverwrite: false,
+    },
+    {
+      status: "no-source" as const,
+      toastText: "This Skill is local only",
+      toastType: "info" as const,
+      showsUpdate: false,
+      showsOverwrite: false,
+    },
+  ])(
+    "renders source update action state for $status",
+    async ({ status, toastText, toastType, showsUpdate, showsOverwrite }) => {
+      const selectedSkill = storeState.skills[0];
+      storeState.getInstalledSkillSourceUpdateStatus = vi
+        .fn()
+        .mockResolvedValue({
+          ...makeUpdateCheck(selectedSkill),
+          status,
+          localModified: status === "local-modified" || status === "conflict",
+          remoteChanged:
+            status === "update-available" || status === "conflict",
+        });
+
+      await act(async () => {
+        await renderWithI18n(<SkillFullDetailPage />, { language: "en" });
+      });
+
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Check Source Updates" }),
+        );
+      });
+
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining(toastText),
+        toastType,
+      );
+      if (showsUpdate) {
+        expect(
+          await screen.findByRole("button", { name: "Update from Source" }),
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          screen.queryByRole("button", { name: "Update from Source" }),
+        ).not.toBeInTheDocument();
+      }
+      if (showsOverwrite) {
+        expect(
+          screen.getByRole("button", { name: "Overwrite local changes" }),
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          screen.queryByRole("button", { name: "Overwrite local changes" }),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
+
+  it("shows linked local guidance when source update is blocked", async () => {
+    const selectedSkill = storeState.skills[0];
+    const updateCheck = makeUpdateCheck(selectedSkill);
+    storeState.getInstalledSkillSourceUpdateStatus = vi
+      .fn()
+      .mockResolvedValue(updateCheck);
+    storeState.updateInstalledSkillFromSource = vi.fn().mockResolvedValue({
+      status: "linked-local-blocked",
+      check: updateCheck,
+      recommendedAction: "convert-to-managed-copy",
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillFullDetailPage />, { language: "en" });
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Check Source Updates" }),
+      );
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Update from Source" }),
+      );
+    });
+
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining("linked to an external folder"),
+      "warning",
+    );
+  });
+
   it("ignores repeated personal notes saves while the first note write is pending", async () => {
     let resolveWrite: (() => void) | undefined;
     const writeLocalFile = vi.fn(
@@ -543,10 +669,9 @@ describe("SkillFullDetailPage async actions", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit notes" }));
-    fireEvent.change(
-      screen.getByRole("textbox", { name: "Personal Notes" }),
-      { target: { value: "Use this for release notes." } },
-    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Personal Notes" }), {
+      target: { value: "Use this for release notes." },
+    });
 
     const saveButton = screen.getByRole("button", { name: "Save" });
     await act(async () => {

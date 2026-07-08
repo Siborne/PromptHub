@@ -228,11 +228,19 @@ describe("skill-installer-repo variant container", () => {
     expect(fsMocks.symlink).not.toHaveBeenCalled();
     expect(fsMocks.cp).toHaveBeenCalledWith(
       "/external/writer",
-      "/prompthub/skills/writer--7dc211f6/repo",
+      expect.stringMatching(
+        /^\/prompthub\/skills\/writer--7dc211f6\/repo\.staging-/,
+      ),
       expect.objectContaining({
         recursive: true,
         filter: expect.any(Function),
       }),
+    );
+    expect(fsMocks.rename).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\/prompthub\/skills\/writer--7dc211f6\/repo\.staging-/,
+      ),
+      "/prompthub/skills/writer--7dc211f6/repo",
     );
     expect(fsMocks.writeFile).toHaveBeenCalledWith(
       "/prompthub/skills/writer--7dc211f6/.prompthub/variant.json",

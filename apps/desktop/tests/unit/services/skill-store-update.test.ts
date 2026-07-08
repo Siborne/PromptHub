@@ -138,9 +138,24 @@ describe("skill store update detection", () => {
       registrySkill,
     );
 
-    expect(status.status).toBe("update-available");
-    expect(status.localModified).toBe(false);
-    expect(status.remoteChanged).toBe(true);
+    expect(status).toMatchObject({
+      status: "update-available",
+      skillId: "skill-writer",
+      sourceIdentity: registrySkill.content_url,
+      localModified: false,
+      remoteChanged: true,
+      shouldInitializeBaseline: false,
+      hasStaleTargets: false,
+      local: expect.objectContaining({
+        contentHash: installedHash,
+      }),
+      baseline: expect.objectContaining({
+        contentHash: installedHash,
+      }),
+      remote: expect.objectContaining({
+        contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    });
   });
 
   it("does not report local-modified when local content already matches the remote source despite a stale install baseline", async () => {
@@ -168,6 +183,33 @@ describe("skill store update detection", () => {
     expect(status.status).toBe("up-to-date");
     expect(status.localModified).toBe(false);
     expect(status.remoteChanged).toBe(false);
+    expect(status.shouldInitializeBaseline).toBe(true);
+    expect(status.baseline).toBeUndefined();
+  });
+
+  it("reports baseline-missing when a legacy install cannot prove local and remote history", async () => {
+    const localSkill = createSkillFixture({
+      id: "skill-writer",
+      name: "writer",
+      registry_slug: "writer",
+      content_url: registrySkill.content_url,
+      content: "# Writer\n\nLocal only edits\n",
+      instructions: "# Writer\n\nLocal only edits\n",
+      installed_content_hash: undefined,
+      installed_directory_fingerprint: undefined,
+    });
+
+    const status = await getRegistrySkillUpdateStatus(
+      localSkill,
+      registrySkill,
+    );
+
+    expect(status).toMatchObject({
+      status: "baseline-missing",
+      localModified: false,
+      remoteChanged: false,
+      shouldInitializeBaseline: false,
+    });
   });
 
   it("does not report update-available for a package when directory fingerprint matches even if the registry version label changed", async () => {
@@ -199,6 +241,78 @@ describe("skill store update detection", () => {
     expect(status.status).toBe("up-to-date");
     expect(status.localModified).toBe(false);
     expect(status.remoteChanged).toBe(false);
+  });
+
+  it("uses installed package baseline to report remote package resource updates", async () => {
+    const currentContent = "# Writer\n\nCurrent package content\n";
+    const installedHash = await computeSkillContentHash(currentContent);
+    const localSkill = createSkillFixture({
+      id: "skill-writer",
+      name: "writer",
+      registry_slug: "writer",
+      content_url: registrySkill.content_url,
+      content: currentContent,
+      instructions: currentContent,
+      installed_content_hash: installedHash,
+      directory_fingerprint: "base-package-fingerprint",
+      installed_directory_fingerprint: "base-package-fingerprint",
+      fingerprint_algorithm: "skill-package-sha256-v1",
+    });
+
+    const status = await getRegistrySkillUpdateStatus(
+      localSkill,
+      {
+        ...registrySkill,
+        content: currentContent,
+        directory_fingerprint: "remote-package-fingerprint",
+      },
+      currentContent,
+    );
+
+    expect(status).toMatchObject({
+      status: "update-available",
+      localModified: false,
+      remoteChanged: true,
+      localDirectoryFingerprint: "base-package-fingerprint",
+      installedDirectoryFingerprint: "base-package-fingerprint",
+      remoteDirectoryFingerprint: "remote-package-fingerprint",
+    });
+  });
+
+  it("uses installed package baseline to report local package modifications", async () => {
+    const currentContent = "# Writer\n\nCurrent package content\n";
+    const installedHash = await computeSkillContentHash(currentContent);
+    const localSkill = createSkillFixture({
+      id: "skill-writer",
+      name: "writer",
+      registry_slug: "writer",
+      content_url: registrySkill.content_url,
+      content: currentContent,
+      instructions: currentContent,
+      installed_content_hash: installedHash,
+      directory_fingerprint: "local-package-fingerprint",
+      installed_directory_fingerprint: "base-package-fingerprint",
+      fingerprint_algorithm: "skill-package-sha256-v1",
+    });
+
+    const status = await getRegistrySkillUpdateStatus(
+      localSkill,
+      {
+        ...registrySkill,
+        content: currentContent,
+        directory_fingerprint: "base-package-fingerprint",
+      },
+      currentContent,
+    );
+
+    expect(status).toMatchObject({
+      status: "local-modified",
+      localModified: true,
+      remoteChanged: false,
+      localDirectoryFingerprint: "local-package-fingerprint",
+      installedDirectoryFingerprint: "base-package-fingerprint",
+      remoteDirectoryFingerprint: "base-package-fingerprint",
+    });
   });
 
   it("reports conflict when both local and remote content changed", async () => {

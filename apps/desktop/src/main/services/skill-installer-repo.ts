@@ -1213,16 +1213,46 @@ export async function saveToLocalRepoBySkillId(
     throw new Error(`Invalid sourceDir: not a directory: ${sourceDir}`);
   }
 
-  if (await fileExists(repoDir)) {
-    await fs.rm(repoDir, { recursive: true, force: true });
+  const suffix = `${Date.now()}-${process.pid}`;
+  const stagingDir = `${repoDir}.staging-${suffix}`;
+  const backupDir = `${repoDir}.old-${suffix}`;
+  await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+  await fs.rm(backupDir, { recursive: true, force: true }).catch(() => {});
+
+  let hadOriginal = false;
+  let movedStagingIntoRepo = false;
+  try {
+    await copyMaterializedSkillDirectory(sourceDir, stagingDir);
+
+    hadOriginal = await fileExists(repoDir);
+    if (hadOriginal) {
+      await fs.rename(repoDir, backupDir);
+    }
+
+    await fs.rename(stagingDir, repoDir);
+    movedStagingIntoRepo = true;
+    await writeVariantSidecarFiles(
+      containerDir,
+      buildSkillVariantSourceMetadata(
+        skill,
+        "copy",
+        path.basename(containerDir),
+      ),
+    );
+    if (hadOriginal) {
+      await fs.rm(backupDir, { recursive: true, force: true });
+    }
+  } catch (error) {
+    if (movedStagingIntoRepo) {
+      await fs.rm(repoDir, { recursive: true, force: true }).catch(() => {});
+    }
+    if (hadOriginal) {
+      await fs.rename(backupDir, repoDir).catch(() => {});
+    }
+    throw error;
+  } finally {
+    await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
   }
-
-  await copyMaterializedSkillDirectory(sourceDir, repoDir);
-
-  await writeVariantSidecarFiles(
-    containerDir,
-    buildSkillVariantSourceMetadata(skill, "copy", path.basename(containerDir)),
-  );
   return repoDir;
 }
 

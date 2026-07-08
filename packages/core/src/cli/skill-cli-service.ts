@@ -20,7 +20,10 @@ import type {
   SkillSafetyScanInput,
   SkillVersion,
 } from "@prompthub/shared/types";
-import { computeDirectoryFingerprint } from "@prompthub/shared/utils/skill-identity";
+import {
+  computeSkillPackageFingerprintV1Sync,
+  SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+} from "@prompthub/shared/utils/skill-source-update";
 
 import { getSkillsDir } from "../runtime-paths";
 import { installSkillFromSource } from "../skills/install-flow";
@@ -62,10 +65,7 @@ async function fileExists(targetPath: string): Promise<boolean> {
   }
 }
 
-function sanitizeString(
-  value: unknown,
-  fallback?: string,
-): string | undefined {
+function sanitizeString(value: unknown, fallback?: string): string | undefined {
   if (typeof value !== "string") {
     return fallback;
   }
@@ -478,6 +478,24 @@ async function saveContent(
   return destinationDir;
 }
 
+function buildCliFingerprintFields(
+  directoryFingerprint: string,
+  options?: { bindSource?: boolean },
+) {
+  return {
+    directory_fingerprint: directoryFingerprint,
+    fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+    ...(options?.bindSource
+      ? {
+          installed_directory_fingerprint: directoryFingerprint,
+          source_last_checked_at: Date.now(),
+          source_last_error: null,
+          source_binding_state: "bound" as const,
+        }
+      : {}),
+  };
+}
+
 async function installFromSkillContent(
   skillContent: string,
   skillDb: SkillDB,
@@ -541,7 +559,9 @@ async function installFromSkillContent(
     is_favorite: false,
     source_url: options?.sourceUrl,
     local_repo_path: localRepoPath,
-    directory_fingerprint: directoryFingerprint,
+    ...buildCliFingerprintFields(directoryFingerprint, {
+      bindSource: Boolean(options?.sourceUrl),
+    }),
   }).id;
 }
 
@@ -625,6 +645,8 @@ async function installFromGithub(
       }
     }
 
+    const directoryFingerprint =
+      await computeRepoDirectoryFingerprintByPath(skillDir);
     return skillDb.create({
       name: manifest.name || repoName,
       description: manifest.description || `Installed from ${sourceUrl}`,
@@ -635,8 +657,7 @@ async function installFromGithub(
       protocol_type: "skill",
       source_url: sourceUrl,
       local_repo_path: skillDir,
-      directory_fingerprint:
-        await computeRepoDirectoryFingerprintByPath(skillDir),
+      ...buildCliFingerprintFields(directoryFingerprint, { bindSource: true }),
       is_favorite: false,
       tags: [],
       original_tags: manifest.tags || ["github"],
@@ -786,7 +807,7 @@ async function computeRepoDirectoryFingerprintByPath(
   absoluteBasePath: string,
 ): Promise<string> {
   const entries = await readRepoFileBuffers(absoluteBasePath);
-  return computeDirectoryFingerprint(entries);
+  return computeSkillPackageFingerprintV1Sync(entries).fingerprint;
 }
 
 async function walkRepoDir<T>(opts: {
@@ -1109,11 +1130,11 @@ export function createCliSkillService(
           if (saved !== skill.local_repo_path) {
             skillDb.update(skill.id, {
               local_repo_path: saved,
-              directory_fingerprint: directoryFingerprint,
+              ...buildCliFingerprintFields(directoryFingerprint),
             });
           } else {
             skillDb.update(skill.id, {
-              directory_fingerprint: directoryFingerprint,
+              ...buildCliFingerprintFields(directoryFingerprint),
             });
           }
           return saved;
@@ -1134,11 +1155,11 @@ export function createCliSkillService(
     if (saved !== skill.local_repo_path) {
       skillDb.update(skill.id, {
         local_repo_path: saved,
-        directory_fingerprint: directoryFingerprint,
+        ...buildCliFingerprintFields(directoryFingerprint),
       });
     } else {
       skillDb.update(skill.id, {
-        directory_fingerprint: directoryFingerprint,
+        ...buildCliFingerprintFields(directoryFingerprint),
       });
     }
     return saved;
@@ -1394,8 +1415,12 @@ export function createCliSkillService(
     if (parsed?.frontmatter.tags !== undefined) {
       update.tags = parsed.frontmatter.tags;
     }
-    update.directory_fingerprint =
-      await computeRepoDirectoryFingerprintByPath(repoPath);
+    Object.assign(
+      update,
+      buildCliFingerprintFields(
+        await computeRepoDirectoryFingerprintByPath(repoPath),
+      ),
+    );
     return skillDb.update(skill.id, update);
   }
 

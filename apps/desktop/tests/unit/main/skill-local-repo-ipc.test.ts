@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SKILL_PACKAGE_FINGERPRINT_ALGORITHM } from "@prompthub/shared/utils/skill-source-update";
 
 const handleMock = vi.fn();
 const saveRemoteGitSkillToLocalRepoBySkillIdMock = vi
@@ -14,7 +15,9 @@ const computeRepoDirectoryFingerprintMock = vi
   .fn()
   .mockResolvedValue("fingerprint-after-copy");
 const isManagedRepoPathMock = vi.fn().mockResolvedValue(true);
-const ensureLocalRepoPathMock = vi.fn().mockResolvedValue("/managed/writer/repo");
+const ensureLocalRepoPathMock = vi
+  .fn()
+  .mockResolvedValue("/managed/writer/repo");
 const renameLocalRepoPathByPathMock = vi.fn().mockResolvedValue(true);
 const writeLocalRepoFileByPathMock = vi.fn().mockResolvedValue(true);
 const deleteLocalRepoFileByPathMock = vi.fn().mockResolvedValue(true);
@@ -157,6 +160,7 @@ describe("skill local repo IPC", () => {
     expect(db.update).toHaveBeenCalledWith("skill-writer", {
       local_repo_path: "/managed/writer/repo",
       directory_fingerprint: "fingerprint-after-copy",
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
     });
   });
 
@@ -210,6 +214,7 @@ describe("skill local repo IPC", () => {
     expect(db.update).toHaveBeenCalledWith("skill-gifgrep", {
       local_repo_path: "/managed/zip-skill/repo",
       directory_fingerprint: "fingerprint-after-copy",
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
     });
   });
 
@@ -297,13 +302,21 @@ describe("skill local repo IPC", () => {
       channel: "SKILL_WRITE_LOCAL_FILE",
       invokeArgs: ["skill-writer", "scripts/main.ts", "updated content"],
       fsMock: writeLocalRepoFileByPathMock,
-      expectedFsArgs: ["/managed/skill-writer/repo", "scripts/main.ts", "updated content"],
+      expectedFsArgs: [
+        "/managed/skill-writer/repo",
+        "scripts/main.ts",
+        "updated content",
+      ],
     },
     {
       channel: "SKILL_RENAME_LOCAL_PATH",
       invokeArgs: ["skill-writer", "scripts/old.ts", "scripts/new.ts"],
       fsMock: renameLocalRepoPathByPathMock,
-      expectedFsArgs: ["/managed/skill-writer/repo", "scripts/old.ts", "scripts/new.ts"],
+      expectedFsArgs: [
+        "/managed/skill-writer/repo",
+        "scripts/old.ts",
+        "scripts/new.ts",
+      ],
     },
     {
       channel: "SKILL_DELETE_LOCAL_FILE",
@@ -369,10 +382,13 @@ describe("skill local repo IPC", () => {
       content: "# Linked",
       instructions: "# Linked",
       directory_fingerprint: "fingerprint-after-copy",
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
     });
     expect(db.update).not.toHaveBeenCalledWith(
       "skill-linked",
-      expect.objectContaining({ local_repo_path: "/managed/skill-linked/repo" }),
+      expect.objectContaining({
+        local_repo_path: "/managed/skill-linked/repo",
+      }),
     );
   });
 
@@ -403,6 +419,7 @@ describe("skill local repo IPC", () => {
       content: "# Updated",
       instructions: "# Updated",
       directory_fingerprint: "fingerprint-after-save",
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
     });
     expect(db.createVersion).not.toHaveBeenCalled();
   });

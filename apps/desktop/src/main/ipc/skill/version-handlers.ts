@@ -5,6 +5,7 @@ import type { SkillIPCContext } from "./shared";
 import { readCurrentFilesSnapshot, replaceRepoFiles } from "./shared";
 import { SkillInstaller } from "../../services/skill-installer";
 import { computeRepoDirectoryFingerprint } from "../../services/skill-repo-sync";
+import { SKILL_PACKAGE_FINGERPRINT_ALGORITHM } from "@prompthub/shared/utils/skill-source-update";
 
 function isValidSkillVersionCreatedAt(value: unknown): boolean {
   if (typeof value === "number") {
@@ -92,7 +93,10 @@ export function registerSkillVersionHandlers({ db }: SkillIPCContext): void {
         content: targetVersion.content,
         instructions: targetVersion.content,
         ...(directoryFingerprint !== undefined
-          ? { directory_fingerprint: directoryFingerprint }
+          ? {
+              directory_fingerprint: directoryFingerprint,
+              fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+            }
           : {}),
       });
       return updatedSkill;
@@ -159,9 +163,7 @@ export function registerSkillVersionHandlers({ db }: SkillIPCContext): void {
           "skill:insertVersionDirect requires version to be a non-negative finite number",
         );
       }
-      if (
-        !isValidSkillVersionCreatedAt(version.createdAt)
-      ) {
+      if (!isValidSkillVersionCreatedAt(version.createdAt)) {
         throw new Error(
           "skill:insertVersionDirect requires createdAt to be a valid ISO date string or finite timestamp",
         );

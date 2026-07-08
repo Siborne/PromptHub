@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Skill } from "@prompthub/shared/types";
-import { computeDirectoryFingerprint } from "@prompthub/shared/utils/skill-identity";
+import {
+  computeSkillPackageFingerprintV1Sync,
+  SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+} from "@prompthub/shared/utils/skill-source-update";
 import {
   buildSkillSyncUpdateFromRepo,
   computeRepoDirectoryFingerprint,
@@ -153,6 +156,7 @@ describe("buildSkillSyncUpdateFromRepo", () => {
 
     expect(next).toEqual({
       directory_fingerprint: "new-directory-fingerprint",
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
     });
   });
 
@@ -183,7 +187,10 @@ describe("computeRepoDirectoryFingerprint", () => {
   });
 
   it("computes a fingerprint from full repo file bytes", async () => {
-    vi.spyOn(SkillInstaller, "readLocalRepoFileBuffersByPath").mockResolvedValue([
+    vi.spyOn(
+      SkillInstaller,
+      "readLocalRepoFileBuffersByPath",
+    ).mockResolvedValue([
       {
         path: "SKILL.md",
         data: new Uint8Array([35, 32, 87, 114, 105, 116, 101, 114, 10]),
@@ -204,7 +211,7 @@ describe("computeRepoDirectoryFingerprint", () => {
       "/repo/path",
     );
     expect(fingerprint).toBe(
-      computeDirectoryFingerprint([
+      computeSkillPackageFingerprintV1Sync([
         {
           path: "SKILL.md",
           data: new Uint8Array([35, 32, 87, 114, 105, 116, 101, 114, 10]),
@@ -220,7 +227,7 @@ describe("computeRepoDirectoryFingerprint", () => {
           data: new Uint8Array([123, 125]),
           isDirectory: false,
         },
-      ]),
+      ]).fingerprint,
     );
   });
 });

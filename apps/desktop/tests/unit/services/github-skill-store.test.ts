@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { computeDirectoryFingerprintFromHashes } from "@prompthub/shared/utils/skill-identity";
 import { loadGitHubSkillRepo } from "../../../src/renderer/services/github-skill-store";
 
 const storeMessages = {
@@ -133,7 +132,7 @@ describe("github skill store identity", () => {
     expect(skills[0]?.source_id).toBeDefined();
   });
 
-  it("keeps the root SKILL.md path and fingerprints the whole root package", async () => {
+  it("keeps the root SKILL.md path without deriving a legacy tree fingerprint", async () => {
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/lewislulu/html-ppt-skill") {
         return JSON.stringify({
@@ -193,29 +192,10 @@ describe("github skill store identity", () => {
         source_url: "https://github.com/lewislulu/html-ppt-skill/tree/main",
       }),
     );
-    expect(skills[0]?.directory_fingerprint).toBe(
-      computeDirectoryFingerprintFromHashes([
-        {
-          path: "SKILL.md",
-          contentHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        },
-        {
-          path: "assets/runtime.js",
-          contentHash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        },
-        {
-          path: "references/themes.md",
-          contentHash: "cccccccccccccccccccccccccccccccccccccccc",
-        },
-        {
-          path: ".github/workflows/ci.yml",
-          contentHash: "dddddddddddddddddddddddddddddddddddddddd",
-        },
-      ]),
-    );
+    expect(skills[0]?.directory_fingerprint).toBeUndefined();
   });
 
-  it("derives directory fingerprints from tree blob hashes", async () => {
+  it("does not expose tree blob hashes as package fingerprints", async () => {
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/example/skills") {
         return JSON.stringify({ default_branch: "main", owner: { login: "example" } });
@@ -254,17 +234,6 @@ describe("github skill store identity", () => {
     });
 
     expect(skills).toHaveLength(1);
-    expect(skills[0]?.directory_fingerprint).toBe(
-      computeDirectoryFingerprintFromHashes([
-        {
-          path: "SKILL.md",
-          contentHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        },
-        {
-          path: "assets/icon.png",
-          contentHash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        },
-      ]),
-    );
+    expect(skills[0]?.directory_fingerprint).toBeUndefined();
   });
 });

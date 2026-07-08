@@ -30,6 +30,11 @@ interface SkillRow {
   local_repo_path: string | null;
   directory_fingerprint: string | null;
   installed_content_hash: string | null;
+  installed_directory_fingerprint: string | null;
+  fingerprint_algorithm: Skill["fingerprint_algorithm"] | null;
+  source_last_checked_at: number | null;
+  source_last_error: string | null;
+  source_binding_state: Skill["source_binding_state"] | null;
   installed_version: string | null;
   installed_at: number | null;
   updated_from_store_at: number | null;
@@ -143,7 +148,7 @@ export class SkillDB {
         id, name, description, content, mcp_config,
         protocol_type, version, author, tags, original_tags, is_favorite,
         source_url, source_id, source_label, source_branch, source_directory, canonical_skill_path, local_repo_path, directory_fingerprint, icon_url, icon_emoji, icon_background, category, is_builtin,
-        registry_slug, content_url, installed_content_hash, installed_version, installed_at,
+        registry_slug, content_url, installed_content_hash, installed_directory_fingerprint, fingerprint_algorithm, source_last_checked_at, source_last_error, source_binding_state, installed_version, installed_at,
         updated_from_store_at, prerequisites, compatibility, current_version,
         version_tracking_enabled, safety_level, safety_score, safety_report, safety_scanned_at,
         created_at, updated_at
@@ -151,7 +156,7 @@ export class SkillDB {
         @id, @name, @description, @content, @mcp_config,
         @protocol_type, @version, @author, @tags, @original_tags, @is_favorite,
         @source_url, @source_id, @source_label, @source_branch, @source_directory, @canonical_skill_path, @local_repo_path, @directory_fingerprint, @icon_url, @icon_emoji, @icon_background, @category, @is_builtin,
-        @registry_slug, @content_url, @installed_content_hash, @installed_version, @installed_at,
+        @registry_slug, @content_url, @installed_content_hash, @installed_directory_fingerprint, @fingerprint_algorithm, @source_last_checked_at, @source_last_error, @source_binding_state, @installed_version, @installed_at,
         @updated_from_store_at, @prerequisites, @compatibility, @current_version,
         @version_tracking_enabled, @safety_level, @safety_score, @safety_report, @safety_scanned_at,
         @created_at, @updated_at
@@ -190,6 +195,12 @@ export class SkillDB {
       "@registry_slug": data.registry_slug || null,
       "@content_url": data.content_url || null,
       "@installed_content_hash": data.installed_content_hash || null,
+      "@installed_directory_fingerprint":
+        data.installed_directory_fingerprint || null,
+      "@fingerprint_algorithm": data.fingerprint_algorithm || null,
+      "@source_last_checked_at": data.source_last_checked_at ?? null,
+      "@source_last_error": data.source_last_error ?? null,
+      "@source_binding_state": data.source_binding_state || null,
       "@installed_version": data.installed_version || null,
       "@installed_at": data.installed_at ?? null,
       "@updated_from_store_at": data.updated_from_store_at ?? null,
@@ -380,6 +391,26 @@ export class SkillDB {
       updates.push("installed_content_hash = ?");
       values.push(data.installed_content_hash);
     }
+    if (data.installed_directory_fingerprint !== undefined) {
+      updates.push("installed_directory_fingerprint = ?");
+      values.push(data.installed_directory_fingerprint);
+    }
+    if (data.fingerprint_algorithm !== undefined) {
+      updates.push("fingerprint_algorithm = ?");
+      values.push(data.fingerprint_algorithm);
+    }
+    if (data.source_last_checked_at !== undefined) {
+      updates.push("source_last_checked_at = ?");
+      values.push(data.source_last_checked_at);
+    }
+    if (data.source_last_error !== undefined) {
+      updates.push("source_last_error = ?");
+      values.push(data.source_last_error);
+    }
+    if (data.source_binding_state !== undefined) {
+      updates.push("source_binding_state = ?");
+      values.push(data.source_binding_state);
+    }
     if (data.installed_version !== undefined) {
       updates.push("installed_version = ?");
       values.push(data.installed_version);
@@ -453,7 +484,9 @@ export class SkillDB {
       ...(data.is_favorite !== undefined && { is_favorite: data.is_favorite }),
       ...(data.source_url !== undefined && { source_url: data.source_url }),
       ...(data.source_id !== undefined && { source_id: data.source_id }),
-      ...(data.source_label !== undefined && { source_label: data.source_label }),
+      ...(data.source_label !== undefined && {
+        source_label: data.source_label,
+      }),
       ...(data.source_branch !== undefined && {
         source_branch: data.source_branch,
       }),
@@ -483,10 +516,27 @@ export class SkillDB {
       ...(data.installed_content_hash !== undefined && {
         installed_content_hash: data.installed_content_hash,
       }),
+      ...(data.installed_directory_fingerprint !== undefined && {
+        installed_directory_fingerprint: data.installed_directory_fingerprint,
+      }),
+      ...(data.fingerprint_algorithm !== undefined && {
+        fingerprint_algorithm: data.fingerprint_algorithm,
+      }),
+      ...(data.source_last_checked_at !== undefined && {
+        source_last_checked_at: data.source_last_checked_at,
+      }),
+      ...(data.source_last_error !== undefined && {
+        source_last_error: data.source_last_error ?? undefined,
+      }),
+      ...(data.source_binding_state !== undefined && {
+        source_binding_state: data.source_binding_state,
+      }),
       ...(data.installed_version !== undefined && {
         installed_version: data.installed_version,
       }),
-      ...(data.installed_at !== undefined && { installed_at: data.installed_at }),
+      ...(data.installed_at !== undefined && {
+        installed_at: data.installed_at,
+      }),
       ...(data.updated_from_store_at !== undefined && {
         updated_from_store_at: data.updated_from_store_at,
       }),
@@ -677,7 +727,7 @@ export class SkillDB {
           id, name, description, content, mcp_config,
           protocol_type, version, author, tags, original_tags, is_favorite,
           source_url, source_id, source_label, source_branch, source_directory, canonical_skill_path, local_repo_path, directory_fingerprint, icon_url, icon_emoji, icon_background, category, is_builtin,
-          registry_slug, content_url, installed_content_hash, installed_version, installed_at,
+          registry_slug, content_url, installed_content_hash, installed_directory_fingerprint, fingerprint_algorithm, source_last_checked_at, source_last_error, source_binding_state, installed_version, installed_at,
           updated_from_store_at, prerequisites, compatibility, current_version,
           version_tracking_enabled, safety_level, safety_score, safety_report, safety_scanned_at,
           created_at, updated_at
@@ -685,7 +735,7 @@ export class SkillDB {
           @id, @name, @description, @content, @mcp_config,
           @protocol_type, @version, @author, @tags, @original_tags, @is_favorite,
           @source_url, @source_id, @source_label, @source_branch, @source_directory, @canonical_skill_path, @local_repo_path, @directory_fingerprint, @icon_url, @icon_emoji, @icon_background, @category, @is_builtin,
-          @registry_slug, @content_url, @installed_content_hash, @installed_version, @installed_at,
+          @registry_slug, @content_url, @installed_content_hash, @installed_directory_fingerprint, @fingerprint_algorithm, @source_last_checked_at, @source_last_error, @source_binding_state, @installed_version, @installed_at,
           @updated_from_store_at, @prerequisites, @compatibility, @current_version,
           @version_tracking_enabled, @safety_level, @safety_score, @safety_report, @safety_scanned_at,
           @created_at, @updated_at
@@ -701,7 +751,9 @@ export class SkillDB {
         "@version": skill.version ?? null,
         "@author": skill.author ?? null,
         "@tags": JSON.stringify(skill.tags ?? []),
-        "@original_tags": JSON.stringify(skill.original_tags ?? skill.tags ?? []),
+        "@original_tags": JSON.stringify(
+          skill.original_tags ?? skill.tags ?? [],
+        ),
         "@is_favorite": skill.is_favorite ? 1 : 0,
         "@source_url": skill.source_url ?? null,
         "@source_id": skill.source_id ?? null,
@@ -719,6 +771,12 @@ export class SkillDB {
         "@registry_slug": skill.registry_slug ?? null,
         "@content_url": skill.content_url ?? null,
         "@installed_content_hash": skill.installed_content_hash ?? null,
+        "@installed_directory_fingerprint":
+          skill.installed_directory_fingerprint ?? null,
+        "@fingerprint_algorithm": skill.fingerprint_algorithm ?? null,
+        "@source_last_checked_at": skill.source_last_checked_at ?? null,
+        "@source_last_error": skill.source_last_error ?? null,
+        "@source_binding_state": skill.source_binding_state ?? null,
         "@installed_version": skill.installed_version ?? null,
         "@installed_at": skill.installed_at ?? null,
         "@updated_from_store_at": skill.updated_from_store_at ?? null,
@@ -818,6 +876,12 @@ export class SkillDB {
       registry_slug: row.registry_slug || undefined,
       content_url: row.content_url || undefined,
       installed_content_hash: row.installed_content_hash || undefined,
+      installed_directory_fingerprint:
+        row.installed_directory_fingerprint || undefined,
+      fingerprint_algorithm: row.fingerprint_algorithm || undefined,
+      source_last_checked_at: row.source_last_checked_at ?? undefined,
+      source_last_error: row.source_last_error || undefined,
+      source_binding_state: row.source_binding_state || undefined,
       installed_version: row.installed_version || undefined,
       installed_at: row.installed_at ?? undefined,
       updated_from_store_at: row.updated_from_store_at ?? undefined,

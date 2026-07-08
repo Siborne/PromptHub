@@ -3309,7 +3309,7 @@ describe("SkillInstaller.scanRemoteGithub", () => {
     expect(result).toHaveLength(1);
     expect(result[0].slug).toBe("gitea-skill");
     expect(result[0].author).toBe("icelemon");
-    expect(result[0].directory_fingerprint).toBeTruthy();
+    expect(result[0].directory_fingerprint).toBeUndefined();
     expect(result[0].source_url).toBe(
       "https://gitea.example.com/icelemon/skills/tree/main/gitea-skill",
     );

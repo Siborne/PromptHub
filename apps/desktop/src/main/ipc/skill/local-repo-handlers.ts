@@ -1,5 +1,7 @@
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants";
+import type { SkillSafetyScanInput } from "@prompthub/shared/types";
+import { SKILL_PACKAGE_FINGERPRINT_ALGORITHM } from "@prompthub/shared/utils/skill-source-update";
 import { SkillInstaller } from "../../services/skill-installer";
 import {
   buildSkillSyncUpdateFromRepo,
@@ -126,6 +128,7 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         repoUrl?: string;
         branch?: string;
         directory?: string;
+        safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
       },
     ) => {
       if (typeof skillId !== "string" || skillId.trim().length === 0) {
@@ -152,12 +155,14 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
           repoUrl: options.repoUrl,
           branch: options.branch,
           directory: options.directory,
+          safetyScan: options.safetyScan,
         });
       const directoryFingerprint =
         await computeRepoDirectoryFingerprint(repoPath);
       db.update(skillId, {
         local_repo_path: repoPath,
         directory_fingerprint: directoryFingerprint,
+        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
       });
       return repoPath;
     },
@@ -170,6 +175,7 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
       skillId: string,
       options?: {
         zipUrl?: string;
+        safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
       },
     ) => {
       if (typeof skillId !== "string" || skillId.trim().length === 0) {
@@ -194,12 +200,14 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
       const repoPath =
         await SkillInstaller.saveRemoteZipSkillToLocalRepoBySkillId(skill, {
           zipUrl: options.zipUrl,
+          safetyScan: options.safetyScan,
         });
       const directoryFingerprint =
         await computeRepoDirectoryFingerprint(repoPath);
       db.update(skillId, {
         local_repo_path: repoPath,
         directory_fingerprint: directoryFingerprint,
+        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
       });
       return repoPath;
     },
@@ -411,6 +419,7 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
           content,
           instructions: content,
           directory_fingerprint: nextFingerprint,
+          fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
         });
       }
       return result;
@@ -506,7 +515,9 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
     IPC_CHANNELS.SKILL_GET_LOCAL_PATH_STATUS,
     async (_, localPath: string) => {
       if (typeof localPath !== "string" || localPath.trim() === "") {
-        throw new Error("skill:getLocalPathStatus requires a non-empty localPath");
+        throw new Error(
+          "skill:getLocalPathStatus requires a non-empty localPath",
+        );
       }
       return SkillInstaller.getLocalPathStatus(localPath);
     },

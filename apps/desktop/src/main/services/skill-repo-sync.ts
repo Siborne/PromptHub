@@ -1,5 +1,8 @@
 import type { Skill, UpdateSkillParams } from "@prompthub/shared/types";
-import { computeDirectoryFingerprint } from "@prompthub/shared/utils/skill-identity";
+import {
+  computeSkillPackageFingerprintV1Sync,
+  SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+} from "@prompthub/shared/utils/skill-source-update";
 import { sanitizeImportedSkillDraft } from "./skill-import-sanitize";
 import { parseSkillMd } from "./skill-validator";
 import { SkillInstaller } from "./skill-installer";
@@ -91,8 +94,18 @@ export function buildSkillSyncUpdateFromRepo(
     changed = true;
   }
 
-  if (directoryFingerprint !== undefined && directoryFingerprint !== skill.directory_fingerprint) {
+  if (
+    directoryFingerprint !== undefined &&
+    directoryFingerprint !== skill.directory_fingerprint
+  ) {
     update.directory_fingerprint = directoryFingerprint;
+    update.fingerprint_algorithm = SKILL_PACKAGE_FINGERPRINT_ALGORITHM;
+    changed = true;
+  } else if (
+    directoryFingerprint !== undefined &&
+    skill.fingerprint_algorithm !== SKILL_PACKAGE_FINGERPRINT_ALGORITHM
+  ) {
+    update.fingerprint_algorithm = SKILL_PACKAGE_FINGERPRINT_ALGORITHM;
     changed = true;
   }
 
@@ -103,7 +116,7 @@ export async function computeRepoDirectoryFingerprint(
   repoPath: string,
 ): Promise<string> {
   const entries = await SkillInstaller.readLocalRepoFileBuffersByPath(repoPath);
-  return computeDirectoryFingerprint(entries);
+  return computeSkillPackageFingerprintV1Sync(entries).fingerprint;
 }
 
 /**

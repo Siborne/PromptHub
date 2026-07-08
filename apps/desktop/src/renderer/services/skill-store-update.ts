@@ -1,8 +1,19 @@
-import type { RegistrySkill, Skill } from "@prompthub/shared/types";
+import type {
+  RegistrySkill,
+  Skill,
+  SkillSourceSnapshot,
+} from "@prompthub/shared/types";
 import { computeStableTextHash } from "@prompthub/shared/utils/skill-identity";
+import {
+  buildSkillSourceUpdateCheck,
+  type SkillSourceStaleTarget,
+} from "@prompthub/shared/utils/skill-source-update";
 
 export type RegistrySkillUpdateStatus =
   | "not-installed"
+  | "no-source"
+  | "source-unavailable"
+  | "baseline-missing"
   | "up-to-date"
   | "update-available"
   | "local-modified"
@@ -10,16 +21,25 @@ export type RegistrySkillUpdateStatus =
 
 export interface RegistrySkillUpdateCheck {
   status: RegistrySkillUpdateStatus;
+  skillId: string;
+  sourceIdentity?: string;
   installedSkill?: Skill;
   registrySkill: RegistrySkill;
+  local?: SkillSourceSnapshot;
+  baseline?: SkillSourceSnapshot;
+  remote?: SkillSourceSnapshot;
   localHash?: string;
   installedHash?: string;
   remoteHash: string;
   localDirectoryFingerprint?: string;
+  installedDirectoryFingerprint?: string;
   remoteDirectoryFingerprint?: string;
   remoteContent: string;
   localModified: boolean;
   remoteChanged: boolean;
+  shouldInitializeBaseline: boolean;
+  hasStaleTargets: boolean;
+  staleTargets?: SkillSourceStaleTarget[];
 }
 
 const PRERELEASE_VERSION_ALIASES = ["alpha", "beta", "rc", "pre", "preview"];
@@ -155,16 +175,26 @@ export async function getRegistrySkillUpdateStatus(
   installedSkill: Skill | null,
   registrySkill: RegistrySkill,
   remoteContent = registrySkill.content,
+  options: {
+    staleTargets?: SkillSourceStaleTarget[];
+    resolvedAt?: number;
+  } = {},
 ): Promise<RegistrySkillUpdateCheck> {
   const remoteHash = await computeSkillContentHash(remoteContent);
   if (!installedSkill) {
     return {
       status: "not-installed",
+      skillId: registrySkill.source_id || registrySkill.slug,
+      ...(registrySkill.source_id
+        ? { sourceIdentity: registrySkill.source_id }
+        : {}),
       registrySkill,
       remoteHash,
       remoteContent,
       localModified: false,
       remoteChanged: true,
+      shouldInitializeBaseline: false,
+      hasStaleTargets: false,
     };
   }
 
@@ -173,44 +203,41 @@ export async function getRegistrySkillUpdateStatus(
   const localHash = await computeSkillContentHash(localContent);
   const installedHash = installedSkill.installed_content_hash;
   const localDirectoryFingerprint = installedSkill.directory_fingerprint;
+  const installedDirectoryFingerprint =
+    installedSkill.installed_directory_fingerprint;
   const remoteDirectoryFingerprint = registrySkill.directory_fingerprint;
-  const localMatchesRemote = localHash === remoteHash;
-  const localModified = localMatchesRemote
-    ? false
-    : Boolean(installedHash && localHash !== installedHash);
-  const directoryChanged = Boolean(
-    localDirectoryFingerprint &&
-      remoteDirectoryFingerprint &&
-      localDirectoryFingerprint !== remoteDirectoryFingerprint,
-  );
-  const contentRemoteChanged = localMatchesRemote
-    ? false
-    : installedHash
-      ? remoteHash !== installedHash
-      : remoteHash !== localHash ||
-        hasRegistrySkillVersionChanged(installedSkill, registrySkill);
-  const remoteChanged = directoryChanged || contentRemoteChanged;
-
-  let status: RegistrySkillUpdateStatus = "up-to-date";
-  if (localModified && remoteChanged) {
-    status = "conflict";
-  } else if (localModified) {
-    status = "local-modified";
-  } else if (remoteChanged) {
-    status = "update-available";
-  }
+  const sourceCheck = buildSkillSourceUpdateCheck({
+    skillId: installedSkill.id,
+    sourceIdentity:
+      registrySkill.source_id ||
+      installedSkill.source_id ||
+      registrySkill.content_url ||
+      registrySkill.source_url ||
+      null,
+    localContentHash: localHash,
+    installedContentHash: installedHash,
+    remoteContentHash: remoteHash,
+    localDirectoryFingerprint,
+    installedDirectoryFingerprint,
+    remoteDirectoryFingerprint,
+    fingerprintAlgorithm: installedSkill.fingerprint_algorithm,
+    localVersion: installedSkill.version,
+    installedVersion: installedSkill.installed_version,
+    remoteVersion: registrySkill.version,
+    resolvedAt: options.resolvedAt,
+    staleTargets: options.staleTargets,
+  });
 
   return {
-    status,
+    ...sourceCheck,
     installedSkill,
     registrySkill,
     localHash,
     installedHash,
     remoteHash,
     localDirectoryFingerprint,
+    installedDirectoryFingerprint,
     remoteDirectoryFingerprint,
     remoteContent,
-    localModified,
-    remoteChanged,
   };
 }

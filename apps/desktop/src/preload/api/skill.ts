@@ -104,7 +104,10 @@ export const skillApi = {
   getMdInstallStatusDetails: (
     skillId: string,
   ): Promise<SkillPlatformInstallStatusMap> =>
-    ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_MD_INSTALL_STATUS_DETAILS, skillId),
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_GET_MD_INSTALL_STATUS_DETAILS,
+      skillId,
+    ),
   installMdSymlink: (
     skillId: string,
     skillMdContent: string,
@@ -148,6 +151,7 @@ export const skillApi = {
       repoUrl: string;
       branch?: string;
       directory?: string;
+      safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
     },
   ) =>
     ipcRenderer.invoke(
@@ -159,6 +163,7 @@ export const skillApi = {
     skillId: string,
     options: {
       zipUrl: string;
+      safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
     },
   ) =>
     ipcRenderer.invoke(

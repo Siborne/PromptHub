@@ -1077,7 +1077,8 @@ export function SkillFullDetailPage({
   );
   const showApplySourceUpdate = sourceUpdateStatus === "update-available";
   const showOverwriteSourceUpdate =
-    sourceUpdateStatus === "local-modified" || sourceUpdateStatus === "conflict";
+    sourceUpdateStatus === "local-modified" ||
+    sourceUpdateStatus === "conflict";
   const sourceUpdateButtonLabel = showApplySourceUpdate
     ? t("skill.updateFromSource", "Update from Source")
     : t("skill.checkSourceUpdatesAction", "Check Source Updates");
@@ -1172,6 +1173,33 @@ export function SkillFullDetailPage({
       );
       return;
     }
+    if (status === "baseline-missing") {
+      showToast(
+        t(
+          "skill.sourceUpdateBaselineMissing",
+          "Unable to reconcile history. Keep local changes as a baseline, reset from source, or detach the source binding.",
+        ),
+        "warning",
+      );
+      return;
+    }
+    if (status === "source-unavailable") {
+      showToast(
+        t(
+          "skill.sourceUnavailable",
+          "Source is unavailable. Check the source URL or try again later.",
+        ),
+        "error",
+      );
+      return;
+    }
+    if (status === "no-source") {
+      showToast(
+        t("skill.sourceUpdateNoSource", "This Skill is local only."),
+        "info",
+      );
+      return;
+    }
 
     showToast(
       t("skill.sourceUpdateUnavailable", "No source update target found"),
@@ -1223,13 +1251,24 @@ export function SkillFullDetailPage({
     try {
       const result = overwriteLocalChanges
         ? await updateInstalledSkillFromSource(selectedSkill.id, {
-          overwriteLocalChanges: true,
-        })
+            overwriteLocalChanges: true,
+          })
         : await updateInstalledSkillFromSource(selectedSkill.id);
       if (!result) {
         showToast(
           t("skill.sourceUpdateUnavailable", "No source update target found"),
           "error",
+        );
+        return;
+      }
+      if (result.status === "linked-local-blocked") {
+        setSourceUpdateStatus(result.check.status);
+        showToast(
+          t(
+            "skill.linkedLocalUpdateBlocked",
+            "This Skill is linked to an external folder. Convert it to a managed copy before updating from source, or update the external folder manually.",
+          ),
+          "warning",
         );
         return;
       }
@@ -1704,10 +1743,7 @@ export function SkillFullDetailPage({
                           aria-hidden="true"
                         />
                       ) : (
-                        <RefreshCwIcon
-                          className="h-4 w-4"
-                          aria-hidden="true"
-                        />
+                        <RefreshCwIcon className="h-4 w-4" aria-hidden="true" />
                       )}
                       {overwriteSourceUpdateLabel}
                     </button>
@@ -1987,10 +2023,7 @@ export function SkillFullDetailPage({
                             onClick={() => setIsEditingUserNotes(true)}
                             disabled={isLoadingUserNotes}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-primary disabled:opacity-50"
-                            aria-label={t(
-                              "skill.editUserNotes",
-                              "Edit notes",
-                            )}
+                            aria-label={t("skill.editUserNotes", "Edit notes")}
                             title={t("skill.editUserNotes", "Edit notes")}
                           >
                             {isLoadingUserNotes ? (
@@ -2014,10 +2047,7 @@ export function SkillFullDetailPage({
                       >
                         {isEditingUserNotes ? (
                           <Textarea
-                            aria-label={t(
-                              "skill.userNotes",
-                              "Personal Notes",
-                            )}
+                            aria-label={t("skill.userNotes", "Personal Notes")}
                             value={draftSkillUserNotes}
                             onChange={(event) =>
                               setDraftSkillUserNotes(event.target.value)

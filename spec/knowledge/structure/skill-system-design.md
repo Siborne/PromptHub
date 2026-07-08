@@ -49,6 +49,32 @@ The package boundary is the Skill directory. `SKILL.md` is the required entrypoi
 }
 ```
 
+### 2.1.1 Source Update Resolver Boundary
+
+Source update checks use an explicit resolver boundary before comparing package
+state. The renderer resolver classifies each source into one adapter kind:
+
+- `remote-store`: marketplace/registry metadata that points to a source.
+- `remote-git`: Git/Gitea/GitHub package source with branch/directory metadata.
+- `remote-zip`: release/archive package source.
+- `content-url`: raw single-file `SKILL.md` source.
+- `local-linked`: external local folder used directly as the My Skills source.
+- `managed-copy`: PromptHub-managed local package directory.
+
+The resolver feeds the shared `B/L/R` reconciliation service. Raw `content-url`
+sources are modeled as a single-file package, so their package fingerprint is
+the fetched `SKILL.md` content hash rather than any registry-provided directory
+fingerprint.
+
+Filesystem-backed package fingerprints are computed through the shared
+`skill-package-sha256-v1` package manifest utility before desktop main or CLI
+write `directory_fingerprint` / `installed_directory_fingerprint` rows. Legacy
+stable-text directory hashes remain available only for compatibility tests and
+old-row comparison; they must not be written with the SHA-256 algorithm label.
+Git tree/API metadata that only exposes blob hashes is not enough to compute
+this v1 package fingerprint, so registry loaders leave `directory_fingerprint`
+empty until a clone/materialized package path can be fingerprinted.
+
 ### 2.2 File System Structure (Export Format)
 
 Skills can be exported as `.skill` files (ZIP archives) or simple folders to be compatible with Claude Code standards where possible.

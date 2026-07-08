@@ -1,4 +1,10 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { FormEvent } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -718,9 +724,7 @@ describe("SkillStore remote loading", () => {
     expect(screen.queryByRole("button", { name: "All" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Office" })).toBeNull();
     expect(screen.getByTestId("skill-store-filter-bar")).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText("Search skills..."),
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search skills...")).toBeInTheDocument();
     expect(
       useSkillStore.getState().remoteStoreEntries.clawhub?.skills[0],
     ).toEqual(
@@ -849,7 +853,9 @@ tags: [clawhub]
 # ${name}
 `;
     const fetchRemoteContent = vi.fn(async (url: string) => {
-      if (url === "https://clawhub.ai/api/v1/skills?sort=recommended&limit=24") {
+      if (
+        url === "https://clawhub.ai/api/v1/skills?sort=recommended&limit=24"
+      ) {
         return JSON.stringify({
           items: [{ slug: "first-skill", owner: "coderclaw" }],
           nextCursor: "cursor-2",
@@ -867,7 +873,8 @@ tags: [clawhub]
       }
 
       if (
-        url === "https://clawhub.ai/api/v1/skills/first-skill/file?path=SKILL.md"
+        url ===
+        "https://clawhub.ai/api/v1/skills/first-skill/file?path=SKILL.md"
       ) {
         return skillMd("first-skill");
       }
@@ -960,7 +967,9 @@ tags: [clawhub]
 
   it("refreshes stale ClawHub first-page caches that were loaded without cursor pagination", async () => {
     const fetchRemoteContent = vi.fn(async (url: string) => {
-      if (url === "https://clawhub.ai/api/v1/skills?sort=recommended&limit=24") {
+      if (
+        url === "https://clawhub.ai/api/v1/skills?sort=recommended&limit=24"
+      ) {
         return JSON.stringify({
           items: [{ slug: "fresh-clawhub-skill", owner: "coderclaw" }],
           nextCursor: "fresh-cursor-2",
@@ -1028,8 +1037,7 @@ tags: [clawhub]
           query: "recommended",
           skills: expect.arrayContaining([
             expect.objectContaining({
-              source_url:
-                "https://clawhub.ai/coderclaw/fresh-clawhub-skill",
+              source_url: "https://clawhub.ai/coderclaw/fresh-clawhub-skill",
             }),
           ]),
         }),
@@ -1540,9 +1548,7 @@ tags: [clawhub]
     });
 
     await waitFor(() => {
-      expect(
-        useSkillStore.getState().remoteStoreEntries.community,
-      ).toEqual(
+      expect(useSkillStore.getState().remoteStoreEntries.community).toEqual(
         expect.objectContaining({
           query: "topic:nextjs:",
           skills: [
@@ -2540,7 +2546,9 @@ tags: [clawhub]
   it("labels quick-install package persistence errors as install failures", async () => {
     const installRegistrySkill = vi
       .fn()
-      .mockRejectedValue(new Error("SKILL.md not found in directory: skills/demo"));
+      .mockRejectedValue(
+        new Error("SKILL.md not found in directory: skills/demo"),
+      );
     const scanRemoteGithub = vi.fn().mockResolvedValue([
       {
         slug: "demo",
@@ -2814,7 +2822,9 @@ tags: [clawhub]
           }),
         },
         skill: {
-          fetchRemoteContent: vi.fn().mockResolvedValue(makeSkillsShLeaderboard(0)),
+          fetchRemoteContent: vi
+            .fn()
+            .mockResolvedValue(makeSkillsShLeaderboard(0)),
           scanLocalPreview: vi.fn().mockResolvedValue([]),
           scanSafety: vi.fn().mockResolvedValue({
             level: "safe",
@@ -3248,6 +3258,48 @@ tags: [clawhub]
     });
   });
 
+  it("shows linked local guidance when a store update is blocked", async () => {
+    const check = { status: "update-available" };
+    const getRegistrySkillUpdateStatus = vi.fn().mockResolvedValue(check);
+    const updateRegistrySkill = vi.fn().mockResolvedValue({
+      status: "linked-local-blocked",
+      check,
+      recommendedAction: "convert-to-managed-copy",
+    });
+    useSkillStore.setState({
+      getRegistrySkillUpdateStatus,
+      updateRegistrySkill,
+      getTranslationState: vi.fn().mockReturnValue({
+        value: null,
+        hasTranslation: false,
+        isStale: false,
+      }),
+    } as never);
+
+    await renderWithI18n(
+      <SkillStoreDetail
+        skill={makeRegistrySkill("linked-update", {
+          content_url: "https://example.com/linked-update/SKILL.md",
+        })}
+        isInstalled
+        onClose={vi.fn()}
+      />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Check update/i }));
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /^Update$/i }));
+    });
+
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining("linked to an external folder"),
+      "warning",
+    );
+  });
+
   it("opens the installed My Skills detail from the imported status action", async () => {
     const onClose = vi.fn();
     useSkillStore.setState({
@@ -3453,9 +3505,7 @@ tags: [clawhub]
     await renderWithI18n(<SkillStore />, { language: "en" });
     await screen.findByText("Alpha");
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Batch manage store" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Batch manage store" }));
     fireEvent.click(screen.getByText("Alpha"));
 
     expect(screen.getByText("1 selected")).toBeInTheDocument();
@@ -3502,9 +3552,7 @@ tags: [clawhub]
     await renderWithI18n(<SkillStore />, { language: "en" });
     await screen.findByText("Beta");
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Batch manage store" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Batch manage store" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Select visible store skills" }),
     );
@@ -3583,9 +3631,7 @@ tags: [clawhub]
     await renderWithI18n(<SkillStore />, { language: "en" });
     await screen.findByText("Beta");
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Batch manage store" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Batch manage store" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Select visible store skills" }),
     );
@@ -3655,9 +3701,7 @@ tags: [clawhub]
     await renderWithI18n(<SkillStore />, { language: "en" });
     await screen.findByText("Beta");
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Batch manage store" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Batch manage store" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Select visible store skills" }),
     );

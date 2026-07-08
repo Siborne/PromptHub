@@ -167,9 +167,8 @@ export function SkillStoreDetail({
   const updateCheckInFlightRef = useRef(false);
   const updateInFlightRef = useRef(false);
   const translationInFlightRef = useRef(false);
-  const safetyScanInFlightRef = useRef<Promise<SkillSafetyReport | null> | null>(
-    null,
-  );
+  const safetyScanInFlightRef =
+    useRef<Promise<SkillSafetyReport | null> | null>(null);
   const [translationSidecar, setTranslationSidecar] =
     useState<SkillTranslationSidecar | null>(null);
   const skillSourceKey = skill.source_id || skill.slug || skill.source_url;
@@ -625,19 +624,31 @@ export function SkillStoreDetail({
     try {
       const check = await getRegistrySkillUpdateStatus(skill);
       setUpdateStatus(check.status);
-      const message =
-        check.status === "update-available"
-          ? t("skill.updateAvailable", "Update available")
-          : check.status === "conflict"
-            ? t(
-                "skill.updateConflict",
-                "Local changes conflict with the store update",
-              )
-            : check.status === "local-modified"
-              ? t("skill.localModified", "Local changes detected")
-              : check.status === "up-to-date"
-                ? t("skill.upToDate", "Already up to date")
-                : t("skill.notInstalled", "Not installed");
+      let message = t("skill.notInstalled", "Not installed");
+      if (check.status === "update-available") {
+        message = t("skill.updateAvailable", "Update available");
+      } else if (check.status === "conflict") {
+        message = t(
+          "skill.updateConflict",
+          "Local changes conflict with the store update",
+        );
+      } else if (check.status === "local-modified") {
+        message = t("skill.localModified", "Local changes detected");
+      } else if (check.status === "baseline-missing") {
+        message = t(
+          "skill.sourceUpdateBaselineMissing",
+          "Unable to reconcile history. Keep local changes as a baseline, reset from source, or detach the source binding.",
+        );
+      } else if (check.status === "source-unavailable") {
+        message = t(
+          "skill.sourceUnavailable",
+          "Source is unavailable. Check the source URL or try again later.",
+        );
+      } else if (check.status === "no-source") {
+        message = t("skill.sourceUpdateNoSource", "This Skill is local only.");
+      } else if (check.status === "up-to-date") {
+        message = t("skill.upToDate", "Already up to date");
+      }
       showToast(
         message,
         check.status === "update-available" ? "success" : "info",
@@ -665,6 +676,17 @@ export function SkillStoreDetail({
       });
       if (!result) {
         showToast(t("skill.updateFailed", "Failed"), "error");
+        return;
+      }
+      if (result.status === "linked-local-blocked") {
+        setUpdateStatus(result.check.status);
+        showToast(
+          t(
+            "skill.linkedLocalUpdateBlocked",
+            "This Skill is linked to an external folder. Convert it to a managed copy before updating from source, or update the external folder manually.",
+          ),
+          "warning",
+        );
         return;
       }
       setUpdateStatus(result.status);

@@ -1,4 +1,8 @@
 import type { Skill } from "@prompthub/shared/types";
+import {
+  LEGACY_STABLE_TEXT_FINGERPRINT_ALGORITHM,
+  SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+} from "@prompthub/shared/utils/skill-source-update";
 
 const SKILL_CATEGORIES = new Set<NonNullable<Skill["category"]>>([
   "general",
@@ -12,6 +16,15 @@ const SKILL_CATEGORIES = new Set<NonNullable<Skill["category"]>>([
   "security",
   "meta",
 ]);
+const FINGERPRINT_ALGORITHMS = new Set<
+  NonNullable<Skill["fingerprint_algorithm"]>
+>([
+  SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+  LEGACY_STABLE_TEXT_FINGERPRINT_ALGORITHM,
+]);
+const SOURCE_BINDING_STATES = new Set<
+  NonNullable<Skill["source_binding_state"]>
+>(["bound", "detached", "missing-baseline"]);
 
 function normalizeString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -83,6 +96,24 @@ function normalizeCategory(value: unknown): Skill["category"] | undefined {
     : undefined;
 }
 
+function normalizeFingerprintAlgorithm(
+  value: unknown,
+): Skill["fingerprint_algorithm"] | undefined {
+  return typeof value === "string" &&
+    FINGERPRINT_ALGORITHMS.has(value as Skill["fingerprint_algorithm"])
+    ? (value as Skill["fingerprint_algorithm"])
+    : undefined;
+}
+
+function normalizeSourceBindingState(
+  value: unknown,
+): Skill["source_binding_state"] | undefined {
+  return typeof value === "string" &&
+    SOURCE_BINDING_STATES.has(value as Skill["source_binding_state"])
+    ? (value as Skill["source_binding_state"])
+    : undefined;
+}
+
 export function normalizeSkill(skill: Skill): Skill {
   const safetyReport = skill.safetyReport
     ? {
@@ -99,7 +130,9 @@ export function normalizeSkill(skill: Skill): Skill {
     compatibility: normalizeStringArray(skill.compatibility),
     created_at: normalizeNumber(skill.created_at) ?? 0,
     updated_at:
-      normalizeNumber(skill.updated_at) ?? normalizeNumber(skill.created_at) ?? 0,
+      normalizeNumber(skill.updated_at) ??
+      normalizeNumber(skill.created_at) ??
+      0,
     currentVersion: normalizeNumber(skill.currentVersion) ?? 0,
     author: normalizeString(skill.author),
     description: normalizeString(skill.description),
@@ -114,6 +147,26 @@ export function normalizeSkill(skill: Skill): Skill {
     canonical_skill_path: normalizeNonEmptyString(skill.canonical_skill_path),
     local_repo_path: normalizeNonEmptyString(skill.local_repo_path),
     directory_fingerprint: normalizeNonEmptyString(skill.directory_fingerprint),
+    installed_content_hash: normalizeNonEmptyString(
+      skill.installed_content_hash,
+    ),
+    installed_directory_fingerprint: normalizeNonEmptyString(
+      skill.installed_directory_fingerprint,
+    ),
+    fingerprint_algorithm: normalizeFingerprintAlgorithm(
+      skill.fingerprint_algorithm,
+    ),
+    source_last_checked_at: normalizeNumber(skill.source_last_checked_at),
+    source_last_error:
+      skill.source_last_error === null
+        ? null
+        : normalizeString(skill.source_last_error),
+    source_binding_state: normalizeSourceBindingState(
+      skill.source_binding_state,
+    ),
+    installed_version: normalizeNonEmptyString(skill.installed_version),
+    installed_at: normalizeNumber(skill.installed_at),
+    updated_from_store_at: normalizeNumber(skill.updated_from_store_at),
     icon_url: normalizeNonEmptyString(skill.icon_url),
     icon_emoji: normalizeNonEmptyString(skill.icon_emoji),
     icon_background: normalizeNonEmptyString(skill.icon_background),

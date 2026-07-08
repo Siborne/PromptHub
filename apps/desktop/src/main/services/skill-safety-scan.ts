@@ -198,6 +198,15 @@ interface ScanDeps {
   aiChat?: typeof chatCompletion;
 }
 
+export interface SkillSafetyPreflightReport {
+  level: SkillSafetyLevel;
+  summary: string;
+  findings: SkillSafetyFinding[];
+  recommendedAction: "allow" | "review" | "block";
+  scannedAt: number;
+  checkedFileCount: number;
+}
+
 function isTextFile(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   if (!ext) {
@@ -366,8 +375,11 @@ function deriveLevel(findings: SkillSafetyFinding[]): SkillSafetyLevel {
         "dangerous-delete",
         "encoded-powershell",
         "encoded-shell-bootstrap",
-        "internal-source",
       ].includes(finding.code),
+    ) ||
+    findings.some(
+      (finding) =>
+        finding.code === "internal-source" && finding.severity === "high",
     )
   ) {
     return "blocked";
@@ -557,6 +569,47 @@ function scanRepoFiles(
   }
 
   return checkedFileCount;
+}
+
+export async function scanSkillSafetyPreflight(
+  input: Omit<SkillSafetyScanInput, "aiConfig">,
+  deps: Pick<ScanDeps, "now" | "readRepoFiles" | "resolveAddress"> = {},
+): Promise<SkillSafetyPreflightReport> {
+  const resolveAddress = deps.resolveAddress ?? resolvePublicAddress;
+  const readRepoFiles = deps.readRepoFiles ?? readRepoFilesFromPath;
+  const now = deps.now?.() ?? Date.now();
+
+  let checkedFileCount = input.content ? 1 : 0;
+  const findings: SkillSafetyFinding[] = [];
+
+  if (input.localRepoPath) {
+    const repoFiles = await readRepoFiles(input.localRepoPath);
+    checkedFileCount = Math.max(
+      checkedFileCount,
+      scanRepoFiles(repoFiles, findings),
+    );
+  }
+  if (input.content) {
+    scanTextContent(findings, input.content, "SKILL.md");
+  }
+
+  await scanSourceUrls(input, findings, resolveAddress);
+
+  const dedupedFindings = dedupeFindings(findings);
+  const level = deriveLevel(dedupedFindings);
+  return {
+    level,
+    summary: buildSummary(level, dedupedFindings, checkedFileCount),
+    findings: dedupedFindings,
+    recommendedAction:
+      level === "blocked"
+        ? "block"
+        : level === "high-risk"
+          ? "review"
+          : "allow",
+    scannedAt: now,
+    checkedFileCount,
+  };
 }
 
 // ─── AI-powered safety scanning ───────────────────────────────────

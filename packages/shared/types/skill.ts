@@ -3,6 +3,12 @@ import type { SkillPlatform } from "../constants/platforms";
 
 export type SkillVisibility = "private" | "shared";
 
+export type SkillPackageFingerprintAlgorithm =
+  | "skill-package-sha256-v1"
+  | "legacy-stable-text-v1";
+
+export type SkillSourceBindingState = "bound" | "detached" | "missing-baseline";
+
 export interface Skill {
   id: string;
   ownerUserId?: string | null;
@@ -43,6 +49,11 @@ export interface Skill {
   registry_slug?: string; // Unique slug in the registry
   content_url?: string; // Remote SKILL.md URL
   installed_content_hash?: string; // Hash of the last store-installed/updated content
+  installed_directory_fingerprint?: string; // Fingerprint of the last source-installed package
+  fingerprint_algorithm?: SkillPackageFingerprintAlgorithm; // Algorithm for current and installed package fingerprints
+  source_last_checked_at?: number; // Last source update reconciliation timestamp
+  source_last_error?: string | null; // Sanitized last source update/check error
+  source_binding_state?: SkillSourceBindingState; // Source binding state for reconciliation UX
   installed_version?: string; // Store version at the last install/update
   installed_at?: number; // Timestamp of initial store install
   updated_from_store_at?: number; // Timestamp of the latest store update
@@ -321,6 +332,54 @@ export interface SkillDeleteOptions {
 export interface SkillLocalPathStatus {
   exists: boolean;
   mode?: SkillInstallMode;
+}
+
+export type SkillSourceUpdateStatus =
+  | "no-source"
+  | "source-unavailable"
+  | "baseline-missing"
+  | "up-to-date"
+  | "update-available"
+  | "local-modified"
+  | "conflict";
+
+export type SkillSourceMode =
+  | "managed-copy"
+  | "local-linked"
+  | "content-url"
+  | "remote-store"
+  | "remote-git"
+  | "remote-zip"
+  | "no-source";
+
+export interface SkillSourceSnapshot {
+  contentHash?: string;
+  directoryFingerprint?: string;
+  version?: string;
+  fingerprintAlgorithm: SkillPackageFingerprintAlgorithm;
+  resolvedAt: number;
+}
+
+export interface SkillSourceStaleTarget {
+  targetType: "project" | "agent";
+  targetId: string;
+  installMode: "copy" | "symlink" | "external";
+  currentFingerprint?: string;
+  expectedFingerprint?: string;
+}
+
+export interface SkillSourceUpdateCheck {
+  status: SkillSourceUpdateStatus;
+  skillId: string;
+  sourceIdentity?: string;
+  local?: SkillSourceSnapshot;
+  baseline?: SkillSourceSnapshot;
+  remote?: SkillSourceSnapshot;
+  localModified: boolean;
+  remoteChanged: boolean;
+  shouldInitializeBaseline: boolean;
+  hasStaleTargets: boolean;
+  staleTargets?: SkillSourceStaleTarget[];
 }
 
 /**
