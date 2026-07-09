@@ -491,6 +491,264 @@ describe("CoreMcpLibraryService", () => {
 
     expect(result.overwrittenServerNames).toEqual(["fetch"]);
     expect(service.read().bindings[0].serverIds).toEqual([server.id]);
+    expect(service.read().bindings[0].entryDigests?.[server.id]).toEqual(
+      expect.objectContaining({
+        algorithm: "mcp-target-entry-sha256-v1",
+        serverName: "fetch",
+        digest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
+  });
+
+  it("syncs stale managed targets without returning secret-bearing content", () => {
+    const service = new CoreMcpLibraryService();
+    const server = service.createServer({
+      name: "mineru",
+      displayName: "MinerU",
+      transport: "stdio",
+      command: process.execPath,
+      args: ["mineru-mcp"],
+      env: {
+        MINERU_TOKEN: "ph-token-mineru-old",
+      },
+    });
+    const targetPath = path.join(userDataPath, "target", "mcp.json");
+
+    service.apply({
+      target: "claude",
+      scope: "custom",
+      path: targetPath,
+      serverIds: [server.id],
+    });
+    service.updateServer(server.id, {
+      env: {
+        MINERU_TOKEN: "ph-token-mineru-new",
+      },
+    });
+
+    expect(service.checkServerTargetSync(server.id)).toEqual([
+      expect.objectContaining({
+        status: "needs-sync",
+        safeToReapply: true,
+      }),
+    ]);
+
+    const result = service.syncServerToBoundTargets(server.id);
+    const written = JSON.parse(fs.readFileSync(targetPath, "utf8"));
+
+    expect(result.updated).toEqual([
+      expect.objectContaining({
+        path: targetPath,
+        serverName: "mineru",
+        backupPath: expect.any(String),
+      }),
+    ]);
+    expect(JSON.stringify(result)).not.toContain("ph-token-mineru-new");
+    expect(written.mcpServers.mineru.env.MINERU_TOKEN).toBe(
+      "ph-token-mineru-new",
+    );
+    expect(service.checkServerTargetSync(server.id)[0]).toMatchObject({
+      status: "synced",
+      safeToReapply: false,
+    });
+  });
+
+  it("detects target-side JSON entry fields that PromptHub does not project", () => {
+    const service = new CoreMcpLibraryService();
+    const server = service.createServer({
+      name: "mineru",
+      displayName: "MinerU",
+      transport: "stdio",
+      command: process.execPath,
+      args: ["mineru-mcp"],
+    });
+    const targetPath = path.join(userDataPath, "target", "mcp.json");
+
+    service.apply({
+      target: "claude",
+      scope: "custom",
+      path: targetPath,
+      serverIds: [server.id],
+    });
+    const target = JSON.parse(fs.readFileSync(targetPath, "utf8"));
+    target.mcpServers.mineru.description = "external local note";
+    fs.writeFileSync(targetPath, JSON.stringify(target, null, 2), "utf8");
+
+    expect(service.checkServerTargetSync(server.id)[0]).toMatchObject({
+      status: "external-modified",
+      safeToReapply: false,
+    });
+
+    const result = service.syncServerToBoundTargets(server.id);
+    const written = JSON.parse(fs.readFileSync(targetPath, "utf8"));
+
+    expect(result.updated).toEqual([]);
+    expect(result.blocked).toEqual([
+      expect.objectContaining({ status: "external-modified" }),
+    ]);
+    expect(written.mcpServers.mineru.description).toBe("external local note");
+  });
+
+  it("skips external modifications and disabled platforms during sync", () => {
+    const service = new CoreMcpLibraryService();
+    const server = service.createServer({
+      name: "mineru",
+      displayName: "MinerU",
+      transport: "stdio",
+      command: process.execPath,
+      args: ["mineru-mcp"],
+      env: {
+        MINERU_TOKEN: "ph-token-mineru-old",
+      },
+    });
+    const targetPath = path.join(userDataPath, "target", "mcp.json");
+
+    service.apply({
+      target: "claude",
+      scope: "custom",
+      path: targetPath,
+      serverIds: [server.id],
+    });
+    const external = JSON.parse(fs.readFileSync(targetPath, "utf8"));
+    external.mcpServers.mineru.env.MINERU_TOKEN = "ph-token-external";
+    fs.writeFileSync(targetPath, JSON.stringify(external, null, 2), "utf8");
+    service.updateServer(server.id, {
+      env: { MINERU_TOKEN: "ph-token-mineru-new" },
+    });
+
+    expect(service.checkServerTargetSync(server.id)[0]).toMatchObject({
+      status: "conflict",
+      safeToReapply: false,
+    });
+
+    const result = service.syncServerToBoundTargets(server.id, {
+      disabledPlatformIds: ["claude"],
+    });
+    const written = JSON.parse(fs.readFileSync(targetPath, "utf8"));
+
+    expect(result.updated).toEqual([]);
+    expect(result.skipped).toEqual([
+      expect.objectContaining({ status: "skipped-disabled-platform" }),
+    ]);
+    expect(JSON.stringify(result)).not.toContain("ph-token");
+    expect(written.mcpServers.mineru.env.MINERU_TOKEN).toBe(
+      "ph-token-external",
+    );
+  });
+
+  it("classifies missing, parse-error, disabled, and legacy sync states", () => {
+    const createAppliedServer = (name: string) => {
+      const service = new CoreMcpLibraryService();
+      const server = service.createServer({
+        name,
+        displayName: name,
+        transport: "stdio",
+        command: process.execPath,
+        args: [`${name}-mcp`],
+      });
+      const targetPath = path.join(userDataPath, "target", `${name}.json`);
+      service.apply({
+        target: "claude",
+        scope: "custom",
+        path: targetPath,
+        serverIds: [server.id],
+      });
+      return { service, server, targetPath };
+    };
+
+    const missing = createAppliedServer("missing");
+    fs.rmSync(missing.targetPath);
+    expect(missing.service.checkServerTargetSync(missing.server.id)[0]).toEqual(
+      expect.objectContaining({
+        status: "missing-target",
+        safeToReapply: false,
+      }),
+    );
+
+    const missingEntry = createAppliedServer("missing-entry");
+    fs.writeFileSync(
+      missingEntry.targetPath,
+      JSON.stringify({ mcpServers: {} }),
+      "utf8",
+    );
+    expect(
+      missingEntry.service.checkServerTargetSync(missingEntry.server.id)[0],
+    ).toEqual(
+      expect.objectContaining({
+        status: "missing-entry",
+        safeToReapply: false,
+      }),
+    );
+
+    const parseError = createAppliedServer("parse-error");
+    fs.writeFileSync(parseError.targetPath, "{ invalid json", "utf8");
+    expect(
+      parseError.service.checkServerTargetSync(parseError.server.id)[0],
+    ).toEqual(
+      expect.objectContaining({
+        status: "parse-error",
+        safeToReapply: false,
+      }),
+    );
+
+    const disabled = createAppliedServer("disabled");
+    disabled.service.updateServer(disabled.server.id, { enabled: false });
+    expect(
+      disabled.service.checkServerTargetSync(disabled.server.id)[0],
+    ).toEqual(
+      expect.objectContaining({
+        status: "skipped-server-disabled",
+        safeToReapply: false,
+      }),
+    );
+
+    const legacySynced = createAppliedServer("legacy-synced");
+    const legacyFile = JSON.parse(
+      fs.readFileSync(getMcpLibraryFilePath(), "utf8"),
+    );
+    const legacyBinding = legacyFile.bindings.find((binding: any) =>
+      binding.serverIds.includes(legacySynced.server.id),
+    );
+    delete legacyBinding.entryDigests;
+    fs.writeFileSync(
+      getMcpLibraryFilePath(),
+      JSON.stringify(legacyFile),
+      "utf8",
+    );
+    expect(
+      legacySynced.service.checkServerTargetSync(legacySynced.server.id)[0],
+    ).toEqual(expect.objectContaining({ status: "synced" }));
+    expect(
+      legacySynced.service.read().bindings[0].entryDigests?.[
+        legacySynced.server.id
+      ],
+    ).toEqual(
+      expect.objectContaining({ algorithm: "mcp-target-entry-sha256-v1" }),
+    );
+
+    const legacyReview = createAppliedServer("legacy-review");
+    const reviewFile = JSON.parse(
+      fs.readFileSync(getMcpLibraryFilePath(), "utf8"),
+    );
+    const reviewBinding = reviewFile.bindings.find((binding: any) =>
+      binding.serverIds.includes(legacyReview.server.id),
+    );
+    delete reviewBinding.entryDigests;
+    fs.writeFileSync(
+      getMcpLibraryFilePath(),
+      JSON.stringify(reviewFile),
+      "utf8",
+    );
+    const target = JSON.parse(fs.readFileSync(legacyReview.targetPath, "utf8"));
+    target.mcpServers["legacy-review"].args = ["external-edit"];
+    fs.writeFileSync(
+      legacyReview.targetPath,
+      JSON.stringify(target, null, 2),
+      "utf8",
+    );
+    expect(
+      legacyReview.service.checkServerTargetSync(legacyReview.server.id)[0],
+    ).toEqual(expect.objectContaining({ status: "legacy-needs-review" }));
   });
 
   it("writes and removes OpenCode MCP entries without touching unrelated user config", () => {
@@ -969,6 +1227,35 @@ describe("CoreMcpLibraryService", () => {
     });
   });
 
+  it("warns when env values use unresolved config-file references", () => {
+    const service = new CoreMcpLibraryService();
+    const mineru = service.createServer({
+      name: "mineru",
+      displayName: "MinerU",
+      transport: "stdio",
+      command: process.execPath,
+      args: ["mineru-mcp"],
+      env: {
+        MINERU_TOKEN: "${MINERU_TOKEN}",
+      },
+    });
+
+    expect(service.checkServer(mineru.id)).toMatchObject({
+      serverId: mineru.id,
+      status: "warning",
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "UNRESOLVED_ENV_REFERENCE",
+          severity: "warning",
+          field: "MINERU_TOKEN",
+        }),
+      ]),
+    });
+    expect(JSON.stringify(service.checkServer(mineru.id))).not.toContain(
+      "ph-token",
+    );
+  });
+
   it("applies Codex TOML targets with a backup and managed block", () => {
     const service = new CoreMcpLibraryService();
     const server = service.createServer({
@@ -1000,6 +1287,108 @@ describe("CoreMcpLibraryService", () => {
       path: targetPath,
       serverIds: [server.id],
     });
+  });
+
+  it("syncs one Codex server without deleting other managed servers", () => {
+    const service = new CoreMcpLibraryService();
+    const first = service.createServer({
+      name: "filesystem",
+      displayName: "Filesystem",
+      transport: "stdio",
+      command: "npx",
+      args: ["@modelcontextprotocol/server-filesystem", "/tmp"],
+    });
+    const second = service.createServer({
+      name: "memory",
+      displayName: "Memory",
+      transport: "stdio",
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-memory"],
+      env: {
+        MEMORY_FILE_PATH: "/tmp/memory.json",
+      },
+    });
+    const targetPath = path.join(userDataPath, ".codex", "config.toml");
+
+    service.apply({
+      target: "codex",
+      scope: "custom",
+      path: targetPath,
+      serverIds: [first.id, second.id],
+    });
+    service.updateServer(first.id, {
+      args: ["@modelcontextprotocol/server-filesystem", "/var/tmp"],
+    });
+
+    const result = service.syncServerToBoundTargets(first.id);
+    const written = fs.readFileSync(targetPath, "utf8");
+
+    expect(result.updated).toEqual([
+      expect.objectContaining({
+        serverName: "filesystem",
+        path: targetPath,
+      }),
+    ]);
+    expect(written).toContain("[mcp_servers.filesystem]");
+    expect(written).toContain('"/var/tmp"');
+    expect(written).toContain("[mcp_servers.memory]");
+    expect(written).toContain("@modelcontextprotocol/server-memory");
+    expect(service.checkServerTargetSync(second.id)[0]).toMatchObject({
+      status: "synced",
+    });
+  });
+
+  it("blocks Codex single-server sync when a managed sibling was externally modified", () => {
+    const service = new CoreMcpLibraryService();
+    const first = service.createServer({
+      name: "filesystem",
+      displayName: "Filesystem",
+      transport: "stdio",
+      command: "npx",
+      args: ["@modelcontextprotocol/server-filesystem", "/tmp"],
+    });
+    const second = service.createServer({
+      name: "memory",
+      displayName: "Memory",
+      transport: "stdio",
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-memory"],
+      env: {
+        MEMORY_FILE_PATH: "/tmp/memory.json",
+      },
+    });
+    const targetPath = path.join(userDataPath, ".codex", "config.toml");
+
+    service.apply({
+      target: "codex",
+      scope: "custom",
+      path: targetPath,
+      serverIds: [first.id, second.id],
+    });
+    fs.writeFileSync(
+      targetPath,
+      fs
+        .readFileSync(targetPath, "utf8")
+        .replace("/tmp/memory.json", "/external/memory.json"),
+      "utf8",
+    );
+    service.updateServer(first.id, {
+      args: ["@modelcontextprotocol/server-filesystem", "/var/tmp"],
+    });
+
+    const result = service.syncServerToBoundTargets(first.id);
+    const written = fs.readFileSync(targetPath, "utf8");
+
+    expect(result.updated).toEqual([]);
+    expect(result.blocked).toEqual([
+      expect.objectContaining({
+        serverName: "memory",
+        status: "external-modified",
+      }),
+    ]);
+    expect(written).toContain('"/tmp"');
+    expect(written).not.toContain('"/var/tmp"');
+    expect(written).toContain("/external/memory.json");
   });
 
   it("removes empty target bindings when a distributed server is deleted", () => {

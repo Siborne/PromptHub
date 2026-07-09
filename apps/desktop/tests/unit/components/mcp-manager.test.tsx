@@ -388,6 +388,38 @@ function installMcpMocks(options: McpMockOptions = {}) {
           skippedKeys: [],
           missingKeys: [],
         }),
+        checkTargetSync: vi.fn().mockResolvedValue([
+          {
+            bindingId: "binding-claude",
+            target: "claude",
+            scope: "global",
+            path: claudeTarget.path,
+            serverId: filesystemServer.id,
+            serverName: filesystemServer.name,
+            status: "needs-sync",
+            safeToReapply: true,
+            reason: "Target entry is stale",
+          },
+        ]),
+        syncTargets: vi.fn().mockResolvedValue({
+          updated: [
+            {
+              bindingId: "binding-claude",
+              target: "claude",
+              scope: "global",
+              path: claudeTarget.path,
+              serverId: filesystemServer.id,
+              serverName: filesystemServer.name,
+              status: "needs-sync",
+              safeToReapply: true,
+              reason: "Target was updated from PromptHub",
+              backupPath: `${claudeTarget.path}.bak`,
+            },
+          ],
+          skipped: [],
+          blocked: [],
+          failed: [],
+        }),
       },
     },
     electron: {
@@ -488,6 +520,50 @@ describe("McpManager", () => {
     });
 
     expect(within(detailPage).queryByTitle("Preview")).not.toBeInTheDocument();
+    expect(api.mcp.preview).not.toHaveBeenCalled();
+  });
+
+  it("checks and syncs distributed MCP target entries without previewing content", async () => {
+    const user = userEvent.setup();
+    const { api } = installMcpMocks({
+      targetStatus: [
+        {
+          presetId: claudeTarget.id,
+          path: claudeTarget.path,
+          exists: true,
+          serverNames: ["filesystem"],
+          servers: [filesystemServer],
+        },
+      ],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<McpManager />, { language: "en" });
+    });
+
+    const detailPage = await openFilesystemDetail(user);
+
+    expect(within(detailPage).getByText("Target sync")).toBeInTheDocument();
+    await user.click(
+      within(detailPage).getByRole("button", { name: "Check sync" }),
+    );
+    await waitFor(() => {
+      expect(api.mcp.checkTargetSync).toHaveBeenCalledWith("mcp_filesystem", {
+        disabledPlatformIds: [],
+      });
+    });
+    expect(within(detailPage).getByText("Needs sync")).toBeInTheDocument();
+
+    await user.click(
+      within(detailPage).getByRole("button", {
+        name: "Sync distributed targets",
+      }),
+    );
+    await waitFor(() => {
+      expect(api.mcp.syncTargets).toHaveBeenCalledWith("mcp_filesystem", {
+        disabledPlatformIds: [],
+      });
+    });
     expect(api.mcp.preview).not.toHaveBeenCalled();
   });
 

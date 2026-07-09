@@ -2733,6 +2733,32 @@
       "error": "錯誤",
       "unchecked": "未檢查"
     },
+    "targetSync": {
+      "title": "目標同步",
+      "check": "檢查同步",
+      "sync": "同步已分發目標",
+      "checked": "目標同步檢查完成",
+      "checkedWithReview": "{{count}} 個目標需要確認",
+      "completed": "已同步 {{count}} 個目標",
+      "completedWithReview": "已同步 {{updated}} 個目標，{{blocked}} 個需要確認",
+      "syncedCount": "{{count}} 個已同步",
+      "staleCount": "{{count}} 個需同步",
+      "blockedCount": "{{count}} 個需確認",
+      "skippedCount": "{{count}} 個已跳過",
+      "uncheckedHint": "同步 MCP 環境變數變更前，先檢查已分發目標。",
+      "status": {
+        "synced": "已同步",
+        "needs-sync": "需同步",
+        "external-modified": "外部修改",
+        "conflict": "衝突",
+        "missing-target": "目標缺失",
+        "missing-entry": "項目缺失",
+        "parse-error": "解析失敗",
+        "legacy-needs-review": "需確認",
+        "skipped-disabled-platform": "平台已停用",
+        "skipped-server-disabled": "服務已停用"
+      }
+    },
     "saveEnvValues": "儲存環境變數",
     "savingEnvValues": "正在儲存...",
     "envValue": "環境變數值"

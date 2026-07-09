@@ -25,12 +25,20 @@ import {
   type McpServerConfig,
   type McpServerDraft,
   type McpTargetBinding,
+  type McpTargetEntryDigest,
   type McpTargetKind,
   type McpTargetScope,
+  type McpTargetSyncApplyResult,
+  type McpTargetSyncCheck,
+  type McpTargetSyncOptions,
+  type McpTargetSyncStatus,
   type McpTargetStatusEntry,
 } from "@prompthub/shared/types/mcp";
 import {
   buildMcpConfigPreview,
+  computeMcpTargetEntryDigest,
+  getMcpTargetEntryObject,
+  getMcpServersJsonKey,
   inferMcpEnvRequirements,
   inferMcpPlaceholderRequirements,
   inferMcpRuntimeDetails,
@@ -297,11 +305,54 @@ function normalizeLibrary(raw: Partial<McpLibraryFile>): McpLibraryFile {
           .map((binding) => ({
             ...binding,
             enabled: binding.enabled !== false,
+            entryDigests: normalizeEntryDigests(binding.entryDigests),
             createdAt: binding.createdAt || now,
             updatedAt: binding.updatedAt || now,
           }))
       : [],
   };
+}
+
+function normalizeEntryDigests(
+  value: unknown,
+): Record<string, McpTargetEntryDigest> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const entries = Object.entries(value as Record<string, unknown>).flatMap(
+    ([serverId, rawDigest]) => {
+      if (
+        !rawDigest ||
+        typeof rawDigest !== "object" ||
+        Array.isArray(rawDigest)
+      ) {
+        return [];
+      }
+      const record = rawDigest as Record<string, unknown>;
+      if (
+        record.algorithm !== "mcp-target-entry-sha256-v1" ||
+        typeof record.digest !== "string" ||
+        typeof record.serverName !== "string"
+      ) {
+        return [];
+      }
+      return [
+        [
+          serverId,
+          {
+            algorithm: "mcp-target-entry-sha256-v1" as const,
+            digest: record.digest,
+            serverName: record.serverName,
+            recordedAt:
+              typeof record.recordedAt === "number"
+                ? record.recordedAt
+                : Date.now(),
+          },
+        ] as const,
+      ];
+    },
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function assertUniqueName(
@@ -404,6 +455,147 @@ function findOverwrittenTargetNames(
   return servers
     .filter((server) => server.enabled && existingNames.has(server.name))
     .map((server) => server.name);
+}
+
+function buildEntryDigest(
+  target: McpTargetKind,
+  server: McpServerConfig,
+  recordedAt = nowMs(),
+): McpTargetEntryDigest {
+  return computeMcpTargetEntryDigest(
+    target,
+    getMcpTargetEntryObject(target, server),
+    recordedAt,
+    server.name,
+  );
+}
+
+function readTargetEntryDigest(
+  filePath: string,
+  target: McpTargetKind,
+  serverName: string,
+): string | undefined {
+  const entry = readTargetEntryObject(filePath, target, serverName);
+  return entry
+    ? computeMcpTargetEntryDigest(target, entry, nowMs(), serverName).digest
+    : undefined;
+}
+
+function readTargetEntryObject(
+  filePath: string,
+  target: McpTargetKind,
+  serverName: string,
+): Record<string, unknown> | null {
+  const content = fs.readFileSync(filePath, "utf8");
+  if (isTomlTarget(target)) {
+    return readCodexTomlEntryObject(content, serverName);
+  }
+  const raw = parseMcpJsonConfigContent(content);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const entries = (raw as Record<string, unknown>)[
+    getMcpServersJsonKey(target)
+  ];
+  if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+    return null;
+  }
+  const entry = (entries as Record<string, unknown>)[serverName];
+  return entry && typeof entry === "object" && !Array.isArray(entry)
+    ? (entry as Record<string, unknown>)
+    : null;
+}
+
+function readCodexTomlEntryObject(
+  content: string,
+  serverName: string,
+): Record<string, unknown> | null {
+  const entry: Record<string, unknown> = {};
+  let found = false;
+  let inServerRoot = false;
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const section = parseCodexMcpSectionHeader(line);
+    if (section) {
+      if (section.serverName === serverName && section.isRoot) {
+        found = true;
+        inServerRoot = true;
+        continue;
+      }
+      if (section.serverName === serverName) {
+        found = true;
+        inServerRoot = false;
+        entry.__tomlChildSections = true;
+        continue;
+      }
+      inServerRoot = false;
+      continue;
+    }
+    if (!inServerRoot || !line || line.startsWith("#")) {
+      continue;
+    }
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex === -1) {
+      continue;
+    }
+    entry[line.slice(0, separatorIndex).trim()] = parseTomlDigestValue(
+      line.slice(separatorIndex + 1).trim(),
+    );
+  }
+
+  return found ? entry : null;
+}
+
+function parseCodexMcpSectionHeader(
+  line: string,
+): { serverName: string; isRoot: boolean } | null {
+  const match = line.match(
+    /^\[mcp_servers\.("?)([^"\]]+)\1(?<child>\.[^\]]+)?\]$/,
+  );
+  if (!match) {
+    return null;
+  }
+  return {
+    serverName: match[2],
+    isRoot: !match.groups?.child,
+  };
+}
+
+function parseTomlDigestValue(value: string): unknown {
+  if (value.startsWith("[")) {
+    return parseTomlStringArray(value) ?? value;
+  }
+  if (value.startsWith("{")) {
+    return parseTomlInlineTable(value) ?? value;
+  }
+  const stringValue = parseTomlString(value);
+  if (stringValue !== undefined) {
+    return stringValue;
+  }
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : value;
+}
+
+function buildEntryDigests(
+  target: McpTargetKind,
+  servers: McpServerConfig[],
+  recordedAt = nowMs(),
+): Record<string, McpTargetEntryDigest> {
+  return Object.fromEntries(
+    servers
+      .filter((server) => server.enabled)
+      .map((server) => [
+        server.id,
+        buildEntryDigest(target, server, recordedAt),
+      ]),
+  );
 }
 
 function resolveServer(
@@ -544,6 +736,15 @@ function createHealthResult(server: McpServerConfig): McpHealthCheckResult {
       continue;
     }
     if (value) {
+      if (/\$\{[A-Za-z_][A-Za-z0-9_]*\}/.test(value.trim())) {
+        issues.push({
+          code: "UNRESOLVED_ENV_REFERENCE",
+          severity: "warning",
+          field: requirement.name,
+          message: `Environment references may not expand in all MCP targets: ${requirement.name}`,
+        });
+        continue;
+      }
       const invalidMessage = validateKnownEnvValue(requirement.name, value);
       if (invalidMessage) {
         issues.push({
@@ -573,6 +774,105 @@ function createHealthResult(server: McpServerConfig): McpHealthCheckResult {
     runtime: inferMcpRuntimeDetails(server),
     issues,
   };
+}
+
+function createSyncReason(status: McpTargetSyncStatus): string {
+  const reasons: Record<McpTargetSyncStatus, string> = {
+    synced: "target matches current PromptHub MCP projection",
+    "needs-sync": "PromptHub MCP changed after the last target apply",
+    "external-modified": "target MCP entry changed outside PromptHub",
+    conflict: "PromptHub MCP and target MCP entry both changed",
+    "missing-target": "target config file is missing",
+    "missing-entry": "target config file no longer contains this MCP entry",
+    "parse-error": "target config file cannot be parsed",
+    "legacy-needs-review":
+      "legacy binding has no baseline and target differs from PromptHub",
+    "skipped-disabled-platform": "target platform is disabled in settings",
+    "skipped-server-disabled": "MCP server is disabled in PromptHub",
+  };
+  return reasons[status];
+}
+
+function toSyncCheck(
+  binding: McpTargetBinding,
+  server: McpServerConfig,
+  status: McpTargetSyncStatus,
+  values: Partial<McpTargetSyncCheck> = {},
+): McpTargetSyncCheck {
+  return {
+    bindingId: binding.id,
+    target: binding.target,
+    scope: binding.scope,
+    path: binding.path,
+    serverId: server.id,
+    serverName: server.name,
+    status,
+    safeToReapply: status === "needs-sync",
+    reason: createSyncReason(status),
+    ...values,
+  };
+}
+
+function classifySyncStatus(
+  baselineDigest: string | undefined,
+  currentDigest: string,
+  targetDigest: string | undefined,
+): McpTargetSyncStatus {
+  if (!targetDigest) {
+    return "missing-entry";
+  }
+  if (!baselineDigest) {
+    return currentDigest === targetDigest ? "synced" : "legacy-needs-review";
+  }
+  if (baselineDigest === currentDigest && baselineDigest === targetDigest) {
+    return "synced";
+  }
+  if (baselineDigest === targetDigest && currentDigest !== baselineDigest) {
+    return "needs-sync";
+  }
+  if (baselineDigest === currentDigest && targetDigest !== baselineDigest) {
+    return "external-modified";
+  }
+  if (currentDigest === targetDigest) {
+    return "synced";
+  }
+  return "conflict";
+}
+
+function canRewriteTomlManagedSibling(
+  check: McpTargetSyncCheck,
+  options?: McpTargetSyncOptions,
+): boolean {
+  if (check.status === "synced" || check.status === "needs-sync") {
+    return true;
+  }
+  if (
+    (check.status === "missing-target" || check.status === "missing-entry") &&
+    options?.recreateMissing
+  ) {
+    return true;
+  }
+  if (
+    (check.status === "conflict" ||
+      check.status === "external-modified" ||
+      check.status === "legacy-needs-review" ||
+      check.status === "parse-error") &&
+    options?.forceConflicts
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function shouldSkipDisabledPlatform(
+  binding: McpTargetBinding,
+  options?: McpTargetSyncOptions,
+): boolean {
+  if (options?.includeDisabled) {
+    return false;
+  }
+  const disabledPlatformIds = new Set(options?.disabledPlatformIds ?? []);
+  return disabledPlatformIds.has(binding.target);
 }
 
 function importServerEntry(
@@ -953,6 +1253,13 @@ export class CoreMcpLibraryService {
         .map((binding) => ({
           ...binding,
           serverIds: binding.serverIds.filter((serverId) => serverId !== id),
+          entryDigests: binding.entryDigests
+            ? Object.fromEntries(
+                Object.entries(binding.entryDigests).filter(
+                  ([serverId]) => serverId !== id,
+                ),
+              )
+            : undefined,
         }))
         .filter((binding) => binding.serverIds.length > 0),
     });
@@ -1048,6 +1355,10 @@ export class CoreMcpLibraryService {
     const existingBinding = library.bindings.find(
       (item) => item.id === bindingId,
     );
+    const nextEntryDigests = {
+      ...(existingBinding?.entryDigests ?? {}),
+      ...buildEntryDigests(target.target, servers, now),
+    };
     const binding: McpTargetBinding = {
       id: bindingId,
       target: target.target,
@@ -1064,6 +1375,7 @@ export class CoreMcpLibraryService {
         ]),
       ),
       enabled: true,
+      entryDigests: nextEntryDigests,
       lastAppliedAt: now,
       createdAt: existingBinding?.createdAt ?? now,
       updatedAt: now,
@@ -1132,6 +1444,13 @@ export class CoreMcpLibraryService {
                 serverIds: binding.serverIds.filter(
                   (serverId) => !removedIds.has(serverId),
                 ),
+                entryDigests: binding.entryDigests
+                  ? Object.fromEntries(
+                      Object.entries(binding.entryDigests).filter(
+                        ([serverId]) => !removedIds.has(serverId),
+                      ),
+                    )
+                  : undefined,
                 updatedAt: now,
               }
             : binding,
@@ -1199,6 +1518,13 @@ export class CoreMcpLibraryService {
                 serverIds: binding.serverIds.filter(
                   (serverId) => !removedLibraryIds.has(serverId),
                 ),
+                entryDigests: binding.entryDigests
+                  ? Object.fromEntries(
+                      Object.entries(binding.entryDigests).filter(
+                        ([serverId]) => !removedLibraryIds.has(serverId),
+                      ),
+                    )
+                  : undefined,
                 updatedAt: now,
               }
             : binding,
@@ -1213,6 +1539,206 @@ export class CoreMcpLibraryService {
       removedServerNames: target.serverNames,
       content,
     };
+  }
+
+  checkServerTargetSync(
+    identifier: string,
+    options?: McpTargetSyncOptions,
+  ): McpTargetSyncCheck[] {
+    const library = this.read();
+    const server = resolveServer(library, identifier);
+    const bindings = library.bindings.filter((binding) =>
+      binding.serverIds.includes(server.id),
+    );
+    const checks: McpTargetSyncCheck[] = [];
+    let nextBindings = library.bindings;
+    let shouldWrite = false;
+
+    for (const binding of bindings) {
+      if (shouldSkipDisabledPlatform(binding, options)) {
+        checks.push(toSyncCheck(binding, server, "skipped-disabled-platform"));
+        continue;
+      }
+      if (!server.enabled) {
+        checks.push(toSyncCheck(binding, server, "skipped-server-disabled"));
+        continue;
+      }
+      const current = buildEntryDigest(binding.target, server);
+      const baseline = binding.entryDigests?.[server.id];
+      if (!fs.existsSync(binding.path)) {
+        checks.push(
+          toSyncCheck(binding, server, "missing-target", {
+            baselineDigest: baseline?.digest,
+            currentDigest: current.digest,
+          }),
+        );
+        continue;
+      }
+
+      let targetDigest: string | undefined;
+      try {
+        targetDigest = readTargetEntryDigest(
+          binding.path,
+          binding.target,
+          server.name,
+        );
+      } catch {
+        checks.push(
+          toSyncCheck(binding, server, "parse-error", {
+            baselineDigest: baseline?.digest,
+            currentDigest: current.digest,
+          }),
+        );
+        continue;
+      }
+
+      const status = classifySyncStatus(
+        baseline?.digest,
+        current.digest,
+        targetDigest,
+      );
+      const check = toSyncCheck(binding, server, status, {
+        baselineDigest: baseline?.digest,
+        currentDigest: current.digest,
+        targetDigest,
+        safeToReapply: status === "needs-sync",
+      });
+      checks.push(check);
+
+      if (status === "synced" && baseline?.digest !== current.digest) {
+        nextBindings = nextBindings.map((item) =>
+          item.id === binding.id
+            ? {
+                ...item,
+                entryDigests: {
+                  ...(item.entryDigests ?? {}),
+                  [server.id]: current,
+                },
+                updatedAt: nowMs(),
+              }
+            : item,
+        );
+        shouldWrite = true;
+      }
+    }
+
+    if (shouldWrite) {
+      this.write({ ...library, bindings: nextBindings });
+    }
+    return checks;
+  }
+
+  syncServerToBoundTargets(
+    identifier: string,
+    options?: McpTargetSyncOptions,
+  ): McpTargetSyncApplyResult {
+    const library = this.read();
+    const server = resolveServer(library, identifier);
+    const checks = this.checkServerTargetSync(identifier, options).filter(
+      (check) =>
+        !options?.targetBindingIds?.length ||
+        options.targetBindingIds.includes(check.bindingId),
+    );
+    const result: McpTargetSyncApplyResult = {
+      updated: [],
+      skipped: [],
+      blocked: [],
+      failed: [],
+    };
+
+    for (const check of checks) {
+      if (check.status === "synced") {
+        result.skipped.push(check);
+        continue;
+      }
+      if (check.status === "skipped-disabled-platform") {
+        result.skipped.push(check);
+        continue;
+      }
+      if (check.status === "skipped-server-disabled") {
+        result.skipped.push(check);
+        continue;
+      }
+      if (
+        (check.status === "missing-target" ||
+          check.status === "missing-entry") &&
+        !options?.recreateMissing
+      ) {
+        result.blocked.push(check);
+        continue;
+      }
+      if (
+        (check.status === "conflict" ||
+          check.status === "external-modified" ||
+          check.status === "legacy-needs-review" ||
+          check.status === "parse-error") &&
+        !options?.forceConflicts
+      ) {
+        result.blocked.push(check);
+        continue;
+      }
+
+      const binding = library.bindings.find(
+        (item) => item.id === check.bindingId,
+      );
+      if (!binding) {
+        result.failed.push({ ...check, error: "Binding not found" });
+        continue;
+      }
+
+      const applyServerIds = isTomlTarget(binding.target)
+        ? binding.serverIds
+            .map((serverId) =>
+              library.servers.find((item) => item.id === serverId),
+            )
+            .filter((item): item is McpServerConfig => Boolean(item?.enabled))
+            .map((item) => item.id)
+        : [server.id];
+      const blockingSibling = isTomlTarget(binding.target)
+        ? applyServerIds
+            .filter((serverId) => serverId !== server.id)
+            .flatMap((serverId) =>
+              this.checkServerTargetSync(serverId, options).filter(
+                (item) => item.bindingId === check.bindingId,
+              ),
+            )
+            .find((item) => !canRewriteTomlManagedSibling(item, options))
+        : undefined;
+
+      if (blockingSibling) {
+        result.blocked.push({
+          ...blockingSibling,
+          reason: `TOML target also contains unsafe managed sibling "${blockingSibling.serverName}": ${blockingSibling.reason}`,
+        });
+        continue;
+      }
+
+      try {
+        const applyResult = this.apply({
+          target: binding.target,
+          scope: binding.scope,
+          path: binding.path,
+          serverIds: applyServerIds,
+          force: options?.forceConflicts,
+        });
+        result.updated.push({
+          backupPath: applyResult.backupPath,
+          bindingId: check.bindingId,
+          path: check.path,
+          scope: check.scope,
+          serverName: check.serverName,
+          status: check.status,
+          target: check.target,
+        });
+      } catch (error) {
+        result.failed.push({
+          ...check,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return result;
   }
 
   /**

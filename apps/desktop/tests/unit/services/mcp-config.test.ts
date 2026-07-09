@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { McpServerConfig } from "@prompthub/shared/types/mcp";
 import {
   buildCodexMcpToml,
+  computeMcpTargetEntryDigest,
   buildMcpServersJson,
   buildMcpTargetJson,
   buildVsCodeMcpJson,
+  getMcpTargetEntryObject,
   getMcpServersJsonKey,
   inferMcpEnvRequirements,
   inferMcpPlaceholderRequirements,
   inferMcpRuntimeDetails,
+  MCP_TARGET_ENTRY_DIGEST_ALGORITHM,
   listMcpServerNamesInJson,
   listMcpServerNamesInToml,
   mergeCodexMcpToml,
@@ -162,6 +165,40 @@ describe("mcp-config", () => {
     });
   });
 
+  it("computes stable target-entry digests with target-specific shapes", () => {
+    const first = computeMcpTargetEntryDigest(
+      "claude",
+      getMcpTargetEntryObject("claude", baseServer),
+    );
+    const reordered = computeMcpTargetEntryDigest("claude", {
+      env: { CI: "1" },
+      command: "npx",
+      args: ["@playwright/mcp@latest", "--headless"],
+      ignored: undefined,
+    });
+    const changedArgOrder = computeMcpTargetEntryDigest("claude", {
+      command: "npx",
+      args: ["--headless", "@playwright/mcp@latest"],
+      env: { CI: "1" },
+    });
+    const openCode = computeMcpTargetEntryDigest(
+      "opencode",
+      getMcpTargetEntryObject("opencode", baseServer),
+    );
+
+    expect(first.algorithm).toBe(MCP_TARGET_ENTRY_DIGEST_ALGORITHM);
+    expect(first.digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(reordered.digest).toBe(first.digest);
+    expect(changedArgOrder.digest).not.toBe(first.digest);
+    expect(openCode.digest).not.toBe(first.digest);
+    expect(getMcpTargetEntryObject("opencode", baseServer)).toEqual({
+      type: "local",
+      command: ["npx", "@playwright/mcp@latest", "--headless"],
+      environment: { CI: "1" },
+      enabled: true,
+    });
+  });
+
   it("projects OpenCode remote entries with url and headers", () => {
     const remoteServer: McpServerConfig = {
       ...baseServer,
@@ -198,6 +235,10 @@ describe("mcp-config", () => {
           enabled: true,
         },
       },
+    });
+    expect(getMcpTargetEntryObject("codex", remoteServer)).toEqual({
+      url: "https://mcp.context7.com/mcp",
+      http_headers: { CONTEXT7_API_KEY: "key" },
     });
   });
 

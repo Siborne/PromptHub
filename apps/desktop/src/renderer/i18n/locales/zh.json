@@ -2771,6 +2771,32 @@
       "error": "错误",
       "unchecked": "未检查"
     },
+    "targetSync": {
+      "title": "目标同步",
+      "check": "检查同步",
+      "sync": "同步已分发目标",
+      "checked": "目标同步检查完成",
+      "checkedWithReview": "{{count}} 个目标需要确认",
+      "completed": "已同步 {{count}} 个目标",
+      "completedWithReview": "已同步 {{updated}} 个目标，{{blocked}} 个需要确认",
+      "syncedCount": "{{count}} 个已同步",
+      "staleCount": "{{count}} 个需同步",
+      "blockedCount": "{{count}} 个需确认",
+      "skippedCount": "{{count}} 个已跳过",
+      "uncheckedHint": "同步 MCP 环境变量变更前，先检查已分发目标。",
+      "status": {
+        "synced": "已同步",
+        "needs-sync": "需同步",
+        "external-modified": "外部修改",
+        "conflict": "冲突",
+        "missing-target": "目标缺失",
+        "missing-entry": "条目缺失",
+        "parse-error": "解析失败",
+        "legacy-needs-review": "需确认",
+        "skipped-disabled-platform": "平台已禁用",
+        "skipped-server-disabled": "服务已禁用"
+      }
+    },
     "saveEnvValues": "保存环境变量",
     "savingEnvValues": "正在保存...",
     "envValue": "环境变量值"

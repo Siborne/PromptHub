@@ -96,6 +96,7 @@ export interface McpTargetBinding {
   scope: McpTargetScope;
   path: string;
   enabled: boolean;
+  entryDigests?: Record<string, McpTargetEntryDigest>;
   lastAppliedAt?: number;
   createdAt: number;
   updatedAt: number;
@@ -160,6 +161,83 @@ export interface McpApplyResult {
   content: string;
 }
 
+export type McpTargetEntryDigestAlgorithm = "mcp-target-entry-sha256-v1";
+
+export interface McpTargetEntryDigest {
+  algorithm: McpTargetEntryDigestAlgorithm;
+  digest: string;
+  serverName: string;
+  recordedAt: number;
+}
+
+export type McpTargetSyncStatus =
+  | "synced"
+  | "needs-sync"
+  | "external-modified"
+  | "conflict"
+  | "missing-target"
+  | "missing-entry"
+  | "parse-error"
+  | "legacy-needs-review"
+  | "skipped-disabled-platform"
+  | "skipped-server-disabled";
+
+export interface McpTargetSyncCheck {
+  bindingId: string;
+  target: McpTargetKind;
+  scope: McpTargetScope;
+  path: string;
+  serverId: string;
+  serverName: string;
+  status: McpTargetSyncStatus;
+  safeToReapply: boolean;
+  baselineDigest?: string;
+  currentDigest?: string;
+  targetDigest?: string;
+  reason: string;
+}
+
+export interface McpTargetSyncOptions {
+  disabledPlatformIds?: string[];
+  includeDisabled?: boolean;
+  recreateMissing?: boolean;
+  forceConflicts?: boolean;
+  targetBindingIds?: string[];
+}
+
+export interface McpTargetSyncUpdated {
+  backupPath?: string;
+  bindingId: string;
+  path: string;
+  scope: McpTargetScope;
+  serverName: string;
+  status: McpTargetSyncStatus;
+  target: McpTargetKind;
+}
+
+export interface McpTargetSyncSkipped {
+  bindingId: string;
+  path: string;
+  reason: string;
+  scope: McpTargetScope;
+  serverName: string;
+  status: McpTargetSyncStatus;
+  target: McpTargetKind;
+}
+
+export interface McpTargetSyncBlocked extends McpTargetSyncSkipped {}
+
+export interface McpTargetSyncFailed extends McpTargetSyncSkipped {
+  error: string;
+}
+
+export interface McpTargetSyncApplyResult {
+  updated: McpTargetSyncUpdated[];
+  skipped: McpTargetSyncSkipped[];
+  blocked: McpTargetSyncBlocked[];
+  failed: McpTargetSyncFailed[];
+}
+
 export interface McpImportResult {
   imported: McpServerConfig[];
   skipped: string[];
@@ -215,6 +293,7 @@ export interface McpHealthIssue {
     | "INVALID_URL"
     | "MISSING_ENV"
     | "INVALID_ENV_VALUE"
+    | "UNRESOLVED_ENV_REFERENCE"
     | "PLACEHOLDER_VALUE"
     | "MISSING_CWD";
   severity: McpHealthStatus;

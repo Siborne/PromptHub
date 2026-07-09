@@ -20,6 +20,7 @@ import type {
   McpMarketTemplate,
   McpRemoveTargetNames,
   McpServerDraft,
+  McpTargetSyncOptions,
   McpTargetKind,
   McpTargetScope,
 } from "@prompthub/shared/types/mcp";
@@ -66,6 +67,39 @@ function normalizeMcpTargetPresetPayload(
       },
     ];
   });
+}
+
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const items = value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+  return items.length > 0 ? Array.from(new Set(items)) : undefined;
+}
+
+function normalizeMcpTargetSyncOptions(
+  value: unknown,
+): McpTargetSyncOptions | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    disabledPlatformIds: normalizeStringArray(record.disabledPlatformIds),
+    includeDisabled: record.includeDisabled === true,
+    recreateMissing: record.recreateMissing === true,
+    forceConflicts: record.forceConflicts === true,
+    targetBindingIds: normalizeStringArray(record.targetBindingIds),
+  };
+}
+
+function assertNonEmptyIdentifier(identifier: unknown, channel: string): string {
+  if (typeof identifier !== "string" || identifier.trim().length === 0) {
+    throw new Error(`${channel} requires a non-empty server identifier`);
+  }
+  return identifier.trim();
 }
 
 export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
@@ -180,5 +214,21 @@ export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
       envFilePath: string,
       selectedKeys?: string[],
     ) => service.importEnvForServer(identifier, envFilePath, selectedKeys),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.MCP_TARGET_SYNC_CHECK,
+    async (_event, identifier: string, options?: McpTargetSyncOptions) =>
+      service.checkServerTargetSync(
+        assertNonEmptyIdentifier(identifier, IPC_CHANNELS.MCP_TARGET_SYNC_CHECK),
+        normalizeMcpTargetSyncOptions(options),
+      ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.MCP_TARGET_SYNC_APPLY,
+    async (_event, identifier: string, options?: McpTargetSyncOptions) =>
+      service.syncServerToBoundTargets(
+        assertNonEmptyIdentifier(identifier, IPC_CHANNELS.MCP_TARGET_SYNC_APPLY),
+        normalizeMcpTargetSyncOptions(options),
+      ),
   );
 }

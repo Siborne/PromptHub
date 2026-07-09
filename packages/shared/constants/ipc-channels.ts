@@ -184,6 +184,8 @@ export const IPC_CHANNELS = {
   MCP_HEALTH_CHECK: "mcp:health:check",
   MCP_HEALTH_CHECK_ALL: "mcp:health:checkAll",
   MCP_ENV_IMPORT: "mcp:env:import",
+  MCP_TARGET_SYNC_CHECK: "mcp:targetSync:check",
+  MCP_TARGET_SYNC_APPLY: "mcp:targetSync:apply",
 
   // Plugins
   PLUGIN_LIBRARY_GET: "plugin:library:get",

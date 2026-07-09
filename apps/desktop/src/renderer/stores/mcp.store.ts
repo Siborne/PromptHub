@@ -16,6 +16,9 @@ import type {
   McpServerConfig,
   McpServerDraft,
   McpTargetKind,
+  McpTargetSyncApplyResult,
+  McpTargetSyncCheck,
+  McpTargetSyncOptions,
   McpTargetStatusEntry,
 } from "@prompthub/shared/types/mcp";
 import { MCP_OFFICIAL_MARKET_SOURCE_ID } from "@prompthub/shared/constants/mcp-market";
@@ -52,6 +55,8 @@ interface McpState {
   targetPresets: McpTargetPreset[];
   targetStatus: McpTargetStatusEntry[];
   healthChecks: McpHealthCheckResult[];
+  targetSyncChecks: McpTargetSyncCheck[];
+  lastTargetSyncResult: McpTargetSyncApplyResult | null;
   selectedServerId: string | null;
   selectedTab: "library" | "market" | "projects" | "targets";
   selectedMarketSourceId: string;
@@ -108,6 +113,14 @@ interface McpState {
   ) => Promise<McpEnvImportResult>;
   checkServer: (identifier: string) => Promise<McpHealthCheckResult>;
   checkAllServers: () => Promise<McpHealthCheckResult[]>;
+  checkTargetSync: (
+    identifier: string,
+    options?: McpTargetSyncOptions,
+  ) => Promise<McpTargetSyncCheck[]>;
+  syncTargets: (
+    identifier: string,
+    options?: McpTargetSyncOptions,
+  ) => Promise<McpTargetSyncApplyResult>;
   refreshPreview: (
     target: McpTargetKind,
     serverIds: string[],
@@ -299,6 +312,8 @@ export const useMcpStore = create<McpState>()(
       targetPresets: [],
       targetStatus: [],
       healthChecks: [],
+      targetSyncChecks: [],
+      lastTargetSyncResult: null,
       selectedServerId: null,
       selectedTab: "library",
       selectedMarketSourceId: DEFAULT_MCP_MARKET_SOURCE_ID,
@@ -739,6 +754,29 @@ export const useMcpStore = create<McpState>()(
         const healthChecks = await window.api.mcp.checkAllServers();
         set({ healthChecks });
         return healthChecks;
+      },
+
+      checkTargetSync: async (identifier, options) => {
+        const checks = await window.api.mcp.checkTargetSync(
+          identifier,
+          options,
+        );
+        set({ targetSyncChecks: checks });
+        return checks;
+      },
+
+      syncTargets: async (identifier, options) => {
+        const result = await window.api.mcp.syncTargets(identifier, options);
+        await get().load();
+        const checks = await window.api.mcp.checkTargetSync(
+          identifier,
+          options,
+        );
+        set({
+          lastTargetSyncResult: result,
+          targetSyncChecks: checks,
+        });
+        return result;
       },
 
       refreshPreview: async (target, serverIds) => {

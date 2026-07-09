@@ -31,6 +31,8 @@ import type {
   McpHealthCheckResult,
   McpServerConfig,
   McpServerDraft,
+  McpTargetSyncApplyResult,
+  McpTargetSyncCheck,
 } from "@prompthub/shared/types/mcp";
 import { inferMcpEnvRequirements } from "@prompthub/shared/utils/mcp-config";
 import { copyTextToClipboard } from "../../utils/clipboard";
@@ -57,6 +59,9 @@ interface McpFullDetailPageProps {
     selectedKeys?: string[],
   ) => Promise<McpEnvImportResult>;
   onSave: (serverId: string | null, draft: McpServerDraft) => Promise<void>;
+  onCheckTargetSync: (serverId: string) => Promise<McpTargetSyncCheck[]>;
+  onSyncTargets: (serverId: string) => Promise<McpTargetSyncApplyResult>;
+  targetSyncChecks: McpTargetSyncCheck[];
 }
 
 function formatCommand(server: McpServerConfig): string {
@@ -115,6 +120,42 @@ function formatRecord(record?: Record<string, string>): string {
 
 function formatDate(value: number): string {
   return new Date(value).toLocaleString();
+}
+
+function summarizeTargetSyncChecks(checks: McpTargetSyncCheck[]): {
+  blocked: number;
+  stale: number;
+  synced: number;
+  skipped: number;
+} {
+  return checks.reduce(
+    (summary, check) => {
+      if (check.status === "synced") {
+        summary.synced += 1;
+      } else if (check.safeToReapply) {
+        summary.stale += 1;
+      } else if (check.status.startsWith("skipped-")) {
+        summary.skipped += 1;
+      } else {
+        summary.blocked += 1;
+      }
+      return summary;
+    },
+    { blocked: 0, stale: 0, synced: 0, skipped: 0 },
+  );
+}
+
+function getTargetSyncTone(status: McpTargetSyncCheck["status"]): string {
+  if (status === "synced") {
+    return "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  }
+  if (status === "needs-sync") {
+    return "border-primary/20 bg-primary/10 text-primary";
+  }
+  if (status.startsWith("skipped-")) {
+    return "border-muted bg-muted text-muted-foreground";
+  }
+  return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300";
 }
 
 function getSourceSummary(
@@ -256,6 +297,9 @@ export function McpFullDetailPage({
   onDelete,
   onImportEnv,
   onSave,
+  onCheckTargetSync,
+  onSyncTargets,
+  targetSyncChecks,
 }: McpFullDetailPageProps) {
   const { t } = useTranslation();
   const envInputRef = useRef<HTMLInputElement | null>(null);
@@ -264,6 +308,8 @@ export function McpFullDetailPage({
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [isImportingEnv, setIsImportingEnv] = useState(false);
   const [isSavingEnv, setIsSavingEnv] = useState(false);
+  const [isCheckingTargetSync, setIsCheckingTargetSync] = useState(false);
+  const [isSyncingTargets, setIsSyncingTargets] = useState(false);
   const [envDraft, setEnvDraft] = useState<Record<string, string>>({});
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -291,6 +337,10 @@ export function McpFullDetailPage({
     [healthCheck?.issues],
   );
   const displayName = server.displayName || server.name;
+  const targetSyncSummary = useMemo(
+    () => summarizeTargetSyncChecks(targetSyncChecks),
+    [targetSyncChecks],
+  );
 
   useEffect(() => {
     setEnvDraft(
@@ -330,6 +380,24 @@ export function McpFullDetailPage({
       await onCheckServer(server.id);
     } finally {
       setIsCheckingHealth(false);
+    }
+  };
+
+  const handleTargetSyncCheck = async () => {
+    setIsCheckingTargetSync(true);
+    try {
+      await onCheckTargetSync(server.id);
+    } finally {
+      setIsCheckingTargetSync(false);
+    }
+  };
+
+  const handleTargetSync = async () => {
+    setIsSyncingTargets(true);
+    try {
+      await onSyncTargets(server.id);
+    } finally {
+      setIsSyncingTargets(false);
     }
   };
 
@@ -608,6 +676,114 @@ export function McpFullDetailPage({
                     )}
                   </div>
                 </section>
+
+                {distributedTargetCount > 0 ? (
+                  <section className="shrink-0 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                        {t("mcp.targetSync.title", "Target sync")}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleTargetSyncCheck()}
+                          disabled={isCheckingTargetSync || isSyncingTargets}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-accent/50 px-3 py-1.5 text-xs transition-colors hover:bg-accent disabled:opacity-60"
+                        >
+                          <RefreshCwIcon
+                            className={`h-3.5 w-3.5 ${
+                              isCheckingTargetSync ? "animate-spin" : ""
+                            }`}
+                            aria-hidden="true"
+                          />
+                          {t("mcp.targetSync.check", "Check sync")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleTargetSync()}
+                          disabled={isCheckingTargetSync || isSyncingTargets}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+                        >
+                          <RefreshCwIcon
+                            className={`h-3.5 w-3.5 ${
+                              isSyncingTargets ? "animate-spin" : ""
+                            }`}
+                            aria-hidden="true"
+                          />
+                          {t("mcp.targetSync.sync", "Sync distributed targets")}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="app-wallpaper-panel rounded-2xl border border-border p-4">
+                      {targetSyncChecks.length > 0 ? (
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="rounded-full bg-emerald-500/10 px-2 py-1 font-medium text-emerald-700 dark:text-emerald-300">
+                              {t("mcp.targetSync.syncedCount", {
+                                count: targetSyncSummary.synced,
+                                defaultValue: "{{count}} synced",
+                              })}
+                            </span>
+                            <span className="rounded-full bg-primary/10 px-2 py-1 font-medium text-primary">
+                              {t("mcp.targetSync.staleCount", {
+                                count: targetSyncSummary.stale,
+                                defaultValue: "{{count}} need sync",
+                              })}
+                            </span>
+                            <span className="rounded-full bg-amber-500/10 px-2 py-1 font-medium text-amber-700 dark:text-amber-300">
+                              {t("mcp.targetSync.blockedCount", {
+                                count: targetSyncSummary.blocked,
+                                defaultValue: "{{count}} need review",
+                              })}
+                            </span>
+                            {targetSyncSummary.skipped > 0 ? (
+                              <span className="rounded-full bg-muted px-2 py-1 font-medium text-muted-foreground">
+                                {t("mcp.targetSync.skippedCount", {
+                                  count: targetSyncSummary.skipped,
+                                  defaultValue: "{{count}} skipped",
+                                })}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="space-y-2">
+                            {targetSyncChecks.slice(0, 4).map((check) => (
+                              <div
+                                key={`${check.bindingId}-${check.serverId}`}
+                                className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border bg-background px-3 py-2 text-xs"
+                              >
+                                <div className="min-w-0">
+                                  <div className="truncate font-medium text-foreground">
+                                    {check.target}
+                                  </div>
+                                  <div className="truncate text-muted-foreground">
+                                    {check.path}
+                                  </div>
+                                </div>
+                                <span
+                                  className={`shrink-0 rounded-full border px-2 py-1 font-medium ${getTargetSyncTone(
+                                    check.status,
+                                  )}`}
+                                >
+                                  {t(
+                                    `mcp.targetSync.status.${check.status}`,
+                                    check.status,
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {t(
+                            "mcp.targetSync.uncheckedHint",
+                            "Check distributed targets before syncing MCP env changes.",
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                ) : null}
 
                 {envRequirements.length > 0 ? (
                   <section className="shrink-0 space-y-4">

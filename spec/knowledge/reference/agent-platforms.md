@@ -46,6 +46,12 @@ Stable product rule:
 
 - PromptHub's internal MCP source of truth is a normalized local library, not any one agent config file.
 - Applying MCP config must preserve unrelated target config and create a backup before overwriting an existing file.
+- PromptHub records a per-target projected-entry digest when an MCP server is applied. Later "sync distributed targets" compares baseline, current PromptHub projection, and target entry before writing.
+- Target-side MCP sync digests are computed from the raw server entry in the target config file, not by round-tripping through PromptHub's import model; extra fields on a target entry therefore count as external modifications.
+- One-click MCP target sync may update safe stale targets, but must skip disabled platforms, disabled MCP servers, parse-error targets, missing targets/entries, external edits, and conflicts unless an explicit override flow is used.
+- MCP target sync results must be structural only: target kind, path, status, server name, and backup path are allowed; full config content, env values, headers, and token-bearing arguments must not be returned to renderer sync summaries.
+- Codex/custom TOML one-server sync must not delete other PromptHub-managed servers from the same managed block; either merge per server or rewrite the complete still-managed enabled set.
+- When Codex/custom TOML uses whole managed-block rewrite, all still-managed enabled sibling servers in that block must be checked first; an unsafe sibling external edit or conflict blocks the one-server sync unless an explicit override is used.
 - MCP entries are configuration records, not Skill directory packages; they do not participate in Skill versioning, safety scanning, or rating flows.
 - Roo Code remains documented below as an external Agent asset, but PromptHub no longer exposes it as a built-in MCP target preset.
 

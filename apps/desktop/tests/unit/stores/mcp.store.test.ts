@@ -227,4 +227,70 @@ describe("mcp store remote market cache persistence", () => {
     expect(useMcpStore.getState().selectedServerId).toBe(slackServer.id);
     expect(useMcpStore.getState().preview).toBe("");
   });
+
+  it("syncs distributed targets without storing secret-bearing content in preview", async () => {
+    const targetSyncResult = {
+      updated: [
+        {
+          bindingId: "binding-claude",
+          target: "claude",
+          scope: "global",
+          path: "/Users/test/.claude.json",
+          serverId: filesystemServer.id,
+          serverName: filesystemServer.name,
+          status: "needs-sync",
+          safeToReapply: true,
+          reason: "Target was updated from PromptHub",
+          backupPath: "/Users/test/.claude.json.bak",
+        },
+      ],
+      skipped: [],
+      blocked: [],
+      failed: [],
+    };
+    const targetSyncChecks = [
+      {
+        bindingId: "binding-claude",
+        target: "claude",
+        scope: "global",
+        path: "/Users/test/.claude.json",
+        serverId: filesystemServer.id,
+        serverName: filesystemServer.name,
+        status: "synced",
+        safeToReapply: false,
+        reason: "Target entry matches PromptHub",
+      },
+    ];
+    window.api.mcp = {
+      ...(window.api.mcp ?? {}),
+      syncTargets: vi.fn().mockResolvedValue(targetSyncResult),
+      checkTargetSync: vi.fn().mockResolvedValue(targetSyncChecks),
+      getLibrary: vi.fn().mockResolvedValue(mcpLibrary),
+      listMarket: vi.fn().mockResolvedValue([]),
+      listMarketSources: vi.fn().mockResolvedValue([]),
+      getTargetPresets: vi.fn().mockResolvedValue([]),
+      getTargetStatus: vi.fn().mockResolvedValue([]),
+      checkAllServers: vi.fn().mockResolvedValue([]),
+    };
+    useMcpStore.setState({
+      library: mcpLibrary,
+      selectedServerId: filesystemServer.id,
+      preview: "existing target preview",
+    });
+
+    const result = await useMcpStore
+      .getState()
+      .syncTargets(filesystemServer.id, { disabledPlatformIds: ["cursor"] });
+
+    expect(window.api.mcp.syncTargets).toHaveBeenCalledWith(
+      filesystemServer.id,
+      { disabledPlatformIds: ["cursor"] },
+    );
+    expect(JSON.stringify(result)).not.toContain("ph-token-mineru-12345");
+    expect(useMcpStore.getState().lastTargetSyncResult).toEqual(
+      targetSyncResult,
+    );
+    expect(useMcpStore.getState().targetSyncChecks).toEqual(targetSyncChecks);
+    expect(useMcpStore.getState().preview).toBe("existing target preview");
+  });
 });

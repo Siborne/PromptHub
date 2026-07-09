@@ -16,6 +16,9 @@ import type {
   McpServerConfig,
   McpServerDraft,
   McpTargetKind,
+  McpTargetSyncApplyResult,
+  McpTargetSyncCheck,
+  McpTargetSyncOptions,
   McpTargetStatusEntry,
 } from "@prompthub/shared/types/mcp";
 import type { AgentAssetFileSnapshot } from "@prompthub/shared/types/sync";
@@ -83,4 +86,14 @@ export const mcpApi = {
       envFilePath,
       selectedKeys,
     ),
+  checkTargetSync: (
+    identifier: string,
+    options?: McpTargetSyncOptions,
+  ): Promise<McpTargetSyncCheck[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.MCP_TARGET_SYNC_CHECK, identifier, options),
+  syncTargets: (
+    identifier: string,
+    options?: McpTargetSyncOptions,
+  ): Promise<McpTargetSyncApplyResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.MCP_TARGET_SYNC_APPLY, identifier, options),
 };

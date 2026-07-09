@@ -290,6 +290,7 @@ export function McpManager() {
     loadingMoreMarketSourceId,
     marketError,
     healthChecks,
+    targetSyncChecks,
     targetPresets,
     targetStatus,
     selectedTab,
@@ -311,6 +312,8 @@ export function McpManager() {
     installTemplate,
     importEnv,
     checkServer,
+    checkTargetSync,
+    syncTargets,
     applyTarget,
     removeTarget,
     removeTargetNames,
@@ -434,6 +437,13 @@ export function McpManager() {
         ? healthChecks.find((item) => item.serverId === detailServer.id)
         : undefined,
     [detailServer, healthChecks],
+  );
+  const selectedServerTargetSyncChecks = useMemo(
+    () =>
+      detailServer
+        ? targetSyncChecks.filter((item) => item.serverId === detailServer.id)
+        : [],
+    [detailServer, targetSyncChecks],
   );
   const installedNames = useMemo(
     () => new Set(servers.map((server) => server.name)),
@@ -1291,6 +1301,56 @@ export function McpManager() {
     }
   };
 
+  const handleCheckTargetSync = async (serverId: string) => {
+    try {
+      const checks = await checkTargetSync(serverId, { disabledPlatformIds });
+      const blockedCount = checks.filter(
+        (check) =>
+          !check.safeToReapply &&
+          check.status !== "synced" &&
+          !check.status.startsWith("skipped-"),
+      ).length;
+      showToast(
+        blockedCount > 0
+          ? t("mcp.targetSync.checkedWithReview", {
+              count: blockedCount,
+              defaultValue: "{{count}} target(s) need review",
+            })
+          : t("mcp.targetSync.checked", "Target sync checked"),
+        blockedCount > 0 ? "warning" : "success",
+      );
+      return checks;
+    } catch (syncError) {
+      reportError(syncError);
+      throw syncError;
+    }
+  };
+
+  const handleSyncTargets = async (serverId: string) => {
+    try {
+      const result = await syncTargets(serverId, { disabledPlatformIds });
+      const blockedOrFailed = result.blocked.length + result.failed.length;
+      showToast(
+        blockedOrFailed > 0
+          ? t("mcp.targetSync.completedWithReview", {
+              updated: result.updated.length,
+              blocked: blockedOrFailed,
+              defaultValue:
+                "{{updated}} target(s) synced, {{blocked}} need review",
+            })
+          : t("mcp.targetSync.completed", {
+              count: result.updated.length,
+              defaultValue: "{{count}} target(s) synced",
+            }),
+        blockedOrFailed > 0 ? "warning" : "success",
+      );
+      return result;
+    } catch (syncError) {
+      reportError(syncError);
+      throw syncError;
+    }
+  };
+
   const handleImportEnv = async (
     serverId: string,
     envFilePath: string,
@@ -1396,6 +1456,7 @@ export function McpManager() {
           server={detailServer}
           healthCheck={selectedServerHealth}
           distributedTargetCount={selectedServerTargetCount}
+          targetSyncChecks={selectedServerTargetSyncChecks}
           platformPanel={
             <McpPlatformPanel
               server={detailServer}
@@ -1415,6 +1476,8 @@ export function McpManager() {
           }}
           onSave={handleSave}
           onCheckServer={handleCheckServer}
+          onCheckTargetSync={handleCheckTargetSync}
+          onSyncTargets={handleSyncTargets}
           onImportEnv={handleImportEnv}
           onDelete={handleDelete}
         />

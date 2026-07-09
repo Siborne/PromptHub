@@ -2733,6 +2733,32 @@
       "error": "Error",
       "unchecked": "Unchecked"
     },
+    "targetSync": {
+      "title": "Target sync",
+      "check": "Check sync",
+      "sync": "Sync distributed targets",
+      "checked": "Target sync checked",
+      "checkedWithReview": "{{count}} target(s) need review",
+      "completed": "{{count}} target(s) synced",
+      "completedWithReview": "{{updated}} target(s) synced, {{blocked}} need review",
+      "syncedCount": "{{count}} synced",
+      "staleCount": "{{count}} need sync",
+      "blockedCount": "{{count}} need review",
+      "skippedCount": "{{count}} skipped",
+      "uncheckedHint": "Check distributed targets before syncing MCP env changes.",
+      "status": {
+        "synced": "Synced",
+        "needs-sync": "Needs sync",
+        "external-modified": "External edit",
+        "conflict": "Conflict",
+        "missing-target": "Missing target",
+        "missing-entry": "Missing entry",
+        "parse-error": "Parse error",
+        "legacy-needs-review": "Needs review",
+        "skipped-disabled-platform": "Platform disabled",
+        "skipped-server-disabled": "Server disabled"
+      }
+    },
     "saveEnvValues": "Save env",
     "savingEnvValues": "Saving...",
     "envValue": "env value"
