@@ -38,6 +38,7 @@ const repoMocks = vi.hoisted(() => ({
 const utilsMocks = vi.hoisted(() => ({
   getPlatformSkillsDir: vi.fn(() => "/platform/skills"),
   getCustomAgentPlatforms: vi.fn(() => []),
+  getConfiguredBuiltinAgentPlatformIds: vi.fn(() => []),
   validateMCPConfig: vi.fn(),
 }));
 
@@ -67,6 +68,8 @@ vi.mock("../../../src/main/services/skill-installer-repo", () => ({
 vi.mock("../../../src/main/services/skill-installer-utils", () => ({
   getPlatformSkillsDir: utilsMocks.getPlatformSkillsDir,
   getCustomAgentPlatforms: utilsMocks.getCustomAgentPlatforms,
+  getConfiguredBuiltinAgentPlatformIds:
+    utilsMocks.getConfiguredBuiltinAgentPlatformIds,
   validateMCPConfig: utilsMocks.validateMCPConfig,
 }));
 
@@ -92,6 +95,7 @@ describe("skill-installer-platform symlink install", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     utilsMocks.getCustomAgentPlatforms.mockReturnValue([]);
+    utilsMocks.getConfiguredBuiltinAgentPlatformIds.mockReturnValue([]);
     utilsMocks.getPlatformSkillsDir.mockReturnValue("/platform/skills");
     fsMocks.lstat.mockRejectedValue(
       Object.assign(new Error("missing"), { code: "ENOENT" }),
@@ -182,6 +186,16 @@ describe("skill-installer-platform symlink install", () => {
         (platform) => platform.id === "custom-agent-1",
       ),
     ).toBe(true);
+  });
+
+  it("marks built-in platforms with user overrides as configured targets", () => {
+    utilsMocks.getConfiguredBuiltinAgentPlatformIds.mockReturnValue(["claude"]);
+
+    const claude = getSupportedPlatforms().find(
+      (platform) => platform.id === "claude",
+    );
+
+    expect(claude?.isConfigured).toBe(true);
   });
 
   it("allows symlink installs for custom agents", async () => {

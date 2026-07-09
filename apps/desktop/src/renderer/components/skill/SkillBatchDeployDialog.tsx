@@ -14,7 +14,7 @@ import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { useToast } from "../ui/Toast";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { useSettingsStore } from "../../stores/settings.store";
-import { filterDetectedPlatforms } from "../../services/platform-visibility";
+import { filterDeployablePlatforms } from "../../services/platform-visibility";
 import {
   syncSkillsToPlatforms,
   type SkillInstallMode,
@@ -69,7 +69,7 @@ export function SkillBatchDeployDialog({
 
   const availablePlatforms = useMemo(
     () =>
-      filterDetectedPlatforms(
+      filterDeployablePlatforms(
         supportedPlatforms,
         detectedPlatforms,
         disabledPlatformIds,
@@ -203,8 +203,7 @@ export function SkillBatchDeployDialog({
           t("skill.batchDeployFallback", {
             count: result.fallbacks.length,
             preview,
-            defaultValue:
-              `${result.fallbacks.length} target(s) used copy install because symlinks were unavailable: ${preview}`,
+            defaultValue: `${result.fallbacks.length} target(s) used copy install because symlinks were unavailable: ${preview}`,
           }),
           "warning",
         );
@@ -394,8 +393,8 @@ export function SkillBatchDeployDialog({
               ) : availablePlatforms.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
                   {t(
-                    "skill.noDetectedPlatforms",
-                    "No syncable platform directories detected.",
+                    "skill.noDeployablePlatforms",
+                    "No deployable Agent targets available.",
                   )}
                 </div>
               ) : (
@@ -404,7 +403,7 @@ export function SkillBatchDeployDialog({
                     {actionMode === "deploy"
                       ? t(
                           "skill.batchDeployDefaultsHint",
-                          "Detected platforms are selected by default. Confirm the targets before starting batch sync.",
+                          "Available targets are selected by default. Confirm them before starting batch sync.",
                         )
                       : t(
                           "skill.batchUndeployDefaultsHint",
@@ -573,7 +572,8 @@ export function SkillBatchDeployDialog({
                     })}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    {skillNameById.get(progress.skillId) ?? progress.skillId} {"->"} {progress.platformId}
+                    {skillNameById.get(progress.skillId) ?? progress.skillId}{" "}
+                    {"->"} {progress.platformId}
                   </div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-primary/10">
                     <div
@@ -597,8 +597,8 @@ export function SkillBatchDeployDialog({
                   <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                     {lastFailures.slice(0, 6).map((failure) => (
                       <div key={`${failure.skillId}-${failure.platformId}`}>
-                        {skillNameById.get(failure.skillId) ?? failure.skillId} {"->"} {failure.platformId}:{" "}
-                        {failure.reason}
+                        {skillNameById.get(failure.skillId) ?? failure.skillId}{" "}
+                        {"->"} {failure.platformId}: {failure.reason}
                       </div>
                     ))}
                   </div>

@@ -21,7 +21,7 @@ import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
 import { useUIStore } from "../../stores/ui.store";
-import { filterDetectedPlatforms } from "../../services/platform-visibility";
+import { filterDeployablePlatforms } from "../../services/platform-visibility";
 import { getSkillScanStatus } from "../../services/skill-scan-status";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
@@ -106,7 +106,7 @@ export function SkillAgentsView() {
   const visiblePlatforms = useMemo(
     () =>
       sortSkillPlatformsByPreference(
-        filterDetectedPlatforms(
+        filterDeployablePlatforms(
           platforms,
           detectedPlatforms,
           disabledPlatformIds,
@@ -252,7 +252,7 @@ export function SkillAgentsView() {
         setPlatforms(supported);
         setDetectedPlatforms(detected);
         const nextVisiblePlatforms = sortSkillPlatformsByPreference(
-          filterDetectedPlatforms(supported, detected, disabledPlatformIds),
+          filterDeployablePlatforms(supported, detected, disabledPlatformIds),
           skillPlatformOrder,
         );
         setSelectedPlatformId((current) =>

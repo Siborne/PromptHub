@@ -2146,7 +2146,7 @@
     "selectedPlatforms": "{{count}} seleccionado(s)",
     "distributionStats": "{{deployed}} distribuidos / {{total}} en total",
     "progressiveRendering": "Renderizando {{rendered}}/{{total}} por lotes",
-    "batchDeployDefaultsHint": "Las plataformas detectadas se seleccionan por defecto. Confirma los destinos antes de iniciar la sincronización masiva.",
+    "batchDeployDefaultsHint": "Los destinos disponibles se seleccionan por defecto. Confírmalos antes de iniciar la sincronización masiva.",
     "batchUndeployDefaultsHint": "Solo elimina los skills distribuidos por PromptHub de las plataformas elegidas. Tu repositorio local no se toca.",
     "executionPlan": "Plan de ejecución",
     "noPlatformSelected": "Ninguna plataforma seleccionada",
@@ -2239,7 +2239,6 @@
     "batchDeployHint": "Deploy {{count}} skill(s) to selected platforms.",
     "batchUndeploy": "Batch Uninstall from Platforms",
     "batchUndeployHint": "Removes corresponding skills from selected platform directories. Your local PromptHub repo is not affected.",
-    "noDetectedPlatforms": "No syncable platform directories detected.",
     "customPaths": "Custom scan paths",
     "detailRenderError": "This skill cannot be opened right now",
     "existingTags": "Existing tags",
@@ -2346,7 +2345,8 @@
     "platformUninstallCopyHint": "Elimina la copia del Skill del directorio de la plataforma. El Skill local permanece en PromptHub.",
     "searchSkill": "Buscar Skills...",
     "partiallyImportedBadge": "Importado parcialmente",
-    "selectSkill": "Seleccionar {{name}}"
+    "selectSkill": "Seleccionar {{name}}",
+    "noDeployablePlatforms": "No hay destinos de distribución de Skills disponibles."
   },
   "error": {
     "sha512Desc": "SHA512 checksum mismatch.\nThis is usually caused by CDN cache inconsistencies or network issues.\nThe file may have been downloaded successfully. You can try to install it manually."

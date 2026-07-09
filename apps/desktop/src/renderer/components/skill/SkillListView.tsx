@@ -16,7 +16,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { PlatformIcon } from "../ui/PlatformIcon";
-import { filterDetectedPlatforms } from "../../services/platform-visibility";
+import { filterDeployablePlatforms } from "../../services/platform-visibility";
 import type { Skill, SkillSafetyLevel } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { getRuntimeCapabilities } from "../../runtime";
@@ -231,7 +231,7 @@ export function SkillListView({
   }, [runtimeCapabilities.skillPlatformIntegration, skills]);
 
   const availablePlatforms = useMemo(() => {
-    return filterDetectedPlatforms(
+    return filterDeployablePlatforms(
       supportedPlatforms,
       detectedPlatforms,
       disabledPlatformIds,

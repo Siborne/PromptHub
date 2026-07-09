@@ -21,6 +21,7 @@ export interface SkillPlatform {
   globalRuleFile?: string;
   configFiles?: string[];
   isCustom?: boolean;
+  isConfigured?: boolean;
 }
 
 export type SkillPlatformOsKey = "darwin" | "win32" | "linux";

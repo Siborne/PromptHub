@@ -2147,7 +2147,7 @@
     "selectedPlatforms": "{{count}} 件を選択中",
     "distributionStats": "{{deployed}} 件配布 / 全 {{total}} 件",
     "progressiveRendering": "{{rendered}}/{{total}} 件を段階的に描画中",
-    "batchDeployDefaultsHint": "検出されたプラットフォームは初期状態で選択されています。一括同期を始める前に対象を確認してください。",
+    "batchDeployDefaultsHint": "利用可能なターゲットは初期状態で選択されています。一括同期を始める前に対象を確認してください。",
     "batchUndeployDefaultsHint": "選択したプラットフォームから PromptHub が配布した skill だけを削除します。ローカルリポジトリの元ファイルは削除しません。",
     "executionPlan": "実行プラン",
     "noPlatformSelected": "プラットフォームが未選択です",
@@ -2240,7 +2240,6 @@
     "batchDeployHint": "Deploy {{count}} skill(s) to selected platforms.",
     "batchUndeploy": "Batch Uninstall from Platforms",
     "batchUndeployHint": "Removes corresponding skills from selected platform directories. Your local PromptHub repo is not affected.",
-    "noDetectedPlatforms": "No syncable platform directories detected.",
     "customPaths": "Custom scan paths",
     "detailRenderError": "This skill cannot be opened right now",
     "existingTags": "Existing tags",
@@ -2347,7 +2346,8 @@
     "platformUninstallCopyHint": "プラットフォームディレクトリ内のコピーを削除します。PromptHub 内のローカル Skill は残ります。",
     "searchSkill": "Skill を検索...",
     "partiallyImportedBadge": "一部インポート済み",
-    "selectSkill": "{{name}} を選択"
+    "selectSkill": "{{name}} を選択",
+    "noDeployablePlatforms": "配布可能な Agent ターゲットがありません。"
   },
   "error": {
     "sha512Desc": "SHA512 checksum mismatch.\nThis is usually caused by CDN cache inconsistencies or network issues.\nThe file may have been downloaded successfully. You can try to install it manually."

@@ -464,6 +464,27 @@ function deriveLegacyRootPathMap(
   );
 }
 
+function hasBuiltinAgentOverrideConfig(
+  override: BuiltinAgentOverrideConfig | undefined,
+): boolean {
+  if (!override) {
+    return false;
+  }
+
+  return (
+    Boolean(override.rootPath?.trim()) ||
+    Boolean(override.skillsRelativePath?.trim()) ||
+    Boolean(override.mcpRelativePath?.trim()) ||
+    Boolean(override.pluginsRelativePath?.trim()) ||
+    Boolean(override.rulesRelativePath?.trim()) ||
+    Boolean(override.agentsRelativePath?.trim()) ||
+    Boolean(override.commandsRelativePath?.trim()) ||
+    Boolean(
+      override.configRelativePaths?.some((entry) => entry.trim().length > 0),
+    )
+  );
+}
+
 function parseJsonSetting<T>(rawValue: string | undefined, fallback: T): T {
   if (!rawValue) {
     return fallback;
@@ -621,6 +642,12 @@ export function getCustomAgentPlatforms(): SkillPlatform[] {
       configFiles: agent.configRelativePaths || [],
       isCustom: true,
     }));
+}
+
+export function getConfiguredBuiltinAgentPlatformIds(): string[] {
+  return Object.entries(readBuiltinAgentOverridesFromSettings())
+    .filter(([, override]) => hasBuiltinAgentOverrideConfig(override))
+    .map(([platformId]) => platformId);
 }
 
 /**

@@ -18,6 +18,7 @@ vi.mock("../../../src/main/database", () => ({
 import { initDatabase } from "../../../src/main/database";
 import { getPlatformById } from "@prompthub/shared/constants/platforms";
 import {
+  getConfiguredBuiltinAgentPlatformIds,
   getPlatformRootDir,
   getPlatformSkillsDir,
   getPlatformGlobalRulePath,
@@ -34,6 +35,64 @@ describe("skill-installer-utils", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     invalidateCustomPathsCache();
+  });
+
+  describe("getConfiguredBuiltinAgentPlatformIds", () => {
+    it("returns platform ids with any non-empty builtin override fields", () => {
+      const getMock = vi.fn().mockImplementation((key: string) => {
+        if (key === "builtinAgentOverrides") {
+          return {
+            value: JSON.stringify({
+              claude: { rootPath: "~/.agent" },
+              codex: { skillsRelativePath: "custom-skills" },
+              opencode: {},
+              cursor: { rootPath: "   " },
+            }),
+          };
+        }
+        return undefined;
+      });
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({ get: getMock }),
+      } as unknown as ReturnType<typeof initDatabase>);
+
+      expect(getConfiguredBuiltinAgentPlatformIds().sort()).toEqual([
+        "claude",
+        "codex",
+      ]);
+    });
+
+    it("falls back to customPlatformRootPaths when builtin overrides are empty", () => {
+      const getMock = vi.fn().mockImplementation((key: string) => {
+        if (key === "customPlatformRootPaths") {
+          return {
+            value: JSON.stringify({ claude: "~/.custom-claude" }),
+          };
+        }
+        return undefined;
+      });
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({ get: getMock }),
+      } as unknown as ReturnType<typeof initDatabase>);
+
+      expect(getConfiguredBuiltinAgentPlatformIds()).toEqual(["claude"]);
+    });
+
+    it("falls back to legacy customSkillPlatformPaths roots", () => {
+      const getMock = vi.fn().mockImplementation((key: string) => {
+        if (key === "customSkillPlatformPaths") {
+          return {
+            value: JSON.stringify({ claude: "~/.legacy-claude/skills" }),
+          };
+        }
+        return undefined;
+      });
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({ get: getMock }),
+      } as unknown as ReturnType<typeof initDatabase>);
+
+      expect(getConfiguredBuiltinAgentPlatformIds()).toEqual(["claude"]);
+    });
   });
 
   // ---------- getPlatformSkillsDir ----------

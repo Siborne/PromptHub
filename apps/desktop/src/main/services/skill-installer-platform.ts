@@ -34,6 +34,7 @@ import {
 } from "./cherry-studio-skill-platform";
 import {
   getPlatformSkillsDir,
+  getConfiguredBuiltinAgentPlatformIds,
   getCustomAgentPlatforms,
   validateMCPConfig,
 } from "./skill-installer-utils";
@@ -449,7 +450,14 @@ async function copySkillRepoToPlatform(
  * Get list of supported platforms.
  */
 export function getSupportedPlatforms(): SkillPlatform[] {
-  return [...SKILL_PLATFORMS, ...getCustomAgentPlatforms()];
+  const configuredBuiltinIds = new Set(getConfiguredBuiltinAgentPlatformIds());
+  const builtinPlatforms = SKILL_PLATFORMS.map((platform) =>
+    configuredBuiltinIds.has(platform.id)
+      ? { ...platform, isConfigured: true }
+      : platform,
+  );
+
+  return [...builtinPlatforms, ...getCustomAgentPlatforms()];
 }
 
 /**

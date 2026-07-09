@@ -59,7 +59,7 @@ import { getRemoteStoreSkillCount } from "../../services/remote-store-entry";
 import { getRuntimeCapabilities, isWebRuntime } from "../../runtime";
 import { TagManagerModal } from "../prompt/TagManagerModal";
 import { mergePromptTagCatalog } from "../prompt/prompt-modal-utils";
-import { filterDetectedPlatforms } from "../../services/platform-visibility";
+import { filterDeployablePlatforms } from "../../services/platform-visibility";
 import {
   deriveProjectMcpTargetPresets,
   filterVisibleMcpTargetPresets,
@@ -554,7 +554,7 @@ export function Sidebar({
           return;
         }
         setDetectedSkillAgentCount(
-          filterDetectedPlatforms(supported, detected, disabledPlatformIds)
+          filterDeployablePlatforms(supported, detected, disabledPlatformIds)
             .length,
         );
       } catch {

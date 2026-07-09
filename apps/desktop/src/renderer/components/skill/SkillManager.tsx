@@ -57,7 +57,7 @@ import { getRemoteStoreSkills } from "../../services/remote-store-entry";
 import { hasRegistrySkillVersionChanged } from "../../services/skill-store-update";
 import { getRuntimeCapabilities } from "../../runtime";
 import { useSkillStoreRemoteSync } from "./store-remote-sync";
-import { filterDetectedPlatforms } from "../../services/platform-visibility";
+import { filterDeployablePlatforms } from "../../services/platform-visibility";
 
 const MAX_STAGGERED_CARDS = 10;
 const CARD_STAGGER_MS = 50;
@@ -325,7 +325,7 @@ export function SkillManager() {
   );
   const availableSkillPlatforms = useMemo(
     () =>
-      filterDetectedPlatforms(
+      filterDeployablePlatforms(
         supportedPlatforms,
         detectedPlatforms,
         disabledPlatformIds,

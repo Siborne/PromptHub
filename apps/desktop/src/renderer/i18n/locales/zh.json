@@ -2157,7 +2157,7 @@
     "selectedPlatforms": "已选 {{count}} 个",
     "distributionStats": "已分发 {{deployed}} / 全部 {{total}}",
     "progressiveRendering": "正在分批渲染 {{rendered}}/{{total}}",
-    "batchDeployDefaultsHint": "默认已选中当前检测到的平台。开始批量同步前请先确认目标平台。",
+    "batchDeployDefaultsHint": "默认已选中当前可分发目标。开始批量同步前请先确认目标平台。",
     "batchUndeployDefaultsHint": "仅会从所选平台移除 PromptHub 分发出去的 skill，不会删除本地仓库中的原始文件。",
     "executionPlan": "执行计划",
     "noPlatformSelected": "尚未选择平台",
@@ -2281,7 +2281,6 @@
     "loadFailed": "加载失败",
     "nameInvalid": "名称格式无效（只允许小写字母、数字和连字符）",
     "nameTooLong": "名称长度不能超过 64 个字符",
-    "noDetectedPlatforms": "没有检测到可同步的平台目录",
     "openFileEditor": "打开文件编辑器",
     "openAgentShortcut": "打开当前快捷方式",
     "openLocalSource": "打开本地 Skill 文件夹",
@@ -2357,7 +2356,8 @@
     "platformUninstallCopyHint": "这会删除平台目录中的复制文件，PromptHub 本地 Skill 不会被删除。",
     "searchSkill": "搜索 Skill...",
     "partiallyImportedBadge": "部分已导入",
-    "selectSkill": "选择 {{name}}"
+    "selectSkill": "选择 {{name}}",
+    "noDeployablePlatforms": "当前没有可用的 Skill 分发目标。"
   },
   "error": {
     "sha512Desc": "SHA512 校验失败。\n这通常是由于 CDN 缓存不一致或网络劫持导致的。\n文件可能已下载完成，您可以尝试手动安装。"

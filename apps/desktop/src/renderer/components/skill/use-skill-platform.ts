@@ -12,7 +12,7 @@ import {
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { getRuntimeCapabilities } from "../../runtime";
-import { filterDetectedPlatforms } from "../../services/platform-visibility";
+import { filterDeployablePlatforms } from "../../services/platform-visibility";
 
 export type { SkillInstallMode } from "@prompthub/shared/types";
 
@@ -98,12 +98,10 @@ export function useSkillPlatform(
   installMode: SkillInstallMode,
 ) {
   const loadDeployedStatus = useSkillStore((state) => state.loadDeployedStatus);
-  const skillPlatformOrder = useSettingsStore(
-    (state) => state.skillPlatformOrder,
-  ) ?? [];
-  const disabledPlatformIds = useSettingsStore(
-    (state) => state.disabledPlatformIds,
-  ) ?? [];
+  const skillPlatformOrder =
+    useSettingsStore((state) => state.skillPlatformOrder) ?? [];
+  const disabledPlatformIds =
+    useSettingsStore((state) => state.disabledPlatformIds) ?? [];
   const runtimeCapabilities = getRuntimeCapabilities();
   const [supportedPlatforms, setSupportedPlatforms] = useState<SkillPlatform[]>(
     [],
@@ -149,12 +147,12 @@ export function useSkillPlatform(
       typeof window.api.skill.getMdInstallStatusDetails === "function"
         ? await window.api.skill.getMdInstallStatusDetails(skill.id)
         : Object.fromEntries(
-            Object.entries(await window.api.skill.getMdInstallStatus(skill.id)).map(
-              ([platformId, installed]) => [
-                platformId,
-                { installed: Boolean(installed) },
-              ],
-            ),
+            Object.entries(
+              await window.api.skill.getMdInstallStatus(skill.id),
+            ).map(([platformId, installed]) => [
+              platformId,
+              { installed: Boolean(installed) },
+            ]),
           );
     const status = Object.fromEntries(
       Object.entries(details).map(([platformId, installStatus]) => [
@@ -180,14 +178,19 @@ export function useSkillPlatform(
   const availablePlatforms = useMemo(
     () =>
       sortSkillPlatformsByPreference(
-        filterDetectedPlatforms(
+        filterDeployablePlatforms(
           supportedPlatforms,
           detectedPlatforms,
           disabledPlatformIds,
         ),
         skillPlatformOrder,
       ),
-    [detectedPlatforms, disabledPlatformIds, skillPlatformOrder, supportedPlatforms],
+    [
+      detectedPlatforms,
+      disabledPlatformIds,
+      skillPlatformOrder,
+      supportedPlatforms,
+    ],
   );
 
   const uninstalledPlatforms = useMemo(
@@ -208,7 +211,9 @@ export function useSkillPlatform(
   }, []);
 
   const selectAllPlatforms = useCallback(() => {
-    setSelectedPlatforms(new Set(uninstalledPlatforms.map((platform) => platform.id)));
+    setSelectedPlatforms(
+      new Set(uninstalledPlatforms.map((platform) => platform.id)),
+    );
   }, [uninstalledPlatforms]);
 
   const deselectAllPlatforms = useCallback(() => {
@@ -254,7 +259,11 @@ export function useSkillPlatform(
               });
             }
           } else {
-            await window.api.skill.installMd(skill.id, skillMdContent, platformId);
+            await window.api.skill.installMd(
+              skill.id,
+              skillMdContent,
+              platformId,
+            );
           }
           successCount++;
         } catch (error) {

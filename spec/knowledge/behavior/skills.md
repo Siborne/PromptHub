@@ -64,6 +64,13 @@
 - 项目级分发默认目标为当前项目的 `.agents/skills`，并允许用户额外选择多个目标目录。
 - 项目级分发必须复制整个 Skill 目录到 `<target>/<skill-name>/`，而不是只写单个 `SKILL.md` 文件；这是全局 Skill package contract 在项目分发场景下的具体要求。
 
+### 3.3 Agent Platform Visibility Contract
+
+- Skill 平台分发的可见目标由“已检测到的平台”与“用户显式配置的平台”共同决定。
+- 已启用的 custom Agent 和存在用户覆盖配置的 built-in Agent 必须作为可分发目标显示，即使其根目录当前还不存在；安装流程负责创建缺失目录。
+- `disabledPlatformIds` 始终优先于检测和显式配置，用于隐藏用户不希望看到的平台。
+- 平台检测仍用于默认 built-in 平台降噪和状态提示，但不得单独作为分发目标可见性的唯一门禁。
+
 ### 4. Translation Contract
 
 - Skill 详情页的 AI 翻译结果属于可恢复的本地用户状态。

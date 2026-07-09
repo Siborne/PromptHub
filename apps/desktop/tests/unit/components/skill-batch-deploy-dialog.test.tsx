@@ -53,7 +53,9 @@ function hasHiddenSvgAncestor(element: Element): boolean {
 
 function getExposedButtonMedia(): string[] {
   return Array.from(
-    document.body.querySelectorAll('button svg, button img, button [role="img"]'),
+    document.body.querySelectorAll(
+      'button svg, button img, button [role="img"]',
+    ),
   )
     .filter((element) => !hasHiddenSvgAncestor(element))
     .map((element) => element.outerHTML);
@@ -144,6 +146,98 @@ describe("SkillBatchDeployDialog install mode", () => {
       );
     });
     expect(window.api.skill.installMdSymlink).not.toHaveBeenCalled();
+  });
+
+  it("shows configured Agent targets even when platform detection has not found them", async () => {
+    vi.mocked(window.api.skill.getSupportedPlatforms).mockResolvedValue([
+      {
+        id: "claude",
+        name: "Claude Code",
+        icon: "Terminal",
+        rootDir: {
+          darwin: "~/.agent",
+          win32: "~/.agent",
+          linux: "~/.agent",
+        },
+        skillsRelativePath: "skills",
+        isConfigured: true,
+      },
+      {
+        id: "custom-agent-1",
+        name: "Team Agent",
+        icon: "Bot",
+        rootDir: {
+          darwin: "~/.team-agent",
+          win32: "~/.team-agent",
+          linux: "~/.team-agent",
+        },
+        skillsRelativePath: "skills",
+        isCustom: true,
+      },
+      {
+        id: "codex",
+        name: "Codex CLI",
+        icon: "Bot",
+        rootDir: {
+          darwin: "~/.codex",
+          win32: "~/.codex",
+          linux: "~/.codex",
+        },
+        skillsRelativePath: "skills",
+      },
+    ]);
+    vi.mocked(window.api.skill.detectPlatforms).mockResolvedValue([]);
+
+    await renderWithI18n(
+      <SkillBatchDeployDialog
+        skills={[createSkillFixture({ id: "skill-1", name: "Writer" })]}
+        onClose={vi.fn()}
+      />,
+      { language: "en" },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Claude Code")).toBeInTheDocument();
+      expect(screen.getByText("Team Agent")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Codex CLI")).not.toBeInTheDocument();
+  });
+
+  it("still hides disabled configured Agent targets", async () => {
+    bindSettingsState(
+      createSettingsState({ disabledPlatformIds: ["custom-agent-1"] }),
+    );
+    vi.mocked(window.api.skill.getSupportedPlatforms).mockResolvedValue([
+      {
+        id: "custom-agent-1",
+        name: "Team Agent",
+        icon: "Bot",
+        rootDir: {
+          darwin: "~/.team-agent",
+          win32: "~/.team-agent",
+          linux: "~/.team-agent",
+        },
+        skillsRelativePath: "skills",
+        isCustom: true,
+      },
+    ]);
+    vi.mocked(window.api.skill.detectPlatforms).mockResolvedValue([]);
+
+    await renderWithI18n(
+      <SkillBatchDeployDialog
+        skills={[createSkillFixture({ id: "skill-1", name: "Writer" })]}
+        onClose={vi.fn()}
+      />,
+      { language: "en" },
+    );
+
+    await waitFor(() => {
+      expect(window.api.skill.getSupportedPlatforms).toHaveBeenCalled();
+    });
+    expect(screen.queryByText("Team Agent")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No deployable Agent targets available."),
+    ).toBeInTheDocument();
   });
 
   it("ignores repeated deploy clicks while the first batch is pending", async () => {
@@ -243,8 +337,10 @@ describe("SkillBatchDeployDialog install mode", () => {
       "aria-hidden",
       "true",
     );
-    expect(getExposedButtonMedia(), getExposedButtonMedia().join("\n"))
-      .toHaveLength(0);
+    expect(
+      getExposedButtonMedia(),
+      getExposedButtonMedia().join("\n"),
+    ).toHaveLength(0);
 
     fireEvent.click(symlinkButton);
     fireEvent.click(toggleAllButton);
