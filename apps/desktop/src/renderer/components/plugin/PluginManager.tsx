@@ -3024,6 +3024,8 @@ export function PluginManager() {
   const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
   const [batchMarketRemoveConfirmOpen, setBatchMarketRemoveConfirmOpen] =
     useState(false);
+  const [batchMarketUpdateConfirmOpen, setBatchMarketUpdateConfirmOpen] =
+    useState(false);
   const [batchTagDialogOpen, setBatchTagDialogOpen] = useState(false);
   const [isBatchInstalling, setIsBatchInstalling] = useState(false);
   const [isBatchUpdating, setIsBatchUpdating] = useState(false);
@@ -4101,6 +4103,7 @@ export function PluginManager() {
 
   const handleBatchUpdateMarketPlugins = async () => {
     if (selectedInstalledMarketPlugins.length === 0) {
+      setBatchMarketUpdateConfirmOpen(false);
       showToast(
         t("plugin.batchNoUpdateTargets", "No installed Plugins to update"),
         "info",
@@ -4129,6 +4132,7 @@ export function PluginManager() {
     }
 
     setIsBatchUpdating(false);
+    setBatchMarketUpdateConfirmOpen(false);
     setSelectedMarketEntryIds(new Set());
     showToast(
       t("plugin.batchStoreUpdateResult", {
@@ -5366,7 +5370,7 @@ export function PluginManager() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void handleBatchUpdateMarketPlugins()}
+                    onClick={() => setBatchMarketUpdateConfirmOpen(true)}
                     disabled={
                       isBatchUpdating ||
                       selectedInstalledMarketPlugins.length === 0
@@ -5542,6 +5546,27 @@ export function PluginManager() {
         cancelText={t("common.cancel", "Cancel")}
         variant="destructive"
         isLoading={isDeleting}
+      />
+      <ConfirmDialog
+        isOpen={batchMarketUpdateConfirmOpen}
+        onClose={() => {
+          if (!isBatchUpdating) {
+            setBatchMarketUpdateConfirmOpen(false);
+          }
+        }}
+        onConfirm={() => void handleBatchUpdateMarketPlugins()}
+        title={t(
+          "plugin.batchStoreUpdateTitle",
+          "Update selected store Plugins",
+        )}
+        message={t("plugin.batchStoreUpdateMessage", {
+          defaultValue:
+            "Check and update {{count}} selected installed Plugins from their sources?",
+          count: selectedInstalledMarketPlugins.length,
+        })}
+        confirmText={t("plugin.batchUpdateSelected", "Update selected")}
+        cancelText={t("common.cancel", "Cancel")}
+        isLoading={isBatchUpdating}
       />
       <ConfirmDialog
         isOpen={batchMarketRemoveConfirmOpen}

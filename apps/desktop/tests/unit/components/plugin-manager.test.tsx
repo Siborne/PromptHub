@@ -1,4 +1,10 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   PluginInventorySummary,
@@ -1042,13 +1048,21 @@ describe("PluginManager", () => {
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith("Gmail");
     });
-    writeText.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Copy Plugin path" }));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(
-        "/tmp/prompthub/plugins/gmail/repo/plugins/gmail",
-      );
-    });
+    expect(
+      screen.queryByRole("button", { name: "Copy Plugin path" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open Plugin folder" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open Plugins Store" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Safety Assessment" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Not checked" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Platform Integration")).toBeInTheDocument();
     expect(screen.getByText("Plugin Content")).toBeInTheDocument();
     expect(
@@ -1256,21 +1270,25 @@ describe("PluginManager", () => {
       }),
     );
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Run package check" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Not checked" }));
 
     await waitFor(() => {
       expect(
         window.api.plugin.checkInstalledPluginPackage,
       ).toHaveBeenCalledWith("gmail");
     });
-    expect(screen.getByText("Package OK")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Package OK" }));
+    const packageDialog = await screen.findByRole("dialog", {
+      name: "Package Check",
+    });
+    expect(within(packageDialog).getByText("Package OK")).toBeInTheDocument();
     expect(
-      screen.getByText("/tmp/prompthub/plugins/gmail/repo/plugins/gmail"),
+      within(packageDialog).getByText(
+        "/tmp/prompthub/plugins/gmail/repo/plugins/gmail",
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
+      within(packageDialog).getByText(
         "/tmp/prompthub/plugins/gmail/repo/plugins/gmail/.codex-plugin/plugin.json",
       ),
     ).toBeInTheDocument();
@@ -1324,9 +1342,7 @@ describe("PluginManager", () => {
       }),
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Run safety assessment" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Safety Assessment" }));
 
     await waitFor(() => {
       expect(window.api.skill.scanSafety).toHaveBeenCalledWith(
@@ -1363,10 +1379,22 @@ describe("PluginManager", () => {
         }),
       );
     });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Risk Level - Needs review",
+      }),
+    );
+    const safetyDialog = await screen.findByRole("dialog", {
+      name: "Safety Assessment",
+    });
     expect(
-      screen.getByText("Plugin package needs review before distribution."),
+      within(safetyDialog).getByText(
+        "Plugin package needs review before distribution.",
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByText("External network access")).toBeInTheDocument();
+    expect(
+      within(safetyDialog).getByText("External network access"),
+    ).toBeInTheDocument();
   });
 
   it("creates and opens installed Plugin version snapshots from the detail page", async () => {
@@ -1598,18 +1626,36 @@ describe("PluginManager", () => {
   });
 
   it("updates installed plugins from source when a source update is available", async () => {
-    const updatedPlugin = {
+    const currentPlugin = {
       ...installedGmailPlugin,
+      version: "0.1.2",
+      installedManifestHash: "installed-manifest-hash",
+    };
+    const currentLibrary = { ...installedLibrary, plugins: [currentPlugin] };
+    const updatedPlugin = {
+      ...currentPlugin,
       version: "2.0.0",
       description: "Updated Gmail package",
     };
     const updatedLibrary = { ...installedLibrary, plugins: [updatedPlugin] };
-    installPluginApiMock(installedLibrary);
+    const updatePreview: PluginMarketPreview = {
+      ...sourcePreview,
+      entry: {
+        ...sourcePreview.entry,
+        description: "Updated Gmail package",
+      },
+      description: "Updated Gmail package",
+      version: "2.0.0",
+    };
+    installPluginApiMock(currentLibrary);
     window.api.plugin.getPluginSourceUpdateStatus = vi.fn().mockResolvedValue({
       status: "update-available",
-      plugin: installedGmailPlugin,
+      plugin: currentPlugin,
+      preview: updatePreview,
       localModified: false,
       remoteChanged: true,
+      installedManifestHash: "installed-manifest-hash",
+      remoteManifestHash: "remote-manifest-hash",
     });
     window.api.plugin.updatePluginFromSource = vi.fn().mockResolvedValue({
       status: "updated",
@@ -1617,9 +1663,12 @@ describe("PluginManager", () => {
       library: updatedLibrary,
       check: {
         status: "update-available",
-        plugin: installedGmailPlugin,
+        plugin: currentPlugin,
+        preview: updatePreview,
         localModified: false,
         remoteChanged: true,
+        installedManifestHash: "installed-manifest-hash",
+        remoteManifestHash: "remote-manifest-hash",
       },
       warnings: [],
     });
@@ -1634,9 +1683,19 @@ describe("PluginManager", () => {
     );
 
     expect(
-      await screen.findByRole("button", { name: "Update from source" }),
+      await screen.findByRole("button", { name: "Update available" }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Update from source" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update available" }));
+
+    expect(window.api.plugin.updatePluginFromSource).not.toHaveBeenCalled();
+    const reviewDialog = await screen.findByRole("dialog", {
+      name: "Review Plugin update",
+    });
+    expect(within(reviewDialog).getByText("v0.1.2")).toBeInTheDocument();
+    expect(within(reviewDialog).getByText("v2.0.0")).toBeInTheDocument();
+    fireEvent.click(
+      within(reviewDialog).getByRole("button", { name: "Update from source" }),
+    );
 
     await waitFor(() => {
       expect(window.api.plugin.updatePluginFromSource).toHaveBeenCalledWith(
@@ -2507,7 +2566,21 @@ describe("PluginManager", () => {
     fireEvent.click(
       screen.getAllByRole("button", { name: "Select store Plugin" })[0],
     );
-    fireEvent.click(screen.getByRole("button", { name: "Update selected" }));
+    const updateSelectedButton = screen.getByRole("button", {
+      name: "Update selected",
+    });
+    await waitFor(() => {
+      expect(updateSelectedButton).not.toBeDisabled();
+    });
+    fireEvent.click(updateSelectedButton);
+
+    expect(window.api.plugin.updatePluginFromSource).not.toHaveBeenCalled();
+    const updateDialog = await screen.findByRole("alertdialog", {
+      name: "Update selected store Plugins",
+    });
+    fireEvent.click(
+      within(updateDialog).getByRole("button", { name: "Update selected" }),
+    );
 
     await waitFor(() => {
       expect(window.api.plugin.updatePluginFromSource).toHaveBeenCalledWith(

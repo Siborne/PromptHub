@@ -12,12 +12,11 @@ import {
   AlertTriangleIcon,
   ArrowLeftIcon,
   ArrowUpIcon,
+  CheckCircleIcon,
   CheckIcon,
   CheckSquareIcon,
   CodeIcon,
-  CopyIcon,
   CopyPlusIcon,
-  ExternalLinkIcon,
   FolderOpenIcon,
   HistoryIcon,
   InfoIcon,
@@ -35,7 +34,6 @@ import {
   SquareIcon,
   StarIcon,
   StickyNoteIcon,
-  StoreIcon,
   TrashIcon,
   XIcon,
 } from "lucide-react";
@@ -1124,6 +1122,59 @@ function getPluginSafetyTone(level?: SkillSafetyReport["level"]): string {
   return "border-border bg-background text-muted-foreground";
 }
 
+function formatPluginInventorySummary(
+  inventory?: PluginInventorySummary,
+): string {
+  if (!inventory) {
+    return "-";
+  }
+  const parts = PLUGIN_INVENTORY_KEYS.map((key) => ({
+    key,
+    count: inventory[key] ?? 0,
+  }))
+    .filter((item) => item.count > 0)
+    .map((item) => `${item.count} ${item.key}`);
+  return parts.length > 0 ? parts.join(", ") : "0";
+}
+
+function SourceUpdateDiffRow({
+  current,
+  currentLabel,
+  label,
+  next,
+  sourceLabel,
+}: {
+  current: string | undefined;
+  currentLabel: string;
+  label: string;
+  next: string | undefined;
+  sourceLabel: string;
+}) {
+  return (
+    <div className="grid gap-2 rounded-xl border border-border bg-muted/20 p-3 md:grid-cols-[9rem_1fr_1fr]">
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </div>
+      <div className="min-w-0">
+        <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+          {currentLabel}
+        </div>
+        <div className="break-words text-sm text-foreground">
+          {current?.trim() || "-"}
+        </div>
+      </div>
+      <div className="min-w-0">
+        <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+          {sourceLabel}
+        </div>
+        <div className="break-words text-sm font-medium text-foreground">
+          {next?.trim() || "-"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PluginSafetyAssessmentPanel({
   isScanning,
   onRunSafetyAssessment,
@@ -1298,10 +1349,8 @@ function PluginOverview({
   draftUserNotes,
   hasTranslatedDescription,
   isEditingUserNotes,
-  isCheckingPackage,
   isImportingChildMcp,
   isImportingChildSkills,
-  isScanningSafety,
   isSavingUserNotes,
   isShowingTranslatedDescription,
   isTranslatingDescription,
@@ -1311,13 +1360,10 @@ function PluginOverview({
   onRemoveDistribution,
   onImportChildMcp,
   onImportChildSkills,
-  onRunPackageCheck,
-  onRunSafetyAssessment,
   onSaveUserNotes,
   onStartEditUserNotes,
   onTranslateDescription,
   onUserNotesChange,
-  packageHealthCheck,
   plugin,
   targetMatrix,
 }: {
@@ -1337,10 +1383,8 @@ function PluginOverview({
   draftUserNotes: string;
   hasTranslatedDescription: boolean;
   isEditingUserNotes: boolean;
-  isCheckingPackage: boolean;
   isImportingChildMcp?: boolean;
   isImportingChildSkills?: boolean;
-  isScanningSafety: boolean;
   isSavingUserNotes: boolean;
   isShowingTranslatedDescription: boolean;
   isTranslatingDescription: boolean;
@@ -1355,13 +1399,10 @@ function PluginOverview({
   ) => Promise<void> | void;
   onImportChildMcp?: (plugin: PluginLibraryEntry) => void | Promise<void>;
   onImportChildSkills?: (plugin: PluginLibraryEntry) => void | Promise<void>;
-  onRunPackageCheck: () => void | Promise<void>;
-  onRunSafetyAssessment: () => void | Promise<void>;
   onSaveUserNotes: () => void | Promise<void>;
   onStartEditUserNotes: () => void;
   onTranslateDescription: (forceRefresh?: boolean) => void | Promise<void>;
   onUserNotesChange: (notes: string) => void;
-  packageHealthCheck?: PluginPackageHealthCheck;
   plugin: PluginLibraryEntry;
   targetMatrix: PluginTargetCompatibility[];
 }) {
@@ -1372,7 +1413,9 @@ function PluginOverview({
   const isAgentDetail = Boolean(agentContext);
 
   return (
-    <div className={`${DETAIL_PAGE_SOURCE_CLASS} ${DETAIL_PAGE_PREVIEW_GRID_CLASS}`}>
+    <div
+      className={`${DETAIL_PAGE_SOURCE_CLASS} ${DETAIL_PAGE_PREVIEW_GRID_CLASS}`}
+    >
       <div className="space-y-6">
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1608,17 +1651,6 @@ function PluginOverview({
           />
         ) : (
           <>
-            <PluginSafetyAssessmentPanel
-              isScanning={isScanningSafety}
-              onRunSafetyAssessment={onRunSafetyAssessment}
-              report={plugin.safetyReport}
-            />
-            <PluginPackageHealthPanel
-              check={packageHealthCheck}
-              isChecking={isCheckingPackage}
-              localPackagePath={localPackagePath}
-              onRunCheck={onRunPackageCheck}
-            />
             <PluginPlatformPanel
               plugin={plugin}
               localPackagePath={localPackagePath}
@@ -1789,7 +1821,6 @@ export function PluginFullDetailPage({
   onToggleFavorite,
   onImportChildMcp,
   onImportChildSkills,
-  onOpenStore,
 }: PluginFullDetailPageProps) {
   const { i18n, t } = useTranslation();
   const { showToast } = useToast();
@@ -1840,6 +1871,11 @@ export function PluginFullDetailPage({
   const [isSavingUserNotes, setIsSavingUserNotes] = useState(false);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
   const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
+  const [isSafetyReportModalOpen, setIsSafetyReportModalOpen] = useState(false);
+  const [isPackageCheckModalOpen, setIsPackageCheckModalOpen] = useState(false);
+  const [pendingSourceUpdateMode, setPendingSourceUpdateMode] = useState<
+    "update" | "overwrite" | null
+  >(null);
   const [snapshotNote, setSnapshotNote] = useState("");
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const [translatedDescription, setTranslatedDescription] = useState("");
@@ -1872,19 +1908,23 @@ export function PluginFullDetailPage({
     [descriptionFingerprint, getTranslationState, translationCacheKey],
   );
 
-  const checkSourceUpdate = async (showSuccess = false) => {
-    if (isCheckingUpdate) return;
+  const checkSourceUpdate = async (
+    showSuccess = false,
+  ): Promise<PluginSourceUpdateCheck | null> => {
+    if (isCheckingUpdate) return null;
     setIsCheckingUpdate(true);
     try {
       const check = await getPluginSourceUpdateStatus(plugin.id);
       if (showSuccess && check.status === "up-to-date") {
         showToast(t("plugin.upToDate", "Up to date"), "success");
       }
+      return check;
     } catch (error) {
       showToast(
         error instanceof Error ? error.message : String(error),
         "error",
       );
+      return null;
     } finally {
       setIsCheckingUpdate(false);
     }
@@ -1995,36 +2035,64 @@ export function PluginFullDetailPage({
   const canOverwriteSourceUpdate =
     sourceUpdateCheck?.status === "conflict" ||
     sourceUpdateCheck?.status === "local-modified";
+  const safetyTone = getPluginSafetyTone(plugin.safetyReport?.level);
+  const safetyPillLabel = isScanningSafety
+    ? t("plugin.safetyScanning", "Scanning...")
+    : plugin.safetyReport
+      ? `${t("skill.safetyLevelLabel", "Risk Level")} - ${getSkillSafetyLevelLabel(t, plugin.safetyReport.level)}`
+      : t("plugin.safetyAssessment", "Safety Assessment");
+  const packageHealthLabel = getPackageHealthLabel(
+    packageHealthCheck,
+    isCheckingPackage,
+    t,
+  );
+  const packageHealthTone = getPackageHealthTone(
+    packageHealthCheck,
+    isCheckingPackage,
+  );
 
-  const openLocalPackage = async () => {
-    if (!localPackagePath) return;
-    try {
-      const result = await window.electron?.openPath?.(localPackagePath);
-      if (result && !result.success) {
-        showToast(
-          result.error ||
-            t("plugin.openPluginFolderFailed", "Failed to open Plugin folder"),
-          "error",
-        );
-      }
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : String(error),
-        "error",
-      );
+  const reviewSourceUpdate = async (overwriteLocalChanges = false) => {
+    const check = (await checkSourceUpdate(true)) ?? sourceUpdateCheck;
+    if (!check) return;
+    if (check.status === "up-to-date") {
+      showToast(t("plugin.upToDate", "Up to date"), "success");
+      return;
+    }
+    if (check.status === "not-installed") {
+      showToast(t("plugin.notInstalled", "Not installed"), "error");
+      return;
+    }
+    setPendingSourceUpdateMode(
+      overwriteLocalChanges || check.status !== "update-available"
+        ? "overwrite"
+        : "update",
+    );
+  };
+
+  const confirmPendingSourceUpdate = async () => {
+    const mode = pendingSourceUpdateMode;
+    if (!mode) return;
+    await updateFromSource(mode === "overwrite");
+    setPendingSourceUpdateMode(null);
+  };
+
+  const openSafetyAssessment = () => {
+    if (plugin.safetyReport && !isScanningSafety) {
+      setIsSafetyReportModalOpen(true);
+      return;
+    }
+    if (!isScanningSafety) {
+      void runSafetyAssessment();
     }
   };
 
-  const copyLocalPackagePath = async () => {
-    if (!localPackagePath) return;
-    try {
-      await copyTextToClipboard(localPackagePath);
-      showToast(t("plugin.localPathCopied", "Plugin path copied"));
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : String(error),
-        "error",
-      );
+  const openPackageCheck = () => {
+    if (packageHealthCheck && !isCheckingPackage) {
+      setIsPackageCheckModalOpen(true);
+      return;
+    }
+    if (!isCheckingPackage) {
+      void runPackageCheck();
     }
   };
 
@@ -2310,9 +2378,63 @@ export function PluginFullDetailPage({
               <>
                 <button
                   type="button"
+                  onClick={() => void reviewSourceUpdate(false)}
+                  disabled={isCheckingUpdate || isUpdatingFromSource}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-all disabled:opacity-50 ${sourceUpdateTone}`}
+                  aria-label={sourceUpdateLabel}
+                  title={sourceUpdateLabel}
+                >
+                  {isCheckingUpdate || isUpdatingFromSource ? (
+                    <Loader2Icon
+                      aria-hidden="true"
+                      className="h-4 w-4 animate-spin"
+                    />
+                  ) : canUpdateFromSource ? (
+                    <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
+                  ) : sourceUpdateCheck?.status === "conflict" ||
+                    sourceUpdateCheck?.status === "local-modified" ? (
+                    <AlertTriangleIcon aria-hidden="true" className="h-4 w-4" />
+                  ) : (
+                    <CheckCircleIcon aria-hidden="true" className="h-4 w-4" />
+                  )}
+                  {isUpdatingFromSource
+                    ? t("plugin.updatingFromSource", "Updating")
+                    : sourceUpdateLabel}
+                </button>
+                {canOverwriteSourceUpdate ? (
+                  <button
+                    type="button"
+                    onClick={() => void reviewSourceUpdate(true)}
+                    disabled={isUpdatingFromSource}
+                    className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-600 transition-all hover:bg-red-500/15 disabled:opacity-50 dark:text-red-300"
+                    aria-label={t(
+                      "plugin.overwriteFromSource",
+                      "Overwrite from source",
+                    )}
+                    title={t(
+                      "plugin.overwriteFromSource",
+                      "Overwrite from source",
+                    )}
+                  >
+                    {isUpdatingFromSource ? (
+                      <Loader2Icon
+                        aria-hidden="true"
+                        className="h-4 w-4 animate-spin"
+                      />
+                    ) : (
+                      <AlertTriangleIcon
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                      />
+                    )}
+                    {t("plugin.overwriteFromSource", "Overwrite from source")}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
                   onClick={openSnapshotModal}
                   disabled={isCreatingSnapshot}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-background px-3 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary disabled:opacity-50"
                   aria-label={t("plugin.createSnapshot", "Create Snapshot")}
                   title={t("plugin.createSnapshot", "Create Snapshot")}
                 >
@@ -2329,9 +2451,9 @@ export function PluginFullDetailPage({
                 <button
                   type="button"
                   onClick={() => void onToggleFavorite?.(plugin)}
-                  className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background transition-colors ${
+                  className={`rounded-full p-2.5 transition-all active:scale-press-in ${
                     plugin.isFavorite
-                      ? "text-amber-500 hover:bg-amber-500/10"
+                      ? "text-amber-500 hover:text-amber-600"
                       : "text-muted-foreground hover:bg-amber-500/10 hover:text-amber-500"
                   }`}
                   aria-label={
@@ -2359,7 +2481,7 @@ export function PluginFullDetailPage({
                 <button
                   type="button"
                   onClick={() => setIsVersionHistoryOpen(true)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                  className="rounded-full p-2.5 text-muted-foreground transition-all hover:bg-primary/10 hover:text-primary active:scale-press-in"
                   aria-label={t("plugin.versionHistory", "Version History")}
                   title={t("plugin.versionHistory", "Version History")}
                 >
@@ -2367,118 +2489,8 @@ export function PluginFullDetailPage({
                 </button>
                 <button
                   type="button"
-                  onClick={() => void checkSourceUpdate(true)}
-                  disabled={isCheckingUpdate || isUpdatingFromSource}
-                  className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${sourceUpdateTone}`}
-                  aria-label={sourceUpdateLabel}
-                  title={sourceUpdateLabel}
-                >
-                  {isCheckingUpdate ? (
-                    <Loader2Icon
-                      aria-hidden="true"
-                      className="h-4 w-4 animate-spin"
-                    />
-                  ) : sourceUpdateCheck?.status === "conflict" ||
-                    sourceUpdateCheck?.status === "local-modified" ? (
-                    <AlertTriangleIcon
-                      aria-hidden="true"
-                      className="h-4 w-4"
-                    />
-                  ) : (
-                    <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
-                  )}
-                  {sourceUpdateLabel}
-                </button>
-                {canUpdateFromSource ? (
-                  <button
-                    type="button"
-                    onClick={() => void updateFromSource(false)}
-                    disabled={isUpdatingFromSource}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-                    aria-label={t(
-                      "plugin.updateFromSource",
-                      "Update from source",
-                    )}
-                    title={t("plugin.updateFromSource", "Update from source")}
-                  >
-                    {isUpdatingFromSource ? (
-                      <Loader2Icon
-                        aria-hidden="true"
-                        className="h-4 w-4 animate-spin"
-                      />
-                    ) : (
-                      <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
-                    )}
-                    {t("plugin.updateFromSource", "Update from source")}
-                  </button>
-                ) : null}
-                {canOverwriteSourceUpdate ? (
-                  <button
-                    type="button"
-                    onClick={() => void updateFromSource(true)}
-                    disabled={isUpdatingFromSource}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300"
-                    aria-label={t(
-                      "plugin.overwriteFromSource",
-                      "Overwrite from source",
-                    )}
-                    title={t(
-                      "plugin.overwriteFromSource",
-                      "Overwrite from source",
-                    )}
-                  >
-                    {isUpdatingFromSource ? (
-                      <Loader2Icon
-                        aria-hidden="true"
-                        className="h-4 w-4 animate-spin"
-                      />
-                    ) : (
-                      <AlertTriangleIcon
-                        aria-hidden="true"
-                        className="h-4 w-4"
-                      />
-                    )}
-                    {t("plugin.overwriteFromSource", "Overwrite from source")}
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={onOpenStore}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-background px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  <StoreIcon aria-hidden="true" className="h-4 w-4" />
-                  {t("plugin.openOfficialStore", "Open Plugins Store")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void copyLocalPackagePath()}
-                  disabled={!localPackagePath}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
-                  aria-label={t(
-                    "plugin.copyLocalPackagePath",
-                    "Copy Plugin path",
-                  )}
-                  title={t("plugin.copyLocalPackagePath", "Copy Plugin path")}
-                >
-                  <CopyIcon aria-hidden="true" className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void openLocalPackage()}
-                  disabled={!localPackagePath}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
-                  aria-label={t(
-                    "plugin.openPluginFolder",
-                    "Open Plugin folder",
-                  )}
-                  title={t("plugin.openPluginFolder", "Open Plugin folder")}
-                >
-                  <ExternalLinkIcon aria-hidden="true" className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
                   onClick={() => onDelete(plugin)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  className="rounded-full p-2.5 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive active:scale-press-in"
                   aria-label={t("plugin.deletePlugin", "Delete Plugin")}
                   title={t("plugin.deletePlugin", "Delete Plugin")}
                 >
@@ -2514,6 +2526,54 @@ export function PluginFullDetailPage({
         >
           {t("skill.files", "Files")}
         </DetailTabButton>
+        {!isAgentDetail ? (
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openPackageCheck}
+              disabled={isCheckingPackage || !localPackagePath}
+              title={t("plugin.packageCheckTitle", "Package Check")}
+              className={`my-auto inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${packageHealthTone}`}
+            >
+              {isCheckingPackage ? (
+                <Loader2Icon
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 animate-spin"
+                />
+              ) : packageHealthCheck?.status === "ok" ? (
+                <CheckIcon aria-hidden="true" className="h-3.5 w-3.5" />
+              ) : (
+                <AlertTriangleIcon aria-hidden="true" className="h-3.5 w-3.5" />
+              )}
+              {packageHealthLabel}
+            </button>
+            <button
+              type="button"
+              onClick={openSafetyAssessment}
+              disabled={isScanningSafety}
+              title={
+                plugin.safetyReport
+                  ? t("plugin.safetyAssessment", "Safety Assessment")
+                  : t("plugin.safetyNoReport", "Not assessed")
+              }
+              className={`my-auto inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${safetyTone}`}
+            >
+              {isScanningSafety ? (
+                <ShieldAlertIcon
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 animate-pulse"
+                />
+              ) : plugin.safetyReport?.level === "safe" ? (
+                <ShieldCheckIcon aria-hidden="true" className="h-3.5 w-3.5" />
+              ) : plugin.safetyReport ? (
+                <ShieldAlertIcon aria-hidden="true" className="h-3.5 w-3.5" />
+              ) : (
+                <ShieldIcon aria-hidden="true" className="h-3.5 w-3.5" />
+              )}
+              {safetyPillLabel}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <main
@@ -2535,10 +2595,8 @@ export function PluginFullDetailPage({
             draftUserNotes={draftUserNotes}
             hasTranslatedDescription={Boolean(translatedDescription)}
             isEditingUserNotes={isEditingUserNotes}
-            isCheckingPackage={isCheckingPackage}
             isImportingChildMcp={isImportingChildMcp}
             isImportingChildSkills={isImportingChildSkills}
-            isScanningSafety={isScanningSafety}
             isSavingUserNotes={isSavingUserNotes}
             isShowingTranslatedDescription={showTranslatedDescription}
             isTranslatingDescription={isTranslatingDescription}
@@ -2548,13 +2606,10 @@ export function PluginFullDetailPage({
             onRemoveDistribution={onRemoveDistribution}
             onImportChildMcp={onImportChildMcp}
             onImportChildSkills={onImportChildSkills}
-            onRunPackageCheck={runPackageCheck}
-            onRunSafetyAssessment={runSafetyAssessment}
             onSaveUserNotes={saveUserNotes}
             onStartEditUserNotes={() => setIsEditingUserNotes(true)}
             onTranslateDescription={translatePluginDescription}
             onUserNotesChange={setDraftUserNotes}
-            packageHealthCheck={packageHealthCheck}
             plugin={plugin}
             targetMatrix={targetMatrix}
           />
@@ -2603,6 +2658,125 @@ export function PluginFullDetailPage({
         onClose={() => setIsVersionHistoryOpen(false)}
         plugin={plugin}
       />
+      <Modal
+        isOpen={Boolean(pendingSourceUpdateMode && sourceUpdateCheck?.preview)}
+        onClose={() => {
+          if (!isUpdatingFromSource) setPendingSourceUpdateMode(null);
+        }}
+        title={t("plugin.confirmSourceUpdateTitle", "Review Plugin update")}
+        subtitle={t(
+          "plugin.confirmSourceUpdateSubtitle",
+          "Review the source changes before updating this Plugin.",
+        )}
+        size="xl"
+        closeOnBackdrop={!isUpdatingFromSource}
+        closeOnEscape={!isUpdatingFromSource}
+      >
+        {sourceUpdateCheck?.preview ? (
+          <div className="space-y-5">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm leading-6 text-amber-800 dark:text-amber-200">
+              {pendingSourceUpdateMode === "overwrite"
+                ? t(
+                    "plugin.confirmSourceOverwriteMessage",
+                    "Local changes were detected. Updating will overwrite the local Plugin package with the source version.",
+                  )
+                : t(
+                    "plugin.confirmSourceUpdateMessage",
+                    "Updating will replace the installed Plugin metadata and package with the source version.",
+                  )}
+            </div>
+            <div className="space-y-3">
+              <SourceUpdateDiffRow
+                current={plugin.version ? `v${plugin.version}` : undefined}
+                currentLabel={t("common.current", "Current")}
+                label={t("plugin.version", "Version")}
+                next={
+                  sourceUpdateCheck.preview.version
+                    ? `v${sourceUpdateCheck.preview.version}`
+                    : undefined
+                }
+                sourceLabel={t("plugin.source", "Source")}
+              />
+              <SourceUpdateDiffRow
+                current={plugin.description}
+                currentLabel={t("common.current", "Current")}
+                label={t("plugin.description", "Description")}
+                next={sourceUpdateCheck.preview.description}
+                sourceLabel={t("plugin.source", "Source")}
+              />
+              <SourceUpdateDiffRow
+                current={formatPluginInventorySummary(plugin.inventory)}
+                currentLabel={t("common.current", "Current")}
+                label={t("plugin.inventoryTitle", "Inventory")}
+                next={formatPluginInventorySummary(
+                  sourceUpdateCheck.preview.inventory,
+                )}
+                sourceLabel={t("plugin.source", "Source")}
+              />
+              <SourceUpdateDiffRow
+                current={sourceUpdateCheck.installedManifestHash}
+                currentLabel={t("common.current", "Current")}
+                label={t("plugin.manifestHash", "Manifest hash")}
+                next={sourceUpdateCheck.remoteManifestHash}
+                sourceLabel={t("plugin.source", "Source")}
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={() => setPendingSourceUpdateMode(null)}
+                disabled={isUpdatingFromSource}
+                className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-50"
+              >
+                {t("common.cancel", "Cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmPendingSourceUpdate()}
+                disabled={isUpdatingFromSource}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
+              >
+                {isUpdatingFromSource ? (
+                  <Loader2Icon
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin"
+                  />
+                ) : (
+                  <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
+                )}
+                {pendingSourceUpdateMode === "overwrite"
+                  ? t("plugin.overwriteFromSource", "Overwrite from source")
+                  : t("plugin.updateFromSource", "Update from source")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+      <Modal
+        isOpen={isSafetyReportModalOpen}
+        onClose={() => setIsSafetyReportModalOpen(false)}
+        title={t("plugin.safetyAssessment", "Safety Assessment")}
+        size="xl"
+      >
+        <PluginSafetyAssessmentPanel
+          isScanning={isScanningSafety}
+          onRunSafetyAssessment={runSafetyAssessment}
+          report={plugin.safetyReport}
+        />
+      </Modal>
+      <Modal
+        isOpen={isPackageCheckModalOpen}
+        onClose={() => setIsPackageCheckModalOpen(false)}
+        title={t("plugin.packageCheckTitle", "Package Check")}
+        size="xl"
+      >
+        <PluginPackageHealthPanel
+          check={packageHealthCheck}
+          isChecking={isCheckingPackage}
+          localPackagePath={localPackagePath}
+          onRunCheck={runPackageCheck}
+        />
+      </Modal>
       <Modal
         isOpen={isSnapshotModalOpen}
         onClose={() => {
