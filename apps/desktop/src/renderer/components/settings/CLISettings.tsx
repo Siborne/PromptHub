@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  CopyIcon,
   CheckCircleIcon,
   DownloadIcon,
   Loader2Icon,
@@ -11,8 +12,13 @@ import { useTranslation } from "react-i18next";
 import type { CliInstallMethod, CliStatus } from "@prompthub/shared/types";
 import { SettingItem, SettingSection } from "./shared";
 import { useToast } from "../ui/Toast";
+import { copyTextToClipboard } from "../../utils/clipboard";
 
 const UNKNOWN_LABEL = "Unknown";
+const EMPTY_MANUAL_COMMANDS: Record<CliInstallMethod, string> = {
+  pnpm: "",
+  npm: "",
+};
 
 const FALLBACK_STATUS: CliStatus = {
   installed: false,
@@ -22,6 +28,7 @@ const FALLBACK_STATUS: CliStatus = {
   packageManagerVersion: null,
   releaseTag: "",
   installCommand: null,
+  manualInstallCommands: EMPTY_MANUAL_COMMANDS,
   installSource: "",
 };
 
@@ -83,6 +90,16 @@ export function CLISettings() {
     }
   };
 
+  const handleCopyManualCommand = async (command: string) => {
+    try {
+      await copyTextToClipboard(command);
+      showToast(t("settings.cliInstallCommandCopied"), "success");
+    } catch (error) {
+      console.error("Failed to copy CLI install command:", error);
+      showToast(t("settings.cliInstallCommandCopyFailed"), "error");
+    }
+  };
+
   const hasDetectedPackageManager = Boolean(status.packageManager);
   const primaryInstallMethod = status.packageManager ?? "pnpm";
   const canInstallCli =
@@ -90,6 +107,9 @@ export function CLISettings() {
     !isInstalling &&
     !status.installed &&
     hasDetectedPackageManager;
+  const manualCommands = Object.entries(
+    status.manualInstallCommands ?? EMPTY_MANUAL_COMMANDS,
+  ).filter((entry): entry is [CliInstallMethod, string] => Boolean(entry[1]));
 
   return (
     <div className="space-y-6">
@@ -126,7 +146,9 @@ export function CLISettings() {
 
           {status.installed && status.version ? (
             <SettingItem label={t("settings.cliVersionLabel")}>
-              <span className="text-sm text-muted-foreground">{status.version}</span>
+              <span className="text-sm text-muted-foreground">
+                {status.version}
+              </span>
             </SettingItem>
           ) : null}
 
@@ -198,9 +220,48 @@ export function CLISettings() {
               {t("settings.cliPackageManagerInstallUnavailable")}
             </p>
           ) : null}
+          {!status.installed && manualCommands.length > 0 ? (
+            <div className="space-y-3 rounded-xl border border-border bg-background p-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {t("settings.cliManualInstallTitle")}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("settings.cliManualInstallDesc")}
+                </p>
+              </div>
+              <div className="space-y-2">
+                {manualCommands.map(([manager, command]) => (
+                  <div
+                    key={manager}
+                    className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/40 p-2"
+                  >
+                    <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-xs text-foreground">
+                      {command}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyManualCommand(command)}
+                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted/60"
+                      aria-label={t("settings.cliCopyInstallCommand", {
+                        manager,
+                      })}
+                    >
+                      <CopyIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                      {t("common.copy")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="rounded-xl bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
-            <p className="font-medium text-foreground">{t("settings.cliFeatureTitle")}</p>
-            <p className="mt-1.5 whitespace-pre-line">{t("settings.cliFeatureDesc")}</p>
+            <p className="font-medium text-foreground">
+              {t("settings.cliFeatureTitle")}
+            </p>
+            <p className="mt-1.5 whitespace-pre-line">
+              {t("settings.cliFeatureDesc")}
+            </p>
           </div>
         </div>
       </SettingSection>

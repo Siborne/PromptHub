@@ -323,6 +323,10 @@ export function createWindowElectronMock(overrides?: DeepPartial<MockRecord>) {
           releaseTag: "v0.5.8-beta.2",
           installCommand:
             "pnpm add -g https://github.com/legeling/PromptHub/releases/download/v0.5.8-beta.2/prompthub-cli-0.5.8-beta.2.tgz",
+          manualInstallCommands: {
+            pnpm: "pnpm add -g https://github.com/legeling/PromptHub/releases/download/v0.5.8-beta.2/prompthub-cli-0.5.8-beta.2.tgz",
+            npm: "npm install -g https://github.com/legeling/PromptHub/releases/download/v0.5.8-beta.2/prompthub-cli-0.5.8-beta.2.tgz",
+          },
           installSource:
             "https://github.com/legeling/PromptHub/releases/download/v0.5.8-beta.2/prompthub-cli-0.5.8-beta.2.tgz",
         }),

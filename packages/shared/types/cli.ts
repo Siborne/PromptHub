@@ -6,8 +6,16 @@ export interface CliStatus {
   version: string | null;
   packageManager: CliInstallMethod | null;
   packageManagerVersion: string | null;
+  packageManagerPath?: string | null;
+  packageManagerPathSource?:
+    | "app-env"
+    | "login-shell"
+    | "windows-where"
+    | "npm-prefix"
+    | null;
   releaseTag: string;
   installCommand: string | null;
+  manualInstallCommands: Record<CliInstallMethod, string>;
   installSource: string;
   error?: string;
 }

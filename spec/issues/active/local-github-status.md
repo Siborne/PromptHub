@@ -30,6 +30,7 @@ are closed only after the version containing the change has been published.
 
 | Issue | GitHub state | Local status    | Target release | Change                                  | Notes                                                                                                     |
 | ----- | ------------ | --------------- | -------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| #181  | open         | local_done      | 0.5.9-beta.2   | `cli-install-manual-fallback`           | Windows `where.exe` and npm custom prefix fallbacks are implemented locally; keep GitHub open until release. |
 | #178  | open         | release_pending | 0.5.9-beta.2   | `desktop-issue-178-hermes-localappdata` | `%LOCALAPPDATA%` / Hermes Windows Native handling is implemented locally; keep GitHub open until release. |
 | #170  | open         | release_pending | 0.5.9-beta.2   | `skill-package-boundary`                | GitHub package install now preserves non-`SKILL.md` files locally; keep GitHub open until release.        |
 | #169  | open         | release_pending | 0.5.9-beta.2   | `web-prompt-clipboard-copy`             | Web Markdown prompt copy fallback is implemented locally; keep GitHub open until release.                 |
