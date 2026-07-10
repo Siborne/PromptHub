@@ -1,6 +1,6 @@
 # Completed Changes
 
-兼容入口，对齐最新 `spec-init` 中的 `changes.completed` 语义。
+兼容入口，对齐锁定的 `spec-init` 基线（`f83def1`）中的 `changes.completed` 语义。
 
 PromptHub 当前已完成 change 的真实归档目录仍然是：
 

@@ -1,6 +1,6 @@
 # PromptHub Workflow Verification
 
-`spec/workflow/04-verification/README.md` 是 PromptHub 当前项目级 verification 主入口，对齐最新 `spec-init` 的 workflow/verification 边界，回答“怎么证明做对了”。
+`spec/workflow/04-verification/README.md` 是 PromptHub 当前项目级 verification 主入口，对齐锁定的 `spec-init` 基线（`f83def1`）中的 workflow/verification 边界，回答“怎么证明做对了”。
 
 ## 当前验证原则
 
@@ -16,6 +16,14 @@
 ## 当前验证真相源
 
 - `AGENTS.md` 中的测试标准
+- `spec/rules/testing-standards.md`
+- `spec/workflow/04-verification/01-test-strategy-and-quality-gates.md`
+- `spec/workflow/04-verification/02-test-standards.md`
+- `spec/workflow/04-verification/03-test-design-methodology.md`
+- `spec/workflow/04-verification/04-test-case-matrix.md`
+- `spec/workflow/04-verification/05-regression-suite.md`
+- `spec/workflow/04-verification/06-test-data-and-fixtures.md`
+- `spec/workflow/04-verification/07-coverage-map.md`
 - 各 active change 的 `tasks.md` / `implementation.md`
 - 已存在的单元、集成与 E2E 测试文件
 
@@ -29,16 +37,16 @@
 
 非平凡变更在标记完成前，至少满足以下基线：
 
-| Gate | 必须证明什么 |
-| --- | --- |
-| 功能可用 | 主流程端到端可运行，结果符合预期，没有明显阻断性 bug |
-| UI 实操 | 已在运行中的桌面端、Web 页面、浏览器自动化或等价页面中操作触达控件 |
-| 状态完整 | loading、empty、error、conflict、delete、update、sync、install 等相关状态已验证或说明不适用 |
-| 复用审计 | 已检查现有 UI 组件、布局模式、store、service、IPC/API 或 shared helper，新增实现有理由 |
-| 单元/白盒 | 新增或修改的判断、guard、fallback、错误路径、派生状态有最低有效层测试 |
-| 静态扫描 | 按风险运行针对性扫描或审计，并记录命令、范围和结果 |
-| 防护路径 | 删除、写入、同步、安装、迁移、网络、权限等风险路径有失败/回滚/恢复验证 |
-| 性能压力 | 长列表、批量操作、图谱、同步 payload、文件 inventory 等场景有压力验证或明确不适用 |
+| Gate      | 必须证明什么                                                                                |
+| --------- | ------------------------------------------------------------------------------------------- |
+| 功能可用  | 主流程端到端可运行，结果符合预期，没有明显阻断性 bug                                        |
+| UI 实操   | 已在运行中的桌面端、Web 页面、浏览器自动化或等价页面中操作触达控件                          |
+| 状态完整  | loading、empty、error、conflict、delete、update、sync、install 等相关状态已验证或说明不适用 |
+| 复用审计  | 已检查现有 UI 组件、布局模式、store、service、IPC/API 或 shared helper，新增实现有理由      |
+| 单元/白盒 | 新增或修改的判断、guard、fallback、错误路径、派生状态有最低有效层测试                       |
+| 静态扫描  | 按风险运行针对性扫描或审计，并记录命令、范围和结果                                          |
+| 防护路径  | 删除、写入、同步、安装、迁移、网络、权限等风险路径有失败/回滚/恢复验证                      |
+| 性能压力  | 长列表、批量操作、图谱、同步 payload、文件 inventory 等场景有压力验证或明确不适用           |
 
 ## UI 实操验证
 

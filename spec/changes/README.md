@@ -1,6 +1,6 @@
 # PromptHub Changes
 
-`spec/changes/` 是 PromptHub 的单次变更工作区总入口，对齐最新 `spec-init` 的 `changes` 语义。
+`spec/changes/` 是 PromptHub 的单次变更工作区总入口，对齐锁定的 `spec-init` 基线（`f83def1`）中的 `changes` 语义。
 
 ## Structure
 
@@ -14,11 +14,18 @@
 
 PromptHub 当前仍以 `spec/changes/archive/` 作为已完成 change 的真实归档目录。
 
-为了与最新 `spec-init` 的 `changes.completed` 语义对齐，本仓库额外保留：
+为了与该基线的 `changes.completed` 语义对齐，本仓库额外保留：
 
 - `spec/changes/completed/`
 
 它当前作为兼容入口，指向已完成 change 的归档语义，而不是第二套独立归档仓。
+
+## Inventory
+
+- 生成后的 active / archive / legacy 清单：`spec/changes/index.md`
+- 刷新清单：`pnpm spec:index`
+- 校验清单是否与目录一致：`pnpm spec:index:check`
+- 清单由脚本生成，不手工维护；新增、归档或移动 change 后必须刷新。
 
 ## Routing Rule
 

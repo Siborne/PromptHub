@@ -1,6 +1,6 @@
 # PromptHub Workflow Requirements
 
-`spec/workflow/01-requirements/README.md` 是 PromptHub 当前项目级 requirements 主入口，对齐最新 `spec-init` 的 workflow/requirements 边界，回答“PromptHub 要交付什么”。
+`spec/workflow/01-requirements/README.md` 是 PromptHub 当前项目级 requirements 主入口，对齐锁定的 `spec-init` 基线（`f83def1`）中的 workflow/requirements 边界，回答“PromptHub 要交付什么”。
 
 ## 项目级需求轮廓
 
@@ -52,3 +52,4 @@ PromptHub 的非 trivial 变更必须留下可追踪的内部 spec / design / ta
 
 - 跨领域、跨版本的长期需求先沉淀到 `spec/workflow/01-requirements/README.md`，需要稳定行为细化时再同步到相关 `spec/knowledge/*`
 - 单次变更引入的增量需求先写到 `spec/changes/active/<change-key>/specs/<domain>/spec.md`
+- 进入实现前，每条变更需求必须能在 analyze 中回链到 `DES-*`、`TEST-*` 和 `T-*`

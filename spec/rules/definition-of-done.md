@@ -7,6 +7,9 @@
 - 相关 workflow / knowledge / change 记录已同步
 - `README.md` 中的结构和说明仍然正确
 - 关键技术取舍已记录到 `spec/adr/` 或稳定设计文档
+- 实现前 analyze 已确认 `FR / DES / TEST / T`、稳定文档和 active change 没有阻塞冲突
+- 实现后 converge 已同步实际行为、验证结果、稳定文档、issues/releases/ADRs 和 change 生命周期
+- 已完成 change 已移出 `spec/changes/active/`；仍在 active 的记录明确写出阻塞、复核或待收敛条件
 
 ## 代码与测试
 
@@ -32,3 +35,4 @@
 - 已知风险和未决事项已显式写出
 - 关键疑点已经和用户完成确认，而不是开发者自行假定
 - 准备提交时，已按 `spec/rules/submission-traceability-rules.md` 检查 commit 边界、编号引用、验证记录和 issue 关闭语义
+- 新 standalone record 已按 `spec/rules/document-archive-rules.md` 分配 ID、更新索引并落到正确生命周期目录

@@ -27,7 +27,7 @@ spec/changes/active/<change-key>/
 ├── tasks.md
 ├── implementation.md
 └── specs/
-    └── <domain>/
+    └── <domain>/  # start from change/specs/domain/spec.md
         └── spec.md
 ```
 
@@ -52,3 +52,5 @@ Recommended order:
 5. New active change directories use semantic lowercase kebab-case and no serial number prefix.
 6. GitHub issue changes should include the issue number in the change key, preferably as `<surface>-issue-<number>-<slug>`.
 7. Requirement, design, verification, and task IDs belong inside the markdown files as `FR-###`, `DES-###`, `TEST-###`, and `T-###`, not in folder names.
+8. Before implementation, record Analyze results proving the artifacts do not conflict and no blocking `[待确认]` remains.
+9. Before completion, record Converge results, sync stable docs/records, and move the change to the dated archive path.

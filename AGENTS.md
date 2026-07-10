@@ -306,9 +306,18 @@ PromptHub now uses `spec-init` directories for stable project docs and an OpenSp
 - `spec-init` provides the project-level document boundaries for workflow / knowledge / changes / records
 - PromptHub's change-management backbone remains `spec/changes/active/<change-key>/specs/<domain>/spec.md` plus `spec/changes/archive/`; stable truth now lives in `spec/workflow/*`, `spec/knowledge/*`, `spec/rules/`, `spec/releases/`, and related record folders
 
-The expected SSD loop is:
+The expected SSD loop keeps PromptHub's document layout while applying the
+current `spec-init` phases:
 
-`requirements -> spec -> design -> tasks -> implementation -> sync -> archive`
+`specify -> clarify -> plan -> tasks -> analyze -> implement -> converge`
+
+- `analyze` is required before implementation: requirements, design,
+  verification, tasks, and the active change must have no blocking conflict,
+  orphan traceability ID, or unresolved material decision.
+- `converge` is required before completion: actual behavior, verification,
+  stable knowledge, issues/releases/ADRs, and change lifecycle state must agree.
+- A completed change cannot remain under `spec/changes/active/`; PromptHub maps
+  upstream completed semantics to its authoritative dated archive layout.
 
 #### Document Roles
 
@@ -326,13 +335,9 @@ The expected SSD loop is:
 - `spec/releases/`: project-level release-summary entry.
 - `spec/archive/`: project-level archive entry.
 - `spec/adr/`: project-level ADR entry.
-- `spec/knowledge/context/`: long-lived source-of-truth docs for stable terminology, actors, entities, and product boundaries.
-- `spec/knowledge/structure/`: long-lived source-of-truth docs for stable internal architecture and accepted engineering constraints.
-- `spec/knowledge/behavior/`: long-lived docs for stable workflows, semantic rules, and derivation boundaries.
-- `spec/knowledge/reference/`: long-lived docs for fixed assets such as platform matrices, canonical file mappings, schemas, and durable reference inventories.
 - `spec/README.md`: the internal SSD entry point.
 - `spec/changes/active/<change-key>/`: active change folders for feature work, larger bug fixes, refactors, and migrations.
-- `spec/changes/archive/<date>-<change-key>/`: completed or superseded changes kept for history.
+- `spec/changes/archive/<YYYY>/<MM>/<YYYY-MM-DD>-<change-key>/`: completed or superseded changes kept for history.
 - `spec/changes/legacy/`: recovered historical internal docs that are still useful but are not the current source of truth.
 - `spec/issues/active/`: ongoing defects, quality risks, and follow-up issues that are not yet a scoped implementation change.
 - `spec/changes/_templates/`: reusable templates for proposal, delta specs, design, tasks, and implementation artifacts.
@@ -370,8 +375,9 @@ Use one or more domain spec files under `specs/` when the change spans multiple 
 3. Refine `proposal.md`, `specs/<domain>/spec.md`, and `design.md` as understanding improves; the workflow is iterative, not phase-locked.
 4. Use `tasks.md` as the implementation checklist and mark items complete as work lands.
 5. Update `implementation.md` during or immediately after implementation so the executed work does not live only in git diff or chat history.
-6. When the change ships, sync current behavior back into `spec/workflow/*` and `spec/knowledge/*`, and sync stable rules, release summaries, or decisions into `spec/rules/`, `spec/releases/`, or `spec/adr/` where appropriate.
-7. After shipping or abandoning the work, move the change folder to `spec/changes/archive/` rather than deleting it.
+6. Before implementation, complete an analyze check covering `FR -> DES -> TEST -> T`, document conflicts, blockers, and `[待确认]` items.
+7. When the change ships, sync current behavior back into `spec/workflow/*` and `spec/knowledge/*`, and sync stable rules, release summaries, or decisions into `spec/rules/`, `spec/releases/`, or `spec/adr/` where appropriate.
+8. Complete the converge check, then move completed or abandoned work to `spec/changes/archive/<YYYY>/<MM>/<YYYY-MM-DD>-<change-key>/` rather than leaving it active or deleting it.
 
 #### When To Update Existing Change vs Start New One
 
@@ -391,15 +397,14 @@ Use one or more domain spec files under `specs/` when the change spans multiple 
 
 ### 6.2 Engineering Flow
 
-1. **Locate boundary:** Identify the owning app/package, source-of-truth docs, existing tests, and active change record.
-2. **Plan:** For non-trivial work, create or update a change folder in `spec/changes/active/` using the templates.
-3. **Design data/contract impact:** Before code, write whether the change touches SQLite, filesystem layout, sync payloads, IPC/API, CLI commands, routes, shared types, or i18n.
+1. **Specify / clarify:** Identify the owning app/package, source-of-truth docs, user outcome, constraints, and material decisions requiring confirmation.
+2. **Plan:** For non-trivial work, create or update a change folder in `spec/changes/active/` and define requirements, design, verification, and tasks.
+3. **Analyze:** Confirm the `FR -> DES -> TEST -> T` chain, active change, stable docs, and implementation boundary do not conflict.
 4. **Modify:** Put shared business logic in `packages/core`, storage primitives in `packages/db`, shared contracts in `packages/shared`, and app-specific UI/platform glue in the relevant `apps/*` package.
 5. **IPC/API:** If adding backend access, update shared constants/types, implement the handler/route, expose the bridge/client, and add validation tests.
 6. **Test:** Run the lowest effective test layer first, then the relevant harness (`pnpm verify:release:quick` or `pnpm verify:release`) when release risk exists.
-7. **Record:** Update `implementation.md` with actual execution, verification, skipped checks, and follow-up notes.
-8. **Sync Docs:** Update `spec/workflow/*` when project-level goals or requirements changed, `spec/knowledge/behavior/` or `spec/knowledge/reference/` when stable behavior/assets changed, `spec/knowledge/structure/` when architecture contracts changed, and `docs/` / `README.md` when contributor/user contracts changed.
-9. **Commit:** Use Conventional Commits (e.g., `feat: ...`, `fix: ...`, `refactor: ...`, `test: ...`).
+7. **Converge:** Update `implementation.md`, stable workflow/knowledge/rules, issues/releases/ADRs, and the change lifecycle to match what actually shipped.
+8. **Commit:** Follow `spec/rules/submission-traceability-rules.md`; a non-trivial Conventional Commit requires a traceable body and verification state.
 
 ### 6.3 Data and Storage Change Gate
 

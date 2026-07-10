@@ -67,6 +67,20 @@ Requirements:
 - Any change to exit codes, output format, or config precedence must add regression tests
 - For destructive commands, keep dry-run or confirmation logic under test
 
+## 6.1 Pre-Implementation Analyze Gate
+
+- Every high-priority `FR-*` has a `DES-*`, `TEST-*`, and executable `T-*`
+- Command tree, arguments, output format, and exit codes do not conflict across requirements, design, verification, and tasks
+- `docs/changes/active/<change-key>/` records this round's impact scope, verification approach, and sync checklist
+- No blocking `[To confirm]` item affects command behavior, destructive operations, or machine-readable output
+
+## 6.2 Post-Implementation Converge Gate
+
+- Real command behavior, output format, and exit codes match design
+- New or adjusted tests are written back into this file
+- Stable command conventions and behavior rules are synced into `docs/knowledge/`
+- Change lifecycle, README, AGENTS, issues, releases, and ADRs are updated when affected
+
 ## 7. Execution Guidance
 
 - Start with the failing test for the first must-run command
@@ -81,3 +95,4 @@ Requirements:
 - Bug fixes include regression tests
 - Test commands can be run repeatedly with stable results
 - White-box, performance, and security requirements are either satisfied or explicitly deferred with justification
+- analyze and converge checks have no blocking findings

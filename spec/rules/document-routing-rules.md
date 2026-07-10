@@ -1,6 +1,6 @@
 # PromptHub Document Routing Rules
 
-这个文件定义 PromptHub 在接入最新 `spec-init` skill 后的文档语义到目录路径映射规则。
+这个文件定义 PromptHub 在接入锁定的 `spec-init` 基线（`f83def1`）后的文档语义到目录路径映射规则。
 
 ## 目标
 
@@ -56,6 +56,7 @@
 - TDD 和设计门禁：`spec/rules/tdd-design-gate.md`
 - 代码质量和架构边界：`spec/rules/code-quality-architecture.md`
 - 提交、编号、PR 和发布引用：`spec/rules/submission-traceability-rules.md`
+- 记录 ID、索引、生命周期目录和年月归档：`spec/rules/document-archive-rules.md`
 
 ## PromptHub 当前稳定真相源
 
@@ -84,6 +85,7 @@ PromptHub 已经完成第一轮稳定文档迁移，当前长期真相源直接�
 - 已完成或放弃的 change 归档到 `spec/changes/archive/<YYYY>/<MM>/<YYYY-MM-DD>-<change-key>/`，日期前缀只用于归档时间，不用于 active 排序；`archive/` 根目录不平铺 date-prefixed change folder。
 - 需求、设计、验证、任务编号写在文件内容里：`FR-###`、`DES-###`、`TEST-###`、`T-###`；不要把这些编号编码进文件夹名。
 - 重命名已有 active change 目录必须作为单独整理任务处理，并同步更新所有仓库引用，不能在无引用检查的情况下批量改路径。
+- 新建 standalone issue / bug / change request / ADR 使用 `ISS-YYYYMMDD-NNN`、`BUG-YYYYMMDD-NNN`、`CR-YYYYMMDD-NNN`、`ADR-YYYYMMDD-NNN`；已有 change key、GitHub snapshot 和历史归档不追溯重命名。
 
 ## 同步要求
 

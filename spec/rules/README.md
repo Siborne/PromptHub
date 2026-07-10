@@ -14,6 +14,7 @@
 - `spec/rules/clarification-rules.md`
 - `spec/rules/coding-standards.md`
 - `spec/rules/document-routing-rules.md`
+- `spec/rules/document-archive-rules.md`
 - `spec/rules/issue-management-rules.md`
 - `spec/rules/testing-standards.md`
 - `spec/rules/doc-sync-rules.md`
@@ -23,6 +24,13 @@
 - `spec/rules/tdd-design-gate.md`
 - `spec/rules/code-quality-architecture.md`
 - `spec/rules/submission-traceability-rules.md`
+
+Phase and lifecycle rules:
+
+- non-trivial work follows `specify -> clarify -> plan -> tasks -> analyze -> implement -> converge`
+- `analyze` prevents implementation with conflicting documents, orphan IDs, or blocking decisions
+- `converge` synchronizes actual behavior and moves completed changes out of `active/`
+- new standalone records use the compatible typed-ID policy in `document-archive-rules.md`; existing history is not renamed
 
 领域型回归测试矩阵：
 

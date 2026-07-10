@@ -1,6 +1,6 @@
 # PromptHub Workflow Design
 
-`spec/workflow/02-design/README.md` 是 PromptHub 当前项目级 design 主入口，对齐最新 `spec-init` 的 workflow/design 边界，回答“PromptHub 怎么交付这些能力”。
+`spec/workflow/02-design/README.md` 是 PromptHub 当前项目级 design 主入口，对齐锁定的 `spec-init` 基线（`f83def1`）中的 workflow/design 边界，回答“PromptHub 怎么交付这些能力”。
 
 ## 当前系统级设计轮廓
 
@@ -56,3 +56,4 @@ PromptHub 当前把长期设计事实拆成以下几层：
 
 - 项目级设计入口写在这里
 - 单次变更的具体实现设计继续写到 `spec/changes/active/<change-key>/design.md`
+- `plan` 阶段必须写清方案、权衡、失败边界和回滚；`analyze` 阶段发现设计与需求、稳定文档或实现冲突时必须暂停确认

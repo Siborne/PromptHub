@@ -1,6 +1,6 @@
 # PromptHub Workflow Intake
 
-`spec/workflow/00-intake/README.md` 是 PromptHub 当前项目级 intake 主入口，对齐最新 `spec-init` 的 workflow/intake 边界，主要回答“这件事为什么值得做”。
+`spec/workflow/00-intake/README.md` 是 PromptHub 当前项目级 intake 主入口，对齐锁定的 `spec-init` 基线（`f83def1`）中的 workflow/intake 边界，主要回答“这件事为什么值得做”。
 
 ## 项目背景
 
@@ -51,3 +51,4 @@ PromptHub 是一个本地优先的 Prompt、Skill、Rules 与 AI 编程资产工
 
 - 项目级背景、目标、约束和非目标先写在 intake
 - 单次改动的 proposal / delta spec 继续写进 `spec/changes/active/<change-key>/`
+- 本入口承担 `specify` 的背景部分；影响范围、数据、权限、兼容性或发布语义的关键疑点进入 `clarify`，不得静默带入实现

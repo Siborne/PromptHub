@@ -46,6 +46,20 @@ Requirements:
 - Any change to auth, validation, or error models must add corresponding regression tests
 - Changes involving data-model migration, status-code changes, or integration boundaries require a full regression pass
 
+## 6.1 Pre-Implementation Analyze Gate
+
+- Every high-priority `FR-*` has a `DES-*`, `TEST-*`, and executable `T-*`
+- HTTP contracts, error models, and authentication behavior do not conflict across requirements, design, verification, and tasks
+- `docs/changes/active/<change-key>/` records this round's impact scope, verification approach, and sync checklist
+- No blocking `[To confirm]` item affects API contracts, data models, or auth strategy
+
+## 6.2 Post-Implementation Converge Gate
+
+- Real API behavior, status codes, and error structures match design
+- New or adjusted tests are written back into this file
+- Stable API, data-boundary, and error-model truth is synced into `docs/knowledge/`
+- Change lifecycle, README, AGENTS, issues, releases, and ADRs are updated when affected
+
 ## 7. Execution Guidance
 
 - Start with the failing test for the smallest read/write endpoint
@@ -58,3 +72,4 @@ Requirements:
 - Critical failure scenarios are covered
 - Bug fixes include regression tests
 - Test commands can be run repeatedly with stable results
+- analyze and converge checks have no blocking findings

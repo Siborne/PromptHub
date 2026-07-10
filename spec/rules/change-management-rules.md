@@ -11,6 +11,8 @@
 - bug 修复：更新受影响文档，并在 `spec/changes/active/<change-key>/` 记录症状、根因、验证和影响范围
 - 架构或关键技术变化：更新 `spec/workflow/02-design/README.md`、`spec/knowledge/structure/README.md`，必要时补 `spec/adr/`
 - 版本发布：新增或更新 `spec/releases/` 中的版本记录
+- 实现前：完成 analyze，确认需求、设计、验证、任务和 change 没有冲突、孤立 ID 或阻塞性 `[待确认]`
+- 实现后：完成 converge，确认实际行为、验证、稳定文档、记录索引和 change 状态一致
 - 变更完成后：归档到 `spec/changes/archive/<YYYY>/<MM>/<YYYY-MM-DD>-<change-key>/`
 - `spec/changes/active/` 只保留真正仍在推进、阻塞、待复核或当前工作区仍有未提交改动的 change；不要把已完成记录长期留在 active 中。
 
@@ -29,3 +31,4 @@
 - 每条 bug 记录都要写清症状、根因、修复方案和回归要求
 - release 记录要写清新增、修复、破坏性变化和已知问题
 - 归档前至少确认 tasks 状态、implementation 结果和引用路径；若历史记录缺少当前模板文件，但任务和 implementation 已证明完成，也应归档为历史记录，而不是继续占用 active。
+- 状态写成 Implemented / Shipped / Completed 且没有剩余任务时，不得继续留在 active；若仍需发布、复核或文档同步，状态必须明确写成 release-pending / review-pending / needs-convergence 并列出退出条件。

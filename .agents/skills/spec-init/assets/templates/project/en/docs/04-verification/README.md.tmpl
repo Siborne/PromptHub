@@ -68,6 +68,28 @@ Requirements:
 - What kind of test must be added after a bug fix
 - Which changes require a full regression pass
 
+## 6.1 Pre-Implementation Analyze Gate
+
+Before implementation starts, check:
+
+- Every high-priority `FR-*` has an `AC-*`, `DES-*`, `TEST-*`, and at least one executable `T-*`
+- No `DES-*` lacks a requirement source, no `TEST-*` lacks a verified target, and no `T-*` is unverifiable
+- Requirements, design, verification, and tasks describe the same behavior consistently
+- `docs/changes/active/<change-key>/` records the background, impact scope, verification approach, and sync checklist for this round
+- No blocking `[To confirm]` item still affects implementation direction
+
+If a blocking issue exists, complete the spec or task work before implementing.
+
+## 6.2 Post-Implementation Converge Gate
+
+Before delivery, check:
+
+- Real code behavior matches requirements and design
+- New or adjusted tests are written back into this file
+- Newly discovered long-lived business, structure, or behavior truth is captured under `docs/knowledge/`
+- This change still belongs in `active/`, or should move to `completed/` or `legacy/`
+- README, AGENTS, issues, releases, ADRs, and archive entries are synced when affected
+
 ## 7. Execution Guidance
 
 - Start with the smallest high-priority requirement and write the failing test first
@@ -82,3 +104,4 @@ Requirements:
 - Bug fixes include regression tests
 - Test commands can be run repeatedly with stable results
 - White-box, performance, and security requirements relevant to the current version are either satisfied or explicitly deferred with justification
+- analyze and converge checks have no blocking findings

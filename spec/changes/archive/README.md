@@ -7,3 +7,5 @@
 示例：`spec/changes/archive/2026/07/2026-07-06-spec-init-rule-sync/`。
 
 `archive/` 根目录只放年度目录和本 README，不直接平铺 date-prefixed change folder。
+
+完整 active / archive / legacy 清单见 `spec/changes/index.md`，由 `pnpm spec:index` 生成。

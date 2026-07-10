@@ -2,7 +2,7 @@
 
 `spec/` 是 PromptHub 内部 SSD / spec 系统的唯一归属。所有内部需求、稳定真相文档、delta specs、规则、发布记录、问题追踪、历史变更与模板都放在这里；`docs/` 只保留对外说明文档。
 
-PromptHub 当前采用的是一套 **最新 `spec-init` 边界 + OpenSpec 风格变更流** 的混合体系：
+PromptHub 当前采用的是一套 **固定版本 `spec-init` 边界 + OpenSpec 风格变更流** 的混合体系：
 
 - 用 `spec-init` 的文档边界来区分 `workflow / knowledge / changes / records`
 - 用 `spec/changes/active/<change-key>/specs/<domain>/spec.md` 承载活跃 delta specs
@@ -13,6 +13,13 @@ PromptHub 当前采用的是一套 **最新 `spec-init` 边界 + OpenSpec 风格
 - 现有 change-based workflow 不需要推翻重来
 - agent 可以按 `spec-init` 的边界理解文档职责
 - 工程实现仍然可以按 PromptHub 现有的 `active change -> sync to stable docs` 节奏推进
+
+当前内嵌 `spec-init` 基线：
+
+- Repository: `https://github.com/legeling/spec-init`
+- Revision: `f83def11e7b3e1753cd6f32eacdf09b72b3b29ae`
+- Date: 2026-06-30
+- PromptHub profile: `.agents/skills/spec-init/references/prompthub-profile.md`
 
 ## 当前采用的双层体系
 
@@ -121,6 +128,7 @@ spec/
 - `spec/rules/coding-standards.md`：编码标准、错误处理、安全和结构要求入口
 - `spec/rules/issue-management-rules.md`：issue、本地交付状态、技术债和归档规则
 - `spec/rules/submission-traceability-rules.md`：提交、commit、文档编号、引用关联和 PR 说明规则
+- `spec/rules/document-archive-rules.md`：记录 ID、索引、生命周期目录与年月归档规则
 
 目录命名规则：
 
@@ -147,14 +155,22 @@ spec/
 
 建议的内部 SSD 闭环：
 
-`requirements -> proposal -> spec -> design -> tasks -> implementation -> sync -> archive`
+`specify -> clarify -> plan -> tasks -> analyze -> implement -> converge`
 
 执行约束：
 
 - 非 trivial 的功能、迁移、重构、跨模块 bug 修复，先建 `spec/changes/active/<change-key>/`
 - 行为变化先写 delta spec，再实施代码
+- 实现前必须完成 analyze，确认需求、设计、验证、任务和 active change 没有冲突、孤立 ID 或阻塞性 `[待确认]`
 - 实施完成后，把稳定结果同步回 `spec/workflow/*`、`spec/knowledge/*`、`spec/rules/`、`spec/releases/` 或 `spec/adr/`
+- 完成前必须完成 converge，更新实际验证、长期真相、issues/releases/ADRs、索引和 change 状态
 - 历史旧文档不删除；若不再作为当前真相源，则归入 `spec/changes/legacy/` 或 `spec/changes/archive/`
+
+治理校验：
+
+- `pnpm spec:test`：验证 scaffold、提交规则、PromptHub profile 和 change inventory 行为
+- `pnpm spec:index`：刷新 `spec/changes/index.md`
+- `pnpm spec:index:check`：检查 change inventory 是否与目录一致
 
 推荐写法：
 
