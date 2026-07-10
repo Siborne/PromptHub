@@ -45,7 +45,8 @@
 
 ## Follow-ups
 
-- Durable mobile SQLite persistence.
-- Prompt create/edit flows.
+- Durable mobile SQLite persistence and Prompt create/edit flows moved to
+  `spec/changes/active/mobile-prompt-persistence-hardening/` after the initial
+  shell implementation was found to contain an undocumented first version.
 - Skill package import and `SKILL.md` viewer.
 - WebDAV/cloud sync on mobile.
