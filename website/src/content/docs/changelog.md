@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [0.5.9] - 2026-07-10
+## [0.5.9] - 2026-07-11
 
 ### 新功能 / Features
 
@@ -39,6 +39,8 @@
   - **macOS In-App Updates Restored**: Signed and notarized direct installs from the website or GitHub can download ZIP updates in-app and replace the app after restart, while Homebrew installations remain Brew-managed
 - 🗄️ **CLI 与桌面数据库并发写入修复**：共享 SQLite 数据库写入增加跨进程协调、语句释放和明确的争用错误，并在桌面端恢复可见后刷新数据
   - **CLI and Desktop Database Write Coordination**: Shared SQLite writes now use cross-process coordination, statement finalization, explicit contention errors, and desktop refresh after the app becomes visible again
+- 🔐 **旧版数据库锁恢复**：桌面端取得单实例所有权后可安全回收无主的旧版 SQLite 锁，同时 CLI 和共享调用方继续采用保守锁策略
+  - **Legacy Database Lock Recovery**: Desktop can safely recover ownerless legacy SQLite locks after acquiring the single-instance gate, while CLI and shared callers keep conservative lock behavior
 
 ### 优化 / Improvements
 
