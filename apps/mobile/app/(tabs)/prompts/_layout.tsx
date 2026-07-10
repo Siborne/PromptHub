@@ -1,6 +1,8 @@
-import { Stack } from 'expo-router';
+import { Stack } from "expo-router";
+import { useTranslation } from "react-i18next";
 
 export default function PromptsLayout() {
+  const { t } = useTranslation();
   return (
     <Stack>
       <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -8,16 +10,16 @@ export default function PromptsLayout() {
         name="[id]"
         options={{
           headerShown: true,
-          title: 'Prompt',
-          headerBackTitle: 'Back'
+          title: t("prompts.workflow.detailTitle"),
+          headerBackTitle: t("prompts.workflow.back"),
         }}
       />
       <Stack.Screen
         name="edit"
         options={{
-          presentation: 'modal',
+          presentation: "modal",
           headerShown: true,
-          title: 'Edit Prompt'
+          title: t("prompts.workflow.editTitle"),
         }}
       />
     </Stack>

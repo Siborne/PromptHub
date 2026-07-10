@@ -1,3 +1,174 @@
+const promptWorkflowEn = {
+  back: "Back",
+  cancel: "Cancel",
+  createTitle: "New Prompt",
+  delete: "Delete",
+  deleteError: "The Prompt could not be deleted. Please try again.",
+  deleteErrorTitle: "Delete failed",
+  deleteMessage: "Delete {{title}} permanently?",
+  deleteTitle: "Delete Prompt",
+  description: "Description",
+  descriptionPlaceholder: "Briefly describe what this Prompt does",
+  detailTitle: "Prompt",
+  edit: "Edit Prompt",
+  editTitle: "Edit Prompt",
+  empty: "No Prompts match the current search and filter.",
+  loadError: "The Prompt could not be loaded.",
+  loadErrorTitle: "Load failed",
+  loading: "Loading...",
+  metadata: "Metadata",
+  noSystemPrompt: "No system Prompt",
+  none: "None",
+  save: "Save",
+  saveError: "The Prompt could not be saved. Please try again.",
+  saveErrorTitle: "Save failed",
+  systemPrompt: "System Prompt",
+  systemPromptPlaceholder: "You are an expert assistant...",
+  tags: "Tags",
+  title: "Title",
+  titlePlaceholder: "For example, Code Reviewer",
+  updatedAt: "Updated at",
+  userPrompt: "User Prompt",
+  userPromptPlaceholder: "Review the following code...",
+  validationRequired: "Title and User Prompt are required.",
+  validationTitle: "Required fields",
+  notFound: "Prompt not found.",
+} as const;
+
+const promptWorkflowZh = {
+  ...promptWorkflowEn,
+  back: "返回",
+  cancel: "取消",
+  createTitle: "新建 Prompt",
+  delete: "删除",
+  deleteError: "无法删除 Prompt，请重试。",
+  deleteErrorTitle: "删除失败",
+  deleteMessage: "确定永久删除「{{title}}」吗？",
+  deleteTitle: "删除 Prompt",
+  description: "描述",
+  descriptionPlaceholder: "简要说明这个 Prompt 的用途",
+  edit: "编辑 Prompt",
+  editTitle: "编辑 Prompt",
+  empty: "没有符合当前搜索和筛选条件的 Prompt。",
+  loadError: "无法加载 Prompt。",
+  loadErrorTitle: "加载失败",
+  loading: "正在加载...",
+  metadata: "元数据",
+  noSystemPrompt: "未设置 System Prompt",
+  none: "无",
+  save: "保存",
+  saveError: "无法保存 Prompt，请重试。",
+  saveErrorTitle: "保存失败",
+  systemPromptPlaceholder: "你是一位专业助手...",
+  tags: "标签",
+  title: "标题",
+  titlePlaceholder: "例如：代码审查助手",
+  updatedAt: "更新时间",
+  userPromptPlaceholder: "请审查以下代码...",
+  validationRequired: "标题和 User Prompt 为必填项。",
+  validationTitle: "请填写必填项",
+  notFound: "Prompt 不存在。",
+} as const;
+
+const promptWorkflowZhTw = {
+  ...promptWorkflowZh,
+  back: "返回",
+  cancel: "取消",
+  deleteMessage: "確定永久刪除「{{title}}」嗎？",
+  description: "描述",
+  empty: "沒有符合目前搜尋和篩選條件的 Prompt。",
+  loading: "載入中...",
+  metadata: "中繼資料",
+  save: "儲存",
+  tags: "標籤",
+  title: "標題",
+  updatedAt: "更新時間",
+} as const;
+
+const promptWorkflowJa = {
+  ...promptWorkflowEn,
+  back: "戻る",
+  cancel: "キャンセル",
+  createTitle: "新しい Prompt",
+  delete: "削除",
+  deleteMessage: "{{title}} を完全に削除しますか？",
+  deleteTitle: "Prompt を削除",
+  description: "説明",
+  edit: "Prompt を編集",
+  editTitle: "Prompt を編集",
+  empty: "条件に一致する Prompt はありません。",
+  loading: "読み込み中...",
+  metadata: "メタデータ",
+  none: "なし",
+  save: "保存",
+  tags: "タグ",
+  title: "タイトル",
+  updatedAt: "更新日時",
+} as const;
+
+const promptWorkflowEs = {
+  ...promptWorkflowEn,
+  back: "Atrás",
+  cancel: "Cancelar",
+  createTitle: "Nuevo Prompt",
+  delete: "Eliminar",
+  deleteMessage: "¿Eliminar {{title}} permanentemente?",
+  deleteTitle: "Eliminar Prompt",
+  description: "Descripción",
+  edit: "Editar Prompt",
+  editTitle: "Editar Prompt",
+  empty: "No hay Prompts que coincidan con la búsqueda y el filtro.",
+  loading: "Cargando...",
+  metadata: "Metadatos",
+  none: "Ninguno",
+  save: "Guardar",
+  tags: "Etiquetas",
+  title: "Título",
+  updatedAt: "Actualizado",
+} as const;
+
+const promptWorkflowDe = {
+  ...promptWorkflowEn,
+  back: "Zurück",
+  cancel: "Abbrechen",
+  createTitle: "Neuer Prompt",
+  delete: "Löschen",
+  deleteMessage: "{{title}} dauerhaft löschen?",
+  deleteTitle: "Prompt löschen",
+  description: "Beschreibung",
+  edit: "Prompt bearbeiten",
+  editTitle: "Prompt bearbeiten",
+  empty: "Keine Prompts entsprechen der Suche und dem Filter.",
+  loading: "Wird geladen...",
+  metadata: "Metadaten",
+  none: "Keine",
+  save: "Speichern",
+  tags: "Tags",
+  title: "Titel",
+  updatedAt: "Aktualisiert",
+} as const;
+
+const promptWorkflowFr = {
+  ...promptWorkflowEn,
+  back: "Retour",
+  cancel: "Annuler",
+  createTitle: "Nouveau Prompt",
+  delete: "Supprimer",
+  deleteMessage: "Supprimer définitivement {{title}} ?",
+  deleteTitle: "Supprimer le Prompt",
+  description: "Description",
+  edit: "Modifier le Prompt",
+  editTitle: "Modifier le Prompt",
+  empty: "Aucun Prompt ne correspond à la recherche et au filtre.",
+  loading: "Chargement...",
+  metadata: "Métadonnées",
+  none: "Aucun",
+  save: "Enregistrer",
+  tags: "Tags",
+  title: "Titre",
+  updatedAt: "Mis à jour",
+} as const;
+
 export const resources = {
   zh: {
     translation: {
@@ -25,6 +196,7 @@ export const resources = {
         settings: "设置",
       },
       prompts: {
+        workflow: promptWorkflowZh,
         title: "Prompt 工作台",
         subtitle: "高效管理、搜索和执行你的 Prompt。",
         localCount: "本地预览",
@@ -92,6 +264,7 @@ export const resources = {
         settings: "設定",
       },
       prompts: {
+        workflow: promptWorkflowZhTw,
         title: "Prompt 工作台",
         subtitle: "高效管理、搜尋和執行你的 Prompt。",
         localCount: "本地預覽",
@@ -141,6 +314,7 @@ export const resources = {
         settings: "Settings",
       },
       prompts: {
+        workflow: promptWorkflowEn,
         title: "Prompt Workspace",
         subtitle: "Manage and execute your AI prompts efficiently.",
         localCount: "Local preview",
@@ -176,7 +350,8 @@ export const resources = {
         searchPlaceholder: "Search remote skills or store sources...",
         sources: "Store sources",
         featured: "Featured",
-        featuredPromptDescription: "Turn raw ideas into production-ready prompts.",
+        featuredPromptDescription:
+          "Turn raw ideas into production-ready prompts.",
       },
       settings: {
         title: "Mobile Settings",
@@ -208,13 +383,15 @@ export const resources = {
         settings: "設定",
       },
       prompts: {
+        workflow: promptWorkflowJa,
         title: "Prompt ワークスペース",
         subtitle: "AIプロンプトを効率的に管理および実行します。",
         localCount: "ローカルプレビュー",
       },
       skills: {
         title: "Skill 管理",
-        subtitle: "AIエージェントとツールパッケージをインストールして管理します。",
+        subtitle:
+          "AIエージェントとツールパッケージをインストールして管理します。",
         package: "Package",
       },
       store: {
@@ -244,13 +421,16 @@ export const resources = {
         settings: "Ajustes",
       },
       prompts: {
+        workflow: promptWorkflowEs,
         title: "Espacio de Prompts",
-        subtitle: "Administre y ejecute sus indicaciones de IA de manera eficiente.",
+        subtitle:
+          "Administre y ejecute sus indicaciones de IA de manera eficiente.",
         localCount: "Vista local",
       },
       skills: {
         title: "Gestor de Skills",
-        subtitle: "Instale y administre agentes de IA y paquetes de herramientas.",
+        subtitle:
+          "Instale y administre agentes de IA y paquetes de herramientas.",
         package: "Package",
       },
       store: {
@@ -263,7 +443,8 @@ export const resources = {
         title: "Ajustes móviles",
         subtitle: "Configure preferencias, sincronización y almacenamiento.",
         platform: "Sincronización de dispositivos",
-        platformCopy: "Mantenga sus datos sincronizados sin problemas en todos los dispositivos.",
+        platformCopy:
+          "Mantenga sus datos sincronizados sin problemas en todos los dispositivos.",
       },
     },
   },
@@ -271,7 +452,8 @@ export const resources = {
     translation: {
       common: {
         notFound: "Seite nicht gefunden",
-        notFoundDescription: "Für diese mobile Route gibt es noch keinen Screen.",
+        notFoundDescription:
+          "Für diese mobile Route gibt es noch keinen Screen.",
       },
       tabs: {
         prompts: "Prompts",
@@ -280,6 +462,7 @@ export const resources = {
         settings: "Einstellungen",
       },
       prompts: {
+        workflow: promptWorkflowDe,
         title: "Prompt Workspace",
         subtitle: "Verwalten und führen Sie Ihre KI-Prompts effizient aus.",
         localCount: "Lokale Vorschau",
@@ -291,15 +474,18 @@ export const resources = {
       },
       store: {
         title: "Skill Store",
-        subtitle: "Entdecken Sie offizielle und von der Community kuratierte KI-Skills.",
+        subtitle:
+          "Entdecken Sie offizielle und von der Community kuratierte KI-Skills.",
         official: "Offiziell",
         custom: "Eigene",
       },
       settings: {
         title: "Mobile Einstellungen",
-        subtitle: "Konfigurieren Sie App-Einstellungen, Datensynchronisierung und Speicher.",
+        subtitle:
+          "Konfigurieren Sie App-Einstellungen, Datensynchronisierung und Speicher.",
         platform: "Geräteübergreifende Synchronisierung",
-        platformCopy: "Halten Sie Ihre Daten nahtlos auf allen Geräten synchron.",
+        platformCopy:
+          "Halten Sie Ihre Daten nahtlos auf allen Geräten synchron.",
       },
     },
   },
@@ -316,6 +502,7 @@ export const resources = {
         settings: "Réglages",
       },
       prompts: {
+        workflow: promptWorkflowFr,
         title: "Espace Prompts",
         subtitle: "Gérez et exécutez vos requêtes d'IA efficacement.",
         localCount: "Aperçu local",
@@ -327,15 +514,18 @@ export const resources = {
       },
       store: {
         title: "Skill Store",
-        subtitle: "Découvrez des compétences en IA officielles et communautaires.",
+        subtitle:
+          "Découvrez des compétences en IA officielles et communautaires.",
         official: "Officiel",
         custom: "Personnalisé",
       },
       settings: {
         title: "Réglages mobile",
-        subtitle: "Configurez les préférences, la synchronisation et le stockage.",
+        subtitle:
+          "Configurez les préférences, la synchronisation et le stockage.",
         platform: "Synchronisation multi-appareils",
-        platformCopy: "Gardez vos données synchronisées sur tous les appareils.",
+        platformCopy:
+          "Gardez vos données synchronisées sur tous les appareils.",
       },
     },
   },

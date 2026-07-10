@@ -1,121 +1,198 @@
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { useEffect, useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 import { useTranslation } from "react-i18next";
-import { SymbolView } from "expo-symbols";
 
 import { AppScreen } from "@/components/AppScreen";
 import { AppText } from "@/components/AppText";
-import {
-  promptRepository,
-  type MobilePromptSummary,
-} from "@/features/prompts/data/promptRepository";
+import { showPlatformAlert } from "@/components/platformAlerts";
+import { promptRepository } from "@/features/prompts/data/promptRepository";
 import { useThemePalette } from "@/theme/colors";
 
 export function PromptEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const palette = useThemePalette();
+  const { t } = useTranslation();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const isEditing = !!id;
 
   useEffect(() => {
     let mounted = true;
     if (id) {
-      void promptRepository.getById(id).then((data) => {
-        if (mounted && data) {
-          setTitle(data.title);
-          setDescription(data.description || "");
-          setSystemPrompt(data.systemPrompt || "");
-          setUserPrompt(data.userPrompt);
-        }
-      });
+      void promptRepository
+        .getById(id)
+        .then((data) => {
+          if (mounted && data) {
+            setTitle(data.title);
+            setDescription(data.description || "");
+            setSystemPrompt(data.systemPrompt || "");
+            setUserPrompt(data.userPrompt);
+          }
+        })
+        .catch(() => {
+          if (mounted) {
+            showPlatformAlert(
+              t("prompts.workflow.loadErrorTitle"),
+              t("prompts.workflow.loadError"),
+            );
+          }
+        });
     }
     return () => {
       mounted = false;
     };
-  }, [id]);
+  }, [id, t]);
 
   const handleSave = async () => {
     if (!title.trim() || !userPrompt.trim()) {
-      alert("Title and User Prompt are required");
+      showPlatformAlert(
+        t("prompts.workflow.validationTitle"),
+        t("prompts.workflow.validationRequired"),
+      );
       return;
     }
 
-    if (isEditing) {
-      await promptRepository.update(id, {
-        title,
-        description,
-        systemPrompt,
-        userPrompt,
-      });
-    } else {
-      await promptRepository.create({
-        id: `prompt_${Date.now()}`,
-        title,
-        description,
-        systemPrompt,
-        userPrompt,
-        tags: [],
-        isFavorite: false,
-      });
+    setSaving(true);
+    try {
+      const values = {
+        title: title.trim(),
+        description: description.trim(),
+        systemPrompt: systemPrompt.trim(),
+        userPrompt: userPrompt.trim(),
+      };
+      if (isEditing) {
+        await promptRepository.update(id, values);
+      } else {
+        await promptRepository.create({
+          id: `prompt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          ...values,
+          tags: [],
+          isFavorite: false,
+        });
+      }
+      router.back();
+    } catch {
+      showPlatformAlert(
+        t("prompts.workflow.saveErrorTitle"),
+        t("prompts.workflow.saveError"),
+      );
+    } finally {
+      setSaving(false);
     }
-
-    router.back();
   };
 
   return (
     <AppScreen>
       <Stack.Screen
         options={{
+          title: isEditing
+            ? t("prompts.workflow.editTitle")
+            : t("prompts.workflow.createTitle"),
           headerRight: () => (
-            <Pressable onPress={handleSave}>
-              <AppText style={{ color: palette.accent, fontWeight: '600', fontSize: 17 }}>Save</AppText>
+            <Pressable disabled={saving} onPress={handleSave}>
+              <AppText
+                style={{
+                  color: palette.accent,
+                  fontWeight: "600",
+                  fontSize: 17,
+                }}
+              >
+                {t("prompts.workflow.save")}
+              </AppText>
             </Pressable>
           ),
           headerLeft: () => (
             <Pressable onPress={() => router.back()}>
-              <AppText style={{ color: palette.accent, fontSize: 17 }}>Cancel</AppText>
+              <AppText style={{ color: palette.accent, fontSize: 17 }}>
+                {t("prompts.workflow.cancel")}
+              </AppText>
             </Pressable>
           ),
         }}
       />
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.section}>
-          <AppText variant="subtitle" style={[styles.label, { color: palette.text }]}>Title *</AppText>
+          <AppText
+            variant="subtitle"
+            style={[styles.label, { color: palette.text }]}
+          >
+            {t("prompts.workflow.title")} *
+          </AppText>
           <TextInput
-            style={[styles.input, { backgroundColor: palette.surface, color: palette.text, borderColor: palette.border }]}
+            style={[
+              styles.input,
+              {
+                backgroundColor: palette.surface,
+                color: palette.text,
+                borderColor: palette.border,
+              },
+            ]}
             value={title}
             onChangeText={setTitle}
-            placeholder="E.g., Code Reviewer"
+            placeholder={t("prompts.workflow.titlePlaceholder")}
             placeholderTextColor={palette.muted}
           />
         </View>
 
         <View style={styles.section}>
-          <AppText variant="subtitle" style={[styles.label, { color: palette.text }]}>Description</AppText>
+          <AppText
+            variant="subtitle"
+            style={[styles.label, { color: palette.text }]}
+          >
+            {t("prompts.workflow.description")}
+          </AppText>
           <TextInput
-            style={[styles.input, { backgroundColor: palette.surface, color: palette.text, borderColor: palette.border }]}
+            style={[
+              styles.input,
+              {
+                backgroundColor: palette.surface,
+                color: palette.text,
+                borderColor: palette.border,
+              },
+            ]}
             value={description}
             onChangeText={setDescription}
-            placeholder="Briefly describe what this prompt does"
+            placeholder={t("prompts.workflow.descriptionPlaceholder")}
             placeholderTextColor={palette.muted}
           />
         </View>
 
         <View style={styles.section}>
-          <AppText variant="subtitle" style={[styles.label, { color: palette.text }]}>System Prompt</AppText>
+          <AppText
+            variant="subtitle"
+            style={[styles.label, { color: palette.text }]}
+          >
+            {t("prompts.workflow.systemPrompt")}
+          </AppText>
           <TextInput
-            style={[styles.input, styles.textArea, { backgroundColor: palette.surface, color: palette.text, borderColor: palette.border }]}
+            style={[
+              styles.input,
+              styles.textArea,
+              {
+                backgroundColor: palette.surface,
+                color: palette.text,
+                borderColor: palette.border,
+              },
+            ]}
             value={systemPrompt}
             onChangeText={setSystemPrompt}
-            placeholder="You are an expert assistant..."
+            placeholder={t("prompts.workflow.systemPromptPlaceholder")}
             placeholderTextColor={palette.muted}
             multiline
             textAlignVertical="top"
@@ -123,18 +200,30 @@ export function PromptEditScreen() {
         </View>
 
         <View style={styles.section}>
-          <AppText variant="subtitle" style={[styles.label, { color: palette.text }]}>User Prompt *</AppText>
+          <AppText
+            variant="subtitle"
+            style={[styles.label, { color: palette.text }]}
+          >
+            {t("prompts.workflow.userPrompt")} *
+          </AppText>
           <TextInput
-            style={[styles.input, styles.textArea, { backgroundColor: palette.surface, color: palette.text, borderColor: palette.border }]}
+            style={[
+              styles.input,
+              styles.textArea,
+              {
+                backgroundColor: palette.surface,
+                color: palette.text,
+                borderColor: palette.border,
+              },
+            ]}
             value={userPrompt}
             onChangeText={setUserPrompt}
-            placeholder="Review the following code..."
+            placeholder={t("prompts.workflow.userPromptPlaceholder")}
             placeholderTextColor={palette.muted}
             multiline
             textAlignVertical="top"
           />
         </View>
-
       </ScrollView>
     </AppScreen>
   );
@@ -150,7 +239,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    fontWeight: '600',
+    fontWeight: "600",
     marginLeft: 4,
   },
   input: {
@@ -163,5 +252,5 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 120,
     paddingTop: 12,
-  }
+  },
 });

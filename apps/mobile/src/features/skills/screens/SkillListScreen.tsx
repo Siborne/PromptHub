@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AppScreen } from "@/components/AppScreen";
@@ -21,6 +21,21 @@ export function SkillListScreen() {
   const { t } = useTranslation();
   const palette = useThemePalette();
   const [skills, setSkills] = useState<MobileSkillSummary[]>([]);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const visibleSkills = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    return skills.filter((skill) => {
+      const matchesSearch = [
+        skill.name,
+        skill.description,
+        skill.author,
+        ...skill.tags,
+      ].some((value) => value?.toLocaleLowerCase().includes(query));
+      const matchesFilter = filter !== "favorite" || skill.is_favorite;
+      return matchesSearch && matchesFilter;
+    });
+  }, [filter, search, skills]);
 
   useEffect(() => {
     let mounted = true;
@@ -45,15 +60,18 @@ export function SkillListScreen() {
         title={t("skills.title")}
       />
 
-      <SearchDock placeholder={t("skills.searchPlaceholder")} />
+      <SearchDock
+        onChangeText={setSearch}
+        placeholder={t("skills.searchPlaceholder")}
+        value={search}
+      />
       <SegmentPills
-        active={t("filters.all")}
+        activeId={filter}
         items={[
-          t("filters.all"),
-          t("filters.installed"),
-          t("filters.store"),
-          t("filters.favorite"),
+          { id: "all", label: t("filters.all") },
+          { id: "favorite", label: t("filters.favorite") },
         ]}
+        onChange={setFilter}
       />
 
       <MetricGrid>
@@ -67,7 +85,7 @@ export function SkillListScreen() {
       </MetricGrid>
 
       <WorkPanel label={t("skills.localPackages")}>
-        {skills.map((skill) => (
+        {visibleSkills.map((skill) => (
           <WorkItemRow
             key={skill.id}
             accent={skill.is_favorite ? palette.warning : palette.accentSoft}

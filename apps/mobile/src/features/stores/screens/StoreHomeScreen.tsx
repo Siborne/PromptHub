@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AppScreen } from "@/components/AppScreen";
@@ -15,6 +16,44 @@ import { useThemePalette } from "@/theme/colors";
 export function StoreHomeScreen() {
   const { t } = useTranslation();
   const palette = useThemePalette();
+  const [search, setSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const sources = useMemo(
+    () => [
+      {
+        id: "official",
+        description: "registry.prompthub.local/mobile-official",
+        source: t("store.official"),
+        title: t("store.official"),
+        meta: "registry",
+      },
+      {
+        id: "claude",
+        description: "github.com/anthropics/skills",
+        source: "Claude",
+        title: "Claude Code",
+        meta: "github",
+      },
+      {
+        id: "custom",
+        description: "marketplace.json",
+        source: t("store.custom"),
+        title: t("store.custom"),
+        meta: "url",
+      },
+    ],
+    [t],
+  );
+  const visibleSources = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    return sources.filter(
+      (source) =>
+        (sourceFilter === "all" || source.id === sourceFilter) &&
+        [source.title, source.description, source.source].some((value) =>
+          value.toLocaleLowerCase().includes(query),
+        ),
+    );
+  }, [search, sourceFilter, sources]);
 
   return (
     <AppScreen>
@@ -25,10 +64,20 @@ export function StoreHomeScreen() {
         title={t("store.title")}
       />
 
-      <SearchDock placeholder={t("store.searchPlaceholder")} />
+      <SearchDock
+        onChangeText={setSearch}
+        placeholder={t("store.searchPlaceholder")}
+        value={search}
+      />
       <SegmentPills
-        active={t("store.official")}
-        items={[t("store.official"), "Claude Code", t("store.custom")]}
+        activeId={sourceFilter}
+        items={[
+          { id: "all", label: t("filters.all") },
+          { id: "official", label: t("store.official") },
+          { id: "claude", label: "Claude Code" },
+          { id: "custom", label: t("store.custom") },
+        ]}
+        onChange={setSourceFilter}
       />
 
       <MetricGrid>
@@ -46,46 +95,31 @@ export function StoreHomeScreen() {
       </MetricGrid>
 
       <WorkPanel label={t("store.sources")}>
-        <WorkItemRow
-          accent={palette.accentSoft}
-          description="registry.prompthub.local/mobile-official"
-          action="installed"
-          chips={["registry", "builtin"]}
-          source={t("store.official")}
-          symbol={{
-            ios: "storefront",
-            android: "storefront",
-            web: "storefront",
-          }}
-          title={t("store.official")}
-          meta="registry"
-        />
-        <WorkItemRow
-          accent={palette.accentSoft}
-          description="github.com/anthropics/skills"
-          action="download"
-          chips={["SKILL.md", "GitHub"]}
-          source="Claude"
-          symbol={{ ios: "globe", android: "public", web: "public" }}
-          title="Claude Code"
-          meta="github"
-        />
-        <WorkItemRow
-          accent={palette.surfacePressed}
-          description="marketplace.json"
-          action="more"
-          chips={["json", "url"]}
-          source={t("store.custom")}
-          symbol={{ ios: "link", android: "link", web: "link" }}
-          title={t("store.custom")}
-          meta="url"
-        />
+        {visibleSources.map((source) => (
+          <WorkItemRow
+            key={source.id}
+            accent={
+              source.id === "custom"
+                ? palette.surfacePressed
+                : palette.accentSoft
+            }
+            action={source.id === "official" ? "installed" : "more"}
+            chips={
+              source.id === "claude" ? ["SKILL.md", "GitHub"] : [source.meta]
+            }
+            description={source.description}
+            source={source.source}
+            symbol={{ ios: "globe", android: "public", web: "public" }}
+            title={source.title}
+            meta={source.meta}
+          />
+        ))}
       </WorkPanel>
 
       <WorkPanel label={t("store.featured")}>
         <WorkItemRow
           accent={palette.accentSoft}
-          action="download"
+          action="more"
           chips={["prompt", "quality"]}
           description={t("store.featuredPromptDescription")}
           source="Official"
