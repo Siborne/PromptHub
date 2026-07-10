@@ -1,4 +1,4 @@
-import type { CliIO } from "./run";
+import type { CliIO } from "./types";
 import {
   AIConfigError,
   coreAIConfigService,

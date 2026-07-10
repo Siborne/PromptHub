@@ -143,6 +143,24 @@ export class PromptRelationDB {
     return result.changes > 0;
   }
 
+  insertRelationDirect(relation: PromptRelation): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO prompt_relations (
+          id, source_prompt_id, target_prompt_id, kind, note, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        relation.id,
+        relation.sourcePromptId,
+        relation.targetPromptId,
+        relation.kind,
+        relation.note ?? null,
+        relation.createdAt ? new Date(relation.createdAt).getTime() : Date.now(),
+        relation.updatedAt ? new Date(relation.updatedAt).getTime() : Date.now(),
+      );
+  }
+
   private normalizeCreateInput(
     data: CreatePromptRelationDTO,
   ): CreatePromptRelationDTO {

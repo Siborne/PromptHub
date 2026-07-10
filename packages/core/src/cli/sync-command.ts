@@ -7,12 +7,7 @@ import {
   parseCliWorkspaceBundle,
   restoreCliWorkspaceSnapshot,
 } from "./workspace-sync";
-
-export interface CliRemoteSyncOptions {
-  endpoint: string;
-  token: string;
-  forceClear?: boolean;
-}
+import type { CliRemoteSyncOptions } from "./types";
 
 export class CliRemoteSyncError extends Error {
   constructor(
@@ -76,7 +71,10 @@ async function requestSyncJson(
   });
 
   if (!response.ok) {
-    throw new CliRemoteSyncError(await readErrorMessage(response), response.status);
+    throw new CliRemoteSyncError(
+      await readErrorMessage(response),
+      response.status,
+    );
   }
   return unwrapEnvelope(await response.json());
 }
@@ -101,8 +99,15 @@ export async function pushRemoteSyncSnapshot(
     folderDb: FolderDB;
     skillDb: SkillDB;
   },
+  db?: DatabaseAdapter.Database,
 ): Promise<Record<string, unknown>> {
-  const bundle = await createCliWorkspaceBundle(dbs.promptDb, dbs.folderDb, dbs.skillDb);
+  const bundle = await createCliWorkspaceBundle(
+    dbs.promptDb,
+    dbs.folderDb,
+    dbs.skillDb,
+    undefined,
+    db,
+  );
   const remote = await requestSyncJson(options, "/api/sync/data", {
     method: "PUT",
     body: JSON.stringify({ payload: bundle.payload }),
@@ -129,14 +134,19 @@ export async function pullRemoteSyncSnapshot(
   const hasData = await hasCliWorkspaceData(db);
 
   if (hasData && !options.forceClear) {
-    throw new CliRemoteSyncError("目标工作区非空；如需覆盖请传入 --force-clear", 409);
+    throw new CliRemoteSyncError(
+      "目标工作区非空；如需覆盖请传入 --force-clear",
+      409,
+    );
   }
 
   if (options.forceClear) {
     clearCliWorkspaceData(db);
   }
 
-  const summary = await restoreCliWorkspaceSnapshot(parsed.payload, dbs);
+  const summary = await restoreCliWorkspaceSnapshot(parsed.payload, dbs, {
+    db,
+  });
   return {
     pulled: true,
     forceCleared: Boolean(options.forceClear),

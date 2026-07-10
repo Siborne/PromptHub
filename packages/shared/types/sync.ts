@@ -1,7 +1,12 @@
 import type { Folder } from "./folder";
 import type { McpLibraryFile } from "./mcp";
 import type { PluginLibraryFile, PluginPackageSnapshot } from "./plugin";
-import type { Prompt, PromptVersion } from "./prompt";
+import type {
+  OutputFormatItem,
+  Prompt,
+  PromptRelation,
+  PromptVersion,
+} from "./prompt";
 import type { RuleBackupRecord } from "./rules";
 import type { Settings, SyncProviderKind } from "./settings";
 import type { Skill, SkillFileSnapshot, SkillVersion } from "./skill";
@@ -112,6 +117,8 @@ export interface SyncSnapshot {
   skills: Skill[];
   skillVersions: SkillVersion[];
   skillFiles?: Record<string, SkillFileSnapshot[]>;
+  promptRelations?: PromptRelation[];
+  outputFormatItems?: OutputFormatItem[];
   mcpLibrary?: McpLibraryFile;
   pluginLibrary?: PluginLibraryFile;
   pluginPackages?: PluginPackageSnapshot[];

@@ -169,6 +169,23 @@ export class PromptOutputFormatDB {
       .run(sourcePromptId);
   }
 
+  insertItemDirect(item: OutputFormatItem): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO prompt_output_format_items (
+          id, source_prompt_id, target_prompt_id, sort_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        item.id,
+        item.sourcePromptId,
+        item.targetPromptId,
+        item.sortOrder,
+        item.createdAt ? new Date(item.createdAt).getTime() : Date.now(),
+        item.updatedAt ? new Date(item.updatedAt).getTime() : Date.now(),
+      );
+  }
+
   private normalizeCreateInput(
     data: CreateOutputFormatItemDTO,
   ): CreateOutputFormatItemDTO {

@@ -356,6 +356,31 @@ export const syncSnapshotSchema = z.object({
   skills: z.array(skillSchema),
   skillVersions: z.array(skillVersionSchema).default([]),
   skillFiles: z.record(z.array(skillFileSnapshotSchema)).optional(),
+  promptRelations: z
+    .array(
+      z.object({
+        id: z.string(),
+        sourcePromptId: z.string(),
+        targetPromptId: z.string(),
+        kind: z.enum(['related_to', 'variant_of', 'depends_on', 'next_step']),
+        note: z.string().nullable().optional(),
+        createdAt: z.string(),
+        updatedAt: z.string(),
+      }),
+    )
+    .optional(),
+  outputFormatItems: z
+    .array(
+      z.object({
+        id: z.string(),
+        sourcePromptId: z.string(),
+        targetPromptId: z.string().nullable(),
+        sortOrder: z.number(),
+        createdAt: z.string(),
+        updatedAt: z.string(),
+      }),
+    )
+    .optional(),
   mcpLibrary: mcpLibrarySchema.optional(),
   pluginLibrary: pluginLibrarySchema.optional(),
   pluginPackages: z.array(pluginPackageSnapshotSchema).optional(),

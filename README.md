@@ -289,6 +289,9 @@ prompt    list / get / create / update / delete / duplicate / search
           versions / create-version / delete-version / diff / rollback
           use / copy
           list-tags / rename-tag / delete-tag
+          relation list|create|update|delete
+          output-format list|create|delete|reorder
+          （create/update 支持 --parent-id 树父节点）
 
 folder    list / get / create / update / delete / reorder
 
@@ -300,14 +303,28 @@ rules     list / scan / read / save / rewrite
 skill     list / get / install / delete / remove
           versions / create-version / rollback / delete-version
           export / scan / scan-safety / sync-from-repo
+          update / check-update
           platforms / platform-status / install-md / uninstall-md
+          project-install / install-project
           repo-files / repo-read / repo-write / repo-delete / repo-mkdir / repo-rename
+
+mcp       list / get / create / update / delete
+          market / sources / install / import
+          enable / disable / check / env-import
+          export / apply / remove
+
+plugin    list / get / market / sources / install / delete
+          versions / create-version
 
 ai        providers / provider-add / provider-delete
           models / model-add / model-delete
           routes / route-set / route-clear
 
 workspace export / import
+          （完整 SyncSnapshot：prompts、relations、output-formats、
+           skills + skillFiles、MCP、plugins、rules、媒体）
+
+sync      status / push / pull
 ```
 
 常用全局参数：
