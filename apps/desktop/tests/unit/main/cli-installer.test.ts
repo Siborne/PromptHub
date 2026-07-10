@@ -6,7 +6,7 @@ const { execFileMock } = vi.hoisted(() => ({
 
 vi.mock("electron", () => ({
   app: {
-    getVersion: () => "0.5.9-beta.2",
+    getVersion: () => "0.5.9",
   },
 }));
 
@@ -75,8 +75,8 @@ describe("cli-installer", () => {
     expect(status.packageManager).toBeNull();
     expect(status.installCommand).toBeNull();
     expect(status.manualInstallCommands).toEqual({
-      pnpm: "pnpm add -g https://github.com/legeling/PromptHub/releases/download/v0.5.9-beta.2/prompthub-cli-0.5.9-beta.2.tgz",
-      npm: "npm install -g https://github.com/legeling/PromptHub/releases/download/v0.5.9-beta.2/prompthub-cli-0.5.9-beta.2.tgz",
+      pnpm: "pnpm add -g https://github.com/legeling/PromptHub/releases/download/v0.5.9/prompthub-cli-0.5.9.tgz",
+      npm: "npm install -g https://github.com/legeling/PromptHub/releases/download/v0.5.9/prompthub-cli-0.5.9.tgz",
     });
   });
 

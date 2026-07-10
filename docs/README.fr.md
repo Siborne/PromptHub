@@ -9,7 +9,7 @@ Un espace de travail local-first pour les prompts, les skills et les assets de c
 
 [![GitHub Stars](https://img.shields.io/github/stars/legeling/PromptHub?style=for-the-badge&logo=github&color=yellow)](https://github.com/legeling/PromptHub/stargazers)
 [![Downloads](https://img.shields.io/github/downloads/legeling/PromptHub/total?style=for-the-badge&logo=github&color=blue)](https://github.com/legeling/PromptHub/releases)
-[![Version](https://img.shields.io/badge/release-v0.5.8_stable-22C55E?style=for-the-badge)](https://github.com/legeling/PromptHub/releases/latest)
+[![Version](https://img.shields.io/badge/release-v0.5.9_stable-22C55E?style=for-the-badge)](https://github.com/legeling/PromptHub/releases/latest)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue?style=for-the-badge)](../LICENSE)
 
   <br/>
@@ -66,17 +66,17 @@ Vos données restent sur votre machine.
 
 ## 📥 Téléchargement
 
-Dernière version stable : **v0.5.8** ; aperçu actuel : **v0.5.9-beta.2**. Les liens directs stables pointent toujours vers v0.5.8 ; les builds aperçu sont disponibles dans GitHub Prereleases :
+Dernière version stable : **v0.5.9**. Les liens directs pointent vers les assets stables GitHub Latest ; ils reviendront aux noms fixes CDN une fois le miroir synchronisé :
 
-- **Téléchargement direct** — pointe temporairement vers les assets stables GitHub pour éviter les 404 tant que le mirror CDN est vide ; les liens reviendront aux noms fixes CDN une fois le mirror alimenté.
-- **GitHub Releases** — page de release officielle avec versions archivées, signatures et release notes complètes.
+- **Téléchargement direct** — pointe vers les assets stables GitHub Latest afin d’éviter un miroir CDN vide ; il reviendra aux noms fixes CDN une fois le miroir synchronisé.
+- **GitHub Releases** — page officielle des releases avec archives de versions, signatures et notes complètes.
 
 | Plateforme | Téléchargement direct                                                                                                                                                                                                                                                                                                                                                                                                                   | GitHub Releases                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows    | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.8-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.8-arm64.exe) | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.8-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.8-arm64.exe) |
-| macOS      | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.8-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.8-x64.dmg)     | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.8-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.8-x64.dmg)     |
-| Linux      | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.8-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.8-amd64.deb)              | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.8-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.8-amd64.deb)              |
-| Aperçu     | [![Preview v0.5.9-beta.2](https://img.shields.io/badge/Preview-0.5.9--beta.2-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases/tag/v0.5.9-beta.2)                                                                                                                                                                                                                                 | [GitHub Prerelease v0.5.9-beta.2](https://github.com/legeling/PromptHub/releases/tag/v0.5.9-beta.2)                                                                                                                                                                                                                                                                                                                                     |
+| Windows    | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.9-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.9-arm64.exe) | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.9-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.9-arm64.exe) |
+| macOS      | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-x64.dmg)     | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-x64.dmg)     |
+| Linux      | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-amd64.deb)              | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-amd64.deb)              |
+| Aperçu     | [![Aperçu précédent](https://img.shields.io/badge/Preview-v0.5.9--beta.2-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases/tag/v0.5.9-beta.2)                                                                                                                                                                                                                                     | [GitHub Prerelease v0.5.9-beta.2](https://github.com/legeling/PromptHub/releases/tag/v0.5.9-beta.2)                                                                                                                                                                                                                                                                                                                                     |
 
 > **Apple Silicon ou Intel ?** M1/M2/M3/M4 → `arm64`. Macs Intel → `x64`.
 > **Windows arch ?** La plupart des PC → `x64`. Seules les machines ARM type Surface Pro X → `arm64`.
@@ -114,7 +114,7 @@ Vous voulez tester la prochaine version d'aperçu ? Ouvrez _Paramètres → À p
 
 ## Captures
 
-> Les captures suivantes présentent les surfaces principales de la stable v0.5.8 ; v0.5.9 beta ajoute MCP, arbres de relations Prompt et améliorations import/aperçu Skill.
+> Les captures suivantes présentent les surfaces principales de la stable v0.5.9, dont MCP, Plugin, les arbres de relations Prompt, les améliorations import/aperçu Skill et les espaces Skill par projet.
 
 <div align="center">
   <p><strong>Home en deux colonnes</strong></p>
@@ -304,14 +304,15 @@ Options globales courantes :
 
 Journal complet : **[CHANGELOG.md](../CHANGELOG.md)**
 
-### v0.5.9-beta.2 (2026-06-27, aperçu)
+### v0.5.9 (2026-07-09, stable)
 
-- Gestion Plugin étendue : My Plugins / Plugin Store / Agent Plugin suivent mieux le modèle Skill avec installation, détails, snapshots de version, mises à jour source, actions batch, distribution Agent et import Skill / MCP enfant
-- Sync complète des assets Agent : sync auto-hébergée et backup/restore incluent My Skills, My MCP, My Plugins, Rules et les données associées
-- Centre de configuration réseau : Settings regroupe proxy et sources miroir pour partager une seule politique réseau
-- CLI projet améliorée : installation depuis le répertoire courant, choix interactif de My Skills, installation par chemin et commandes de configuration IA plus complètes
-- Les checks de mise à jour Skill utilisent fingerprints de contenu et comparaison de dossiers, en ignorant caches, artefacts cachés et métadonnées PromptHub
-- MCP / Plugin UI réutilise les motifs Skill pour tags en bas à gauche, largeurs de cartes, badges de mise à jour, pages détail et entrées de distribution
+- Gestion Plugin stabilisée : My Plugins / Plugin Store / Agent Plugin suivent le modèle Skill pour installation, détails, snapshots de version, revue de mise à jour source, actions batch, distribution Agent et import Skill / MCP enfant
+- Gestion et sync MCP étendues : workspace MCP, store officiel de templates, distribution vers targets Agent, health checks, import sélectif .env, commandes CLI MCP et design de resynchronisation en un clic sont consolidés
+- La sync complète des assets Agent inclut My Skills, My MCP, My Plugins, Rules et données liées dans la sync self-hosted et backup/restore
+- Les mises à jour source Skill utilisent des fingerprints SHA-256 de package et une réconciliation à trois voies, avec corrections pour registry fingerprints, baselines content-url et redaction des identifiants URL
+- Les mises à jour source Plugin et batch store affichent maintenant les différences et exigent confirmation avant de remplacer les packages locaux
+- Les Prompts permettent de composer, trier, persister et sauvegarder des séquences de format de sortie personnalisées
+- Le flux macOS est renforcé avec signature Developer ID, notarisation, vérification DMG/ZIP et contrôles Gatekeeper
 
 ### v0.5.9-beta.1 (2026-06-14, aperçu)
 
@@ -385,13 +386,13 @@ Journal complet : **[CHANGELOG.md](../CHANGELOG.md)**
 
 ## Feuille de route
 
-### v0.5.9-beta.2 ← aperçu actuel
+### v0.5.9 ← stable actuelle
 
-- La gestion Plugin / MCP continue de converger vers l'expérience Skill pour stores, distribution Agent, détails, filtres de tags et badges de mise à jour
-- Sync des assets Agent, proxy réseau, installation CLI de projet et checks de sources Skill passent en validation beta2
-- Arbre de relations Prompt, chemins Agent Windows, toggle captcha Web et correctifs de release pipeline sont inclus pour les utilisateurs aperçu
+- Plugin / MCP s’alignent sur l’expérience Skill pour stores, distribution Agent, détails, filtres de tags, revue de mise à jour et safety checks
+- Sync des assets Agent, proxy réseau, installations CLI de projet et checks de source Skill passent en stable
+- Arbres de relations Prompt, chemins Windows Agent, toggle captcha Web, signature/notarisation macOS et correctifs de release pipeline arrivent aux utilisateurs stables
 
-### v0.5.8 ← stable actuelle
+### v0.5.8
 
 - Reverse prompt d'image, configuration fournisseurs/capacités/routes et tests d'image sont stabilisés
 - Cycle de vie Skill consolidé pour boutiques, Git, agents, projets, plateformes, copy / symlink et Skills intégrés

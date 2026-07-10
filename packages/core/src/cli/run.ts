@@ -75,7 +75,7 @@ const EXIT_CODES = {
   INTERNAL: 10,
 } as const;
 
-const CLI_VERSION = "0.5.9-beta.2";
+const CLI_VERSION = "0.5.9";
 
 type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
 

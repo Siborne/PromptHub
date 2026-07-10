@@ -1,5 +1,46 @@
 ## [Unreleased]
 
+## [0.5.9] - 2026-07-09
+
+### 新功能 / Features
+
+- 🧩 **Plugin 管理正式收口**：My Plugins / Plugin Store / Agent Plugin 进入稳定版，支持安装、详情、版本快照、来源更新确认、批量操作、Agent 分发、子 Skill / MCP 导入和静态安全评估
+  - **Plugin Management Stabilized**: My Plugins / Plugin Store / Agent Plugin are now part of the stable release with install, detail, version snapshots, source update review, batch actions, Agent distribution, child Skill / MCP import, and static safety assessment
+- 🧰 **MCP 管理与同步能力扩展**：MCP 工作台、官方模板商店、Agent 目标分发、健康检查、`.env` 按需导入、CLI MCP 命令和一键重同步设计完成阶段性收口
+  - **MCP Management and Sync Expanded**: MCP workspace, official template store, Agent target distribution, health checks, selective `.env` import, CLI MCP commands, and one-click resync design are consolidated for this release
+- 🔄 **整套 Agent 资产同步**：自托管同步和备份恢复纳入 My Skills、My MCP、My Plugins、Rules 等 Agent 资产，减少跨设备恢复后的能力缺口
+  - **Full Agent Asset Sync**: Self-hosted sync and backup/restore now include Agent assets such as My Skills, My MCP, My Plugins, and Rules to reduce cross-device recovery gaps
+- 🌐 **网络配置中心**：设置页新增网络分类，集中管理代理与镜像源相关配置，网络请求可复用统一代理策略
+  - **Network Configuration Center**: Settings now include a Network category for proxy and mirror-source configuration, with network requests sharing one proxy policy
+- 🧑‍💻 **CLI 项目工作流优化**：CLI 支持从当前目录出发的项目 Skill 工作流、交互式选择我的 Skill、路径安装和更完整的 AI 配置命令
+  - **CLI Project Workflow Improvements**: CLI workflows now support current-directory project Skill installs, interactive My Skill selection, path-based installs, and fuller AI configuration commands
+- 🧱 **Prompt 自定义输出格式序列**：Prompt 可组合多个引用 Prompt 作为有序输出格式，支持拖拽排序、持久化、备份恢复和删除联动
+  - **Custom Prompt Output Format Sequences**: Prompts can compose ordered referenced Prompts as reusable output formats with drag sorting, persistence, backup/restore, and deletion cleanup
+
+### 问题修复 / Fixes
+
+- 🔎 **Skill 来源更新校验更可靠**：更新检查改为 SHA-256 包指纹和三方对账，忽略缓存、隐藏产物和 PromptHub 自身元数据，并修复远程 registry 指纹误标、content-url 基线和 URL 脱敏问题
+  - **More Reliable Skill Source Update Checks**: Source update checks now use SHA-256 package fingerprints and three-way reconciliation while ignoring caches, hidden artifacts, and PromptHub metadata, with fixes for remote registry fingerprint labeling, content-url baselines, and URL credential redaction
+- ✅ **Plugin 更新必须先确认**：来源更新和批量商店更新现在先展示差异并要求确认，不再点击后直接覆盖本地 Plugin
+  - **Plugin Updates Require Confirmation**: Source updates and batch store updates now show a review step and require confirmation instead of directly overwriting local Plugins
+- 🪟 **Windows / Agent 路径兼容**：补齐 `%LOCALAPPDATA%`、Hermes、Trae Work、WorkBuddy、QClaw 等平台路径、图标和 shell 打开路径处理
+  - **Windows / Agent Path Compatibility**: Added `%LOCALAPPDATA%`, Hermes, Trae Work, WorkBuddy, QClaw, platform icon, and shell-open path handling for more reliable Agent asset detection
+- 🧰 **MCP 卸载配置清理**：Codex TOML MCP 删除现在会同时移除 server 子配置和 tool approval override，避免卸载后残留无效 MCP 配置导致 CLI 报错
+  - **MCP Uninstall Config Cleanup**: Codex TOML MCP removal now deletes server child sections and tool approval overrides together, avoiding invalid leftover MCP config after uninstall
+- 🌐 **自部署 Web 验证码开关**：自部署 Web 登录验证码支持通过环境变量关闭，方便内网个人部署
+  - **Self-hosted Web Captcha Toggle**: Self-hosted Web login captcha can be disabled through an environment variable for private intranet deployments
+- 🚀 **发布链路加固**：发布 workflow 对可选镜像发布、macOS Developer ID 签名、公证和产物校验增加保护
+  - **Release Pipeline Hardening**: Release workflows now guard optional mirror publishing and strengthen macOS Developer ID signing, notarization, and artifact verification
+
+### 优化 / Improvements
+
+- 🎛️ **MCP / Plugin UI 与 Skill 对齐**：My MCP、Agent MCP、Plugin Store、Agent Plugin、标签筛选、详情页、卡片宽度、更新提示、安全扫描和分发入口继续复用 Skill 的布局与交互模式
+  - **MCP / Plugin UI Aligned with Skills**: My MCP, Agent MCP, Plugin Store, Agent Plugin, tag filters, detail pages, card widths, update badges, safety checks, and distribution entry points now reuse Skill layout and interaction patterns more consistently
+- 🧪 **测试与文档标准补强**：补充白盒/黑盒/边界/安全/性能/回滚验证要求，扩展 MCP、Plugin、同步、CLI、设置和 UI 回归测试覆盖
+  - **Testing and Documentation Standards Expanded**: Added stronger white-box, black-box, boundary, security, performance, and rollback verification requirements with broader MCP, Plugin, sync, CLI, settings, and UI regression coverage
+- 🧾 **本地 Issue 状态工作流**：新增 GitHub issue 远端状态和本地交付状态分离规则，已完成但未随版本发布的问题标记为本地完成/待发布
+  - **Local Issue Status Workflow**: Added a split between remote GitHub issue state and local delivery state so implemented-but-unreleased issues can be tracked as local done / release pending
+
 ## [0.5.9-beta.2] - 2026-06-27
 
 ### 新功能 / Features
