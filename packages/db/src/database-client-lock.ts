@@ -10,6 +10,7 @@ export interface DatabaseClientLeaseOptions {
   pid?: number;
   isProcessAlive?: (pid: number) => boolean;
   registerExitHandler?: boolean;
+  recoverUnregisteredLock?: boolean;
 }
 
 export interface DatabaseClientLease {
@@ -112,10 +113,14 @@ function writeCurrentLease(clientsDir: string, pid: number): string {
   return leasePath;
 }
 
-function removeOrphanedLock(dbPath: string, scan: ClientLeaseScan): void {
+function removeOrphanedLock(
+  dbPath: string,
+  scan: ClientLeaseScan,
+  recoverUnregisteredLock: boolean,
+): void {
   const lockDir = `${dbPath}.lock`;
   const canRecover =
-    scan.hasRecoverableStaleLease &&
+    (scan.hasRecoverableStaleLease || recoverUnregisteredLock) &&
     !scan.hasLiveClient &&
     !scan.hasUnknownOwner;
   if (!canRecover || !fs.existsSync(lockDir)) {
@@ -185,7 +190,11 @@ export function acquireDatabaseClientLease(
   const leasePath = writeCurrentLease(clientsDir, pid);
   try {
     const clientScan = scanClientLeases(clientsDir, pid, isProcessAlive);
-    removeOrphanedLock(dbPath, clientScan);
+    removeOrphanedLock(
+      dbPath,
+      clientScan,
+      options.recoverUnregisteredLock === true,
+    );
   } catch (error) {
     removeLeaseRegistration(leasePath, clientsDir);
     throw error;

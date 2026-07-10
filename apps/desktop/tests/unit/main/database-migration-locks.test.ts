@@ -7,7 +7,14 @@ import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import DatabaseAdapter from "../../../src/main/database/sqlite";
-import { closeDatabase } from "../../../src/main/database";
+import {
+  closeDatabase,
+  initDatabase as initDesktopDatabase,
+} from "../../../src/main/database";
+import {
+  configureRuntimePaths,
+  resetRuntimePaths,
+} from "../../../src/main/runtime-paths";
 import { initDatabase as initSharedDatabase } from "@prompthub/db";
 
 function createLegacySkillSchema(dbPath: string): DatabaseAdapter.Database {
@@ -40,6 +47,7 @@ describe("database migration locking regression", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     closeDatabase();
+    resetRuntimePaths();
     for (const dir of tempDirs.splice(0)) {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -132,5 +140,21 @@ describe("database migration locking regression", () => {
         String(message).includes("[DB] Cleared stale lock"),
       ),
     ).toBe(false);
+  });
+
+  it("recovers an ownerless legacy lock during Desktop startup", () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-desktop-legacy-lock-"),
+    );
+    tempDirs.push(userDataPath);
+    const dbPath = path.join(userDataPath, "data", "prompthub.db");
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    initSharedDatabase(dbPath);
+    closeDatabase();
+    fs.mkdirSync(`${dbPath}.lock`);
+    configureRuntimePaths({ userDataPath });
+
+    expect(() => initDesktopDatabase()).not.toThrow();
+    expect(fs.existsSync(`${dbPath}.lock`)).toBe(false);
   });
 });

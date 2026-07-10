@@ -100,6 +100,23 @@ describe("database client lock coordination", () => {
     lease.release();
   });
 
+  it("preserves a live registered writer during legacy lock recovery", () => {
+    const fixture = createFixture();
+    roots.push(fixture.root);
+    fs.mkdirSync(`${fixture.dbPath}.lock`);
+    writeLease(fixture.dbPath, 42);
+
+    const lease = acquireDatabaseClientLease(fixture.dbPath, {
+      pid: 7,
+      isProcessAlive: (pid) => pid === 42,
+      recoverUnregisteredLock: true,
+      registerExitHandler: false,
+    });
+
+    expect(fs.existsSync(`${fixture.dbPath}.lock`)).toBe(true);
+    lease.release();
+  });
+
   it("recovers an orphan lock and prunes dead or malformed leases", () => {
     const fixture = createFixture();
     roots.push(fixture.root);

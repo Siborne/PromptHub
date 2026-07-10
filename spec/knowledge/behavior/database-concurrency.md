@@ -19,14 +19,19 @@
 - adapter 的 `run`、`get`、`all` 每次完成后必须 finalize 底层 WASM statement；
   可复用 statement wrapper 在下一次调用时重新 prepare，不能让已完成操作长期持锁。
 - 当其它已登记 PromptHub 进程仍存活时，必须保留锁并由 SQLite 等待或返回 busy。
-- 当锁没有可验证的租约来源、租约无法安全清理，或锁路径不是普通目录时，
-  必须保守保留，避免在新旧版本并行或异常文件状态下放行第二个 writer。
+- 当锁没有可验证的租约来源时，共享数据库调用方必须默认保守保留，避免在
+  新旧版本并行时放行第二个 writer。只有已经通过外部单实例机制确认进程互斥的
+  host，才可显式启用未登记 legacy lock 恢复。
+- 当租约无法安全清理，或锁路径不是非符号链接的普通目录时，所有调用方都必须
+  保守保留。
 
 ### 3. Orphan Recovery
 
 - 进程初始化数据库前登记 PID 租约，正常关闭或进程正常退出时清理租约。
-- 只有发现并成功清理已死亡或无效的既有租约，且没有活跃或未知所有者时，
+- 默认只有发现并成功清理已死亡或无效的既有租约，且没有活跃或未知所有者时，
   初始化才可清理对应 orphan lock。
+- Desktop 在通过 Electron 单实例 gate 后，可恢复升级前版本遗留的未登记普通
+  lock；CLI 与其它共享调用方不得默认启用该能力。
 - 初始化中途失败必须清理本进程刚创建的租约，避免制造新的假所有者。
 
 ### 4. Contention And Visibility
@@ -55,3 +60,12 @@ When lock 对应的已登记进程已经死亡：
 - 下一次初始化清理死亡租约
 - 没有其它活跃或未知所有者时恢复 orphan lock
 - 数据库随后按正常初始化和迁移流程打开
+
+### Scenario: Desktop upgrades from a pre-lease version
+
+When Desktop 已通过 Electron 单实例 gate，且数据目录只剩一个没有租约登记的
+普通 `.lock` 目录：
+
+- Desktop 可将其识别为 legacy orphan lock 并恢复
+- 如存在活跃租约、未知租约项、符号链接或非目录 lock，仍必须拒绝清理
+- CLI 与其它共享调用方面对同一未登记 lock 时仍默认保留

@@ -38,6 +38,11 @@ export interface InitDatabaseHooks {
     name: string;
     source_url: string | null;
   }) => string | null;
+  /**
+   * Recover a legacy lock without lease metadata. Only hosts with an external
+   * single-instance guarantee may enable this; shared callers default to false.
+   */
+  recoverUnregisteredLock?: boolean;
 }
 
 let db: Database.Database | null = null;
@@ -241,7 +246,9 @@ export function initDatabase(
   if (db) return db;
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  dbClientLease = acquireDatabaseClientLease(dbPath);
+  dbClientLease = acquireDatabaseClientLease(dbPath, {
+    recoverUnregisteredLock: hooks?.recoverUnregisteredLock,
+  });
   try {
     backupDatabaseBeforeMigration(dbPath);
     db = new Database(dbPath);

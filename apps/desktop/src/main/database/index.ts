@@ -164,6 +164,8 @@ export function initDatabase(): DatabaseAdapter.Database {
   ensurePreUpgradeBackup(dbPath);
   const hooks: InitDatabaseHooks = {
     resolveSkillRepoPath,
+    // Main-process initialization runs only after Electron's single-instance gate.
+    recoverUnregisteredLock: true,
   };
   return dbInit(dbPath, hooks);
 }
