@@ -73,6 +73,14 @@ apps/web-cloudflare/.dev.vars
 apps/web-cloudflare/.wrangler/
 apps/web-cloudflare/scripts/*.local.txt
 
+# Signing credentials
+*.p8
+*.p12
+*.pfx
+AuthKey_*.p8
+DeveloperID*.p12
+DeveloperID*.pfx
+
 # ========================
 # Test / Coverage
 # ========================

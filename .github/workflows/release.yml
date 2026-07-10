@@ -133,7 +133,7 @@ jobs:
 
             if [ "$has_api_key" = "true" ]; then
               APPLE_API_KEY_PATH="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
-              node -e 'require("fs").writeFileSync(process.argv[1], Buffer.from(process.env.APPLE_API_KEY_B64, "base64"))' "$APPLE_API_KEY_PATH"
+              node -e 'const fs = require("fs"); const outputPath = process.argv[1]; const encodedKey = process.env.APPLE_API_KEY_B64 || ""; const keyContent = Buffer.from(encodedKey, "base64").toString("utf8").trim(); if (!keyContent.includes("-----BEGIN PRIVATE KEY-----")) { console.error("APPLE_API_KEY must be the base64-encoded contents of an AuthKey_<KEY_ID>.p8 file."); process.exit(1); } fs.writeFileSync(outputPath, `${keyContent}\n`, { mode: 0o600 });' "$APPLE_API_KEY_PATH"
               chmod 600 "$APPLE_API_KEY_PATH"
               export APPLE_API_KEY="$APPLE_API_KEY_PATH"
             fi
@@ -196,6 +196,33 @@ jobs:
         shell: bash
         working-directory: apps/desktop
         run: |
+          validate_macos_app() {
+            local app_path="$1"
+
+            codesign --verify --deep --strict --verbose=2 "$app_path"
+
+            local codesign_info
+            codesign_info=$(codesign -dv --verbose=2 "$app_path" 2>&1)
+            echo "$codesign_info"
+            echo "$codesign_info" | grep -q "Authority=Developer ID Application:"
+
+            xcrun stapler validate "$app_path"
+
+            local spctl_out
+            spctl_out=$(spctl --assess --verbose --type exec "$app_path" 2>&1)
+            echo "$spctl_out"
+            echo "$spctl_out" | grep -q "accepted"
+            echo "$spctl_out" | grep -q "source=Notarized Developer ID"
+          }
+
+          cleanup() {
+            if [ -n "${DMG_MOUNT_DIR:-}" ] && mount | grep -q "$DMG_MOUNT_DIR"; then
+              hdiutil detach "$DMG_MOUNT_DIR" -quiet || true
+            fi
+            rm -rf "${TMP_DIR:-}" "${DMG_MOUNT_DIR:-}"
+          }
+          trap cleanup EXIT
+
           ZIP_FILE=$(find dist -maxdepth 1 -name "PromptHub-*-${{ matrix.arch }}.zip" | head -n 1)
           if [ -z "$ZIP_FILE" ]; then
             echo "Expected macOS ZIP artifact not found for ${{ matrix.arch }}"
@@ -210,9 +237,26 @@ jobs:
             exit 1
           fi
 
-          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-          xcrun stapler validate "$APP_PATH"
-          spctl --assess --verbose --type exec "$APP_PATH"
+          echo "Verifying ZIP app: $APP_PATH"
+          validate_macos_app "$APP_PATH"
+
+          DMG_FILE=$(find dist -maxdepth 1 -name "PromptHub-*-${{ matrix.arch }}.dmg" | head -n 1)
+          if [ -z "$DMG_FILE" ]; then
+            echo "Expected macOS DMG artifact not found for ${{ matrix.arch }}"
+            exit 1
+          fi
+
+          DMG_MOUNT_DIR=$(mktemp -d)
+          hdiutil attach "$DMG_FILE" -mountpoint "$DMG_MOUNT_DIR" -nobrowse -quiet
+
+          DMG_APP_PATH=$(find "$DMG_MOUNT_DIR" -maxdepth 2 -type d -name "PromptHub.app" | head -n 1)
+          if [ -z "$DMG_APP_PATH" ]; then
+            echo "PromptHub.app not found inside $DMG_FILE"
+            exit 1
+          fi
+
+          echo "Verifying DMG app: $DMG_APP_PATH"
+          validate_macos_app "$DMG_APP_PATH"
 
       # NSIS installer executables expose the bootstrap PE header instead of the packaged app
       # architecture, so installer-level PE checks report false mismatches on Windows builds.
