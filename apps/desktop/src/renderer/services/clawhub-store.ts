@@ -8,6 +8,56 @@ const DEFAULT_COMPATIBILITY = ["claude", "codex", "cursor", "opencode"];
 
 type ClawHubRecord = Record<string, unknown>;
 
+export interface ParsedClawHubSkillLocation {
+  slug: string;
+  owner?: string;
+}
+
+export function parseClawHubSkillUrl(
+  sourceUrl?: string | null,
+): ParsedClawHubSkillLocation | null {
+  if (!sourceUrl?.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(sourceUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (host !== "clawhub.ai" && host !== "www.clawhub.ai") {
+      return null;
+    }
+
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    if (parts[0] === "api") {
+      return null;
+    }
+
+    if (parts[0] === "skills" && parts[1]) {
+      return { slug: parts[1] };
+    }
+
+    if (parts[0] && parts[1] === "skills" && parts[2]) {
+      return { owner: parts[0], slug: parts[2] };
+    }
+
+    if (parts[0] && parts[1]) {
+      return { owner: parts[0], slug: parts[1] };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function getClawHubSkillContentUrl(slug: string): string {
+  return `${CLAWHUB_BASE_URL}/api/v1/skills/${encodeURIComponent(slug)}/file?path=SKILL.md`;
+}
+
+export function getClawHubSkillPackageUrl(slug: string): string {
+  return `${CLAWHUB_BASE_URL}/api/v1/download?slug=${encodeURIComponent(slug)}`;
+}
+
 function getString(record: ClawHubRecord, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = record[key];
@@ -175,8 +225,8 @@ function buildClawHubSkill(
     (owner
       ? `${CLAWHUB_BASE_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`
       : `${CLAWHUB_BASE_URL}/skills/${encodeURIComponent(slug)}`);
-  const contentUrl = `${CLAWHUB_BASE_URL}/api/v1/skills/${encodeURIComponent(slug)}/file?path=SKILL.md`;
-  const packageUrl = `${CLAWHUB_BASE_URL}/api/v1/download?slug=${encodeURIComponent(slug)}`;
+  const contentUrl = getClawHubSkillContentUrl(slug);
+  const packageUrl = getClawHubSkillPackageUrl(slug);
   const safeContent = skillMdContent.trim()
     ? skillMdContent
     : buildSkillMdFallback(displayName, description);

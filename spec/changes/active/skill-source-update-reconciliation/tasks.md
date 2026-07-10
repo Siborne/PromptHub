@@ -27,6 +27,9 @@
 - [x] `T-SU-020`: Sync stable docs after implementation lands.
 - [x] `T-SU-021`: Update existing store update checks to use complete package baselines when package metadata exists.
 - [x] `T-SU-022`: Update existing fingerprint callers to record and respect fingerprint algorithm versions.
+- [x] `T-SU-023`: Resolve installed ClawHub page sources through the ClawHub
+  content/package APIs instead of Git. Covers `FR-SU-013`, `DES-SU-011`,
+  `TEST-SU-013`.
 
 Progress note 2026-07-07: `T-SU-016` is closed for registry/source update checks through the shared `buildSkillSourceUpdateCheck()` reconciliation builder; sanitized source errors remain recorded at the renderer side-effect boundary. `T-SU-017` is still not complete enough to close. Implemented safe-apply slices include non-local remote source materialization before metadata baseline writes, staged safety preflight for remote package writes, and managed repo staging/backup swap on partial copy failure. `T-SU-022` is closed for durable DB writes; remaining DTO-only fingerprints intentionally do not carry the DB algorithm field.
 
@@ -39,6 +42,8 @@ Progress note 2026-07-08: `T-SU-020` is closed. Stable docs were advanced for th
 Progress note 2026-07-08: `T-SU-017` is closed. Remote Git/Zip sources stage and safety-scan before managed repo replacement; managed repo replacement uses staging/backup rollback; raw content-url updates safety-scan before writing `SKILL.md` and roll back through the version snapshot if the final DB baseline write fails.
 
 Progress note 2026-07-08 review follow-up: external review found tree/API paths still deriving legacy blob-hash manifests as `directory_fingerprint`. Main and renderer registry tree loaders now leave package fingerprints empty unless a v1 package hash is available; content-url install baselines use the content hash; source error sanitization strips URL userinfo; DB migration marks existing directory fingerprints as `legacy-stable-text-v1`.
+
+Progress note 2026-07-09 regression follow-up: ClawHub page URLs are not Git repositories. Installed ClawHub sources now derive `content_url` and `package_url` from the page slug, avoid Git package fingerprint checks, and do not reuse the installed local package fingerprint as the remote package fingerprint when the store entry is absent.
 
 ## Verification Tasks
 
@@ -54,6 +59,8 @@ Progress note 2026-07-08 review follow-up: external review found tree/API paths 
 - [x] `TEST-SU-010`: Integration tests for update-available, local-modified, conflict, baseline-missing, source-unavailable, and auxiliary stale target reporting.
 - [x] `TEST-SU-011`: Regression tests proving existing store update checks still preserve imported state while detecting package resource updates.
 - [x] `TEST-SU-012`: Regression tests proving legacy fingerprints are migrated only when local and source packages match.
+- [x] `TEST-SU-013`: Regression tests proving store-backed and missing-store
+  ClawHub updates use package APIs and never Git-clone page URLs.
 
 Progress note 2026-07-07: added focused store regressions for source-unavailable sanitized error recording, remote package/content-url update persistence failure ordering, project/agent copied target stale auxiliary reporting, and detail-page status actions. Full end-to-end status integration coverage remains open under `TEST-SU-010`.
 
@@ -62,6 +69,8 @@ Progress note 2026-07-08: `TEST-SU-010` is closed. Added a store integration mat
 Progress note 2026-07-08: static audits are closed. Direct fingerprint writes now distinguish current local package (`directory_fingerprint`) from installed source baseline (`installed_directory_fingerprint`); SHA-256-labeled durable writes use the shared v1 package manifest utility; UI copy has distinct local-modified/conflict/baseline-missing/source-unavailable messages; source fetch/clone paths continue through the existing IPC validation, SSRF-protected fetcher, and repo path traversal guards.
 
 Progress note 2026-07-08 review follow-up: added regressions for GitHub/Gitea tree scans not exposing legacy fingerprints, legacy algorithm migration/defaulting, content-url install baselines, and URL userinfo redaction.
+
+Progress note 2026-07-09 regression follow-up: added ClawHub/MinerU update regressions proving store-backed and installed-source updates use the ClawHub package zip endpoint and never treat `https://clawhub.ai/<owner>/<skill>` as a Git repository URL.
 
 ## Static Audit Targets
 

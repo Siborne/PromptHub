@@ -83,10 +83,7 @@ export function parseGitHubSkillLocation(
 }
 
 export function getRegistrySkillDirectory(
-  regSkill: Pick<
-    RegistrySkill,
-    "source_directory" | "canonical_skill_path"
-  >,
+  regSkill: Pick<RegistrySkill, "source_directory" | "canonical_skill_path">,
 ): string | undefined {
   const explicitDirectory = regSkill.source_directory
     ?.trim()
@@ -113,8 +110,8 @@ export function isLocalRegistrySkill(
   return Boolean(
     (typeof skill.content_url === "string" &&
       isLikelyLocalSource(skill.content_url)) ||
-      (typeof skill.source_url === "string" &&
-        isLikelyLocalSource(skill.source_url)),
+    (typeof skill.source_url === "string" &&
+      isLikelyLocalSource(skill.source_url)),
   );
 }
 
@@ -138,9 +135,9 @@ export function isLinkedLocalSkill(
   const sourceUrl = normalizeLocalSourceKey(skill.source_url);
   return Boolean(
     localRepoPath &&
-      sourceUrl &&
-      localRepoPath === sourceUrl &&
-      isLikelyLocalSource(sourceUrl),
+    sourceUrl &&
+    localRepoPath === sourceUrl &&
+    isLikelyLocalSource(sourceUrl),
   );
 }
 
@@ -148,6 +145,7 @@ function getPublicDirectoryStoreValues(
   regSkill: RegistrySkillSourceDescriptor,
 ): string[] {
   return [
+    regSkill.source_url,
     regSkill.store_url,
     regSkill.content_url,
     regSkill.source_label,
@@ -159,8 +157,8 @@ function getPublicDirectoryStoreValues(
 function hasPackageMetadata(regSkill: RegistrySkillSourceDescriptor): boolean {
   return Boolean(
     getRegistrySkillDirectory(regSkill) ||
-      regSkill.canonical_skill_path ||
-      regSkill.directory_fingerprint,
+    regSkill.canonical_skill_path ||
+    regSkill.directory_fingerprint,
   );
 }
 

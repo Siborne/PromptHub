@@ -2546,6 +2546,211 @@ description: Use this skill for PDF tasks.
     );
   });
 
+  it("updates ClawHub skills from package zip without treating the page URL as git", async () => {
+    const localContent = "# MinerU\n\nOld extractor.\n";
+    const remoteContent = "# MinerU\n\nUpdated extractor.\n";
+    const installedHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash(localContent);
+    const sourceId = "source-clawhub-mineru-document-extractor";
+    const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
+    const getRemoteGitPackageFingerprint = vi.fn();
+    const saveRemoteZipToRepo = vi
+      .fn()
+      .mockResolvedValue("/managed/mineru/repo");
+    const versionCreate = vi.fn().mockResolvedValue({ id: "version-mineru" });
+    const syncFromRepo = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-mineru-document-extractor",
+        name: "mineru-document-extractor",
+        local_repo_path: "/managed/mineru/repo",
+        content: remoteContent,
+        instructions: remoteContent,
+        directory_fingerprint: "zip-package-fingerprint-v2",
+        installed_directory_fingerprint: "zip-package-fingerprint-v2",
+      }),
+    );
+    const update = vi.fn().mockImplementation(async (_id, data) => ({
+      ...createSkillFixture({
+        id: "skill-mineru-document-extractor",
+        name: "mineru-document-extractor",
+        source_id: sourceId,
+        registry_slug: "clawhub-mineru-document-extractor",
+        source_url:
+          "https://clawhub.ai/mineru-extract/mineru-document-extractor",
+        content_url:
+          "https://clawhub.ai/api/v1/skills/mineru-document-extractor/file?path=SKILL.md",
+        local_repo_path: "/managed/mineru/repo",
+        content: remoteContent,
+        instructions: remoteContent,
+      }),
+      ...data,
+    }));
+
+    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    (window as any).api.skill.getRemoteGitPackageFingerprint =
+      getRemoteGitPackageFingerprint;
+    (window as any).api.skill.saveRemoteZipToRepo = saveRemoteZipToRepo;
+    (window as any).api.skill.versionCreate = versionCreate;
+    (window as any).api.skill.syncFromRepo = syncFromRepo;
+    (window as any).api.skill.update = update;
+
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-mineru-document-extractor",
+          name: "mineru-document-extractor",
+          source_id: sourceId,
+          registry_slug: "clawhub-mineru-document-extractor",
+          source_url:
+            "https://clawhub.ai/mineru-extract/mineru-document-extractor",
+          content_url:
+            "https://clawhub.ai/api/v1/skills/mineru-document-extractor/file?path=SKILL.md",
+          content: localContent,
+          instructions: localContent,
+          installed_content_hash: installedHash,
+          installed_directory_fingerprint: "zip-package-fingerprint-v1",
+          directory_fingerprint: "zip-package-fingerprint-v1",
+          fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+          installed_version: "1.0.0",
+        }),
+      ],
+      registrySkills: [
+        {
+          slug: "clawhub-mineru-document-extractor",
+          source_id: sourceId,
+          name: "mineru-document-extractor",
+          description: "MinerU document extraction",
+          category: "general",
+          author: "mineru-extract",
+          source_label: "ClawHub",
+          source_url:
+            "https://clawhub.ai/mineru-extract/mineru-document-extractor",
+          store_url:
+            "https://clawhub.ai/mineru-extract/mineru-document-extractor",
+          canonical_skill_path: "SKILL.md",
+          content_url:
+            "https://clawhub.ai/api/v1/skills/mineru-document-extractor/file?path=SKILL.md",
+          package_url:
+            "https://clawhub.ai/api/v1/download?slug=mineru-document-extractor",
+          tags: ["mineru"],
+          version: "1.1.0",
+          content: remoteContent,
+        },
+      ],
+    });
+
+    const result = await useSkillStore.getState().updateRegistrySkill(sourceId);
+
+    expect(result?.status).toBe("updated");
+    expect(getRemoteGitPackageFingerprint).not.toHaveBeenCalled();
+    expect(saveRemoteZipToRepo).toHaveBeenCalledWith(
+      "skill-mineru-document-extractor",
+      {
+        zipUrl:
+          "https://clawhub.ai/api/v1/download?slug=mineru-document-extractor",
+      },
+    );
+    expect(syncFromRepo).toHaveBeenCalledWith(
+      "skill-mineru-document-extractor",
+    );
+    expect(update).toHaveBeenCalledWith(
+      "skill-mineru-document-extractor",
+      expect.objectContaining({
+        content: remoteContent,
+        source_last_error: null,
+        source_binding_state: "bound",
+      }),
+    );
+  });
+
+  it("updates installed ClawHub page-url sources through package zip when store entry is absent", async () => {
+    const localContent = "# MinerU\n\nOld extractor.\n";
+    const remoteContent = "# MinerU\n\nUpdated extractor.\n";
+    const installedHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash(localContent);
+    const getRemoteGitPackageFingerprint = vi.fn();
+    const saveRemoteGitToRepo = vi.fn();
+    const saveRemoteZipToRepo = vi
+      .fn()
+      .mockResolvedValue("/managed/mineru/repo");
+    const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
+    const versionCreate = vi.fn().mockResolvedValue({ id: "version-mineru" });
+    const syncFromRepo = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-mineru-document-extractor",
+        name: "mineru-document-extractor",
+        local_repo_path: "/managed/mineru/repo",
+        content: remoteContent,
+        instructions: remoteContent,
+        directory_fingerprint: "zip-package-fingerprint-v2",
+        installed_directory_fingerprint: "zip-package-fingerprint-v2",
+      }),
+    );
+    const update = vi.fn().mockImplementation(async (_id, data) => ({
+      ...createSkillFixture({
+        id: "skill-mineru-document-extractor",
+        name: "mineru-document-extractor",
+        source_url:
+          "https://clawhub.ai/mineru-extract/mineru-document-extractor",
+        content: remoteContent,
+        instructions: remoteContent,
+      }),
+      ...data,
+    }));
+
+    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    (window as any).api.skill.getRemoteGitPackageFingerprint =
+      getRemoteGitPackageFingerprint;
+    (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
+    (window as any).api.skill.saveRemoteZipToRepo = saveRemoteZipToRepo;
+    (window as any).api.skill.versionCreate = versionCreate;
+    (window as any).api.skill.syncFromRepo = syncFromRepo;
+    (window as any).api.skill.update = update;
+
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-mineru-document-extractor",
+          name: "mineru-document-extractor",
+          source_url:
+            "https://clawhub.ai/mineru-extract/mineru-document-extractor",
+          local_repo_path: undefined,
+          source_label: "ClawHub",
+          canonical_skill_path: "SKILL.md",
+          content: localContent,
+          instructions: localContent,
+          installed_content_hash: installedHash,
+          installed_directory_fingerprint: "zip-package-fingerprint-v1",
+          directory_fingerprint: "zip-package-fingerprint-v1",
+          fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+          installed_version: "1.0.0",
+        }),
+      ],
+      registrySkills: [],
+      remoteStoreEntries: {},
+    });
+
+    const result = await useSkillStore
+      .getState()
+      .updateInstalledSkillFromSource("skill-mineru-document-extractor");
+
+    expect(result?.status).toBe("updated");
+    expect(getRemoteGitPackageFingerprint).not.toHaveBeenCalled();
+    expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
+    expect(fetchRemoteContent).toHaveBeenCalledWith(
+      "https://clawhub.ai/api/v1/skills/mineru-document-extractor/file?path=SKILL.md",
+    );
+    expect(saveRemoteZipToRepo).toHaveBeenCalledWith(
+      "skill-mineru-document-extractor",
+      {
+        zipUrl:
+          "https://clawhub.ai/api/v1/download?slug=mineru-document-extractor",
+      },
+    );
+  });
+
   it("rolls back a created package skill when remote package persistence fails", async () => {
     const create = vi.fn().mockResolvedValue(
       createSkillFixture({
@@ -2707,9 +2912,7 @@ description: Use this skill for PDF tasks.
       .getState()
       .computeRegistrySkillHash(localContent);
     const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
-    const writeLocalFile = vi
-      .fn()
-      .mockRejectedValue(new Error("write failed"));
+    const writeLocalFile = vi.fn().mockRejectedValue(new Error("write failed"));
     const versionCreate = vi.fn().mockResolvedValue(undefined);
     const update = vi.fn().mockImplementation(async (_id, data) =>
       createSkillFixture({
@@ -2731,8 +2934,7 @@ description: Use this skill for PDF tasks.
           name: "content-url-writer",
           source_id: "source-content-url-writer",
           registry_slug: "content-url-writer",
-          content_url:
-            "https://example.com/skills/content-url-writer/SKILL.md",
+          content_url: "https://example.com/skills/content-url-writer/SKILL.md",
           content: localContent,
           instructions: localContent,
           installed_content_hash: installedHash,
@@ -2751,8 +2953,7 @@ description: Use this skill for PDF tasks.
           category: "general",
           author: "PromptHub",
           source_url: "",
-          content_url:
-            "https://example.com/skills/content-url-writer/SKILL.md",
+          content_url: "https://example.com/skills/content-url-writer/SKILL.md",
           tags: ["writing"],
           version: "1.1.0",
           content: remoteContent,
@@ -2824,8 +3025,7 @@ description: Use this skill for PDF tasks.
           name: "content-url-writer",
           source_id: "source-content-url-writer",
           registry_slug: "content-url-writer",
-          content_url:
-            "https://example.com/skills/content-url-writer/SKILL.md",
+          content_url: "https://example.com/skills/content-url-writer/SKILL.md",
           content: localContent,
           instructions: localContent,
           installed_content_hash: installedHash,
@@ -2844,8 +3044,7 @@ description: Use this skill for PDF tasks.
           category: "general",
           author: "PromptHub",
           source_url: "",
-          content_url:
-            "https://example.com/skills/content-url-writer/SKILL.md",
+          content_url: "https://example.com/skills/content-url-writer/SKILL.md",
           tags: ["writing"],
           version: "1.1.0",
           content: remoteContent,
@@ -2900,8 +3099,7 @@ description: Use this skill for PDF tasks.
           name: "content-url-writer",
           source_id: "source-content-url-writer",
           registry_slug: "content-url-writer",
-          content_url:
-            "https://example.com/skills/content-url-writer/SKILL.md",
+          content_url: "https://example.com/skills/content-url-writer/SKILL.md",
           content: localContent,
           instructions: localContent,
           installed_content_hash: installedHash,
@@ -2920,8 +3118,7 @@ description: Use this skill for PDF tasks.
           category: "general",
           author: "PromptHub",
           source_url: "",
-          content_url:
-            "https://example.com/skills/content-url-writer/SKILL.md",
+          content_url: "https://example.com/skills/content-url-writer/SKILL.md",
           tags: ["writing"],
           version: "1.1.0",
           content: remoteContent,

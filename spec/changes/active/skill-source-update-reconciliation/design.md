@@ -403,6 +403,14 @@ Source update apply sequence:
    - if the legacy entry hashes do not match, report `baseline-missing`
 5. Preserve all old fields for compatibility.
 
+## `DES-SU-011` ClawHub Page Adapter
+
+ClawHub page URLs are registry identities, not Git remotes. The renderer parses
+supported `clawhub.ai` page shapes into an owner and slug, then derives the
+canonical `SKILL.md` content endpoint and package zip endpoint. Store-backed and
+installed-source checks share these helpers so a missing store row cannot send
+the page URL through Git package resolution.
+
 ## Verification Strategy
 
 Required test layers:
@@ -457,3 +465,4 @@ Inferring upstream from arbitrary local folders can surprise users and create cr
 | `FR-SU-010` | `DES-SU-010` | `TEST-SU-010` |
 | `FR-SU-011` | `DES-SU-003`, `DES-SU-004` | `TEST-SU-011` |
 | `FR-SU-012` | `DES-SU-005`, `DES-SU-006` | `TEST-SU-012` |
+| `FR-SU-013` | `DES-SU-011` | `TEST-SU-013` |

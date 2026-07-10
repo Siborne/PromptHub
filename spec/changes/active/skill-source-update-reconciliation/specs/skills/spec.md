@@ -143,6 +143,13 @@ Existing store update checks must continue to preserve imported state by source 
 
 Existing directory fingerprint ignore rules remain the baseline, but implementation must document algorithm version and use the same implementation in desktop main, renderer, CLI, remote store adapters, and tests.
 
+### `FR-SU-013` ClawHub Page Source Resolution
+
+An installed ClawHub page URL must resolve through ClawHub content and package
+API endpoints. PromptHub must not treat a ClawHub page URL as a Git repository
+or reuse an installed local package fingerprint as a remote fingerprint when a
+store entry is unavailable.
+
 ## Removed Requirements
 
 - None.
@@ -240,6 +247,15 @@ When target scans run
 Then copied targets whose fingerprint differs from My Skills source are labeled as stale in the distribution scan report or returned through auxiliary `hasStaleTargets` / `staleTargets` fields
 And PromptHub offers redistribution via the distribution view instead of changing the My Skills source update status.
 
+### Scenario `SC-SU-013`: Installed ClawHub page resolves without a store row
+
+Given an installed Skill has a ClawHub page URL and the current store result no
+longer contains that Skill
+When PromptHub checks for source updates
+Then it derives the ClawHub slug from the page URL
+And fetches the ClawHub `SKILL.md` and package zip API endpoints
+And never attempts to clone the page URL as Git.
+
 ## Traceability
 
 | Requirement | Scenarios | Design | Verification | Task |
@@ -256,3 +272,4 @@ And PromptHub offers redistribution via the distribution view instead of changin
 | `FR-SU-010` | `SC-SU-003`, `SC-SU-004`, `SC-SU-009` | `DES-SU-010` | `TEST-SU-010` | `T-SU-010` |
 | `FR-SU-011` | `SC-SU-002`, `SC-SU-005` | `DES-SU-003`, `DES-SU-004` | `TEST-SU-011` | `T-SU-021` |
 | `FR-SU-012` | `SC-SU-006`, `SC-SU-007` | `DES-SU-005`, `DES-SU-006` | `TEST-SU-012` | `T-SU-022` |
+| `FR-SU-013` | `SC-SU-013` | `DES-SU-011` | `TEST-SU-013` | `T-SU-023` |

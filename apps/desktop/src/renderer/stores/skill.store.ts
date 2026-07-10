@@ -63,6 +63,11 @@ import {
   getRemoteStoreSkillCount,
   getRemoteStoreSkills,
 } from "../services/remote-store-entry";
+import {
+  getClawHubSkillContentUrl,
+  getClawHubSkillPackageUrl,
+  parseClawHubSkillUrl,
+} from "../services/clawhub-store";
 
 export type SkillFilterType =
   | "all"
@@ -449,11 +454,21 @@ function getInstalledSkillSourceCandidateKeys(skill: Skill): string[] {
 function buildInstalledSkillSourceCandidate(
   skill: Skill,
 ): RegistrySkill | null {
-  const contentUrl = deriveGitHubSkillContentUrl(
-    skill.source_url,
-    skill.content_url,
-  );
   const sourceUrl = skill.source_url?.trim();
+  const clawHubLocation = parseClawHubSkillUrl(sourceUrl);
+  const contentUrl =
+    deriveGitHubSkillContentUrl(skill.source_url, skill.content_url) ||
+    (clawHubLocation
+      ? getClawHubSkillContentUrl(clawHubLocation.slug)
+      : undefined);
+  const packageUrl = clawHubLocation
+    ? getClawHubSkillPackageUrl(clawHubLocation.slug)
+    : undefined;
+  const canonicalSkillPath =
+    skill.canonical_skill_path || (clawHubLocation ? "SKILL.md" : undefined);
+  const sourceLabel =
+    skill.source_label || (clawHubLocation ? "ClawHub" : undefined);
+
   if (!sourceUrl && !contentUrl) {
     return null;
   }
@@ -469,13 +484,15 @@ function buildInstalledSkillSourceCandidate(
         sourceUrl,
         branch: skill.source_branch,
         directory: skill.source_directory,
-        skillPath: skill.canonical_skill_path || contentUrl,
+        skillPath: canonicalSkillPath || contentUrl,
       }),
-    source_label: skill.source_label,
+    source_label: sourceLabel,
     source_branch: skill.source_branch,
     source_directory: skill.source_directory,
-    canonical_skill_path: skill.canonical_skill_path,
-    directory_fingerprint: skill.directory_fingerprint,
+    canonical_skill_path: canonicalSkillPath,
+    directory_fingerprint: clawHubLocation
+      ? undefined
+      : skill.directory_fingerprint,
     description: skill.description || "",
     category: skill.category || "general",
     icon_url: skill.icon_url,
@@ -487,6 +504,7 @@ function buildInstalledSkillSourceCandidate(
     version: "source",
     content: skill.content || skill.instructions || "",
     content_url: contentUrl,
+    package_url: packageUrl,
     prerequisites: skill.prerequisites,
     compatibility: skill.compatibility,
   };
@@ -1304,7 +1322,8 @@ async function applyRegistrySkillUpdateToInstalledSkill(
   let didMaterializeRemoteSource = false;
   try {
     const now = Date.now();
-    const shouldSyncRemoteSourceBeforeMetadata = !isLocalRegistrySkill(regSkill);
+    const shouldSyncRemoteSourceBeforeMetadata =
+      !isLocalRegistrySkill(regSkill);
     const preSyncedSkill = shouldSyncRemoteSourceBeforeMetadata
       ? await syncRemoteRegistrySkillRepo(
           installedSkill.id,
@@ -1456,7 +1475,8 @@ async function buildSourceUnavailableCheck(
 
   return {
     status: "source-unavailable",
-    skillId: installedSkill?.id || registrySkill.source_id || registrySkill.slug,
+    skillId:
+      installedSkill?.id || registrySkill.source_id || registrySkill.slug,
     ...(registrySkill.source_id || installedSkill?.source_id
       ? { sourceIdentity: registrySkill.source_id || installedSkill?.source_id }
       : {}),
@@ -2228,7 +2248,8 @@ export const useSkillStore = create<SkillState>()(
         let remoteContent: string;
         try {
           remoteContent = await resolveRegistrySkillContent(effectiveRegSkill);
-          const remoteContentHash = await computeSkillContentHash(remoteContent);
+          const remoteContentHash =
+            await computeSkillContentHash(remoteContent);
           const remoteDirectoryFingerprint =
             await resolveRemoteRegistryDirectoryFingerprint(regSkill, {
               remoteContentHash,
@@ -2290,7 +2311,8 @@ export const useSkillStore = create<SkillState>()(
         let remoteContent: string;
         try {
           remoteContent = await resolveRegistrySkillContent(effectiveRegSkill);
-          const remoteContentHash = await computeSkillContentHash(remoteContent);
+          const remoteContentHash =
+            await computeSkillContentHash(remoteContent);
           const remoteDirectoryFingerprint =
             await resolveRemoteRegistryDirectoryFingerprint(regSkill, {
               remoteContentHash,
