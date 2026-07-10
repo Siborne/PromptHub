@@ -390,6 +390,7 @@ PromptHub MUST model Plugin support as an adapter matrix across agent-native bun
 - **WHEN** PromptHub scans Claude Code's installed Plugin inventory
 - **THEN** PromptHub includes the directory as a manual Agent Plugin bundle using static inventory counts
 - **AND** a markerless directory containing only one generic capability class remains excluded
+- **AND** capability directories and package markers that resolve through symlinks outside the package root are ignored
 - **AND** PromptHub does not execute files or traverse outside the Claude configuration root while classifying the directory
 
 #### Scenario: Agent Plugin localizes target support copy

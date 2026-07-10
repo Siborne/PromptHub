@@ -112,6 +112,7 @@
 - [x] PluginManager, renderer store, and core library tests cover removing a distributed My Plugins package from the currently selected Agent target through a confirmation-gated Agent Plugin action.
 - [x] Desktop main tests cover target-native installed Plugin inventory for Codex, Claude Code, Cursor, Gemini CLI, Kiro, and GitHub Copilot, including normal Claude state directories not being treated as Plugins.
 - [x] Add an exact GitHub #176 regression for markerless `~/.claude/get-shit-done` multi-capability bundles while rejecting single-capability false positives.
+- [x] Reject Agent Plugin markers and capability directories that resolve through symlinks outside the scanned package root.
 - [x] Core Plugin library tests cover importing a target-native Agent Plugin package into My Plugins by copying the package into PromptHub-managed storage.
 - [x] Core Plugin library tests cover HTTPS and SSH Plugin source imports, duplicate handling across branches, branch metadata retention after library readback, and single-skill source rejection.
 - [x] Core Plugin library tests cover package copy distribution to resolved Agent Plugin paths, unsupported target rejection, and `distributedTargetIds` persistence.

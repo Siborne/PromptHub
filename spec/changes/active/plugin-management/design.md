@@ -181,6 +181,7 @@ Claude root scanning supports legacy/manual capability bundles that were install
 - A markerless directory with `package.json` remains eligible when it contains at least one recognized Plugin capability directory.
 - A markerless directory without `package.json` is eligible only when it contains at least two distinct recognized capability classes, such as commands plus docs/workflows or scripts.
 - A directory with only one generic capability folder is not enough evidence of a Plugin bundle and must remain excluded.
+- Package markers and capability directories count only when their resolved paths remain inside the package root; symlinks to external files or directories are ignored.
 - Detection reads only directory/file metadata and never executes package code.
 
 ## Installation Flow

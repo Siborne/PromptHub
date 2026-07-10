@@ -401,15 +401,20 @@
   folders as full Plugin bundles.
 - The regression fixture matches the reported `~/.claude/get-shit-done`
   structure with commands, workflows, and executable tooling.
+- Agent inventory classification now resolves package markers, `package.json`,
+  `.mcp.json`, and recognized capability directories before counting them.
+  Paths that resolve outside the candidate package root through symlinks are
+  ignored, while ordinary contained package files retain their previous
+  behavior.
 - Verification:
-  - `tests/unit/main/plugin-target-inventory.test.ts`: passed (8 tests).
+  - `tests/unit/main/plugin-target-inventory.test.ts`: passed (10 tests),
+    including external capability-directory, manifest, and `package.json`
+    symlink regressions.
   - Agent Plugin component regressions: passed (4 selected tests).
   - Desktop typecheck and lint: passed.
-  - Full desktop unit confirmation run: passed (288 files, 2,804 tests).
-  - `pnpm verify:release:quick` did not complete because its first desktop-unit
-    pass reported five transient UI-test failures under full-suite load. The
-    affected tests passed on immediate focused rerun (47 tests), and the full
-    desktop unit suite then passed; later quick-harness steps were not reached.
+  - Full desktop unit confirmation runs through the quick release harness:
+    passed (288 files, 2,808 tests).
+  - `pnpm verify:release:quick`: passed all 18 checks in 596.8 seconds.
 
 ## Synced Docs
 

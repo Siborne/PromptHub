@@ -149,6 +149,72 @@ describe("Agent Plugin target inventory scan", () => {
     expect(plugins).toEqual([]);
   });
 
+  it("rejects markerless Claude capabilities that resolve outside the Agent root", () => {
+    const externalRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "external-plugin-capabilities-"),
+    );
+    const manualPlugin = path.join(agentRoot, "linked-bundle");
+    touch(path.join(externalRoot, "commands", "ship.md"));
+    touch(path.join(externalRoot, "workflows", "release.md"));
+    fs.mkdirSync(manualPlugin, { recursive: true });
+    fs.symlinkSync(
+      path.join(externalRoot, "commands"),
+      path.join(manualPlugin, "commands"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    fs.symlinkSync(
+      path.join(externalRoot, "workflows"),
+      path.join(manualPlugin, "workflows"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+
+    try {
+      expect(
+        scanInstalledPluginsForTarget("claude-code", agentRoot),
+      ).toEqual([]);
+    } finally {
+      fs.rmSync(externalRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "rejects Claude marker and package metadata symlinks outside the package root",
+    () => {
+      const externalRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), "external-plugin-metadata-"),
+      );
+      const linkedMarkerPlugin = path.join(agentRoot, "linked-marker");
+      const linkedPackagePlugin = path.join(agentRoot, "linked-package");
+      writeJson(path.join(externalRoot, "plugin.json"), {
+        name: "external-marker",
+        commands: ["./commands/ship.md"],
+      });
+      writeJson(path.join(externalRoot, "package.json"), {
+        name: "external-package",
+      });
+      fs.mkdirSync(path.join(linkedMarkerPlugin, ".claude-plugin"), {
+        recursive: true,
+      });
+      fs.symlinkSync(
+        path.join(externalRoot, "plugin.json"),
+        path.join(linkedMarkerPlugin, ".claude-plugin", "plugin.json"),
+      );
+      touch(path.join(linkedPackagePlugin, "commands", "ship.md"));
+      fs.symlinkSync(
+        path.join(externalRoot, "package.json"),
+        path.join(linkedPackagePlugin, "package.json"),
+      );
+
+      try {
+        expect(
+          scanInstalledPluginsForTarget("claude-code", agentRoot),
+        ).toEqual([]);
+      } finally {
+        fs.rmSync(externalRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("reads Cursor plugin packages from plugin roots", () => {
     const cursorPlugin = path.join(
       agentRoot,
