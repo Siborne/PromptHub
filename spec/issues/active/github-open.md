@@ -3,9 +3,9 @@
 ## Source
 
 - Repository: `legeling/PromptHub`
-- Snapshot date: `2026-06-24`
-- Capture method: `GitHub REST API /repos/legeling/PromptHub/issues?state=open&per_page=100`
-- Open issues captured: `31`
+- Snapshot date: `2026-07-09`
+- Capture method: `GitHub CLI gh issue list --state open --limit 1000`
+- Open issues captured: `34`
 
 ## Notes
 
@@ -16,6 +16,9 @@
 
 | # | 标题 | 标签 | 创建时间 | 最近更新 | 链接 |
 |---|---|---|---|---|---|
+| #181 | CLI 检测机制不兼容自定义 npm prefix |  | 2026-07-08 | 2026-07-08 | https://github.com/legeling/PromptHub/issues/181 |
+| #180 | [Bug]: 数据备份导入时，没有导入我手动添加的skill商店数据 | bug, version: 0.5.8 | 2026-07-06 | 2026-07-06 | https://github.com/legeling/PromptHub/issues/180 |
+| #179 | [Bug]: 设置中添加自定义agent或修改agent后，该agent在skill分发页面的选项中不显示 | bug, version: 0.5.8 | 2026-07-06 | 2026-07-06 | https://github.com/legeling/PromptHub/issues/179 |
 | #178 | [Bug]: 0.5.8版本，Agent自动检测不兼容%LOCALAPPDATA%环境变量 | bug, version: 0.5.8 | 2026-06-23 | 2026-06-23 | https://github.com/legeling/PromptHub/issues/178 |
 | #177 | [Feature]: 可以集成skillhub吗 | enhancement, version: 0.59 | 2026-06-22 | 2026-06-22 | https://github.com/legeling/PromptHub/issues/177 |
 | #176 | [Bug]: | bug, version: 最新版本 | 2026-06-17 | 2026-06-17 | https://github.com/legeling/PromptHub/issues/176 |

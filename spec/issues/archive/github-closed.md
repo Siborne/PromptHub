@@ -3,8 +3,8 @@
 ## Source
 
 - Repository: `legeling/PromptHub`
-- Snapshot date: `2026-06-24`
-- Capture method: `GitHub REST API /repos/legeling/PromptHub/issues?state=closed&per_page=100`
+- Snapshot date: `2026-07-09`
+- Capture method: `GitHub CLI gh issue list --state closed --limit 1000`
 - Closed issues captured: `129`
 
 ## Notes

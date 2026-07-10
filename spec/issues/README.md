@@ -29,8 +29,8 @@ This prevents the project from closing user-reported issues before users can dow
 
 ## Sync Note
 
-- 当前 GitHub issue 清单通过 GitHub REST API 手工同步到仓库。
-- 本轮同步时间：`2026-06-24`。
+- 当前 GitHub issue 清单通过 GitHub CLI 手工同步到仓库。
+- 本轮同步时间：`2026-07-09`。
 - 如果 GitHub issue 状态发生明显变化，或某个 active change 依赖 issue 上下文，应优先刷新这里的快照。
 - 如果只是本地实现状态变化，更新 `active/local-github-status.md`，不要手改 GitHub 快照文件。
 
