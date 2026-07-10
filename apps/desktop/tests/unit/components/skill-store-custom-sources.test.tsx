@@ -1035,9 +1035,7 @@ describe("SkillStore custom sources", () => {
       screen.queryByText("Try a different search or category"),
     ).not.toBeInTheDocument();
     expect(screen.queryAllByText("Docs Store")).toHaveLength(1);
-    expect(
-      screen.queryByPlaceholderText("Search skills..."),
-    ).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search skills...")).toBeInTheDocument();
   });
 
   it("keeps selected custom store header actions semantic and decorative icons hidden", async () => {
@@ -1277,6 +1275,62 @@ describe("SkillStore custom sources", () => {
       screen.queryByText("Try a different search or category"),
     ).not.toBeInTheDocument();
   });
+
+  it.each([
+    ["marketplace-json", "https://example.com/marketplace.json"],
+    ["git-repo", "https://github.com/example/skills"],
+    ["local-dir", "/tmp/example-skills"],
+  ] as const)(
+    "searches loaded %s custom store skills without changing sources",
+    async (sourceType, sourceUrl) => {
+      const sourceId = `${sourceType}-store`;
+      useSkillStore.setState({
+        storeView: "store",
+        selectedStoreSourceId: sourceId,
+        customStoreSources: [
+          {
+            id: sourceId,
+            name: "Team Store",
+            type: sourceType,
+            url: sourceUrl,
+            enabled: true,
+            order: 0,
+            createdAt: Date.now(),
+          },
+        ],
+        remoteStoreEntries: {
+          [sourceId]: {
+            loadedAt: Date.now(),
+            error: null,
+            skills: [
+              makeRegistrySkill(),
+              makeRegistrySkill({
+                slug: "code-helper",
+                name: "Code Helper",
+                description: "Helps with code",
+                source_id: "code-helper-source",
+                source_url: "https://example.com/code-helper",
+              }),
+            ],
+          },
+        },
+      } as never);
+
+      await act(async () => {
+        await renderWithI18n(<SkillStore />, { language: "en" });
+      });
+
+      const search = screen.getByRole("textbox", { name: "Search skills..." });
+      fireEvent.change(search, { target: { value: "docs" } });
+      fireEvent.submit(screen.getByTestId("skill-store-local-search-form"));
+
+      await waitFor(() => {
+        expect(screen.getByText("Docs Helper")).toBeInTheDocument();
+        expect(screen.queryByText("Code Helper")).not.toBeInTheDocument();
+      });
+      expect(useSkillStore.getState().selectedStoreSourceId).toBe(sourceId);
+    },
+  );
 
   it("refreshes a local directory source from the latest SKILL.md on disk", async () => {
     const scanLocalPreview = vi

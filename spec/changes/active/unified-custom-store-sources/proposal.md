@@ -10,6 +10,7 @@ Skill Store already lets users add, edit, disable, refresh, and remove custom st
 - Provide a shared custom store source model and reusable CRUD helpers for renderer stores.
 - Require a confirmation dialog before deleting a custom store source.
 - Let Skill, MCP, and Plugin surfaces share the same custom-source add/edit/delete/toggle behavior where their existing loaders can support it.
+- Let users search the currently selected custom Skill Store catalog with the same store-local search behavior used by built-in remote sources.
 - Keep each product area's existing marketplace parsing and installation semantics.
 
 ## Non-goals

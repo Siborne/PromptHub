@@ -27,6 +27,14 @@ PromptHub MUST expose the same custom store source management pattern for Skill,
 - **AND** the source is removed only after confirmation
 - **AND** canceling the confirmation leaves the source unchanged.
 
+#### Scenario: Search a custom Skill Store source
+
+- **GIVEN** the user selects an enabled custom Skill Store source with loaded skills
+- **WHEN** the user enters a query in the store-local search control
+- **THEN** PromptHub filters only that source's loaded skills using the shared Skill Store search semantics
+- **AND** the query can match skill name, slug, description, author, source metadata, or tags
+- **AND** clearing the query restores the complete selected custom source catalog without refetching it.
+
 ### Requirement: Product Source Adapters
 
 PromptHub MUST keep product-specific marketplace loading behind adapters rather than duplicating UI behavior.

@@ -1308,7 +1308,8 @@ export function SkillStore() {
   const shouldShowStoreSearch =
     sourceMeta.showCatalog &&
     (selectedStoreSourceId === "community" ||
-      selectedStoreSourceId === "clawhub");
+      selectedStoreSourceId === "clawhub" ||
+      Boolean(selectedCustomSource));
   const canLoadNextStorePage = Boolean(visibleRemoteEntry?.nextCursor);
   const isLoadingMoreSelectedSource =
     loadingMoreSourceId === selectedStoreSourceId;
