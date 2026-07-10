@@ -215,7 +215,7 @@ describe("MainContent selection restore integration", () => {
     expect(selectPrompt).not.toHaveBeenCalledWith("prompt-2");
   });
 
-  it("exposes prompt cards as keyboard-activatable selection buttons", async () => {
+  it("exposes prompt cards as keyboard-activatable selection controls", async () => {
     const user = userEvent.setup();
     const selectPrompt = vi.fn();
     const prompt = createPrompt("prompt-keyboard", "folder-a");
@@ -253,7 +253,7 @@ describe("MainContent selection restore integration", () => {
       name: "Prompt prompt-keyboard",
     });
 
-    expect(card).toHaveAttribute("type", "button");
+    expect(card).toHaveAttribute("tabindex", "0");
 
     selectPrompt.mockClear();
     card.focus();
