@@ -1,8 +1,4 @@
 import '@/i18n';
-import { initDatabase } from '@/storage/database';
-
-// Initialize local SQLite database
-initDatabase();
 
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
