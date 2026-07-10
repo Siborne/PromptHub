@@ -127,7 +127,7 @@ describe("PromptQuickRewriteDialog", () => {
       "Example: keep the original intent, but make the output more suitable for Claude and add clearer steps plus a final output format.",
     );
     expect(rewriteTextarea.closest("div.mt-3")).toBeInTheDocument();
-  }, 10000);
+  }, 30_000);
 
   it("applies the draft and opens the editor when continue editing is selected", async () => {
     const user = userEvent.setup();
@@ -193,7 +193,7 @@ describe("PromptQuickRewriteDialog", () => {
         userPrompt: "Return a numbered weekly plan.",
       }),
     );
-  }, 10000);
+  }, 30_000);
 
   it("shows errors when AI rewrite response is invalid", async () => {
     const user = userEvent.setup();

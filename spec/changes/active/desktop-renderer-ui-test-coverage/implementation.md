@@ -3592,3 +3592,19 @@ work could land cleanly):
     **4 files / 24 tests**, passing.
   - `pnpm --filter @prompthub/desktop typecheck`: passing.
   - `git diff --check`: passing.
+
+## Full-suite timeout alignment follow-up
+
+- Removed stale local 10/15-second overrides from heavy desktop jsdom component
+  regressions. These tests now use the established 30-second desktop Vitest
+  budget without changing assertions or production behavior.
+- The quick release harness first reproduced a prompt modal timeout at 10.78
+  seconds and then a project import-preference timeout at 25.37 seconds under
+  full-suite load; both tests passed immediately in focused runs.
+- Verification:
+  - `prompt-modal-structure.test.tsx`: passed (1 file, 12 tests).
+  - Focused `SkillProjectsView` import-preference regression: passed.
+  - Desktop ESLint and typecheck: passed through the quick release harness.
+  - Full desktop unit suite: passed through the quick release harness (288
+    files, 2,808 tests).
+  - `pnpm verify:release:quick`: passed all 18 checks in 596.8 seconds.

@@ -1661,5 +1661,5 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       "Upgrade backup restored. PromptHub will restart automatically.",
       "success",
     );
-  }, 10000);
+  }, 30_000);
 });

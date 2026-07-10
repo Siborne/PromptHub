@@ -15,6 +15,8 @@ import {
 } from "@prompthub/core";
 import type { PluginLibraryFile } from "@prompthub/shared/types/plugin";
 
+const WORKSPACE_SYNC_TEST_TIMEOUT_MS = 15_000;
+
 function makeTempRoot(tempDirs: string[]): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-cli-sync-"));
   tempDirs.push(dir);
@@ -208,7 +210,7 @@ describe("CLI workspace sync snapshots", () => {
         },
       },
     });
-  });
+  }, WORKSPACE_SYNC_TEST_TIMEOUT_MS);
 
   it("imports a v2 workspace bundle into the shared local workspace", async () => {
     const sourceRoot = makeTempRoot(tempDirs);
@@ -281,7 +283,7 @@ describe("CLI workspace sync snapshots", () => {
       expect.objectContaining({ id: "plugin-1" }),
     ]);
     expect(libraries.pluginNote).toBe("plugin asset");
-  });
+  }, WORKSPACE_SYNC_TEST_TIMEOUT_MS);
 
   it("pushes the full workspace snapshot to a remote sync endpoint", async () => {
     const root = makeTempRoot(tempDirs);
@@ -356,7 +358,7 @@ describe("CLI workspace sync snapshots", () => {
         plugins: 1,
       },
     });
-  });
+  }, WORKSPACE_SYNC_TEST_TIMEOUT_MS);
 
   it("falls back to sync manifest when a cloud endpoint has no status route", async () => {
     const root = makeTempRoot(tempDirs);
@@ -481,5 +483,5 @@ describe("CLI workspace sync snapshots", () => {
     expect(promptList.stdout).toEqual([
       expect.objectContaining({ title: "Remote Pull" }),
     ]);
-  });
+  }, WORKSPACE_SYNC_TEST_TIMEOUT_MS);
 });

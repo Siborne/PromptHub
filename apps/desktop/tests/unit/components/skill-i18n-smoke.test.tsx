@@ -1369,7 +1369,7 @@ describe("skill i18n smoke", () => {
       ).toBeInTheDocument();
     });
     expect(screen.getByText("Help the user write better.")).toBeInTheDocument();
-  }, 15000);
+  }, 30_000);
 
   it("prompts to retranslate when the saved translation is stale", async () => {
     const syncedSkill = {

@@ -400,6 +400,8 @@
 - [x] `tests/unit/components/skill-icon-picker.test.tsx` follow-up icon upload
       file input accessible-name regression
 - [x] Desktop Vitest timeout stabilization for heavy jsdom renderer suites
+- [x] Align the prompt modal structure regression with the desktop suite's 30-second jsdom timeout budget.
+- [x] Remove stale 10/15-second overrides from heavy desktop component suites so they consistently use the established 30-second budget.
 - [x] `tests/unit/main/data-layout-migration.test.ts` follow-up legacy layout
       migration symlink rejection for root entries and nested directory entries
 - [x] `tests/unit/main/upgrade-backup.test.ts` and

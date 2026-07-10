@@ -24,6 +24,8 @@ Two profiles are available:
 
 - Shared packages: compile exported shared contracts before downstream apps consume them.
 - CLI: lint, typecheck, tests, and build for standalone distribution.
+- CLI workspace snapshot tests retain full filesystem, SQLite, MCP, and Plugin assertions while using a 15-second per-test budget so a timed-out async test cannot reset shared runtime paths during the following case.
+- Heavy desktop jsdom regressions use the established 30-second desktop test budget instead of narrower local overrides that fail only under full-suite load.
 - Desktop: lint, typecheck, unit, integration, build, performance budget, bundle budget, and E2E smoke.
 - Web: lint, typecheck, tests, and build.
 - Cloudflare worker: lint, typecheck, and tests.

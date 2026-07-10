@@ -1809,7 +1809,7 @@ describe("SkillProjectsView", () => {
         { ifExists: "overwrite", mode: "symlink" },
       );
     });
-  }, 15000);
+  }, 30_000);
 
   it("remembers project import preferences after reopening the modal", async () => {
     const selectFolder = vi.fn().mockResolvedValue("/tmp/novel/custom-targets");
@@ -1882,7 +1882,7 @@ describe("SkillProjectsView", () => {
         name: /Custom target.*\/tmp\/novel\/custom-targets/i,
       }),
     ).toBeInTheDocument();
-  }, 15000);
+  }, 30_000);
 
   it("warns when background rescan fails after a successful import", async () => {
     const copyRepoByPathToDirectory = vi
@@ -1959,7 +1959,7 @@ describe("SkillProjectsView", () => {
         "warning",
       );
     });
-  }, 15000);
+  }, 30_000);
 
   it("deploys a project-local skill to the default project target", async () => {
     const copyRepoByPathToDirectory = vi

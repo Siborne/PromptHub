@@ -136,31 +136,35 @@ describe("Prompt modal structure", () => {
     async () => {
       const user = userEvent.setup();
 
-    await renderWithI18n(
-      <ToastProvider>
-        <CreatePromptModal
-          isOpen
-          onClose={vi.fn()}
-          onCreate={vi.fn()}
-          defaultPromptType="image"
-        />
-      </ToastProvider>,
-      { language: "en" },
-    );
+      await renderWithI18n(
+        <ToastProvider>
+          <CreatePromptModal
+            isOpen
+            onClose={vi.fn()}
+            onCreate={vi.fn()}
+            defaultPromptType="image"
+          />
+        </ToastProvider>,
+        { language: "en" },
+      );
 
-    expect(screen.getByText("Prompt Type")).toBeInTheDocument();
-    expect(screen.getByText("User Prompt")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Use {{variableName}} or {{variableName:exampleValue}} to define variables, e.g., {{language}} or {{courseName:Computer Science}}",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
-    expect(screen.queryByText("Description (Optional)")).not.toBeInTheDocument();
-    expect(screen.queryByText("Reference Media")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Test with image models (e.g., DALL-E). Generated images will be saved to preview."),
-    ).not.toBeInTheDocument();
+      expect(screen.getByText("Prompt Type")).toBeInTheDocument();
+      expect(screen.getByText("User Prompt")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Use {{variableName}} or {{variableName:exampleValue}} to define variables, e.g., {{language}} or {{courseName:Computer Science}}",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Description (Optional)"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("Reference Media")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          "Test with image models (e.g., DALL-E). Generated images will be saved to preview.",
+        ),
+      ).not.toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: /More Settings/i }));
 
@@ -169,7 +173,7 @@ describe("Prompt modal structure", () => {
       expect(screen.getByText("Reference Media")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "More Settings" })).toBeInTheDocument();
     },
-    10000,
+    30_000,
   );
 
   it("clears discarded create modal drafts before reopening", async () => {
@@ -425,7 +429,7 @@ describe("Prompt modal structure", () => {
     expect(screen.queryByDisplayValue("Stale rewritten prompt.")).not.toBeInTheDocument();
     expect(screen.getByDisplayValue(basePrompt.description ?? "")).toBeInTheDocument();
     expect(screen.getByDisplayValue(basePrompt.userPrompt)).toBeInTheDocument();
-  }, 10000);
+  }, 30_000);
 
   it("ignores stale translate-to-English results after close and reopen", async () => {
     const user = userEvent.setup();
@@ -484,7 +488,7 @@ describe("Prompt modal structure", () => {
     expect(screen.queryByDisplayValue("Stale English system prompt.")).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("Stale English user prompt.")).not.toBeInTheDocument();
     expect(screen.queryByText("已生成英文版 Prompt")).not.toBeInTheDocument();
-  }, 10000);
+  }, 30_000);
 
   it("ignores stale translate-from-English results after close and reopen", async () => {
     const user = userEvent.setup();
@@ -545,7 +549,7 @@ describe("Prompt modal structure", () => {
     expect(screen.queryByText("已生成当前语言版本")).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("原始系统提示词。")).toBeInTheDocument();
     expect(screen.getByDisplayValue("原始用户提示词。")).toBeInTheDocument();
-  }, 10000);
+  }, 30_000);
 
   it("shows an error toast when rewrite is requested without instructions", async () => {
     const user = userEvent.setup();

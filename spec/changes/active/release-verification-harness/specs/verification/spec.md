@@ -28,6 +28,7 @@
   - Given a local worktree
   - When the maintainer runs `pnpm verify:release:quick`
   - Then the harness runs the static, unit, and build checks needed for quick feedback
+  - And filesystem-backed CLI workspace sync tests use a timeout budget that remains deterministic under full-harness load without relaxing their assertions
   - And it skips the slower release-only desktop integration, performance, bundle, and E2E smoke layers
 
 - Scenario: A new check duplicates an existing command
