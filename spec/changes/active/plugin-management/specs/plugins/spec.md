@@ -382,6 +382,16 @@ PromptHub MUST model Plugin support as an adapter matrix across agent-native bun
 - **AND** the Agent-installed packages are not silently added to PromptHub's My Plugins library or treated as PromptHub-managed packages
 - **AND** unsupported runtime-only, composite, or pending targets remain greyed out and are not scanned as if separate skill/MCP folders were Plugin packages
 
+#### Scenario: Agent Plugin recognizes a markerless multi-capability Claude bundle
+
+- **GIVEN** a legacy or manually installed directory exists directly under the Claude configuration root
+- **AND** the directory has no `.claude-plugin/plugin.json` or `package.json`
+- **AND** it contains at least two distinct recognized Plugin capability classes such as commands, docs/workflows, or scripts
+- **WHEN** PromptHub scans Claude Code's installed Plugin inventory
+- **THEN** PromptHub includes the directory as a manual Agent Plugin bundle using static inventory counts
+- **AND** a markerless directory containing only one generic capability class remains excluded
+- **AND** PromptHub does not execute files or traverse outside the Claude configuration root while classifying the directory
+
 #### Scenario: Agent Plugin localizes target support copy
 
 - **GIVEN** the user opens Agent Plugin in any supported desktop locale

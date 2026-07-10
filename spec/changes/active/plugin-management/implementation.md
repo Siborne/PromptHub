@@ -389,6 +389,28 @@
   - `git diff --check`
     - Result: passed.
 
+## GitHub #176 Markerless Claude Bundle Follow-up
+
+- Claude root scanning now recognizes a markerless manual package without
+  `package.json` when at least two distinct recognized capability classes are
+  populated.
+- Native manifest packages and the existing `package.json` manual-package path
+  retain their previous behavior.
+- Markerless directories containing only one generic capability class remain
+  excluded, which avoids treating ordinary Claude state or loose command
+  folders as full Plugin bundles.
+- The regression fixture matches the reported `~/.claude/get-shit-done`
+  structure with commands, workflows, and executable tooling.
+- Verification:
+  - `tests/unit/main/plugin-target-inventory.test.ts`: passed (8 tests).
+  - Agent Plugin component regressions: passed (4 selected tests).
+  - Desktop typecheck and lint: passed.
+  - Full desktop unit confirmation run: passed (288 files, 2,804 tests).
+  - `pnpm verify:release:quick` did not complete because its first desktop-unit
+    pass reported five transient UI-test failures under full-suite load. The
+    affected tests passed on immediate focused rerun (47 tests), and the full
+    desktop unit suite then passed; later quick-harness steps were not reached.
+
 ## Synced Docs
 
 - `spec/knowledge/behavior/plugins.md`

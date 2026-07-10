@@ -117,6 +117,38 @@ describe("Agent Plugin target inventory scan", () => {
     expect(plugins.some((plugin) => plugin.name === "sessions")).toBe(false);
   });
 
+  it("reads markerless multi-capability Claude bundles without package.json", () => {
+    const manualPlugin = path.join(agentRoot, "get-shit-done");
+    touch(path.join(manualPlugin, "commands", "ship.md"));
+    touch(path.join(manualPlugin, "workflows", "release.md"));
+    touch(path.join(manualPlugin, "bin", "gsd-tools.cjs"));
+
+    const plugins = scanInstalledPluginsForTarget("claude-code", agentRoot);
+
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0]).toMatchObject({
+      name: "get-shit-done",
+      inventory: { commands: 1, docs: 1, scripts: 1 },
+    });
+  });
+
+  it("rejects weak markerless Claude package signals", () => {
+    touch(path.join(agentRoot, "command-snippets", "commands", "ship.md"));
+    writeJson(path.join(agentRoot, "package-only", "package.json"), {
+      name: "package-only",
+    });
+    fs.mkdirSync(path.join(agentRoot, "empty-bundle", "commands"), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.join(agentRoot, "empty-bundle", "workflows"), {
+      recursive: true,
+    });
+
+    const plugins = scanInstalledPluginsForTarget("claude-code", agentRoot);
+
+    expect(plugins).toEqual([]);
+  });
+
   it("reads Cursor plugin packages from plugin roots", () => {
     const cursorPlugin = path.join(
       agentRoot,

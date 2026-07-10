@@ -173,6 +173,16 @@ Evidence references:
 - Cline plugins: `https://docs.cline.bot/customization/plugins`
 - Windsurf / Devin Cascade separate assets: `https://docs.devin.ai/desktop/cascade/skills` and `https://docs.devin.ai/desktop/cascade/hooks`
 
+## Markerless Manual Claude Bundles
+
+Claude root scanning supports legacy/manual capability bundles that were installed outside Claude's current plugin registry and cache layout.
+
+- A native marker such as `.claude-plugin/plugin.json` remains authoritative.
+- A markerless directory with `package.json` remains eligible when it contains at least one recognized Plugin capability directory.
+- A markerless directory without `package.json` is eligible only when it contains at least two distinct recognized capability classes, such as commands plus docs/workflows or scripts.
+- A directory with only one generic capability folder is not enough evidence of a Plugin bundle and must remain excluded.
+- Detection reads only directory/file metadata and never executes package code.
+
 ## Installation Flow
 
 `DES-PLUGIN-004`

@@ -401,10 +401,19 @@ function looksLikeManualPluginPackage(
   markerPaths: string[],
 ): boolean {
   if (getPackageMarkerPath(packageDir, markerPaths)) return true;
-  if (!fs.existsSync(path.join(packageDir, "package.json"))) return false;
-  return PLUGIN_DIR_INVENTORY.some(({ dirs }) =>
+  const hasRecognizedCapability = PLUGIN_DIR_INVENTORY.some(({ dirs }) =>
     dirs.some((dirName) => fs.existsSync(path.join(packageDir, dirName))),
   );
+  if (fs.existsSync(path.join(packageDir, "package.json"))) {
+    return hasRecognizedCapability;
+  }
+
+  const populatedCapabilityKinds = PLUGIN_DIR_INVENTORY.filter(({ dirs }) =>
+    dirs.some(
+      (dirName) => countDirectoryEntries(path.join(packageDir, dirName)) > 0,
+    ),
+  ).length;
+  return populatedCapabilityKinds >= 2;
 }
 
 function getPluginInventory(
