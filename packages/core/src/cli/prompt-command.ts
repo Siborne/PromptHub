@@ -25,14 +25,13 @@ import {
   promptTagTableRows,
   promptVersionTableRows,
   renderPromptCopy,
-  requirePositional,
   requirePrompt,
   resolvePromptCreateArgs,
-  resolvePromptIdentifier,
   resolvePromptSearchArgs,
   resolvePromptUpdateArgs,
   resolvePromptVersionDiffArgs,
 } from "./prompt-utils";
+import { resolvePromptIdentifier } from "./select";
 
 export async function handlePromptCommand(
   args: string[],

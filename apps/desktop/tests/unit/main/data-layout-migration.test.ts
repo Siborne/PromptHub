@@ -513,7 +513,7 @@ describe("data-layout-migration", () => {
     expect(markerRecord.failedEntries).toBeUndefined();
   });
 
-  it("completes migration when unified data already contains legacy root rows", async () => {
+  it("removes a legacy root database already superseded by unified data", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
 
@@ -579,7 +579,7 @@ describe("data-layout-migration", () => {
       fs
         .readdirSync(userDataPath)
         .some((entry) => /^prompthub\.db\.legacy-conflict-.*\.db$/.test(entry)),
-    ).toBe(true);
+    ).toBe(false);
 
     const markerRecord = JSON.parse(
       fs.readFileSync(getDataLayoutMigrationMarkerPath(userDataPath), "utf8"),

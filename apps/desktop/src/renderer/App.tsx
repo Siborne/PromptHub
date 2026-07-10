@@ -55,6 +55,7 @@ import { Spinner } from "./components/ui/Spinner";
 import { isWebRuntime } from "./runtime";
 import { useBackupImportController } from "./hooks/useBackupImportController";
 import { waitForPersistHydration } from "./utils/persist-hydration";
+import { createLocalDataRefreshController } from "./services/local-data-refresh";
 
 // Lazy load heavy components for better initial load performance
 // 懒加载大型组件以提升初始加载性能
@@ -770,7 +771,17 @@ function App() {
       }
     };
 
+    const localDataRefresh = createLocalDataRefreshController({
+      fetchPrompts,
+      fetchFolders,
+      isVisible: () =>
+        isWindowVisibleRef.current && document.visibilityState !== "hidden",
+    });
+
     const handleBackgroundTaskResume = () => {
+      void localDataRefresh.refresh().catch((error) => {
+        console.error("Failed to refresh local data after resume:", error);
+      });
       if (
         pendingStartupSyncRef.current &&
         isWindowVisibleRef.current &&

@@ -2,6 +2,10 @@ import Database from "./adapter";
 import path from "path";
 import fs from "fs";
 import { SCHEMA_TABLES, SCHEMA_INDEXES } from "./schema";
+import {
+  acquireDatabaseClientLease,
+  type DatabaseClientLease,
+} from "./database-client-lock";
 
 /** Column metadata returned by `PRAGMA table_info(...)`. */
 interface PragmaColumnInfo {
@@ -37,6 +41,20 @@ export interface InitDatabaseHooks {
 }
 
 let db: Database.Database | null = null;
+let dbClientLease: DatabaseClientLease | null = null;
+
+function resetFailedDatabaseInitialization(): void {
+  const failedDatabase = db;
+  db = null;
+  try {
+    failedDatabase?.close();
+  } catch (error) {
+    console.warn("[DB] Failed to close an incomplete database:", error);
+  } finally {
+    dbClientLease?.release();
+    dbClientLease = null;
+  }
+}
 
 const REQUIRED_MIGRATION_NAMES = [
   "backfill_local_repo_path_v1",
@@ -115,27 +133,6 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   users: ["role"],
   prompt_versions: ["system_prompt_en", "user_prompt_en", "ai_response"],
 };
-
-/**
- * node-sqlite3-wasm uses a directory lock `<dbfile>.lock`.
- * If the previous run crashed, the lock directory may remain and cause
- * "database is locked" on the next startup. Proactively clean it up.
- */
-function clearStaleLock(dbPath: string): void {
-  const lockDir = `${dbPath}.lock`;
-  try {
-    if (!fs.existsSync(lockDir)) {
-      return;
-    }
-    fs.rmSync(lockDir, { recursive: true, force: true });
-    console.log(`[DB] Cleared stale lock: ${lockDir}`);
-  } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") {
-      console.warn(`[DB] Failed to clear stale lock (${lockDir}):`, err);
-    }
-  }
-}
 
 function tableExists(probe: Database.Database, tableName: string): boolean {
   return Boolean(
@@ -244,15 +241,23 @@ export function initDatabase(
   if (db) return db;
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  clearStaleLock(dbPath);
-  backupDatabaseBeforeMigration(dbPath);
-  db = new Database(dbPath);
+  dbClientLease = acquireDatabaseClientLease(dbPath);
+  try {
+    backupDatabaseBeforeMigration(dbPath);
+    db = new Database(dbPath);
 
-  // Enable foreign key constraints
-  db.pragma("foreign_keys = ON");
+    // Serialize short cross-process write overlaps before reporting a conflict.
+    db.pragma("busy_timeout = 5000");
 
-  // Create tables only (indexes come after migrations)
-  db.exec(SCHEMA_TABLES);
+    // Enable foreign key constraints
+    db.pragma("foreign_keys = ON");
+
+    // Create tables only (indexes come after migrations)
+    db.exec(SCHEMA_TABLES);
+  } catch (error) {
+    resetFailedDatabaseInitialization();
+    throw error;
+  }
 
   // Run all migrations in a single transaction to avoid lock contention.
   // Each table's column list is fetched exactly once and reused.
@@ -711,13 +716,13 @@ export function initDatabase(
 
   try {
     runMigrations();
+    // Now that all columns exist, create indexes + FTS
+    db.exec(SCHEMA_INDEXES);
   } catch (error) {
     console.error("Database migration failed:", error);
+    resetFailedDatabaseInitialization();
     throw error;
   }
-
-  // Now that all columns exist, create indexes + FTS
-  db.exec(SCHEMA_INDEXES);
 
   console.log(`Database initialized at: ${dbPath}`);
   return db;
@@ -737,9 +742,13 @@ export function getDatabase(): Database.Database {
  * Close database connection
  */
 export function closeDatabase(): void {
-  if (db) {
-    db.close();
-    db = null;
+  const databaseToClose = db;
+  db = null;
+  try {
+    databaseToClose?.close();
+  } finally {
+    dbClientLease?.release();
+    dbClientLease = null;
   }
 }
 

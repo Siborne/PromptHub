@@ -18,7 +18,10 @@ type WasmDatabaseConstructor = new (
 ) => {
   exec(sql: string): void;
   prepare(sql: string): {
-    run(params?: unknown): { changes: number; lastInsertRowid: number | bigint };
+    run(params?: unknown): {
+      changes: number;
+      lastInsertRowid: number | bigint;
+    };
     get(params?: unknown): unknown;
     all(params?: unknown): unknown[];
     finalize?: () => void;
@@ -29,14 +32,17 @@ type WasmDatabaseConstructor = new (
 
 const WasmDatabase = sqlite3Wasm.Database as WasmDatabaseConstructor;
 
+type WasmStatement = ReturnType<
+  InstanceType<WasmDatabaseConstructor>["prepare"]
+>;
+
 class Statement {
+  private isFinalized = false;
+
   constructor(
-    private stmt: {
-      run(params?: unknown): { changes: number; lastInsertRowid: number | bigint };
-      get(params?: unknown): unknown;
-      all(params?: unknown): unknown[];
-      finalize?: () => void;
-    },
+    private readonly prepareStatement: () => WasmStatement,
+    private stmt: WasmStatement | null,
+    private readonly onRelease: () => void,
   ) {}
 
   private normalizeParams(params: unknown[]): unknown[] | unknown {
@@ -51,34 +57,71 @@ class Statement {
     return params;
   }
 
-  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint } {
-    const normalized = this.normalizeParams(params);
-    return Array.isArray(normalized) && normalized.length === 0
-      ? this.stmt.run()
-      : this.stmt.run(normalized);
+  run(...params: unknown[]): {
+    changes: number;
+    lastInsertRowid: number | bigint;
+  } {
+    return this.execute((stmt) => {
+      const normalized = this.normalizeParams(params);
+      return Array.isArray(normalized) && normalized.length === 0
+        ? stmt.run()
+        : stmt.run(normalized);
+    });
   }
 
   get(...params: unknown[]): unknown {
-    const normalized = this.normalizeParams(params);
-    return Array.isArray(normalized) && normalized.length === 0
-      ? this.stmt.get()
-      : this.stmt.get(normalized);
+    return this.execute((stmt) => {
+      const normalized = this.normalizeParams(params);
+      return Array.isArray(normalized) && normalized.length === 0
+        ? stmt.get()
+        : stmt.get(normalized);
+    });
   }
 
   all(...params: unknown[]): unknown[] {
-    const normalized = this.normalizeParams(params);
-    return Array.isArray(normalized) && normalized.length === 0
-      ? this.stmt.all()
-      : this.stmt.all(normalized);
+    return this.execute((stmt) => {
+      const normalized = this.normalizeParams(params);
+      return Array.isArray(normalized) && normalized.length === 0
+        ? stmt.all()
+        : stmt.all(normalized);
+    });
+  }
+
+  private execute<T>(operation: (stmt: WasmStatement) => T): T {
+    if (this.isFinalized) {
+      throw new Error("Statement already finalized");
+    }
+    const stmt = this.stmt ?? this.prepareStatement();
+    try {
+      return operation(stmt);
+    } finally {
+      // The WASM VFS retains its directory lock until the raw statement ends.
+      try {
+        stmt.finalize?.();
+      } finally {
+        this.stmt = null;
+        this.onRelease();
+      }
+    }
   }
 
   finalize(): void {
-    this.stmt.finalize?.();
+    if (this.isFinalized) {
+      return;
+    }
+    this.isFinalized = true;
+    try {
+      this.stmt?.finalize?.();
+    } finally {
+      this.stmt = null;
+      this.onRelease();
+    }
   }
 }
 
 class DatabaseAdapter {
   private _db: InstanceType<WasmDatabaseConstructor>;
+  private statements = new Set<Statement>();
 
   constructor(path: string, options?: { readOnly?: boolean }) {
     this._db = new WasmDatabase(path, options);
@@ -161,7 +204,14 @@ class DatabaseAdapter {
   }
 
   prepare(sql: string): Statement {
-    return new Statement(this._db.prepare(sql));
+    let statement: Statement;
+    statement = new Statement(
+      () => this._db.prepare(sql),
+      this._db.prepare(sql),
+      () => this.statements.delete(statement),
+    );
+    this.statements.add(statement);
+    return statement;
   }
 
   /**
@@ -194,7 +244,22 @@ class DatabaseAdapter {
   }
 
   close(): void {
-    this._db.close();
+    let closeError: unknown;
+    for (const statement of [...this.statements]) {
+      try {
+        statement.finalize();
+      } catch (error) {
+        closeError ??= error;
+      }
+    }
+    try {
+      this._db.close();
+    } catch (error) {
+      closeError ??= error;
+    }
+    if (closeError) {
+      throw closeError;
+    }
   }
 }
 

@@ -74,6 +74,16 @@ function configureCliRuntime(
   return { args: nextArgs, output: outputOption };
 }
 
+function isDatabaseBusyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("database is locked") ||
+    normalized.includes("database table is locked") ||
+    normalized.includes("sqlite_busy")
+  );
+}
+
 export async function runCli(
   argv: string[],
   io: CliIO = defaultIO(),
@@ -163,11 +173,17 @@ export async function runCli(
                 error.message,
                 error.status === 409 ? EXIT_CODES.CONFLICT : EXIT_CODES.IO,
               )
-            : new CliError(
-                "INTERNAL_ERROR",
-                error instanceof Error ? error.message : String(error),
-                EXIT_CODES.INTERNAL,
-              );
+            : isDatabaseBusyError(error)
+              ? new CliError(
+                  "DATABASE_BUSY",
+                  "数据库正在被另一个 PromptHub 进程写入，请稍后重试；如持续出现，请关闭其他 PromptHub 进程后重试",
+                  EXIT_CODES.CONFLICT,
+                )
+              : new CliError(
+                  "INTERNAL_ERROR",
+                  error instanceof Error ? error.message : String(error),
+                  EXIT_CODES.INTERNAL,
+                );
     emitError({ io, output: "json", skills: skillService }, cliError);
     return cliError.exitCode;
   } finally {

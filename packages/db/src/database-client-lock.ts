@@ -1,0 +1,210 @@
+import fs from "fs";
+import path from "path";
+
+interface DatabaseClientLeaseRecord {
+  pid: number;
+  registeredAt: string;
+}
+
+export interface DatabaseClientLeaseOptions {
+  pid?: number;
+  isProcessAlive?: (pid: number) => boolean;
+  registerExitHandler?: boolean;
+}
+
+export interface DatabaseClientLease {
+  release: () => void;
+}
+
+interface ClientLeaseScan {
+  hasLiveClient: boolean;
+  hasRecoverableStaleLease: boolean;
+  hasUnknownOwner: boolean;
+}
+
+interface ExitCleanupRegistry {
+  releases: Set<() => void>;
+  handleExit: () => void;
+}
+
+const EXIT_CLEANUP_REGISTRY_KEY = Symbol.for(
+  "prompthub.database-client-lock.exit-cleanup",
+);
+
+function defaultIsProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function readLeasePid(filePath: string): number | null {
+  try {
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      return null;
+    }
+    const parsed = JSON.parse(
+      fs.readFileSync(filePath, "utf8"),
+    ) as Partial<DatabaseClientLeaseRecord>;
+    return Number.isInteger(parsed.pid) && Number(parsed.pid) > 0
+      ? Number(parsed.pid)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function removeLeaseFile(filePath: string): boolean {
+  try {
+    fs.rmSync(filePath, { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function scanClientLeases(
+  clientsDir: string,
+  currentPid: number,
+  isProcessAlive: (pid: number) => boolean,
+): ClientLeaseScan {
+  let hasLiveClient = false;
+  let hasRecoverableStaleLease = false;
+  let hasUnknownOwner = false;
+  for (const entry of fs.readdirSync(clientsDir, { withFileTypes: true })) {
+    const filePath = path.join(clientsDir, entry.name);
+    const pid = entry.isFile() ? readLeasePid(filePath) : null;
+    if (pid !== null && entry.name !== `${pid}.json`) {
+      const removed = removeLeaseFile(filePath);
+      hasRecoverableStaleLease ||= removed;
+      hasUnknownOwner ||= !removed;
+      continue;
+    }
+    if (pid === currentPid) {
+      continue;
+    }
+    if (pid === null || !isProcessAlive(pid)) {
+      const removed = removeLeaseFile(filePath);
+      hasRecoverableStaleLease ||= removed;
+      hasUnknownOwner ||= !removed;
+      continue;
+    }
+    hasLiveClient = true;
+  }
+  return { hasLiveClient, hasRecoverableStaleLease, hasUnknownOwner };
+}
+
+function writeCurrentLease(clientsDir: string, pid: number): string {
+  const leasePath = path.join(clientsDir, `${pid}.json`);
+  const record: DatabaseClientLeaseRecord = {
+    pid,
+    registeredAt: new Date().toISOString(),
+  };
+  removeLeaseFile(leasePath);
+  fs.writeFileSync(leasePath, JSON.stringify(record), {
+    encoding: "utf8",
+    flag: "wx",
+    mode: 0o600,
+  });
+  return leasePath;
+}
+
+function removeOrphanedLock(dbPath: string, scan: ClientLeaseScan): void {
+  const lockDir = `${dbPath}.lock`;
+  const canRecover =
+    scan.hasRecoverableStaleLease &&
+    !scan.hasLiveClient &&
+    !scan.hasUnknownOwner;
+  if (!canRecover || !fs.existsSync(lockDir)) {
+    return;
+  }
+  const lockStat = fs.lstatSync(lockDir);
+  if (!lockStat.isDirectory() || lockStat.isSymbolicLink()) {
+    return;
+  }
+  fs.rmSync(lockDir, { recursive: true, force: true });
+  console.log(`[DB] Recovered orphaned lock: ${lockDir}`);
+}
+
+function getExitCleanupRegistry(): ExitCleanupRegistry {
+  const scope = globalThis as typeof globalThis & {
+    [EXIT_CLEANUP_REGISTRY_KEY]?: ExitCleanupRegistry;
+  };
+  if (!scope[EXIT_CLEANUP_REGISTRY_KEY]) {
+    const releases = new Set<() => void>();
+    scope[EXIT_CLEANUP_REGISTRY_KEY] = {
+      releases,
+      handleExit: () => {
+        for (const release of [...releases]) {
+          release();
+        }
+      },
+    };
+  }
+  return scope[EXIT_CLEANUP_REGISTRY_KEY];
+}
+
+function registerExitCleanup(release: () => void): () => void {
+  const registry = getExitCleanupRegistry();
+  if (registry.releases.size === 0) {
+    process.once("exit", registry.handleExit);
+  }
+  registry.releases.add(release);
+  return () => {
+    registry.releases.delete(release);
+    if (registry.releases.size === 0) {
+      process.off("exit", registry.handleExit);
+    }
+  };
+}
+
+function removeLeaseRegistration(leasePath: string, clientsDir: string): void {
+  removeLeaseFile(leasePath);
+  try {
+    fs.rmdirSync(clientsDir);
+  } catch {
+    // Other clients or stale entries still own the directory.
+  }
+}
+
+export function acquireDatabaseClientLease(
+  dbPath: string,
+  options: DatabaseClientLeaseOptions = {},
+): DatabaseClientLease {
+  const pid = options.pid ?? process.pid;
+  const isProcessAlive = options.isProcessAlive ?? defaultIsProcessAlive;
+  const clientsDir = `${dbPath}.clients`;
+  fs.mkdirSync(clientsDir, { recursive: true, mode: 0o700 });
+  const clientsDirStat = fs.lstatSync(clientsDir);
+  if (!clientsDirStat.isDirectory() || clientsDirStat.isSymbolicLink()) {
+    throw new Error(`Invalid database clients directory: ${clientsDir}`);
+  }
+  const leasePath = writeCurrentLease(clientsDir, pid);
+  try {
+    const clientScan = scanClientLeases(clientsDir, pid, isProcessAlive);
+    removeOrphanedLock(dbPath, clientScan);
+  } catch (error) {
+    removeLeaseRegistration(leasePath, clientsDir);
+    throw error;
+  }
+
+  let released = false;
+  let unregisterExitCleanup: () => void = () => undefined;
+  const release = () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    unregisterExitCleanup();
+    removeLeaseRegistration(leasePath, clientsDir);
+  };
+
+  if (options.registerExitHandler !== false) {
+    unregisterExitCleanup = registerExitCleanup(release);
+  }
+
+  return { release };
+}
