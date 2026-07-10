@@ -104,6 +104,44 @@ describe("agent root paths", () => {
     ]);
   });
 
+  it("shows Grok Build's documented user assets without enabling an MCP writer", () => {
+    const platform = getPlatformById("grok");
+    expect(platform).toBeDefined();
+    expect(platform!.rootDir.darwin).toBe("~/.grok");
+    expect(platform!.rootDir.win32).toBe("%USERPROFILE%\\.grok");
+
+    const config = getEffectiveBuiltinAgentConfig(
+      platform!,
+      "~/.grok",
+      undefined,
+    );
+
+    expect(config.skillsRelativePath).toBe("skills");
+    expect(config.pluginsRelativePath).toBe("plugins");
+    expect(config.rulesRelativePath).toBe("AGENTS.md");
+    expect(config.configRelativePaths).toEqual([
+      "config.toml",
+      "pager.toml",
+      "settings.json",
+      "lsp.json",
+      "sandbox.toml",
+    ]);
+    expect(config.mcpRelativePath).toBe("config.toml");
+    expect(buildAgentRootAssetPreview(config)).toMatchObject({
+      mcpConfigPaths: ["~/.grok/config.toml"],
+      ruleCandidates: ["~/.grok/AGENTS.md"],
+      agentDirectories: ["~/.grok/agents"],
+      pluginDirectories: ["~/.grok/plugins"],
+      configCandidates: [
+        "~/.grok/config.toml",
+        "~/.grok/pager.toml",
+        "~/.grok/settings.json",
+        "~/.grok/lsp.json",
+        "~/.grok/sandbox.toml",
+      ],
+    });
+  });
+
   it("keeps QClaw as an OpenClaw-compatible platform without an unconfirmed MCP path", () => {
     const platform = getPlatformById("qclaw");
     expect(platform).toBeDefined();

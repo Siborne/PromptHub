@@ -10,6 +10,7 @@ function requirePlatform(platformId: string) {
 
 const claudePlatform = requirePlatform("claude");
 const codexPlatform = requirePlatform("codex");
+const grokPlatform = requirePlatform("grok");
 const geminiPlatform = requirePlatform("gemini");
 const opencodePlatform = requirePlatform("opencode");
 const windsurfPlatform = requirePlatform("windsurf");
@@ -23,6 +24,7 @@ export const RULE_FILE_GROUPS = ["workspace", "assistant", "tooling"] as const;
 export const RULE_PLATFORM_ORDER = [
   "claude",
   "codex",
+  "grok",
   "gemini",
   "opencode",
   "windsurf",
@@ -53,6 +55,17 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
       "Global Codex instructions stored next to the managed Codex settings directory.",
     name: "AGENTS.md",
     description: "Global Codex instructions loaded from the local Codex configuration.",
+    group: "assistant",
+  },
+  "grok-global": {
+    id: "grok-global",
+    platformId: "grok",
+    platformName: grokPlatform.name,
+    platformIcon: grokPlatform.icon,
+    platformDescription:
+      "Global Grok Build instructions stored in the local Grok configuration directory.",
+    name: "AGENTS.md",
+    description: "Global Grok Build instructions loaded for every project.",
     group: "assistant",
   },
   "gemini-global": {

@@ -25,6 +25,8 @@ import traeIcon from "../../assets/platforms/trae.png";
 import workbuddyIcon from "../../assets/platforms/workbuddy.svg";
 import opencodeIcon from "../../assets/platforms/opencode.png";
 import codexIcon from "../../assets/platforms/codex.png";
+import grokLightIcon from "../../assets/platforms/grok-light.svg";
+import grokDarkIcon from "../../assets/platforms/grok-dark.svg";
 import kiloLightIcon from "../../assets/platforms/kilo-light.svg";
 import kiloDarkIcon from "../../assets/platforms/kilo-dark.svg";
 import openclawIcon from "../../assets/platforms/openclaw.png";
@@ -56,6 +58,10 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   workbuddy: workbuddyIcon,
   opencode: opencodeIcon,
   codex: codexIcon,
+  grok: {
+    light: grokLightIcon,
+    dark: grokDarkIcon,
+  },
   kilo: {
     light: kiloLightIcon,
     dark: kiloDarkIcon,
@@ -89,6 +95,7 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   opencode: <TerminalIcon />,
   cline: <TerminalIcon />,
   codex: <TerminalIcon />,
+  grok: <TerminalIcon />,
   kilo: <BotIcon />,
   amp: <ZapIcon />,
   openclaw: <BugIcon />,

@@ -62,6 +62,21 @@ describe("PlatformIcon", () => {
     );
   });
 
+  it("renders the Grok brand icon in both light and dark themes", () => {
+    render(<PlatformIcon platformId="grok" size={20} />);
+
+    const icons = screen.getAllByRole("img", { name: "grok icon" });
+    expect(icons).toHaveLength(2);
+    expect(icons[0]).toHaveAttribute(
+      "src",
+      expect.stringContaining("grok-light.svg"),
+    );
+    expect(icons[1]).toHaveAttribute(
+      "src",
+      expect.stringContaining("grok-dark.svg"),
+    );
+  });
+
   it("keeps bundled platform PNG assets as real PNG files", () => {
     const invalidPngFiles = readdirSync(platformAssetsDir)
       .filter((fileName) => fileName.endsWith(".png"))

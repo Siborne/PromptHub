@@ -1698,6 +1698,7 @@ describe("CoreMcpLibraryService", () => {
     );
 
     expect(byId.roo).toBeUndefined();
+    expect(byId.grok).toBeUndefined();
     expect(byId.claude.path).toBe("/Users/test/.claude.json");
     expect(byId.codex.path).toBe("/Users/test/.codex/config.toml");
     expect(byId.gemini.path).toBe("/Users/test/.gemini/settings.json");

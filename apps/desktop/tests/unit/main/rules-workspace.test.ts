@@ -458,6 +458,7 @@ describe("rules workspace storage", () => {
     expect(descriptors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "codex-global", name: "AGENTS.md" }),
+        expect.objectContaining({ id: "grok-global", name: "AGENTS.md" }),
         expect.objectContaining({ id: "opencode-global", name: "AGENTS.md" }),
         expect.objectContaining({ id: "claude-global", name: "CLAUDE.md" }),
       ]),
