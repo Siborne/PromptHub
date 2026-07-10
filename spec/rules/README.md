@@ -31,6 +31,7 @@ Phase and lifecycle rules:
 - `analyze` prevents implementation with conflicting documents, orphan IDs, or blocking decisions
 - `converge` synchronizes actual behavior and moves completed changes out of `active/`
 - new standalone records use the compatible typed-ID policy in `document-archive-rules.md`; existing history is not renamed
+- reusable `.agents/skills/*` procedures defer to this hierarchy; parallel `.agents/rules/`, `.agents/workflows/`, generic `docs/rules/`, and tool-specific project constraints are not allowed
 
 领域型回归测试矩阵：
 

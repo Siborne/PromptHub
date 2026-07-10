@@ -50,6 +50,16 @@
 - macOS signing credentials must be scoped to macOS jobs and must not be exported as generic signing variables for Windows or Linux builds.
 - Release verification must check the packaged macOS app with `codesign`, `xcrun stapler validate`, and `spctl`.
 
+### 9. Release Procedure Entry
+
+- The reusable execution procedure lives only at
+  `.agents/skills/release-sync/SKILL.md`.
+- The skill must defer policy to this stable release spec and current
+  repository commands; it must not be copied into `.agents/rules/` or
+  `.agents/workflows/`.
+- Release-impacting local changes use `pnpm verify:release:quick`; tagging or
+  publishing a release candidate requires the full `pnpm verify:release` gate.
+
 ## Stable Scenarios
 
 ### Scenario: Contributor prepares a release-impacting change

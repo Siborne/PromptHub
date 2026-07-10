@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 27 |
-| Archived | 147 |
+| Active | 26 |
+| Archived | 149 |
 | Legacy | 1 |
 
 ## Active
@@ -39,7 +39,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `rules-managed-copies` | in progress | `spec/changes/active/rules-managed-copies/` |
 | `skill-source-update-reconciliation` | completed | `spec/changes/active/skill-source-update-reconciliation/` |
 | `skill-uninstall-lifecycle` | active | `spec/changes/active/skill-uninstall-lifecycle/` |
-| `spec-structure-rename` | in progress | `spec/changes/active/spec-structure-rename/` |
 | `unified-custom-store-sources` | implemented | `spec/changes/active/unified-custom-store-sources/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
 
@@ -192,8 +191,10 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-06-web-skill-workspace-atomic-export` | archived | `spec/changes/archive/2026/07/2026-07-06-web-skill-workspace-atomic-export/` |
 | `2026-07-06-web-sync-data-size-boundary` | archived | `spec/changes/archive/2026/07/2026-07-06-web-sync-data-size-boundary/` |
 | `2026-07-07-desktop-platform-brand-icons` | archived | `spec/changes/archive/2026/07/2026-07-07-desktop-platform-brand-icons/` |
+| `2026-07-10-spec-governance-single-source-cleanup` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-governance-single-source-cleanup/` |
 | `2026-07-10-spec-init-submission-gate` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-init-submission-gate/` |
 | `2026-07-10-spec-init-upstream-alignment` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-init-upstream-alignment/` |
+| `2026-07-10-spec-structure-rename` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-structure-rename/` |
 
 ## Legacy
 

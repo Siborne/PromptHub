@@ -27,7 +27,7 @@ spec/changes/active/<change-key>/
 ├── tasks.md
 ├── implementation.md
 └── specs/
-    └── <domain>/  # start from change/specs/domain/spec.md
+    └── <domain>/  # start from _templates/change/specs/domain/spec.md
         └── spec.md
 ```
 

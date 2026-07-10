@@ -2,7 +2,23 @@
 
 ## Status
 
-In progress.
+Superseded and converged on 2026-07-10.
+
+## Supersession
+
+The `domains / architecture / logic / assets` layout recorded by this change
+was an intermediate topology. It was later replaced by the current
+`workflow / knowledge / changes / records` model defined in `spec/README.md`
+and `spec-init.topology.yml`.
+
+The durable content survived under its current semantic paths:
+
+- former architecture material -> `spec/knowledge/structure/`
+- former stable logic -> `spec/knowledge/behavior/`
+- former stable assets -> `spec/knowledge/reference/`
+
+No active implementation remains. This record is archived as historical
+context and MUST NOT be used as the current directory contract.
 
 ## Goal
 
@@ -41,3 +57,11 @@ In progress.
 - `spec/assets/agent-platforms.md` 已将 `SOUL.md` 标记为 OpenClaw 官方确认文件名，不再把 `OpenClaw` 作为纯 `PromptHub inferred` 平台处理
 - `spec/logic/rules-workspace.md` 已明确记录：资产文档中的“官方证据充分”不自动等于 `Rules` 运行时支持；`OpenClaw` 目前仍属于文档已建模、运行时未接入的状态
 - `spec/assets/agent-platforms.md` 与 `spec/logic/rules-workspace.md` 现在都明确区分了 `Cursor`、`Kiro`、`Roo Code`、`GitHub Copilot` 的资产级建模状态与未进入 `Rules` 全局白名单的具体原因
+
+## Converge
+
+- Current source of truth: `spec/README.md` and `spec-init.topology.yml`.
+- Superseding change:
+  `spec/changes/archive/2026/07/2026-07-10-spec-init-upstream-alignment/`.
+- Final destination:
+  `spec/changes/archive/2026/07/2026-07-10-spec-structure-rename/`.

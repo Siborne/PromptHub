@@ -5,8 +5,10 @@
 - State: open
 - Created: 2026-07-10
 - Owner surface: internal documentation governance
-- Related change:
+- Related changes:
   `spec/changes/archive/2026/07/2026-07-10-spec-init-upstream-alignment/`
+  and
+  `spec/changes/archive/2026/07/2026-07-10-spec-governance-single-source-cleanup/`
 
 ## Confirmed Gaps
 
@@ -17,7 +19,6 @@
 - `r2-direct-downloads`
 - `readme-screenshots-v0-5-6`
 - `skill-uninstall-lifecycle`
-- `spec-structure-rename`
 
 Each directory requires either a real `specs/<domain>/spec.md` or an explicit
 legacy/superseded archive decision. Do not create an empty compliance file.
@@ -33,7 +34,6 @@ with no unchecked task boxes and require owner review before movement:
 - `mobile-app-shell`
 - `rules-managed-copies`
 - `skill-source-update-reconciliation`
-- `spec-structure-rename`
 - `unified-custom-store-sources`
 
 Some remain active because of release, review, convergence, or concurrent work.
@@ -48,6 +48,9 @@ should move to the dated archive.
   now contain explicit indexes, including intentional empty-state records.
 - Historical records predate typed IDs and remain intentionally compatible;
   new standalone records follow the typed-ID rule.
+- `spec-structure-rename` was confirmed as an intermediate, superseded
+  topology and archived at
+  `spec/changes/archive/2026/07/2026-07-10-spec-structure-rename/`.
 
 ## Acceptance Criteria
 

@@ -48,7 +48,7 @@
     "start:web": "pnpm --filter @prompthub/web start",
     "spec:index": "node scripts/generate-spec-change-index.mjs",
     "spec:index:check": "node scripts/generate-spec-change-index.mjs --check",
-    "spec:test": "bash .agents/skills/spec-init/tests/spec-init-commit-rules.sh && bash .agents/skills/spec-init/tests/spec-init-governance.sh && bash .agents/skills/spec-init/tests/spec-change-index.sh",
+    "spec:test": "bash .agents/skills/spec-init/tests/spec-init-commit-rules.sh && bash .agents/skills/spec-init/tests/spec-init-governance.sh && bash .agents/skills/spec-init/tests/spec-change-index.sh && bash .agents/skills/spec-init/tests/spec-governance-single-source.sh",
     "verify:web": "pnpm lint:web && pnpm typecheck:web && pnpm test:web -- --run && pnpm build:web",
     "verify:release": "node --experimental-strip-types scripts/verify-release.mts",
     "verify:release:quick": "node --experimental-strip-types scripts/verify-release.mts --profile quick",

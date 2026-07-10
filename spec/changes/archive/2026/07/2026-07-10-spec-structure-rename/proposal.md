@@ -1,5 +1,8 @@
 # Proposal
 
+> Superseded: this proposal documents an intermediate topology. Current paths
+> are defined by `spec/README.md` and `spec-init.topology.yml`.
+
 ## Why
 
 当前 `spec/specs/` 命名虽然在方法论上可解释，但在实际使用中存在明显可读性问题：

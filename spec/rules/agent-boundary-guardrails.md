@@ -14,6 +14,24 @@ Before non-trivial implementation, agents must read:
 
 If a boundary exists, update that boundary. Do not create a parallel source of truth.
 
+## Instruction Surface Boundary
+
+PromptHub repository-wide instructions have one hierarchy:
+
+1. `AGENTS.md`
+2. `spec-init.topology.yml`
+3. routed stable documents under `spec/*`
+4. the matching active change for current deltas
+
+Reusable procedures may live under `.agents/skills/*`, but a skill must point
+back to the stable project source and cannot redefine it. Do not create
+parallel project constraints under `.agents/rules/`, `.agents/workflows/`,
+generic `docs/rules/`, or tool-specific files such as repository-local
+`CLAUDE.md` and `.cursorrules`.
+
+The embedded `spec-init` assets contain generic `docs/*` output templates for
+other repositories. They are generator inputs, not PromptHub project rules.
+
 ## Existing Behavior Changes
 
 Before changing existing behavior, identify and record:

@@ -15,6 +15,13 @@ Before non-trivial code changes, read in this order:
 
 If an existing boundary exists, update it. Do not create a competing rule, schema, storage layout, or workflow because it is easier than finding the current one.
 
+Repository-wide governance lives only in `AGENTS.md`,
+`spec-init.topology.yml`, and the routed documents under `spec/*`.
+`.agents/skills/*` may provide reusable execution procedures, but they must
+defer to those project sources. Do not add parallel project constraints under
+`.agents/rules/`, `.agents/workflows/`, generic `docs/rules/`, or tool-specific
+instruction files.
+
 ### 0.2 Mandatory Change Gate
 
 Create or update an active change folder before implementation when the work touches any of these:
