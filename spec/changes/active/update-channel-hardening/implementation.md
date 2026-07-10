@@ -15,6 +15,18 @@
 - Tightened `apps/desktop/src/renderer/components/UpdateDialog.tsx` so the update UI now reuses the shared `Modal` shell, keeps release notes inside a bounded scroll area, shortens the `available` state copy to version-focused guidance, and reserves installation acknowledgement UI for the `downloaded` state.
 - Removed the misleading in-app install backup gate from Homebrew-managed `available` / `downloaded` flows and kept those paths focused on Homebrew / Releases guidance instead.
 - Extended `apps/desktop/tests/unit/components/update-dialog.test.tsx` to lock in the lighter download-stage backup copy and the Homebrew-specific available-update behavior.
+- Direct macOS installations now use `electron-updater.downloadUpdate()` and
+  `quitAndInstall(false, true)` after the existing pre-upgrade snapshot. The
+  released ZIP, rather than a manually opened DMG, is the update payload.
+- Homebrew remains excluded from the in-app download and install paths.
+- The downloaded-update dialog now presents direct macOS installation as a
+  restart action, with no manual DMG guidance or redundant Downloads action.
+- Added regression coverage for direct macOS native download/install behavior
+  and for the corresponding dialog action while preserving Homebrew coverage.
+- `TEST-UPDATER-005`: main-process updater coverage verifies native macOS
+  download/restart behavior and the Homebrew ownership boundary.
+- `TEST-UPDATER-006`: renderer coverage verifies the direct macOS install
+  action without manual DMG or Downloads guidance.
 
 ## Verification
 
@@ -25,6 +37,9 @@
 - `pnpm --filter @prompthub/desktop lint`
 - `pnpm --filter @prompthub/desktop typecheck`
 - `pnpm --filter @prompthub/desktop build`
+- `git diff --check` for the macOS updater change: passed
+- Targeted Vitest execution: not run locally; release validation is delegated
+  to CI by maintainer direction.
 - `pnpm --filter @prompthub/desktop test -- tests/unit/components/update-dialog.test.tsx --run`
 - `pnpm --filter @prompthub/desktop lint`
 - `pnpm --filter @prompthub/desktop build`

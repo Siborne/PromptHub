@@ -46,6 +46,9 @@
 ### 8. macOS Developer ID Signing
 
 - macOS desktop release artifacts must be built with Hardened Runtime enabled and notarized by Apple before publication.
+- Direct-install macOS in-app updates must publish the signed and notarized ZIP
+  payload plus matching `latest-mac*.yml` metadata; the DMG remains the
+  first-install distribution artifact.
 - GitHub Actions macOS jobs must require Developer ID Application signing credentials and App Store Connect notarization credentials before packaging.
 - macOS signing credentials must be scoped to macOS jobs and must not be exported as generic signing variables for Windows or Linux builds.
 - Release verification must check the packaged macOS app with `codesign`, `xcrun stapler validate`, and `spctl`.
@@ -118,4 +121,5 @@ When a tag release builds macOS DMG and ZIP artifacts:
 
 - the workflow requires Developer ID and notarization secrets before packaging
 - the packaged app passes signature, stapling, and Gatekeeper assessment checks
+- the release includes matching ZIP metadata for direct-install in-app updates
 - public install notes present the notarized artifact as the normal install path

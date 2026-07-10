@@ -61,6 +61,11 @@
 
 - 桌面端更新弹窗中的手动升级前备份动作必须在弹窗内处理失败路径；如果预升级快照或导出步骤失败，界面必须进入可见错误态，而不是把 Promise rejection 泄漏到事件处理器外。
 
+### 9.1 Direct macOS In-App Updates
+
+- 从 PromptHub 官方 DMG 安装、且后续 release ZIP 已完成 Developer ID 签名与 Apple 公证的 macOS 用户，必须可以在应用内下载并重启完成升级；更新流程使用 `electron-updater` 的已验证 ZIP payload，不要求用户手动挂载 DMG 或复制应用。
+- Homebrew Cask 安装仍由 Homebrew 负责升级；应用内更新不得下载或替换 Caskroom 中的应用。
+
 ### 10. Renderer List Virtualization
 
 - 桌面端 renderer 必须用 `@tanstack/react-virtual` 把以下四个长列表场景控制在 O(visible) 量级：

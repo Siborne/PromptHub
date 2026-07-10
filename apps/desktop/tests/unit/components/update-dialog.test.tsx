@@ -307,6 +307,51 @@ describe("UpdateDialog", () => {
     expect(runPreUpgradeBackupMock).not.toHaveBeenCalled();
   });
 
+  it("offers a direct macOS installation as an in-app restart", async () => {
+    installWindowMocks({
+      electron: {
+        updater: {
+          check: vi.fn().mockResolvedValue({ success: true }),
+          download: vi.fn().mockResolvedValue(undefined),
+          install: vi.fn().mockResolvedValue({ success: true }),
+          getVersion: vi.fn().mockResolvedValue("0.5.1"),
+          getPlatform: vi.fn().mockResolvedValue("darwin"),
+          getInstallSource: vi.fn().mockResolvedValue("direct"),
+          onStatus: vi.fn((callback: (status: UpdateStatus) => void) => {
+            callback(downloadedStatus);
+            return vi.fn();
+          }),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <UpdateDialog isOpen={true} onClose={vi.fn()} initialStatus={downloadedStatus} />,
+        { language: "en" },
+      );
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Install Now" }),
+    ).toBeDisabled();
+    expect(screen.queryByText(/manually install the update/i)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Open Downloads" }),
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByLabelText(
+        "I have backed up the relevant data and understand the app will close during installation.",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Install Now" }));
+
+    await waitFor(() => {
+      expect(window.electron.updater.install).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("keeps a visible available state when a transient checking event arrives", async () => {
     let statusHandler: ((status: UpdateStatus) => void) | undefined;
 

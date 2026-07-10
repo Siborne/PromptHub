@@ -4,7 +4,6 @@ import { autoUpdater } from "electron-updater";
 import fs from "fs";
 import path from "path";
 import https from "https";
-import http from "http";
 import { createUpgradeDataSnapshot } from "./services/upgrade-backup";
 import { getHttpRequestAgent } from "./services/network-proxy";
 import { compareVersions, isPrereleaseVersion } from "../utils/version";
@@ -509,13 +508,6 @@ async function openPathOrError(targetPath: string): Promise<string | null> {
   return typeof error === "string" && error.trim().length > 0 ? error : null;
 }
 
-// macOS: track last detected update info for DMG download
-// macOS: 记录最近一次检测到的更新信息，用于 DMG 下载
-let lastUpdateInfo: ElectronUpdateInfo | null = null;
-// macOS: path to the downloaded DMG file
-// macOS: 已下载的 DMG 文件路径
-let macDownloadedDmgPath: string | null = null;
-
 export interface UpdateStatus {
   status:
     | "checking"
@@ -611,15 +603,6 @@ export function initUpdater(win: BrowserWindow) {
     }
 
     console.info("Update available:", info.version);
-    // macOS: store update info for later DMG download
-    // macOS: 保存更新信息，供后续 DMG 下载使用
-    if (isMacPlatform()) {
-      lastUpdateInfo = info;
-      console.log(
-        `[Updater/macDMG] Stored update info: v${info.version}, files:`,
-        info.files?.map((f) => f.url),
-      );
-    }
     sendStatusToWindow({
       status: "available",
       info: toSimpleInfo(info),
@@ -671,297 +654,6 @@ export function initUpdater(win: BrowserWindow) {
 function sendStatusToWindow(status: UpdateStatus) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("updater:status", status);
-  }
-}
-
-// --- macOS DMG direct download (bypass Squirrel) ---
-// --- macOS DMG 直接下载（绕过 Squirrel） ---
-
-/**
- * Find the DMG download URL from update info for current architecture.
- * electron-updater's UpdateInfo.files contains all files listed in latest-mac.yml.
- * 从更新信息中找到当前架构对应的 DMG 下载链接。
- */
-function findMacDmgUrl(
-  info: ElectronUpdateInfo,
-  feedUrl: string,
-): string | null {
-  const arch = process.arch; // 'x64' or 'arm64'
-  const files = info.files || [];
-
-  // Find DMG file matching current architecture
-  // 找到匹配当前架构的 DMG 文件
-  const dmgFile =
-    files.find((f) => f.url.endsWith(".dmg") && f.url.includes(`-${arch}.`)) ||
-    files.find((f) => f.url.endsWith(".dmg"));
-
-  if (!dmgFile) {
-    console.error("[Updater/macDMG] No DMG file found in update info");
-    return null;
-  }
-
-  // Build full URL: feedUrl base + filename
-  // 构建完整 URL：feedUrl 基础路径 + 文件名
-  const baseUrl = feedUrl.replace(/\/$/, "");
-  return `${baseUrl}/${dmgFile.url}`;
-}
-
-export function resolveUpdaterDownloadUrl(
-  value: string,
-  baseUrl?: string,
-): string {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new Error("Unsupported updater download URL: empty URL");
-  }
-
-  let parsed: URL;
-  try {
-    parsed = baseUrl ? new URL(trimmed, baseUrl) : new URL(trimmed);
-  } catch {
-    throw new Error(`Unsupported updater download URL: ${trimmed}`);
-  }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(
-      `Unsupported updater download protocol: ${parsed.protocol}`,
-    );
-  }
-
-  return parsed.href;
-}
-
-/**
- * Download a file via HTTP(S) with redirect following and progress reporting.
- * 通过 HTTP(S) 下载文件，支持重定向跟踪和进度上报。
- */
-function downloadFile(
-  url: string,
-  destPath: string,
-  onProgress: (progress: ProgressInfo) => void,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const doRequest = (requestUrl: string, redirectCount: number) => {
-      if (redirectCount > 5) {
-        reject(new Error("Too many redirects"));
-        return;
-      }
-
-      let normalizedRequestUrl: string;
-      try {
-        normalizedRequestUrl = resolveUpdaterDownloadUrl(requestUrl);
-      } catch (error) {
-        reject(error);
-        return;
-      }
-
-      const parsedRequestUrl = new URL(normalizedRequestUrl);
-      const client = parsedRequestUrl.protocol === "https:" ? https : http;
-      const req = client.get(
-        parsedRequestUrl,
-        {
-          agent: getHttpRequestAgent(parsedRequestUrl),
-        },
-        (res) => {
-          // Handle redirects (301, 302, 303, 307, 308)
-          // 处理重定向
-          if (
-            res.statusCode &&
-            res.statusCode >= 300 &&
-            res.statusCode < 400 &&
-            res.headers.location
-          ) {
-            let redirectUrl: string;
-            try {
-              redirectUrl = resolveUpdaterDownloadUrl(
-                res.headers.location,
-                normalizedRequestUrl,
-              );
-            } catch (error) {
-              res.resume();
-              reject(error);
-              return;
-            }
-            console.log(
-              `[Updater/macDMG] Redirect ${res.statusCode} -> ${redirectUrl}`,
-            );
-            res.resume(); // Drain response to free socket
-            doRequest(redirectUrl, redirectCount + 1);
-            return;
-          }
-
-          if (res.statusCode !== 200) {
-            res.resume();
-            reject(new Error(`HTTP ${res.statusCode} for ${requestUrl}`));
-            return;
-          }
-
-          const total = parseInt(res.headers["content-length"] || "0", 10);
-          let transferred = 0;
-          const startTime = Date.now();
-
-          const fileStream = fs.createWriteStream(destPath);
-
-          res.on("data", (chunk: Buffer) => {
-            transferred += chunk.length;
-            const elapsed = (Date.now() - startTime) / 1000 || 0.001;
-            const bytesPerSecond = Math.round(transferred / elapsed);
-            const percent = total > 0 ? (transferred / total) * 100 : 0;
-            onProgress({ percent, bytesPerSecond, total, transferred });
-          });
-
-          res.pipe(fileStream);
-
-          fileStream.on("finish", () => {
-            fileStream.close();
-            resolve();
-          });
-
-          fileStream.on("error", (err) => {
-            fs.unlink(destPath, () => {}); // Clean up partial file
-            reject(err);
-          });
-        },
-      );
-
-      req.on("error", (err) => {
-        fs.unlink(destPath, () => {});
-        reject(err);
-      });
-
-      req.setTimeout(30000, () => {
-        req.destroy();
-        fs.unlink(destPath, () => {});
-        reject(new Error("Download request timed out"));
-      });
-    };
-
-    doRequest(url, 0);
-  });
-}
-
-/**
- * Build the feed URL string that was last used (for constructing DMG download URL).
- * We derive this from the autoUpdater's internal state or from stored context.
- * 构建上次使用的 feed URL（用于拼接 DMG 下载链接）。
- */
-function buildFeedUrl(useMirror: boolean, context: FeedContext): string {
-  if (useMirror) {
-    // Return first mirror source as starting point; caller will retry all mirrors
-    // 返回第一个镜像源作为起点；调用方会逐一重试
-    return getMirrorSources(context.channel, context.releaseTag)[0];
-  }
-  return getOfficialFeedUrl(context.channel, context.releaseTag);
-}
-
-/**
- * macOS: download DMG file directly to ~/Downloads, bypassing Squirrel.
- * macOS: 直接下载 DMG 到 ~/Downloads，绕过 Squirrel 自动更新。
- */
-async function macDownloadDmg(
-  useMirror: boolean,
-  context: FeedContext,
-): Promise<{ success: boolean; error?: string }> {
-  if (!lastUpdateInfo) {
-    return {
-      success: false,
-      error: "No update info available. Please check for updates first.",
-    };
-  }
-
-  const version = lastUpdateInfo.version;
-  const dmgFileName = `PromptHub-${version}-${process.arch}.dmg`;
-  const destPath = path.join(app.getPath("downloads"), dmgFileName);
-
-  // If already downloaded, skip re-download
-  // 如果已经下载过，跳过重新下载
-  if (fs.existsSync(destPath)) {
-    const stat = fs.statSync(destPath);
-    if (stat.size > 1024 * 1024) {
-      // > 1MB, likely valid
-      console.log(
-        `[Updater/macDMG] DMG already exists at: ${destPath} (${stat.size} bytes)`,
-      );
-      macDownloadedDmgPath = destPath;
-      sendStatusToWindow({
-        status: "downloaded",
-        info: toSimpleInfo(lastUpdateInfo),
-      });
-      return { success: true };
-    }
-    // Too small, probably a partial download — remove and retry
-    // 太小，可能是部分下载 — 删除后重试
-    fs.unlinkSync(destPath);
-  }
-
-  lastPercent = 0;
-
-  const tryDownload = async (feedUrl: string): Promise<void> => {
-    const dmgUrl = findMacDmgUrl(lastUpdateInfo!, feedUrl);
-    if (!dmgUrl) {
-      throw new Error("Cannot determine DMG download URL from update manifest");
-    }
-
-    console.log(`[Updater/macDMG] Downloading from: ${dmgUrl}`);
-    console.log(`[Updater/macDMG] Saving to: ${destPath}`);
-
-    await downloadFile(dmgUrl, destPath, (progress) => {
-      // Apply anti-regression logic
-      // 应用防进度回退逻辑
-      if (progress.percent < lastPercent && lastPercent < 99) {
-        return;
-      }
-      lastPercent = progress.percent;
-      sendStatusToWindow({ status: "downloading", progress });
-    });
-  };
-
-  // Mirror mode: try each mirror in order
-  // 镜像模式：依次尝试每个镜像源
-  if (useMirror) {
-    for (const mirrorUrl of getMirrorSources(
-      context.channel,
-      context.releaseTag,
-    )) {
-      try {
-        await tryDownload(mirrorUrl);
-        macDownloadedDmgPath = destPath;
-        sendStatusToWindow({
-          status: "downloaded",
-          info: toSimpleInfo(lastUpdateInfo),
-        });
-        return { success: true };
-      } catch (mirrorError) {
-        console.warn(
-          `[Updater/macDMG] Mirror download failed: ${mirrorUrl}`,
-          mirrorError,
-        );
-        lastPercent = 0;
-        // Clean up partial file before next attempt
-        if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
-      }
-    }
-    return {
-      success: false,
-      error:
-        "All mirror sources failed. Please try disabling mirror acceleration.",
-    };
-  }
-
-  // Official source
-  // 官方源
-  try {
-    const feedUrl = buildFeedUrl(false, context);
-    await tryDownload(feedUrl);
-    macDownloadedDmgPath = destPath;
-    sendStatusToWindow({
-      status: "downloaded",
-      info: toSimpleInfo(lastUpdateInfo),
-    });
-    return { success: true };
-  } catch (err) {
-    const errMsg = (err as Error).message || String(err);
-    return { success: false, error: `Download DMG failed: ${errMsg}` };
   }
 }
 
@@ -1099,22 +791,15 @@ export function registerUpdaterIPC() {
 
       lastFeedContext = context;
 
-      // macOS: bypass Squirrel, download DMG directly to ~/Downloads
-      // macOS: 绕过 Squirrel，直接下载 DMG 到 ~/Downloads
-      if (isMacPlatform()) {
-        if (getMacInstallSource() === "homebrew") {
-          return {
-            success: false,
-            error: getHomebrewUpgradeMessage(),
-            installSource: "homebrew",
-          };
-        }
-        console.log("[Updater/macDMG] Using direct DMG download for macOS");
-        return await macDownloadDmg(useMirror, context);
+      if (isMacPlatform() && getMacInstallSource() === "homebrew") {
+        return {
+          success: false,
+          error: getHomebrewUpgradeMessage(),
+          installSource: "homebrew",
+        };
       }
 
-      // Windows/Linux: use electron-updater's built-in download (Squirrel/NSIS)
-      // Windows/Linux: 使用 electron-updater 内置下载（Squirrel/NSIS）
+      // All direct installs use electron-updater's verified package workflow.
       applyMirrorDownloadSettings(useMirror);
 
       // If mirror is enabled, use mirror sources directly
@@ -1175,40 +860,17 @@ export function registerUpdaterIPC() {
         fromVersion: app.getVersion(),
       });
 
-      if (isMacPlatform()) {
-        if (getMacInstallSource() === "homebrew") {
-          return {
-            success: false,
-            manual: true,
-            installSource: "homebrew",
-            error: getHomebrewUpgradeMessage(),
-            backupPath: backup.backupPath,
-          };
-        }
-        // macOS: open the downloaded DMG for manual installation
-        // macOS: 打开已下载的 DMG 文件让用户手动安装
-        const manualInstallerPath =
-          macDownloadedDmgPath && fs.existsSync(macDownloadedDmgPath)
-            ? macDownloadedDmgPath
-            : app.getPath("downloads");
-        const openError = await openPathOrError(manualInstallerPath);
-        if (openError) {
-          return {
-            success: false,
-            manual: true,
-            error: `Failed to open downloaded update: ${openError}`,
-            backupPath: backup.backupPath,
-          };
-        }
+      if (isMacPlatform() && getMacInstallSource() === "homebrew") {
         return {
-          success: true,
+          success: false,
           manual: true,
+          installSource: "homebrew",
+          error: getHomebrewUpgradeMessage(),
           backupPath: backup.backupPath,
         };
       }
 
-      // Windows/Linux: auto install
-      // Windows/Linux: 自动安装
+      // Direct installations restart through electron-updater after the snapshot.
       autoUpdater.quitAndInstall(false, true);
       return {
         success: true,
@@ -1238,19 +900,7 @@ export function registerUpdaterIPC() {
   });
 
   ipcMain.handle("updater:openDownloadedUpdate", async () => {
-    // macOS: show the downloaded DMG in Finder
-    // macOS: 在 Finder 中显示已下载的 DMG
-    if (
-      isMacPlatform() &&
-      macDownloadedDmgPath &&
-      fs.existsSync(macDownloadedDmgPath)
-    ) {
-      shell.showItemInFolder(macDownloadedDmgPath);
-      return { success: true, path: macDownloadedDmgPath };
-    }
-
-    // Windows/Linux: show electron-updater's downloaded installer
-    // Windows/Linux: 显示 electron-updater 下载的安装包
+    // Reveal the package only when electron-updater exposes a durable path.
     const installerPath = (autoUpdater as unknown as { installerPath?: string })
       .installerPath;
     if (installerPath && fs.existsSync(installerPath)) {

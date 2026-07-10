@@ -63,11 +63,16 @@ import { registerUpdaterIPC } from "../../../src/main/updater";
 
 describe("updater install backup", () => {
   const originalPlatform = process.platform;
+  const originalExecPath = process.execPath;
 
   beforeEach(() => {
     vi.clearAllMocks();
     electronMocks.openPathMock.mockReset();
     Object.defineProperty(process, "platform", { value: originalPlatform });
+    Object.defineProperty(process, "execPath", {
+      value: originalExecPath,
+      configurable: true,
+    });
     delete (autoUpdater as unknown as { installerPath?: string }).installerPath;
     backupMocks.createUpgradeDataSnapshotMock.mockResolvedValue({
       backupPath: "/tmp/PromptHub/backups/v0.5.1-2026-04-16T00-00-00",
@@ -85,6 +90,7 @@ describe("updater install backup", () => {
   });
 
   it("creates a userData snapshot before triggering install", async () => {
+    Object.defineProperty(process, "platform", { value: "win32" });
     registerUpdaterIPC();
 
     const installHandler = electronMocks.handleMock.mock.calls.find(
@@ -103,16 +109,38 @@ describe("updater install backup", () => {
       "/tmp/PromptHub",
       { fromVersion: "0.5.1" },
     );
-    if (process.platform === "darwin") {
-      expect(electronMocks.openPathMock).toHaveBeenCalled();
-      expect(result).toEqual({
-        success: true,
-        manual: true,
-        backupPath: "/tmp/PromptHub/backups/v0.5.1-2026-04-16T00-00-00",
-      });
-      return;
-    }
+    expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
+    expect(result).toEqual({
+      success: true,
+      manual: false,
+      backupPath: "/tmp/PromptHub/backups/v0.5.1-2026-04-16T00-00-00",
+    });
+  });
 
+  it("restarts a direct macOS installation through the native updater", async () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    Object.defineProperty(process, "execPath", {
+      value: "/Applications/PromptHub.app/Contents/MacOS/PromptHub",
+      configurable: true,
+    });
+
+    registerUpdaterIPC();
+
+    const installHandler = electronMocks.handleMock.mock.calls.find(
+      ([channel]) => channel === "updater:install",
+    )?.[1] as (() => Promise<{
+      success: boolean;
+      manual: boolean;
+      backupPath: string;
+    }>);
+
+    const result = await installHandler();
+
+    expect(backupMocks.createUpgradeDataSnapshotMock).toHaveBeenCalledWith(
+      "/tmp/PromptHub",
+      { fromVersion: "0.5.1" },
+    );
+    expect(electronMocks.openPathMock).not.toHaveBeenCalled();
     expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
     expect(result).toEqual({
       success: true,
@@ -139,35 +167,6 @@ describe("updater install backup", () => {
     expect(result.error).toContain("Automatic upgrade backup failed");
     expect(result.error).toContain("disk full while copying data");
   });
-
-  it.skipIf(process.platform !== "darwin")(
-    "reports macOS manual installer open failures",
-    async () => {
-      electronMocks.openPathMock.mockResolvedValue("No application can open this file");
-
-      registerUpdaterIPC();
-
-      const installHandler = electronMocks.handleMock.mock.calls.find(
-        ([channel]) => channel === "updater:install",
-      )?.[1] as (() => Promise<{
-        success: boolean;
-        error?: string;
-        manual?: boolean;
-        backupPath?: string;
-      }>);
-
-      const result = await installHandler();
-
-      expect(backupMocks.createUpgradeDataSnapshotMock).toHaveBeenCalled();
-      expect(electronMocks.openPathMock).toHaveBeenCalledWith("/tmp/downloads");
-      expect(result).toEqual({
-        success: false,
-        manual: true,
-        backupPath: "/tmp/PromptHub/backups/v0.5.1-2026-04-16T00-00-00",
-        error: "Failed to open downloaded update: No application can open this file",
-      });
-    },
-  );
 
   it("blocks in-app install for Homebrew-installed macOS builds", async () => {
     Object.defineProperty(process, "platform", { value: "darwin" });

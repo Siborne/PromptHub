@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // 注意：import 会在 vi.mock 之后真正生效，所以这里得到的是 mock 对象
+import { ipcMain } from "electron";
 import { autoUpdater } from "electron-updater";
 
 const { httpsGetMock } = vi.hoisted(() => ({
@@ -96,7 +97,6 @@ import {
   detectMacInstallSource,
   initUpdater,
   registerUpdaterIPC,
-  resolveUpdaterDownloadUrl,
 } from "../../../src/main/updater";
 
 describe("Updater Service (Main Process)", () => {
@@ -173,6 +173,26 @@ describe("Updater Service (Main Process)", () => {
 
     // Should remain default or whatever it was (initUpdater logic only touches channel on win32)
     expect(autoUpdater.channel).toBe("latest");
+  });
+
+  it("uses electron-updater for direct macOS downloads", async () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    initUpdater(mockWindow);
+    registerUpdaterIPC();
+
+    const downloadHandler = vi.mocked(ipcMain.handle).mock.calls.find(
+      ([channel]) => channel === "updater:download",
+    )?.[1] as ((options: { useMirror: boolean; channel: "stable" }) => Promise<{
+      success: boolean;
+    }>);
+
+    const result = await downloadHandler({
+      useMirror: false,
+      channel: "stable",
+    });
+
+    expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ success: true });
   });
 
   it('should send "available" status to window when update found', () => {
@@ -351,34 +371,4 @@ describe("Updater Service (Main Process)", () => {
     ).toBe("direct");
   });
 
-  it("resolves updater download redirects only to HTTP(S) URLs", () => {
-    expect(
-      resolveUpdaterDownloadUrl(
-        "../PromptHub-1.1.0-arm64.dmg",
-        "https://github.com/legeling/PromptHub/releases/latest/download/latest-mac.yml",
-      ),
-    ).toBe(
-      "https://github.com/legeling/PromptHub/releases/latest/PromptHub-1.1.0-arm64.dmg",
-    );
-
-    expect(
-      resolveUpdaterDownloadUrl(
-        "https://github.com/legeling/PromptHub/releases/download/v1.1.0/PromptHub.dmg",
-      ),
-    ).toBe(
-      "https://github.com/legeling/PromptHub/releases/download/v1.1.0/PromptHub.dmg",
-    );
-
-    expect(() =>
-      resolveUpdaterDownloadUrl(
-        "file:///tmp/PromptHub.dmg",
-        "https://github.com/legeling/PromptHub/releases/latest/download/latest-mac.yml",
-      ),
-    ).toThrow("Unsupported updater download protocol");
-    expect(() =>
-      resolveUpdaterDownloadUrl(
-        "httpx://github.com/legeling/PromptHub/PromptHub.dmg",
-      ),
-    ).toThrow("Unsupported updater download protocol");
-  });
 });

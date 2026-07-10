@@ -94,3 +94,26 @@ Desktop update dialogs must not show manual-backup install gates for Homebrew-ma
 - And PromptHub detects an available update
 - When the update dialog renders the `available` state
 - Then it guides the user to Homebrew / Releases instead of showing the in-app installation backup gate
+
+### `FR-UPDATER-005`: Signed direct macOS builds must support in-app updates
+
+Desktop clients installed directly from PromptHub's signed and notarized macOS
+release artifacts must download the matching ZIP update through
+`electron-updater` and restart into the update without asking users to mount a
+DMG or copy an application bundle manually.
+
+#### Scenario: Direct-install macOS user installs a downloaded update
+
+- Given PromptHub is running from a direct macOS installation rather than Homebrew
+- And the selected release includes a signed, notarized ZIP update artifact for the current architecture
+- When the user downloads and confirms installation in the update dialog
+- Then PromptHub creates its pre-upgrade snapshot
+- And invokes the native updater restart path
+- And the dialog presents the action as an in-app installation rather than opening Downloads
+
+#### Scenario: Homebrew macOS user installs a downloaded update
+
+- Given PromptHub is running from a Homebrew Caskroom
+- When the user requests an update
+- Then PromptHub does not download or replace the application through `electron-updater`
+- And it continues to direct the user to Homebrew

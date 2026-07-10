@@ -22,6 +22,8 @@
 - 统一桌面端更新通道模型（stable / preview）
 - 收敛 `updater.ts` 中 GitHub provider、generic provider、manifest 命名的职责边界
 - 修复预览包默认通道、降级误报、preview manifest 缺失、UI 闪烁问题
+- Signed and notarized direct-install macOS builds use the native `electron-updater`
+  download and restart path instead of a manually opened DMG.
 - 明确 preview release 与 stable release 的发布策略，并同步到 release 规则
 - 补充主进程 updater、renderer 更新状态流、发布约束测试
 
@@ -34,6 +36,9 @@
 
 - `electron-updater` 的 channel / allowDowngrade / allowPrerelease 语义较隐蔽，若修复不完整，可能引入新的误升级或误降级行为。
 - 若继续让 preview 与 stable 共用同一个纯版本号（例如都叫 `0.5.5`），客户端将无法可靠区分当前安装包来源，默认通道推断仍会脆弱。
+- macOS automatic replacement depends on the released ZIP artifact remaining
+  Developer ID signed and notarized; Homebrew-managed installations must retain
+  Homebrew as their owner.
 
 ## Rollback Thinking
 

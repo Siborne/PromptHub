@@ -91,6 +91,24 @@
 
 - `updateChannelExplicitlySet: boolean`
 
+### `DES-UPDATER-005`: macOS Install Strategy
+
+The release workflow now proves that direct-install macOS ZIP artifacts are
+Developer ID signed, notarized, stapled, and Gatekeeper-accepted. Direct macOS
+installs can therefore use `electron-updater.downloadUpdate()` and
+`quitAndInstall(false, true)`, the same controlled restart path used by the
+other desktop targets. This keeps update metadata validation and downloaded
+artifact handling inside `electron-updater`; it removes the duplicate DMG
+runtime path and its manual Finder hand-off.
+
+Homebrew remains an ownership boundary: an executable resolved under a
+Homebrew Caskroom must continue to direct users to `brew upgrade --cask
+prompthub` and must never be replaced by the in-app updater.
+
+The renderer treats direct macOS updates as in-app installs. The manual DMG
+guidance and folder-opening primary action are removed; the existing backup
+acknowledgement and explicit install action remain in place.
+
 ## UI / UX State Model
 
 需要一个单一更新状态源，至少满足：
@@ -112,3 +130,9 @@
 
 - 采用 semver prerelease 版本号后，preview 版本编号会变长，但换来更稳定的更新语义与自动推断能力。
 - 统一回 GitHub provider 后，镜像加速场景需要重新核对是否还能通过 generic mirror URL 平滑工作；可能需要对“检查元数据”和“下载二进制”分开建模。
+
+## Traceability
+
+| Requirement | Design | Verification | Task |
+| --- | --- | --- | --- |
+| `FR-UPDATER-005` | `DES-UPDATER-005` | `TEST-UPDATER-005`, `TEST-UPDATER-006` | `T-UPDATER-009`, `T-UPDATER-010` |

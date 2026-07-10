@@ -542,8 +542,8 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
         );
 
       case 'downloaded':
-        const isMac = platform === 'darwin';
-        const isMacHomebrewDownloaded = isMac && installSource === 'homebrew';
+        const isMacHomebrewDownloaded =
+          platform === 'darwin' && installSource === 'homebrew';
         const downloadedVersion = getStatusVersion(updateStatus.info);
         return (
           <div className="space-y-4">
@@ -558,17 +558,10 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
                 </p>
               </div>
             </div>
-            {!isMac && (
+            {!isMacHomebrewDownloaded && (
               <p className="text-xs text-muted-foreground">
                 {t('settings.installRestartHint')}
               </p>
-            )}
-            {isMac && !isMacHomebrewDownloaded && (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
-                <p className="text-sm text-amber-600 dark:text-amber-400 whitespace-pre-line">
-                  {t('settings.macManualInstall')}
-                </p>
-              </div>
             )}
             {!isMacHomebrewDownloaded &&
               renderBackupGate({
@@ -596,11 +589,6 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
                       <ExternalLinkIcon aria-hidden="true" className="w-4 h-4" />
                       {t('settings.openReleasesPage')}
                     </>
-                  ) : isMac ? (
-                    <>
-                      <FolderOpenIcon aria-hidden="true" className="w-4 h-4" />
-                      {t('settings.openDownloadFolder')}
-                    </>
                   ) : (
                     <>
                       {isInstalling ? (
@@ -618,7 +606,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
                   {t('settings.installLater')}
                 </button>
               </div>
-              {!isMac && !isMacHomebrewDownloaded && (
+              {platform !== 'darwin' && !isMacHomebrewDownloaded && (
                 <button
                   type="button"
                   onClick={() => window.electron?.updater?.openDownloadedUpdate?.()}
