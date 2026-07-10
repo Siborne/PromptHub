@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [0.5.9] - 2026-07-09
+## [0.5.9] - 2026-07-10
 
 ### 新功能 / Features
 
@@ -14,6 +14,10 @@
   - **Network Configuration Center**: Settings now include a Network category for proxy and mirror-source configuration, with network requests sharing one proxy policy
 - 🧑‍💻 **CLI 项目工作流优化**：CLI 支持从当前目录出发的项目 Skill 工作流、交互式选择我的 Skill、路径安装和更完整的 AI 配置命令
   - **CLI Project Workflow Improvements**: CLI workflows now support current-directory project Skill installs, interactive My Skill selection, path-based installs, and fuller AI configuration commands
+- ⌨️ **CLI 资源与工作区命令补齐**：补齐 Prompt、Folder、Skill、Rules、MCP、Plugin 和 Workspace 的查询与管理命令，让无界面工作流覆盖主要资源
+  - **CLI Resource and Workspace Commands Completed**: Added complete query and management commands for Prompts, Folders, Skills, Rules, MCPs, Plugins, and Workspaces so headless workflows cover the primary resources
+- 🤖 **Grok Build Agent 支持**：依据 Grok Build 当前公开约定接入官方图标、`~/.grok` 根目录，以及 Skill、Rules、配置和 MCP 文件发现
+  - **Grok Build Agent Support**: Added the official icon, `~/.grok` root, and Skill, Rules, configuration, and MCP file discovery based on Grok Build's current public conventions
 - 🧱 **Prompt 自定义输出格式序列**：Prompt 可组合多个引用 Prompt 作为有序输出格式，支持拖拽排序、持久化、备份恢复和删除联动
   - **Custom Prompt Output Format Sequences**: Prompts can compose ordered referenced Prompts as reusable output formats with drag sorting, persistence, backup/restore, and deletion cleanup
 
@@ -31,6 +35,10 @@
   - **Self-hosted Web Captcha Toggle**: Self-hosted Web login captcha can be disabled through an environment variable for private intranet deployments
 - 🚀 **发布链路加固**：发布 workflow 对可选镜像发布、macOS Developer ID 签名、公证和产物校验增加保护
   - **Release Pipeline Hardening**: Release workflows now guard optional mirror publishing and strengthen macOS Developer ID signing, notarization, and artifact verification
+- 🍎 **macOS 应用内更新恢复**：通过官网或 GitHub 直接安装的签名、公证版本可在应用内下载 ZIP 更新并重启完成替换；Homebrew 安装仍由 Brew 管理升级
+  - **macOS In-App Updates Restored**: Signed and notarized direct installs from the website or GitHub can download ZIP updates in-app and replace the app after restart, while Homebrew installations remain Brew-managed
+- 🗄️ **CLI 与桌面数据库并发写入修复**：共享 SQLite 数据库写入增加跨进程协调、语句释放和明确的争用错误，并在桌面端恢复可见后刷新数据
+  - **CLI and Desktop Database Write Coordination**: Shared SQLite writes now use cross-process coordination, statement finalization, explicit contention errors, and desktop refresh after the app becomes visible again
 
 ### 优化 / Improvements
 
@@ -38,6 +46,8 @@
   - **MCP / Plugin UI Aligned with Skills**: My MCP, Agent MCP, Plugin Store, Agent Plugin, tag filters, detail pages, card widths, update badges, safety checks, and distribution entry points now reuse Skill layout and interaction patterns more consistently
 - 🧪 **测试与文档标准补强**：补充白盒/黑盒/边界/安全/性能/回滚验证要求，扩展 MCP、Plugin、同步、CLI、设置和 UI 回归测试覆盖
   - **Testing and Documentation Standards Expanded**: Added stronger white-box, black-box, boundary, security, performance, and rollback verification requirements with broader MCP, Plugin, sync, CLI, settings, and UI regression coverage
+- 🧪 **桌面发布契约稳定性**：修正备份文件系统和 Prompt 主内容选择恢复的集成测试契约，降低完整发布验证中的误报与超时风险
+  - **Desktop Release Contract Stability**: Aligned backup filesystem and Prompt main-content selection restoration integration contracts to reduce false failures and timeout risk in full release verification
 - 🧾 **本地 Issue 状态工作流**：新增 GitHub issue 远端状态和本地交付状态分离规则，已完成但未随版本发布的问题标记为本地完成/待发布
   - **Local Issue Status Workflow**: Added a split between remote GitHub issue state and local delivery state so implemented-but-unreleased issues can be tracked as local done / release pending
 
