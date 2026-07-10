@@ -3,9 +3,9 @@
 ## Source
 
 - Repository: `legeling/PromptHub`
-- Snapshot date: `2026-07-09`
+- Snapshot date: `2026-07-10`
 - Capture method: `GitHub CLI gh issue list --state open --limit 1000`
-- Open issues captured: `34`
+- Open issues captured: `33`
 
 ## Notes
 
@@ -22,7 +22,6 @@
 | #178 | [Bug]: 0.5.8版本，Agent自动检测不兼容%LOCALAPPDATA%环境变量 | bug, version: 0.5.8 | 2026-06-23 | 2026-06-23 | https://github.com/legeling/PromptHub/issues/178 |
 | #177 | [Feature]: 可以集成skillhub吗 | enhancement, version: 0.59 | 2026-06-22 | 2026-06-22 | https://github.com/legeling/PromptHub/issues/177 |
 | #176 | [Bug]: | bug, version: 最新版本 | 2026-06-17 | 2026-06-17 | https://github.com/legeling/PromptHub/issues/176 |
-| #175 | [Feature]: 能不能参考 aghub  实现以下 skill 和 这个 mcp的板块 | enhancement, version: 最新版本 | 2026-06-17 | 2026-06-17 | https://github.com/legeling/PromptHub/issues/175 |
 | #170 | [Bug]:  0.5.8版本，从Git仓库安装skill时，只下载了SKILL.md文件，其他文件没有下载 | bug, version: 0.5.8 | 2026-06-07 | 2026-06-07 | https://github.com/legeling/PromptHub/issues/170 |
 | #169 | [Bug]: 复制markdown提示词的时候报错，复制失败 | bug, version: 主分支 | 2026-06-07 | 2026-06-07 | https://github.com/legeling/PromptHub/issues/169 |
 | #168 | [Bug]:无法对 Skill 更新 | bug, version: 无法更新Skill | 2026-06-07 | 2026-06-07 | https://github.com/legeling/PromptHub/issues/168 |

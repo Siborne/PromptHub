@@ -3,9 +3,9 @@
 ## Source
 
 - Repository: `legeling/PromptHub`
-- Snapshot date: `2026-07-09`
+- Snapshot date: `2026-07-10`
 - Capture method: `GitHub CLI gh issue list --state closed --limit 1000`
-- Closed issues captured: `129`
+- Closed issues captured: `130`
 
 ## Notes
 
@@ -16,6 +16,7 @@
 
 | # | 标题 | 标签 | 创建时间 | 关闭时间 | 链接 |
 |---|---|---|---|---|---|
+| #175 | [Feature]: 能不能参考 aghub  实现以下 skill 和 这个 mcp的板块 | enhancement, version: 最新版本 | 2026-06-17 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/175 |
 | #171 | [Bug]: 软件检查更新出现更新日志频闪问题 | bug, version: 0.5.4 | 2026-06-13 | 2026-06-13 | https://github.com/legeling/PromptHub/issues/171 |
 | #166 | [Bug]: skill 商店超过软件边界时候无法滑动显示最底部 | bug, version: 0.5.8-beta3 | 2026-06-03 | 2026-06-04 | https://github.com/legeling/PromptHub/issues/166 |
 | #165 | [Bug]: 拉取 skill 仓库报错 | bug, version: 0.5.8-beta3 | 2026-06-03 | 2026-06-04 | https://github.com/legeling/PromptHub/issues/165 |
