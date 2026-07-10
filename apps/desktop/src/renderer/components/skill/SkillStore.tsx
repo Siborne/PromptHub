@@ -1352,7 +1352,7 @@ export function SkillStore() {
     Boolean(selectedCustomSource) &&
     !shouldShowInitialLoading &&
     !currentRemoteError &&
-    sourceRegistrySkills.length === 0;
+    selectedStoreLoadedCount === 0;
   const isRefreshingCachedSource =
     isSelectedSourceRemote &&
     loadingSourceId === selectedStoreSourceId &&

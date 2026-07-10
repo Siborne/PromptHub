@@ -1276,6 +1276,52 @@ describe("SkillStore custom sources", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows search-empty guidance when a non-empty custom store has no matches", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn(),
+          scanLocalPreview: vi.fn(),
+        },
+      },
+    });
+    useSkillStore.setState({
+      storeView: "store",
+      selectedStoreSourceId: "custom-docs",
+      storeSearchQuery: "missing",
+      customStoreSources: [
+        {
+          id: "custom-docs",
+          name: "Docs Store",
+          type: "marketplace-json",
+          url: "https://example.com/marketplace.json",
+          enabled: true,
+          order: 0,
+          createdAt: Date.now(),
+        },
+      ],
+      remoteStoreEntries: {
+        "custom-docs": {
+          loadedAt: Date.now(),
+          error: null,
+          skills: [makeRegistrySkill()],
+        },
+      },
+    } as never);
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    expect(screen.getByText("No skills found")).toBeInTheDocument();
+    expect(
+      screen.getByText("Try a different search or category"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No skills in this custom store yet"),
+    ).not.toBeInTheDocument();
+  });
+
   it.each([
     ["marketplace-json", "https://example.com/marketplace.json"],
     ["git-repo", "https://github.com/example/skills"],

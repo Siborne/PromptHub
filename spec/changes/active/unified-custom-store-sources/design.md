@@ -35,6 +35,8 @@ Deletion confirmation is UI-owned. Store mutation methods remain direct state mu
 - The selected custom Skill Store source reuses `storeSearchQuery` and the existing pure `filterRegistrySkills` helper.
 - Search is local to the already loaded custom catalog; it does not introduce a new remote API or query contract.
 - Search must cover every supported custom Skill source type: marketplace JSON, Git repository, and local directory.
+- Store search and selected detail state are source-scoped and reset atomically when the user changes sources.
+- Source-empty remediation is derived from the loaded base catalog, while search-empty guidance is derived from the filtered catalog.
 - Empty queries restore the complete selected-source catalog, and source/category isolation remains unchanged.
 
 ## Compatibility

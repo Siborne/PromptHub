@@ -98,4 +98,20 @@ describe("skill registry selectors", () => {
       useSkillStore.getState().getRecommendedSkills().map((skill) => skill.source_id),
     ).toEqual(["claude-code:fork-writer"]);
   });
+
+  it("clears source-scoped search when the selected store changes", () => {
+    useSkillStore.setState({
+      selectedStoreSourceId: "community",
+      selectedRegistrySlug: "community:docs-helper",
+      storeSearchQuery: "docs",
+    });
+
+    useSkillStore.getState().selectStoreSource("claude-code");
+
+    expect(useSkillStore.getState()).toMatchObject({
+      selectedStoreSourceId: "claude-code",
+      selectedRegistrySlug: null,
+      storeSearchQuery: "",
+    });
+  });
 });

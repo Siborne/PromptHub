@@ -47,6 +47,12 @@ Implemented.
     `storeSearchQuery` and `filterRegistrySkills` against their loaded catalog.
   - Searching keeps the selected source unchanged and does not add a custom
     remote query contract.
+- Corrected source-scoped Skill Store search state.
+  - Switching store sources atomically clears the prior query and selected
+    registry detail so hidden source-specific filters cannot leak across stores.
+  - A loaded non-empty custom catalog with zero filtered matches now shows the
+    standard search-empty guidance, while the custom-source remediation remains
+    reserved for a genuinely empty loaded catalog.
 
 ## Verification
 
@@ -56,14 +62,15 @@ Implemented.
   - Result: passed.
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/plugin-target-inventory.test.ts tests/unit/services/skill-store-search.test.ts tests/unit/components/skill-store-custom-sources.test.tsx tests/unit/components/skill-store-remote.test.tsx`
   - Result: passed (4 files, 114 tests), including all three custom Skill Store source types and the existing built-in search behavior.
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/plugin-target-inventory.test.ts tests/unit/components/skill-store-custom-sources.test.tsx tests/unit/components/skill-store-remote.test.tsx tests/unit/stores/skill-registry-selectors.test.ts tests/unit/services/skill-store-search.test.ts`
+  - Result: passed (5 files, 119 tests), including custom search-empty guidance
+    and source-switch query/detail reset.
 - `pnpm --filter @prompthub/desktop lint`
   - Result: passed.
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit`
-  - Result: passed on the confirmation run (288 files, 2,804 tests).
+  - Result: passed through the final quick release harness confirmation run
+    (288 files, 2,808 tests).
 - `pnpm verify:release:quick`
-  - Result: did not complete. The first desktop-unit pass reported five
-    transient UI-test failures under full-suite load; the affected tests and
-    the complete desktop unit suite passed on immediate reruns. The remaining
-    quick-harness steps were not reached.
+  - Result: passed all 18 checks in 596.8 seconds.
 - `git diff --check`
   - Result: passed.

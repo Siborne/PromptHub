@@ -33,6 +33,8 @@ PromptHub MUST expose the same custom store source management pattern for Skill,
 - **WHEN** the user enters a query in the store-local search control
 - **THEN** PromptHub filters only that source's loaded skills using the shared Skill Store search semantics
 - **AND** the query can match skill name, slug, description, author, source metadata, or tags
+- **AND** a loaded non-empty source with zero matches shows search-empty guidance instead of source-empty remediation
+- **AND** selecting another store source clears the prior source's query and selected skill detail
 - **AND** clearing the query restores the complete selected custom source catalog without refetching it.
 
 ### Requirement: Product Source Adapters

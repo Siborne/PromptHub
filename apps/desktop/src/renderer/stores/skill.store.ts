@@ -2590,7 +2590,11 @@ export const useSkillStore = create<SkillState>()(
       },
 
       selectStoreSource: (id) => {
-        set({ selectedStoreSourceId: id });
+        set({
+          selectedStoreSourceId: id,
+          selectedRegistrySlug: null,
+          storeSearchQuery: "",
+        });
       },
 
       upsertRegistrySkills: (incomingSkills) => {
