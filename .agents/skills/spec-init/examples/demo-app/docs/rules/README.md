@@ -13,6 +13,7 @@
 - `docs/rules/doc-sync-rules.md`: 文档与代码同步规则
 - `docs/rules/change-management-rules.md`: 新需求、bugfix、发布的记录规则
 - `docs/rules/issue-management-rules.md`: issue 跟踪与废弃文档归档规则
+- `docs/rules/commit-rules.md`: 提交边界、正文关联和测试状态规则
 - `docs/rules/definition-of-done.md`: 完成定义检查清单
 - `docs/rules/document-routing-rules.md`: 文档语义到目录路径的路由规则
 
@@ -20,4 +21,5 @@
 
 1. 在开始编码前先阅读本目录
 2. 遇到取舍时，先看规则是否已有默认答案
-3. 如果项目演进出新的团队规则，在这个目录增补，不要只散落在聊天或 PR 评论中
+3. 提交前阅读 `docs/rules/commit-rules.md`，确认提交正文包含主要关联和实际测试状态
+4. 如果项目演进出新的团队规则，在这个目录增补，不要只散落在聊天或 PR 评论中

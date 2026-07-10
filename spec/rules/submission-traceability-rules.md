@@ -34,19 +34,26 @@ PromptHub 使用 Conventional Commits：
 
 - summary 使用祈使语气，简短描述“做什么”，例如 `fix: skip web auth captcha when disabled`。
 - scope 可选，但建议用于跨域仓库，例如 `fix(web): ...`、`docs(spec): ...`、`feat(desktop): ...`。
-- commit body 应在需要时记录验证命令、风险和文档关联。
+- 非 trivial commit 必须包含正文；只有 Conventional Commit 标题不算完整提交。
+- 正文必须记录提交目的、一个主要 change 或 issue 关联、实际验证命令和结果；影响范围或残余风险存在时也必须记录。
 - 不要在 commit message 中写密钥、真实部署地址、私有路径或个人账号信息。
 
-推荐 body 格式：
+最低 body 格式：
 
 ```text
-Refs: spec/changes/active/<change-key>
-Refs: #<issue-number>
+Summary:
+<why this commit exists>
+
+Refs:
+- Change: spec/changes/active/<change-key>
+- Issue: #<issue-number>
 
 Verification:
-- pnpm --filter <package> test -- --run <test-file>
-- pnpm --filter <package> typecheck
+- <command>: passed
+- <not-run check and reason, when applicable>
 ```
+
+纯机械、单文件且不改变行为边界的 trivial commit 可以省略正文，但仍必须满足原子提交、工作区隔离和实际验证要求。任何关联 issue、active change、用户流程、公共契约、持久化、同步、安全或发布状态的提交都不属于 trivial commit。
 
 只有在目标版本已经发布、且确实要关闭 GitHub issue 时，才使用 `Closes #<issue-number>`。本地实现完成但尚未发布时使用 `Refs #<issue-number>`，并在 `spec/issues/active/local-github-status.md` 标记本地状态。
 
@@ -95,9 +102,9 @@ FR-001 -> DES-001 -> TEST-001 -> T-001
 
 推荐在 `specs/<domain>/spec.md` 或 `design.md` 中增加 Traceability 表：
 
-| Requirement | Design | Verification | Task |
-| --- | --- | --- | --- |
-| `FR-001` | `DES-001` | `TEST-001` | `T-001` |
+| Requirement | Design    | Verification | Task    |
+| ----------- | --------- | ------------ | ------- |
+| `FR-001`    | `DES-001` | `TEST-001`   | `T-001` |
 
 引用要求：
 
@@ -118,7 +125,7 @@ FR-001 -> DES-001 -> TEST-001 -> T-001
 4. `implementation.md` 已记录实际验证命令和未通过/未运行原因。
 5. 稳定文档、对外文档、issue 本地状态按需同步。
 6. 运行了最低有效验证，或记录了明确阻塞。
-7. commit message 使用 Conventional Commits，并在需要时引用 change、issue 和验证结果。
+7. commit message 使用 Conventional Commits；非 trivial commit 正文已引用主要 change/issue，并记录实际验证结果。
 
 ## 6. PR / 发布关联
 

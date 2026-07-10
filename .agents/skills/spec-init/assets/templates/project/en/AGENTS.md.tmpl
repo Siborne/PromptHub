@@ -1,4 +1,4 @@
-# __PROJECT_NAME__ Agent Rules
+# **PROJECT_NAME** Agent Rules
 
 ## Goal
 
@@ -27,20 +27,20 @@ Clarify the current delivery scope, long-lived project truth, verification strat
 
 ## Document Boundaries
 
-| File | Focus | Do not put here |
-|---|---|---|
-| `docs/workflow/00-intake/README.md` | background, users, goals, constraints | concrete technical design |
-| `docs/workflow/01-requirements/README.md` | what / why / success | framework choices, tables, endpoint implementation |
-| `docs/workflow/02-design/README.md` | how / architecture / current-stage decisions | task execution order |
-| `docs/knowledge/context/README.md` | glossary, actors, core entities, long-lived business boundaries | current sprint tasks |
-| `docs/knowledge/structure/README.md` | module boundaries, system structure, integrations | delivery scheduling |
-| `docs/knowledge/behavior/README.md` | key flows, state transitions, business rules | low-level implementation detail |
-| `docs/knowledge/reference/README.md` | examples, schemas, fixtures, assets, and fixed references | temporary discussion notes |
-| `docs/workflow/03-implementation/README.md` | milestones, dependencies, delivery order | low-level implementation detail |
-| `docs/workflow/04-verification/README.md` | how requirements are verified | vague “write tests later” statements |
-| `docs/workflow/05-tasks/README.md` | executable actions | abstract goals |
-| `docs/changes/active/<change-key>/` | one change workspace and its impact analysis | long-lived project truth |
-| `docs/rules/` | project-wide engineering rules | product requirement details |
+| File                                        | Focus                                                           | Do not put here                                    |
+| ------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------- |
+| `docs/workflow/00-intake/README.md`         | background, users, goals, constraints                           | concrete technical design                          |
+| `docs/workflow/01-requirements/README.md`   | what / why / success                                            | framework choices, tables, endpoint implementation |
+| `docs/workflow/02-design/README.md`         | how / architecture / current-stage decisions                    | task execution order                               |
+| `docs/knowledge/context/README.md`          | glossary, actors, core entities, long-lived business boundaries | current sprint tasks                               |
+| `docs/knowledge/structure/README.md`        | module boundaries, system structure, integrations               | delivery scheduling                                |
+| `docs/knowledge/behavior/README.md`         | key flows, state transitions, business rules                    | low-level implementation detail                    |
+| `docs/knowledge/reference/README.md`        | examples, schemas, fixtures, assets, and fixed references       | temporary discussion notes                         |
+| `docs/workflow/03-implementation/README.md` | milestones, dependencies, delivery order                        | low-level implementation detail                    |
+| `docs/workflow/04-verification/README.md`   | how requirements are verified                                   | vague “write tests later” statements               |
+| `docs/workflow/05-tasks/README.md`          | executable actions                                              | abstract goals                                     |
+| `docs/changes/active/<change-key>/`         | one change workspace and its impact analysis                    | long-lived project truth                           |
+| `docs/rules/`                               | project-wide engineering rules                                  | product requirement details                        |
 
 ## Delivery Rules
 
@@ -50,6 +50,8 @@ Clarify the current delivery scope, long-lived project truth, verification strat
 - API, data shape, and config changes must update design docs, knowledge docs, and tests together.
 - Bug fixes must include regression tests and a corresponding change workspace update.
 - New requirements, bug fixes, refactors, or workflow changes should update `docs/changes/active/` or its archive destinations.
+- Before any commit, split commit, history rewrite, or push, read `docs/rules/commit-rules.md` and inspect the current worktree state.
+- Every non-trivial commit must have a body that records its primary link, purpose, impact, and actual test status; a title alone is not compliant.
 - Releases or externally visible delivery changes should update `docs/releases/`.
 - Unresolved issues, risks, and technical debt should update `docs/issues/`.
 - Replaced or retired documents should be moved into `docs/archive/`.
@@ -79,4 +81,5 @@ Fill in the actual stack-specific commands:
 - High-priority requirements have automated verification.
 - README helps new contributors understand the structure quickly.
 - Known trade-offs and risks are recorded in docs or ADRs.
+- Commit boundaries and messages pass the `docs/rules/commit-rules.md` checklist.
 - The checklist in `docs/rules/definition-of-done.md` passes.

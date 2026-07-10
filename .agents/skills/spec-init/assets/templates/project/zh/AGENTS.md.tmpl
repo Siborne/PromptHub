@@ -1,4 +1,4 @@
-# __PROJECT_NAME__ Agent Rules
+# **PROJECT_NAME** Agent Rules
 
 ## Goal
 
@@ -27,20 +27,20 @@
 
 ## Document Boundaries
 
-| File | Focus | Do not put here |
-|---|---|---|
-| `docs/workflow/00-intake/README.md` | 背景、用户、目标、非目标、约束 | 具体技术方案 |
-| `docs/workflow/01-requirements/README.md` | what / why / success | 框架、库、表名、接口实现 |
-| `docs/workflow/02-design/README.md` | how / architecture / current-stage decisions | 执行顺序和碎任务 |
-| `docs/knowledge/context/README.md` | 术语、角色、核心实体、长期业务边界 | 本轮临时任务 |
-| `docs/knowledge/structure/README.md` | 模块边界、系统结构、集成关系 | 具体交付排期 |
-| `docs/knowledge/behavior/README.md` | 关键流程、状态流转、业务规则 | 低层实现细节 |
-| `docs/knowledge/reference/README.md` | 样例、协议、schema、素材和固定参考 | 临时讨论记录 |
-| `docs/workflow/03-implementation/README.md` | 里程碑、依赖、交付顺序 | 细碎的底层实现细节 |
-| `docs/workflow/04-verification/README.md` | 如何验证需求落地 | 只有“后面补测试”这种空话 |
-| `docs/workflow/05-tasks/README.md` | 可执行动作 | 抽象愿景和泛泛而谈 |
-| `docs/changes/active/<change-key>/` | 单次变更的工作区和影响分析 | 项目长期稳定真相 |
-| `docs/rules/` | 项目级规范与完成定义 | 具体业务需求细节 |
+| File                                        | Focus                                        | Do not put here          |
+| ------------------------------------------- | -------------------------------------------- | ------------------------ |
+| `docs/workflow/00-intake/README.md`         | 背景、用户、目标、非目标、约束               | 具体技术方案             |
+| `docs/workflow/01-requirements/README.md`   | what / why / success                         | 框架、库、表名、接口实现 |
+| `docs/workflow/02-design/README.md`         | how / architecture / current-stage decisions | 执行顺序和碎任务         |
+| `docs/knowledge/context/README.md`          | 术语、角色、核心实体、长期业务边界           | 本轮临时任务             |
+| `docs/knowledge/structure/README.md`        | 模块边界、系统结构、集成关系                 | 具体交付排期             |
+| `docs/knowledge/behavior/README.md`         | 关键流程、状态流转、业务规则                 | 低层实现细节             |
+| `docs/knowledge/reference/README.md`        | 样例、协议、schema、素材和固定参考           | 临时讨论记录             |
+| `docs/workflow/03-implementation/README.md` | 里程碑、依赖、交付顺序                       | 细碎的底层实现细节       |
+| `docs/workflow/04-verification/README.md`   | 如何验证需求落地                             | 只有“后面补测试”这种空话 |
+| `docs/workflow/05-tasks/README.md`          | 可执行动作                                   | 抽象愿景和泛泛而谈       |
+| `docs/changes/active/<change-key>/`         | 单次变更的工作区和影响分析                   | 项目长期稳定真相         |
+| `docs/rules/`                               | 项目级规范与完成定义                         | 具体业务需求细节         |
 
 ## Delivery Rules
 
@@ -50,6 +50,8 @@
 - 新接口、数据结构、配置项变化，必须同时更新设计文档、知识层文档和测试。
 - 修 bug 必须补回归测试，并记录进当前变更工作区。
 - 新需求、bugfix、重构或流程变化，应同步更新 `docs/changes/active/` 或其归档位置。
+- 任何 commit、分批提交、历史改写或推送前，必须先阅读 `docs/rules/commit-rules.md` 并检查当前工作区状态。
+- 非 trivial commit 必须有正文，写清主要关联、修改目的、影响范围和实际测试状态；只有短标题不算合规提交。
 - 版本发布或对外交付变化，应同步更新 `docs/releases/`。
 - 未解决问题、风险和技术债，应同步更新 `docs/issues/`。
 - 被替代或废弃的文档，应同步归档到 `docs/archive/`。
@@ -79,4 +81,5 @@
 - 高优先级需求有自动化验证。
 - README 能帮助新成员快速理解项目结构。
 - 已知风险和取舍已记录到文档或 ADR。
+- 提交边界和 commit message 已通过 `docs/rules/commit-rules.md` 检查。
 - `docs/rules/definition-of-done.md` 中的检查项通过。

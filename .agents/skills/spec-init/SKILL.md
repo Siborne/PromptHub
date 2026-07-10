@@ -86,6 +86,7 @@ metadata:
 - 如果项目已存在，先读代码再写文档，不要反过来。
 - 如果信息不全，写 `[待确认]`，但不要把整份文档都留空。
 - spec 不是一次性文档；每轮需求变化、设计变化、实现变化后都要继续完善。
+- 初始化或补齐项目规则时，必须生成并链接提交规范；不能只在 README 中引用一个实际不存在的规则文件。
 - 项目内已有 `AGENTS.md`、`spec/README.md`、`spec/rules/*` 或自定义 topology 时，必须优先遵循项目内真实拓扑；不要把本 skill 的通用 `docs/` 示例路径强行套用到项目上。
 - 对已有项目，先确认当前代码结构是否与历史文档一致；若不一致，先记录“文档已过时”的风险，再更新边界文档。
 
@@ -114,6 +115,7 @@ metadata:
 - delta spec 必须放在 `specs/<domain>/spec.md`，不要新建平铺的 `spec.md`。
 - 稳定真相只在变更落地后同步回 `spec/workflow/*`、`spec/knowledge/*`、`spec/rules/`、`spec/releases/` 或 `spec/adr/`。
 - 如果代码、稳定文档和 active change 互相冲突，先记录冲突并要求用户确认，不要静默选择最小改动。
+- 用户要求提交、分批提交、改写提交或推送时，先读 `spec/rules/submission-traceability-rules.md`，再检查 `git status --short`；非 trivial commit 必须在正文记录主要 change/issue 和实际验证状态。
 
 ### PromptHub Issue 状态规则
 
@@ -158,6 +160,7 @@ PromptHub 的 GitHub issue 远端状态和本地交付状态是两套记录：
 - `docs/archive/README.md`: 已归档、已替代、已废弃但仍需保留历史的文档
 - `docs/adr/`: 关键架构或技术决策为什么改变
 - `docs/rules/`: 默认工程规则
+- `docs/rules/commit-rules.md`: 提交边界、标题、正文、文档关联和测试状态规则
 
 ## 默认工作流
 

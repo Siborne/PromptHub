@@ -136,6 +136,16 @@ Do not write phrases like "I am analyzing", "I think", "I will first", "my reaso
 
 Docs may record concise decisions, shipped changes, assumptions, risks, commands run, and verification results. They should not preserve the agent's conversational process. Maintainer-only operational details, such as signing certificates, release credentials, or secret-handling steps, belong in internal `spec/` records or secure secret stores, not public README files unless they are explicitly intended for contributors or users.
 
+### 0.9 Mandatory Submission Gate
+
+Before any commit, split commit, history rewrite, or push operation:
+
+1. Read `spec/rules/submission-traceability-rules.md`; the quick summary in Section 11 does not replace the full rule.
+2. Run `git status --short` and separate current work from user or parallel-agent changes.
+3. Confirm the commit is one independently reversible logical unit and its active change maintains `FR -> DES -> TEST -> T` traceability.
+4. For every non-trivial commit, include a body with the primary change or issue reference and the actual verification status. A Conventional Commit title by itself is not sufficient.
+5. Use `Refs #<issue>` before release. Use `Closes #<issue>` only when the containing version is already published and the issue should be closed.
+
 ## 1. Project Overview
 
 **PromptHub** is a local-first prompt and AI-skill management monorepo. It includes a cross-platform Electron desktop app, a standalone CLI, a self-hosted web app, and a Cloudflare Worker backend. It allows users to organize, version-control, sync, recover, and test prompts and reusable AI skill definitions.
@@ -738,7 +748,8 @@ Detailed submission, traceability, document ID, issue reference, and PR rules li
 | **Imperative mood**      | "add feature" not "added feature" or "adds feature".                                |
 | **No auto-commit**       | AI agents must never commit without explicit user instruction.                      |
 | **Atomic commits**       | Each commit should represent one logical change. Don't mix features with bug fixes. |
-| **Traceable docs**       | Non-trivial commits should reference the active change and maintain `FR -> DES -> TEST -> T`. |
+| **Required body**        | Every non-trivial commit body must record its primary change/issue and actual verification status. |
+| **Traceable docs**       | Non-trivial commits must reference the active change and maintain `FR -> DES -> TEST -> T`. |
 | **Issue references**     | Use `Refs #123` before release; use `Closes #123` only when the published release should close the issue. |
 | **All tests must pass**  | Relevant lint / typecheck / test / build commands must pass, or blockers must be recorded before committing. |
 

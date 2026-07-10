@@ -1,0 +1,76 @@
+# 提交规范
+
+## 提交门禁
+
+- AI agent 只有在用户明确要求提交、分批提交、改写提交或推送时才能执行 Git 写操作。
+- 提交前必须查看 `git status --short`，区分本轮改动、用户改动和并行改动。
+- 不得 stage 或提交与本轮目标无关的文件。
+- 每个 commit 必须是一个独立、可回滚的逻辑单元。
+- 非 trivial commit 必须关联一个主要 Issue 或 change workspace，并完成必要的文档收敛和验证。
+
+## 标题
+
+使用 Conventional Commits：
+
+```text
+<type>(optional-scope): <简短祈使句>
+```
+
+常用类型：`feat`、`fix`、`docs`、`test`、`refactor`、`perf`、`chore`、`style`、`release`。
+
+- 标题使用项目主要语言，控制在 72 个字符以内。
+- 标题说明结果，不堆叠多个无关动作。
+- scope 可选；跨域仓库建议使用稳定领域名。
+
+## 提交正文
+
+非 trivial commit 必须包含正文；只有短标题不算合规提交。
+
+```text
+摘要：
+一句话说明本次提交为什么存在。
+
+关联：
+- Change: docs/changes/active/<change-key>/
+- Issue: #123
+- Requirement: FR-001
+- Design: DES-001
+- Verification: TEST-001
+
+修改范围：
+- 实际修改的模块或文件
+
+影响范围：
+- 受影响的功能、用户流程、契约或发布面
+
+测试状态：
+- <实际命令>：通过
+- <未运行项及原因>
+
+残余风险：
+- 仍需人工复核或后续处理的风险
+```
+
+没有内容的行必须省略，不写“无”“不适用”或空占位。
+
+## Issue 语义
+
+- 版本尚未发布时使用 `Refs #123`，不要提前关闭 issue。
+- 只有包含该变更的版本已经发布且 issue 应被关闭时，才使用 `Closes #123`。
+- issue 远端状态与本地交付状态必须按项目规则分别记录。
+
+## 测试状态
+
+- 写明实际运行的命令和结果，不能只写“测试通过”。
+- 未运行的检查必须说明原因。
+- 测试失败时不能把提交描述为完成态，除非该提交本身用于记录失败基线。
+- Bug、数据、接口、同步、安全和发布变更必须记录回归验证及残余风险。
+
+## 提交前检查
+
+1. 当前 staged 文件只属于本提交。
+2. 提交只处理一个主要逻辑变更。
+3. 非 trivial change 已维护 `FR -> DES -> TEST -> T`。
+4. change implementation 已记录实际验证和跳过项。
+5. commit body 已记录主要关联和测试状态。
+6. `git diff --cached --check` 通过。

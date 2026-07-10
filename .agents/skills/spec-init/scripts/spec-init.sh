@@ -340,6 +340,7 @@ render_project_template "docs/archive/README.md.tmpl" "$TARGET_DIR/docs/archive/
 render_project_template "docs/adr/README.md.tmpl" "$TARGET_DIR/$ADR_INDEX_DOC"
 render_project_template "docs/adr/0000-record-template.md.tmpl" "$TARGET_DIR/docs/adr/0000-record-template.md"
 render_project_template "docs/rules/README.md.tmpl" "$TARGET_DIR/$RULES_INDEX_DOC"
+render_project_template "docs/rules/commit-rules.md.tmpl" "$TARGET_DIR/docs/rules/commit-rules.md"
 render_project_template "docs/rules/clarification-rules.md.tmpl" "$TARGET_DIR/docs/rules/clarification-rules.md"
 render_project_template "docs/rules/coding-standards.md.tmpl" "$TARGET_DIR/docs/rules/coding-standards.md"
 render_project_template "docs/rules/testing-standards.md.tmpl" "$TARGET_DIR/docs/rules/testing-standards.md"

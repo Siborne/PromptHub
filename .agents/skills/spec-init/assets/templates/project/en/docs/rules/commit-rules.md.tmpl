@@ -1,0 +1,76 @@
+# Commit Rules
+
+## Submission Gate
+
+- An AI agent may perform Git write operations only after the user explicitly requests a commit, split commits, history rewrite, or push.
+- Before committing, inspect `git status --short` and separate current work from user and parallel changes.
+- Do not stage or commit files unrelated to the current objective.
+- Every commit must be one independently reversible logical unit.
+- Every non-trivial commit must link one primary Issue or change workspace and complete the required documentation convergence and verification.
+
+## Title
+
+Use Conventional Commits:
+
+```text
+<type>(optional-scope): <short imperative summary>
+```
+
+Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`, `style`, and `release`.
+
+- Follow the project's primary language and keep the title under 72 characters.
+- Describe the result without combining unrelated actions.
+- Scope is optional; monorepos should prefer stable domain names.
+
+## Commit Body
+
+Every non-trivial commit must have a commit body. A short title alone is not compliant.
+
+```text
+Summary:
+One sentence explaining why this commit exists.
+
+Links:
+- Change: docs/changes/active/<change-key>/
+- Issue: #123
+- Requirement: FR-001
+- Design: DES-001
+- Verification: TEST-001
+
+Modified scope:
+- Modules or files actually changed
+
+Impact scope:
+- Affected feature, user flow, contract, or release surface
+
+Test status:
+- <actual command>: passed
+- <check not run and reason>
+
+Residual risk:
+- Manual review or follow-up risk that remains
+```
+
+Omit empty items entirely. Do not write `None`, `N/A`, or empty placeholders.
+
+## Issue Semantics
+
+- Before release, use `Refs #123` and do not close the issue early.
+- Use `Closes #123` only when the containing version is already published and the issue should close.
+- Keep remote issue state and local delivery state separate according to project rules.
+
+## Test Status
+
+- Record actual commands and results rather than only saying "tests passed."
+- Explain every relevant check that was not run.
+- Do not describe a commit as complete while tests fail unless the commit intentionally records a failing baseline.
+- Bug, data, API, sync, security, and release changes must record regression coverage and residual risk.
+
+## Pre-commit Checklist
+
+1. Staged files belong only to this commit.
+2. The commit handles one primary logical change.
+3. Non-trivial changes maintain `FR -> DES -> TEST -> T`.
+4. The change implementation records actual verification and skipped checks.
+5. The commit body records the primary link and test status.
+6. `git diff --cached --check` passes.
