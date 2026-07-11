@@ -13,6 +13,7 @@
       "@prompthub/core": ["../../packages/core/src/index.ts"],
       "@prompthub/core/*": ["../../packages/core/src/*"],
       "@prompthub/shared": ["../../packages/shared/types/index.ts"],
+      "@prompthub/shared/utils/*": ["../../packages/shared/utils/*"],
       "@prompthub/shared/*": ["../../packages/shared/*/index.ts"],
       "@prompthub/db": ["../../packages/db/src/index.ts"],
       "@prompthub/db/*": ["../../packages/db/src/*"]

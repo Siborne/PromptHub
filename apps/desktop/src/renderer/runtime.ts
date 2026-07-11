@@ -40,11 +40,11 @@ export function getRuntimeCapabilities(): PromptHubRuntimeCapabilities {
       appUpdate: false,
       dataRecovery: false,
       desktopWindowControls: false,
-      skillDistribution: true,
-      skillFileEditing: true,
-      skillLocalScan: true,
-      skillPlatformIntegration: true,
-      skillStore: true,
+      skillDistribution: false,
+      skillFileEditing: false,
+      skillLocalScan: false,
+      skillPlatformIntegration: false,
+      skillStore: false,
     };
   }
 

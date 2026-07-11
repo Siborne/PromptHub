@@ -16,6 +16,10 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     resolve: {
       alias: {
+        '@prompthub/shared/utils': path.resolve(
+          __dirname,
+          '../../packages/shared/utils',
+        ),
         '@prompthub/shared/constants': path.resolve(
           __dirname,
           '../../packages/shared/constants',

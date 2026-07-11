@@ -6,16 +6,16 @@ describe('web desktop runtime capability parity', () => {
     Reflect.set(window, '__PROMPTHUB_WEB__', true);
   });
 
-  it('keeps bridged skill surfaces available in web runtime', () => {
+  it('does not advertise Desktop-owned skill surfaces in web runtime', () => {
     expect(getRuntimeCapabilities()).toMatchObject({
       appUpdate: false,
       dataRecovery: false,
       desktopWindowControls: false,
-      skillDistribution: true,
-      skillFileEditing: true,
-      skillLocalScan: true,
-      skillPlatformIntegration: true,
-      skillStore: true,
+      skillDistribution: false,
+      skillFileEditing: false,
+      skillLocalScan: false,
+      skillPlatformIntegration: false,
+      skillStore: false,
     });
   });
 });

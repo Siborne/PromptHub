@@ -11,15 +11,16 @@ It is not the hosted commercial PromptHub Cloud stack. Keep the boundary clear:
 
 ## Product Scope
 
-This app should stay focused on desktop-equivalent core capabilities:
+This app provides browser-safe workspace capabilities:
 
-- prompt management
-- folders
-- skills
-- import/export
-- sync
-- media
-- settings
+- prompts, folders, prompt hierarchy, relations, and output-format sequences
+- skill records, versions, safety review, import/export, and remote import
+- rules, media, settings, backup, and desktop synchronization
+
+MCP and Plugin data remains part of backup and synchronization payloads, but
+the browser does not manage or apply those Desktop-owned resources. The web
+workspace also does not expose local skill package files, agent scans,
+symlinks, platform installation, or native shell operations.
 
 It should not grow cloud-only features such as:
 

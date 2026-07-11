@@ -24,6 +24,13 @@
   - 交互式终端应显示编号列表并让用户选择。
   - 非交互调用必须返回冲突和候选项，不得静默选择第一个结果。
 
+### 2.2 Prompt Hierarchy Persistence
+
+- Prompt 的 `parentId` 与 `order` 是稳定的层级数据，必须与其他 Prompt
+  元数据一起写入工作区 frontmatter，并在导入时恢复。
+- 工作区导入必须在同一事务中按父节点优先恢复层级；缺失父节点或循环引用
+  不得留下部分导入的数据。
+
 ### 3. Stable Internal Sources
 
 - Prompt 协议设计见 `spec/knowledge/structure/prompt-protocols-zh.md`。

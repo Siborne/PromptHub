@@ -87,6 +87,11 @@
   workspace.
 - If staging writes fail, the previous live prompt workspace must remain
   readable and unchanged.
+- Prompt frontmatter must retain `parentId` and `order` so hierarchy moves
+  survive workspace export and bootstrap import.
+- Workspace import must restore prompts in parent-before-child order inside a
+  transaction. A missing or cyclic parent reference must fail without making a
+  partial prompt hierarchy visible.
 
 ### 10. Web Skill Workspace Files
 
@@ -129,6 +134,23 @@
 - AI execution helpers used by prompt testing, image generation, multi-model
   comparison, generated-image download, and skill translation should load on
   demand instead of being evaluated with the authenticated workspace shell.
+
+### 13. Browser Workspace Capability Boundary
+
+- The authenticated browser workspace supports server-backed Prompt, Folder,
+  Rules, media, settings, and browser-safe Skill workflows.
+- Prompt hierarchy moves, graph relations, and output-format sequences must
+  use authenticated Web APIs backed by the existing SQLite contracts; browser
+  code must not fall back to IndexedDB for these records.
+- MCP and Plugin libraries, packages, store sources, and asset files remain
+  opaque backup/sync data in Web. The browser must not present their managers
+  or mutate Desktop target configuration.
+- Local skill files, repository copy/symlink operations, local agent scans,
+  platform detection, and platform installation are Desktop-only. Web
+  capability flags must disable these surfaces and bridge calls must reject
+  rather than return fabricated success values.
+- A persisted browser UI module of `mcp` or `plugin` must resolve to Prompt so
+  a prior session cannot open an unsupported manager.
 
 ## Stable Scenarios
 

@@ -74,10 +74,7 @@ const variableSchema = z.object({
           `variable option must be at most ${MAX_PROMPT_VARIABLE_OPTION_LENGTH} characters`,
         ),
     )
-    .max(
-      MAX_PROMPT_VARIABLE_OPTIONS,
-      `variable options must contain at most ${MAX_PROMPT_VARIABLE_OPTIONS} entries`,
-    )
+    .max(MAX_PROMPT_VARIABLE_OPTIONS, `variable options must contain at most ${MAX_PROMPT_VARIABLE_OPTIONS} entries`)
     .optional(),
   required: z.boolean(),
 });
@@ -92,10 +89,7 @@ const promptTagsSchema = z
 
 const promptMediaReferencesSchema = z
   .array(promptMediaReferenceSchema)
-  .max(
-    MAX_PROMPT_MEDIA_REFERENCES,
-    `media references must contain at most ${MAX_PROMPT_MEDIA_REFERENCES} entries`,
-  );
+  .max(MAX_PROMPT_MEDIA_REFERENCES, `media references must contain at most ${MAX_PROMPT_MEDIA_REFERENCES} entries`);
 
 const createPromptSchema = z.object({
   visibility: z.enum(['private', 'shared']).optional(),
@@ -195,22 +189,14 @@ function getLiteralTagQueryValues(requestUrl: string): string[] {
   return new URL(requestUrl).searchParams.getAll('tag');
 }
 
-function parseTagQuery(
-  legacyTags: string | undefined,
-  literalTags: string[] = [],
-): string[] | undefined {
-  const rawValues =
-    literalTags.length > 0
-      ? literalTags
-      : legacyTags?.split(',') ?? [];
+function parseTagQuery(legacyTags: string | undefined, literalTags: string[] = []): string[] | undefined {
+  const rawValues = literalTags.length > 0 ? literalTags : (legacyTags?.split(',') ?? []);
 
   if (rawValues.length === 0) {
     return undefined;
   }
 
-  const values = rawValues
-    .map((tag) => tag.trim())
-    .filter(Boolean);
+  const values = rawValues.map((tag) => tag.trim()).filter(Boolean);
 
   if (values.length > MAX_PROMPT_LIST_TAGS) {
     throw new PromptServiceError(
@@ -235,6 +221,44 @@ function parseTagQuery(
 const versionDiffQuerySchema = z.object({
   from: z.coerce.number().int().positive(),
   to: z.coerce.number().int().positive(),
+});
+
+const promptIdSchema = z.string().trim().min(1).max(200);
+const outputFormatSortOrderSchema = z.coerce.number().int().nonnegative().max(100000);
+const relationKindSchema = z.enum(['related_to', 'variant_of', 'depends_on', 'next_step']);
+const movePromptSchema = z.object({
+  parentId: promptIdSchema.nullable(),
+  sortOrder: outputFormatSortOrderSchema,
+});
+const createRelationSchema = z.object({
+  sourcePromptId: promptIdSchema,
+  targetPromptId: promptIdSchema,
+  kind: relationKindSchema,
+  note: z.string().max(5000).nullable().optional(),
+});
+const updateRelationSchema = z.object({
+  kind: relationKindSchema.optional(),
+  note: z.string().max(5000).nullable().optional(),
+});
+const relationListQuerySchema = z.object({
+  promptId: promptIdSchema.optional(),
+  kind: relationKindSchema.optional(),
+  direction: z.enum(['outgoing', 'incoming', 'both']).optional(),
+});
+const createOutputFormatSchema = z.object({
+  sourcePromptId: promptIdSchema,
+  targetPromptId: promptIdSchema.nullable(),
+  sortOrder: outputFormatSortOrderSchema.optional(),
+});
+const updateOutputFormatSchema = z.object({
+  sortOrder: outputFormatSortOrderSchema.optional(),
+});
+const outputFormatListQuerySchema = z.object({
+  sourcePromptId: promptIdSchema.optional(),
+});
+const reorderOutputFormatSchema = z.object({
+  sourcePromptId: promptIdSchema,
+  sortOrder: outputFormatSortOrderSchema,
 });
 
 prompts.post('/', async (c) => {
@@ -320,8 +344,7 @@ prompts.get('/', async (c) => {
     keyword: query.keyword,
     tags,
     folderId: query.folderId,
-    isFavorite:
-      query.isFavorite === undefined ? undefined : query.isFavorite === 'true',
+    isFavorite: query.isFavorite === undefined ? undefined : query.isFavorite === 'true',
     sortBy: query.sortBy,
     sortOrder: query.sortOrder,
     limit: query.limit,
@@ -335,6 +358,137 @@ prompts.get('/', async (c) => {
       limit: normalizedQuery.limit ?? result.items.length,
       offset: normalizedQuery.offset ?? 0,
     });
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.post('/:id/move', async (c) => {
+  const parsed = await parseJsonBody(c, movePromptSchema);
+  if (!parsed.success) {
+    return parsed.response;
+  }
+
+  try {
+    return success(
+      c,
+      promptService.move(getAuthUser(c), c.req.param('id'), parsed.data.parentId, parsed.data.sortOrder),
+    );
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.post('/relations', async (c) => {
+  const parsed = await parseJsonBody(c, createRelationSchema);
+  if (!parsed.success) {
+    return parsed.response;
+  }
+
+  try {
+    return success(c, promptService.createRelation(getAuthUser(c), parsed.data), 201);
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.get('/relations', async (c) => {
+  const parsed = relationListQuerySchema.safeParse(c.req.query());
+  if (!parsed.success) {
+    return error(c, 422, ErrorCode.VALIDATION_ERROR, parsed.error.issues[0]?.message ?? 'Invalid relation query');
+  }
+
+  try {
+    return success(c, promptService.listRelations(getAuthUser(c), parsed.data));
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.put('/relations/:id', async (c) => {
+  const parsed = await parseJsonBody(c, updateRelationSchema);
+  if (!parsed.success) {
+    return parsed.response;
+  }
+
+  try {
+    return success(c, promptService.updateRelation(getAuthUser(c), c.req.param('id'), parsed.data));
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.delete('/relations/:id', async (c) => {
+  try {
+    promptService.deleteRelation(getAuthUser(c), c.req.param('id'));
+    return success(c, { ok: true });
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.post('/output-formats', async (c) => {
+  const parsed = await parseJsonBody(c, createOutputFormatSchema);
+  if (!parsed.success) {
+    return parsed.response;
+  }
+
+  try {
+    return success(c, promptService.createOutputFormat(getAuthUser(c), parsed.data), 201);
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.get('/output-formats', async (c) => {
+  const parsed = outputFormatListQuerySchema.safeParse(c.req.query());
+  if (!parsed.success) {
+    return error(c, 422, ErrorCode.VALIDATION_ERROR, parsed.error.issues[0]?.message ?? 'Invalid output format query');
+  }
+
+  try {
+    return success(c, promptService.listOutputFormats(getAuthUser(c), parsed.data));
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.put('/output-formats/:id', async (c) => {
+  const parsed = await parseJsonBody(c, updateOutputFormatSchema);
+  if (!parsed.success) {
+    return parsed.response;
+  }
+
+  try {
+    return success(c, promptService.updateOutputFormat(getAuthUser(c), c.req.param('id'), parsed.data));
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.delete('/output-formats/:id', async (c) => {
+  try {
+    promptService.deleteOutputFormat(getAuthUser(c), c.req.param('id'));
+    return success(c, { ok: true });
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.put('/output-formats/:id/reorder', async (c) => {
+  const parsed = await parseJsonBody(c, reorderOutputFormatSchema);
+  if (!parsed.success) {
+    return parsed.response;
+  }
+
+  try {
+    promptService.reorderOutputFormat(
+      getAuthUser(c),
+      parsed.data.sourcePromptId,
+      c.req.param('id'),
+      parsed.data.sortOrder,
+    );
+    return success(c, { ok: true });
   } catch (routeError) {
     return toPromptErrorResponse(c, routeError);
   }
@@ -414,11 +568,7 @@ prompts.post('/:id/versions/:versionId/rollback', async (c) => {
 
 prompts.delete('/:id/versions/:versionId', async (c) => {
   try {
-    promptService.deleteVersion(
-      getAuthUser(c),
-      c.req.param('id'),
-      c.req.param('versionId'),
-    );
+    promptService.deleteVersion(getAuthUser(c), c.req.param('id'), c.req.param('versionId'));
     return success(c, { ok: true });
   } catch (routeError) {
     return toPromptErrorResponse(c, routeError);

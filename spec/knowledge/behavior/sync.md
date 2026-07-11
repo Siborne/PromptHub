@@ -32,6 +32,8 @@
 
 - 桌面端可以把自部署 Web 工作区作为备份与恢复目标。
 - 面向用户的自部署说明在 `docs/web-self-hosted.md`，内部同步与布局事实在 `spec/`。
+- 自部署 Web 必须在同步与备份 payload 中保留 MCP/Plugin 库、包、商店源与
+  agent asset 文件，即使浏览器不提供这些 Desktop-owned 资源的管理界面。
 
 ### 3. Stable Internal Sources
 

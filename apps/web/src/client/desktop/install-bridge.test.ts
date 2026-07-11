@@ -13,10 +13,16 @@ describe('installDesktopBridge media helpers', () => {
     Reflect.deleteProperty(window, 'api');
     Reflect.deleteProperty(window, 'electron');
     Reflect.deleteProperty(window, '__PROMPTHUB_WEB__');
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ data: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ data: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    );
   });
 
   it('falls back when crypto.randomUUID is unavailable for pasted image uploads', async () => {
@@ -57,16 +63,8 @@ describe('installDesktopBridge media helpers', () => {
     await expect(electronBridge.openImage('cover image.png')).resolves.toBe(true);
     await expect(electronBridge.openVideo('demo video.mp4')).resolves.toBe(true);
 
-    expect(openSpy).toHaveBeenCalledWith(
-      '/api/media/images/cover%20image.png',
-      '_blank',
-      'noopener,noreferrer',
-    );
-    expect(openSpy).toHaveBeenCalledWith(
-      '/api/media/videos/demo%20video.mp4',
-      '_blank',
-      'noopener,noreferrer',
-    );
+    expect(openSpy).toHaveBeenCalledWith('/api/media/images/cover%20image.png', '_blank', 'noopener,noreferrer');
+    expect(openSpy).toHaveBeenCalledWith('/api/media/videos/demo%20video.mp4', '_blank', 'noopener,noreferrer');
   });
 
   it('reports unsupported openPath targets instead of pretending local paths opened', async () => {
@@ -82,11 +80,7 @@ describe('installDesktopBridge media helpers', () => {
     await expect(electronBridge.openPath('https://example.com/docs')).resolves.toEqual({
       success: true,
     });
-    expect(openSpy).toHaveBeenCalledWith(
-      'https://example.com/docs',
-      '_blank',
-      'noopener,noreferrer',
-    );
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/docs', '_blank', 'noopener,noreferrer');
 
     await expect(electronBridge.openPath('/tmp/project')).resolves.toEqual({
       success: false,
@@ -113,9 +107,7 @@ describe('installDesktopBridge media helpers', () => {
     };
 
     await expect(electronBridge.selectImage()).resolves.toEqual([]);
-    expect(
-      document.body.querySelectorAll('input[type="file"]'),
-    ).toHaveLength(0);
+    expect(document.body.querySelectorAll('input[type="file"]')).toHaveLength(0);
   });
 
   it('exposes prompt tag helpers and rules bridge methods', async () => {
@@ -164,10 +156,12 @@ describe('installDesktopBridge media helpers', () => {
     await expect(api.prompt.deleteTag('beta')).resolves.toBe(true);
     await expect(api.rules.list()).resolves.toEqual([]);
     await expect(api.rules.scan()).resolves.toEqual([]);
-    await expect(
-      api.rules.addProject({ name: 'Docs Site', rootPath: '/workspace/docs' }),
-    ).resolves.toEqual({ success: true });
-    await expect(api.rules.removeProject('docs-site')).resolves.toEqual({ success: true });
+    await expect(api.rules.addProject({ name: 'Docs Site', rootPath: '/workspace/docs' })).resolves.toEqual({
+      success: true,
+    });
+    await expect(api.rules.removeProject('docs-site')).resolves.toEqual({
+      success: true,
+    });
   });
 
   it('maps desktop prompt restore helpers to real web endpoints', async () => {
@@ -212,15 +206,142 @@ describe('installDesktopBridge media helpers', () => {
     await expect(api.prompt.syncWorkspace()).resolves.toBe(true);
 
     expect(calls).toEqual([
-      { url: '/api/folders/direct-insert', method: 'POST', body: { id: 'folder-1' } },
-      { url: '/api/prompts/direct-insert', method: 'POST', body: { id: 'prompt-1' } },
+      {
+        url: '/api/folders/direct-insert',
+        method: 'POST',
+        body: { id: 'folder-1' },
+      },
+      {
+        url: '/api/prompts/direct-insert',
+        method: 'POST',
+        body: { id: 'prompt-1' },
+      },
       {
         url: '/api/prompts/versions/direct-insert',
         method: 'POST',
         body: { id: 'version-1' },
       },
-      { url: '/api/prompts/versions/version-1', method: 'DELETE', body: undefined },
+      {
+        url: '/api/prompts/versions/version-1',
+        method: 'DELETE',
+        body: undefined,
+      },
       { url: '/api/prompts/workspace/sync', method: 'POST', body: undefined },
+    ]);
+  });
+
+  it('maps prompt hierarchy, relations, and output formats to durable web routes', async () => {
+    const installDesktopBridge = await loadInstallDesktopBridge();
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        calls.push({
+          url,
+          method: init?.method ?? 'GET',
+          body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        });
+        return new Response(JSON.stringify({ data: { ok: true } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+
+    installDesktopBridge();
+
+    const api = Reflect.get(window, 'api') as {
+      prompt: {
+        move: (id: string, parentId: string | null, order: number) => Promise<unknown>;
+        createRelation: (data: Record<string, unknown>) => Promise<unknown>;
+        listRelations: (query: Record<string, string>) => Promise<unknown>;
+        updateRelation: (id: string, data: Record<string, unknown>) => Promise<unknown>;
+        deleteRelation: (id: string) => Promise<boolean>;
+        createOutputFormat: (data: Record<string, unknown>) => Promise<unknown>;
+        listOutputFormat: (query: Record<string, string>) => Promise<unknown>;
+        updateOutputFormat: (id: string, data: Record<string, unknown>) => Promise<unknown>;
+        deleteOutputFormat: (id: string) => Promise<boolean>;
+        reorderOutputFormat: (sourceId: string, itemId: string, order: number) => Promise<boolean>;
+      };
+    };
+
+    await api.prompt.move('prompt/a', null, 2);
+    await api.prompt.createRelation({
+      sourcePromptId: 'source/a',
+      targetPromptId: 'target/b',
+      kind: 'depends_on',
+    });
+    await api.prompt.listRelations({
+      promptId: 'source/a',
+      direction: 'outgoing',
+    });
+    await api.prompt.updateRelation('relation/a', { note: 'required first' });
+    await api.prompt.deleteRelation('relation/a');
+    await api.prompt.createOutputFormat({
+      sourcePromptId: 'source/a',
+      targetPromptId: null,
+    });
+    await api.prompt.listOutputFormat({ sourcePromptId: 'source/a' });
+    await api.prompt.updateOutputFormat('format/a', { sortOrder: 1 });
+    await api.prompt.deleteOutputFormat('format/a');
+    await api.prompt.reorderOutputFormat('source/a', 'format/a', 1);
+
+    expect(calls).toEqual([
+      {
+        url: '/api/prompts/prompt%2Fa/move',
+        method: 'POST',
+        body: { parentId: null, sortOrder: 2 },
+      },
+      {
+        url: '/api/prompts/relations',
+        method: 'POST',
+        body: {
+          sourcePromptId: 'source/a',
+          targetPromptId: 'target/b',
+          kind: 'depends_on',
+        },
+      },
+      {
+        url: '/api/prompts/relations?promptId=source%2Fa&direction=outgoing',
+        method: 'GET',
+        body: undefined,
+      },
+      {
+        url: '/api/prompts/relations/relation%2Fa',
+        method: 'PUT',
+        body: { note: 'required first' },
+      },
+      {
+        url: '/api/prompts/relations/relation%2Fa',
+        method: 'DELETE',
+        body: undefined,
+      },
+      {
+        url: '/api/prompts/output-formats',
+        method: 'POST',
+        body: { sourcePromptId: 'source/a', targetPromptId: null },
+      },
+      {
+        url: '/api/prompts/output-formats?sourcePromptId=source%2Fa',
+        method: 'GET',
+        body: undefined,
+      },
+      {
+        url: '/api/prompts/output-formats/format%2Fa',
+        method: 'PUT',
+        body: { sortOrder: 1 },
+      },
+      {
+        url: '/api/prompts/output-formats/format%2Fa',
+        method: 'DELETE',
+        body: undefined,
+      },
+      {
+        url: '/api/prompts/output-formats/format%2Fa/reorder',
+        method: 'PUT',
+        body: { sourcePromptId: 'source/a', sortOrder: 1 },
+      },
     ]);
   });
 
@@ -270,14 +391,16 @@ describe('installDesktopBridge media helpers', () => {
         versionCreate: (skillId: string, note?: string) => Promise<unknown>;
         versionRollback: (skillId: string, version: number) => Promise<unknown>;
         versionDelete: (skillId: string, versionId: string) => Promise<boolean>;
-        syncFromRepo: (id: string) => Promise<unknown>;
         saveSafetyReport: (skillId: string, report: Record<string, unknown>) => Promise<unknown>;
         export: (skillId: string, format: 'skillmd' | 'json') => Promise<string>;
       };
     };
 
     await api.prompt.get('prompt/a?b#c');
-    await api.prompt.search({ scope: 'private', tags: ['legal,review', 'landing page'] });
+    await api.prompt.search({
+      scope: 'private',
+      tags: ['legal,review', 'landing page'],
+    });
     await api.prompt.update('prompt/a?b#c', { title: 'safe' });
     await api.prompt.delete('prompt/a?b#c');
     await api.prompt.copy('prompt/a?b#c');
@@ -294,7 +417,6 @@ describe('installDesktopBridge media helpers', () => {
     await api.skill.versionCreate('skill/a?b#c', 'snapshot');
     await api.skill.versionRollback('skill/a?b#c', 3);
     await api.skill.versionDelete('skill/a?b#c', 'version/a?b#c');
-    await api.skill.syncFromRepo('skill/a?b#c');
     await api.skill.saveSafetyReport('skill/a?b#c', {
       level: 'safe',
       findings: [],
@@ -325,7 +447,6 @@ describe('installDesktopBridge media helpers', () => {
       '/api/skills/skill%2Fa%3Fb%23c/versions',
       '/api/skills/skill%2Fa%3Fb%23c/versions/3/rollback',
       '/api/skills/skill%2Fa%3Fb%23c/versions/version%2Fa%3Fb%23c',
-      '/api/skills/skill%2Fa%3Fb%23c',
       '/api/skills/skill%2Fa%3Fb%23c/safety-report',
       '/api/skills/skill%2Fa%3Fb%23c/export',
     ]);
@@ -342,42 +463,30 @@ describe('installDesktopBridge media helpers', () => {
       };
     };
 
-    await expect(electronBridge.updater.getVersion()).resolves.toBe(
-      `${rootPackage.version}-web`,
-    );
+    await expect(electronBridge.updater.getVersion()).resolves.toBe(`${rootPackage.version}-web`);
   });
 
-  it('exposes desktop skill platform surfaces in the web bridge', async () => {
+  it('rejects Desktop-owned skill filesystem and platform operations', async () => {
     const installDesktopBridge = await loadInstallDesktopBridge();
 
     installDesktopBridge();
 
     const api = Reflect.get(window, 'api') as {
       skill: {
-        getSupportedPlatforms: () => Promise<Array<{ id: string; name: string }>>;
-        detectPlatforms: () => Promise<Array<{ id: string; name: string }>>;
-        scanPlatformSkills: (platformId: string) => Promise<{
-          platform: { id: string; name: string };
-          skillsDir: string;
-          scannedSkills: unknown[];
-        }>;
+        writeLocalFile: (skillId: string, path: string, content: string) => Promise<boolean>;
+        getSupportedPlatforms: () => Promise<unknown>;
+        scanPlatformSkills: (platformId: string) => Promise<unknown>;
       };
     };
 
-    await expect(api.skill.getSupportedPlatforms()).resolves.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: 'claude', name: 'Claude Code' }),
-      ]),
+    await expect(api.skill.writeLocalFile('skill-1', 'SKILL.md', 'content')).rejects.toThrow(
+      'Local skill-file writes is not supported in the web runtime',
     );
-    await expect(api.skill.detectPlatforms()).resolves.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: 'claude', name: 'Claude Code' }),
-      ]),
+    await expect(api.skill.getSupportedPlatforms()).rejects.toThrow(
+      'Local skill-platform discovery is not supported in the web runtime',
     );
-    await expect(api.skill.scanPlatformSkills('claude')).resolves.toEqual({
-      platform: expect.objectContaining({ id: 'claude', name: 'Claude Code' }),
-      skillsDir: '',
-      scannedSkills: [],
-    });
+    await expect(api.skill.scanPlatformSkills('claude')).rejects.toThrow(
+      'Skill platform scanning is not supported in the web runtime',
+    );
   });
 });

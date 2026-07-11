@@ -1,5 +1,19 @@
-import { FolderDB, PromptDB } from '@prompthub/db';
-import type { CreatePromptDTO, Prompt, PromptVersion, SearchQuery, UpdatePromptDTO } from '@prompthub/shared';
+import { FolderDB, PromptDB, PromptOutputFormatDB, PromptRelationDB } from '@prompthub/db';
+import type {
+  CreateOutputFormatItemDTO,
+  CreatePromptDTO,
+  CreatePromptRelationDTO,
+  OutputFormatItem,
+  OutputFormatItemQuery,
+  Prompt,
+  PromptRelation,
+  PromptRelationQuery,
+  PromptVersion,
+  SearchQuery,
+  UpdateOutputFormatItemDTO,
+  UpdatePromptDTO,
+  UpdatePromptRelationDTO,
+} from '@prompthub/shared';
 import { getServerDatabase } from '../database.js';
 import { ErrorCode } from '../utils/response.js';
 import { normalizeMediaFileName } from './media-filename.js';
@@ -85,9 +99,11 @@ function escapeLikePattern(value: string): string {
 }
 
 export class PromptService {
-  private readonly promptDb = new PromptDB(getServerDatabase());
-  private readonly folderDb = new FolderDB(getServerDatabase());
   private readonly db = getServerDatabase();
+  private readonly promptDb = new PromptDB(this.db);
+  private readonly folderDb = new FolderDB(this.db);
+  private readonly relationDb = new PromptRelationDB(this.db);
+  private readonly outputFormatDb = new PromptOutputFormatDB(this.db);
 
   create(actor: PromptActor, data: CreatePromptDTO): Prompt {
     const visibility = data.visibility ?? 'private';
@@ -118,9 +134,7 @@ export class PromptService {
       };
     }
 
-    const sorted = query.sortBy === 'title'
-      ? this.sortPrompts(baseData, query.sortBy, query.sortOrder)
-      : baseData;
+    const sorted = query.sortBy === 'title' ? this.sortPrompts(baseData, query.sortBy, query.sortOrder) : baseData;
     const total = baseData.length;
     const offset = query.offset ?? 0;
     const limit = query.limit ?? sorted.length;
@@ -192,6 +206,90 @@ export class PromptService {
     }
 
     syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
+  }
+
+  move(actor: PromptActor, id: string, parentId: string | null, order: number): Prompt {
+    const row = this.getRequiredRow(id);
+    this.assertCanWrite(actor, row);
+
+    if (parentId !== null) {
+      const parent = this.getRequiredRow(parentId);
+      this.assertCanWrite(actor, parent);
+      this.assertMatchingVisibility(row, parent, 'Prompt parent visibility must match prompt visibility');
+    }
+
+    try {
+      this.promptDb.movePrompt(id, parentId, order);
+    } catch (error) {
+      throw new PromptServiceError(
+        422,
+        ErrorCode.VALIDATION_ERROR,
+        error instanceof Error ? error.message : 'Unable to move prompt',
+      );
+    }
+
+    syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
+    return this.getById(actor, id);
+  }
+
+  createRelation(actor: PromptActor, data: CreatePromptRelationDTO): PromptRelation {
+    this.assertRelationEndpointsWritable(actor, data.sourcePromptId, data.targetPromptId);
+    return this.runRelationMutation(() => this.relationDb.create(data));
+  }
+
+  listRelations(actor: PromptActor, query: PromptRelationQuery = {}): PromptRelation[] {
+    if (query.promptId) {
+      this.assertCanRead(actor, this.getRequiredRow(query.promptId));
+    }
+
+    return this.relationDb.list(query).filter((relation) => this.canReadRelation(actor, relation));
+  }
+
+  updateRelation(actor: PromptActor, id: string, data: UpdatePromptRelationDTO): PromptRelation {
+    const relation = this.getRequiredRelation(id);
+    this.assertRelationEndpointsWritable(actor, relation.sourcePromptId, relation.targetPromptId);
+
+    return this.runRelationMutation(() => this.relationDb.update(id, data));
+  }
+
+  deleteRelation(actor: PromptActor, id: string): void {
+    const relation = this.getRequiredRelation(id);
+    this.assertRelationEndpointsWritable(actor, relation.sourcePromptId, relation.targetPromptId);
+    this.relationDb.delete(id);
+  }
+
+  createOutputFormat(actor: PromptActor, data: CreateOutputFormatItemDTO): OutputFormatItem {
+    this.assertOutputEndpointsWritable(actor, data.sourcePromptId, data.targetPromptId);
+    return this.runOutputFormatMutation(() => this.outputFormatDb.create(data));
+  }
+
+  listOutputFormats(actor: PromptActor, query: OutputFormatItemQuery = {}): OutputFormatItem[] {
+    if (query.sourcePromptId) {
+      this.assertCanRead(actor, this.getRequiredRow(query.sourcePromptId));
+    }
+
+    return this.outputFormatDb.list(query).filter((item) => this.canReadOutputFormat(actor, item));
+  }
+
+  updateOutputFormat(actor: PromptActor, id: string, data: UpdateOutputFormatItemDTO): OutputFormatItem {
+    const item = this.getRequiredOutputFormat(id);
+    this.assertOutputEndpointsWritable(actor, item.sourcePromptId, item.targetPromptId);
+    return this.runOutputFormatMutation(() => this.outputFormatDb.update(id, data));
+  }
+
+  deleteOutputFormat(actor: PromptActor, id: string): void {
+    const item = this.getRequiredOutputFormat(id);
+    this.assertOutputEndpointsWritable(actor, item.sourcePromptId, item.targetPromptId);
+    this.outputFormatDb.delete(id);
+  }
+
+  reorderOutputFormat(actor: PromptActor, sourcePromptId: string, itemId: string, sortOrder: number): void {
+    const item = this.getRequiredOutputFormat(itemId);
+    if (item.sourcePromptId !== sourcePromptId) {
+      throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, 'Output format item source does not match');
+    }
+    this.assertOutputEndpointsWritable(actor, item.sourcePromptId, item.targetPromptId);
+    this.outputFormatDb.reorder(sourcePromptId, itemId, sortOrder);
   }
 
   insertDirect(actor: PromptActor, prompt: Prompt): Prompt {
@@ -298,9 +396,9 @@ export class PromptService {
     const row = this.getRequiredRow(id);
     this.assertCanWrite(actor, row);
 
-    const versionRow = this.db
-      .prepare('SELECT prompt_id FROM prompt_versions WHERE id = ?')
-      .get(versionId) as { prompt_id: string } | undefined;
+    const versionRow = this.db.prepare('SELECT prompt_id FROM prompt_versions WHERE id = ?').get(versionId) as
+      | { prompt_id: string }
+      | undefined;
     if (!versionRow || versionRow.prompt_id !== id) {
       throw new PromptServiceError(404, ErrorCode.NOT_FOUND, 'Prompt version not found');
     }
@@ -429,7 +527,10 @@ export class PromptService {
     return row?.total ?? 0;
   }
 
-  private buildPromptListFilter(actor: PromptActor, query: SearchQuery): {
+  private buildPromptListFilter(
+    actor: PromptActor,
+    query: SearchQuery,
+  ): {
     whereSql: string;
     params: Array<string | number>;
   } {
@@ -481,12 +582,13 @@ export class PromptService {
   }
 
   private getPromptListOrderSql(query: SearchQuery): string {
-    const sortColumn = {
-      title: 'title',
-      createdAt: 'created_at',
-      updatedAt: 'updated_at',
-      usageCount: 'usage_count',
-    }[query.sortBy ?? 'updatedAt'] ?? 'updated_at';
+    const sortColumn =
+      {
+        title: 'title',
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
+        usageCount: 'usage_count',
+      }[query.sortBy ?? 'updatedAt'] ?? 'updated_at';
     const sortOrder = query.sortOrder === 'asc' ? 'ASC' : 'DESC';
     return `ORDER BY ${sortColumn} ${sortOrder}`;
   }
@@ -576,10 +678,7 @@ export class PromptService {
     }
   }
 
-  private updateScopedTags(
-    actor: PromptActor,
-    update: (tags: string[]) => string[] | null,
-  ): void {
+  private updateScopedTags(actor: PromptActor, update: (tags: string[]) => string[] | null): void {
     const rows = this.getTagRowsForWrite(actor);
     const updateStmt = this.db.prepare(`
       UPDATE prompts
@@ -602,10 +701,108 @@ export class PromptService {
     transaction();
   }
 
+  private getRequiredRelation(id: string): PromptRelation {
+    const relation = this.relationDb.getById(id);
+    if (!relation) {
+      throw new PromptServiceError(404, ErrorCode.NOT_FOUND, 'Prompt relation not found');
+    }
+    return relation;
+  }
+
+  private getRequiredOutputFormat(id: string): OutputFormatItem {
+    const item = this.outputFormatDb.getById(id);
+    if (!item) {
+      throw new PromptServiceError(404, ErrorCode.NOT_FOUND, 'Output format item not found');
+    }
+    return item;
+  }
+
+  private assertRelationEndpointsWritable(actor: PromptActor, sourcePromptId: string, targetPromptId: string): void {
+    const source = this.getRequiredRow(sourcePromptId);
+    const target = this.getRequiredRow(targetPromptId);
+    this.assertCanWrite(actor, source);
+    this.assertCanWrite(actor, target);
+    this.assertMatchingVisibility(source, target, 'Related prompts must have matching visibility');
+  }
+
+  private assertOutputEndpointsWritable(
+    actor: PromptActor,
+    sourcePromptId: string,
+    targetPromptId: string | null,
+  ): void {
+    const source = this.getRequiredRow(sourcePromptId);
+    this.assertCanWrite(actor, source);
+    if (targetPromptId !== null) {
+      const target = this.getRequiredRow(targetPromptId);
+      this.assertCanWrite(actor, target);
+      this.assertMatchingVisibility(source, target, 'Output format prompts must have matching visibility');
+    }
+  }
+
+  private assertMatchingVisibility(source: PromptRow, target: PromptRow, message: string): void {
+    if (source.visibility !== target.visibility) {
+      throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, message);
+    }
+  }
+
+  private canReadRelation(actor: PromptActor, relation: PromptRelation): boolean {
+    return this.canReadPrompt(actor, relation.sourcePromptId) && this.canReadPrompt(actor, relation.targetPromptId);
+  }
+
+  private canReadOutputFormat(actor: PromptActor, item: OutputFormatItem): boolean {
+    return (
+      this.canReadPrompt(actor, item.sourcePromptId) &&
+      (item.targetPromptId === null || this.canReadPrompt(actor, item.targetPromptId))
+    );
+  }
+
+  private canReadPrompt(actor: PromptActor, id: string): boolean {
+    const row = this.getRow(id);
+    return row !== null && (row.visibility === 'shared' || row.owner_user_id === actor.userId);
+  }
+
+  private runRelationMutation(mutation: () => PromptRelation | null): PromptRelation {
+    try {
+      const relation = mutation();
+      if (!relation) {
+        throw new PromptServiceError(404, ErrorCode.NOT_FOUND, 'Prompt relation not found');
+      }
+      return relation;
+    } catch (error) {
+      if (error instanceof PromptServiceError) {
+        throw error;
+      }
+      throw new PromptServiceError(
+        422,
+        ErrorCode.VALIDATION_ERROR,
+        error instanceof Error ? error.message : 'Unable to update prompt relation',
+      );
+    }
+  }
+
+  private runOutputFormatMutation(mutation: () => OutputFormatItem | null): OutputFormatItem {
+    try {
+      const item = mutation();
+      if (!item) {
+        throw new PromptServiceError(404, ErrorCode.NOT_FOUND, 'Output format item not found');
+      }
+      return item;
+    } catch (error) {
+      if (error instanceof PromptServiceError) {
+        throw error;
+      }
+      throw new PromptServiceError(
+        422,
+        ErrorCode.VALIDATION_ERROR,
+        error instanceof Error ? error.message : 'Unable to update output format',
+      );
+    }
+  }
+
   private getRow(id: string): PromptRow | null {
-    const row = this.db
-      .prepare('SELECT id, owner_user_id, visibility FROM prompts WHERE id = ?')
-      .get(id) as PromptRow | undefined;
+    const row = this.db.prepare('SELECT id, owner_user_id, visibility FROM prompts WHERE id = ?').get(id) as
+      | PromptRow
+      | undefined;
     return row ?? null;
   }
 
@@ -624,9 +821,9 @@ export class PromptService {
   }
 
   private getFolderRow(id: string): FolderRow | null {
-    const row = this.db
-      .prepare('SELECT id, owner_user_id, visibility FROM folders WHERE id = ?')
-      .get(id) as FolderRow | undefined;
+    const row = this.db.prepare('SELECT id, owner_user_id, visibility FROM folders WHERE id = ?').get(id) as
+      | FolderRow
+      | undefined;
     return row ?? null;
   }
 
@@ -649,7 +846,11 @@ export class PromptService {
     }
 
     if (folder.visibility !== visibility) {
-      throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, 'Prompt folder visibility must match prompt visibility');
+      throw new PromptServiceError(
+        422,
+        ErrorCode.VALIDATION_ERROR,
+        'Prompt folder visibility must match prompt visibility',
+      );
     }
   }
 
@@ -665,10 +866,7 @@ export class PromptService {
     }
   }
 
-  private assertMediaReferencesAllowed(
-    fileNames: string[] | undefined,
-    label: 'image' | 'video',
-  ): void {
+  private assertMediaReferencesAllowed(fileNames: string[] | undefined, label: 'image' | 'video'): void {
     for (const fileName of fileNames ?? []) {
       try {
         normalizeMediaFileName(fileName, `Invalid ${label} filename`);
@@ -701,11 +899,7 @@ export class PromptService {
     }
   }
 
-  private sortPrompts(
-    prompts: Prompt[],
-    sortBy: SearchQuery['sortBy'],
-    sortOrder: SearchQuery['sortOrder'],
-  ): Prompt[] {
+  private sortPrompts(prompts: Prompt[], sortBy: SearchQuery['sortBy'], sortOrder: SearchQuery['sortOrder']): Prompt[] {
     const direction = sortOrder === 'asc' ? 1 : -1;
     const copy = [...prompts];
 
