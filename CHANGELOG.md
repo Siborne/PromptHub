@@ -25,6 +25,12 @@
 
 - 🔎 **Skill 来源更新校验更可靠**：更新检查改为 SHA-256 包指纹和三方对账，忽略缓存、隐藏产物和 PromptHub 自身元数据，并修复远程 registry 指纹误标、content-url 基线和 URL 脱敏问题
   - **More Reliable Skill Source Update Checks**: Source update checks now use SHA-256 package fingerprints and three-way reconciliation while ignoring caches, hidden artifacts, and PromptHub metadata, with fixes for remote registry fingerprint labeling, content-url baselines, and URL credential redaction
+- 🛡️ **Skill 高风险更新可审查、可精确授权**：自建或私有来源的高风险更新现在展示扫描结果，可对当前包一次性确认，或仅信任精确的仓库、分支和目录来源；阻断级风险、路径穿越和结构错误仍不可绕过
+  - **Reviewable Skill High-Risk Updates**: High-risk updates from self-hosted or private sources now show their scan results and can be approved once for the exact package or trusted only for the exact repository, branch, and directory; blocked findings, path traversal, and structural failures remain non-overridable
+- **自建 Skill 来源检查不再卡住更新**：已暂存并完成本地扫描的自建 Git/Gitea package 会在来源地址无法解析时给出可见警告，而不是等待无界 DNS 查询
+  - **Responsive Self-Hosted Skill Checks**: A staged and locally scanned custom Git/Gitea package now surfaces an address-verification warning instead of waiting indefinitely for DNS resolution
+- 🧾 **SKILL.md YAML 元数据保真**：统一 YAML frontmatter 解析和规范化，保留块标量、嵌套字段与 `allowed-tools` 等合法字段，避免编辑或更新后静默丢失元数据
+  - **SKILL.md YAML Metadata Fidelity**: Unified YAML frontmatter parsing and normalization preserve block scalars, nested fields, and valid fields such as `allowed-tools`, preventing silent metadata loss after editing or updating
 - ✅ **Plugin 更新必须先确认**：来源更新和批量商店更新现在先展示差异并要求确认，不再点击后直接覆盖本地 Plugin
   - **Plugin Updates Require Confirmation**: Source updates and batch store updates now show a review step and require confirmation instead of directly overwriting local Plugins
 - 🪟 **Windows / Agent 路径兼容**：补齐 `%LOCALAPPDATA%`、Hermes、Trae Work、WorkBuddy、QClaw 等平台路径、图标和 shell 打开路径处理
@@ -52,6 +58,8 @@
   - **Desktop Release Contract Stability**: Aligned backup filesystem and Prompt main-content selection restoration integration contracts to reduce false failures and timeout risk in full release verification
 - 🧾 **本地 Issue 状态工作流**：新增 GitHub issue 远端状态和本地交付状态分离规则，已完成但未随版本发布的问题标记为本地完成/待发布
   - **Local Issue Status Workflow**: Added a split between remote GitHub issue state and local delivery state so implemented-but-unreleased issues can be tracked as local done / release pending
+- 🧱 **模块边界与 AI 路由收口**：核心、桌面和 Web 共享 AI 协议端点与鉴权推导；大型界面、状态和测试按业务边界拆分，并由源码行数门禁防止文件再次突破硬上限
+  - **Module Boundaries and AI Routing Consolidated**: Core, desktop, and Web now share AI protocol endpoint and authentication derivation; large UI, state, and test surfaces are split by domain boundaries and protected by a source-size gate
 
 ## [0.5.9-beta.2] - 2026-06-27
 
