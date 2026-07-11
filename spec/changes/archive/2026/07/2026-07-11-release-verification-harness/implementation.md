@@ -39,6 +39,11 @@
   desktop, and verifies the persisted remote snapshot rather than a stale
   historical inventory count.
 
+## Publication
+
+- The final `v0.5.9` tag points to `13fe4e2791eec6eafc75ba4102fb8738257de81d`.
+- GitHub Actions release run `29154880401` completed all five platform builds and the release publication job successfully.
+
 ## Verification
 
 - `pnpm verify:release -- --list` passes and shows the full release profile command list.

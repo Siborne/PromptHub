@@ -6,4 +6,4 @@
 - [x] `T-PORT-004` Add a failing regression assertion for stale `local_repo_path`, then omit it from the restored create payload.
 - [x] `T-PORT-005` Run focused unit, targeted Electron E2E, typecheck, production build, and bundle-budget verification.
 - [x] `T-PORT-006` Sync stable desktop performance and Skill restore knowledge, update the change index, and record actual verification.
-- [ ] `T-PORT-007` Include this change in the traceable release commit and archive it after the replacement 0.5.9 release is published.
+- [x] `T-PORT-007` Include this change in the traceable release commit and archive it after the replacement 0.5.9 release is published.

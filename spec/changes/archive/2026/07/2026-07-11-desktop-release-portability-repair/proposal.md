@@ -2,8 +2,8 @@
 
 ## Phase And Status
 
-- Phase: converge
-- Status: release-pending
+- Phase: released
+- Status: published in `0.5.9`
 - Primary requirements: `FR-PORT-001`, `FR-PORT-002`
 - Exit condition: the desktop bundle budget, typecheck, focused backup unit test, and real Electron backup round trip pass with the portable restore and E2E-only bridge boundaries in place.
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation and final release verification are complete; publication remains pending.
+Implementation, final release verification, and publication in `0.5.9` are complete.
 
 ## Current Inventory
 

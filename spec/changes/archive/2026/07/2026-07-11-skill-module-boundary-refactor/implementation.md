@@ -3,8 +3,8 @@
 ## Status
 
 The safety, renderer store, settings, and detail-page decomposition phases are
-implemented and verified. The final root release gate passed; publication and
-archive remain pending.
+implemented and verified. The final root release gate passed and the change
+shipped in `0.5.9`.
 
 ## Initial Inventory
 

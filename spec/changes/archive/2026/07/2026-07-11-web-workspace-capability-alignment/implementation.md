@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented; release-harness convergence is complete pending publication.
+Implemented, release-verified, and published in `0.5.9`.
 
 ## Verification Plan
 

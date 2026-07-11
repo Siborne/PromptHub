@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented and verified on 2026-07-11.
+Implemented, verified, and published in `0.5.9` on 2026-07-11.
 
 ## User Report Fixtures
 

@@ -2,8 +2,8 @@
 
 ## Status
 
-Local workflow and documentation updates are complete. The replacement
-`v0.5.9` tag and its GHCR publication remain pending the final release gate.
+The replacement `v0.5.9` tag, Desktop release, and GHCR publication completed
+successfully after the final release gate.
 
 ## Verification Plan
 
@@ -52,3 +52,5 @@ Local workflow and documentation updates are complete. The replacement
   retained as release evidence.
 - The focused workflow/Dockerfile contract suite passes 2 tests after adding
   the Core package build/runtime copies and path trigger.
+- GitHub Actions run `29154880396` completed the standard `v0.5.9` Web image
+  build and publication successfully after the Docker workspace correction.

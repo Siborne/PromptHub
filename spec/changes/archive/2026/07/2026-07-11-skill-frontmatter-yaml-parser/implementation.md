@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation and focused verification complete for GitHub issue #183. The issue remains open until a release containing the fix is published.
+Implementation and focused verification completed for GitHub issue #183. The fix shipped in `0.5.9`, and the issue is closed.
 
 ## Source Of Truth
 
@@ -32,7 +32,7 @@ Implementation and focused verification complete for GitHub issue #183. The issu
 
 - Stable Skill behavior now records the shared YAML contract, standard fields, preservation behavior, and safe-failure rules.
 - Regression matrix `SR-020` records the escaped destructive rewrite bug.
-- Active issue overlay is marked `local_done` for the next patch release.
+- Active issue overlay is marked `released` after the published `0.5.9` replacement.
 
 ## Implementation Result
 

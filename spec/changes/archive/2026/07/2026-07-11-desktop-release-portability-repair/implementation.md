@@ -2,8 +2,8 @@
 
 ## Status
 
-- Phase: converge
-- Status: release-pending
+- Phase: released
+- Status: published in `0.5.9`
 
 ## Shipped
 
@@ -39,8 +39,8 @@
 ## Converge
 
 - Stable workflow/knowledge/rules synced: desktop performance and Skill restore boundaries updated.
-- Issues/releases/ADRs/indexes synced: change index regenerated; release commit and archive remain pending publication.
-- Final change destination: `spec/changes/archive/2026/07/2026-07-11-desktop-release-portability-repair/` after the replacement release is published.
+- Issues/releases/ADRs/indexes synced: the replacement release workflow completed successfully and the change is archived with this publication record.
+- Final change destination: `spec/changes/archive/2026/07/2026-07-11-desktop-release-portability-repair/`.
 
 ## Synced Docs
 

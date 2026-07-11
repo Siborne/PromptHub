@@ -5,7 +5,7 @@
 - Repository: `legeling/PromptHub`
 - Snapshot date: `2026-07-11`
 - Capture method: `GitHub CLI gh issue list --state closed --limit 1000`
-- Closed issues captured: `142`
+- Closed issues captured: `143`
 
 ## Notes
 
@@ -17,6 +17,7 @@
 | # | 标题 | 标签 | 创建时间 | 关闭时间 | 链接 |
 |---|---|---|---|---|---|
 | #184 | CLI 写入冲突：Desktop 打开时 CLI 无法写入数据库 |  | 2026-07-10 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/184 |
+| #183 | [Bug]: SKILL.md frontmatter 手写解析器不支持 YAML 块标量与 allowed-tools 字段，编辑后静默丢字段 |  | 2026-07-10 | 2026-07-11 | https://github.com/legeling/PromptHub/issues/183 |
 | #181 | CLI 检测机制不兼容自定义 npm prefix |  | 2026-07-08 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/181 |
 | #180 | [Bug]: 数据备份导入时，没有导入我手动添加的skill商店数据 | bug, version: 0.5.8 | 2026-07-06 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/180 |
 | #179 | [Bug]: 设置中添加自定义agent或修改agent后，该agent在skill分发页面的选项中不显示 | bug, version: 0.5.8 | 2026-07-06 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/179 |

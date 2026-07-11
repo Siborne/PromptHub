@@ -16,7 +16,7 @@
 
 | #    | 标题                                                                                            | 标签                        | 创建时间   | 最近更新   | 链接                                             |
 | ---- | ----------------------------------------------------------------------------------------------- | --------------------------- | ---------- | ---------- | ------------------------------------------------ |
-| #183 | [Bug]: SKILL.md frontmatter 手写解析器不支持 YAML 块标量与 allowed-tools 字段，编辑后静默丢字段 |                             | 2026-07-10 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/183 |
+| #185 | [Bug]: 自部署：本地skill同步到远端或者网页版商城安装skill问题                              | bug, version: 0.5.9        | 2026-07-11 | 2026-07-11 | https://github.com/legeling/PromptHub/issues/185 |
 | #177 | [Feature]: 可以集成skillhub吗                                                                   | enhancement, version: 0.59  | 2026-06-22 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/177 |
 | #145 | [Feature]: 建议完善标签管理界面                                                                 | enhancement, version: 0.5.6 | 2026-05-24 | 2026-05-24 | https://github.com/legeling/PromptHub/issues/145 |
 | #141 | [Bug]: skill 添加商店问题                                                                       | bug, version: 0.5.6         | 2026-05-20 | 2026-05-20 | https://github.com/legeling/PromptHub/issues/141 |
