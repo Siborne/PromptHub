@@ -3,9 +3,9 @@
 ## Source
 
 - Repository: `legeling/PromptHub`
-- Snapshot date: `2026-07-10`
+- Snapshot date: `2026-07-11`
 - Capture method: `GitHub CLI gh issue list --state open --limit 1000`
-- Open issues captured: `35`
+- Open issues captured: `23`
 
 ## Notes
 
@@ -16,20 +16,8 @@
 
 | #    | 标题                                                                                            | 标签                        | 创建时间   | 最近更新   | 链接                                             |
 | ---- | ----------------------------------------------------------------------------------------------- | --------------------------- | ---------- | ---------- | ------------------------------------------------ |
-| #184 | CLI 写入冲突：Desktop 打开时 CLI 无法写入数据库                                                 |                             | 2026-07-10 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/184 |
 | #183 | [Bug]: SKILL.md frontmatter 手写解析器不支持 YAML 块标量与 allowed-tools 字段，编辑后静默丢字段 |                             | 2026-07-10 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/183 |
-| #181 | CLI 检测机制不兼容自定义 npm prefix                                                             |                             | 2026-07-08 | 2026-07-08 | https://github.com/legeling/PromptHub/issues/181 |
-| #180 | [Bug]: 数据备份导入时，没有导入我手动添加的skill商店数据                                        | bug, version: 0.5.8         | 2026-07-06 | 2026-07-06 | https://github.com/legeling/PromptHub/issues/180 |
-| #179 | [Bug]: 设置中添加自定义agent或修改agent后，该agent在skill分发页面的选项中不显示                 | bug, version: 0.5.8         | 2026-07-06 | 2026-07-06 | https://github.com/legeling/PromptHub/issues/179 |
-| #178 | [Bug]: 0.5.8版本，Agent自动检测不兼容%LOCALAPPDATA%环境变量                                     | bug, version: 0.5.8         | 2026-06-23 | 2026-06-23 | https://github.com/legeling/PromptHub/issues/178 |
 | #177 | [Feature]: 可以集成skillhub吗                                                                   | enhancement, version: 0.59  | 2026-06-22 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/177 |
-| #176 | [Bug]:                                                                                          | bug, version: 最新版本      | 2026-06-17 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/176 |
-| #170 | [Bug]: 0.5.8版本，从Git仓库安装skill时，只下载了SKILL.md文件，其他文件没有下载                  | bug, version: 0.5.8         | 2026-06-07 | 2026-06-07 | https://github.com/legeling/PromptHub/issues/170 |
-| #169 | [Bug]: 复制markdown提示词的时候报错，复制失败                                                   | bug, version: 主分支        | 2026-06-07 | 2026-06-07 | https://github.com/legeling/PromptHub/issues/169 |
-| #168 | [Bug]:无法对 Skill 更新                                                                         | bug, version: 无法更新Skill | 2026-06-07 | 2026-06-07 | https://github.com/legeling/PromptHub/issues/168 |
-| #167 | [Feature]: 自定义的Skill商店是否可以有一个针对技能的搜索                                        | enhancement, version: 0.5.8 | 2026-06-04 | 2026-07-10 | https://github.com/legeling/PromptHub/issues/167 |
-| #160 | [Feature]: 一些提示词编辑界面易用性建议                                                         | enhancement, version: 0.5.7 | 2026-05-31 | 2026-05-31 | https://github.com/legeling/PromptHub/issues/160 |
-| #159 | [Bug]: 客户端链接web 401 我确认密码正确                                                         | bug, version: 最新          | 2026-05-30 | 2026-05-30 | https://github.com/legeling/PromptHub/issues/159 |
 | #145 | [Feature]: 建议完善标签管理界面                                                                 | enhancement, version: 0.5.6 | 2026-05-24 | 2026-05-24 | https://github.com/legeling/PromptHub/issues/145 |
 | #141 | [Bug]: skill 添加商店问题                                                                       | bug, version: 0.5.6         | 2026-05-20 | 2026-05-20 | https://github.com/legeling/PromptHub/issues/141 |
 | #139 | [Feature]: 数据迁移的一个小经验：数据导出导入可以解决大多数问题                                 | enhancement, version: 0.5.6 | 2026-05-19 | 2026-05-19 | https://github.com/legeling/PromptHub/issues/139 |
