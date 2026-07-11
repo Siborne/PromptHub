@@ -4,8 +4,6 @@ import {
   useCallback,
   useRef,
   useMemo,
-  type ReactNode,
-  type PointerEvent,
   type WheelEvent,
 } from "react";
 import { createPortal } from "react-dom";
@@ -23,10 +21,6 @@ import {
   ChevronRightIcon,
   PencilIcon,
   RotateCcwIcon,
-  MusicIcon,
-  MinusIcon,
-  PlusIcon,
-  Maximize2Icon,
 } from "lucide-react";
 import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { useToast } from "../ui/Toast";
@@ -36,6 +30,15 @@ import {
   getSkillCodeEditorLanguageName,
 } from "./SkillCodeEditor";
 import { getSkillFileIconUrl } from "./skill-file-icons";
+import {
+  ResourceImageFullscreenPreview,
+  ResourcePreview,
+} from "./SkillFileResourcePreview";
+import {
+  SkillFileContextMenu,
+  type SkillFileContextMenuAction,
+} from "./SkillFileContextMenu";
+import { SkillFileMutationDialogs } from "./SkillFileMutationDialogs";
 import {
   MAX_RESOURCE_ZOOM,
   MIN_RESOURCE_ZOOM,
@@ -90,421 +93,6 @@ function getFileIcon(name: string, isDirectory: boolean, isOpen: boolean) {
       className="skill-file-editor__tree-item-icon"
       draggable={false}
     />
-  );
-}
-
-type ResourceImageMode = "inline" | "fullscreen";
-
-interface ImageZoomControlsProps {
-  imageZoom: number;
-  mode: ResourceImageMode;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onResetZoom: () => void;
-  onOpenFullscreen?: () => void;
-  zoomOutLabel: string;
-  zoomInLabel: string;
-  resetZoomLabel: string;
-  fullscreenLabel: string;
-}
-
-interface ImageResourceCanvasProps extends Omit<
-  ImageZoomControlsProps,
-  "mode"
-> {
-  file: FileEntry;
-  mode?: ResourceImageMode;
-  onImageWheelZoom: (event: WheelEvent<HTMLDivElement>) => void;
-}
-
-function ImageZoomControls({
-  imageZoom,
-  mode,
-  onZoomIn,
-  onZoomOut,
-  onResetZoom,
-  onOpenFullscreen,
-  zoomOutLabel,
-  zoomInLabel,
-  resetZoomLabel,
-  fullscreenLabel,
-}: ImageZoomControlsProps) {
-  const isFullscreenMode = mode === "fullscreen";
-  const centerLabel = isFullscreenMode ? resetZoomLabel : fullscreenLabel;
-
-  return (
-    <div className="skill-file-editor__zoom-controls">
-      <button
-        className="skill-file-editor__editor-tab skill-file-editor__editor-tab--icon"
-        type="button"
-        onClick={onZoomOut}
-        disabled={imageZoom <= MIN_RESOURCE_ZOOM}
-        title={zoomOutLabel}
-        aria-label={zoomOutLabel}
-      >
-        <MinusIcon
-          aria-hidden="true"
-          style={{ width: "0.875rem", height: "0.875rem" }}
-        />
-      </button>
-      <button
-        className="skill-file-editor__editor-tab"
-        type="button"
-        onClick={isFullscreenMode ? onResetZoom : onOpenFullscreen}
-        disabled={isFullscreenMode ? imageZoom === 1 : !onOpenFullscreen}
-        title={centerLabel}
-        aria-label={centerLabel}
-      >
-        {isFullscreenMode ? (
-          <RotateCcwIcon
-            aria-hidden="true"
-            style={{ width: "0.875rem", height: "0.875rem" }}
-          />
-        ) : (
-          <Maximize2Icon
-            aria-hidden="true"
-            style={{ width: "0.875rem", height: "0.875rem" }}
-          />
-        )}
-        <span>{Math.round(imageZoom * 100)}%</span>
-      </button>
-      <button
-        className="skill-file-editor__editor-tab skill-file-editor__editor-tab--icon"
-        type="button"
-        onClick={onZoomIn}
-        disabled={imageZoom >= MAX_RESOURCE_ZOOM}
-        title={zoomInLabel}
-        aria-label={zoomInLabel}
-      >
-        <PlusIcon
-          aria-hidden="true"
-          style={{ width: "0.875rem", height: "0.875rem" }}
-        />
-      </button>
-    </div>
-  );
-}
-
-function ImageResourceCanvas({
-  file,
-  imageZoom,
-  onImageWheelZoom,
-  onZoomIn,
-  onZoomOut,
-  onResetZoom,
-  onOpenFullscreen,
-  zoomOutLabel,
-  zoomInLabel,
-  resetZoomLabel,
-  fullscreenLabel,
-  mode = "inline",
-}: ImageResourceCanvasProps) {
-  const panStateRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    scrollLeft: number;
-    scrollTop: number;
-  } | null>(null);
-  const [isPanningImage, setIsPanningImage] = useState(false);
-
-  const handleImagePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    panStateRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      scrollLeft: event.currentTarget.scrollLeft,
-      scrollTop: event.currentTarget.scrollTop,
-    };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    setIsPanningImage(true);
-  };
-
-  const handleImagePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const panState = panStateRef.current;
-    if (!panState || panState.pointerId !== event.pointerId) {
-      return;
-    }
-
-    event.currentTarget.scrollLeft =
-      panState.scrollLeft - (event.clientX - panState.startX);
-    event.currentTarget.scrollTop =
-      panState.scrollTop - (event.clientY - panState.startY);
-  };
-
-  const stopImagePan = (event: PointerEvent<HTMLDivElement>) => {
-    if (panStateRef.current?.pointerId !== event.pointerId) {
-      return;
-    }
-
-    panStateRef.current = null;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    setIsPanningImage(false);
-  };
-
-  return (
-    <div
-      className={`skill-file-editor__resource-preview skill-file-editor__resource-preview--image skill-file-editor__resource-preview--image-${mode}`}
-      onWheel={onImageWheelZoom}
-    >
-      <div
-        className={`skill-file-editor__resource-image-viewport${
-          isPanningImage
-            ? " skill-file-editor__resource-image-viewport--panning"
-            : ""
-        }`}
-        onPointerDown={handleImagePointerDown}
-        onPointerMove={handleImagePointerMove}
-        onPointerUp={stopImagePan}
-        onPointerCancel={stopImagePan}
-      >
-        <div
-          className="skill-file-editor__resource-image-stage"
-          style={{
-            width: `${imageZoom * 100}%`,
-            height: `${imageZoom * 100}%`,
-          }}
-        >
-          <img
-            src={file.content}
-            alt={file.path}
-            className="skill-file-editor__resource-image"
-          />
-        </div>
-      </div>
-      <ImageZoomControls
-        imageZoom={imageZoom}
-        mode={mode}
-        onZoomIn={onZoomIn}
-        onZoomOut={onZoomOut}
-        onResetZoom={onResetZoom}
-        onOpenFullscreen={onOpenFullscreen}
-        zoomOutLabel={zoomOutLabel}
-        zoomInLabel={zoomInLabel}
-        resetZoomLabel={resetZoomLabel}
-        fullscreenLabel={fullscreenLabel}
-      />
-    </div>
-  );
-}
-
-function ResourceImageFullscreenPreview({
-  file,
-  isOpen,
-  imageZoom,
-  onClose,
-  onImageWheelZoom,
-  onZoomIn,
-  onZoomOut,
-  onResetZoom,
-  zoomOutLabel,
-  zoomInLabel,
-  resetZoomLabel,
-  fullscreenLabel,
-  closeLabel,
-}: {
-  file: FileEntry | null;
-  isOpen: boolean;
-  imageZoom: number;
-  onClose: () => void;
-  onImageWheelZoom: (event: WheelEvent<HTMLDivElement>) => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onResetZoom: () => void;
-  zoomOutLabel: string;
-  zoomInLabel: string;
-  resetZoomLabel: string;
-  fullscreenLabel: string;
-  closeLabel: string;
-}) {
-  useEffect(() => {
-    if (!isOpen || !file) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [file, isOpen, onClose]);
-
-  if (!isOpen || !file) {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      className="skill-file-editor__fullscreen-preview"
-      role="dialog"
-      aria-modal="true"
-      aria-label={fullscreenLabel}
-    >
-      <div className="skill-file-editor__fullscreen-preview-header">
-        <span className="skill-file-editor__fullscreen-preview-title">
-          {file.path}
-        </span>
-        <button
-          className="skill-file-editor__fullscreen-preview-close"
-          type="button"
-          onClick={onClose}
-          title={closeLabel}
-          aria-label={closeLabel}
-        >
-          <XIcon aria-hidden="true" style={{ width: "1rem", height: "1rem" }} />
-        </button>
-      </div>
-      <ImageResourceCanvas
-        file={file}
-        imageZoom={imageZoom}
-        onImageWheelZoom={onImageWheelZoom}
-        onZoomIn={onZoomIn}
-        onZoomOut={onZoomOut}
-        onResetZoom={onResetZoom}
-        zoomOutLabel={zoomOutLabel}
-        zoomInLabel={zoomInLabel}
-        resetZoomLabel={resetZoomLabel}
-        fullscreenLabel={fullscreenLabel}
-        mode="fullscreen"
-      />
-    </div>,
-    document.body,
-  );
-}
-
-function ResourcePreview({
-  file,
-  emptyLabel,
-  imageZoom,
-  onImageWheelZoom,
-  onZoomIn,
-  onZoomOut,
-  onResetZoom,
-  onOpenFullscreen,
-  zoomOutLabel,
-  zoomInLabel,
-  resetZoomLabel,
-  fullscreenLabel,
-}: {
-  file: FileEntry;
-  emptyLabel: string;
-  imageZoom: number;
-  onImageWheelZoom: (event: WheelEvent<HTMLDivElement>) => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onResetZoom: () => void;
-  onOpenFullscreen: () => void;
-  zoomOutLabel: string;
-  zoomInLabel: string;
-  resetZoomLabel: string;
-  fullscreenLabel: string;
-}) {
-  if (file.encoding !== "data-url" || !file.previewKind) {
-    return (
-      <div className="skill-file-editor__resource-preview skill-file-editor__resource-preview--empty">
-        <FileIcon style={{ width: "2rem", height: "2rem" }} />
-        <span>{emptyLabel}</span>
-      </div>
-    );
-  }
-
-  if (file.previewKind === "image") {
-    return (
-      <ImageResourceCanvas
-        file={file}
-        imageZoom={imageZoom}
-        onImageWheelZoom={onImageWheelZoom}
-        onZoomIn={onZoomIn}
-        onZoomOut={onZoomOut}
-        onResetZoom={onResetZoom}
-        onOpenFullscreen={onOpenFullscreen}
-        zoomOutLabel={zoomOutLabel}
-        zoomInLabel={zoomInLabel}
-        resetZoomLabel={resetZoomLabel}
-        fullscreenLabel={fullscreenLabel}
-      />
-    );
-  }
-
-  if (file.previewKind === "audio") {
-    return (
-      <div className="skill-file-editor__resource-preview skill-file-editor__resource-preview--media">
-        <MusicIcon style={{ width: "2rem", height: "2rem" }} />
-        <audio
-          controls
-          src={file.content}
-          className="skill-file-editor__resource-audio"
-        />
-      </div>
-    );
-  }
-
-  if (file.previewKind === "video") {
-    return (
-      <div className="skill-file-editor__resource-preview">
-        <video
-          controls
-          src={file.content}
-          className="skill-file-editor__resource-video"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="skill-file-editor__resource-preview">
-      <iframe
-        src={file.content}
-        title={file.path}
-        className="skill-file-editor__resource-pdf"
-      />
-    </div>
-  );
-}
-
-// ─── Sub-components ─────────────────────────────────────
-
-function SimpleDialog({
-  isOpen,
-  title,
-  children,
-  onClose,
-}: {
-  isOpen: boolean;
-  title: string;
-  children: ReactNode;
-  onClose: () => void;
-}) {
-  if (!isOpen) return null;
-  return createPortal(
-    <div className="skill-file-editor__dialog-overlay">
-      <div
-        data-testid="skill-file-editor-dialog-backdrop"
-        role="presentation"
-        aria-hidden="true"
-        className="skill-file-editor__dialog-backdrop"
-        onClick={onClose}
-      />
-      <div className="skill-file-editor__dialog">
-        <h3>{title}</h3>
-        {children}
-      </div>
-    </div>,
-    document.body,
   );
 }
 
@@ -1221,6 +809,21 @@ export function SkillFileEditor({
     }
   }, [localPath, skillId, showToast, t]);
 
+  const handleContextMenuAction = (action: SkillFileContextMenuAction) => {
+    if (action.type === "rename") {
+      setDialogInput(action.path.split("/").pop() || action.path);
+      setRenameDialogPath(action.path);
+    } else if (action.type === "delete") {
+      setDeleteDialogFile(action.path);
+    } else {
+      setDialogInput("");
+      setCreateParentPath("parentPath" in action ? action.parentPath : null);
+      if (action.type === "new-file") setNewFileDialogOpen(true);
+      else setNewFolderDialogOpen(true);
+    }
+    setContextMenu(null);
+  };
+
   // ─── Render ──────────────────────────────────────────
 
   if (!isOpen) return null;
@@ -1630,272 +1233,34 @@ export function SkillFileEditor({
         </div>
       </div>
 
-      {/* New File Dialog */}
-      <SimpleDialog
-        isOpen={newFileDialogOpen}
-        title={t("skill.newFile", "New File")}
-        onClose={() => setNewFileDialogOpen(false)}
-      >
-        <input
-          type="text"
-          className="skill-file-editor__dialog-input"
-          aria-label={t("skill.enterFileName", "Enter file name")}
-          value={dialogInput}
-          onChange={(e) => setDialogInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleNewFile();
-            if (e.key === "Escape") setNewFileDialogOpen(false);
-          }}
-          placeholder={t("skill.enterFileName", "Enter file name")}
-          autoFocus
-        />
-        <p className="skill-file-editor__dialog-hint">
-          e.g. helpers/utils.py, README.md
-        </p>
-        <div className="skill-file-editor__dialog-actions">
-          <button
-            type="button"
-            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--cancel"
-            onClick={() => setNewFileDialogOpen(false)}
-          >
-            {t("common.cancel", "Cancel")}
-          </button>
-          <button
-            type="button"
-            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--primary"
-            onClick={handleNewFile}
-            disabled={!dialogInput.trim()}
-          >
-            {t("common.confirm", "Confirm")}
-          </button>
-        </div>
-      </SimpleDialog>
+      <SkillFileMutationDialogs
+        deletePath={deleteDialogFile}
+        input={dialogInput}
+        isNewFileOpen={newFileDialogOpen}
+        isNewFolderOpen={newFolderDialogOpen}
+        renamePath={renameDialogPath}
+        onCloseDelete={() => setDeleteDialogFile(null)}
+        onCloseNewFile={() => setNewFileDialogOpen(false)}
+        onCloseNewFolder={() => setNewFolderDialogOpen(false)}
+        onCloseRename={() => setRenameDialogPath(null)}
+        onCreateFile={handleNewFile}
+        onCreateFolder={handleNewFolder}
+        onDelete={handleDeleteFile}
+        onInputChange={setDialogInput}
+        onRename={handleRenamePath}
+      />
 
-      {/* New Folder Dialog */}
-      <SimpleDialog
-        isOpen={newFolderDialogOpen}
-        title={t("skill.newFolder", "New Folder")}
-        onClose={() => setNewFolderDialogOpen(false)}
-      >
-        <input
-          type="text"
-          className="skill-file-editor__dialog-input"
-          aria-label={t("skill.enterFolderName", "Enter folder name")}
-          value={dialogInput}
-          onChange={(e) => setDialogInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleNewFolder();
-            if (e.key === "Escape") setNewFolderDialogOpen(false);
-          }}
-          placeholder={t("skill.enterFolderName", "Enter folder name")}
-          autoFocus
-        />
-        <div className="skill-file-editor__dialog-actions">
-          <button
-            type="button"
-            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--cancel"
-            onClick={() => setNewFolderDialogOpen(false)}
-          >
-            {t("common.cancel", "Cancel")}
-          </button>
-          <button
-            type="button"
-            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--primary"
-            onClick={handleNewFolder}
-            disabled={!dialogInput.trim()}
-          >
-            {t("common.confirm", "Confirm")}
-          </button>
-        </div>
-      </SimpleDialog>
-
-      {/* Delete Confirmation Dialog */}
-      <SimpleDialog
-        isOpen={!!deleteDialogFile}
-        title={t("common.delete", "Delete")}
-        onClose={() => setDeleteDialogFile(null)}
-      >
-        <p
-          style={{
-            fontSize: "0.85rem",
-            color: "hsl(var(--muted-foreground))",
-            marginBottom: "0.5rem",
-          }}
-        >
-          {t(
-            "skill.deletePathConfirm",
-            "Are you sure you want to delete this file or folder? This action cannot be undone.",
-          )}
-        </p>
-        <p
-          style={{
-            fontSize: "0.8rem",
-            fontFamily: "monospace",
-            background: "hsl(var(--muted) / 0.5)",
-            padding: "0.375rem 0.5rem",
-            borderRadius: "0.375rem",
-          }}
-        >
-          {deleteDialogFile}
-        </p>
-        <div className="skill-file-editor__dialog-actions">
-          <button
-            type="button"
-            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--cancel"
-            onClick={() => setDeleteDialogFile(null)}
-          >
-            {t("common.cancel", "Cancel")}
-          </button>
-          <button
-            type="button"
-            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--destructive"
-            onClick={handleDeleteFile}
-          >
-            {t("common.delete", "Delete")}
-          </button>
-        </div>
-      </SimpleDialog>
-
-      <SimpleDialog
-        isOpen={!!renameDialogPath}
-        title={t("folder.rename", "重命名")}
-        onClose={() => setRenameDialogPath(null)}
-      >
-        <input
-          type="text"
-          className="skill-file-editor__dialog-input"
-          aria-label={t("folder.rename", "重命名")}
-          value={dialogInput}
-          onChange={(e) => setDialogInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleRenamePath();
-            if (e.key === "Escape") setRenameDialogPath(null);
-          }}
-          placeholder={t("skill.enterFileName", "Enter file name")}
-          autoFocus
-        />
-        <div className="skill-file-editor__dialog-actions">
-          <button
-            type="button"
-            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--cancel"
-            onClick={() => setRenameDialogPath(null)}
-          >
-            {t("common.cancel", "Cancel")}
-          </button>
-          <button
-            type="button"
-            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--primary"
-            onClick={handleRenamePath}
-            disabled={!dialogInput.trim()}
-          >
-            {t("common.confirm", "Confirm")}
-          </button>
-        </div>
-      </SimpleDialog>
-
-      {contextMenu && !readOnly && (
-        <div
-          className="skill-file-editor__context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          {contextMenu.path && !contextMenu.isDirectory && (
-            <>
-              <button
-                type="button"
-                className="skill-file-editor__context-item"
-                onClick={() => {
-                  const currentName =
-                    contextMenu.path?.split("/").pop() ||
-                    contextMenu.path ||
-                    "";
-                  setDialogInput(currentName);
-                  setRenameDialogPath(contextMenu.path);
-                  setContextMenu(null);
-                }}
-              >
-                <PencilIcon aria-hidden="true" className="w-4 h-4" />
-                {t("folder.rename", "重命名")}
-              </button>
-              <button
-                type="button"
-                className="skill-file-editor__context-item skill-file-editor__context-item--danger"
-                onClick={() => {
-                  setDeleteDialogFile(contextMenu.path);
-                  setContextMenu(null);
-                }}
-              >
-                <Trash2Icon aria-hidden="true" className="w-4 h-4" />
-                {t("common.delete", "Delete")}
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            className="skill-file-editor__context-item"
-            onClick={() => {
-              setDialogInput("");
-              setCreateParentPath(
-                contextMenu.path && contextMenu.isDirectory
-                  ? contextMenu.path
-                  : contextMenu.path?.split("/").slice(0, -1).join("/") || null,
-              );
-              setNewFileDialogOpen(true);
-              setContextMenu(null);
-            }}
-          >
-            <FilePlusIcon aria-hidden="true" className="w-4 h-4" />
-            {t("skill.newFile", "New File")}
-          </button>
-          <button
-            type="button"
-            className="skill-file-editor__context-item"
-            onClick={() => {
-              setDialogInput("");
-              setCreateParentPath(
-                contextMenu.path && contextMenu.isDirectory
-                  ? contextMenu.path
-                  : contextMenu.path?.split("/").slice(0, -1).join("/") || null,
-              );
-              setNewFolderDialogOpen(true);
-              setContextMenu(null);
-            }}
-          >
-            <FolderPlusIcon aria-hidden="true" className="w-4 h-4" />
-            {t("skill.newFolder", "New Folder")}
-          </button>
-          {contextMenu.path && contextMenu.isDirectory && (
-            <>
-              <button
-                type="button"
-                className="skill-file-editor__context-item"
-                onClick={() => {
-                  const currentName =
-                    contextMenu.path?.split("/").pop() ||
-                    contextMenu.path ||
-                    "";
-                  setDialogInput(currentName);
-                  setRenameDialogPath(contextMenu.path);
-                  setContextMenu(null);
-                }}
-              >
-                <PencilIcon aria-hidden="true" className="w-4 h-4" />
-                {t("folder.rename", "重命名")}
-              </button>
-              <button
-                type="button"
-                className="skill-file-editor__context-item skill-file-editor__context-item--danger"
-                onClick={() => {
-                  setDeleteDialogFile(contextMenu.path);
-                  setContextMenu(null);
-                }}
-              >
-                <Trash2Icon aria-hidden="true" className="w-4 h-4" />
-                {t("common.delete", "Delete")}
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      <SkillFileContextMenu
+        contextMenu={contextMenu}
+        readOnly={readOnly}
+        labels={{
+          delete: t("common.delete", "Delete"),
+          newFile: t("skill.newFile", "New File"),
+          newFolder: t("skill.newFolder", "New Folder"),
+          rename: t("folder.rename", "重命名"),
+        }}
+        onAction={handleContextMenuAction}
+      />
     </>
   );
 

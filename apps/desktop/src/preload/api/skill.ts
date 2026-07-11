@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import type {
   CreateSkillParams,
   MCPServerConfig,
+  RemoteSkillPackageSaveResult,
   SkillPlatformInstallResult,
   SkillPlatformInstallStatusMap,
   SkillSafetyReport,
@@ -152,8 +153,9 @@ export const skillApi = {
       branch?: string;
       directory?: string;
       safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
+      approvedPackageFingerprint?: string;
     },
-  ) =>
+  ): Promise<RemoteSkillPackageSaveResult> =>
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_SAVE_REMOTE_GIT_TO_REPO,
       skillId,
@@ -164,8 +166,9 @@ export const skillApi = {
     options: {
       zipUrl: string;
       safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
+      approvedPackageFingerprint?: string;
     },
-  ) =>
+  ): Promise<RemoteSkillPackageSaveResult> =>
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_SAVE_REMOTE_ZIP_TO_REPO,
       skillId,

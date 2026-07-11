@@ -42,6 +42,11 @@ import { SkillDB } from "@/main/database/skill";
 import { readGithubTokenSetting } from "@/main/settings/settings-readers";
 import { parseSkillMd } from "./skill-validator";
 import { sanitizeImportedSkillDraft } from "./skill-import-sanitize";
+import {
+  assertStagedRemoteSkillPackageSafe,
+  type RemoteSkillPackageSafetyScanOptions,
+} from "./skill-update-safety";
+export { SkillSafetyReviewRequiredError } from "./skill-update-safety";
 
 function buildSkillFingerprintFields(directoryFingerprint: string) {
   return {
@@ -94,65 +99,30 @@ function toTitleCase(value: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-type RemoteSkillPackageSafetyScanOptions = {
-  aiConfig?: SafetyScanAIConfig;
-  scan?: typeof scanSkillSafety;
-  preflightScan?: typeof scanSkillSafetyPreflight;
-};
-
-type StagedRemoteSkillPackageSafetyInput = {
-  skill: Pick<Skill, "name">;
-  skillDir: string;
-  sourceUrl: string;
-  safetyScan?: RemoteSkillPackageSafetyScanOptions;
-};
-
-function isBlockingSafetyLevel(
-  report: Pick<SkillSafetyPreflightReport, "level">,
-): boolean {
-  return report.level === "blocked" || report.level === "high-risk";
+function buildRemoteSkillSourceKey(
+  skill: Pick<Skill, "source_id">,
+  repo: NonNullable<ReturnType<typeof parseGitRepo>>,
+  branch?: string,
+  directory?: string,
+): string {
+  if (skill.source_id?.trim()) return skill.source_id.trim();
+  return `git:${repo.host}/${repo.owner}/${repo.repo}@${branch?.trim() || "default"}:${directory?.trim() || "."}`;
 }
 
-function createSafetyScanBlockedUpdateError(
-  report: Pick<SkillSafetyPreflightReport, "level" | "summary">,
-): Error {
-  return new Error(
-    `SAFETY_SCAN_BLOCKED_UPDATE: staged remote Skill package was flagged as ${report.level}: ${report.summary}`,
-  );
-}
-
-async function assertStagedRemoteSkillPackageSafe(
-  input: StagedRemoteSkillPackageSafetyInput,
-): Promise<void> {
-  const content = await fs.readFile(
-    path.join(input.skillDir, "SKILL.md"),
-    "utf-8",
-  );
-  const preflightReport = await (
-    input.safetyScan?.preflightScan ?? scanSkillSafetyPreflight
-  )({
-    name: input.skill.name,
-    content,
-    sourceUrl: input.sourceUrl,
-    localRepoPath: input.skillDir,
-  });
-  if (isBlockingSafetyLevel(preflightReport)) {
-    throw createSafetyScanBlockedUpdateError(preflightReport);
-  }
-
-  if (!input.safetyScan?.aiConfig) {
-    return;
-  }
-
-  const aiReport = await (input.safetyScan.scan ?? scanSkillSafety)({
-    name: input.skill.name,
-    content,
-    sourceUrl: input.sourceUrl,
-    localRepoPath: input.skillDir,
-    aiConfig: input.safetyScan.aiConfig,
-  });
-  if (isBlockingSafetyLevel(aiReport)) {
-    throw createSafetyScanBlockedUpdateError(aiReport);
+function buildRemoteZipSourceKey(
+  skill: Pick<Skill, "id" | "source_id">,
+  zipUrl: string,
+): string {
+  if (skill.source_id?.trim()) return skill.source_id.trim();
+  try {
+    const url = new URL(zipUrl);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return `zip:${url.toString()}`;
+  } catch {
+    return `zip:skill:${skill.id}`;
   }
 }
 
@@ -376,11 +346,7 @@ import {
   exportAsSkillMd,
   importFromJson,
 } from "./skill-installer-export";
-import {
-  scanSkillSafety,
-  scanSkillSafetyPreflight,
-  type SkillSafetyPreflightReport,
-} from "./skill-safety-scan";
+import { scanSkillSafety } from "./skill-safety-scan";
 
 // ========================================================================
 // Facade class — every static method delegates to the appropriate sub-module
@@ -732,7 +698,9 @@ export class SkillInstaller {
           ? `${sourceDirectory}/SKILL.md`
           : "SKILL.md",
         local_repo_path: installDir,
-        ...buildSkillFingerprintFields(computePackageDirectoryFingerprint(repoFiles)),
+        ...buildSkillFingerprintFields(
+          computePackageDirectoryFingerprint(repoFiles),
+        ),
         is_favorite: false,
         tags: [],
         original_tags: manifest.tags || ["github"],
@@ -935,13 +903,17 @@ export class SkillInstaller {
         await this.readLocalRepoFileBuffersByPath(localRepoPath);
       db.update(createdSkill.id, {
         local_repo_path: localRepoPath,
-        ...buildSkillFingerprintFields(computePackageDirectoryFingerprint(repoFiles)),
+        ...buildSkillFingerprintFields(
+          computePackageDirectoryFingerprint(repoFiles),
+        ),
       });
     } else if (localRepoPath) {
       const repoFiles =
         await this.readLocalRepoFileBuffersByPath(localRepoPath);
       db.update(createdSkill.id, {
-        ...buildSkillFingerprintFields(computePackageDirectoryFingerprint(repoFiles)),
+        ...buildSkillFingerprintFields(
+          computePackageDirectoryFingerprint(repoFiles),
+        ),
       });
     }
 
@@ -965,6 +937,7 @@ export class SkillInstaller {
       branch?: string;
       directory?: string;
       safetyScan?: RemoteSkillPackageSafetyScanOptions;
+      approvedPackageFingerprint?: string;
     },
   ): Promise<string> {
     await this.init();
@@ -1014,6 +987,16 @@ export class SkillInstaller {
         skillDir,
         sourceUrl: options.repoUrl,
         safetyScan: options.safetyScan,
+        packageFingerprint: computePackageDirectoryFingerprint(
+          await this.readLocalRepoFileBuffersByPath(skillDir),
+        ),
+        approvedPackageFingerprint: options.approvedPackageFingerprint,
+        sourceKey: buildRemoteSkillSourceKey(
+          skill,
+          parsedRepo,
+          options.branch,
+          requestedDirectory,
+        ),
       });
       return await saveToLocalRepoBySkillId(skill, skillDir, "copy");
     } finally {
@@ -1090,6 +1073,7 @@ export class SkillInstaller {
     options: {
       zipUrl: string;
       safetyScan?: RemoteSkillPackageSafetyScanOptions;
+      approvedPackageFingerprint?: string;
     },
   ): Promise<string> {
     await this.init();
@@ -1148,6 +1132,11 @@ export class SkillInstaller {
         skillDir,
         sourceUrl: zipUrl,
         safetyScan: options.safetyScan,
+        packageFingerprint: computePackageDirectoryFingerprint(
+          await this.readLocalRepoFileBuffersByPath(skillDir),
+        ),
+        approvedPackageFingerprint: options.approvedPackageFingerprint,
+        sourceKey: buildRemoteZipSourceKey(skill, zipUrl),
       });
       return await saveToLocalRepoBySkillId(skill, skillDir, "copy");
     } finally {

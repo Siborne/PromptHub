@@ -118,6 +118,28 @@ describe("skill store update detection", () => {
     expect(first).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("hashes YAML block scalars and nested maps by semantic value", async () => {
+    const first = await computeSkillContentHash(`---
+name: writer
+description: |-
+  First line.
+  Second line.
+metadata:
+  owner: team-a
+  flags:
+    reviewed: true
+---
+# Writer`);
+    const second = await computeSkillContentHash(`---
+metadata: { flags: { reviewed: true }, owner: team-a }
+description: "First line.\\nSecond line."
+name: writer
+---
+# Writer`);
+
+    expect(first).toBe(second);
+  });
+
   it("reports update-available only when remote changed and local content is still pristine", async () => {
     const installedHash = await computeSkillContentHash(
       "# Writer\n\nOriginal\n",

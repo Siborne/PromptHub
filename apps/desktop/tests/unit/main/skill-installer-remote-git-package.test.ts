@@ -17,7 +17,10 @@ import {
   getSkillsDir,
   resetRuntimePaths,
 } from "../../../src/main/runtime-paths";
-import { SkillInstaller } from "../../../src/main/services/skill-installer";
+import {
+  SkillInstaller,
+  SkillSafetyReviewRequiredError,
+} from "../../../src/main/services/skill-installer";
 import { invalidateCustomPathsCache } from "../../../src/main/services/skill-installer-utils";
 import * as skillInstallerUtils from "../../../src/main/services/skill-installer-utils";
 
@@ -111,6 +114,107 @@ afterEach(async () => {
 });
 
 describe("SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId", () => {
+  it("requires fingerprint-pinned review for high-risk packages and accepts the exact retry", async () => {
+    await SkillInstaller.init();
+    vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(
+      async (_url, destDir) => {
+        const skillDir = path.join(destDir, "skills", "writer");
+        await fs.mkdir(skillDir, { recursive: true });
+        await fs.writeFile(path.join(skillDir, "SKILL.md"), "# Writer\n");
+      },
+    );
+    const preflightScan = vi.fn().mockResolvedValue({
+      level: "high-risk",
+      summary: "Review one script.",
+      findings: [
+        {
+          code: "script-file",
+          severity: "high",
+          title: "Script requires review",
+          detail: "User-authored script",
+        },
+      ],
+      recommendedAction: "review",
+      scannedAt: 1,
+      checkedFileCount: 1,
+    });
+    const aiScan = vi.fn().mockResolvedValue({
+      level: "warn",
+      summary: "Review three warning findings.",
+      findings: ["network", "shell", "credential"].map((code) => ({
+        code,
+        severity: "warn",
+        title: `${code} warning`,
+        detail: "User-authored behavior requires review",
+      })),
+      recommendedAction: "review",
+      scannedAt: 2,
+      checkedFileCount: 4,
+      scanMethod: "ai",
+    });
+    const safetyScan = {
+      preflightScan,
+      scan: aiScan,
+      aiConfig: {
+        provider: "openai",
+        apiProtocol: "openai" as const,
+        apiKey: "test-key",
+        apiUrl: "https://example.com/v1",
+        model: "test-model",
+      },
+    };
+    const skill = {
+      id: "skill-gitea-writer",
+      name: "writer",
+      source_id: "source-gitea-writer",
+      source_url: "https://gitea.example.com/team/skills",
+    };
+
+    let reviewError: SkillSafetyReviewRequiredError | undefined;
+    try {
+      await SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(skill, {
+        repoUrl: skill.source_url,
+        directory: "skills/writer",
+        safetyScan,
+      });
+    } catch (error) {
+      if (error instanceof SkillSafetyReviewRequiredError) reviewError = error;
+    }
+
+    expect(reviewError).toMatchObject({
+      sourceKey: "source-gitea-writer",
+      report: {
+        level: "high-risk",
+        scanMethod: "ai",
+        findings: expect.arrayContaining([
+          expect.objectContaining({ code: "script-file" }),
+          expect.objectContaining({ code: "network" }),
+          expect.objectContaining({ code: "shell" }),
+          expect.objectContaining({ code: "credential" }),
+        ]),
+      },
+      packageFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    await expect(
+      SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(skill, {
+        repoUrl: skill.source_url,
+        directory: "skills/writer",
+        safetyScan,
+        approvedPackageFingerprint: "0".repeat(64),
+      }),
+    ).rejects.toBeInstanceOf(SkillSafetyReviewRequiredError);
+    const repoPath =
+      await SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(skill, {
+        repoUrl: skill.source_url,
+        directory: "skills/writer",
+        safetyScan,
+        approvedPackageFingerprint: reviewError?.packageFingerprint,
+      });
+    await expect(
+      fs.readFile(path.join(repoPath, "SKILL.md"), "utf8"),
+    ).resolves.toBe("# Writer\n");
+  });
+
   it("copies the full custom Git/Gitea skill package into the managed repo", async () => {
     await SkillInstaller.init();
 
@@ -505,6 +609,7 @@ describe("SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId", () => {
     await expect(
       SkillInstaller.saveRemoteZipSkillToLocalRepoBySkillId(skill, {
         zipUrl: "https://clawhub.ai/api/v1/download?slug=unsafe-update",
+        approvedPackageFingerprint: "0".repeat(64),
       }),
     ).rejects.toThrow(/SAFETY_SCAN_BLOCKED_UPDATE/);
 

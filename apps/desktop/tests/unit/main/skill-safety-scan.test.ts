@@ -6,7 +6,10 @@ import type {
   SafetyScanAIConfig,
   SkillLocalFileEntry,
 } from "@prompthub/shared/types";
-import { scanSkillSafety } from "../../../src/main/services/skill-safety-scan";
+import {
+  scanSkillSafety,
+  scanSkillSafetyPreflight,
+} from "../../../src/main/services/skill-safety-scan";
 
 const aiConfig: SafetyScanAIConfig = {
   provider: "openai",
@@ -506,6 +509,34 @@ describe("skill-safety-scan", () => {
     ).rejects.toThrow("SAFETY_SCAN_BLOCKED_SOURCE");
 
     expect(aiChat).not.toHaveBeenCalled();
+  });
+
+  it("bounds unresolved source verification for an installed package", async () => {
+    const report = await scanSkillSafetyPreflight(
+      {
+        name: "self-hosted-skill",
+        content: "# Self-hosted Skill",
+        sourceUrl: "https://gitea.example.com/team/skills",
+        localRepoPath: "/managed/self-hosted-skill",
+      },
+      {
+        now: () => 1,
+        readRepoFiles: vi.fn().mockResolvedValue([]),
+        resolveAddress: () => new Promise<never>(() => {}),
+        sourceResolutionTimeoutMs: 1,
+      },
+    );
+
+    expect(report.level).toBe("warn");
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "internal-source",
+          severity: "warn",
+          evidence: "Source address verification timed out",
+        }),
+      ]),
+    );
   });
 
   it("scans an installed managed package even when its custom Gitea source is internal", async () => {

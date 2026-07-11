@@ -354,15 +354,36 @@ describe("skill source update reconciliation", () => {
       resolvedAt: 123,
     });
 
-    expect(check.local?.fingerprintAlgorithm).toBe(
-      LEGACY_STABLE_TEXT_FINGERPRINT_ALGORITHM,
-    );
     expect(check.baseline?.fingerprintAlgorithm).toBe(
       LEGACY_STABLE_TEXT_FINGERPRINT_ALGORITHM,
     );
-    expect(check.remote?.fingerprintAlgorithm).toBe(
-      LEGACY_STABLE_TEXT_FINGERPRINT_ALGORITHM,
+    expect(check.local?.fingerprintAlgorithm).toBe(
+      SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
     );
+    expect(check.remote?.fingerprintAlgorithm).toBe(
+      SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+    );
+  });
+
+  it("does not report an update when legacy entry content and current v1 packages match", () => {
+    const check = buildSkillSourceUpdateCheck({
+      skillId: "private-gitea-skill",
+      sourceIdentity: "gitea:team/prompthub-web",
+      localContentHash: "same-entry-content",
+      installedContentHash: "same-entry-content",
+      remoteContentHash: "same-entry-content",
+      localDirectoryFingerprint: "current-v1-package",
+      installedDirectoryFingerprint: "legacy-package-fingerprint",
+      remoteDirectoryFingerprint: "current-v1-package",
+      fingerprintAlgorithm: LEGACY_STABLE_TEXT_FINGERPRINT_ALGORITHM,
+      resolvedAt: 123,
+    });
+
+    expect(check).toMatchObject({
+      status: "up-to-date",
+      localModified: false,
+      remoteChanged: false,
+    });
   });
 
   it("keeps legacy stable text algorithm separate from sha256 package fingerprints", async () => {

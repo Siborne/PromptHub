@@ -183,6 +183,33 @@ function orderFrontmatter(
   return ordered;
 }
 
+function canonicalizeYamlValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeYamlValue);
+  }
+  if (!isPlainRecord(value)) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort((left, right) => left.localeCompare(right))
+      .map((key) => [key, canonicalizeYamlValue(value[key])]),
+  );
+}
+
+/** Normalize a SKILL.md by YAML semantics for stable content hashing. */
+export function normalizeSkillMdForHash(content: string): string {
+  const normalized = content.replace(/\r\n?/g, "\n");
+  const parsed = parseSkillMd(normalized);
+  if (!parsed || !FRONTMATTER_MARKER.test(normalized)) {
+    return normalized.trimEnd();
+  }
+  const yamlContent = stringify(canonicalizeYamlValue(parsed.rawFrontmatter), {
+    lineWidth: 0,
+  }).trimEnd();
+  return `---\n${yamlContent}\n---\n${parsed.body}`.trimEnd();
+}
+
 /** Serialize SKILL.md while retaining file-owned and extension frontmatter. */
 export function serializeSkillMd(input: SerializeSkillMdInput): string {
   const parsedInstructions = parseSkillMd(input.instructions ?? "");

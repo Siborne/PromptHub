@@ -427,14 +427,24 @@ export interface SkillSafetyReport {
   recommendedAction: "allow" | "review" | "block";
   scannedAt: number;
   checkedFileCount: number;
-  /** Desktop safety scans are AI-generated. */
-  scanMethod: "ai";
+  /** Active model scan or mandatory local package preflight. */
+  scanMethod: "ai" | "preflight";
   /**
    * Numeric safety score 0-100 (higher = safer).
    * blocked=0-10, high-risk=20-40, warn=50-70, safe=80-100
    */
   score?: number;
 }
+
+export interface SkillUpdateSafetyReview {
+  report: SkillSafetyReport;
+  packageFingerprint: string;
+  sourceKey: string;
+}
+
+export type RemoteSkillPackageSaveResult =
+  | { status: "saved"; repoPath: string }
+  | { status: "safety-review-required"; review: SkillUpdateSafetyReview };
 
 /**
  * Minimal AI model config passed from renderer to main process

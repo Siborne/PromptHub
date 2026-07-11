@@ -3,6 +3,7 @@ import type {
   Skill,
   SkillSourceSnapshot,
 } from "@prompthub/shared/types";
+import { normalizeSkillMdForHash } from "@prompthub/core/skills/skill-frontmatter";
 import { computeStableTextHash } from "@prompthub/shared/utils/skill-identity";
 import {
   buildSkillSourceUpdateCheck,
@@ -84,33 +85,8 @@ export function hasRegistrySkillVersionChanged(
   return !areSkillStoreVersionsEqual(installedVersion, registrySkill.version);
 }
 
-function normalizeFrontmatter(content: string): string {
-  if (!content.startsWith("---\n")) {
-    return content;
-  }
-
-  const endIndex = content.indexOf("\n---", 4);
-  if (endIndex === -1) {
-    return content;
-  }
-
-  const frontmatter = content.slice(4, endIndex).trim();
-  const bodyStart = content.startsWith("\n", endIndex + 4)
-    ? endIndex + 5
-    : endIndex + 4;
-  const body = content.slice(bodyStart);
-  const sortedLines = frontmatter
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .sort((left, right) => left.localeCompare(right));
-
-  return `---\n${sortedLines.join("\n")}\n---\n${body}`;
-}
-
 export function normalizeSkillContentForHash(content: string): string {
-  const normalized = content.replace(/\r\n?/g, "\n");
-  return normalizeFrontmatter(normalized).trimEnd();
+  return normalizeSkillMdForHash(content);
 }
 
 export function computeSkillContentFingerprint(content: string): string {

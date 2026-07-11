@@ -17,6 +17,8 @@ const MAX_SCAN_FILES = 200;
 const MAX_TEXT_FILE_BYTES = 256 * 1024;
 const MAX_AI_PROMPT_CONTENT_CHARS = 64 * 1024;
 const MAX_AI_FILE_CONTENT_CHARS = 8 * 1024;
+const LOCAL_PACKAGE_ADDRESS_RESOLUTION_TIMEOUT_MS = 250;
+const SOURCE_ADDRESS_RESOLUTION_TIMEOUT_MS = 2_000;
 const TRUSTED_HOSTS = new Set([
   "github.com",
   "raw.githubusercontent.com",
@@ -195,6 +197,7 @@ interface ScanDeps {
   now?: () => number;
   readRepoFiles?: (absolutePath: string) => Promise<SkillLocalFileEntry[]>;
   resolveAddress?: typeof resolvePublicAddress;
+  sourceResolutionTimeoutMs?: number;
   aiChat?: typeof chatCompletion;
 }
 
@@ -423,6 +426,7 @@ async function scanSourceUrls(
   input: SkillSafetyScanInput,
   findings: SkillSafetyFinding[],
   resolveAddress: typeof resolvePublicAddress,
+  sourceResolutionTimeoutMs: number,
 ): Promise<void> {
   const urls = [input.sourceUrl, input.contentUrl].filter(
     (value): value is string => Boolean(value && value.trim()),
@@ -482,7 +486,11 @@ async function scanSourceUrls(
     }
 
     try {
-      await resolveAddress(host);
+      await resolveSourceAddressWithTimeout(
+        host,
+        resolveAddress,
+        sourceResolutionTimeoutMs,
+      );
     } catch (error) {
       const hasLocalPackage = Boolean(input.localRepoPath);
       addFinding(findings, {
@@ -496,6 +504,39 @@ async function scanSourceUrls(
       });
     }
   }
+}
+
+async function resolveSourceAddressWithTimeout(
+  host: string,
+  resolveAddress: typeof resolvePublicAddress,
+  timeoutMs: number,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const resolution = Promise.resolve().then(() => resolveAddress(host));
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error("Source address verification timed out")),
+      timeoutMs,
+    );
+  });
+
+  try {
+    await Promise.race([resolution, deadline]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+function getSourceResolutionTimeoutMs(
+  input: Pick<SkillSafetyScanInput, "localRepoPath">,
+  deps: Pick<ScanDeps, "sourceResolutionTimeoutMs">,
+): number {
+  const defaultTimeout = input.localRepoPath
+    ? LOCAL_PACKAGE_ADDRESS_RESOLUTION_TIMEOUT_MS
+    : SOURCE_ADDRESS_RESOLUTION_TIMEOUT_MS;
+  return Math.max(1, deps.sourceResolutionTimeoutMs ?? defaultTimeout);
 }
 
 function scanRepoFiles(
@@ -573,11 +614,15 @@ function scanRepoFiles(
 
 export async function scanSkillSafetyPreflight(
   input: Omit<SkillSafetyScanInput, "aiConfig">,
-  deps: Pick<ScanDeps, "now" | "readRepoFiles" | "resolveAddress"> = {},
+  deps: Pick<
+    ScanDeps,
+    "now" | "readRepoFiles" | "resolveAddress" | "sourceResolutionTimeoutMs"
+  > = {},
 ): Promise<SkillSafetyPreflightReport> {
   const resolveAddress = deps.resolveAddress ?? resolvePublicAddress;
   const readRepoFiles = deps.readRepoFiles ?? readRepoFilesFromPath;
   const now = deps.now?.() ?? Date.now();
+  const sourceResolutionTimeoutMs = getSourceResolutionTimeoutMs(input, deps);
 
   let checkedFileCount = input.content ? 1 : 0;
   const findings: SkillSafetyFinding[] = [];
@@ -593,7 +638,12 @@ export async function scanSkillSafetyPreflight(
     scanTextContent(findings, input.content, "SKILL.md");
   }
 
-  await scanSourceUrls(input, findings, resolveAddress);
+  await scanSourceUrls(
+    input,
+    findings,
+    resolveAddress,
+    sourceResolutionTimeoutMs,
+  );
 
   const dedupedFindings = dedupeFindings(findings);
   const level = deriveLevel(dedupedFindings);
@@ -997,6 +1047,7 @@ export async function scanSkillSafety(
 
   const resolveAddress = deps.resolveAddress ?? resolvePublicAddress;
   const readRepoFiles = deps.readRepoFiles ?? readRepoFilesFromPath;
+  const sourceResolutionTimeoutMs = getSourceResolutionTimeoutMs(input, deps);
 
   let checkedFileCount = input.content ? 1 : 0;
   let repoFiles: SkillLocalFileEntry[] = [];
@@ -1013,7 +1064,12 @@ export async function scanSkillSafety(
   // synthetic static report. AI remains the source of truth for the final
   // report, while blocked internal sources fail before the model call.
   const preflightFindings: SkillSafetyFinding[] = [];
-  await scanSourceUrls(input, preflightFindings, resolveAddress);
+  await scanSourceUrls(
+    input,
+    preflightFindings,
+    resolveAddress,
+    sourceResolutionTimeoutMs,
+  );
   preflightFindings.push(...repoFindings);
 
   if (

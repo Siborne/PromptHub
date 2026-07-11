@@ -13,7 +13,10 @@ const useSettingsStoreMock = vi.fn();
 const useToastMock = vi.fn();
 
 vi.mock("../../../src/renderer/stores/settings.store", () => ({
-  useSettingsStore: () => useSettingsStoreMock(),
+  useSettingsStore: (selector?: (state: Record<string, unknown>) => unknown) => {
+    const state = useSettingsStoreMock();
+    return selector ? selector(state) : state;
+  },
 }));
 
 vi.mock("../../../src/renderer/components/ui/Toast", () => ({
@@ -71,6 +74,8 @@ function createSettingsState() {
     aiModels: [],
     autoScanInstalledSkills: false,
     autoScanStoreSkillsBeforeInstall: false,
+    trustedSkillUpdateSourceKeys: [],
+    revokeSkillUpdateSourceTrust: vi.fn(),
     setAutoScanInstalledSkills: vi.fn(),
     setAutoScanStoreSkillsBeforeInstall: vi.fn(),
     githubToken: "",
@@ -222,6 +227,43 @@ describe("SkillSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: /Copy File/ }));
 
     expect(handleSubmit).not.toHaveBeenCalled();
+  });
+
+  it("ignores malformed trusted update source settings from legacy state", async () => {
+    useSettingsStoreMock.mockReturnValue({
+      ...createSettingsState(),
+      trustedSkillUpdateSourceKeys: { legacy: true },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSafetySettingsSection />, {
+        language: "en",
+      });
+    });
+
+    expect(screen.queryByText("Trusted Update Sources")).toBeNull();
+  });
+
+  it("lists and revokes valid trusted update sources", async () => {
+    const revokeSkillUpdateSourceTrust = vi.fn();
+    useSettingsStoreMock.mockReturnValue({
+      ...createSettingsState(),
+      trustedSkillUpdateSourceKeys: ["github.com/example/skills"],
+      revokeSkillUpdateSourceTrust,
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSafetySettingsSection />, {
+        language: "en",
+      });
+    });
+
+    expect(screen.getByText("github.com/example/skills")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(revokeSkillUpdateSourceTrust).toHaveBeenCalledWith(
+      "github.com/example/skills",
+    );
   });
 
   it("adds a custom agent root and shows derived asset previews", async () => {

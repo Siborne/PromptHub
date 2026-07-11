@@ -1,14 +1,28 @@
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants";
-import type { SkillSafetyScanInput } from "@prompthub/shared/types";
+import type {
+  RemoteSkillPackageSaveResult,
+  SkillSafetyScanInput,
+} from "@prompthub/shared/types";
 import { SKILL_PACKAGE_FINGERPRINT_ALGORITHM } from "@prompthub/shared/utils/skill-source-update";
 import { SkillInstaller } from "../../services/skill-installer";
+import { SkillSafetyReviewRequiredError } from "../../services/skill-update-safety";
 import {
   buildSkillSyncUpdateFromRepo,
   computeRepoDirectoryFingerprint,
 } from "../../services/skill-repo-sync";
 import type { SkillIPCContext } from "./shared";
 import { ensureLocalRepoPath } from "./shared";
+
+function validateApprovedPackageFingerprint(
+  value: unknown,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) {
+    throw new Error("approvedPackageFingerprint must be a SHA-256 hex string");
+  }
+  return value;
+}
 
 async function resolveManagedRepoPath(
   context: SkillIPCContext,
@@ -129,6 +143,7 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         branch?: string;
         directory?: string;
         safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
+        approvedPackageFingerprint?: string;
       },
     ) => {
       if (typeof skillId !== "string" || skillId.trim().length === 0) {
@@ -150,21 +165,42 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         throw new Error(`Skill not found: ${skillId}`);
       }
 
-      const repoPath =
-        await SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(skill, {
-          repoUrl: options.repoUrl,
-          branch: options.branch,
-          directory: options.directory,
-          safetyScan: options.safetyScan,
+      try {
+        const approvedPackageFingerprint = validateApprovedPackageFingerprint(
+          options.approvedPackageFingerprint,
+        );
+        const repoPath =
+          await SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(skill, {
+            repoUrl: options.repoUrl,
+            branch: options.branch,
+            directory: options.directory,
+            safetyScan: options.safetyScan,
+            approvedPackageFingerprint,
+          });
+        const directoryFingerprint =
+          await computeRepoDirectoryFingerprint(repoPath);
+        db.update(skillId, {
+          local_repo_path: repoPath,
+          directory_fingerprint: directoryFingerprint,
+          fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
         });
-      const directoryFingerprint =
-        await computeRepoDirectoryFingerprint(repoPath);
-      db.update(skillId, {
-        local_repo_path: repoPath,
-        directory_fingerprint: directoryFingerprint,
-        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
-      });
-      return repoPath;
+        return {
+          status: "saved",
+          repoPath,
+        } satisfies RemoteSkillPackageSaveResult;
+      } catch (error) {
+        if (error instanceof SkillSafetyReviewRequiredError) {
+          return {
+            status: "safety-review-required",
+            review: {
+              report: error.report,
+              packageFingerprint: error.packageFingerprint,
+              sourceKey: error.sourceKey,
+            },
+          } satisfies RemoteSkillPackageSaveResult;
+        }
+        throw error;
+      }
     },
   );
 
@@ -176,6 +212,7 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
       options?: {
         zipUrl?: string;
         safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
+        approvedPackageFingerprint?: string;
       },
     ) => {
       if (typeof skillId !== "string" || skillId.trim().length === 0) {
@@ -197,19 +234,40 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         throw new Error(`Skill not found: ${skillId}`);
       }
 
-      const repoPath =
-        await SkillInstaller.saveRemoteZipSkillToLocalRepoBySkillId(skill, {
-          zipUrl: options.zipUrl,
-          safetyScan: options.safetyScan,
+      try {
+        const approvedPackageFingerprint = validateApprovedPackageFingerprint(
+          options.approvedPackageFingerprint,
+        );
+        const repoPath =
+          await SkillInstaller.saveRemoteZipSkillToLocalRepoBySkillId(skill, {
+            zipUrl: options.zipUrl,
+            safetyScan: options.safetyScan,
+            approvedPackageFingerprint,
+          });
+        const directoryFingerprint =
+          await computeRepoDirectoryFingerprint(repoPath);
+        db.update(skillId, {
+          local_repo_path: repoPath,
+          directory_fingerprint: directoryFingerprint,
+          fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
         });
-      const directoryFingerprint =
-        await computeRepoDirectoryFingerprint(repoPath);
-      db.update(skillId, {
-        local_repo_path: repoPath,
-        directory_fingerprint: directoryFingerprint,
-        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
-      });
-      return repoPath;
+        return {
+          status: "saved",
+          repoPath,
+        } satisfies RemoteSkillPackageSaveResult;
+      } catch (error) {
+        if (error instanceof SkillSafetyReviewRequiredError) {
+          return {
+            status: "safety-review-required",
+            review: {
+              report: error.report,
+              packageFingerprint: error.packageFingerprint,
+              sourceKey: error.sourceKey,
+            },
+          } satisfies RemoteSkillPackageSaveResult;
+        }
+        throw error;
+      }
     },
   );
 

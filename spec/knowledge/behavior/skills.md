@@ -47,6 +47,10 @@
 - `local-linked` 外部目录是用户外部文件夹的内容真相源。v1 不允许直接把远程来源更新覆盖进外部链接目录；UI 必须引导用户转换为 PromptHub 托管副本或手动更新外部目录。
 - 来源解析必须先归类为明确 adapter kind：`remote-store`、`remote-git`、`remote-zip`、`content-url`、`local-linked` 或 `managed-copy`。raw `content-url` 是单文件来源，安装基线与远程 package fingerprint 必须等于该 `SKILL.md` 的内容 hash，不得信任 registry 中陈旧或外部提供的目录指纹。
 - 非本地远程来源更新必须先完成内容落盘，再写入 DB 元数据和来源基线。远程 Git/Zip package 更新必须先通过暂存/安全检查/落盘流程；raw `content-url` 更新在单文件写入前也必须运行安全扫描，且只有 `SKILL.md` 写入成功后才允许刷新基线。任何远程内容落盘失败都不得提前把 DB 标记为已更新。
+- 远程 Git/Zip 更新的本地 package 结构、路径穿越与禁止模式预检始终启用；可选 AI 扫描与本地预检的结果必须在首次人工复核前合并。`blocked`、路径穿越、无效 package 结构和不安全 archive 不可绕过；`high-risk` 必须返回结构化 findings 供用户复核，不得退化为仅含错误字符串的 IPC 失败。
+- `high-risk` 更新批准必须绑定本次暂存 package 的 SHA-256 fingerprint，并在重试时重新暂存、扫描与比对；内容变化后旧批准失效。复核未产生内容变更时不得留下多余版本快照。
+- 用户可显式信任一个确切 Skill 来源，作用域必须是 `source_id` 或规范化的 repo/branch/directory，不得扩大为整个 Git/Gitea host。信任只允许扫描后的 fingerprint 自动重试，不跳过扫描；首次信任只能在人工批准成功后持久化，并且必须可在设置中撤销。持久化来源键不得包含 URL userinfo、query 或 fragment。
+- 来源地址验证必须有超时边界。对于已经暂存并完成本地 package 扫描的更新，无法解析的自建来源只能产生可见的 provenance warning，不得令更新请求长期挂起；尚未物化本地 package 的内部/不可验证来源继续采用严格阻断策略。
 - 如果 raw `content-url` 已写入但最终 DB 基线写入失败，必须通过更新前创建的版本快照回滚，避免本地文件内容与数据库来源基线长期不一致。
 - PromptHub 托管 repo 替换必须使用 staging/backup swap；复制、校验或 sidecar 写入失败时，应保留上一个可用 managed repo。
 - 来源检查失败时，PromptHub 应保留本地内容，返回 `source-unavailable`，并只保存净化后的 `source_last_error` 摘要，避免把 URL userinfo、token、query secret、堆栈换行等细节暴露到持久化错误字段。

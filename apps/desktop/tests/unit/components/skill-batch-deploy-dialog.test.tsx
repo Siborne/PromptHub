@@ -104,7 +104,9 @@ describe("SkillBatchDeployDialog install mode", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Claude Code")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Claude Code/ }),
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Symlink/ }));
@@ -132,7 +134,9 @@ describe("SkillBatchDeployDialog install mode", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Claude Code")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Claude Code/ }),
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Copy/ }));
@@ -197,8 +201,12 @@ describe("SkillBatchDeployDialog install mode", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Claude Code")).toBeInTheDocument();
-      expect(screen.getByText("Team Agent")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Claude Code/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Team Agent/ }),
+      ).toBeInTheDocument();
     });
     expect(screen.queryByText("Codex CLI")).not.toBeInTheDocument();
   });
@@ -257,7 +265,9 @@ describe("SkillBatchDeployDialog install mode", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Claude Code")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Claude Code/ }),
+      ).toBeInTheDocument();
     });
 
     const submitButton = getSubmitButton();
@@ -291,7 +301,9 @@ describe("SkillBatchDeployDialog install mode", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Claude Code")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Claude Code/ }),
+      ).toBeInTheDocument();
     });
 
     const closeButton = screen.getByRole("button", { name: "Close" });

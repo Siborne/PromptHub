@@ -61,6 +61,7 @@ const settingsState = {
   setProjectSkillImportPreferences: vi.fn(),
   aiModels: [],
   updateSkillProject: vi.fn(),
+  trustSkillUpdateSource: vi.fn(),
 };
 
 vi.mock("../../../src/renderer/stores/skill.store", () => ({
@@ -192,6 +193,7 @@ function resetState() {
   settingsState.setProjectSkillImportPreferences = vi.fn();
   settingsState.aiModels = [];
   settingsState.updateSkillProject = vi.fn();
+  settingsState.trustSkillUpdateSource = vi.fn();
 }
 
 describe("SkillFullDetailPage async actions", () => {
@@ -474,6 +476,82 @@ describe("SkillFullDetailPage async actions", () => {
     });
   });
 
+  it("reviews a high-risk source update and retries the exact fingerprint", async () => {
+    const selectedSkill = storeState.skills[0];
+    const updateCheck = makeUpdateCheck(selectedSkill);
+    const updateInstalledSkillFromSource = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: "safety-review-required",
+        check: updateCheck,
+        review: {
+          sourceKey: "source:private-gitea-skill",
+          packageFingerprint: "a".repeat(64),
+          report: {
+            level: "high-risk",
+            summary: "Review one script.",
+            findings: [
+              {
+                code: "script-file",
+                severity: "high",
+                title: "Script requires review",
+                detail: "User-authored script",
+              },
+            ],
+            recommendedAction: "review",
+            scannedAt: 1,
+            checkedFileCount: 1,
+            scanMethod: "preflight",
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: "updated",
+        skill: selectedSkill,
+        check: { ...updateCheck, status: "up-to-date" },
+      });
+    storeState.getInstalledSkillSourceUpdateStatus = vi
+      .fn()
+      .mockResolvedValue(updateCheck);
+    storeState.updateInstalledSkillFromSource = updateInstalledSkillFromSource;
+
+    await act(async () => {
+      await renderWithI18n(<SkillFullDetailPage />, { language: "en" });
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Check Source Updates" }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Update from Source" }),
+      );
+    });
+
+    expect(await screen.findByText("Review Skill Update")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(
+        screen.getByLabelText(
+          "Trust future high-risk updates from this exact Skill source",
+        ),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Update Anyway" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(updateInstalledSkillFromSource).toHaveBeenLastCalledWith(
+        selectedSkill.id,
+        expect.objectContaining({
+          approvedPackageFingerprint: "a".repeat(64),
+        }),
+      );
+    });
+    expect(settingsState.trustSkillUpdateSource).toHaveBeenCalledWith(
+      "source:private-gitea-skill",
+    );
+  });
+
   it("allows explicit source overwrite after a local-modified update check", async () => {
     const selectedSkill = storeState.skills[0];
     const updateCheck: RegistrySkillUpdateCheck = {
@@ -570,8 +648,7 @@ describe("SkillFullDetailPage async actions", () => {
           ...makeUpdateCheck(selectedSkill),
           status,
           localModified: status === "local-modified" || status === "conflict",
-          remoteChanged:
-            status === "update-available" || status === "conflict",
+          remoteChanged: status === "update-available" || status === "conflict",
         });
 
       await act(async () => {

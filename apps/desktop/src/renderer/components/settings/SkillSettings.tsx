@@ -20,14 +20,12 @@ import type {
   BuiltinAgentOverrideConfig,
   CustomAgentConfig,
 } from "@prompthub/shared/types";
-import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
-
 import {
   SKILL_PLATFORMS,
   getPlatformRootTemplate,
+  type SkillPlatform,
 } from "@prompthub/shared/constants/platforms";
 import { useSettingsStore } from "../../stores/settings.store";
-import { useSkillStore } from "../../stores/skill.store";
 import {
   buildAgentRootAssetPreview,
   getEffectiveBuiltinAgentConfig,
@@ -37,8 +35,9 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { SettingSection, ToggleSwitch } from "./shared";
 import { useToast } from "../ui/Toast";
-import { getSafetyScanAIConfig } from "../skill/detail-utils";
 import { sortSkillPlatformsByPreference } from "../skill/use-skill-platform";
+import { getRendererPlatform } from "../../services/runtime-platform";
+export { SkillSafetySettingsSection } from "./SkillSafetySettingsSection";
 
 interface ManagedAgentEntry {
   id: string;
@@ -57,13 +56,6 @@ interface ManagedAgentEntry {
   configRelativePaths?: string[];
 }
 
-function getCurrentPlatformKey(): "darwin" | "win32" | "linux" {
-  const platform = navigator.userAgent.toLowerCase();
-  if (platform.includes("win")) return "win32";
-  if (platform.includes("mac")) return "darwin";
-  return "linux";
-}
-
 function useOrderedPlatforms() {
   const settings = useSettingsStore();
 
@@ -78,7 +70,7 @@ function useOrderedPlatforms() {
 function useManagedAgentEntries() {
   const settings = useSettingsStore();
   const orderedPlatforms = useOrderedPlatforms();
-  const currentPlatformKey = getCurrentPlatformKey();
+  const currentPlatformKey = getRendererPlatform();
 
   return useMemo<ManagedAgentEntry[]>(() => {
     const builtinEntries: ManagedAgentEntry[] = orderedPlatforms.map(
@@ -173,7 +165,7 @@ export function SkillSettings() {
   const { showToast } = useToast();
   const orderedPlatforms = useOrderedPlatforms();
   const managedAgentEntries = useManagedAgentEntries();
-  const currentPlatformKey = getCurrentPlatformKey();
+  const currentPlatformKey = getRendererPlatform();
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentRootPath, setNewAgentRootPath] = useState("");
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
@@ -1499,142 +1491,5 @@ export function SkillSettings() {
         cancelText={t("common.cancel", "Cancel")}
       />
     </div>
-  );
-}
-
-export function SkillSafetySettingsSection() {
-  const { t } = useTranslation();
-  const settings = useSettingsStore();
-  const scanInstalledSkillSafety = useSkillStore(
-    (state) => state.scanInstalledSkillSafety,
-  );
-  const aiModels = settings.aiModels;
-  const { showToast } = useToast();
-  const [isBatchScanning, setIsBatchScanning] = useState(false);
-
-  return (
-    <SettingSection
-      title={t("settings.skillSafetyChecks", "Skill Safety Checks")}
-    >
-      <div className="p-4 space-y-3">
-        <p className="text-xs text-muted-foreground">
-          {t(
-            "settings.skillSafetyChecksDesc",
-            "Control automatic safety scans for installed Skills and pre-install checks from the store.",
-          )}
-        </p>
-        <button
-          type="button"
-          onClick={() =>
-            settings.setAutoScanInstalledSkills(
-              !settings.autoScanInstalledSkills,
-            )
-          }
-          aria-pressed={settings.autoScanInstalledSkills}
-          className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
-            settings.autoScanInstalledSkills
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/30"
-          }`}
-        >
-          <div className="text-sm font-semibold">
-            {t(
-              "settings.autoScanInstalledSkills",
-              "Auto-scan Installed Skills",
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t(
-              "settings.autoScanInstalledSkillsDesc",
-              "Automatically run a safety scan when opening a Skill detail page to detect high-risk changes.",
-            )}
-          </p>
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            settings.setAutoScanStoreSkillsBeforeInstall(
-              !settings.autoScanStoreSkillsBeforeInstall,
-            )
-          }
-          aria-pressed={settings.autoScanStoreSkillsBeforeInstall}
-          className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
-            settings.autoScanStoreSkillsBeforeInstall
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/30"
-          }`}
-        >
-          <div className="text-sm font-semibold">
-            {t(
-              "settings.autoScanStoreSkillsBeforeInstall",
-              "Pre-install Safety Scan",
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t(
-              "settings.autoScanStoreSkillsBeforeInstallDesc",
-              "Off by default. When enabled, a safety scan runs before adding a Skill from the store, blocking obviously dangerous entries.",
-            )}
-          </p>
-        </button>
-        <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold">
-                {t(
-                  "settings.batchScanInstalledSkills",
-                  "Scan All Installed Skills Now",
-                )}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t(
-                  "settings.batchScanInstalledSkillsDesc",
-                  "Manually run a safety scan on all Skills in your library to quickly find high-risk content.",
-                )}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const run = async () => {
-                  setIsBatchScanning(true);
-                  try {
-                    const summary = await scanInstalledSkillSafety(
-                      undefined,
-                      getSafetyScanAIConfig(aiModels),
-                    );
-                    showToast(
-                      t("settings.batchScanInstalledSkillsResult", {
-                        total: summary.total,
-                        blocked: summary.blocked,
-                        highRisk: summary.highRisk,
-                        warn: summary.warn,
-                        defaultValue: `Checked ${summary.total} skills · blocked ${summary.blocked} · high risk ${summary.highRisk} · warn ${summary.warn}`,
-                      }),
-                      summary.blocked > 0 || summary.highRisk > 0
-                        ? "error"
-                        : summary.warn > 0
-                          ? "warning"
-                          : "success",
-                    );
-                  } catch (error) {
-                    showToast(String(error), "error");
-                  } finally {
-                    setIsBatchScanning(false);
-                  }
-                };
-                void run();
-              }}
-              disabled={isBatchScanning}
-              className="shrink-0 h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-            >
-              {isBatchScanning
-                ? t("skill.safetyScanning", "Scanning...")
-                : t("skill.runSafetyAssessment", "Run Scan")}
-            </button>
-          </div>
-        </div>
-      </div>
-    </SettingSection>
   );
 }

@@ -1,37 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Loader2Icon,
   Link2Icon,
-  CheckSquareIcon,
-  DownloadIcon,
   ListChecksIcon,
-  PackagePlusIcon,
   SearchIcon,
   Settings2Icon,
-  Trash2Icon,
   XIcon,
-  LayoutGridIcon,
-  CodeIcon,
-  SparklesIcon,
-  BarChartIcon,
-  ShieldIcon,
-  RocketIcon,
-  PaletteIcon,
-  WandIcon,
-  BriefcaseIcon,
-  FileSpreadsheetIcon,
-  BoxesIcon,
-  GlobeIcon,
-  FolderIcon,
-  DatabaseIcon,
   RefreshCwIcon,
-  StoreIcon,
 } from "lucide-react";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { SkillStoreDetail } from "./SkillStoreDetail";
-import { SkillStoreCard } from "./SkillStoreCard";
 import { SkillStoreCustomSources } from "./SkillStoreCustomSources";
 import { SkillStoreSourceEditModal } from "./SkillStoreSourceEditModal";
 import { SkillStoreSourceForm } from "./SkillStoreSourceForm";
@@ -69,391 +48,27 @@ import {
   getRemoteStoreSkillCount,
   getRemoteStoreSkills,
 } from "../../services/remote-store-entry";
+import { SkillStoreCatalog } from "./SkillStoreCatalog";
+import { SkillStoreSourceOverview } from "./SkillStoreSourceOverview";
+import {
+  SkillStoreBatchToolbar,
+  type StoreBatchOperation,
+} from "./SkillStoreBatchToolbar";
+import {
+  getRegistrySkillPendingKey,
+  getRegistrySkillSelectionId,
+} from "./skill-store-identifiers";
+import {
+  CATEGORY_ICONS,
+  CUSTOM_SOURCE_TYPE_OPTIONS,
+  formatStoreSourceHint,
+  getErrorMessage,
+} from "./skill-store-presentation";
 
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  all: <LayoutGridIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-  office: <FileSpreadsheetIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-  dev: <CodeIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-  ai: <SparklesIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-  data: <BarChartIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-  management: <BriefcaseIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-  deploy: <RocketIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-  design: <PaletteIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-  security: <ShieldIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-  meta: <WandIcon aria-hidden="true" className="w-3.5 h-3.5" />,
-};
-
-const CUSTOM_SOURCE_TYPE_OPTIONS: Array<{
-  value: Extract<
-    SkillStoreSource["type"],
-    "marketplace-json" | "git-repo" | "local-dir"
-  >;
-  icon: React.ReactNode;
-}> = [
-  {
-    value: "marketplace-json",
-    icon: <DatabaseIcon className="w-4 h-4" />,
-  },
-  {
-    value: "git-repo",
-    icon: <GlobeIcon className="w-4 h-4" />,
-  },
-  {
-    value: "local-dir",
-    icon: <FolderIcon className="w-4 h-4" />,
-  },
-];
-
-const STORE_GRID_GAP_PX = 12;
-const STORE_GRID_ROW_HEIGHT_PX = 118;
-const STORE_GRID_HEADER_HEIGHT_PX = 36;
-const STORE_GRID_BOTTOM_GUTTER_PX = 24;
-const STORE_CATALOG_VIRTUALIZE_THRESHOLD = 240;
 const STORE_SEARCH_DEBOUNCE_MS = 300;
-
-type StoreBatchOperation = "install" | "update" | "remove";
-
-type StoreCatalogRow =
-  | {
-      type: "section";
-      key: string;
-      label: string;
-      count: number;
-      tone: "installed" | "available";
-    }
-  | {
-      type: "skills";
-      key: string;
-      skills: RegistrySkill[];
-      installed: boolean;
-      startIndex: number;
-    };
-
-function getStoreGridColumns(width: number): number {
-  if (width >= 1200) return 4;
-  if (width >= 760) return 3;
-  if (width >= 640) return 2;
-  return 1;
-}
-
-function buildStoreCatalogRows(options: {
-  availableLabel: string;
-  columns: number;
-  importedLabel: string;
-  installed: RegistrySkill[];
-  recommended: RegistrySkill[];
-}): StoreCatalogRow[] {
-  const rows: StoreCatalogRow[] = [];
-  const appendSection = (
-    key: string,
-    label: string,
-    skills: RegistrySkill[],
-    installed: boolean,
-  ) => {
-    if (skills.length === 0) return;
-    rows.push({
-      type: "section",
-      key: `${key}-header`,
-      label,
-      count: skills.length,
-      tone: installed ? "installed" : "available",
-    });
-
-    for (let index = 0; index < skills.length; index += options.columns) {
-      const rowSkills = skills.slice(index, index + options.columns);
-      rows.push({
-        type: "skills",
-        key: `${key}-${index}-${rowSkills.map(getRegistrySkillSelectionId).join("|")}`,
-        skills: rowSkills,
-        installed,
-        startIndex: index,
-      });
-    }
-  };
-
-  appendSection("installed", options.importedLabel, options.installed, true);
-  appendSection("available", options.availableLabel, options.recommended, false);
-  return rows;
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function getStoreSourceErrorCode(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function formatStoreSourceHint(source: SkillStoreSource): string {
-  const parts = [source.url];
-  if (source.branch) {
-    parts.push(`branch: ${source.branch}`);
-  }
-  if (source.directory) {
-    parts.push(`dir: ${source.directory}`);
-  }
-  return parts.join(" | ");
-}
-
-function getRegistrySkillSelectionId(skill: RegistrySkill): string {
-  return skill.source_id || skill.slug || skill.source_url;
-}
-
-function getRegistrySkillPendingKey(skill: RegistrySkill): string {
-  return skill.source_id || skill.source_url || skill.slug;
-}
-
-interface VirtualizedSkillStoreCatalogProps {
-  availableLabel: string;
-  batchMode: boolean;
-  hasPotentialUpdate: (skill: RegistrySkill) => boolean;
-  importedLabel: string;
-  installed: RegistrySkill[];
-  installingSourceIds: Record<string, true>;
-  isSkillInstalled: (skill: RegistrySkill) => boolean;
-  onOpenSkillDetail: (skill: RegistrySkill) => void;
-  onQuickInstall: (skill: RegistrySkill, e: React.MouseEvent) => void;
-  onSelectSkill: (sourceId: string) => void;
-  onToggleBatchSelection: (skill: RegistrySkill) => void;
-  recommended: RegistrySkill[];
-  scrollRef: React.RefObject<HTMLDivElement>;
-  selectedSourceIds: Set<string>;
-  storeLabel: string;
-  storeTone: "official" | "community" | "git" | "local";
-}
-
-function VirtualizedSkillStoreCatalog({
-  availableLabel,
-  batchMode,
-  hasPotentialUpdate,
-  importedLabel,
-  installed,
-  installingSourceIds,
-  isSkillInstalled,
-  onOpenSkillDetail,
-  onQuickInstall,
-  onSelectSkill,
-  onToggleBatchSelection,
-  recommended,
-  scrollRef,
-  selectedSourceIds,
-  storeLabel,
-  storeTone,
-}: VirtualizedSkillStoreCatalogProps) {
-  const catalogRef = useRef<HTMLDivElement | null>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
-  const [scrollMargin, setScrollMargin] = useState(0);
-
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-
-    const update = () => {
-      setContainerWidth(
-        Math.max(0, node.clientWidth || window.innerWidth || 1024),
-      );
-      setScrollMargin(catalogRef.current?.offsetTop ?? 0);
-    };
-    update();
-
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-    };
-  }, [scrollRef]);
-
-  const columns = useMemo(
-    () => getStoreGridColumns(containerWidth || 1024),
-    [containerWidth],
-  );
-  const rows = useMemo(
-    () =>
-      buildStoreCatalogRows({
-        availableLabel,
-        columns,
-        importedLabel,
-        installed,
-        recommended,
-      }),
-    [availableLabel, columns, importedLabel, installed, recommended],
-  );
-  const totalSkillCount = installed.length + recommended.length;
-
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollRef.current,
-    scrollMargin,
-    estimateSize: (index) =>
-      rows[index]?.type === "section"
-        ? STORE_GRID_HEADER_HEIGHT_PX
-        : STORE_GRID_ROW_HEIGHT_PX + STORE_GRID_GAP_PX,
-    overscan: 5,
-    getItemKey: (index) => rows[index]?.key ?? `store-row-${index}`,
-  });
-
-  const virtualRows = rowVirtualizer.getVirtualItems();
-  const totalHeight = rowVirtualizer.getTotalSize();
-
-  if (totalSkillCount <= STORE_CATALOG_VIRTUALIZE_THRESHOLD) {
-    return (
-      <div className="space-y-8">
-        {installed.length > 0 && (
-          <section>
-            <div className="mb-4 flex items-center gap-2">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                {importedLabel}
-              </h3>
-              <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-bold text-green-500">
-                {installed.length}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {installed.map((skill, index) => (
-                <SkillStoreCard
-                  key={getRegistrySkillSelectionId(skill)}
-                  skill={skill}
-                  isInstalled={true}
-                  hasUpdate={hasPotentialUpdate(skill)}
-                  index={index}
-                  batchMode={batchMode}
-                  isSelected={selectedSourceIds.has(
-                    getRegistrySkillSelectionId(skill),
-                  )}
-                  storeLabel={storeLabel}
-                  storeTone={storeTone}
-                  installingSourceIds={installingSourceIds}
-                  onOpenDetail={onOpenSkillDetail}
-                  onClick={() =>
-                    batchMode
-                      ? onToggleBatchSelection(skill)
-                      : onSelectSkill(getRegistrySkillSelectionId(skill))
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {recommended.length > 0 && (
-          <section>
-            <div className="mb-4 flex items-center gap-2">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                {availableLabel}
-              </h3>
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                {recommended.length}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {recommended.map((skill, index) => (
-                <SkillStoreCard
-                  key={getRegistrySkillSelectionId(skill)}
-                  skill={skill}
-                  isInstalled={isSkillInstalled(skill)}
-                  index={index}
-                  batchMode={batchMode}
-                  isSelected={selectedSourceIds.has(
-                    getRegistrySkillSelectionId(skill),
-                  )}
-                  storeLabel={storeLabel}
-                  storeTone={storeTone}
-                  installingSourceIds={installingSourceIds}
-                  onOpenDetail={onOpenSkillDetail}
-                  onQuickInstall={onQuickInstall}
-                  onClick={() =>
-                    batchMode
-                      ? onToggleBatchSelection(skill)
-                      : onSelectSkill(getRegistrySkillSelectionId(skill))
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      ref={catalogRef}
-      className="relative w-full"
-      data-testid="skill-store-virtual-catalog"
-      style={{ height: `${totalHeight + STORE_GRID_BOTTOM_GUTTER_PX}px` }}
-    >
-      {virtualRows.map((virtualRow) => {
-        const row = rows[virtualRow.index];
-        if (!row) return null;
-
-        return (
-          <div
-            key={virtualRow.key}
-            data-index={virtualRow.index}
-            data-testid="skill-store-virtual-row"
-            ref={rowVirtualizer.measureElement}
-            className="absolute left-0 right-0"
-            style={{
-              top: 0,
-              transform: `translateY(${virtualRow.start - scrollMargin}px)`,
-            }}
-          >
-            {row.type === "section" ? (
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">
-                  {row.label}
-                </h3>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                    row.tone === "installed"
-                      ? "bg-green-500/10 text-green-500"
-                      : "bg-primary/10 text-primary"
-                  }`}
-                >
-                  {row.count}
-                </span>
-              </div>
-            ) : (
-              <div
-                className="grid"
-                style={{
-                  gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                  gap: `${STORE_GRID_GAP_PX}px`,
-                }}
-              >
-                {row.skills.map((skill, itemIndex) => (
-                  <SkillStoreCard
-                    key={getRegistrySkillSelectionId(skill)}
-                    skill={skill}
-                    isInstalled={row.installed || isSkillInstalled(skill)}
-                    hasUpdate={
-                      row.installed ? hasPotentialUpdate(skill) : undefined
-                    }
-                    index={row.startIndex + itemIndex}
-                    batchMode={batchMode}
-                    isSelected={selectedSourceIds.has(
-                      getRegistrySkillSelectionId(skill),
-                    )}
-                    storeLabel={storeLabel}
-                    storeTone={storeTone}
-                    installingSourceIds={installingSourceIds}
-                    onOpenDetail={onOpenSkillDetail}
-                    onQuickInstall={row.installed ? undefined : onQuickInstall}
-                    onClick={() =>
-                      batchMode
-                        ? onToggleBatchSelection(skill)
-                        : onSelectSkill(getRegistrySkillSelectionId(skill))
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 export function SkillStore() {
@@ -609,8 +224,8 @@ export function SkillStore() {
     selectedRemoteEntry?.query === expectedClawHubQuery;
   const visibleRemoteEntry =
     isSelectedSkillsShEntryCurrent && isSelectedClawHubEntryCurrent
-    ? selectedRemoteEntry
-    : undefined;
+      ? selectedRemoteEntry
+      : undefined;
   const selectedStoreTotalCount = visibleRemoteEntry?.totalCount;
   const selectedStoreMatchedCount = visibleRemoteEntry?.matchedCount;
   const selectedStoreLoadedCount = getRemoteStoreSkillCount(visibleRemoteEntry);
@@ -633,8 +248,7 @@ export function SkillStore() {
     selectedStoreSourceId === "community" ||
     selectedStoreSourceId === "clawhub" ||
     Boolean(selectedCustomSource);
-  const hasReliableStoreCategoryFilter =
-    selectedStoreSourceId !== "clawhub";
+  const hasReliableStoreCategoryFilter = selectedStoreSourceId !== "clawhub";
 
   useEffect(() => {
     if (!isSelectedSourceRemote) return;
@@ -858,7 +472,9 @@ export function SkillStore() {
 
   useEffect(() => {
     if (selectedStoreSkillIds.size === 0) return;
-    const visibleIds = new Set(sourceRegistrySkills.map(getRegistrySkillSelectionId));
+    const visibleIds = new Set(
+      sourceRegistrySkills.map(getRegistrySkillSelectionId),
+    );
     setSelectedStoreSkillIds((current) => {
       const next = new Set<string>();
       current.forEach((id) => {
@@ -1500,9 +1116,9 @@ export function SkillStore() {
         </div>
       </div>
 
-      {((shouldShowGenericCategoryFilter ||
+      {(shouldShowGenericCategoryFilter ||
         shouldShowSkillsShFilter ||
-        shouldShowStoreSearch) ||
+        shouldShowStoreSearch ||
         selectedStoreSourceId === "new-custom") && (
         <div
           className="px-6 py-3 border-b border-border app-wallpaper-section space-y-3"
@@ -1541,27 +1157,27 @@ export function SkillStore() {
           )}
 
           {shouldShowGenericCategoryFilter && (
-          <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-            {categories.map((cat) => {
-              const isActive = storeCategory === cat.key;
-              return (
-                <button
-                  key={cat.key}
-                  type="button"
-                  aria-pressed={isActive}
-                  onClick={() => setStoreCategory(cat.key)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                    isActive
-                      ? "bg-primary text-white shadow-sm"
-                      : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                  }`}
-                >
-                  <span aria-hidden="true">{CATEGORY_ICONS[cat.key]}</span>
-                  {cat.label}
-                </button>
-              );
-            })}
-          </div>
+            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
+              {categories.map((cat) => {
+                const isActive = storeCategory === cat.key;
+                return (
+                  <button
+                    key={cat.key}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setStoreCategory(cat.key)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                      isActive
+                        ? "bg-primary text-white shadow-sm"
+                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                    }`}
+                  >
+                    <span aria-hidden="true">{CATEGORY_ICONS[cat.key]}</span>
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
           )}
 
           {shouldShowSkillsShFilter && (
@@ -1592,21 +1208,21 @@ export function SkillStore() {
           )}
 
           {selectedStoreSourceId === "new-custom" && (
-          <SkillStoreSourceForm
-            branch={sourceBranch}
-            directory={sourceDirectory}
-            handleAddSource={handleAddSource}
-            setBranch={setSourceBranch}
-            setDirectory={setSourceDirectory}
-            setSourceName={setSourceName}
-            setSourceType={setSourceType}
-            setSourceUrl={setSourceUrl}
-            sourceName={sourceName}
-            sourceType={sourceType}
-            sourceUrl={sourceUrl}
-            t={t}
-            typeOptions={CUSTOM_SOURCE_TYPE_OPTIONS}
-          />
+            <SkillStoreSourceForm
+              branch={sourceBranch}
+              directory={sourceDirectory}
+              handleAddSource={handleAddSource}
+              setBranch={setSourceBranch}
+              setDirectory={setSourceDirectory}
+              setSourceName={setSourceName}
+              setSourceType={setSourceType}
+              setSourceUrl={setSourceUrl}
+              sourceName={sourceName}
+              sourceType={sourceType}
+              sourceUrl={sourceUrl}
+              t={t}
+              typeOptions={CUSTOM_SOURCE_TYPE_OPTIONS}
+            />
           )}
         </div>
       )}
@@ -1678,7 +1294,7 @@ export function SkillStore() {
         {sourceMeta.showCatalog && (
           <>
             {installed.length > 0 || recommended.length > 0 ? (
-              <VirtualizedSkillStoreCatalog
+              <SkillStoreCatalog
                 availableLabel={t("skill.availableSection", "Available")}
                 batchMode={isStoreBatchMode}
                 hasPotentialUpdate={hasPotentialUpdate}
@@ -1725,10 +1341,7 @@ export function SkillStore() {
                       {t("skill.storeLoadingMore", "Loading more...")}
                     </>
                   ) : canLoadNextStorePage ? (
-                    t(
-                      "skill.storeScrollLoadHint",
-                      "Scroll down to load more",
-                    )
+                    t("skill.storeScrollLoadHint", "Scroll down to load more")
                   ) : (
                     t("skill.storeEndOfResults", "End of results")
                   )}
@@ -1738,193 +1351,10 @@ export function SkillStore() {
           </>
         )}
 
-        {selectedStoreSourceId === "claude-code" && (
-          <div className="app-wallpaper-panel border border-border rounded-2xl p-6 space-y-4">
-            <div className="flex items-center gap-2 text-foreground">
-              <GlobeIcon className="w-5 h-5 text-primary" />
-              <h3 className="text-base font-semibold">
-                {t("skill.claudeCodeStore", "Claude Code Store")}
-              </h3>
-            </div>
-            <p className="text-sm text-muted-foreground leading-7">
-              {t(
-                "skill.claudeCodeStoreDetail",
-                "This built-in source is meant for the Claude Code ecosystem. It is designed to work first with the official skills repository and marketplace.json indexes, and can later become a browsable remote store.",
-              )}
-            </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <div className="text-sm font-medium text-foreground mb-1">
-                  {t("skill.supportedFormat", "Supported Formats")}
-                </div>
-                <div className="text-xs text-muted-foreground leading-6">
-                  {t(
-                    "skill.formatDirectoryRepo",
-                    "`SKILL.md` directory-style repository",
-                  )}
-                  <br />
-                  {t(
-                    "skill.formatIndexStore",
-                    "`marketplace.json` index-style store",
-                  )}
-                </div>
-              </div>
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <div className="text-sm font-medium text-foreground mb-1">
-                  {t("skill.exampleSources", "Built-in Reference Sources")}
-                </div>
-                <div className="text-xs text-muted-foreground leading-6 break-all">
-                  https://github.com/anthropics/skills
-                  <br />
-                  https://raw.githubusercontent.com/docker/claude-code-plugin-manager/main/marketplace.json
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {selectedStoreSourceId === "openai-codex" && (
-          <div className="app-wallpaper-panel border border-border rounded-2xl p-6 space-y-4">
-            <div className="flex items-center gap-2 text-foreground">
-              <GlobeIcon className="w-5 h-5 text-primary" />
-              <h3 className="text-base font-semibold">
-                {t("skill.openaiCodexStore", "OpenAI Codex Store")}
-              </h3>
-            </div>
-            <p className="text-sm text-muted-foreground leading-7">
-              {t(
-                "skill.openaiCodexStoreDetail",
-                "This built-in source is meant for the OpenAI Codex ecosystem. It focuses on the curated openai/skills catalog and keeps the install flow compatible with directory-style SKILL.md repositories.",
-              )}
-            </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <div className="text-sm font-medium text-foreground mb-1">
-                  {t("skill.supportedFormat", "Supported Formats")}
-                </div>
-                <div className="text-xs text-muted-foreground leading-6">
-                  {t(
-                    "skill.formatDirectoryRepo",
-                    "`SKILL.md` directory-style repository",
-                  )}
-                  <br />
-                  {t(
-                    "skill.formatCuratedSubdir",
-                    "Curated subdirectory inside a larger Git repository",
-                  )}
-                </div>
-              </div>
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <div className="text-sm font-medium text-foreground mb-1">
-                  {t("skill.exampleSources", "Built-in Reference Sources")}
-                </div>
-                <div className="text-xs text-muted-foreground leading-6 break-all">
-                  https://github.com/openai/skills/tree/main/skills/.curated
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {selectedStoreSourceId === "community" && (
-          <div className="app-wallpaper-panel border border-border rounded-2xl p-6 space-y-4">
-            <div className="flex items-center gap-2 mb-3 text-foreground">
-              <BoxesIcon className="w-5 h-5 text-primary" />
-              <h3 className="text-base font-semibold">
-                {t("skill.communityStore", "Community Store")}
-              </h3>
-            </div>
-            <p className="text-sm text-muted-foreground leading-6">
-              {t(
-                "skill.communityStoreHint",
-                "This area will aggregate third-party community skill sources. The entry is ready for connecting a community registry next.",
-              )}
-            </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <div className="text-sm font-medium text-foreground mb-1">
-                  {t("skill.supportedFormat", "Supported Formats")}
-                </div>
-                <div className="text-xs text-muted-foreground leading-6">
-                  {t(
-                    "skill.formatCommunityLeaderboard",
-                    "skills.sh community leaderboard",
-                  )}
-                  <br />
-                  {t(
-                    "skill.formatSkillDetailPage",
-                    "skills.sh skill detail page",
-                  )}
-                </div>
-              </div>
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <div className="text-sm font-medium text-foreground mb-1">
-                  {t("skill.exampleSources", "Built-in Reference Sources")}
-                </div>
-                <div className="text-xs text-muted-foreground leading-6 break-all">
-                  https://skills.sh/
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {selectedStoreSourceId === "clawhub" && (
-          <div className="app-wallpaper-panel border border-border rounded-2xl p-6 space-y-4">
-            <div className="flex items-center gap-2 mb-3 text-foreground">
-              <GlobeIcon className="w-5 h-5 text-primary" />
-              <h3 className="text-base font-semibold">
-                {t("skill.clawHubStore", "ClawHub Store")}
-              </h3>
-            </div>
-            <p className="text-sm text-muted-foreground leading-6">
-              {t(
-                "skill.clawHubStoreHint",
-                "Built-in ClawHub source for browsing public community skills from clawhub.ai.",
-              )}
-            </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <div className="text-sm font-medium text-foreground mb-1">
-                  {t("skill.supportedFormat", "Supported Formats")}
-                </div>
-                <div className="text-xs text-muted-foreground leading-6">
-                  {t(
-                    "skill.formatClawHubApi",
-                    "ClawHub public skill registry API",
-                  )}
-                  <br />
-                  {t("skill.formatSkillMdFile", "`SKILL.md` file endpoint")}
-                </div>
-              </div>
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
-                <div className="text-sm font-medium text-foreground mb-1">
-                  {t("skill.exampleSources", "Built-in Reference Sources")}
-                </div>
-                <div className="text-xs text-muted-foreground leading-6 break-all">
-                  https://clawhub.ai/
-                  <br />
-                  https://clawhub.ai/api/v1/skills
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {selectedStoreSourceId === "official" && (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-20 text-center text-muted-foreground">
-            <StoreIcon className="mb-4 h-12 w-12 opacity-25" />
-            <h3 className="mb-1 text-lg font-semibold text-foreground">
-              {t("skill.officialStoreComingSoon", "Official store coming soon")}
-            </h3>
-            <p className="max-w-md text-sm leading-6 opacity-80">
-              {t(
-                "skill.officialStoreComingSoonHint",
-                "The official store is not open yet. You can import skills from Claude Code, OpenAI Codex, or a custom store for now.",
-              )}
-            </p>
-          </div>
-        )}
+        <SkillStoreSourceOverview
+          selectedStoreSourceId={selectedStoreSourceId}
+          t={t}
+        />
 
         {(selectedStoreSourceId === "new-custom" || selectedCustomSource) && (
           <section className="space-y-4">
@@ -1963,109 +1393,23 @@ export function SkillStore() {
       </div>
 
       {isStoreBatchMode && sourceMeta.showCatalog && (
-        <div className="shrink-0 border-t border-border app-wallpaper-panel-strong px-6 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="rounded-full border border-border bg-card/80 px-3 py-1 text-xs font-medium text-muted-foreground">
-              {t("skill.selectedCount", "{{count}} selected", {
-                count: selectedStoreSkillIds.size,
-              })}
-            </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={handleSelectVisibleStoreSkills}
-                disabled={isStoreBatchBusy || sourceRegistrySkills.length === 0}
-                className={`rounded-lg p-2 transition-colors disabled:opacity-40 ${
-                  areVisibleStoreSkillsSelected
-                    ? "bg-primary/10 text-primary hover:bg-primary/15"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                }`}
-                aria-label={selectVisibleStoreSkillsLabel}
-                title={selectVisibleStoreSkillsLabel}
-              >
-                <CheckSquareIcon aria-hidden="true" className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={handleBatchInstallStoreSkills}
-                disabled={
-                  isStoreBatchBusy || selectedInstallTargets.length === 0
-                }
-                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-40"
-                aria-label={t(
-                  "skill.batchStoreInstallSelected",
-                  "Install selected",
-                )}
-                title={t(
-                  "skill.batchStoreInstallSelected",
-                  "Install selected",
-                )}
-              >
-                {runningBatchOperation === "install" ? (
-                  <Loader2Icon
-                    aria-hidden="true"
-                    className="h-4 w-4 animate-spin"
-                  />
-                ) : (
-                  <PackagePlusIcon aria-hidden="true" className="h-4 w-4" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleBatchUpdateStoreSkills}
-                disabled={
-                  isStoreBatchBusy || selectedUpdateTargets.length === 0
-                }
-                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-500 disabled:opacity-40"
-                aria-label={t(
-                  "skill.batchStoreUpdateSelected",
-                  "Update selected",
-                )}
-                title={t(
-                  "skill.batchStoreUpdateSelected",
-                  "Update selected",
-                )}
-              >
-                {runningBatchOperation === "update" ? (
-                  <Loader2Icon
-                    aria-hidden="true"
-                    className="h-4 w-4 animate-spin"
-                  />
-                ) : (
-                  <DownloadIcon aria-hidden="true" className="h-4 w-4" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleBatchRemoveStoreSkills}
-                disabled={
-                  isStoreBatchBusy || selectedRemoveTargets.length === 0
-                }
-                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-                aria-label={t(
-                  "skill.batchStoreRemoveSelected",
-                  "Remove selected from My Skills",
-                )}
-                title={t(
-                  "skill.batchStoreRemoveSelected",
-                  "Remove selected from My Skills",
-                )}
-              >
-                <Trash2Icon aria-hidden="true" className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={handleClearStoreBatchSelection}
-                disabled={isStoreBatchBusy || selectedStoreSkillIds.size === 0}
-                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
-                aria-label={t("common.deselectAll", "Deselect All")}
-                title={t("common.deselectAll", "Deselect All")}
-              >
-                <XIcon aria-hidden="true" className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <SkillStoreBatchToolbar
+          areVisibleSkillsSelected={areVisibleStoreSkillsSelected}
+          canInstall={selectedInstallTargets.length > 0}
+          canRemove={selectedRemoveTargets.length > 0}
+          canSelectVisible={sourceRegistrySkills.length > 0}
+          canUpdate={selectedUpdateTargets.length > 0}
+          isBusy={isStoreBatchBusy}
+          onClear={handleClearStoreBatchSelection}
+          onInstall={handleBatchInstallStoreSkills}
+          onRemove={handleBatchRemoveStoreSkills}
+          onSelectVisible={handleSelectVisibleStoreSkills}
+          onUpdate={handleBatchUpdateStoreSkills}
+          runningOperation={runningBatchOperation}
+          selectedCount={selectedStoreSkillIds.size}
+          selectVisibleLabel={selectVisibleStoreSkillsLabel}
+          t={t}
+        />
       )}
 
       <SkillStoreSourceEditModal
