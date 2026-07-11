@@ -38,6 +38,7 @@ const listenerMap = new Map<
   (...args: any[]) => void,
   (...args: any[]) => void
 >();
+const isE2EEnvironment = process.env.PROMPTHUB_E2E === "1";
 
 type DataPathChangeAction = "migrate" | "switch" | "overwrite";
 
@@ -403,10 +404,14 @@ contextBridge.exposeInMainWorld("electron", {
       },
     ) => ipcRenderer.invoke(IPC_CHANNELS.S3_STAT, key, config),
   },
-  e2e: {
-    getStats: () => ipcRenderer.invoke("e2e:getStats"),
-    resetStats: () => ipcRenderer.invoke("e2e:resetStats"),
-  },
+  ...(isE2EEnvironment
+    ? {
+        e2e: {
+          getStats: () => ipcRenderer.invoke("e2e:getStats"),
+          resetStats: () => ipcRenderer.invoke("e2e:resetStats"),
+        },
+      }
+    : {}),
   // Shortcuts
   // 快捷键
   getShortcuts: () => ipcRenderer.invoke("shortcuts:get"),

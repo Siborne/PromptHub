@@ -61,6 +61,13 @@ function getSeedPath(seedFileName: string) {
   return path.join(process.cwd(), "tests/e2e/fixtures", seedFileName);
 }
 
+async function waitForRendererReady(page: Page): Promise<void> {
+  await page.waitForLoadState("domcontentloaded");
+  await expect(
+    page.locator("#root button:not([disabled])").first(),
+  ).toBeVisible();
+}
+
 export async function launchPromptHub(
   seedFileName: string | null,
   options: LaunchOptions = {},
@@ -84,13 +91,13 @@ export async function launchPromptHub(
   });
 
   const page = await app.firstWindow();
-  await page.waitForLoadState("domcontentloaded");
-  await expect(page.locator("#root")).toBeVisible();
+  await waitForRendererReady(page);
 
   return { app, page, userDataDir };
 }
 
 export async function setAppLanguage(page: Page, language: string) {
+  await waitForRendererReady(page);
   await page.evaluate((nextLanguage) => {
     localStorage.setItem(
       "prompthub-settings",
@@ -100,13 +107,14 @@ export async function setAppLanguage(page: Page, language: string) {
     );
   }, language);
   await page.reload();
-  await page.waitForLoadState("domcontentloaded");
+  await waitForRendererReady(page);
 }
 
 export async function setAppSettings(
   page: Page,
   nextSettings: Record<string, unknown>,
 ) {
+  await waitForRendererReady(page);
   const mainSettingsPatch = buildMainSettingsPatch(nextSettings);
 
   await page.evaluate(async ({ settingsPatch, persistedSettingsPatch }) => {
@@ -122,7 +130,7 @@ export async function setAppSettings(
     }
   }, { settingsPatch: nextSettings, persistedSettingsPatch: mainSettingsPatch });
   await page.reload();
-  await page.waitForLoadState("domcontentloaded");
+  await waitForRendererReady(page);
 }
 
 export async function closePromptHub(

@@ -1009,6 +1009,9 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
           id: _id,
           created_at: _createdAt,
           updated_at: _updatedAt,
+          // Backup files can cross machines. Reusing an old local source path
+          // could write restored files into a missing or user-owned directory.
+          local_repo_path: _localRepoPath,
           ...createData
         } = skill;
         const restoredSkill = await window.api?.skill?.create(

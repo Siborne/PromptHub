@@ -1,27 +1,35 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import { ToastProvider } from './components/ui/Toast';
-import {
-  exportDatabase,
-  restoreFromBackup,
-} from "./services/database-backup";
-import './styles/globals.css';
-import { i18nReady } from './i18n';  // Initialize i18n / 初始化 i18n
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { ToastProvider } from "./components/ui/Toast";
+import "./styles/globals.css";
+import { i18nReady } from "./i18n";
 
-if (window.electron?.e2e) {
-  window.__PROMPTHUB_E2E_BACKUP__ = {
-    exportDatabase,
-    restoreFromBackup,
-  };
-}
+// Start loading the app while the selected locale is initialized, without
+// making the renderer entry parse every application feature before it can boot.
+const appModule = import("./App");
+const App = React.lazy(() => appModule);
 
-void i18nReady.then(() => {
-  ReactDOM.createRoot(document.getElementById('root')!).render(
+const e2eBackupReady = window.electron?.e2e
+  ? import("./services/database-backup").then(
+      ({ exportDatabase, restoreFromBackup }) => {
+        window.__PROMPTHUB_E2E_BACKUP__ = {
+          exportDatabase,
+          restoreFromBackup,
+        };
+      },
+    )
+  : Promise.resolve();
+
+void Promise.all([i18nReady, e2eBackupReady]).then(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <ToastProvider>
-        <App />
+        <React.Suspense
+          fallback={<div className="h-screen bg-background" aria-busy="true" />}
+        >
+          <App />
+        </React.Suspense>
       </ToastProvider>
-    </React.StrictMode>
+    </React.StrictMode>,
   );
 });

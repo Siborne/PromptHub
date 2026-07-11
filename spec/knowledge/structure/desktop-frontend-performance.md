@@ -66,6 +66,7 @@ Renderer startup entry (`index-*.js`) 不应静态 import 与当前首屏无关�
 - 更新、导入、AI 测试、技能详情等 modal/detail surface 默认按需加载；共享类型必须用 `import type`，避免 TypeScript 类型意外变成 runtime import。
 - 功能专属 store：常驻 shell 组件（如 `TopBar`、`Sidebar`、`App`）不得为了某个非默认模块静态 import 对应 store。应把模块专属搜索、导航面板、详情面板抽到 lazy 组件中，由该组件订阅自己的 store。例如 Rules UI 通过 `TopBarRulesSearch` / `RulesSidebarPanel` 按需加载 `rules.store.ts`。
 - 内置注册表、模板目录、base64 图标表等大静态数据不得为了一个轻量 selector 或分类常量进入启动路径。需要共享小型元数据时，拆成独立轻量常量文件；完整注册表只在用户打开对应 store/marketplace 并触发加载动作时动态 import。
+- E2E 专用 bridge 和其依赖只可在明确的 E2E preload profile 下暴露和加载。普通桌面启动不得仅因测试 API 存在而请求备份、fixture 或测试辅助模块；E2E runner 必须覆盖该 profile 的启动和 bridge 就绪时序。
 
 新增或修改启动路径 import 后，必须运行 `pnpm --filter @prompthub/desktop bundle:budget`。如果预算失败，先用 `pnpm --filter @prompthub/desktop build:analyze` 确认是否把 cold-path JSON、markdown、AI provider、modal 或设置页模块打进了主入口。
 

@@ -1382,6 +1382,7 @@ describe("database-backup restore", () => {
             created_at: Date.parse("2026-04-07T00:00:00.000Z"),
             updated_at: Date.parse("2026-04-07T00:00:00.000Z"),
             currentVersion: 1,
+            local_repo_path: "/previous-machine/skills/writer/repo",
           } as any,
         ],
         skillVersions: [
@@ -1425,6 +1426,8 @@ describe("database-backup restore", () => {
       }),
       { skipInitialVersion: true },
     );
+    const [createPayload] = window.api.skill.create.mock.calls[0];
+    expect(createPayload).not.toHaveProperty("local_repo_path");
     expect(window.api.skill.insertVersionDirect).toHaveBeenCalledWith(
       expect.objectContaining({
         skillId: "restored-skill-1",
