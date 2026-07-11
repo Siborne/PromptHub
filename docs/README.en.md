@@ -114,7 +114,7 @@ Want to try the next dev preview? Open _Settings → About_ and toggle the previ
 
 ## Screenshots
 
-> The screenshots below show the current 0.5.9 stable surfaces, including MCP / Skill / Plugin management, source-update review, safety checks, and Agent distribution entry points.
+> The screenshots below cover all five desktop workspaces in the current 0.5.9 stable: Prompt, Skill, MCP, Plugin, and Rules.
 
 <div align="center">
   <p><strong>Two-column home</strong></p>
@@ -125,6 +125,12 @@ Want to try the next dev preview? Open _Settings → About_ and toggle the previ
   <br/><br/>
   <p><strong>Skill detail with one-click platform install</strong></p>
   <img src="./imgs/11-skill-platform-install.png" width="80%" alt="Skill platform install"/>
+  <br/><br/>
+  <p><strong>MCP workspace</strong></p>
+  <img src="./imgs/18-mcp-workspace.png" width="80%" alt="MCP workspace"/>
+  <br/><br/>
+  <p><strong>Plugin workspace</strong></p>
+  <img src="./imgs/19-plugin-workspace.png" width="80%" alt="Plugin workspace"/>
   <br/><br/>
   <p><strong>Rules workspace</strong></p>
   <img src="./imgs/13-rules-workspace.png" width="80%" alt="Rules workspace"/>

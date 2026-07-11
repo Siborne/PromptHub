@@ -22,11 +22,12 @@
  *   2 — required output directories are missing or the build is stale
  */
 
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { getScreenshotPlanMismatch } from "./readme-screenshot-plan.mts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +39,11 @@ const seedPath = path.join(
 );
 const mainEntry = path.join(desktopRoot, "out/main/index.js");
 const docsImgsDir = path.join(repoRoot, "docs/imgs");
+const pluginFixtureDir = path.join(
+  desktopRoot,
+  "out",
+  "screenshots-plugin-fixture",
+);
 
 const VIEWPORT = { width: 1440, height: 900 } as const;
 
@@ -71,6 +77,50 @@ async function ensureDocsDir(): Promise<void> {
   await mkdir(docsImgsDir, { recursive: true });
 }
 
+async function createPluginFixture(): Promise<string> {
+  await rm(pluginFixtureDir, { recursive: true, force: true });
+  await mkdir(path.join(pluginFixtureDir, ".codex-plugin"), {
+    recursive: true,
+  });
+  await mkdir(path.join(pluginFixtureDir, "skills", "release-check"), {
+    recursive: true,
+  });
+  await mkdir(path.join(pluginFixtureDir, "commands"), { recursive: true });
+
+  await writeFile(
+    path.join(pluginFixtureDir, ".codex-plugin", "plugin.json"),
+    `${JSON.stringify(
+      {
+        name: "release-companion",
+        version: "1.0.0",
+        description: "Release readiness helpers for PromptHub teams.",
+        skills: "./skills",
+        commands: ["./commands/release-check.md"],
+        interface: {
+          displayName: "Release Companion",
+          longDescription:
+            "Reusable release checks, handoffs, and changelog prompts.",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginFixtureDir, "skills", "release-check", "SKILL.md"),
+    "---\nname: release-check\n---\nValidate release readiness.\n",
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginFixtureDir, "commands", "release-check.md"),
+    "Review the release candidate.\n",
+    "utf8",
+  );
+
+  return pluginFixtureDir;
+}
+
 async function setLanguageAndTheme(page: Page): Promise<void> {
   await page.evaluate(() => {
     const raw = localStorage.getItem("prompthub-settings");
@@ -87,6 +137,33 @@ async function setLanguageAndTheme(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
+async function seedIntegrationLibraries(
+  page: Page,
+  sourcePath: string,
+): Promise<void> {
+  await page.evaluate(async (pluginSourcePath) => {
+    await window.api.mcp.createServer({
+      name: "release-tracker",
+      displayName: "Release Tracker",
+      description: "Tracks release readiness across PromptHub workspaces.",
+      transport: "stdio",
+      command: "npx",
+      args: ["-y", "@prompthub/release-tracker"],
+      enabled: true,
+      tags: ["release", "engineering"],
+      source: { type: "manual", label: "README fixture" },
+    });
+    await window.api.plugin.importLocalPluginPackage({
+      sourcePath: pluginSourcePath,
+      sourceTargetId: "codex",
+      sourceTargetName: "Codex",
+    });
+  }, sourcePath);
+  await page.reload();
+  await page.waitForLoadState("domcontentloaded");
+  await settle(page, 500);
+}
+
 async function settle(page: Page, ms: number = 350): Promise<void> {
   await page.waitForTimeout(ms);
 }
@@ -95,6 +172,17 @@ async function capture(page: Page, filename: string): Promise<void> {
   const out = path.join(docsImgsDir, filename);
   await page.screenshot({ path: out, animations: "disabled" });
   console.log(`  -> ${path.relative(repoRoot, out)}`);
+}
+
+function assertSurfacePlan(): void {
+  const capturedFilenames = SURFACES.map((surface) => surface.filename);
+  const { missing, unlisted } = getScreenshotPlanMismatch(capturedFilenames);
+
+  if (missing.length > 0 || unlisted.length > 0) {
+    throw new Error(
+      `README screenshot plan mismatch: missing [${missing.join(", ")}], unlisted [${unlisted.join(", ")}].`,
+    );
+  }
 }
 
 const SURFACES: Surface[] = [
@@ -148,20 +236,6 @@ const SURFACES: Surface[] = [
     },
   },
   {
-    filename: "12-skill-files-version-diff.png",
-    description: "Skill file editor + version history",
-    async prepare(page) {
-      // From the skill detail surface, open Version History.
-      const versionButton = page
-        .locator('button:has-text("Version History"), button:has-text("版本历史")')
-        .first();
-      if (await versionButton.isVisible().catch(() => false)) {
-        await versionButton.click();
-        await settle(page, 600);
-      }
-    },
-  },
-  {
     filename: "13-rules-workspace.png",
     description: "Rules workspace",
     async prepare(page) {
@@ -197,21 +271,6 @@ const SURFACES: Surface[] = [
     },
   },
   {
-    filename: "16-tag-manager.png",
-    description: "Tag manager modal",
-    async prepare(page) {
-      // The tag-manager entry sits in the sidebar tag area as a small gear
-      // button next to the "TAGS" label.
-      const tagSettings = page
-        .locator('button[aria-label="Edit"], button[title="Edit"]')
-        .first();
-      if (await tagSettings.isVisible().catch(() => false)) {
-        await tagSettings.click();
-        await settle(page, 600);
-      }
-    },
-  },
-  {
     filename: "17-appearance-motion.png",
     description: "Settings → Appearance with the motion section",
     async prepare(page) {
@@ -231,11 +290,45 @@ const SURFACES: Surface[] = [
       }
     },
   },
+  {
+    filename: "18-mcp-workspace.png",
+    description: "MCP workspace",
+    async prepare(page) {
+      const mcpNav = page.locator('button[title="MCP"]').first();
+      await mcpNav.waitFor({ state: "visible", timeout: 5000 });
+      await mcpNav.click();
+      const myMcpNav = page.locator('button[title="My MCP"]').first();
+      await myMcpNav.waitFor({ state: "visible", timeout: 5000 });
+      await myMcpNav.click();
+      await page.getByText("Release Tracker", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 5000,
+      });
+      await settle(page, 500);
+    },
+  },
+  {
+    filename: "19-plugin-workspace.png",
+    description: "Plugin workspace",
+    async prepare(page) {
+      const pluginNav = page.locator('button[title="Plugins"]').first();
+      await pluginNav.waitFor({ state: "visible", timeout: 5000 });
+      await pluginNav.click();
+      const myPluginsNav = page.locator('button[title="My Plugins"]').first();
+      await myPluginsNav.waitFor({ state: "visible", timeout: 5000 });
+      await myPluginsNav.click();
+      await page
+        .getByText("Release Companion", { exact: true })
+        .waitFor({ state: "visible", timeout: 5000 });
+      await settle(page, 500);
+    },
+  },
 ];
 
 async function captureAll(): Promise<void> {
   await ensureBuilt();
   await ensureDocsDir();
+  assertSurfacePlan();
 
   let app: ElectronApplication | null = null;
   let exitCode = 0;
@@ -249,6 +342,7 @@ async function captureAll(): Promise<void> {
     // empty profile.
     await rm(userDataDir, { recursive: true, force: true });
     await mkdir(userDataDir, { recursive: true });
+    const pluginSourcePath = await createPluginFixture();
 
     app = await electron.launch({
       args: [mainEntry],
@@ -264,6 +358,7 @@ async function captureAll(): Promise<void> {
     await page.waitForLoadState("domcontentloaded");
     await page.setViewportSize(VIEWPORT);
     await setLanguageAndTheme(page);
+    await seedIntegrationLibraries(page, pluginSourcePath);
 
     for (const surface of SURFACES) {
       console.log(`[screenshots] ${surface.description} (${surface.filename})`);
@@ -289,6 +384,7 @@ async function captureAll(): Promise<void> {
     if (app) {
       await app.close().catch(() => undefined);
     }
+    await rm(pluginFixtureDir, { recursive: true, force: true });
   }
 
   process.exit(exitCode);

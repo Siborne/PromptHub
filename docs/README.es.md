@@ -114,7 +114,7 @@ Vuelve a abrir la app. Sustituye la ruta si la instalaste en otro sitio.
 
 ## Capturas
 
-> Las siguientes capturas muestran las superficies principales de la estable v0.5.9, incluyendo MCP, Plugin, árbol de relaciones de Prompt, mejoras de importación/vista previa de Skill y espacios de trabajo de Skill por proyecto.
+> Las siguientes capturas cubren los cinco espacios de trabajo de escritorio de la estable v0.5.9: Prompt, Skill, MCP, Plugin y Rules.
 
 <div align="center">
   <p><strong>Home en dos columnas</strong></p>
@@ -125,6 +125,12 @@ Vuelve a abrir la app. Sustituye la ruta si la instalaste en otro sitio.
   <br/><br/>
   <p><strong>Detalle de Skill con instalación a plataformas con un clic</strong></p>
   <img src="./imgs/11-skill-platform-install.png" width="80%" alt="Instalación de Skill en plataforma"/>
+  <br/><br/>
+  <p><strong>Espacio MCP</strong></p>
+  <img src="./imgs/18-mcp-workspace.png" width="80%" alt="Espacio MCP"/>
+  <br/><br/>
+  <p><strong>Espacio Plugin</strong></p>
+  <img src="./imgs/19-plugin-workspace.png" width="80%" alt="Espacio Plugin"/>
   <br/><br/>
   <p><strong>Espacio Rules</strong></p>
   <img src="./imgs/13-rules-workspace.png" width="80%" alt="Espacio Rules"/>

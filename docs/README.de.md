@@ -114,7 +114,7 @@ Nächste Entwicklungs-Vorschau testen? _Einstellungen → Über_ öffnen und den
 
 ## Screenshots
 
-> Die folgenden Screenshots zeigen die aktuellen Oberflächen der stabilen Version 0.5.9, einschließlich MCP-/Skill-/Plugin-Verwaltung, Source-Update-Prüfung, Sicherheitschecks und Agent-Verteilung.
+> Die folgenden Screenshots decken alle fünf Desktop-Workspaces der stabilen Version 0.5.9 ab: Prompt, Skill, MCP, Plugin und Rules.
 
 <div align="center">
   <p><strong>Zwei-Spalten-Home</strong></p>
@@ -125,6 +125,12 @@ Nächste Entwicklungs-Vorschau testen? _Einstellungen → Über_ öffnen und den
   <br/><br/>
   <p><strong>Skill-Detail mit Ein-Klick-Installation auf Plattformen</strong></p>
   <img src="./imgs/11-skill-platform-install.png" width="80%" alt="Skill-Plattforminstallation"/>
+  <br/><br/>
+  <p><strong>MCP-Workspace</strong></p>
+  <img src="./imgs/18-mcp-workspace.png" width="80%" alt="MCP-Workspace"/>
+  <br/><br/>
+  <p><strong>Plugin-Workspace</strong></p>
+  <img src="./imgs/19-plugin-workspace.png" width="80%" alt="Plugin-Workspace"/>
   <br/><br/>
   <p><strong>Rules-Workspace</strong></p>
   <img src="./imgs/13-rules-workspace.png" width="80%" alt="Rules-Workspace"/>

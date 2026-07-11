@@ -118,7 +118,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 
 ## 截图
 
-> 下面这几张展示了当前稳定版 0.5.9 的核心交互，包括 MCP / Skill / Plugin 管理、来源更新确认、安全检查和 Agent 分发入口。
+> 以下截图覆盖当前稳定版 0.5.9 的五个桌面工作区：Prompt、Skill、MCP、Plugin 和 Rules。
 
 <div align="center">
   <p><strong>主界面（双栏首页）</strong></p>
@@ -129,6 +129,12 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
   <br/><br/>
   <p><strong>Skill 详情与一键安装到平台</strong></p>
   <img src="./docs/imgs/11-skill-platform-install.png" width="80%" alt="Skill 平台安装"/>
+  <br/><br/>
+  <p><strong>MCP 工作区</strong></p>
+  <img src="./docs/imgs/18-mcp-workspace.png" width="80%" alt="MCP 工作区"/>
+  <br/><br/>
+  <p><strong>Plugin 工作区</strong></p>
+  <img src="./docs/imgs/19-plugin-workspace.png" width="80%" alt="Plugin 工作区"/>
   <br/><br/>
   <p><strong>Rules 工作区</strong></p>
   <img src="./docs/imgs/13-rules-workspace.png" width="80%" alt="Rules 工作区"/>

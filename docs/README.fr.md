@@ -114,7 +114,7 @@ Vous voulez tester la prochaine version d'aperçu ? Ouvrez _Paramètres → À p
 
 ## Captures
 
-> Les captures suivantes présentent les surfaces principales de la stable v0.5.9, dont MCP, Plugin, les arbres de relations Prompt, les améliorations import/aperçu Skill et les espaces Skill par projet.
+> Les captures suivantes couvrent les cinq espaces de travail de bureau de la stable v0.5.9 : Prompt, Skill, MCP, Plugin et Rules.
 
 <div align="center">
   <p><strong>Home en deux colonnes</strong></p>
@@ -125,6 +125,12 @@ Vous voulez tester la prochaine version d'aperçu ? Ouvrez _Paramètres → À p
   <br/><br/>
   <p><strong>Détail Skill avec installation plateforme en un clic</strong></p>
   <img src="./imgs/11-skill-platform-install.png" width="80%" alt="Installation Skill plateforme"/>
+  <br/><br/>
+  <p><strong>Espace MCP</strong></p>
+  <img src="./imgs/18-mcp-workspace.png" width="80%" alt="Espace MCP"/>
+  <br/><br/>
+  <p><strong>Espace Plugin</strong></p>
+  <img src="./imgs/19-plugin-workspace.png" width="80%" alt="Espace Plugin"/>
   <br/><br/>
   <p><strong>Espace Rules</strong></p>
   <img src="./imgs/13-rules-workspace.png" width="80%" alt="Espace Rules"/>
