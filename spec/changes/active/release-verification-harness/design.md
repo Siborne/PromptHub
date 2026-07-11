@@ -25,7 +25,11 @@ Two profiles are available:
 
 - Shared packages: compile exported shared contracts before downstream apps consume them.
 - CLI: lint, typecheck, tests, and build for standalone distribution.
-- CLI workspace snapshot tests retain full filesystem, SQLite, MCP, and Plugin assertions while using a 15-second per-test budget so a timed-out async test cannot reset shared runtime paths during the following case.
+- `DES-VERIFY-004`: programmatic `runCli` calls serialize access to
+  process-global runtime paths, database handles, and console suppression.
+  CLI Vitest file parallelism is disabled because its test files also mutate
+  process-global runtime paths, database handles, `cwd`, and `HOME`; the
+  isolation applies only inside the shared test process.
 - Heavy desktop jsdom regressions use the established 30-second desktop test budget instead of narrower local overrides that fail only under full-suite load.
 - Desktop unit tests run with two to four workers. The worker bound is a release-test reliability control, not a relaxation of assertions or individual test budgets.
 - Desktop integration mocks must expose the renderer database exports used by the backup flow. Prompt-card integration tests assert the semantic role, focusability, and keyboard behavior actually provided by the card rather than a `type` attribute unavailable on its composite control.
@@ -42,6 +46,20 @@ keyboard semantics through the composite control's observable role,
 focusability, and activation behavior. Test fixtures must not preserve obsolete
 exports or DOM element assumptions.
 
+Self-hosted sync E2E remote seeds are API contract fixtures. Their `version`
+field identifies the backup format, not a scenario label, so they must use a
+supported production snapshot version such as `web-backup-v2`.
+
+E2E helpers that patch renderer-owned persisted settings wait for the React
+application to render a visible enabled root button after every reload. A
+DOMContentLoaded event alone is not a store-hydration boundary: a still-running
+startup write can otherwise replace a test's localStorage patch with defaults.
+
+Manual self-hosted upload and restore coverage targets the visible action names
+(`Back up to remote` and `Update from remote`). Managed rule, MCP, and Plugin
+inventory is read from the live desktop before upload, then asserted from the
+persisted remote snapshot rather than against a historical fixture count.
+
 ## Tradeoffs
 
 - The harness intentionally does not call aggregate scripts such as `test:release` or `verify:web`; it expands the underlying unique commands so duplicate validation is visible and prevented.
@@ -52,3 +70,7 @@ exports or DOM element assumptions.
 | Requirement | Design | Verification | Task |
 | --- | --- | --- | --- |
 | `FR-VERIFY-003` | `DES-VERIFY-003` | `TEST-VERIFY-003`, `TEST-VERIFY-004` | `T-VERIFY-003` |
+| `FR-VERIFY-004` | `DES-VERIFY-004` | `TEST-VERIFY-005` | `T-VERIFY-004` |
+| `FR-VERIFY-003` | `DES-VERIFY-003` | `TEST-VERIFY-006` | `T-VERIFY-006` |
+| `FR-VERIFY-003` | `DES-VERIFY-003` | `TEST-VERIFY-007` | `T-VERIFY-007` |
+| `FR-VERIFY-003` | `DES-VERIFY-003` | `TEST-VERIFY-008` | `T-VERIFY-008` |

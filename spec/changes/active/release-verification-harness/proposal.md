@@ -10,6 +10,8 @@ Recent releases exposed multiple user-found regressions after publishing. The pr
   - Add a root release verification harness that covers desktop, CLI, web, Cloudflare worker, and shared workspace packages.
   - Keep each harness command unique so release validation does not duplicate the same test layer through nested aggregate scripts.
   - Keep the desktop jsdom suite within a bounded worker pool so the release gate remains reliable on normal developer machines.
+  - Serialize programmatic CLI commands that share process-global runtime and
+    database state.
   - Document the expected verification layers for future bug fixes and release work.
 - Out of scope:
   - Rewriting existing test suites.
@@ -22,6 +24,9 @@ Recent releases exposed multiple user-found regressions after publishing. The pr
 - Newly exposed package-level typecheck gaps may fail until shared packages are brought into compliance.
 - E2E smoke remains environment-sensitive and may require local browser/runtime dependencies.
 - Reducing desktop test parallelism increases suite duration, but avoids worker RPC failures and false timeout failures under memory pressure.
+- CLI runtime paths, database handles, console suppression, and test process
+  state are global; serializing embedded invocations trades some test
+  parallelism for data-directory isolation.
 
 ## Rollback Thinking
 

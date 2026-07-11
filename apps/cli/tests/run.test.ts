@@ -80,6 +80,52 @@ describe("standalone cli wiring", () => {
     expect(listRes.json[0].title).toBe("CLI Prompt");
   });
 
+  it("keeps concurrent programmatic CLI invocations in their own data directories", async () => {
+    const firstRoot = makeTempRoot(tempDirs);
+    const secondRoot = makeTempRoot(tempDirs);
+    const [firstCreate, secondCreate] = await Promise.all([
+      execCli([
+        ...withDataDir(firstRoot),
+        "prompt",
+        "create",
+        "--title",
+        "First concurrent prompt",
+        "--user-prompt",
+        "first",
+      ]),
+      execCli([
+        ...withDataDir(secondRoot),
+        "prompt",
+        "create",
+        "--title",
+        "Second concurrent prompt",
+        "--user-prompt",
+        "second",
+      ]),
+    ]);
+
+    expect(firstCreate.exitCode).toBe(0);
+    expect(secondCreate.exitCode).toBe(0);
+
+    const firstList = await execCli([
+      ...withDataDir(firstRoot),
+      "prompt",
+      "list",
+    ]);
+    const secondList = await execCli([
+      ...withDataDir(secondRoot),
+      "prompt",
+      "list",
+    ]);
+
+    expect(
+      firstList.json.map((prompt: { title: string }) => prompt.title),
+    ).toEqual(["First concurrent prompt"]);
+    expect(
+      secondList.json.map((prompt: { title: string }) => prompt.title),
+    ).toEqual(["Second concurrent prompt"]);
+  }, 10_000);
+
   it("creates new CLI databases under the unified data directory", async () => {
     const root = makeTempRoot(tempDirs);
     const userDataDir = path.join(root, "user-data");

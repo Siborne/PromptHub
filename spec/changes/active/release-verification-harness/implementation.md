@@ -10,9 +10,10 @@
 - Included `packages/shared/utils/**/*` in shared package typechecking because it is exported package surface.
 - Added explicit Node type boundaries for `@prompthub/core` and `@prompthub/db`.
 - Fixed a package-level typecheck bug in `packages/core/src/rules-workspace.ts` where `fileExists()` was used as a truthy Promise instead of being awaited.
-- Stabilized real filesystem-backed CLI workspace sync tests with a 15-second
-  budget. Assertions remain unchanged; the larger budget prevents a timed-out
-  async import from resetting global runtime paths during the following test.
+- Serialized programmatic `runCli` commands because runtime paths, database
+  handles, and console suppression are process-global. CLI Vitest test-file
+  parallelism is disabled for the same shared-process boundary; the
+  filesystem-backed assertions remain unchanged.
 - Aligned heavy desktop component regressions with the established 30-second
   jsdom budget by removing stale local 10/15-second overrides.
 - Bounded the desktop Vitest pool to two to four workers. This removes
@@ -25,6 +26,18 @@
   `listOutputFormatItems` renderer database export.
 - `TEST-VERIFY-004`: prompt selection integration asserts the composite card's
   focusable keyboard contract instead of a native button-only attribute.
+- `TEST-VERIFY-005`: concurrent programmatic CLI commands use different data
+  directories and each list only the Prompt created in its own directory.
+- `TEST-VERIFY-006`: self-hosted desktop E2E fixtures use the production
+  `web-backup-v2` snapshot identifier rather than scenario labels that the
+  Web sync import contract correctly rejects.
+- `TEST-VERIFY-007`: E2E settings helpers wait for the visible renderer before
+  changing localStorage-backed settings, so an in-flight hydration write cannot
+  overwrite a self-hosted sync configuration with defaults.
+- `TEST-VERIFY-008`: the live self-hosted upload flow targets the visible
+  backup and restore action names, derives managed rule/MCP/Plugin counts from
+  desktop, and verifies the persisted remote snapshot rather than a stale
+  historical inventory count.
 
 ## Verification
 
@@ -41,7 +54,20 @@
   worker RPC timeouts and two stale desktop integration contracts.
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit --maxWorkers=4 --minWorkers=2 --reporter=dot` passes all 288 files and 2,808 tests.
 - `pnpm --filter @prompthub/desktop test:integration` passes all 7 files and 40 tests after the integration contract fixes.
-- The final full `pnpm verify:release` rerun remains required before tagging.
+- `pnpm --filter @prompthub/cli exec vitest run` passes all 9 files and 86
+  tests, including `TEST-VERIFY-005`.
+- Earlier full-profile attempts exposed the desktop entry bundle boundary, the
+  Web route-test timeout budget, and an SSR shared-utils alias gap. Those
+  issues were repaired without widening the product bundle budget or changing
+  production behavior.
+- `pnpm --filter @prompthub/desktop exec playwright test tests/e2e/self-hosted-sync.spec.ts --grep "automatically pulls the remote workspace"` passes (1 test). The previous E2E failure was a stale `startup-auto-sync` fixture label in the schema-version field; the server correctly rejected it as an unsupported backup version.
+- The same E2E helper sequence was reproduced three times after the readiness
+  barrier: each run retained `selfHostedSyncEnabled`, `syncProvider`, and the
+  self-hosted URL after the language and settings reloads.
+- `pnpm --filter @prompthub/desktop exec playwright test tests/e2e/self-hosted-sync.spec.ts --reporter=line` passes both startup pull and live manual upload/download scenarios (2 tests, 17.7 seconds). The manual flow verifies the current remote rule/MCP/Plugin inventory after upload.
+- `pnpm verify:release` passed all 22 checks in 333.9 seconds: 86 CLI tests,
+  2,859 desktop unit tests, 40 desktop integration tests, 6 desktop E2E smoke
+  tests, 333 Web tests, and 10 Cloudflare worker tests.
 
 ## Synced Docs
 

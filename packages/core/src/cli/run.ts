@@ -84,6 +84,25 @@ function isDatabaseBusyError(error: unknown): boolean {
   );
 }
 
+let cliProcessGlobalsTail: Promise<void> = Promise.resolve();
+
+async function withCliProcessGlobals<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  let release!: () => void;
+  const previousOperation = cliProcessGlobalsTail;
+  cliProcessGlobalsTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previousOperation.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
+
 export async function runCli(
   argv: string[],
   io: CliIO = defaultIO(),
@@ -97,6 +116,19 @@ export async function runCli(
   },
   skillService: CliSkillService = coreCliSkillService,
 ): Promise<number> {
+  return withCliProcessGlobals(() =>
+    runCliOperation(argv, io, runtimeHooks, databaseHooks, skillService),
+  );
+}
+
+async function runCliOperation(
+  argv: string[],
+  io: CliIO,
+  runtimeHooks: CliRuntimeHooks,
+  databaseHooks: CliDatabaseHooks,
+  skillService: CliSkillService,
+): Promise<number> {
+  // Runtime paths, the database adapter, and console suppression are process-global.
   const restoreConsole = suppressConsoleNoise();
 
   try {

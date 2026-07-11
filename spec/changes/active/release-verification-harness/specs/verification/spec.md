@@ -46,6 +46,35 @@
   - Then the backup fixture exposes the current renderer database contract
   - And prompt-card coverage asserts focusability and keyboard activation without requiring a native button `type`
 
+- Scenario: Self-hosted E2E seeds import a supported sync snapshot
+  - Given the desktop E2E suite seeds remote self-hosted data through `PUT /api/sync/data`
+  - When the remote snapshot is created for a startup or pull scenario
+  - Then its `version` is a supported backup-format identifier
+  - And the fixture does not use a scenario label as a snapshot version
+
+- Scenario: E2E helper patches renderer-owned settings after a reload
+  - Given an E2E helper changes localStorage-backed settings such as a self-hosted sync credential
+  - When the helper reloads the renderer before or after the patch
+  - Then it waits for the rendered application rather than only DOMContentLoaded
+  - And startup persistence cannot replace the patch with default settings
+
+- Scenario: Self-hosted E2E verifies the live manual upload flow
+  - Given managed rules, MCP servers, and Plugins can change as built-in agent support evolves
+  - When the desktop user chooses `Back up to remote` and then `Update from remote`
+  - Then the test targets those visible action names
+  - And it derives managed inventory counts from desktop before upload
+  - And it verifies that the remote snapshot contains the same managed inventory
+
+### `FR-VERIFY-004`: Programmatic CLI invocations remain isolated
+
+- Scenario: Programmatic callers use separate CLI data directories concurrently
+  - Given two `runCli` calls share one Node process and configure different
+    data directories
+  - When both calls create and list Prompt records
+  - Then each invocation completes through the process-global serialization
+    boundary
+  - And each directory contains only its own Prompt records
+
 - Scenario: A new check duplicates an existing command
   - Given a future edit to the harness
   - When two checks use the same exact command

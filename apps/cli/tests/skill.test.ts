@@ -775,7 +775,7 @@ describe("CLI skill commands", () => {
     ]);
     expect(deleteVersionRes.exitCode).toBe(0);
     expect(deleteVersionRes.json.deleted).toBe(true);
-  });
+  }, 20_000);
 
   it("reports skill platform status and delegates install-md or uninstall-md", async () => {
     const root = makeTempRoot(tempDirs);

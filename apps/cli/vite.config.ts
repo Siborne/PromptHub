@@ -1,6 +1,6 @@
 import path from "path";
 import { builtinModules } from "module";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 const externalModules = new Set([
   ...builtinModules,
@@ -9,6 +9,10 @@ const externalModules = new Set([
 ]);
 
 export default defineConfig({
+  test: {
+    // CLI tests share process-wide runtime paths, database handles, cwd, and HOME.
+    fileParallelism: false,
+  },
   resolve: {
     alias: {
       "@prompthub/core": path.resolve(__dirname, "../../packages/core/src"),

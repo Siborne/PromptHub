@@ -17,7 +17,17 @@ interface SyncManifestResponse {
       prompts: number;
       folders: number;
       skills: number;
+      mcpServers: number;
+      plugins: number;
     };
+  };
+}
+
+interface SyncDataResponse {
+  data: {
+    rules?: unknown[];
+    mcpLibrary?: { servers: unknown[] };
+    pluginLibrary?: { plugins: unknown[] };
   };
 }
 
@@ -48,7 +58,7 @@ test.describe("E2E: desktop self-hosted sync", () => {
         },
         body: JSON.stringify({
           payload: {
-            version: "startup-auto-sync",
+            version: "web-backup-v2",
             exportedAt: "2026-04-16T08:00:00.000Z",
             prompts: [
               {
@@ -228,10 +238,32 @@ test.describe("E2E: desktop self-hosted sync", () => {
         page.getByText(/Connection successful/i),
       ).toBeVisible();
 
-      await page.getByRole("button", { name: "Upload" }).click();
+      const expectedRuntimeAssetCounts = await page.evaluate(async () => {
+        const [rules, mcpLibrary, pluginSnapshot] = await Promise.all([
+          window.api.rules.list(),
+          window.api.mcp.getLibrary(),
+          window.api.plugin.exportLibrarySnapshot(),
+        ]);
+
+        return {
+          rules: rules.length,
+          mcpServers: mcpLibrary.servers.length,
+          plugins: pluginSnapshot.library.plugins.length,
+        };
+      });
+
+      const backupToRemote = page.getByRole("button", {
+        name: "Back up to remote",
+        exact: true,
+      });
+      await expect(backupToRemote).toBeEnabled();
+      await backupToRemote.click();
       await expect(
         page.getByText(
-          /Uploaded 1 prompts, 1 folders, 6 rules, and 0 skills/i,
+          new RegExp(
+            `Uploaded 1 prompts, 1 folders, ${expectedRuntimeAssetCounts.rules} rules, and 0 skills`,
+            "i",
+          ),
         ),
       ).toBeVisible();
 
@@ -255,7 +287,28 @@ test.describe("E2E: desktop self-hosted sync", () => {
         prompts: 1,
         folders: 1,
         skills: 0,
+        mcpServers: expectedRuntimeAssetCounts.mcpServers,
+        plugins: expectedRuntimeAssetCounts.plugins,
       });
+
+      const uploadedDataResponse = await fetch(`${server.baseUrl}/api/sync/data`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      });
+      expect(uploadedDataResponse.ok).toBe(true);
+      const uploadedData =
+        (await uploadedDataResponse.json()) as SyncDataResponse;
+      expect(uploadedData.data.rules ?? []).toHaveLength(
+        expectedRuntimeAssetCounts.rules,
+      );
+      expect(uploadedData.data.mcpLibrary?.servers ?? []).toHaveLength(
+        expectedRuntimeAssetCounts.mcpServers,
+      );
+      expect(uploadedData.data.pluginLibrary?.plugins ?? []).toHaveLength(
+        expectedRuntimeAssetCounts.plugins,
+      );
 
       const syncUpdateResponse = await fetch(`${server.baseUrl}/api/sync/data`, {
         method: "PUT",
@@ -265,7 +318,7 @@ test.describe("E2E: desktop self-hosted sync", () => {
         },
         body: JSON.stringify({
           payload: {
-            version: "e2e-sync",
+            version: "web-backup-v2",
             exportedAt: "2026-04-16T00:00:00.000Z",
             prompts: [
               {
@@ -345,7 +398,12 @@ test.describe("E2E: desktop self-hosted sync", () => {
       });
       expect(syncUpdateResponse.ok).toBe(true);
 
-      await page.getByRole("button", { name: "Download" }).click();
+      const updateFromRemote = page.getByRole("button", {
+        name: "Update from remote",
+        exact: true,
+      });
+      await expect(updateFromRemote).toBeEnabled();
+      await updateFromRemote.click();
       await expect
         .poll(
           async () =>
