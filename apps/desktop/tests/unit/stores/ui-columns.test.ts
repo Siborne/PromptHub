@@ -23,6 +23,7 @@ describe("useUIStore resizable columns (issue #119)", () => {
 
   afterEach(() => {
     localStorage.clear();
+    Reflect.deleteProperty(window, "__PROMPTHUB_WEB__");
   });
 
   it("defaults to the legacy Tailwind widths", async () => {
@@ -189,6 +190,27 @@ describe("useUIStore resizable columns (issue #119)", () => {
     await Promise.resolve();
 
     expect(mod.useUIStore.getState().appModule).toBe("mcp");
+    expect(mod.useUIStore.getState().viewMode).toBe("prompt");
+  });
+
+  it("restores a browser session from a Desktop-only module to prompts", async () => {
+    Reflect.set(window, "__PROMPTHUB_WEB__", true);
+    localStorage.setItem(
+      "ui-storage",
+      JSON.stringify({
+        state: {
+          appModule: "plugin",
+          viewMode: "prompt",
+          isSidebarCollapsed: false,
+        },
+        version: 0,
+      }),
+    );
+
+    const mod = await import("../../../src/renderer/stores/ui.store");
+    await Promise.resolve();
+
+    expect(mod.useUIStore.getState().appModule).toBe("prompt");
     expect(mod.useUIStore.getState().viewMode).toBe("prompt");
   });
 

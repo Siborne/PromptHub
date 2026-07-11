@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { isWebRuntime } from "../runtime";
 
 type ViewMode = "prompt" | "skill";
 
@@ -43,13 +44,18 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function normalizeAppModule(value: unknown): AppModule {
-  return value === "skill" ||
+  const module =
+    value === "skill" ||
     value === "rules" ||
     value === "mcp" ||
     value === "plugin" ||
     value === "prompt"
-    ? value
-    : "prompt";
+      ? value
+      : "prompt";
+
+  return isWebRuntime() && (module === "mcp" || module === "plugin")
+    ? "prompt"
+    : module;
 }
 
 function getViewModeForModule(module: AppModule): ViewMode {
@@ -82,11 +88,13 @@ export const useUIStore = create<UIState>()(
       viewMode: "prompt",
       appModule: "prompt",
       setViewMode: (mode) => set({ viewMode: mode, appModule: mode }),
-      setAppModule: (mode) =>
+      setAppModule: (mode) => {
+        const appModule = normalizeAppModule(mode);
         set({
-          appModule: mode,
-          viewMode: mode === "skill" ? "skill" : "prompt",
-        }),
+          appModule,
+          viewMode: appModule === "skill" ? "skill" : "prompt",
+        });
+      },
       isSidebarCollapsed: false,
       toggleSidebar: () =>
         set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
