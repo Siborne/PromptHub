@@ -28,6 +28,12 @@ Local workflow and documentation updates are complete. The replacement
   compatibility or backfill tag is created.
 - The deployment guide and version-reporting issue template now use the same
   release tag convention.
+- The tagged Docker build exposed that the browser-safe Skill detail imports
+  the shared core frontmatter parser while the image omitted the `packages/core`
+  workspace package. Both build and runtime stages now install and copy that
+  package so Docker resolves the same workspace export as local Web builds.
+- The Web pull-request path filter now includes `packages/core/**`, ensuring
+  future shared parser or workflow changes trigger the Docker image check.
 
 ## Verification
 
@@ -40,3 +46,9 @@ Local workflow and documentation updates are complete. The replacement
 - The final `pnpm verify:release` run passed all 22 checks in 333.9 seconds,
   including the SSR Web build after the explicit shared-utils alias was added.
   Tag publication remains pending.
+- The local Docker daemon is unavailable on the release workstation, so the
+  tag-triggered GitHub Actions Docker build is the required real-image
+  verification after the correction. The original tagged image failure is
+  retained as release evidence.
+- The focused workflow/Dockerfile contract suite passes 2 tests after adding
+  the Core package build/runtime copies and path trigger.

@@ -16,6 +16,7 @@ const webPackage = JSON.parse(
 
 describe("self-hosted Web release workflow", () => {
   it("publishes Web images from the standard Desktop release tag", () => {
+    expect(workflowSource).toContain('- "packages/core/**"');
     expect(workflowSource).toContain('- "v*"');
     expect(workflowSource).toContain("type=semver,pattern={{version}}");
     expect(workflowSource).toContain("type=semver,pattern=v{{version}}");
@@ -36,6 +37,13 @@ describe("self-hosted Web release workflow", () => {
 
     expect(webPackage.version).toBe(rootPackage.version);
     expect(dockerfile).toContain("require('./package.json').version");
+    expect(dockerfile).toContain(
+      "COPY packages/core/package.json packages/core/package.json",
+    );
+    expect(dockerfile).toContain("COPY packages/core packages/core");
+    expect(dockerfile).toContain(
+      "COPY --from=builder /app/packages/core/src packages/core/src",
+    );
     expect(appSource).toContain(
       "process.env.APP_VERSION || rootPackage.version",
     );

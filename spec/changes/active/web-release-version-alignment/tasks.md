@@ -10,3 +10,8 @@
 - [x] `T-WEBREL-003` Verify source/runtime version alignment and release docs;
       the full release harness passed (`NFR-WEBREL-001`, `DES-WEBREL-003`,
       `TEST-WEBREL-003`).
+- [x] `T-WEBREL-004` Preserve the Core workspace package in the Docker build
+      and runtime stages after the tagged image build exposed the missing
+      frontmatter-parser export (`FR-WEBREL-001`, `NFR-WEBREL-001`,
+      `DES-WEBREL-003`, `DES-WEBREL-004`, `TEST-WEBREL-003`,
+      `TEST-WEBREL-004`).

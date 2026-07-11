@@ -10,11 +10,14 @@
   the standard `v*` trigger then publishes the matching GHCR image.
 - `DES-WEBREL-003`: keep the Dockerfile's root-package version injection as
   the single runtime version source for client and `/health` responses.
+- `DES-WEBREL-004`: the Docker build and runtime stages copy every workspace
+  package imported by the browser or server build. The PR workflow watches
+  those package paths so a new workspace import cannot bypass image validation.
 
 ## Traceability
 
 | Requirement      | Design           | Verification      | Task           |
 | ---------------- | ---------------- | ----------------- | -------------- |
-| `FR-WEBREL-001`  | `DES-WEBREL-001` | `TEST-WEBREL-001` | `T-WEBREL-001` |
+| `FR-WEBREL-001`  | `DES-WEBREL-001`, `DES-WEBREL-004` | `TEST-WEBREL-001`, `TEST-WEBREL-004` | `T-WEBREL-001`, `T-WEBREL-004` |
 | `FR-WEBREL-002`  | `DES-WEBREL-002` | `TEST-WEBREL-002` | `T-WEBREL-002` |
 | `NFR-WEBREL-001` | `DES-WEBREL-003` | `TEST-WEBREL-003` | `T-WEBREL-003` |

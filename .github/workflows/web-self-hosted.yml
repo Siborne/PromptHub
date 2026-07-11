@@ -5,6 +5,7 @@ on:
     paths:
       - "apps/web/**"
       - "packages/db/**"
+      - "packages/core/**"
       - "packages/shared/**"
       - "pnpm-lock.yaml"
       - ".github/workflows/web-self-hosted.yml"
