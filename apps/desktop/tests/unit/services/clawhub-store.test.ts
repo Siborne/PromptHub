@@ -11,10 +11,14 @@ describe("clawhub store", () => {
     const skillMd = [
       "---",
       "name: smart-api-connector",
-      "description: Connect APIs safely",
+      "description: |-",
+      "  Connect APIs safely.",
+      "  Preserve authenticated workflows.",
       "version: 2.0.0",
       "author: claw",
-      "tags: [api, dev]",
+      "tags:",
+      "  - api",
+      "  - dev",
       "---",
       "",
       "# Smart API Connector",
@@ -59,6 +63,7 @@ describe("clawhub store", () => {
     expect(skills[0]).toEqual(
       expect.objectContaining({
         name: "smart-api-connector",
+        description: "Connect APIs safely.\nPreserve authenticated workflows.",
         source_label: "ClawHub",
         source_url: "https://clawhub.ai/coderclaw/smart-api-connector",
         content_url:
@@ -118,7 +123,9 @@ describe("clawhub store", () => {
         });
       }
 
-      if (url === `${CLAWHUB_BASE_URL}/api/v1/skills/sonoscli/file?path=SKILL.md`) {
+      if (
+        url === `${CLAWHUB_BASE_URL}/api/v1/skills/sonoscli/file?path=SKILL.md`
+      ) {
         return "# Sonoscli";
       }
 
@@ -201,7 +208,9 @@ describe("clawhub store", () => {
         });
       }
 
-      if (url === `${CLAWHUB_BASE_URL}/api/v1/skills/gifgrep/file?path=SKILL.md`) {
+      if (
+        url === `${CLAWHUB_BASE_URL}/api/v1/skills/gifgrep/file?path=SKILL.md`
+      ) {
         return "# GifGrep";
       }
 

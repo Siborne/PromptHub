@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 26 |
-| Archived | 149 |
+| Active | 29 |
+| Archived | 151 |
 | Legacy | 1 |
 
 ## Active
@@ -16,6 +16,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | Change | Recorded status | Path |
 | --- | --- | --- |
 | `app-shell-left-rail` | in progress | `spec/changes/active/app-shell-left-rail/` |
+| `cli-feature-completeness` | active | `spec/changes/active/cli-feature-completeness/` |
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
 | `desktop-frontend-animation-system` | active | `spec/changes/active/desktop-frontend-animation-system/` |
 | `desktop-frontend-perf-tuneup` | active | `spec/changes/active/desktop-frontend-perf-tuneup/` |
@@ -24,6 +25,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-prompt-context-move` | active | `spec/changes/active/desktop-prompt-context-move/` |
 | `desktop-renderer-ui-test-coverage` | active | `spec/changes/active/desktop-renderer-ui-test-coverage/` |
 | `desktop-update-dialog-polish` | active | `spec/changes/active/desktop-update-dialog-polish/` |
+| `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
 | `homepage-changelog-route-retirement` | active | `spec/changes/active/homepage-changelog-route-retirement/` |
 | `macos-developer-id-signing` | active | `spec/changes/active/macos-developer-id-signing/` |
 | `mcp-env-sync-reapply` | implemented | `spec/changes/active/mcp-env-sync-reapply/` |
@@ -37,6 +39,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `readme-screenshots-v0-5-6` | active | `spec/changes/active/readme-screenshots-v0-5-6/` |
 | `release-verification-harness` | active | `spec/changes/active/release-verification-harness/` |
 | `rules-managed-copies` | in progress | `spec/changes/active/rules-managed-copies/` |
+| `skill-frontmatter-yaml-parser` | active | `spec/changes/active/skill-frontmatter-yaml-parser/` |
 | `skill-source-update-reconciliation` | completed | `spec/changes/active/skill-source-update-reconciliation/` |
 | `skill-uninstall-lifecycle` | active | `spec/changes/active/skill-uninstall-lifecycle/` |
 | `unified-custom-store-sources` | implemented | `spec/changes/active/unified-custom-store-sources/` |
@@ -191,6 +194,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-06-web-skill-workspace-atomic-export` | archived | `spec/changes/archive/2026/07/2026-07-06-web-skill-workspace-atomic-export/` |
 | `2026-07-06-web-sync-data-size-boundary` | archived | `spec/changes/archive/2026/07/2026-07-06-web-sync-data-size-boundary/` |
 | `2026-07-07-desktop-platform-brand-icons` | archived | `spec/changes/archive/2026/07/2026-07-07-desktop-platform-brand-icons/` |
+| `2026-07-10-cli-desktop-database-concurrency` | archived | `spec/changes/archive/2026/07/2026-07-10-cli-desktop-database-concurrency/` |
+| `2026-07-10-desktop-legacy-lock-recovery` | archived | `spec/changes/archive/2026/07/2026-07-10-desktop-legacy-lock-recovery/` |
 | `2026-07-10-spec-governance-single-source-cleanup` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-governance-single-source-cleanup/` |
 | `2026-07-10-spec-init-submission-gate` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-init-submission-gate/` |
 | `2026-07-10-spec-init-upstream-alignment` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-init-upstream-alignment/` |

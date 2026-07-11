@@ -1,5 +1,14 @@
 # 活跃问题追踪：质量与工具链
 
+## 2026-07-11
+
+### 未解决
+
+- `Q-005` quick release harness 的 Desktop unit 阶段存在 8 个非 #183 回归
+  - `skill-batch-deploy-dialog.test.tsx` 有 4 个用例仍用单元素 `getByText("Claude Code")` 查询，但当前 UI 同时展示平台卡片和已选平台摘要，导致重复文本失败。
+  - `skill-installer-remote-git-package.test.ts` 有 4 个文件系统/Git package 用例在整套 unit 并发负载下达到 30 秒超时；相关 #183 focused tests 不受影响。
+  - 后续应分别修正可访问性查询契约，并复现 remote Git package 全套负载时延，不能仅提高超时掩盖阻塞。
+
 ## 2026-03-12
 
 ### 已解决

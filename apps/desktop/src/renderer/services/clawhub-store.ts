@@ -1,3 +1,4 @@
+import { parseSkillMd } from "@prompthub/core/skills/skill-frontmatter";
 import type { RegistrySkill } from "@prompthub/shared/types";
 import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
 
@@ -149,35 +150,14 @@ function parseFrontmatter(content: string): {
   version?: string;
   author?: string;
 } {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) {
-    return { tags: [] };
-  }
-
-  const block = match[1];
-  const tagsLine = block.match(/^tags:\s*\[(.+)\]$/m)?.[1] ?? "";
+  const frontmatter = parseSkillMd(content)?.frontmatter;
 
   return {
-    name: block
-      .match(/^name:\s*(.+)$/m)?.[1]
-      ?.trim()
-      .replace(/^['"]|['"]$/g, ""),
-    description: block
-      .match(/^description:\s*(.+)$/m)?.[1]
-      ?.trim()
-      .replace(/^['"]|['"]$/g, ""),
-    author: block
-      .match(/^author:\s*(.+)$/m)?.[1]
-      ?.trim()
-      .replace(/^['"]|['"]$/g, ""),
-    version: block
-      .match(/^version:\s*(.+)$/m)?.[1]
-      ?.trim()
-      .replace(/^['"]|['"]$/g, ""),
-    tags: tagsLine
-      .split(",")
-      .map((tag) => tag.trim().replace(/^['"]|['"]$/g, ""))
-      .filter(Boolean),
+    name: frontmatter?.name || undefined,
+    description: frontmatter?.description,
+    author: frontmatter?.author,
+    version: frontmatter?.version,
+    tags: frontmatter?.tags ?? [],
   };
 }
 

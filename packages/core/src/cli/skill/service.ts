@@ -24,6 +24,7 @@ import {
 } from "@prompthub/shared/utils/skill-source-update";
 import { getSkillsDir } from "../../runtime-paths";
 import { installSkillFromSource } from "../../skills/install-flow";
+import { serializeSkillMd } from "../../skills/skill-frontmatter";
 import {
   parseSkillMd,
   sanitizeString,
@@ -654,29 +655,19 @@ export function createCliSkillService(
   }
 
   function exportAsSkillMd(skill: Skill): string {
-    const yamlStr = (v: string): string =>
-      /[:#\[\]{},\n\r\\]/.test(v)
-        ? `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
-        : v;
-    const body = skill.instructions || skill.content || "";
-    const frontmatter: string[] = ["---"];
-    frontmatter.push(`name: ${yamlStr(skill.name)}`);
-    if (skill.description)
-      frontmatter.push(`description: ${yamlStr(skill.description)}`);
-    if (skill.version) frontmatter.push(`version: ${yamlStr(skill.version)}`);
-    if (skill.author) frontmatter.push(`author: ${yamlStr(skill.author)}`);
-    if (skill.tags && skill.tags.length > 0) {
-      frontmatter.push(`tags: [${skill.tags.map(yamlStr).join(", ")}]`);
-    }
-    const compatibility = Array.isArray(skill.compatibility)
-      ? skill.compatibility
-      : [skill.compatibility || "prompthub"];
-    frontmatter.push(
-      `compatibility: [${compatibility.map(yamlStr).join(", ")}]`,
-    );
-    frontmatter.push("---");
-    frontmatter.push("");
-    return `${frontmatter.join("\n")}${body}`;
+    return serializeSkillMd({
+      name: skill.name,
+      ...(skill.description !== undefined
+        ? { description: skill.description }
+        : {}),
+      ...(skill.version !== undefined ? { version: skill.version } : {}),
+      ...(skill.author !== undefined ? { author: skill.author } : {}),
+      ...(skill.tags !== undefined ? { tags: skill.tags } : {}),
+      ...(skill.compatibility !== undefined
+        ? { compatibility: skill.compatibility }
+        : {}),
+      instructions: skill.instructions || skill.content || "",
+    });
   }
 
   function exportAsJson(skill: Skill): string {

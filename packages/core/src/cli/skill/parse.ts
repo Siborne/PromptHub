@@ -1,14 +1,8 @@
-export interface ParsedSkillMd {
-  frontmatter: {
-    name?: string;
-    description?: string;
-    version?: string;
-    author?: string;
-    tags?: string[];
-    compatibility?: string;
-  };
-  body?: string;
-}
+export {
+  parseSkillMd,
+  type ParsedSkillMd,
+  type SkillFrontmatter,
+} from "../../skills/skill-frontmatter";
 
 export function sanitizeString(
   value: unknown,
@@ -82,66 +76,4 @@ export function validateSkillName(skillName: string): string {
   }
 
   return normalizedName;
-}
-
-export function parseSkillMd(content: string): ParsedSkillMd | null {
-  if (!content || typeof content !== "string") {
-    return null;
-  }
-
-  const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
-  if (!frontmatterMatch) {
-    return { frontmatter: {}, body: content.trim() };
-  }
-
-  const body = content.slice(frontmatterMatch[0].length).trim();
-  const frontmatter: ParsedSkillMd["frontmatter"] = {};
-  for (const line of frontmatterMatch[1].split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-
-    const colonIndex = trimmed.indexOf(":");
-    if (colonIndex === -1) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, colonIndex).trim();
-    let value = trimmed.slice(colonIndex + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    if (value.startsWith("[") && value.endsWith("]")) {
-      const items = value
-        .slice(1, -1)
-        .split(",")
-        .map((item) => item.trim().replace(/^['"]|['"]$/g, ""))
-        .filter(Boolean);
-      if (key === "tags") {
-        frontmatter.tags = items;
-      } else if (key === "compatibility") {
-        frontmatter.compatibility = items.join(", ");
-      }
-      continue;
-    }
-
-    if (key === "name") frontmatter.name = value;
-    if (key === "description") frontmatter.description = value;
-    if (key === "version") frontmatter.version = value;
-    if (key === "author") frontmatter.author = value;
-    if (key === "compatibility") frontmatter.compatibility = value;
-    if (key === "tags" && !frontmatter.tags) {
-      frontmatter.tags = value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-  }
-
-  return { frontmatter, body };
 }

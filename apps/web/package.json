@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.8",
+    "@prompthub/core": "workspace:*",
     "@prompthub/db": "workspace:*",
     "@prompthub/shared": "workspace:*",
     "bcryptjs": "^2.4.3",

@@ -40,6 +40,20 @@ description: |
     expect(resolveSkillDescription(content)).toBe("Line one. Line two.");
   });
 
+  it("does not mistake YAML scalar text containing dashes for the closing marker", () => {
+    const content = `---
+name: demo
+description: "Keeps foo---bar intact"
+---
+
+# Title
+
+Body`;
+
+    expect(stripFrontmatter(content)).toBe("# Title\n\nBody");
+    expect(resolveSkillDescription(content)).toBe("Keeps foo bar intact");
+  });
+
   it("restores a version through window api and reloads skills", async () => {
     const versionRollback = vi.fn().mockResolvedValue(undefined);
     const loadSkills = vi.fn().mockResolvedValue(undefined);
@@ -78,17 +92,17 @@ description: |
   it("localizes skill source labels through i18n keys", () => {
     const t = vi.fn(
       (key: string, fallback: string, options?: Record<string, unknown>) => {
-      const map: Record<string, string> = {
-        "skill.sourceGithubStore": "Imported via Store",
-        "skill.sourceRemoteGitRepo": "Imported from Remote Git Repository",
-        "skill.sourceLocalFolder": "Imported from Local Folder",
-        "skill.sourceCursorLocalFolder": "Imported from Cursor Folder",
-        "skill.sourceAgentPlatformFolder": fallback.replace(
-          "{{platform}}",
-          String(options?.platform ?? ""),
-        ),
-      };
-      return map[key] || fallback;
+        const map: Record<string, string> = {
+          "skill.sourceGithubStore": "Imported via Store",
+          "skill.sourceRemoteGitRepo": "Imported from Remote Git Repository",
+          "skill.sourceLocalFolder": "Imported from Local Folder",
+          "skill.sourceCursorLocalFolder": "Imported from Cursor Folder",
+          "skill.sourceAgentPlatformFolder": fallback.replace(
+            "{{platform}}",
+            String(options?.platform ?? ""),
+          ),
+        };
+        return map[key] || fallback;
       },
     );
 
@@ -124,7 +138,9 @@ description: |
     expect(localSourceUrl?.kind).toBe("local");
     expect(localSourceUrl?.sourceLabel).toBe("Imported from Local Folder");
     expect(cherry?.kind).toBe("local");
-    expect(cherry?.sourceLabel).toBe("Imported from Cherry Studio Agent Skills");
+    expect(cherry?.sourceLabel).toBe(
+      "Imported from Cherry Studio Agent Skills",
+    );
   });
 
   it("treats self-hosted git URLs as remote git repositories instead of local folders", () => {
@@ -262,9 +278,9 @@ description: |
     expect(resolveGitHubMarkdownUrl("data:text/html,boom", base, "link")).toBe(
       "",
     );
-    expect(resolveGitHubMarkdownUrl("data:image/svg+xml,boom", base, "image")).toBe(
-      "",
-    );
+    expect(
+      resolveGitHubMarkdownUrl("data:image/svg+xml,boom", base, "image"),
+    ).toBe("");
   });
 
   it("groups repeated safety findings by code and severity", () => {

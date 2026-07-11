@@ -10,6 +10,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "paths": {
+      "@prompthub/core": ["../../packages/core/src/index.ts"],
+      "@prompthub/core/*": ["../../packages/core/src/*"],
       "@prompthub/shared": ["../../packages/shared/types/index.ts"],
       "@prompthub/shared/*": ["../../packages/shared/*/index.ts"],
       "@prompthub/db": ["../../packages/db/src/index.ts"],

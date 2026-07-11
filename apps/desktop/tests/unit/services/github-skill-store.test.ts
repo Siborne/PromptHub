@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { loadGitHubSkillRepo } from "../../../src/renderer/services/github-skill-store";
+import {
+  loadGitHubSkillRepo,
+  parseFrontmatter,
+} from "../../../src/renderer/services/github-skill-store";
 
 const storeMessages = {
   rateLimitMessage: "rate limited",
@@ -9,6 +12,29 @@ const storeMessages = {
 };
 
 describe("github skill store identity", () => {
+  it("parses CRLF block scalars and block-list tags", () => {
+    const parsed = parseFrontmatter(
+      [
+        "---",
+        "name: writer",
+        "description: |-",
+        "  First line.",
+        "  Second line.",
+        "tags:",
+        "  - docs",
+        "  - review",
+        "---",
+        "# Writer",
+      ].join("\r\n"),
+    );
+
+    expect(parsed).toEqual({
+      name: "writer",
+      description: "First line.\nSecond line.",
+      tags: ["docs", "review"],
+    });
+  });
+
   it("generates distinct source ids for the same skill on different branches", async () => {
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/example/skills") {

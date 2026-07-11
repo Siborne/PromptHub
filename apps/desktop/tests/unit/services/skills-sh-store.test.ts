@@ -214,6 +214,42 @@ Use this skill to look up the right capability for a task.
     expect(skill?.content).toContain("# Finding Skills");
   });
 
+  it("preserves YAML indentation when parsing SKILL.md block values", () => {
+    const html = `
+      <article>
+        <h2>SKILL.md</h2>
+        <pre><code>---
+name: release-helper
+description: |-
+  First line.
+  Second line.
+tags:
+  - release
+  - docs
+---
+
+# Release Helper
+        </code></pre>
+        <h2>Repository</h2>
+        <p>example/skills</p>
+      </article>
+    `;
+
+    const skill = parseSkillsShDetail(html, {
+      owner: "example",
+      repo: "skills",
+      skillName: "release-helper",
+      detailPath: "/example/skills/release-helper",
+      detailUrl: "https://skills.sh/example/skills/release-helper",
+    });
+
+    expect(skill).toMatchObject({
+      name: "release-helper",
+      description: "First line.\nSecond line.",
+      tags: ["release", "docs"],
+    });
+  });
+
   it("does not guess a skills/<name> package directory for non-standard skills.sh repos", () => {
     const html = `
       <article>

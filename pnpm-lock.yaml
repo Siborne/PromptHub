@@ -394,6 +394,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.8
         version: 1.19.13(hono@4.12.12)
+      '@prompthub/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@prompthub/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -561,13 +564,22 @@ importers:
       '@prompthub/shared':
         specifier: workspace:*
         version: link:../shared
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.4
+      '@vitest/coverage-v8':
+        specifier: ^2.0.0
+        version: 2.1.9(vitest@2.1.9(@types/node@24.12.4)(jsdom@27.3.0)(lightningcss@1.32.0)(terser@5.48.0))
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@24.12.4)(jsdom@27.3.0)(lightningcss@1.32.0)(terser@5.48.0)
 
   packages/db:
     dependencies:
@@ -11077,7 +11089,9 @@ snapshots:
       metro-runtime: 0.84.4
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 

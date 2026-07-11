@@ -4,9 +4,9 @@
  * Handles serialization to SKILL.md (frontmatter + body) and JSON formats,
  * as well as importing skills from JSON.
  */
+import { serializeSkillMd } from "@prompthub/core/skills/skill-frontmatter";
 import { SkillDB } from "../database/skill";
 import { sanitizeImportedSkillDraft } from "./skill-import-sanitize";
-import { parseSkillMd } from "./skill-validator";
 
 // ==================== SKILL.md export ====================
 
@@ -19,47 +19,11 @@ export function exportAsSkillMd(skill: {
   instructions?: string;
   compatibility?: string | string[];
   license?: string;
+  metadata?: Record<string, string>;
+  allowedTools?: string;
+  preservedFrontmatter?: Record<string, unknown>;
 }): string {
-  const yamlStr = (v: string): string =>
-    /[:#\[\]{},\n\r\\]/.test(v)
-      ? `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
-      : v;
-  const parsed = parseSkillMd(skill.instructions || "");
-  const bodyContent = parsed ? parsed.body : skill.instructions || "";
-
-  // Build YAML frontmatter
-  const frontmatter: string[] = ["---"];
-  frontmatter.push(`name: ${yamlStr(skill.name)}`);
-  if (skill.description) {
-    frontmatter.push(`description: ${yamlStr(skill.description)}`);
-  }
-  if (skill.version) {
-    frontmatter.push(`version: ${yamlStr(skill.version)}`);
-  }
-  if (skill.author) {
-    frontmatter.push(`author: ${yamlStr(skill.author)}`);
-  }
-  if (skill.license) {
-    frontmatter.push(`license: ${yamlStr(skill.license)}`);
-  }
-  if (skill.tags && skill.tags.length > 0) {
-    frontmatter.push(`tags: [${skill.tags.map(yamlStr).join(", ")}]`);
-  }
-  const compatibilityList = Array.isArray(skill.compatibility)
-    ? skill.compatibility
-    : [skill.compatibility || "prompthub"];
-  frontmatter.push(
-    `compatibility: [${compatibilityList.map(yamlStr).join(", ")}]`,
-  );
-  frontmatter.push("---");
-  frontmatter.push("");
-
-  // Always append the markdown body only. If instructions already contain a
-  // full SKILL.md with frontmatter, reusing the raw string would duplicate the
-  // YAML block during export/install.
-  const content = bodyContent;
-
-  return frontmatter.join("\n") + content;
+  return serializeSkillMd(skill);
 }
 
 // ==================== JSON export ====================

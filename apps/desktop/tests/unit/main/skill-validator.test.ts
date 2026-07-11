@@ -215,6 +215,96 @@ Body`;
     });
   });
 
+  it("parses YAML block scalars and standard allowed-tools metadata", () => {
+    const md = `---
+name: pdf-processing
+description: |-
+  Extracts text and tables from PDF files.
+  Use when working with PDF documents.
+allowed-tools: Read, Bash(git add *)
+metadata:
+  author: your-org
+  version: "1.2"
+---
+# PDF Processing`;
+
+    const result = parseSkillMd(md);
+
+    expect(result?.frontmatter.description).toBe(
+      "Extracts text and tables from PDF files.\nUse when working with PDF documents.",
+    );
+    expect(result?.frontmatter).toMatchObject({
+      allowedTools: "Read, Bash(git add *)",
+      metadata: { author: "your-org", version: "1.2" },
+    });
+  });
+
+  it("applies YAML folded block scalar semantics", () => {
+    const md = `---
+name: folded-description
+description: >-
+  First trigger sentence.
+  Second trigger sentence.
+---
+Body`;
+
+    expect(parseSkillMd(md)?.frontmatter.description).toBe(
+      "First trigger sentence. Second trigger sentence.",
+    );
+  });
+
+  it("keeps allowed-tools string syntax intact", () => {
+    const md = `---
+name: tool-pattern
+description: Tests tool patterns
+allowed-tools: 'Read, Bash(python -c "a,b")'
+---
+Body`;
+
+    expect(parseSkillMd(md)?.frontmatter.allowedTools).toBe(
+      'Read, Bash(python -c "a,b")',
+    );
+  });
+
+  it("rejects malformed YAML and non-object frontmatter roots", () => {
+    expect(
+      parseSkillMd(`---\nname: broken\ndescription: [unterminated\n---\nBody`),
+    ).toBeNull();
+    expect(parseSkillMd(`---\n- name: array-root\n---\nBody`)).toBeNull();
+  });
+
+  it("rejects custom tags, excessive aliases, and missing closing markers", () => {
+    expect(
+      parseSkillMd(`---\nname: tagged\ndescription: !env SECRET\n---\nBody`),
+    ).toBeNull();
+
+    const aliasHeavy = `---
+name: alias-heavy
+a: &a [x, x]
+b: &b [*a, *a]
+c: &c [*b, *b]
+d: &d [*c, *c]
+e: &e [*d, *d]
+f: &f [*e, *e]
+metadata: *f
+---
+Body`;
+    expect(() => parseSkillMd(aliasHeavy)).not.toThrow();
+    expect(parseSkillMd(aliasHeavy)).toBeNull();
+    expect(parseSkillMd(`---\nname: missing-close\nBody`)).toBeNull();
+  });
+
+  it("parses CRLF frontmatter without changing body semantics", () => {
+    const result = parseSkillMd(
+      "---\r\nname: crlf-skill\r\ndescription: Works on Windows\r\n---\r\n# Body\r\nText",
+    );
+    expect(result?.frontmatter).toMatchObject({
+      name: "crlf-skill",
+      description: "Works on Windows",
+    });
+    expect(result?.body).toBe("# Body\r\nText");
+  });
+
   it("exits metadata block when a top-level key appears", () => {
     const md = `---
 name: my-skill
@@ -242,7 +332,7 @@ Body`;
     expect(result!.frontmatter.description).toBe("test");
   });
 
-  it("skips lines without colons", () => {
+  it("rejects invalid YAML lines without key-value syntax", () => {
     const md = `---
 name: my-skill
 this line has no colon
@@ -250,14 +340,10 @@ description: ok
 ---
 Body`;
 
-    const result = parseSkillMd(md);
-    expect(result!.frontmatter.description).toBe("ok");
+    expect(parseSkillMd(md)).toBeNull();
   });
 
-  it("handles empty frontmatter (no fields between --- markers)", () => {
-    // The regex `^---\s*\n([\s\S]*?)\n---` requires at least one char between
-    // the two --- lines. With nothing between them, it falls through to the
-    // "no frontmatter" path, treating the whole content as body.
+  it("handles empty frontmatter as an empty YAML object", () => {
     const md = `---
 ---
 Body here`;
@@ -265,7 +351,7 @@ Body here`;
     const result = parseSkillMd(md);
     expect(result).not.toBeNull();
     expect(result!.frontmatter.name).toBe("");
-    expect(result!.body).toBe("---\n---\nBody here");
+    expect(result!.body).toBe("Body here");
   });
 
   it("handles frontmatter with empty body", () => {
@@ -366,15 +452,13 @@ Body`;
     // Unknown keys should not break parsing
   });
 
-  it("handles mixed quotes (mismatched) — takes literal value", () => {
+  it("rejects mismatched YAML quotes", () => {
     const md = `---
 name: my-skill
 description: "unclosed single
 ---
 Body`;
-    const result = parseSkillMd(md);
-    // Mismatched quotes — parser only strips if both ends match
-    expect(result!.frontmatter.description).toBe('"unclosed single');
+    expect(parseSkillMd(md)).toBeNull();
   });
 
   it("handles empty tags array []", () => {

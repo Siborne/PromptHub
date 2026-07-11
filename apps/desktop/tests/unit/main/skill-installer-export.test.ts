@@ -51,6 +51,24 @@ describe("skill-installer-export", () => {
 
     expect(exported).toMatch(/^---[\s\S]*---\n$/);
     expect(exported.match(/^---$/gm)).toHaveLength(2);
-    expect(exported).not.toContain("description: Existing description\n---\n\n---");
+    expect(exported).not.toContain(
+      "description: Existing description\n---\n\n---",
+    );
+  });
+
+  it("serializes allowed-tools, metadata, and multiline descriptions as valid YAML", () => {
+    const exported = exportAsSkillMd({
+      name: "pdf-processing",
+      description: "Extracts PDF text.\nUse for document extraction.",
+      instructions: "# PDF Processing",
+      allowedTools: "Read, Bash(git add *)",
+      metadata: { author: "your-org", version: "1.2" },
+    });
+
+    expect(exported).toContain("allowed-tools: Read, Bash(git add *)");
+    expect(exported).toContain("metadata:");
+    expect(exported).toContain('version: "1.2"');
+    expect(exported).toContain("Extracts PDF text.");
+    expect(exported).toContain("Use for document extraction.");
   });
 });

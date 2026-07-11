@@ -172,8 +172,8 @@ export async function syncFrontmatterToRepo(
   const body = parsed?.body ?? "";
 
   // Rebuild the full SKILL.md with updated frontmatter + original body.
-  // Preserve compatibility and license from the original frontmatter so they
-  // are not lost when exportAsSkillMd rewrites the file.
+  // File-owned fields remain in preservedFrontmatter so their YAML values are
+  // not changed through the normalized renderer view.
   const newContent = SkillInstaller.exportAsSkillMd({
     name: updatedSkill.name,
     description: updatedSkill.description ?? undefined,
@@ -181,8 +181,7 @@ export async function syncFrontmatterToRepo(
     author: updatedSkill.author ?? undefined,
     tags: updatedSkill.tags ?? [],
     instructions: body,
-    compatibility: parsed?.frontmatter.compatibility ?? undefined,
-    license: parsed?.frontmatter.license ?? undefined,
+    preservedFrontmatter: parsed?.rawFrontmatter,
   });
 
   // Write back

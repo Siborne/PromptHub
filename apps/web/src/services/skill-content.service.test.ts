@@ -221,6 +221,24 @@ Body line 2
       expect(parsed.raw).toBe(raw);
     });
 
+    it('parses YAML block scalars and block-list tags', () => {
+      const parsed = parseRemoteSkill(`---
+name: remote-helper
+description: |-
+  First line.
+  Second line.
+tags:
+  - docs
+  - review
+---
+
+# Remote Helper`);
+
+      expect(parsed.description).toBe('First line.\nSecond line.');
+      expect(parsed.tags).toEqual(['docs', 'review']);
+      expect(parsed.body).toBe('# Remote Helper');
+    });
+
     it('returns trimmed body and original raw content when frontmatter is absent', () => {
       const raw = '\n\n# Plain Skill\n\nBody only.\n';
       const parsed = parseRemoteSkill(raw);

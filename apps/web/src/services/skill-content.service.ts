@@ -1,5 +1,6 @@
 import dns from 'node:dns/promises';
 
+import { parseSkillMd } from '@prompthub/core/skills/skill-frontmatter';
 import type {
   SafetyScanAIConfig,
   SkillSafetyFinding,
@@ -598,68 +599,22 @@ export async function scanSkillContentWithAI(
 }
 
 export function parseRemoteSkill(content: string): ParsedRemoteSkill {
-  const frontmatterMatch = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n)?/);
-  if (!frontmatterMatch) {
+  const parsed = parseSkillMd(content);
+  if (!parsed) {
     return {
       body: content.trim(),
       raw: content,
     };
   }
 
-  const frontmatterLines = frontmatterMatch[1].split(/\r?\n/);
-  const parsed: ParsedRemoteSkill = {
-    body: content.slice(frontmatterMatch[0].length).trim(),
+  const frontmatter = parsed.frontmatter;
+  return {
+    ...(frontmatter.name ? { name: frontmatter.name } : {}),
+    ...(frontmatter.description !== undefined ? { description: frontmatter.description } : {}),
+    ...(frontmatter.version !== undefined ? { version: frontmatter.version } : {}),
+    ...(frontmatter.author !== undefined ? { author: frontmatter.author } : {}),
+    ...(frontmatter.tags !== undefined ? { tags: frontmatter.tags } : {}),
+    body: parsed.body,
     raw: content,
   };
-
-  for (const line of frontmatterLines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue;
-    }
-
-    const colonIndex = trimmed.indexOf(':');
-    if (colonIndex === -1) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, colonIndex).trim();
-    let value = trimmed.slice(colonIndex + 1).trim();
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    if (value.startsWith('[') && value.endsWith(']')) {
-      const items = value
-        .slice(1, -1)
-        .split(',')
-        .map((item) => item.trim().replace(/^['"]|['"]$/g, ''))
-        .filter(Boolean);
-      if (key === 'tags') {
-        parsed.tags = items;
-      }
-      continue;
-    }
-
-    if (key === 'name') {
-      parsed.name = value;
-    } else if (key === 'description') {
-      parsed.description = value;
-    } else if (key === 'version') {
-      parsed.version = value;
-    } else if (key === 'author') {
-      parsed.author = value;
-    } else if (key === 'tags' && !parsed.tags) {
-      parsed.tags = value
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-  }
-
-  return parsed;
 }

@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import { parseSkillMd } from "@prompthub/core/skills/skill-frontmatter";
 import type {
   SafetyScanAIConfig,
   Skill,
@@ -24,12 +25,7 @@ interface ImmersiveSegment {
  * 从 SKILL.md 内容中剥离 YAML frontmatter。
  */
 export function stripFrontmatter(content: string): string {
-  const trimmed = content.trim();
-  if (!trimmed.startsWith("---")) return trimmed;
-
-  const endIdx = trimmed.indexOf("---", 3);
-  if (endIdx === -1) return trimmed;
-  return trimmed.slice(endIdx + 3).trim();
+  return parseSkillMd(content)?.body ?? content.trim();
 }
 
 export function getErrorMessage(error: unknown): string {
@@ -130,7 +126,12 @@ export interface GitHubMarkdownBase {
   imageBase: string;
 }
 
-const SAFE_MARKDOWN_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+const SAFE_MARKDOWN_LINK_PROTOCOLS = new Set([
+  "http:",
+  "https:",
+  "mailto:",
+  "tel:",
+]);
 const SAFE_MARKDOWN_IMAGE_PROTOCOLS = new Set(["http:", "https:"]);
 const SAFE_SKILL_EXTERNAL_PROTOCOLS = new Set(["http:", "https:"]);
 const EXPLICIT_URL_PROTOCOL_REGEX = /^[a-z][a-z0-9+.-]*:/i;
@@ -158,7 +159,8 @@ function hasUnsafeExplicitSourceProtocol(value: string): boolean {
     return false;
   }
   return (
-    EXPLICIT_URL_PROTOCOL_REGEX.test(trimmed) && !resolveSkillExternalUrl(trimmed)
+    EXPLICIT_URL_PROTOCOL_REGEX.test(trimmed) &&
+    !resolveSkillExternalUrl(trimmed)
   );
 }
 
@@ -436,7 +438,9 @@ export function resolveGitHubMarkdownUrl(
   }
 
   const allowedProtocols =
-    kind === "image" ? SAFE_MARKDOWN_IMAGE_PROTOCOLS : SAFE_MARKDOWN_LINK_PROTOCOLS;
+    kind === "image"
+      ? SAFE_MARKDOWN_IMAGE_PROTOCOLS
+      : SAFE_MARKDOWN_LINK_PROTOCOLS;
 
   if (!base) {
     try {
@@ -682,44 +686,9 @@ function normalizeInlineText(text: string): string {
 }
 
 function extractFrontmatterValue(content: string, key: string): string | null {
-  const trimmed = content.trim();
-  if (!trimmed.startsWith("---")) return null;
-
-  const frontmatterMatch = trimmed.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
-  if (!frontmatterMatch) return null;
-
-  const lines = frontmatterMatch[1].split("\n");
-  const lineIndex = lines.findIndex((entry) =>
-    entry.trim().startsWith(`${key}:`),
-  );
-
-  if (lineIndex === -1) return null;
-
-  let value = lines[lineIndex]
-    .trim()
-    .slice(key.length + 1)
-    .trim();
-
-  if (/^[|>][-+]?$/u.test(value)) {
-    const blockLines: string[] = [];
-    for (let i = lineIndex + 1; i < lines.length; i += 1) {
-      const line = lines[i];
-      if (!/^\s+/.test(line)) {
-        break;
-      }
-      blockLines.push(line.replace(/^\s+/, "").trimEnd());
-    }
-    value = blockLines.join("\n").trim();
-  }
-
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    value = value.slice(1, -1);
-  }
-
-  return normalizeInlineText(value) || null;
+  const value = parseSkillMd(content)?.rawFrontmatter[key];
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  return normalizeInlineText(String(value)) || null;
 }
 
 function extractBodySummary(content: string): string | null {

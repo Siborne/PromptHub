@@ -12,6 +12,7 @@ import {
   syncFrontmatterToRepo,
 } from "../../../src/main/services/skill-repo-sync";
 import { SkillInstaller } from "../../../src/main/services/skill-installer";
+import { parseSkillMd } from "../../../src/main/services/skill-validator";
 
 const baseSkill: Skill = {
   id: "skill-1",
@@ -351,8 +352,10 @@ describe("syncFrontmatterToRepo", () => {
       author: "New Author",
       tags: ["general"],
       instructions: expect.stringContaining("# Write Skill"),
-      compatibility: "prompthub",
-      license: undefined,
+      preservedFrontmatter: expect.objectContaining({
+        name: "write",
+        description: "Old description",
+      }),
     });
     expect(SkillInstaller.writeLocalRepoFileByPath).toHaveBeenCalledWith(
       "/repo/path",
@@ -474,7 +477,7 @@ describe("syncFrontmatterToRepo", () => {
     expect(SkillInstaller.writeLocalRepoFileByPath).not.toHaveBeenCalled();
   });
 
-  it("preserves compatibility and license from original frontmatter", async () => {
+  it("preserves compatibility and license values from original frontmatter", async () => {
     const mdWithExtras = [
       "---",
       "name: write",
@@ -483,7 +486,7 @@ describe("syncFrontmatterToRepo", () => {
       "author: Local",
       "license: MIT",
       "tags: [general]",
-      "compatibility: claude, cursor",
+      "compatibility: [claude, cursor]",
       "---",
       "",
       "# Body",
@@ -499,12 +502,54 @@ describe("syncFrontmatterToRepo", () => {
 
     await syncFrontmatterToRepo(updatedSkill, "/repo/path");
 
-    expect(SkillInstaller.exportAsSkillMd).toHaveBeenCalledWith(
-      expect.objectContaining({
-        compatibility: "claude, cursor",
-        license: "MIT",
-      }),
+    const rewritten = vi.mocked(SkillInstaller.writeLocalRepoFileByPath).mock
+      .calls[0]?.[2];
+    expect(parseSkillMd(rewritten ?? "")?.rawFrontmatter).toMatchObject({
+      compatibility: ["claude", "cursor"],
+      license: "MIT",
+    });
+  });
+
+  it("preserves standard and extension fields during metadata-only rewrites", async () => {
+    const mdWithExtensions = [
+      "---",
+      "name: write",
+      "description: |-",
+      "  Writes clear release notes.",
+      "  Use for stable releases.",
+      "allowed-tools: Read, Bash(git add *)",
+      "metadata:",
+      '  author-id: "maintainer-1"',
+      'x-prompthub-policy: "keep-me"',
+      "tags: [general]",
+      "---",
+      "",
+      "# Body",
+    ].join("\n");
+
+    vi.mocked(SkillInstaller.readLocalRepoFilesByPath).mockResolvedValue([
+      {
+        path: "SKILL.md",
+        content: mdWithExtensions,
+        isDirectory: false,
+      },
+    ]);
+
+    await syncFrontmatterToRepo(
+      {
+        ...updatedSkill,
+        description: "Writes clear release notes.\nUse for stable releases.",
+        tags: ["general", "release"],
+      },
+      "/repo/path",
     );
+
+    const rewritten = vi.mocked(SkillInstaller.writeLocalRepoFileByPath).mock
+      .calls[0]?.[2];
+    expect(rewritten).toContain("allowed-tools: Read, Bash(git add *)");
+    expect(rewritten).toContain("author-id: maintainer-1");
+    expect(rewritten).toContain("x-prompthub-policy: keep-me");
+    expect(rewritten).toContain("# Body");
   });
 
   it("falls back to default compatibility when original has none", async () => {
@@ -527,12 +572,10 @@ describe("syncFrontmatterToRepo", () => {
 
     await syncFrontmatterToRepo(updatedSkill, "/repo/path");
 
-    // compatibility should be undefined (not set by original), exportAsSkillMd
-    // will default to "prompthub" internally
-    expect(SkillInstaller.exportAsSkillMd).toHaveBeenCalledWith(
-      expect.objectContaining({
-        compatibility: undefined,
-      }),
-    );
+    const rewritten = vi.mocked(SkillInstaller.writeLocalRepoFileByPath).mock
+      .calls[0]?.[2];
+    expect(parseSkillMd(rewritten ?? "")?.rawFrontmatter).toMatchObject({
+      compatibility: ["prompthub"],
+    });
   });
 });

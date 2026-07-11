@@ -19,6 +19,7 @@ import {
   resetRuntimePaths,
 } from "../../../src/main/runtime-paths";
 import { SkillInstaller } from "../../../src/main/services/skill-installer";
+import { parseSkillMd } from "../../../src/main/services/skill-validator";
 import { initDatabase } from "@/main/database";
 import { readGithubTokenSetting } from "@/main/settings/settings-readers";
 import { invalidateCustomPathsCache } from "../../../src/main/services/skill-installer-utils";
@@ -86,10 +87,10 @@ afterEach(async () => {
 describe("SkillInstaller.exportAsSkillMd", () => {
   it("produces valid frontmatter with name only", () => {
     const md = SkillInstaller.exportAsSkillMd({ name: "test-skill" });
-    expect(md).toContain("---");
-    expect(md).toContain("name: test-skill");
-    // Default compatibility
-    expect(md).toContain("compatibility: [prompthub]");
+    expect(parseSkillMd(md)?.frontmatter).toMatchObject({
+      name: "test-skill",
+      compatibility: "prompthub",
+    });
   });
 
   it("includes all provided metadata fields", () => {
@@ -104,14 +105,17 @@ describe("SkillInstaller.exportAsSkillMd", () => {
       instructions: "# Hello\n\nDo stuff.",
     });
 
-    expect(md).toContain("name: my-skill");
-    expect(md).toContain("description: A great skill");
-    expect(md).toContain("version: 2.0.0");
-    expect(md).toContain("author: Alice");
-    expect(md).toContain("license: MIT");
-    expect(md).toContain("tags: [coding, python]");
-    expect(md).toContain("compatibility: [prompthub, claude]");
-    expect(md).toContain("# Hello\n\nDo stuff.");
+    const parsed = parseSkillMd(md);
+    expect(parsed?.frontmatter).toMatchObject({
+      name: "my-skill",
+      description: "A great skill",
+      version: "2.0.0",
+      author: "Alice",
+      license: "MIT",
+      tags: ["coding", "python"],
+      compatibility: "prompthub, claude",
+    });
+    expect(parsed?.body).toBe("# Hello\n\nDo stuff.");
   });
 
   it("omits optional fields when not provided", () => {
@@ -128,8 +132,9 @@ describe("SkillInstaller.exportAsSkillMd", () => {
       name: "test-skill",
       description: 'Has "quotes" and [brackets]',
     });
-    // Should be YAML-escaped with double quotes
-    expect(md).toContain('description: "Has \\"quotes\\" and [brackets]"');
+    expect(parseSkillMd(md)?.frontmatter.description).toBe(
+      'Has "quotes" and [brackets]',
+    );
   });
 
   it("handles empty string instructions as empty body", () => {
@@ -146,7 +151,7 @@ describe("SkillInstaller.exportAsSkillMd", () => {
       name: "test",
       compatibility: ["claude"],
     });
-    expect(md).toContain("compatibility: [claude]");
+    expect(parseSkillMd(md)?.frontmatter.compatibility).toBe("claude");
   });
 
   it("handles compatibility as string (not array)", () => {
@@ -154,22 +159,20 @@ describe("SkillInstaller.exportAsSkillMd", () => {
       name: "test",
       compatibility: "custom-platform",
     });
-    expect(md).toContain("compatibility: [custom-platform]");
+    expect(parseSkillMd(md)?.frontmatter.compatibility).toBe("custom-platform");
   });
 
   it("YAML-escapes colons in name", () => {
     const md = SkillInstaller.exportAsSkillMd({ name: "has:colon" });
-    expect(md).toContain('"has:colon"');
+    expect(parseSkillMd(md)?.frontmatter.name).toBe("has:colon");
   });
 
-  it("YAML-wraps description containing newlines in double quotes", () => {
+  it("round-trips descriptions containing newlines", () => {
     const md = SkillInstaller.exportAsSkillMd({
       name: "test",
       description: "line1\nline2",
     });
-    // The yamlStr helper wraps values containing \n in double quotes
-    // but does NOT escape the literal newline to \\n — it produces a multi-line YAML value
-    expect(md).toContain('description: "line1\nline2"');
+    expect(parseSkillMd(md)?.frontmatter.description).toBe("line1\nline2");
   });
 
   it("handles tags with special chars", () => {
@@ -177,8 +180,10 @@ describe("SkillInstaller.exportAsSkillMd", () => {
       name: "test",
       tags: ["tag:with:colons", "normal"],
     });
-    expect(md).toContain('"tag:with:colons"');
-    expect(md).toContain("normal");
+    expect(parseSkillMd(md)?.frontmatter.tags).toEqual([
+      "tag:with:colons",
+      "normal",
+    ]);
   });
 });
 
@@ -3123,9 +3128,10 @@ describe("SkillInstaller.installFromGithub", () => {
         await fs.writeFile(path.join(destDir, "docs", "guide.md"), "Guide");
       },
     );
-    vi.spyOn(SkillInstaller, "resolveSingleSkillDirFromRepo").mockImplementation(
-      async (installDir) => installDir,
-    );
+    vi.spyOn(
+      SkillInstaller,
+      "resolveSingleSkillDirFromRepo",
+    ).mockImplementation(async (installDir) => installDir);
     vi.spyOn(SkillInstaller, "readManifest").mockResolvedValue({
       name: "repo",
       description: "Repo",
@@ -3139,14 +3145,14 @@ describe("SkillInstaller.installFromGithub", () => {
       SkillInstaller.installFromGithub("https://github.com/owner/repo", mockDb),
     ).resolves.toBe("skill-cleanup");
 
-    expect(
-      fsSync.existsSync(path.join(managedSkillsDir(), "owner-repo")),
-    ).toBe(false);
+    expect(fsSync.existsSync(path.join(managedSkillsDir(), "owner-repo"))).toBe(
+      false,
+    );
     const managedRepoPath = dbMock.update.mock.calls[0]?.[1]?.local_repo_path;
     expect(typeof managedRepoPath).toBe("string");
-    expect(fsSync.existsSync(path.join(String(managedRepoPath), "SKILL.md"))).toBe(
-      true,
-    );
+    expect(
+      fsSync.existsSync(path.join(String(managedRepoPath), "SKILL.md")),
+    ).toBe(true);
   });
 
   it("rolls back the created DB row when post-create persistence fails", async () => {
@@ -3173,9 +3179,10 @@ describe("SkillInstaller.installFromGithub", () => {
         await fs.writeFile(path.join(destDir, "SKILL.md"), "# Repo\n");
       },
     );
-    vi.spyOn(SkillInstaller, "resolveSingleSkillDirFromRepo").mockImplementation(
-      async (installDir) => installDir,
-    );
+    vi.spyOn(
+      SkillInstaller,
+      "resolveSingleSkillDirFromRepo",
+    ).mockImplementation(async (installDir) => installDir);
     vi.spyOn(SkillInstaller, "readManifest").mockResolvedValue({
       name: "repo",
       description: "Repo",
@@ -3189,9 +3196,9 @@ describe("SkillInstaller.installFromGithub", () => {
     ).rejects.toThrow("update failed");
 
     expect(dbMock.delete).toHaveBeenCalledWith("skill-rollback");
-    expect(
-      fsSync.existsSync(path.join(managedSkillsDir(), "owner-repo")),
-    ).toBe(false);
+    expect(fsSync.existsSync(path.join(managedSkillsDir(), "owner-repo"))).toBe(
+      false,
+    );
   });
 
   it("rejects when a skill with the derived repo name already exists in DB", async () => {

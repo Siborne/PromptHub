@@ -1,3 +1,4 @@
+import { parseSkillMd } from "@prompthub/core/skills/skill-frontmatter";
 import type {
   GitHubRepoMetadata,
   GitHubTreeEntry,
@@ -13,30 +14,17 @@ import {
   buildSkillSourceId,
 } from "@prompthub/shared/utils/skill-identity";
 
-function stripQuotes(value: string): string {
-  return value.trim().replace(/^['"]|['"]$/g, "");
-}
-
 export function parseFrontmatter(content: string): {
   name: string;
   description: string;
   tags: string[];
 } {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) {
-    return { name: "", description: "", tags: [] };
-  }
-
-  const block = match[1];
-  const tagsLine = block.match(/^tags:\s*\[(.+)\]$/m)?.[1] ?? "";
+  const frontmatter = parseSkillMd(content)?.frontmatter;
 
   return {
-    name: stripQuotes(block.match(/^name:\s*(.+)$/m)?.[1] ?? ""),
-    description: stripQuotes(block.match(/^description:\s*(.+)$/m)?.[1] ?? ""),
-    tags: tagsLine
-      .split(",")
-      .map((tag) => stripQuotes(tag))
-      .filter(Boolean),
+    name: frontmatter?.name ?? "",
+    description: frontmatter?.description ?? "",
+    tags: frontmatter?.tags ?? [],
   };
 }
 

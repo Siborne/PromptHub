@@ -1,3 +1,4 @@
+import { parseSkillMd } from "@prompthub/core/skills/skill-frontmatter";
 import type { RegistrySkill } from "@prompthub/shared/types";
 import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
 
@@ -174,28 +175,24 @@ function parseFrontmatter(content: string): {
   description?: string;
   tags: string[];
 } {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) {
-    return { tags: [] };
-  }
-
-  const block = match[1];
-  const tagsLine = block.match(/^tags:\s*\[(.+)\]$/m)?.[1] ?? "";
+  const frontmatter = parseSkillMd(content)?.frontmatter;
 
   return {
-    name: block.match(/^name:\s*(.+)$/m)?.[1]?.trim().replace(/^['"]|['"]$/g, ""),
-    description: block.match(/^description:\s*(.+)$/m)?.[1]?.trim().replace(/^['"]|['"]$/g, ""),
-    tags: tagsLine
-      .split(",")
-      .map((tag) => tag.trim().replace(/^['"]|['"]$/g, ""))
-      .filter(Boolean),
+    name: frontmatter?.name || undefined,
+    description: frontmatter?.description,
+    tags: frontmatter?.tags ?? [],
   };
 }
 
-function getSectionLines(text: string, heading: string, stopHeadings: string[]): string[] {
-  const lines = text.split("\n").map((line) => line.trim());
+function getSectionLines(
+  text: string,
+  heading: string,
+  stopHeadings: string[],
+  preserveIndentation = false,
+): string[] {
+  const lines = text.split("\n");
   const startIndex = lines.findIndex(
-    (line) => line.toLowerCase() === heading.toLowerCase(),
+    (line) => line.trim().toLowerCase() === heading.toLowerCase(),
   );
   if (startIndex === -1) {
     return [];
@@ -206,10 +203,11 @@ function getSectionLines(text: string, heading: string, stopHeadings: string[]):
 
   for (let index = startIndex + 1; index < lines.length; index += 1) {
     const current = lines[index];
-    if (stopSet.has(current.toLowerCase())) {
+    const normalized = current.trim();
+    if (stopSet.has(normalized.toLowerCase())) {
       break;
     }
-    collected.push(current);
+    collected.push(preserveIndentation ? current : normalized);
   }
 
   return collected;
@@ -358,7 +356,7 @@ export function parseSkillsShDetail(
       "GitHub Stars",
       "Installed on",
       "Security audits",
-    ]),
+    ], true),
   );
 
   if (!summary && !skillMd) {
