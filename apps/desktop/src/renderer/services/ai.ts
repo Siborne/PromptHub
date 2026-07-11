@@ -1,4 +1,49 @@
-import type { AIProtocol, AITransportResponse, PromptType } from "@prompthub/shared/types";
+import type { AIProtocol, AITransportResponse } from "@prompthub/shared/types";
+import {
+  buildChatEndpointFromBase,
+  buildHeadersForProtocol,
+  buildModelsEndpointFromBase,
+  getBaseUrl,
+  normalizeApiUrlInput,
+  resolveAIProtocol,
+  resolveProtocolBase,
+} from "@prompthub/shared/utils/ai-protocol";
+import type {
+  AIConfig,
+  AITestResult,
+  ChatCompletionRequest,
+  ChatCompletionOptions,
+  ChatCompletionResponse,
+  ChatCompletionResult,
+  ChatMessage,
+  ChatMessageContent,
+  ChatMessageContentPart,
+  FetchModelsResult,
+  ImageGenerationRequest,
+  ImageGenerationResponse,
+  ImageParams,
+  ImageReferenceAttachment,
+  ImageTestResult,
+  ModelInfo,
+  MultiModelCompareResult,
+  PromptRewriteInput,
+  PromptRewriteResult,
+  StreamCallbacks,
+} from "./ai-types";
+import {
+  generateSkillContentWithCompletion,
+  multiModelCompareWithCompletion,
+  polishSkillContentWithCompletion,
+  rewritePromptDraftWithCompletion,
+} from "./ai-content-workflows";
+
+export type * from "./ai-types";
+export { buildMessagesFromPrompt } from "./ai-content-workflows";
+
+export {
+  getBaseUrl,
+  normalizeApiUrlInput,
+} from "@prompthub/shared/utils/ai-protocol";
 
 /**
  * AI Service - Call various AI model APIs
@@ -6,24 +51,6 @@ import type { AIProtocol, AITransportResponse, PromptType } from "@prompthub/sha
  * AI 服务 - 调用各种 AI 模型 API
  * 大部分国内外服务商都兼容 OpenAI 格式
  */
-
-export interface ChatImageAttachment {
-  name?: string;
-  mimeType: string;
-  base64: string;
-}
-
-export type ChatMessageContentPart =
-  | { type: "text"; text: string }
-  | {
-      type: "image_url";
-      image_url: {
-        url: string;
-        detail?: "auto" | "low" | "high";
-      };
-    };
-
-export type ChatMessageContent = string | ChatMessageContentPart[];
 
 type AnthropicMessageContentPart =
   | { type: "text"; text: string }
@@ -35,146 +62,6 @@ type AnthropicMessageContentPart =
         data: string;
       };
     };
-
-export interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: ChatMessageContent;
-}
-
-export interface ChatCompletionRequest {
-  messages: ChatMessage[];
-  model: string;
-  temperature?: number;
-  max_tokens?: number;
-  max_completion_tokens?: number; // 新版 OpenAI 模型（o1, gpt-5 等）使用此参数
-  top_p?: number;
-  top_k?: number;
-  frequency_penalty?: number;
-  presence_penalty?: number;
-  stream?: boolean;
-  enable_thinking?: boolean;
-  // Output format: undefined = text, { type: 'json_object' } = JSON mode, { type: 'json_schema', ... } = JSON Schema
-  // 输出格式：undefined = 文本，{ type: 'json_object' } = JSON 模式，{ type: 'json_schema', ... } = JSON Schema
-  response_format?: {
-    type: "text" | "json_object" | "json_schema";
-    json_schema?: {
-      name: string;
-      strict?: boolean;
-      schema: Record<string, unknown>;
-    };
-  };
-}
-
-export interface ChatCompletionResponse {
-  id: string;
-  choices: {
-    index: number;
-    message: ChatMessage & {
-      reasoning_content?: string; // 思考模型的思考内容 / Thinking content for reasoning models
-    };
-    finish_reason: string;
-    delta?: {
-      content?: string;
-      reasoning_content?: string;
-    };
-  }[];
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
-
-// Chat model parameters
-// 对话模型参数
-export interface ChatParams {
-  temperature?: number; // 温度 (0-2) / Temperature
-  maxTokens?: number; // 最大 token 数 / Max tokens
-  topP?: number; // Top-P 采样 / Top-P sampling
-  topK?: number; // Top-K 采样 / Top-K sampling
-  frequencyPenalty?: number; // 频率惩罚 / Frequency penalty
-  presencePenalty?: number; // 存在惩罚 / Presence penalty
-  stream?: boolean; // 流式输出 / Streaming output
-  enableThinking?: boolean; // 思考模式 / Thinking mode
-  customParams?: Record<string, string | number | boolean>; // 自定义参数 / Custom parameters
-}
-
-// Image model parameters
-// 图像模型参数
-export interface ImageParams {
-  size?: string;
-  quality?: "standard" | "hd";
-  style?: "vivid" | "natural";
-  n?: number;
-}
-
-export interface ImageReferenceAttachment {
-  name?: string;
-  mimeType: string;
-  base64: string;
-}
-
-export interface AIConfig {
-  // 可选：用于区分同名模型（多模型对比的流式回调映射）
-  // Optional: Used to distinguish models with the same name (for multi-model comparison streaming callback mapping)
-  id?: string;
-  provider: string;
-  apiProtocol: AIProtocol;
-  apiKey: string;
-  apiUrl: string;
-  model: string;
-  type?: "chat" | "image"; // 模型类型 / Model type
-  chatParams?: ChatParams;
-  imageParams?: ImageParams;
-}
-
-// ============ 图像生成相关接口 ============
-// ============ Image Generation Related Interfaces ============
-
-export interface ImageGenerationRequest {
-  prompt: string;
-  model?: string;
-  n?: number;
-  size?: "256x256" | "512x512" | "1024x1024" | "1024x1792" | "1792x1024";
-  quality?: "standard" | "hd";
-  style?: "vivid" | "natural";
-  response_format?: "url" | "b64_json";
-}
-
-export interface ImageGenerationResponse {
-  created: number;
-  data: {
-    url?: string;
-    b64_json?: string;
-    revised_prompt?: string;
-  }[];
-}
-
-export interface ImageTestResult {
-  success: boolean;
-  imageUrl?: string;
-  imageBase64?: string;
-  revisedPrompt?: string;
-  error?: string;
-  latency?: number;
-  model: string;
-  provider: string;
-}
-
-// Streaming output callback interface
-// 流式输出回调接口
-export interface StreamCallbacks {
-  onContent?: (chunk: string) => void; // 内容块回调 / Content chunk callback
-  onThinking?: (chunk: string) => void; // 思考内容回调 / Thinking content callback
-  onComplete?: (fullContent: string, thinkingContent?: string) => void; // 完成回调 / Completion callback
-}
-
-// Chat completion result
-// 对话完成结果
-export interface ChatCompletionResult {
-  content: string;
-  thinkingContent?: string;
-}
 
 interface ResponseLike {
   ok: boolean;
@@ -197,134 +84,6 @@ const IMAGE_GENERATION_TIMEOUT_MS = 300_000;
 const AI_CONNECTION_TEST_MAX_TOKENS = 8;
 const AI_CONNECTION_TEST_TIMEOUT_MS = 12_000;
 const AI_CONNECTION_TEST_PROMPT = "Reply with exactly: OK";
-
-type ResolvedProtocol = {
-  protocol: AIProtocol;
-  explicit: boolean;
-  baseUrl: string;
-};
-
-function resolveAIProtocol(config: Pick<AIConfig, "apiProtocol" | "provider" | "apiUrl">): AIProtocol {
-  if (config.apiProtocol === "openai" || config.apiProtocol === "gemini" || config.apiProtocol === "anthropic") {
-    return config.apiProtocol;
-  }
-
-  const provider = config.provider?.toLowerCase() || "";
-  const apiUrl = config.apiUrl?.toLowerCase() || "";
-
-  if (provider === "anthropic" || apiUrl.includes("api.anthropic.com")) {
-    return "anthropic";
-  }
-
-  if (provider === "google" || provider === "gemini" || apiUrl.includes("generativelanguage.googleapis.com")) {
-    return "gemini";
-  }
-
-  return "openai";
-}
-
-function resolveProtocolBase(apiUrl: string, protocol: AIProtocol): ResolvedProtocol {
-  const trimmed = apiUrl.trim();
-  const explicit = trimmed.endsWith("#");
-  const rawValue = explicit ? trimmed.slice(0, -1) : trimmed;
-  const baseUrl = getBaseUrl(rawValue);
-
-  return {
-    protocol,
-    explicit,
-    baseUrl,
-  };
-}
-
-function buildChatEndpointFromBase(resolved: ResolvedProtocol): string {
-  const baseUrl = resolved.baseUrl.replace(/\/$/, "");
-  if (!baseUrl) {
-    return "";
-  }
-
-  if (resolved.explicit) {
-    return baseUrl;
-  }
-
-  if (resolved.protocol === "gemini") {
-    if (baseUrl.endsWith("/openai")) {
-      return `${baseUrl}/chat/completions`;
-    }
-    if (baseUrl.match(/\/v\d+(?:beta)?$/)) {
-      return `${baseUrl}/openai/chat/completions`;
-    }
-    return `${baseUrl}/v1beta/openai/chat/completions`;
-  }
-
-  if (resolved.protocol === "anthropic") {
-    if (baseUrl.match(/\/v\d+$/)) {
-      return `${baseUrl}/messages`;
-    }
-    return `${baseUrl}/v1/messages`;
-  }
-
-  if (baseUrl.match(/\/v\d+$/)) {
-    return `${baseUrl}/chat/completions`;
-  }
-
-  return `${baseUrl}/v1/chat/completions`;
-}
-
-function buildModelsEndpointFromBase(resolved: ResolvedProtocol): string {
-  const baseUrl = resolved.baseUrl.replace(/\/$/, "");
-  if (!baseUrl) {
-    return "";
-  }
-
-  if (resolved.protocol === "gemini") {
-    const geminiBaseUrl = baseUrl.replace(/\/openai$/, "");
-    if (geminiBaseUrl.match(/\/v\d+(?:beta)?$/)) {
-      return `${geminiBaseUrl}/models`;
-    }
-    return `${geminiBaseUrl}/v1beta/models`;
-  }
-
-  if (resolved.protocol === "anthropic") {
-    if (baseUrl.match(/\/v\d+$/)) {
-      return `${baseUrl}/models`;
-    }
-    return `${baseUrl}/v1/models`;
-  }
-
-  if (baseUrl.match(/\/v\d+$/)) {
-    return `${baseUrl}/models`;
-  }
-
-  return `${baseUrl}/v1/models`;
-}
-
-function buildHeadersForProtocol(
-  protocol: AIProtocol,
-  apiKey: string,
-  options?: { accept?: string; contentType?: boolean; useNativeGeminiAuth?: boolean },
-): Record<string, string> {
-  const headers: Record<string, string> = {};
-  if (options?.contentType !== false) {
-    headers["Content-Type"] = "application/json";
-  }
-  if (options?.accept) {
-    headers.Accept = options.accept;
-  }
-
-  if (protocol === "anthropic") {
-    headers["x-api-key"] = apiKey;
-    headers["anthropic-version"] = "2023-06-01";
-    return headers;
-  }
-
-  if (protocol === "gemini" && options?.useNativeGeminiAuth) {
-    headers["x-goog-api-key"] = apiKey;
-    return headers;
-  }
-
-  headers.Authorization = `Bearer ${apiKey}`;
-  return headers;
-}
 
 function getAITransport() {
   if (typeof window === "undefined") {
@@ -356,15 +115,13 @@ function createFetchResponseLike(response: Response): ResponseLike {
   };
 }
 
-async function requestAIEndpoint(
-  request: {
-    method: "GET" | "POST";
-    url: string;
-    headers: Record<string, string>;
-    body?: string;
-    timeoutMs?: number;
-  },
-): Promise<ResponseLike> {
+async function requestAIEndpoint(request: {
+  method: "GET" | "POST";
+  url: string;
+  headers: Record<string, string>;
+  body?: string;
+  timeoutMs?: number;
+}): Promise<ResponseLike> {
   const transport = getAITransport();
   if (transport) {
     return createResponseLike(await transport.request(request));
@@ -390,7 +147,10 @@ function getResponseHeader(
   return match?.[1] ?? "";
 }
 
-function isHtmlErrorPayload(text: string, headers: Record<string, string>): boolean {
+function isHtmlErrorPayload(
+  text: string,
+  headers: Record<string, string>,
+): boolean {
   const contentType = getResponseHeader(headers, "content-type").toLowerCase();
   const trimmed = text.trimStart().toLowerCase();
   return (
@@ -405,7 +165,10 @@ function extractHtmlTitle(text: string): string | null {
   return match?.[1]?.replace(/\s+/g, " ").trim() || null;
 }
 
-function formatGatewayTimeoutMessage(operation: string, status: number): string {
+function formatGatewayTimeoutMessage(
+  operation: string,
+  status: number,
+): string {
   return `${operation} gateway timed out (${status}). The provider or proxy did not finish before its own timeout.`;
 }
 
@@ -487,7 +250,10 @@ function isGeminiApiHost(apiUrl: string): boolean {
 }
 
 function isGeminiOpenAICompatEndpoint(endpoint: string): boolean {
-  return endpoint.includes("generativelanguage.googleapis.com") && endpoint.includes("/openai/");
+  return (
+    endpoint.includes("generativelanguage.googleapis.com") &&
+    endpoint.includes("/openai/")
+  );
 }
 
 function yieldToEventLoop() {
@@ -577,14 +343,17 @@ function normalizeAssistantContent(content: ChatMessageContent): string {
   }
 
   return content
-    .filter((part): part is Extract<ChatMessageContentPart, { type: "text" }> =>
-      part.type === "text",
+    .filter(
+      (part): part is Extract<ChatMessageContentPart, { type: "text" }> =>
+        part.type === "text",
     )
     .map((part) => part.text)
     .join("");
 }
 
-function toAnthropicMessageContent(content: ChatMessageContent): string | AnthropicMessageContentPart[] {
+function toAnthropicMessageContent(
+  content: ChatMessageContent,
+): string | AnthropicMessageContentPart[] {
   if (typeof content === "string") {
     return content;
   }
@@ -631,28 +400,7 @@ async function getErrorMessageFromResponse(
 export async function chatCompletion(
   config: AIConfig,
   messages: ChatMessage[],
-  options?: {
-    temperature?: number;
-    maxTokens?: number;
-    topP?: number;
-    topK?: number;
-    frequencyPenalty?: number;
-    presencePenalty?: number;
-    stream?: boolean;
-    enableThinking?: boolean;
-    onStream?: (chunk: string) => void; // 兼容旧版 / Legacy compatibility
-    streamCallbacks?: StreamCallbacks;
-    // Output format options / 输出格式选项
-    responseFormat?: {
-      type: "text" | "json_object" | "json_schema";
-      jsonSchema?: {
-        name: string;
-        strict?: boolean;
-        schema: Record<string, unknown>;
-      };
-    };
-    timeoutMs?: number;
-  },
+  options?: ChatCompletionOptions,
 ): Promise<ChatCompletionResult> {
   const { provider, apiKey, apiUrl, model, chatParams } = config;
   const providerId = provider?.toLowerCase() || "";
@@ -673,7 +421,9 @@ export async function chatCompletion(
     throw new Error("No model selected");
   }
 
-  const endpoint = buildChatEndpointFromBase(resolveProtocolBase(apiUrl, protocol));
+  const endpoint = buildChatEndpointFromBase(
+    resolveProtocolBase(apiUrl, protocol),
+  );
 
   // 合并参数：config.chatParams < options（options 优先级更高）
   // Merge parameters: config.chatParams < options (options takes precedence)
@@ -1073,19 +823,6 @@ async function handleStreamResponse(
   }
 
   return finalizeStreamState(state, streamCallbacks);
-}
-
-export interface AITestResult {
-  // Optional: link the result back to the configured model instance
-  // 可选：用于将结果关联回具体的模型配置实例（避免同 provider/model 串台）
-  id?: string;
-  success: boolean;
-  response?: string;
-  thinkingContent?: string; // 思考内容 / Thinking content
-  error?: string;
-  latency?: number; // 响应时间 (ms)
-  model: string;
-  provider: string;
 }
 
 /**
@@ -1904,86 +1641,6 @@ export async function testImageGeneration(
   }
 }
 
-// ============ SKILL.md 生成功能 ============
-// ============ SKILL.md Generation Functionality ============
-
-/**
- * Claude 官方 skill-creator 系统提示词
- * 基于 https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md
- * Claude official skill-creator system prompt
- * Based on https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md
- */
-const SKILL_CREATOR_SYSTEM_PROMPT = `You are a Skill Creator that helps users create effective SKILL.md files following the Anthropic Agent Skills specification.
-
-## About Skills
-
-Skills are modular, self-contained packages that extend Claude's capabilities by providing specialized knowledge, workflows, and tools. They transform Claude from a general-purpose agent into a specialized agent equipped with procedural knowledge.
-
-## SKILL.md Structure
-
-Every SKILL.md requires:
-1. **YAML frontmatter** (between --- markers) with:
-   - \`name\`: Human-friendly name (lowercase-with-hyphens, max 64 characters)
-   - \`description\`: What the skill does and when to use it (max 200 characters) - CRITICAL: Claude uses this to determine when to invoke the skill
-2. **Markdown body** with clear instructions
-
-## Core Principles
-
-1. **Concise is Key**: Only include information Claude doesn't already have. Challenge each piece: "Does Claude really need this?"
-2. **Clear Description**: Include BOTH what the skill does AND specific triggers/contexts for when to use it
-3. **Progressive Disclosure**: Keep SKILL.md lean (<500 lines), move detailed reference to separate files
-4. **Appropriate Freedom**: Match instruction specificity to task fragility
-
-## Output Format
-
-Generate a complete SKILL.md with proper structure:
-
-\`\`\`markdown
----
-name: skill-name-here
-description: Clear description of what this skill does and when to use it (max 200 chars)
----
-
-# Skill Title
-
-## Overview
-Brief explanation of the skill's purpose.
-
-## When to Use
-- Trigger condition 1
-- Trigger condition 2
-
-## Instructions
-1. Step 1
-2. Step 2
-...
-
-## Examples (if helpful)
-...
-
-## Guidelines
-- Important constraint 1
-- Best practice 2
-\`\`\`
-
-## Important Rules
-
-1. Use imperative/infinitive form in instructions
-2. Be specific about when the skill should be used in the description
-3. Include examples when they clarify usage
-4. Focus each skill on one specific workflow
-5. Do NOT include extraneous documentation (README, CHANGELOG, etc.)
-6. Output ONLY the SKILL.md content, no additional explanation`;
-
-/**
- * 使用 AI 生成 SKILL.md 内容
- * Generate SKILL.md content using AI
- * @param config AI 配置
- * @param skillName 技能名称（用户输入）
- * @param skillPurpose 技能用途描述（用户输入）
- * @param streamCallbacks 可选的流式回调
- * @returns 生成的 SKILL.md 内容
- */
 export async function generateSkillContent(
   config: AIConfig,
   skillName: string,
@@ -1991,50 +1648,15 @@ export async function generateSkillContent(
   streamCallbacks?: StreamCallbacks,
   customSystemPrompt?: string,
 ): Promise<string> {
-  const userPrompt = `Create a SKILL.md file for the following skill:
-
-**Skill Name**: ${skillName}
-**Purpose/Description**: ${skillPurpose}
-
-Generate a complete, well-structured SKILL.md following the Anthropic Agent Skills specification. Output ONLY the SKILL.md content (including the YAML frontmatter), no additional explanation.`;
-
-  const systemPrompt = customSystemPrompt || SKILL_CREATOR_SYSTEM_PROMPT;
-  const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userPrompt },
-  ];
-
-  const result = await chatCompletion(config, messages, {
-    temperature: 0.7,
-    maxTokens: 4096,
-    stream: !!streamCallbacks,
+  return generateSkillContentWithCompletion(
+    chatCompletion,
+    config,
+    skillName,
+    skillPurpose,
     streamCallbacks,
-  });
-
-  return result.content;
+    customSystemPrompt,
+  );
 }
-
-/**
- * AI 润色 SKILL.md 内容（保留核心能力，按标准格式优化可读性）
- * AI polish SKILL.md content (preserve core capabilities, optimize readability per standard format)
- */
-const SKILL_POLISH_SYSTEM_PROMPT = `You are a SKILL.md editor. Your job is to polish and restructure existing skill content to follow the Anthropic Agent Skills specification — while strictly preserving ALL core capabilities, instructions, and intent written by the user.
-
-## Rules
-
-1. **PRESERVE everything the user wrote** — do NOT remove, weaken, or change any core instruction, capability, workflow step, or constraint. You are polishing, not rewriting.
-2. **Add YAML frontmatter** if missing (name + description ≤200 chars)
-3. **Restructure** into clear sections: Overview, When to Use, Instructions, Guidelines, Examples (only if helpful)
-4. **Improve clarity** — fix grammar, use imperative form, add bullet points, improve formatting
-5. **Keep it concise** — remove redundancy but never remove unique information
-6. **Output ONLY the polished SKILL.md** — no explanations, no commentary, no code fences wrapping the entire output
-7. **Use the same language as the user's content** — if the user wrote in Chinese, output in Chinese; if English, output in English
-
-## Important
-
-- If the content already has good structure, make minimal changes
-- Never invent new capabilities the user didn't describe
-- The description in frontmatter should accurately summarize what the user wrote`;
 
 export async function polishSkillContent(
   config: AIConfig,
@@ -2042,193 +1664,24 @@ export async function polishSkillContent(
   skillName?: string,
   streamCallbacks?: StreamCallbacks,
 ): Promise<string> {
-  const userPrompt = `Please polish the following SKILL.md content. Preserve ALL core capabilities and instructions. Only improve structure, formatting, and readability according to the SKILL.md standard.
-
-${skillName ? `**Skill Name**: ${skillName}\n` : ""}
-**Existing Content**:
-${existingContent}`;
-
-  const messages: ChatMessage[] = [
-    { role: "system", content: SKILL_POLISH_SYSTEM_PROMPT },
-    { role: "user", content: userPrompt },
-  ];
-
-  const result = await chatCompletion(config, messages, {
-    temperature: 0.4,
-    maxTokens: 4096,
-    stream: !!streamCallbacks,
+  return polishSkillContentWithCompletion(
+    chatCompletion,
+    config,
+    existingContent,
+    skillName,
     streamCallbacks,
-  });
-
-  return result.content;
-}
-
-export interface PromptRewriteInput {
-  promptType: PromptType;
-  title: string;
-  description?: string | null;
-  systemPrompt?: string | null;
-  userPrompt: string;
-  notes?: string | null;
-  instruction: string;
-}
-
-export interface PromptRewriteResult {
-  summary?: string;
-  description?: string;
-  systemPrompt?: string;
-  userPrompt?: string;
-  notes?: string;
-}
-
-const PROMPT_REWRITE_SYSTEM_PROMPT = `You are an expert prompt editor working inside PromptHub.
-
-Your job is to improve an existing prompt draft according to the user's instruction while preserving the original task intent.
-
-Rules:
-1. Preserve the original goal, intent, placeholders, and important constraints unless the user explicitly asks to change them.
-2. Keep placeholders like {{variable}}, {{variable:example}}, template markers, markdown structure, and code fences intact unless the user explicitly asks to rewrite them.
-3. Improve clarity, structure, specificity, output constraints, and consistency when useful.
-4. Do NOT invent new product requirements, tools, or capabilities that were not implied by the current draft.
-5. Do NOT modify title, tags, folder, images, videos, or bilingual fields.
-6. Return STRICT JSON only. No markdown fences. No explanation outside JSON.
-7. Only include fields that should change. Omit fields that should stay unchanged.
-
-Return JSON with this shape only:
-{
-  "summary": "Short one-line summary of what changed",
-  "description": "Optional updated description",
-  "systemPrompt": "Optional updated system prompt",
-  "userPrompt": "Optional updated user prompt",
-  "notes": "Optional updated notes"
-}`;
-
-function extractJsonObject(responseContent: string): Record<string, unknown> | null {
-  const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-
-  if (!jsonMatch) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return null;
-    }
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+  );
 }
 
 export async function rewritePromptDraft(
   config: AIConfig,
   input: PromptRewriteInput,
 ): Promise<PromptRewriteResult> {
-  const promptTypeGuidance =
-    input.promptType === "image"
-      ? "Focus on visual clarity, subject detail, composition, style, lighting, and negative constraints when useful."
-      : input.promptType === "video"
-        ? "Focus on motion, shot progression, timing, pacing, camera movement, and temporal consistency when useful."
-        : "Focus on instruction clarity, role setup, context, step-by-step structure, and output formatting when useful.";
-
-  const userPrompt = `Please improve the following PromptHub draft according to the user's rewrite request.
-
-Prompt type: ${input.promptType}
-Prompt title: ${input.title}
-Rewrite request:
-${input.instruction}
-
-Prompt-type guidance:
-${promptTypeGuidance}
-
-Current draft JSON:
-${JSON.stringify(
-    {
-      description: input.description || "",
-      systemPrompt: input.systemPrompt || "",
-      userPrompt: input.userPrompt,
-      notes: input.notes || "",
-    },
-    null,
-    2,
-  )}`;
-
-  const result = await chatCompletion(
-    config,
-    [
-      { role: "system", content: PROMPT_REWRITE_SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ],
-    {
-      temperature: 0.4,
-      maxTokens: 4096,
-    },
-  );
-
-  if (!result.content) {
-    throw new Error("AI rewrite returned empty content");
-  }
-
-  const parsed = extractJsonObject(result.content);
-  if (!parsed) {
-    throw new Error("AI rewrite did not return valid JSON");
-  }
-
-  const rewritten: PromptRewriteResult = {};
-
-  if (typeof parsed.summary === "string" && parsed.summary.trim()) {
-    rewritten.summary = parsed.summary.trim();
-  }
-
-  if ("description" in parsed) {
-    if (typeof parsed.description !== "string") {
-      throw new Error("AI rewrite returned an invalid description field");
-    }
-    rewritten.description = parsed.description;
-  }
-
-  if ("systemPrompt" in parsed) {
-    if (typeof parsed.systemPrompt !== "string") {
-      throw new Error("AI rewrite returned an invalid systemPrompt field");
-    }
-    rewritten.systemPrompt = parsed.systemPrompt;
-  }
-
-  if ("userPrompt" in parsed) {
-    if (typeof parsed.userPrompt !== "string") {
-      throw new Error("AI rewrite returned an invalid userPrompt field");
-    }
-    rewritten.userPrompt = parsed.userPrompt;
-  }
-
-  if ("notes" in parsed) {
-    if (typeof parsed.notes !== "string") {
-      throw new Error("AI rewrite returned an invalid notes field");
-    }
-    rewritten.notes = parsed.notes;
-  }
-
-  if (
-    rewritten.description === undefined &&
-    rewritten.systemPrompt === undefined &&
-    rewritten.userPrompt === undefined &&
-    rewritten.notes === undefined
-  ) {
-    throw new Error("AI rewrite did not return any editable fields");
-  }
-
-  return rewritten;
+  return rewritePromptDraftWithCompletion(chatCompletion, config, input);
 }
 
 // ============ 多模型对比分析 ============
 // ============ Multi-Model Comparison Analysis ============
-
-export interface MultiModelCompareResult {
-  messages: ChatMessage[];
-  results: AITestResult[];
-  totalTime: number;
-}
 
 /**
  * Multi-model prompt comparison (parallel execution, supports streaming)
@@ -2244,131 +1697,16 @@ export async function multiModelCompare(
     // 每个模型的流式回调
   },
 ): Promise<MultiModelCompareResult> {
-  const startTime = Date.now();
-
-  const promises = configs.map(async (config) => {
-    const resultStartTime = Date.now();
-    const streamCallbacks = options?.streamCallbacksMap?.get(
-      config.id || config.model,
-    );
-
-    try {
-      // 显式传递 stream 和 enableThinking 参数
-      // Explicitly pass stream and enableThinking parameters
-      const useStream = config.chatParams?.stream ?? false;
-      const useThinking = config.chatParams?.enableThinking ?? false;
-
-      const result = await chatCompletion(config, messages, {
-        temperature: options?.temperature,
-        maxTokens: options?.maxTokens,
-        stream: useStream,
-        enableThinking: useThinking,
-        streamCallbacks,
-      });
-
-      return {
-        id: config.id,
-        success: true,
-        response: result.content,
-        thinkingContent: result.thinkingContent,
-        latency: Date.now() - resultStartTime,
-        model: config.model,
-        provider: config.provider,
-      } as AITestResult;
-    } catch (error) {
-      return {
-        id: config.id,
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        latency: Date.now() - resultStartTime,
-        model: config.model,
-        provider: config.provider,
-      } as AITestResult;
-    }
-  });
-
-  const results = await Promise.all(promises);
-
-  return {
+  return multiModelCompareWithCompletion(
+    chatCompletion,
+    configs,
     messages,
-    results,
-    totalTime: Date.now() - startTime,
-  };
-}
-
-/**
- * Generate messages using prompt template
- * 使用 Prompt 模板生成消息
- */
-export function buildMessagesFromPrompt(
-  systemPrompt: string | undefined,
-  userPrompt: string,
-  variables?: Record<string, string>,
-  imageAttachments?: ChatImageAttachment[],
-): ChatMessage[] {
-  const messages: ChatMessage[] = [];
-
-  // Replace variables
-  // 替换变量
-  let processedUserPrompt = userPrompt;
-  if (variables) {
-    for (const [key, value] of Object.entries(variables)) {
-      processedUserPrompt = processedUserPrompt.replace(
-        new RegExp(`\\{\\{${key}\\}\\}`, "g"),
-        value,
-      );
-    }
-  }
-
-  if (systemPrompt) {
-    let processedSystemPrompt = systemPrompt;
-    if (variables) {
-      for (const [key, value] of Object.entries(variables)) {
-        processedSystemPrompt = processedSystemPrompt.replace(
-          new RegExp(`\\{\\{${key}\\}\\}`, "g"),
-          value,
-        );
-      }
-    }
-    messages.push({ role: "system", content: processedSystemPrompt });
-  }
-
-  if (imageAttachments && imageAttachments.length > 0) {
-    const content: ChatMessageContentPart[] = [
-      { type: "text", text: processedUserPrompt },
-      ...imageAttachments.map((attachment) => ({
-        type: "image_url" as const,
-        image_url: {
-          url: `data:${attachment.mimeType};base64,${attachment.base64}`,
-        },
-      })),
-    ];
-    messages.push({ role: "user", content });
-  } else {
-    messages.push({ role: "user", content: processedUserPrompt });
-  }
-
-  return messages;
+    options,
+  );
 }
 
 // ============ 获取模型列表 ============
 // ============ Get Model List ============
-
-export interface ModelInfo {
-  id: string;
-  name?: string;
-  owned_by?: string;
-  created?: number;
-}
-
-export interface FetchModelsResult {
-  success: boolean;
-  models: ModelInfo[];
-  error?: string;
-  reason?: "auth" | "network" | "unsupported" | "http" | "parse";
-  endpoint?: string;
-  status?: number;
-}
 
 interface AnthropicModelsPayload {
   data?: Array<{
@@ -2398,68 +1736,6 @@ interface ArrayModelPayloadItem {
   id?: string;
   model?: string;
   name?: string;
-}
-
-/**
- * Calculate Base URL (for display preview)
- * 处理各种用户输入情况，返回标准化的 base URL
- * 如果用户在 URL 末尾输入 #，则视为显式指定，不进行后续补全，预览显示 # 之前的部分
- * Calculate base URL (for display preview)
- * Handle various user input scenarios, return standardized base URL
- * If the user enters # at the end of the URL, it is treated as explicitly specified,
- * no subsequent completion is performed, and the preview displays the part before #
- */
-export function getBaseUrl(apiUrl: string): string {
-  if (!apiUrl) return "";
-
-  let url = apiUrl.trim();
-
-  // Handle # suffix: if ends with #, treat as explicit and remove # for display
-  // 处理 # 后缀：如果以 # 结尾，视为显式指定，显示时移除 #
-  if (url.endsWith("#")) {
-    return url.slice(0, -1);
-  }
-
-  if (url.endsWith("/")) {
-    url = url.slice(0, -1);
-  }
-
-  // Remove common endpoint suffixes
-  // 移除常见的端点后缀
-  const suffixes = [
-    "/chat/completions",
-    "/completions",
-    "/models",
-    "/embeddings",
-    "/images/generations",
-  ];
-  for (const suffix of suffixes) {
-    if (url.endsWith(suffix)) {
-      url = url.slice(0, -suffix.length);
-      break;
-    }
-  }
-
-  return url;
-}
-
-/**
- * Normalize user input for persisted API URL storage
- * 保持用户显式的 # 标记，同时把完整 endpoint 收敛为 base URL
- */
-export function normalizeApiUrlInput(apiUrl: string): string {
-  if (!apiUrl) return "";
-
-  const trimmed = apiUrl.trim();
-  const explicit = trimmed.endsWith("#");
-  const rawValue = explicit ? trimmed.slice(0, -1) : trimmed;
-  const normalized = getBaseUrl(rawValue);
-
-  if (!normalized) {
-    return explicit ? "#" : "";
-  }
-
-  return explicit ? `${normalized}#` : normalized;
 }
 
 /**
@@ -2583,11 +1859,11 @@ export async function fetchAvailableModels(
           ? "auth"
           : response.status === 0 && /timeout/i.test(errorText)
             ? "network"
-          : response.status === 404 ||
-              response.status === 405 ||
-              response.status === 501
-            ? "unsupported"
-            : "http";
+            : response.status === 404 ||
+                response.status === 405 ||
+                response.status === 501
+              ? "unsupported"
+              : "http";
       return {
         success: false,
         models: [],
@@ -2609,7 +1885,11 @@ export async function fetchAvailableModels(
       | ArrayModelPayloadItem[]
     >();
 
-    if (apiProtocol === "anthropic" && "data" in data && Array.isArray(data.data)) {
+    if (
+      apiProtocol === "anthropic" &&
+      "data" in data &&
+      Array.isArray(data.data)
+    ) {
       const models = data.data
         .filter((m: { id?: string }) => typeof m.id === "string")
         .map(

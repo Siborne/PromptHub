@@ -8,6 +8,12 @@ import type {
   SkillSafetyReport,
   SkillSafetyScanInput,
 } from '@prompthub/shared';
+import {
+  buildChatEndpointFromBase,
+  buildHeadersForProtocol,
+  resolveAIProtocol,
+  resolveProtocolBase,
+} from '@prompthub/shared/utils/ai-protocol';
 
 const AI_REQUEST_TIMEOUT_MS = 60_000;
 
@@ -77,118 +83,6 @@ export interface ParsedRemoteSkill {
   tags?: string[];
   body: string;
   raw: string;
-}
-
-function resolveAIProtocol(
-  config: Pick<SafetyScanAIConfig, 'apiProtocol' | 'provider' | 'apiUrl'>,
-): SafetyScanAIConfig['apiProtocol'] {
-  if (
-    config.apiProtocol === 'openai' ||
-    config.apiProtocol === 'gemini' ||
-    config.apiProtocol === 'anthropic'
-  ) {
-    return config.apiProtocol;
-  }
-
-  const provider = config.provider?.toLowerCase() || '';
-  const apiUrl = config.apiUrl?.toLowerCase() || '';
-
-  if (provider === 'anthropic' || apiUrl.includes('api.anthropic.com')) {
-    return 'anthropic';
-  }
-
-  if (
-    provider === 'google' ||
-    provider === 'gemini' ||
-    apiUrl.includes('generativelanguage.googleapis.com')
-  ) {
-    return 'gemini';
-  }
-
-  return 'openai';
-}
-
-function getBaseUrl(apiUrl: string): string {
-  if (!apiUrl) return '';
-  let url = apiUrl.trim();
-  if (url.endsWith('#')) return url.slice(0, -1);
-  if (url.endsWith('/')) url = url.slice(0, -1);
-  for (const suffix of [
-    '/chat/completions',
-    '/completions',
-    '/models',
-    '/embeddings',
-    '/images/generations',
-    '/messages',
-  ]) {
-    if (url.endsWith(suffix)) {
-      return url.slice(0, -suffix.length);
-    }
-  }
-  return url;
-}
-
-function buildChatEndpoint(
-  apiUrl: string,
-  protocol: SafetyScanAIConfig['apiProtocol'],
-): string {
-  const trimmed = apiUrl.trim();
-  const explicit = trimmed.endsWith('#');
-  const baseUrl = getBaseUrl(explicit ? trimmed.slice(0, -1) : trimmed).replace(
-    /\/$/,
-    '',
-  );
-
-  if (explicit) {
-    if (protocol === 'anthropic') {
-      return baseUrl.endsWith('/messages') ? baseUrl : `${baseUrl}/messages`;
-    }
-    return baseUrl.endsWith('/chat/completions')
-      ? baseUrl
-      : `${baseUrl}/chat/completions`;
-  }
-
-  if (protocol === 'gemini') {
-    if (baseUrl.endsWith('/openai')) {
-      return `${baseUrl}/chat/completions`;
-    }
-    if (baseUrl.match(/\/v\d+(?:beta)?$/)) {
-      return `${baseUrl}/openai/chat/completions`;
-    }
-    return `${baseUrl}/v1beta/openai/chat/completions`;
-  }
-
-  if (protocol === 'anthropic') {
-    if (baseUrl.match(/\/v\d+$/)) {
-      return `${baseUrl}/messages`;
-    }
-    return `${baseUrl}/v1/messages`;
-  }
-
-  if (baseUrl.match(/\/v\d+$/)) {
-    return `${baseUrl}/chat/completions`;
-  }
-
-  return `${baseUrl}/v1/chat/completions`;
-}
-
-function buildHeaders(
-  config: SafetyScanAIConfig,
-  protocol: SafetyScanAIConfig['apiProtocol'],
-): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  };
-
-  if (protocol === 'anthropic') {
-    headers['x-api-key'] = config.apiKey;
-    headers['anthropic-version'] = '2023-06-01';
-  } else {
-    headers.Authorization = `Bearer ${config.apiKey}`;
-  }
-
-  return headers;
 }
 
 function isLoopbackOrPrivateIpv4(address: string): boolean {
@@ -315,8 +209,12 @@ async function chatCompletion(
   }
 
   const protocol = resolveAIProtocol(config);
-  const endpoint = buildChatEndpoint(config.apiUrl, protocol);
-  const headers = buildHeaders(config, protocol);
+  const endpoint = buildChatEndpointFromBase(
+    resolveProtocolBase(config.apiUrl, protocol),
+  );
+  const headers = buildHeadersForProtocol(protocol, config.apiKey, {
+    accept: 'application/json',
+  });
   const isGemini = protocol === 'gemini';
   const isAnthropic = protocol === 'anthropic';
   const model = isGemini ? config.model.replace(/^models\//, '') : config.model;

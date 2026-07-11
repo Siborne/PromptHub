@@ -18,7 +18,8 @@
 ## Stable Asset Rules
 
 - 本文档记录长期稳定、可反复查阅的供应商 API 基线信息，不是一次性的变更提案。
-- 当 `AISettings.tsx`、`ai-workbench/constants.ts`、`renderer/services/ai.ts`、`main/services/ai-client.ts` 的 provider 默认值或协议选择逻辑发生稳定变化时，应同步更新本文件。
+- 当 `AISettingsPrototype.tsx`、`ai-workbench/constants.ts`、`renderer/services/ai.ts`、`packages/core/src/ai-client.ts` 的 provider 默认值或协议选择逻辑发生稳定变化时，应同步更新本文件。
+- endpoint、鉴权头、URL 标准化和旧配置协议推断的代码真相源是 `packages/shared/utils/ai-protocol.ts`；Desktop、Core 与 Web 必须复用它，不能分别维护同名策略。
 - 对已经通过官方公开文档核验的供应商，记录为 `Officially documented`。
 - 对当前仅确认了 PromptHub 默认值、未完成完整官方核验的供应商，记录为 `PromptHub inferred` 或 `Evidence limited`，不得伪装为已核验事实。
 - 对文档中出现、但尚不能确认是独立 provider 还是模型/别名的名称，必须单独标为 `Evidence limited` 或 `PromptHub inferred`，不要直接并入 canonical provider 列表。
