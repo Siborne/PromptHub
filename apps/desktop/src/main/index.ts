@@ -55,8 +55,6 @@ import {
 } from "./data-path";
 import {
   configureRuntimePaths,
-  getDataDir,
-  getDatabasePath,
   getImagesDir,
   getRulesDir,
   getVideosDir,
@@ -65,6 +63,7 @@ import {
   getPromptsWorkspaceDir,
   getConfigDir,
 } from "./runtime-paths";
+import { registerAppRuntimeIPC } from "./ipc/app-runtime.ipc";
 import { PromptDB } from "./database/prompt";
 import { FolderDB } from "./database/folder";
 import {
@@ -518,84 +517,7 @@ ipcMain.handle(IPC_CHANNELS.APP_RELAUNCH, () => {
   return { success: true };
 });
 
-ipcMain.handle(IPC_CHANNELS.APP_GET_CACHE_SIZE, async () => {
-  const size = await session.defaultSession.getCacheSize();
-  return { size };
-});
-
-ipcMain.handle(IPC_CHANNELS.APP_CLEAR_CACHE, async () => {
-  await session.defaultSession.clearCache();
-  return { success: true };
-});
-
-function getAutoSyncLogPath(): string {
-  return path.join(app.getPath("userData"), "logs", "auto-sync.jsonl");
-}
-
-function ensureAutoSyncLogFile(): string {
-  const filePath = getAutoSyncLogPath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, "", "utf8");
-  }
-  return filePath;
-}
-
-function sanitizeAutoSyncLogMessage(value: unknown): string {
-  return String(value ?? "")
-    .replace(/https?:\/\/[^\s]+/gi, "[url]")
-    .replace(/\b[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}\b/g, "[email]")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 500);
-}
-
-ipcMain.handle(
-  IPC_CHANNELS.APP_APPEND_AUTO_SYNC_LOG,
-  async (_event, entry: unknown) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      return { success: false, error: "Invalid automatic sync log entry" };
-    }
-
-    const record = entry as Record<string, unknown>;
-    const provider = record.provider;
-    const reason = record.reason;
-    const status = record.status;
-    const startedAt = record.startedAt;
-    const finishedAt = record.finishedAt;
-
-    if (
-      !["webdav", "s3", "self-hosted"].includes(String(provider)) ||
-      !["startup", "startup-resume", "interval"].includes(String(reason)) ||
-      !["success", "failed", "skipped"].includes(String(status)) ||
-      typeof startedAt !== "string" ||
-      typeof finishedAt !== "string"
-    ) {
-      return { success: false, error: "Invalid automatic sync log entry" };
-    }
-
-    const logRecord = {
-      id: typeof record.id === "string" ? record.id : undefined,
-      provider,
-      reason,
-      status,
-      startedAt,
-      finishedAt,
-      message: sanitizeAutoSyncLogMessage(record.message),
-      localChanged:
-        typeof record.localChanged === "boolean"
-          ? record.localChanged
-          : undefined,
-    };
-
-    fs.appendFileSync(
-      ensureAutoSyncLogFile(),
-      `${JSON.stringify(logRecord)}\n`,
-      "utf8",
-    );
-    return { success: true, path: getAutoSyncLogPath() };
-  },
-);
+registerAppRuntimeIPC();
 
 // Configure minimize-to-tray behavior
 // 设置最小化到托盘
@@ -607,19 +529,6 @@ ipcMain.on("app:setMinimizeToTray", (_event, enabled: boolean) => {
     destroyTray();
   }
 });
-
-ipcMain.handle(IPC_CHANNELS.APP_GET_RUNTIME_PATHS, async () => ({
-  userDataPath: app.getPath("userData"),
-  dataDir: getDataDir(),
-  databasePath: getDatabasePath(),
-  promptsDir: getPromptsWorkspaceDir(),
-  rulesDir: getRulesDir(),
-  skillsDir: getSkillsDir(),
-  mcpDir: path.join(getDataDir(), "mcp"),
-  backupsDir: path.join(app.getPath("userData"), "backups"),
-  logsDir: path.join(app.getPath("userData"), "logs"),
-  autoSyncLogPath: ensureAutoSyncLogFile(),
-}));
 
 // Set close action (Windows)
 // 设置关闭行为 (Windows)
