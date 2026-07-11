@@ -19,6 +19,7 @@ These rules are the default quality bar for PromptHub implementation work. They 
 - Functions should stay below 50 lines by default.
 - Components, stores, and services must be split before they become mixed-responsibility "god" files.
 - Existing files over 2,000 lines are legacy debt. Do not add behavior to them except while extracting smaller modules or tests.
+- `pnpm lint:file-size` enforces a 1,500-line new-file ceiling and the 2,000-line hard limit. The checked-in 1,500+ legacy baseline is a one-way ceiling: existing large files may shrink but must never grow, and new large files cannot be added. New files should still target the stricter 1,000-line default.
 
 When a file approaches the limit, split by responsibility:
 

@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 29 |
-| Archived | 151 |
+| Active | 35 |
+| Archived | 152 |
 | Legacy | 1 |
 
 ## Active
@@ -23,6 +23,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-home-layout-controls` | active | `spec/changes/active/desktop-home-layout-controls/` |
 | `desktop-issue-179-configured-skill-targets` | active | `spec/changes/active/desktop-issue-179-configured-skill-targets/` |
 | `desktop-prompt-context-move` | active | `spec/changes/active/desktop-prompt-context-move/` |
+| `desktop-release-portability-repair` | active | `spec/changes/active/desktop-release-portability-repair/` |
 | `desktop-renderer-ui-test-coverage` | active | `spec/changes/active/desktop-renderer-ui-test-coverage/` |
 | `desktop-update-dialog-polish` | active | `spec/changes/active/desktop-update-dialog-polish/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
@@ -33,6 +34,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `mobile-prompt-persistence-hardening` | implemented | `spec/changes/active/mobile-prompt-persistence-hardening/` |
 | `platform-workbench-prototype` | in progress | `spec/changes/active/platform-workbench-prototype/` |
 | `plugin-management` | active | `spec/changes/active/plugin-management/` |
+| `project-module-boundary-hardening` | active | `spec/changes/active/project-module-boundary-hardening/` |
 | `project-skill-management` | in progress | `spec/changes/active/project-skill-management/` |
 | `prompt-output-format-contribution` | active | `spec/changes/active/prompt-output-format-contribution/` |
 | `r2-direct-downloads` | active | `spec/changes/active/r2-direct-downloads/` |
@@ -40,10 +42,14 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `release-verification-harness` | active | `spec/changes/active/release-verification-harness/` |
 | `rules-managed-copies` | in progress | `spec/changes/active/rules-managed-copies/` |
 | `skill-frontmatter-yaml-parser` | active | `spec/changes/active/skill-frontmatter-yaml-parser/` |
+| `skill-module-boundary-refactor` | active | `spec/changes/active/skill-module-boundary-refactor/` |
 | `skill-source-update-reconciliation` | completed | `spec/changes/active/skill-source-update-reconciliation/` |
+| `skill-source-update-trust-review` | implemented | `spec/changes/active/skill-source-update-trust-review/` |
 | `skill-uninstall-lifecycle` | active | `spec/changes/active/skill-uninstall-lifecycle/` |
 | `unified-custom-store-sources` | implemented | `spec/changes/active/unified-custom-store-sources/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
+| `web-release-version-alignment` | active | `spec/changes/active/web-release-version-alignment/` |
+| `web-workspace-capability-alignment` | implemented | `spec/changes/active/web-workspace-capability-alignment/` |
 
 ## Archived
 
@@ -200,6 +206,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-10-spec-init-submission-gate` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-init-submission-gate/` |
 | `2026-07-10-spec-init-upstream-alignment` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-init-upstream-alignment/` |
 | `2026-07-10-spec-structure-rename` | archived | `spec/changes/archive/2026/07/2026-07-10-spec-structure-rename/` |
+| `2026-07-11-readme-desktop-module-screenshots-v0-5-9` | archived | `spec/changes/archive/2026/07/2026-07-11-readme-desktop-module-screenshots-v0-5-9/` |
 
 ## Legacy
 
