@@ -47,7 +47,7 @@ body:
     attributes:
       label: "Version"
       description: "App version, web tag, or commit if known. PromptHub will turn this into a version label automatically."
-      placeholder: "e.g. 0.5.5, web-v0.5.5, main@abc1234"
+      placeholder: "e.g. 0.5.5, v0.5.5, main@abc1234"
     validations:
       required: true
 

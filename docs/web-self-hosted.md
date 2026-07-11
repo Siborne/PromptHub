@@ -135,9 +135,11 @@ Useful root-level commands:
 
 `apps/web` already includes a production `Dockerfile` and ready-to-use compose files.
 
-When a release tag is built in CI, PromptHub also publishes a container image to GHCR:
+When a standard `v<version>` release tag is built in CI, PromptHub also
+publishes a container image to GHCR:
 
-- `ghcr.io/legeling/prompthub-web:<version-tag>`
+- `ghcr.io/legeling/prompthub-web:<version>`
+- `ghcr.io/legeling/prompthub-web:v<version>`
 - `ghcr.io/legeling/prompthub-web:latest`
 
 ### Quick Start with Docker Compose

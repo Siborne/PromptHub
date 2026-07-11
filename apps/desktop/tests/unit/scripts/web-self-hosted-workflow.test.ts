@@ -1,0 +1,43 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+const repositoryRoot = path.resolve(process.cwd(), "../..");
+const workflowSource = readFileSync(
+  path.join(repositoryRoot, ".github/workflows/web-self-hosted.yml"),
+  "utf8",
+);
+const rootPackage = JSON.parse(
+  readFileSync(path.join(repositoryRoot, "package.json"), "utf8"),
+) as { version: string };
+const webPackage = JSON.parse(
+  readFileSync(path.join(repositoryRoot, "apps/web/package.json"), "utf8"),
+) as { version: string };
+
+describe("self-hosted Web release workflow", () => {
+  it("publishes Web images from the standard Desktop release tag", () => {
+    expect(workflowSource).toContain('- "v*"');
+    expect(workflowSource).toContain("type=semver,pattern={{version}}");
+    expect(workflowSource).toContain("type=semver,pattern=v{{version}}");
+    expect(workflowSource).toContain(
+      "type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}",
+    );
+  });
+
+  it("uses the root release version for Web builds and health responses", () => {
+    const dockerfile = readFileSync(
+      path.join(repositoryRoot, "apps/web/Dockerfile"),
+      "utf8",
+    );
+    const appSource = readFileSync(
+      path.join(repositoryRoot, "apps/web/src/app.ts"),
+      "utf8",
+    );
+
+    expect(webPackage.version).toBe(rootPackage.version);
+    expect(dockerfile).toContain("require('./package.json').version");
+    expect(appSource).toContain(
+      "process.env.APP_VERSION || rootPackage.version",
+    );
+  });
+});
