@@ -87,7 +87,7 @@ Add sub-navigation in the Skill area:
 **Interactions:**
 - Click installed skill → open skill detail page (edit mode)
 - Click recommended skill → open skill detail modal (install mode)
-- Click `+` button → install directly (skip detail modal)
+- Click `+` button → open the same install preview and confirmation flow; no store installation writes without confirmation
 - Click edit button → open skill editor
 
 ---
@@ -273,22 +273,24 @@ Extends existing `SkillFullDetailPage` with:
 ```
 Browse store → Click skill → View detail → Click Install
                                              ↓
-                                   1. Download SKILL.md content
-                                   2. Save to local database
-                                   3. Download and cache icon
-                                   4. Update Installed list
-                                   5. Optional: install to platforms
+                                   1. Fetch the current package
+                                   2. Run the safety scan
+                                   3. Show package/content diff
+                                   4. Require explicit confirmation
+                                   5. Write local package and update list
+                                   6. Optional: install to platforms
 ```
 
 ### 6.2 Quick Install (+ button)
 
 ```
-Click + → Install directly (skip detail)
+Click + → Open install preview
           ↓
-   1. Fetch SKILL.md from remote
-   2. Store locally
-   3. Show success toast
-   4. Move from Recommended to Installed
+   1. Fetch the current package
+   2. Run the safety scan and show the content diff
+   3. Require explicit confirmation
+   4. Store locally and report the result
+   5. Move from Recommended to Installed
 ```
 
 ### 6.3 Uninstall
@@ -300,7 +302,7 @@ Open installed skill → Click Uninstall → Confirm → Remove from DB → Retu
 ### 6.4 Update
 
 ```
-Refresh / Auto-check → Compare remote registry version → Show update prompt → Update SKILL.md
+Refresh / Auto-check → Compare B/L/R package state → Show package/content diff and scan result → Confirm → Update package
 ```
 
 ---

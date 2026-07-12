@@ -87,7 +87,7 @@
 **交互行为：**
 - 点击已安装技能 → 进入技能详情页（编辑模式）
 - 点击推荐技能 → 弹出技能详情弹窗（安装模式）
-- 点击 `+` 按钮 → 直接安装（无需弹窗确认）
+- 点击 `+` 按钮 → 打开与详情页一致的预览和确认流程；未确认不得写入
 - 点击编辑按钮 → 进入技能编辑页
 
 ---
@@ -315,22 +315,24 @@ function SkillIcon({ iconUrl, iconEmoji, name, size = 'md', className }: SkillIc
 ```
 用户浏览商店 → 点击技能 → 查看详情弹窗 → 点击 Install
                                               ↓
-                                    1. 下载 SKILL.md 内容
-                                    2. 保存到本地数据库
-                                    3. 下载并缓存图标
-                                    4. 更新 Installed 列表
-                                    5. 可选：安装到平台(Claude/Cursor等)
+                                    1. 获取当前 package
+                                    2. 执行安全扫描
+                                    3. 展示 package/内容差异
+                                    4. 等待用户明确确认
+                                    5. 写入本地 package 并更新列表
+                                    6. 可选：安装到平台(Claude/Cursor等)
 ```
 
 ### 6.2 快速安装（+按钮）
 
 ```
-用户点击 + 按钮 → 直接安装（跳过详情页）
+用户点击 + 按钮 → 打开安装预览
                   ↓
-        1. 从远程获取 SKILL.md
-        2. 存储到本地
-        3. 显示成功提示
-        4. 技能从 Recommended 移到 Installed
+        1. 获取当前 package
+        2. 执行安全扫描并展示内容差异
+        3. 等待用户明确确认
+        4. 存储到本地并回传结果
+        5. 技能从 Recommended 移到 Installed
 ```
 
 ### 6.3 卸载流程
@@ -347,11 +349,11 @@ function SkillIcon({ iconUrl, iconEmoji, name, size = 'md', className }: SkillIc
 ### 6.4 更新流程
 
 ```
-刷新按钮 / 自动检查 → 检测远程 registry.json 版本
+刷新按钮 / 自动检查 → 对账 B/L/R package 状态
                        ↓
-            版本不一致 → 显示更新提示
+            存在变化 → 显示 package/内容差异和扫描结果
                          ↓
-                用户确认 → 更新 SKILL.md 内容
+                用户确认 → 更新整个 Skill package
 ```
 
 ### 6.5 批量商店管理
@@ -514,7 +516,7 @@ interface SkillState {
 **优先级: 中 | 预计工时: 2天**
 
 - [ ] 实现 `installFromRegistry` action：从远程 URL 下载 SKILL.md → 存储到本地数据库
-- [ ] 实现快速安装（+按钮直接安装，不打开详情）
+- [x] 实现快速安装（+按钮打开预览，确认后安装）
 - [ ] 安装成功后技能从 Recommended 移入 Installed，动画过渡
 - [ ] 实现卸载时技能回到 Recommended
 - [ ] 加载状态和错误处理
