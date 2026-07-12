@@ -24,6 +24,11 @@ import {
 import { scheduleAllSaveSync } from "../../services/webdav-save-sync";
 import { useSettingsStore } from "../settings.store";
 import { getSafetyScanAIConfig } from "./skill-store-domain";
+import {
+  getCloudSkillMarkdown,
+  getCloudStorePackage,
+  isCloudRegistrySkill,
+} from "../../services/cloud-store";
 import { buildSourceBaselineFields } from "./skill-source-update-baseline";
 import type { SkillState } from "./skill-store-types";
 
@@ -261,12 +266,77 @@ async function syncRemoteContentUrlSkill(
   );
 }
 
+async function rollbackCloudPackageWrite(
+  skillId: string,
+  previousFiles: Array<{ path: string; content: string }>,
+  writtenPaths: Set<string>,
+): Promise<void> {
+  const previousByPath = new Map(
+    previousFiles.map((file) => [file.path.toLowerCase(), file]),
+  );
+  for (const path of writtenPaths) {
+    const previous = previousByPath.get(path.toLowerCase());
+    try {
+      if (previous) {
+        await window.api.skill.writeLocalFile(
+          skillId,
+          previous.path,
+          previous.content,
+          { skipVersionSnapshot: true },
+        );
+      } else {
+        await window.api.skill.deleteLocalFile(skillId, path);
+      }
+    } catch (rollbackError) {
+      console.warn(`Failed to roll back Cloud package file "${path}":`, rollbackError);
+    }
+  }
+}
+
+async function syncCloudSkillPackage(
+  skillId: string,
+  registrySkill: RegistrySkill,
+  effectiveContent: string,
+): Promise<void> {
+  const packageResponse = await getCloudStorePackage(registrySkill);
+  const effectiveCloudContent = getCloudSkillMarkdown(packageResponse);
+  await assertRemoteContentUrlSkillSafe(registrySkill, effectiveCloudContent);
+  const previousFiles = (await window.api.skill.readLocalFiles(skillId))
+    .filter((file) => !file.isDirectory)
+    .map((file) => ({ path: file.path, content: file.content }));
+  const writtenPaths = new Set<string>();
+  try {
+    for (const file of packageResponse.package.files) {
+      writtenPaths.add(file.path);
+      await window.api.skill.writeLocalFile(
+        skillId,
+        file.path,
+        file.path.toLowerCase() === "skill.md"
+          ? effectiveContent || effectiveCloudContent
+          : file.content,
+        { skipVersionSnapshot: true },
+      );
+    }
+  } catch (error) {
+    await rollbackCloudPackageWrite(skillId, previousFiles, writtenPaths);
+    throw error;
+  }
+}
+
 export async function syncRemoteRegistrySkillRepo(
   skillId: string,
   registrySkill: RegistrySkill,
   effectiveContent: string,
   options: RemoteRegistrySyncOptions = {},
 ): Promise<Skill | null> {
+  if (isCloudRegistrySkill(registrySkill)) {
+    await syncCloudSkillPackage(skillId, registrySkill, effectiveContent);
+    return refreshSyncedRegistrySkill(
+      skillId,
+      registrySkill,
+      options.refreshBaseline !== false,
+    );
+  }
   if (registrySkill.package_url?.trim()) {
     return syncRemoteZipPackage(skillId, registrySkill, options);
   }

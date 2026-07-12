@@ -214,11 +214,16 @@ function useSidebarStoreCounts(
     const count = getRemoteStoreSkillCount(entry);
     return entry.nextCursor ? `${count}+` : count;
   }, [remoteStoreEntries]);
+  const promptHubCloudStoreCount = useMemo(
+    () => getRemoteStoreSkillCount(remoteStoreEntries["prompthub-cloud"]),
+    [remoteStoreEntries],
+  );
   return {
     claudeCodeStoreCount,
     openAiCodexStoreCount,
     communityStoreCount,
     clawHubStoreCount,
+    promptHubCloudStoreCount,
   };
 }
 

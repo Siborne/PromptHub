@@ -356,12 +356,12 @@ describe("SkillStore remote loading", () => {
     expect(installRegistrySkill).not.toHaveBeenCalled();
 
     await waitFor(() => {
-      expect(screen.getByText("High-Risk Skill Detected")).toBeInTheDocument();
+      expect(screen.getByText("Review Skill before adding")).toBeInTheDocument();
       expect(screen.getByText("static false positive")).toBeInTheDocument();
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Add Anyway" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirm and add" }));
     });
 
     expect(installRegistrySkill).toHaveBeenCalledWith(
@@ -513,7 +513,9 @@ describe("SkillStore remote loading", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Update$/i }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Confirm update" }),
+      );
     });
 
     expect(updateRegistrySkill).toHaveBeenCalledWith("source-update-ready", {
@@ -554,7 +556,9 @@ describe("SkillStore remote loading", () => {
       fireEvent.click(screen.getByRole("button", { name: /Check update/i }));
     });
     await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: /^Update$/i }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Confirm update" }),
+      );
     });
 
     expect(showToast).toHaveBeenCalledWith(

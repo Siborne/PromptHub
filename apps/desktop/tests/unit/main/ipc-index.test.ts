@@ -18,6 +18,15 @@ const registerMcpIPCMock = vi.fn();
 const registerPluginIPCMock = vi.fn();
 
 vi.mock("electron", () => ({
+  app: {
+    getPath: vi.fn(() => "/tmp/prompthub-ipc-test"),
+    getVersion: vi.fn(() => "0.5.9-test"),
+  },
+  safeStorage: {
+    isEncryptionAvailable: vi.fn(() => true),
+    encryptString: vi.fn(() => Buffer.from("encrypted")),
+    decryptString: vi.fn(() => "token"),
+  },
   ipcMain: {
     removeHandler: removeHandlerMock,
     handle: vi.fn(),

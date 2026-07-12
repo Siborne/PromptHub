@@ -119,6 +119,26 @@ function getClawHubOverview(t: TFunction): SourceOverview {
   };
 }
 
+function getPromptHubCloudOverview(t: TFunction): SourceOverview {
+  return {
+    description: t(
+      "skill.promptHubCloudStoreHint",
+      "Published PromptHub Cloud releases with package fingerprints, safety checks, and confirmation before installation.",
+    ),
+    examples: <>https://api.prompthub.cloud/api/v1/store/feed</>,
+    formats: (
+      <>
+        {t("skill.formatPromptHubCloudPackage", "PromptHub Store package v1")}
+        <br />
+        {t("skill.formatSkillMdFile", "`SKILL.md` file")}
+      </>
+    ),
+    headerClassName: "mb-3",
+    icon: StoreIcon,
+    title: t("skill.promptHubCloudStore", "PromptHub Cloud"),
+  };
+}
+
 const SOURCE_OVERVIEW_BUILDERS: Record<
   string,
   (t: TFunction) => SourceOverview
@@ -127,6 +147,7 @@ const SOURCE_OVERVIEW_BUILDERS: Record<
   "openai-codex": getOpenAiOverview,
   community: getCommunityOverview,
   clawhub: getClawHubOverview,
+  "prompthub-cloud": getPromptHubCloudOverview,
 };
 
 function OfficialStoreEmptyState({ t }: { t: TFunction }) {

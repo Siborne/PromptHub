@@ -20,9 +20,11 @@ import { useToast } from "../ui/Toast";
 import { SkillQuickInstall } from "./SkillQuickInstall";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import type {
+  CloudStorePackageResponse,
   RegistrySkill,
   Skill,
   SkillSafetyReport,
+  SkillUpdateSafetyReview,
 } from "@prompthub/shared/types";
 import { SKILL_CATEGORIES } from "@prompthub/shared/constants/skill-registry";
 import {
@@ -40,6 +42,7 @@ import {
 import {
   computeSkillContentFingerprint,
   findInstalledRegistrySkill,
+  type RegistrySkillUpdateCheck,
 } from "../../services/skill-store-update";
 import { isLikelyLocalSource } from "../../services/skill-store-source";
 import {
@@ -56,10 +59,19 @@ import {
 } from "./safety-i18n";
 import { SkillMarkdown } from "./SkillMarkdown";
 import { SkillVariantBadgeList } from "./SkillVariantBadgeList";
+import { SkillStoreUpdateReviewDialog } from "./SkillStoreUpdateReviewDialog";
+import { SkillStoreInstallReviewDialog } from "./SkillStoreInstallReviewDialog";
+import { CloudStoreEngagement } from "./CloudStoreEngagement";
+import { SkillUpdateSafetyReviewDialog } from "./SkillUpdateSafetyReviewDialog";
 import {
   buildSkillVariantBadges,
   inferSkillVariantSourceDebugLabel,
 } from "../../services/skill-variant-badges";
+import {
+  getCloudStorePackage,
+  isCloudRegistrySkill,
+} from "../../services/cloud-store";
+import { resolveRegistrySkillContent } from "../../stores/skill/skill-source-update-workflow";
 
 function humanizeCategory(value: string): string {
   return value
@@ -131,10 +143,10 @@ export function SkillStoreDetail({
   );
   const clearTranslation = useSkillStore((state) => state.clearTranslation);
   const translationMode = useSettingsStore((state) => state.translationMode);
-  const autoScanBeforeInstall = useSettingsStore(
-    (state) => state.autoScanStoreSkillsBeforeInstall,
-  );
   const aiModels = useSettingsStore((state) => state.aiModels);
+  const trustSkillUpdateSource = useSettingsStore(
+    (state) => state.trustSkillUpdateSource,
+  );
   const [localIsInstalling, setLocalIsInstalling] = useState(false);
   const [isUninstalling, setIsUninstalling] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -147,8 +159,28 @@ export function SkillStoreDetail({
   const [safetyReport, setSafetyReport] = useState<SkillSafetyReport | null>(
     null,
   );
-  const [pendingHighRiskInstallReport, setPendingHighRiskInstallReport] =
+  const [pendingInstallContent, setPendingInstallContent] = useState("");
+  const [pendingInstallPackage, setPendingInstallPackage] =
+    useState<CloudStorePackageResponse | null>(null);
+  const [pendingInstallSafetyReport, setPendingInstallSafetyReport] =
     useState<SkillSafetyReport | null>(null);
+  const [showInstallReview, setShowInstallReview] = useState(false);
+  const [pendingUpdateCheck, setPendingUpdateCheck] =
+    useState<RegistrySkillUpdateCheck | null>(null);
+  const [pendingUpdatePackage, setPendingUpdatePackage] =
+    useState<CloudStorePackageResponse | null>(null);
+  const [pendingUpdateSafetyReport, setPendingUpdateSafetyReport] =
+    useState<SkillSafetyReport | null>(null);
+  const [showUpdateReview, setShowUpdateReview] = useState(false);
+  const [overwritePendingUpdate, setOverwritePendingUpdate] = useState(false);
+  const [pendingSafetyReview, setPendingSafetyReview] =
+    useState<{ review: SkillUpdateSafetyReview; overwrite: boolean } | null>(
+      null,
+    );
+  const [trustReviewedSource, setTrustReviewedSource] = useState(false);
+  const [cloudPackage, setCloudPackage] =
+    useState<CloudStorePackageResponse | null>(null);
+  const [cloudPackageLoading, setCloudPackageLoading] = useState(false);
   const groupedSafetyFindings = safetyReport
     ? groupSkillSafetyFindings(safetyReport.findings ?? [])
     : [];
@@ -172,8 +204,33 @@ export function SkillStoreDetail({
   const [translationSidecar, setTranslationSidecar] =
     useState<SkillTranslationSidecar | null>(null);
   const skillSourceKey = skill.source_id || skill.slug || skill.source_url;
+  const cloudSourceId = skill.source_id;
+  const isCloudSkill = isCloudRegistrySkill(skill);
   const safeSourceUrl = resolveSkillExternalUrl(skill.source_url);
   const safeStoreUrl = resolveSkillExternalUrl(skill.store_url);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCloudPackage(null);
+    if (!isCloudSkill) {
+      setCloudPackageLoading(false);
+      return;
+    }
+    setCloudPackageLoading(true);
+    void getCloudStorePackage({ source_id: cloudSourceId })
+      .then((packageResponse) => {
+        if (!cancelled) setCloudPackage(packageResponse);
+      })
+      .catch(() => {
+        if (!cancelled) setCloudPackage(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCloudPackageLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudSourceId, isCloudSkill]);
 
   const targetLang = useMemo(() => {
     const lang = (i18n.language || "").toLowerCase();
@@ -202,7 +259,9 @@ export function SkillStoreDetail({
   const installedSkillMdContent =
     installedSkill?.instructions || installedSkill?.content || "";
   const registrySkillMdContent =
-    typeof skill.content === "string" ? skill.content : "";
+    cloudPackage?.package.files.find(
+      (file) => file.path.toLowerCase() === "skill.md",
+    )?.content || (typeof skill.content === "string" ? skill.content : "");
   const preferSourceContent = Boolean(
     skill.content_url && isLikelyLocalSource(skill.content_url),
   );
@@ -248,7 +307,7 @@ export function SkillStoreDetail({
   const installed = isInstalled || justInstalled;
   const isInstalling = externalIsInstalling || localIsInstalling;
   const canShowUpdateActions =
-    installed && Boolean(skill.content_url || skill.content);
+    installed && (isCloudSkill || Boolean(skill.content_url || skill.content));
   const canApplyStoreUpdate = updateStatus === "update-available";
   const canOverwriteLocalChanges =
     updateStatus === "conflict" || updateStatus === "local-modified";
@@ -312,8 +371,8 @@ export function SkillStoreDetail({
       try {
         const report = await window.api.skill.scanSafety({
           name: skill.name,
-          content: installedSkillMdContent || skill.content,
-          sourceUrl: skill.source_url,
+          content: installedSkillMdContent || registrySkillMdContent,
+          sourceUrl: isCloudSkill ? undefined : skill.source_url,
           contentUrl: skill.content_url,
           localRepoPath: installedSkill?.local_repo_path,
           securityAudits: skill.security_audits,
@@ -345,6 +404,8 @@ export function SkillStoreDetail({
     aiModels,
     installedSkill,
     installedSkillMdContent,
+    isCloudSkill,
+    registrySkillMdContent,
     saveSafetyReport,
     showToast,
     skill.content,
@@ -451,6 +512,15 @@ export function SkillStoreDetail({
     stalePromptFingerprintRef.current = null;
     setShowRetranslatePrompt(false);
     setTranslationSidecar(null);
+    setPendingUpdateCheck(null);
+    setPendingUpdatePackage(null);
+    setPendingUpdateSafetyReport(null);
+    setShowUpdateReview(false);
+    setPendingSafetyReview(null);
+    setPendingInstallContent("");
+    setPendingInstallPackage(null);
+    setPendingInstallSafetyReport(null);
+    setShowInstallReview(false);
   }, [skill.slug]);
 
   useEffect(() => {
@@ -549,41 +619,91 @@ export function SkillStoreDetail({
     installInFlightRef.current = true;
     setInstallPending(true);
     try {
-      const performInstall = async () => {
-        const result = await installRegistrySkill(installableSkill);
-        if (result) {
-          setJustInstalled(true);
-          showToast(
-            t("skill.addedToLibrary", "Added") + `: ${skill.name}`,
-            "success",
-          );
-          setDeploySkill(result);
-          scheduleInstallFeedbackReset();
-        }
-      };
+      const packageResponse = isCloudSkill
+        ? await getCloudStorePackage(installableSkill)
+        : null;
+      const content = packageResponse
+        ? packageResponse.package.files.find(
+            (file) => file.path.toLowerCase() === "skill.md",
+          )?.content || ""
+        : await resolveRegistrySkillContent(installableSkill);
+      if (!content.trim()) {
+        throw new Error("STORE_SKILL_CONTENT_EMPTY");
+      }
+      const report = await window.api.skill.scanSafety({
+        name: skill.name,
+        content,
+        sourceUrl: isCloudSkill ? undefined : skill.source_url,
+        contentUrl: isCloudSkill ? undefined : skill.content_url,
+        securityAudits: skill.security_audits,
+        aiConfig: getSafetyScanAIConfig(aiModels),
+      });
+      setPendingInstallContent(content);
+      setPendingInstallPackage(packageResponse);
+      setPendingInstallSafetyReport(report);
+      setShowInstallReview(true);
+    } catch (e) {
+      showToast(formatSkillInstallError(e, t), "error");
+    } finally {
+      installInFlightRef.current = false;
+      setInstallPending(false);
+    }
+  };
 
-      if (autoScanBeforeInstall) {
-        const report = await scanSafety();
-        const shouldBlockInstall = report?.level === "blocked";
-        if (shouldBlockInstall) {
+  const handleConfirmInstall = async () => {
+    if (installed || installInFlightRef.current) return;
+    installInFlightRef.current = true;
+    setInstallPending(true);
+    try {
+      if (pendingInstallContent) {
+        const latestPackage = isCloudSkill
+          ? await getCloudStorePackage(installableSkill)
+          : null;
+        const latestContent = latestPackage
+          ? latestPackage.package.files.find(
+              (file) => file.path.toLowerCase() === "skill.md",
+            )?.content || ""
+          : await resolveRegistrySkillContent(installableSkill);
+        const releaseChanged = Boolean(
+          latestPackage &&
+            pendingInstallPackage &&
+            latestPackage.release.id !== pendingInstallPackage.release.id,
+        );
+        if (releaseChanged || latestContent !== pendingInstallContent) {
+          const latestReport = await window.api.skill.scanSafety({
+            name: skill.name,
+            content: latestContent,
+            sourceUrl: isCloudSkill ? undefined : skill.source_url,
+            contentUrl: isCloudSkill ? undefined : skill.content_url,
+            securityAudits: skill.security_audits,
+            aiConfig: getSafetyScanAIConfig(aiModels),
+          });
+          setPendingInstallContent(latestContent);
+          setPendingInstallPackage(latestPackage);
+          setPendingInstallSafetyReport(latestReport);
           showToast(
             t(
-              "skill.safetyScanBlockedInstall",
-              "This skill was flagged as high risk. Review the safety report before adding it.",
+              "skill.installReviewChanged",
+              "The source changed while you were reviewing. Please review the latest preview again.",
             ),
-            "error",
+            "warning",
           );
-          return;
-        }
-        if (report?.level === "high-risk") {
-          setPendingHighRiskInstallReport(report);
           return;
         }
       }
-
-      await performInstall();
-    } catch (e) {
-      showToast(formatSkillInstallError(e, t), "error");
+      const result = await installRegistrySkill(installableSkill);
+      if (result) {
+        setShowInstallReview(false);
+        setJustInstalled(true);
+        showToast(
+          t("skill.addedToLibrary", "Added") + `: ${skill.name}`,
+          "success",
+        );
+        setDeploySkill(result);
+        scheduleInstallFeedbackReset();
+      }
+    } catch (error) {
+      showToast(formatSkillInstallError(error, t), "error");
     } finally {
       installInFlightRef.current = false;
       setInstallPending(false);
@@ -624,6 +744,9 @@ export function SkillStoreDetail({
     try {
       const check = await getRegistrySkillUpdateStatus(skill);
       setUpdateStatus(check.status);
+      setPendingUpdateCheck(check);
+      setPendingUpdatePackage(null);
+      setPendingUpdateSafetyReport(null);
       let message = t("skill.notInstalled", "Not installed");
       if (check.status === "update-available") {
         message = t("skill.updateAvailable", "Update available");
@@ -649,6 +772,42 @@ export function SkillStoreDetail({
       } else if (check.status === "up-to-date") {
         message = t("skill.upToDate", "Already up to date");
       }
+
+      const needsReview = [
+        "update-available",
+        "local-modified",
+        "conflict",
+      ].includes(check.status);
+      if (needsReview) {
+        if (isCloudSkill && check.registrySkill.source_id) {
+          try {
+            const packageResponse = await getCloudStorePackage({
+              source_id: check.registrySkill.source_id,
+            });
+            setPendingUpdatePackage(packageResponse);
+          } catch (error) {
+            showToast(
+              `${t("skill.updatePreviewFailed", "Could not load the update preview")}: ${getErrorMessage(error)}`,
+              "warning",
+            );
+          }
+        }
+        try {
+          const report = await window.api.skill.scanSafety({
+            name: skill.name,
+            content: check.remoteContent,
+            sourceUrl: isCloudSkill ? undefined : skill.source_url,
+            contentUrl: isCloudSkill ? undefined : skill.content_url,
+            securityAudits: skill.security_audits,
+            aiConfig: getSafetyScanAIConfig(aiModels),
+          });
+          setPendingUpdateSafetyReport(report);
+        } catch (error) {
+          showToast(formatSkillSafetyScanError(error, t), "warning");
+        }
+        setOverwritePendingUpdate(check.status !== "update-available");
+        setShowUpdateReview(true);
+      }
       showToast(
         message,
         check.status === "update-available" ? "success" : "info",
@@ -664,7 +823,10 @@ export function SkillStoreDetail({
     }
   };
 
-  const handleUpdate = async (overwriteLocalChanges = false) => {
+  const handleUpdate = async (
+    overwriteLocalChanges = false,
+    approvedPackageFingerprint?: string,
+  ) => {
     if (isUpdating || updateInFlightRef.current) {
       return;
     }
@@ -673,9 +835,18 @@ export function SkillStoreDetail({
     try {
       const result = await updateRegistrySkill(skillSourceKey, {
         overwriteLocalChanges,
+        ...(approvedPackageFingerprint ? { approvedPackageFingerprint } : {}),
       });
       if (!result) {
         showToast(t("skill.updateFailed", "Failed"), "error");
+        return;
+      }
+      if (result.status === "safety-review-required") {
+        setPendingSafetyReview({
+          review: result.review,
+          overwrite: overwriteLocalChanges,
+        });
+        setTrustReviewedSource(false);
         return;
       }
       if (result.status === "linked-local-blocked") {
@@ -691,6 +862,8 @@ export function SkillStoreDetail({
       }
       setUpdateStatus(result.status);
       if (result.status === "updated") {
+        setShowUpdateReview(false);
+        setPendingUpdateCheck(null);
         showToast(
           `${t("skill.updateSuccess", "Updated")}: ${skill.name}`,
           "success",
@@ -719,6 +892,25 @@ export function SkillStoreDetail({
       updateInFlightRef.current = false;
       setIsUpdating(false);
     }
+  };
+
+  const handleOpenUpdateReview = (overwriteLocalChanges: boolean) => {
+    if (pendingUpdateCheck) {
+      setOverwritePendingUpdate(overwriteLocalChanges);
+      setShowUpdateReview(true);
+      return;
+    }
+    void handleCheckUpdate();
+  };
+
+  const handleConfirmSafetyReview = async () => {
+    if (!pendingSafetyReview || isUpdating) return;
+    const pending = pendingSafetyReview;
+    setPendingSafetyReview(null);
+    if (trustReviewedSource) {
+      trustSkillUpdateSource(pending.review.sourceKey);
+    }
+    await handleUpdate(pending.overwrite, pending.review.packageFingerprint);
   };
 
   const handleOpenInstalledSkill = () => {
@@ -771,6 +963,7 @@ export function SkillStoreDetail({
                 {skill.author}
               </div>
             </div>
+            {isCloudSkill && <CloudStoreEngagement slug={skill.slug} />}
           </div>
           <button
             type="button"
@@ -837,6 +1030,12 @@ export function SkillStoreDetail({
           </div>
 
           {/* SKILL.md content rendered as markdown */}
+          {cloudPackageLoading && isCloudSkill && !registrySkillMdContent && (
+            <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2Icon className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              {t("skill.loadingCloudPackage", "Loading the latest package...")}
+            </div>
+          )}
           {(() => {
             if (showTranslation && translatedRenderedContent) {
               // Immersive mode: interleaved original + translation
@@ -1156,7 +1355,7 @@ export function SkillStoreDetail({
                     {canApplyStoreUpdate && (
                       <button
                         type="button"
-                        onClick={() => handleUpdate(false)}
+                        onClick={() => handleOpenUpdateReview(false)}
                         disabled={isCheckingUpdate || isUpdating}
                         className={footerButtonPrimary}
                       >
@@ -1171,13 +1370,13 @@ export function SkillStoreDetail({
                             className="w-3.5 h-3.5"
                           />
                         )}
-                        {t("skill.update", "Update")}
+                        {t("skill.reviewUpdate", "Review update")}
                       </button>
                     )}
                     {canOverwriteLocalChanges && (
                       <button
                         type="button"
-                        onClick={() => handleUpdate(true)}
+                        onClick={() => handleOpenUpdateReview(true)}
                         disabled={isUpdating}
                         className={`${footerButtonBase} border-amber-500/25 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300`}
                       >
@@ -1258,74 +1457,44 @@ export function SkillStoreDetail({
         />
       )}
 
-      <ConfirmDialog
-        isOpen={Boolean(pendingHighRiskInstallReport)}
-        onClose={() => setPendingHighRiskInstallReport(null)}
-        onConfirm={() => {
-          const run = async () => {
-            if (
-              !pendingHighRiskInstallReport ||
-              installed ||
-              installInFlightRef.current
-            ) {
-              return;
-            }
-            setPendingHighRiskInstallReport(null);
-            installInFlightRef.current = true;
-            setInstallPending(true);
-            try {
-              const result = await installRegistrySkill(installableSkill);
-              if (result) {
-                setJustInstalled(true);
-                showToast(
-                  t("skill.addedToLibrary", "Added") + `: ${skill.name}`,
-                  "success",
-                );
-                setDeploySkill(result);
-                scheduleInstallFeedbackReset();
-              }
-            } catch (error) {
-              showToast(formatSkillInstallError(error, t), "error");
-            } finally {
-              installInFlightRef.current = false;
-              setInstallPending(false);
-            }
-          };
-
-          void run();
+      <SkillStoreUpdateReviewDialog
+        check={showUpdateReview ? pendingUpdateCheck : null}
+        cloudDiff={pendingUpdatePackage?.release.diff}
+        safetyReport={pendingUpdateSafetyReport}
+        overwriteLocalChanges={overwritePendingUpdate}
+        isLoading={isUpdating}
+        t={t}
+        onClose={() => {
+          if (!isUpdating) setShowUpdateReview(false);
         }}
-        title={t("skill.safetyHighRiskTitle", "High-Risk Skill Detected")}
-        message={
-          pendingHighRiskInstallReport ? (
-            <div className="space-y-3 text-left">
-              <p>{pendingHighRiskInstallReport.summary}</p>
-              <ul className="space-y-1">
-                {pendingHighRiskInstallReport.findings
-                  .slice(0, 5)
-                  .map((finding) => (
-                    <li
-                      key={`${finding.code}-${finding.filePath || finding.evidence || ""}`}
-                    >
-                      • {getSkillSafetyFindingTitle(t, finding)}
-                      {finding.filePath ? ` · ${finding.filePath}` : ""}
-                    </li>
-                  ))}
-              </ul>
-              <p className="text-xs opacity-80">
-                {t(
-                  "skill.safetyHighRiskConfirm",
-                  "If you trust the source, you may proceed. Otherwise, review the source code first.",
-                )}
-              </p>
-            </div>
-          ) : (
-            ""
-          )
-        }
-        confirmText={t("skill.addAnyway", "Add Anyway")}
-        cancelText={t("common.cancel", "Cancel")}
-        variant="destructive"
+        onConfirm={() => void handleUpdate(overwritePendingUpdate)}
       />
+
+      <SkillStoreInstallReviewDialog
+        skill={showInstallReview ? installableSkill : null}
+        content={pendingInstallContent}
+        cloudDiff={pendingInstallPackage?.release.diff}
+        safetyReport={pendingInstallSafetyReport}
+        isLoading={isInstalling}
+        t={t}
+        onClose={() => {
+          if (!isInstalling) setShowInstallReview(false);
+        }}
+        onConfirm={() => void handleConfirmInstall()}
+      />
+
+      <SkillUpdateSafetyReviewDialog
+        review={pendingSafetyReview?.review ?? null}
+        trustSource={trustReviewedSource}
+        isLoading={isUpdating}
+        t={t}
+        onTrustSourceChange={setTrustReviewedSource}
+        onClose={() => {
+          if (!isUpdating) setPendingSafetyReview(null);
+        }}
+        onConfirm={() => void handleConfirmSafetyReview()}
+      />
+
       <ConfirmDialog
         isOpen={showRetranslatePrompt}
         onClose={() => setShowRetranslatePrompt(false)}

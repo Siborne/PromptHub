@@ -36,6 +36,11 @@ import {
 } from "../../services/clawhub-store";
 import { isLikelyLocalSource } from "../../services/skill-store-source";
 import { getRemoteStoreSkillCount } from "../../services/remote-store-entry";
+import {
+  mapCloudListingToRegistrySkill,
+  PROMPTHUB_CLOUD_STORE_ID,
+  PROMPTHUB_CLOUD_STORE_URL,
+} from "../../services/cloud-store";
 import { useSkillStore } from "../../stores/skill.store";
 
 const MAX_REMOTE_STORE_DEPTH = 3;
@@ -46,7 +51,7 @@ export const BUILTIN_REMOTE_STORES: Record<
   string,
   {
     id: string;
-    type: "git-repo" | "skills-sh" | "clawhub";
+    type: "git-repo" | "skills-sh" | "clawhub" | "cloud";
     url: string;
     branch?: string;
     directory?: string;
@@ -73,6 +78,11 @@ export const BUILTIN_REMOTE_STORES: Record<
     id: "clawhub",
     type: "clawhub",
     url: CLAWHUB_BASE_URL,
+  },
+  [PROMPTHUB_CLOUD_STORE_ID]: {
+    id: PROMPTHUB_CLOUD_STORE_ID,
+    type: "cloud",
+    url: PROMPTHUB_CLOUD_STORE_URL,
   },
 };
 
@@ -736,6 +746,23 @@ export function useSkillStoreRemoteSync(
     [],
   );
 
+  const loadCloudStore = useCallback(
+    async (searchQuery = ""): Promise<StoreLoadResult> => {
+      const result = await window.api.cloud.store.listFeed({
+        q: searchQuery.trim() || undefined,
+        limit: PRECONFIGURED_STORE_PAGE_SIZE,
+      });
+      return {
+        skills: result.listings
+          .map(mapCloudListingToRegistrySkill)
+          .filter((skill): skill is RegistrySkill => Boolean(skill)),
+        query: searchQuery.trim(),
+        pageSize: PRECONFIGURED_STORE_PAGE_SIZE,
+      };
+    },
+    [],
+  );
+
   const loadStoreSource = useCallback(
     async (
       sourceId: string,
@@ -870,6 +897,8 @@ export function useSkillStoreRemoteSync(
             );
           } else if (source.type === "clawhub") {
             result = await loadClawHubStore(pageCursor, storeSearchQuery);
+          } else if (source.type === "cloud") {
+            result = await loadCloudStore(storeSearchQuery);
           } else if (source.type === "marketplace-json") {
             result = toStoreLoadResult(await loadMarketplaceStore(source.url));
           } else if (source.type === "local-dir") {
@@ -973,6 +1002,7 @@ export function useSkillStoreRemoteSync(
       customStoreSources,
       loadGitHubRepoSkills,
       loadClawHubStore,
+      loadCloudStore,
       loadLocalDirectoryStore,
       loadMarketplaceStore,
       loadSkillsShStore,
@@ -1003,6 +1033,7 @@ export function useSkillStoreRemoteSync(
       "openai-codex",
       "community",
       "clawhub",
+      PROMPTHUB_CLOUD_STORE_ID,
       ...enabledCustomSourceIds,
     ];
 

@@ -10,3 +10,4 @@ export * from './recovery';
 export * from './cli';
 export * from './mcp';
 export * from './plugin';
+export * from './cloud';

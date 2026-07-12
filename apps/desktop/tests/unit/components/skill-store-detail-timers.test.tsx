@@ -90,6 +90,12 @@ describe("SkillStoreDetail timer lifecycle", () => {
       await Promise.resolve();
     });
 
+    expect(useSkillStore.getState().installRegistrySkill).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm and add" }));
+      await Promise.resolve();
+    });
+
     expect(useSkillStore.getState().installRegistrySkill).toHaveBeenCalledTimes(1);
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
 
@@ -234,7 +240,7 @@ describe("SkillStoreDetail timer lifecycle", () => {
       fireEvent.click(checkUpdate);
     });
 
-    const updateButton = screen.getByRole("button", { name: "Update" });
+    const updateButton = screen.getByRole("button", { name: "Review update" });
     expect(updateButton).toHaveAttribute("type", "button");
     expect(updateButton.querySelector("svg")).toHaveAttribute(
       "aria-hidden",
@@ -370,6 +376,15 @@ describe("SkillStoreDetail timer lifecycle", () => {
       await Promise.resolve();
     });
 
+    expect(installRegistrySkill).not.toHaveBeenCalled();
+
+    const confirmButton = screen.getByRole("button", { name: "Confirm and add" });
+    await act(async () => {
+      confirmButton.click();
+      confirmButton.click();
+      await Promise.resolve();
+    });
+
     expect(installRegistrySkill).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -478,7 +493,8 @@ describe("SkillStoreDetail timer lifecycle", () => {
       fireEvent.click(screen.getByRole("button", { name: "Check update" }));
     });
 
-    const updateButton = screen.getByRole("button", { name: "Update" });
+    expect(updateRegistrySkill).not.toHaveBeenCalled();
+    const updateButton = screen.getByRole("button", { name: "Confirm update" });
     await act(async () => {
       updateButton.click();
       updateButton.click();

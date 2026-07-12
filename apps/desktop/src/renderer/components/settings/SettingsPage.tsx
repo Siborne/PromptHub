@@ -47,6 +47,7 @@ const DESKTOP_SETTINGS_MENU = [
   { id: "ai", labelKey: "settings.ai", icon: BrainIcon },
   { id: "shortcuts", labelKey: "settings.shortcuts", icon: KeyboardIcon },
   { id: "security", labelKey: "settings.security", icon: KeyIcon },
+  { id: "cloudAccount", labelKey: "settings.cloudAccount", icon: CloudIcon },
   { id: "cli", labelKey: "settings.cliTitle", icon: TerminalSquareIcon },
   { id: "about", labelKey: "settings.about", icon: InfoIcon },
 ];
@@ -124,6 +125,11 @@ const WebDeviceSettings = lazy(() =>
 const WebWorkspaceSettings = lazy(() =>
   import("./WebWorkspaceSettings").then((module) => ({
     default: module.WebWorkspaceSettings,
+  })),
+);
+const CloudAccountSettings = lazy(() =>
+  import("./CloudAccountSettings").then((module) => ({
+    default: module.CloudAccountSettings,
   })),
 );
 
@@ -254,6 +260,8 @@ export function SettingsPage({
         return <AppearanceSettings />;
       case "security":
         return <SecuritySettings />;
+      case "cloudAccount":
+        return <CloudAccountSettings />;
       case "data":
         return (
           <DataSettings

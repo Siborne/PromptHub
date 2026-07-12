@@ -8,6 +8,7 @@ import {
   getSkillSourceUpdateActionPolicy,
   SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
 } from "@prompthub/shared/utils/skill-source-update";
+import { computeSkillPackageFingerprintV1Sync } from "@prompthub/shared/utils/skill-source-update";
 import {
   getClawHubSkillContentUrl,
   getClawHubSkillPackageUrl,
@@ -28,6 +29,11 @@ import {
   type RegistrySkillUpdateCheck,
 } from "../../services/skill-store-update";
 import { getRemoteStoreSkills } from "../../services/remote-store-entry";
+import {
+  getCloudSkillMarkdown,
+  getCloudStorePackage,
+  isCloudRegistrySkill,
+} from "../../services/cloud-store";
 import { sanitizeSourceUpdateError } from "./skill-store-domain";
 import {
   buildSourceBaselineFields,
@@ -218,6 +224,9 @@ export async function resolveRegistrySkillContent(
       ? localSkillMd.content
       : registrySkill.content;
   }
+  if (isCloudRegistrySkill(registrySkill)) {
+    return getCloudSkillMarkdown(await getCloudStorePackage(registrySkill));
+  }
   if (!registrySkill.content_url) return registrySkill.content;
   const freshContent = await window.api.skill.fetchRemoteContent(
     registrySkill.content_url,
@@ -235,6 +244,20 @@ export async function resolveRemoteRegistryDirectoryFingerprint(
   } = {},
 ): Promise<string | undefined> {
   const sourceUrl = registrySkill.source_url;
+  if (isCloudRegistrySkill(registrySkill)) {
+    const packageResponse = await getCloudStorePackage(registrySkill);
+    const fingerprint = computeSkillPackageFingerprintV1Sync(
+      packageResponse.package.files.map((file) => ({
+        path: file.path,
+        content: file.content,
+      })),
+    ).fingerprint;
+    return normalizeRemoteDirectoryFingerprint(registrySkill, {
+      remoteContentHash: options.remoteContentHash,
+      resolvedDirectoryFingerprint: fingerprint,
+      installedSkill: options.installedSkill,
+    });
+  }
   if (!sourceUrl || !shouldCloneRegistrySkillPackage(registrySkill)) {
     return normalizeRemoteDirectoryFingerprint(registrySkill, {
       remoteContentHash: options.remoteContentHash,

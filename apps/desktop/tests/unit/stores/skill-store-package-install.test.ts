@@ -208,6 +208,120 @@ describe("skill store", () => {
     );
   });
 
+  it("uses the Cloud release fingerprint for delivery intent and the desktop package fingerprint for the local baseline", async () => {
+    const create = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-cloud-writer",
+        name: "cloud-writer",
+        source_id: "cloud:listing:cloud-writer",
+      }),
+    );
+    const getAll = vi.fn().mockResolvedValue([]);
+    const syncFromRepo = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-cloud-writer",
+        name: "cloud-writer",
+        source_id: "cloud:listing:cloud-writer",
+        content: "# Cloud Writer\n",
+        instructions: "# Cloud Writer\n",
+        local_repo_path: "/managed/cloud-writer/repo",
+      }),
+    );
+    const createInstallIntent = vi.fn().mockResolvedValue({
+      install: { id: "cloud-install-1" },
+    });
+    const updateInstallStatus = vi.fn().mockResolvedValue(undefined);
+    (window as any).api.skill.create = create;
+    (window as any).api.skill.getAll = getAll;
+    (window as any).api.skill.syncFromRepo = syncFromRepo;
+    (window as any).api.skill.writeLocalFile = vi.fn().mockResolvedValue(undefined);
+    (window as any).api.cloud = {
+      store: {
+        getPackage: vi.fn().mockResolvedValue({
+          listing: {
+            id: "listing:cloud-writer",
+            sourceType: "skill",
+            sourceId: "source-cloud-writer",
+            slug: "cloud-writer",
+            title: "Cloud Writer",
+            summary: "Cloud writer",
+          },
+          updateStatus: "install_available",
+          release: {
+            id: "release-cloud-writer",
+            packageVersionId: "package-cloud-writer",
+            versionLabel: "1.2.0",
+            sourceRevision: null,
+            fingerprintAlgorithm: "store-package-sha256-v1",
+            contentFingerprint: "store-release-fingerprint",
+            diff: {
+              added: ["SKILL.md"],
+              removed: [],
+              modified: [],
+              metadataChanged: false,
+              compatibilityChanged: false,
+              environmentChanged: false,
+              permissionsChanged: false,
+            },
+            publishedAt: null,
+          },
+          package: {
+            schemaVersion: "1",
+            version: "1.2.0",
+            metadata: {},
+            files: [
+              { path: "SKILL.md", content: "# Cloud Writer\n" },
+              { path: "scripts/run.sh", content: "echo cloud\n" },
+            ],
+            compatibility: [],
+            environment: [],
+            permissions: [],
+          },
+        }),
+        createInstallIntent,
+        updateInstallStatus,
+      },
+    };
+
+    await useSkillStore.getState().installRegistrySkill({
+      slug: "cloud-writer",
+      source_id: "cloud:listing:cloud-writer",
+      name: "Cloud Writer",
+      description: "Cloud writer",
+      category: "general",
+      author: "PromptHub Cloud",
+      source_url: "cloud://store/listings/cloud-writer",
+      tags: [],
+      version: "published",
+      content: "",
+    });
+
+    expect(createInstallIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        listingId: "listing:cloud-writer",
+        operation: "install",
+        expectedReleaseId: "release-cloud-writer",
+        expectedFingerprint: "store-release-fingerprint",
+      }),
+    );
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        directory_fingerprint: expect.not.stringMatching(
+          "store-release-fingerprint",
+        ),
+        installed_directory_fingerprint: expect.not.stringMatching(
+          "store-release-fingerprint",
+        ),
+      }),
+    );
+    expect(updateInstallStatus).toHaveBeenCalledWith("cloud-install-1", {
+      status: "started",
+    });
+    expect(updateInstallStatus).toHaveBeenCalledWith("cloud-install-1", {
+      status: "succeeded",
+    });
+  });
+
   it("marks a cloned custom Git install as pristine after repo sync changes the content baseline", async () => {
     const cachedContent = "# Writer\n\nCached registry content.\n";
     const repoContent = "# Writer\n\nContent from cloned repo.\n";

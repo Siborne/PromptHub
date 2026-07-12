@@ -59,6 +59,11 @@ import {
   getRegistrySkillSelectionId,
 } from "./skill-store-identifiers";
 import {
+  getCloudSkillMarkdown,
+  getCloudStorePackage,
+  isCloudRegistrySkill,
+} from "../../services/cloud-store";
+import {
   CATEGORY_ICONS,
   CUSTOM_SOURCE_TYPE_OPTIONS,
   formatStoreSourceHint,
@@ -140,6 +145,8 @@ export function SkillStore() {
     Set<string>
   >(new Set());
   const [batchRemoveConfirmOpen, setBatchRemoveConfirmOpen] = useState(false);
+  const [batchUpdateConfirmOpen, setBatchUpdateConfirmOpen] =
+    useState(false);
   const [runningBatchOperation, setRunningBatchOperation] =
     useState<StoreBatchOperation | null>(null);
   const [editingCustomSourceId, setEditingCustomSourceId] = useState<
@@ -247,6 +254,7 @@ export function SkillStore() {
     selectedStoreSourceId === "openai-codex" ||
     selectedStoreSourceId === "community" ||
     selectedStoreSourceId === "clawhub" ||
+    selectedStoreSourceId === "prompthub-cloud" ||
     Boolean(selectedCustomSource);
   const hasReliableStoreCategoryFilter = selectedStoreSourceId !== "clawhub";
 
@@ -325,6 +333,12 @@ export function SkillStore() {
     (regSkill: RegistrySkill): boolean => {
       const installedSkill = findInstalledRegistrySkill(skills, regSkill);
       if (!installedSkill) return false;
+      if (isCloudRegistrySkill(regSkill)) {
+        const publishedAt = Date.parse(regSkill.version || "");
+        return Number.isFinite(publishedAt)
+          ? publishedAt > (installedSkill.updated_from_store_at ?? 0)
+          : true;
+      }
       if (installedSkill.installed_content_hash) {
         return hasRegistrySkillVersionChanged(installedSkill, regSkill);
       }
@@ -513,11 +527,14 @@ export function SkillStore() {
         return true;
       }
 
+      const cloudPackage = isCloudRegistrySkill(skill)
+        ? await getCloudStorePackage(skill)
+        : null;
       const report = await window.api.skill.scanSafety({
         name: skill.name,
-        content: skill.content,
-        sourceUrl: skill.source_url,
-        contentUrl: skill.content_url,
+        content: cloudPackage ? getCloudSkillMarkdown(cloudPackage) : skill.content,
+        sourceUrl: cloudPackage ? undefined : skill.source_url,
+        contentUrl: cloudPackage ? undefined : skill.content_url,
         securityAudits: skill.security_audits,
         aiConfig: getSafetyScanAIConfig(aiModels),
       });
@@ -705,8 +722,10 @@ export function SkillStore() {
             const updated = await updateRegistrySkill(
               getRegistrySkillSelectionId(skill),
             );
-            if (updated) {
+            if (updated?.status === "updated") {
               result.succeeded += 1;
+            } else if (updated) {
+              result.skipped += 1;
             } else {
               result.failed += 1;
             }
@@ -757,8 +776,8 @@ export function SkillStore() {
   }, [runBatchStoreOperation]);
 
   const handleBatchUpdateStoreSkills = useCallback(() => {
-    void runBatchStoreOperation("update");
-  }, [runBatchStoreOperation]);
+    setBatchUpdateConfirmOpen(true);
+  }, []);
 
   const handleBatchRemoveStoreSkills = useCallback(() => {
     setBatchRemoveConfirmOpen(true);
@@ -867,6 +886,20 @@ export function SkillStore() {
       };
     }
 
+    if (selectedStoreSourceId === "prompthub-cloud") {
+      return {
+        title: t("skill.promptHubCloudStore", "PromptHub Cloud"),
+        hint: t(
+          "skill.promptHubCloudStoreHint",
+          "Published PromptHub Cloud releases with package fingerprints, safety checks, and confirmation before installation.",
+        ),
+        count: displayedStoreCount,
+        countLabel: displayedStoreCountLabel,
+        showCatalog: true,
+        canRefresh: true,
+      };
+    }
+
     if (selectedStoreSourceId === "new-custom") {
       return {
         title: t("skill.addStoreSource", "Add Store"),
@@ -925,6 +958,7 @@ export function SkillStore() {
     sourceMeta.showCatalog &&
     (selectedStoreSourceId === "community" ||
       selectedStoreSourceId === "clawhub" ||
+      selectedStoreSourceId === "prompthub-cloud" ||
       Boolean(selectedCustomSource));
   const canLoadNextStorePage = Boolean(visibleRemoteEntry?.nextCursor);
   const isLoadingMoreSelectedSource =
@@ -947,6 +981,8 @@ export function SkillStore() {
       : selectedStoreSourceId === "claude-code" ||
           selectedStoreSourceId === "openai-codex"
         ? "official"
+        : selectedStoreSourceId === "prompthub-cloud"
+          ? "official"
         : selectedCustomSource?.type === "local-dir"
           ? "local"
           : "git";
@@ -1256,6 +1292,11 @@ export function SkillStore() {
                         "skill.loadingClawHubStore",
                         "Loading ClawHub public skill list...",
                       )
+                    : selectedStoreSourceId === "prompthub-cloud"
+                      ? t(
+                          "skill.loadingPromptHubCloudStore",
+                          "Loading PromptHub Cloud Store releases...",
+                        )
                     : t(
                         "skill.loadingCustomStore",
                         "Loading custom store content...",
@@ -1463,6 +1504,38 @@ export function SkillStore() {
         cancelText={t("common.cancel", "Cancel")}
         variant="destructive"
         isLoading={runningBatchOperation === "remove"}
+      />
+
+      <ConfirmDialog
+        isOpen={batchUpdateConfirmOpen}
+        onClose={() => {
+          if (!isStoreBatchBusy) setBatchUpdateConfirmOpen(false);
+        }}
+        onConfirm={() => {
+          setBatchUpdateConfirmOpen(false);
+          void runBatchStoreOperation("update");
+        }}
+        title={t("skill.batchStoreUpdateTitle", "Review selected updates")}
+        message={
+          <div className="space-y-2 text-left">
+            <p>
+              {t(
+                "skill.batchStoreUpdateMessage",
+                "PromptHub will recheck and apply the selected updates after confirmation. Open an individual Skill to inspect its full line diff.",
+              )}
+            </p>
+            <ul className="max-h-32 space-y-1 overflow-y-auto text-xs">
+              {selectedUpdateTargets.map((target) => (
+                <li key={getRegistrySkillSelectionId(target)} className="truncate">
+                  {target.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
+        confirmText={t("skill.batchStoreUpdateSelected", "Update selected")}
+        cancelText={t("common.cancel", "Cancel")}
+        isLoading={runningBatchOperation === "update"}
       />
 
       {selectedDetailSkill && (

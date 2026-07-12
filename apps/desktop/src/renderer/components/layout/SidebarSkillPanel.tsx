@@ -153,6 +153,11 @@ function getBuiltInSkillSources(
       label: controller.t("skill.clawHubStore", "ClawHub 商店"),
       count: controller.clawHubStoreCount,
     },
+    {
+      id: "prompthub-cloud",
+      label: controller.t("skill.promptHubCloudStore", "PromptHub Cloud"),
+      count: controller.promptHubCloudStoreCount,
+    },
   ];
 }
 

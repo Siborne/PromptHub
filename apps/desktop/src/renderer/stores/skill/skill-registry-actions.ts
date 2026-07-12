@@ -19,6 +19,12 @@ import {
 } from "../../services/skill-source-resolver";
 import { normalizeSkill } from "../../services/skill-normalize";
 import { SkillUpdateSafetyReviewRequiredError } from "../../services/skill-source-update-review";
+import {
+  getCloudSkillMarkdown,
+  getCloudStorePackage,
+  isCloudRegistrySkill,
+} from "../../services/cloud-store";
+import { computeSkillPackageFingerprintV1Sync } from "@prompthub/shared/utils/skill-source-update";
 import { getErrorMessage, hasMeaningfulSkillBody } from "./skill-store-domain";
 import {
   applyRegistrySkillUpdateToInstalledSkill,
@@ -55,17 +61,34 @@ async function resolveRegistrySkillRemoteState(
   registrySkill: RegistrySkill,
   installedSkill: Skill | null,
 ): Promise<{ registrySkill: RegistrySkill; remoteContent: string }> {
-  const remoteContent = await resolveRegistrySkillContent(registrySkill);
+  const cloudPackage = isCloudRegistrySkill(registrySkill)
+    ? await getCloudStorePackage(registrySkill)
+    : null;
+  const remoteContent = cloudPackage
+    ? getCloudSkillMarkdown(cloudPackage)
+    : await resolveRegistrySkillContent(registrySkill);
   const remoteContentHash = await computeSkillContentHash(remoteContent);
-  const directoryFingerprint = await resolveRemoteRegistryDirectoryFingerprint(
-    registrySkill,
-    { remoteContentHash, installedSkill },
-  );
+  const directoryFingerprint = cloudPackage
+    ? computeSkillPackageFingerprintV1Sync(
+        cloudPackage.package.files.map((file) => ({
+          path: file.path,
+          content: file.content,
+        })),
+      ).fingerprint
+    : await resolveRemoteRegistryDirectoryFingerprint(registrySkill, {
+        remoteContentHash,
+        installedSkill,
+      });
   return {
-    registrySkill: replaceRegistrySkillDirectoryFingerprint(
-      registrySkill,
-      directoryFingerprint,
-    ),
+    registrySkill: {
+      ...replaceRegistrySkillDirectoryFingerprint(
+        registrySkill,
+        directoryFingerprint,
+      ),
+      ...(cloudPackage?.release.versionLabel
+        ? { version: cloudPackage.release.versionLabel }
+        : {}),
+    },
     remoteContent,
   };
 }
@@ -284,7 +307,18 @@ async function materializeRegistryUpdate(
   notePrefix: string,
   markAsBuiltin: boolean,
 ): Promise<RegistrySkillUpdateResult | null> {
+  let cloudInstallId: string | null = null;
   try {
+    if (isCloudRegistrySkill(registrySkill)) {
+      const cloudPackage = await resolveCloudInstallPackage(registrySkill);
+      cloudInstallId = await createCloudInstallIntent(
+        registrySkill,
+        cloudPackage.releaseId,
+        cloudPackage.cloudFingerprint,
+        "update",
+      );
+      await reportCloudInstallStatus(cloudInstallId, "started");
+    }
     const skill = await applyRegistrySkillUpdateToInstalledSkill(
       check.installedSkill!,
       registrySkill,
@@ -298,8 +332,10 @@ async function materializeRegistryUpdate(
     );
     if (!skill) return null;
     updateRegistrySkillInMemory(set, skill);
+    await reportCloudInstallStatus(cloudInstallId, "succeeded");
     return { status: "updated", skill, check };
   } catch (error) {
+    await reportCloudInstallStatus(cloudInstallId, "failed", error);
     if (error instanceof SkillUpdateSafetyReviewRequiredError) {
       return { status: "safety-review-required", check, review: error.review };
     }
@@ -360,6 +396,91 @@ async function resolveInstallContent(
     );
   }
   return content;
+}
+
+async function resolveCloudInstallPackage(registrySkill: RegistrySkill): Promise<{
+  registrySkill: RegistrySkill;
+  content: string;
+  releaseId: string;
+  desktopFingerprint: string;
+  cloudFingerprint: string;
+}> {
+  const packageResponse = await getCloudStorePackage(registrySkill);
+  const content = getCloudSkillMarkdown(packageResponse);
+  const desktopFingerprint = computeSkillPackageFingerprintV1Sync(
+    packageResponse.package.files.map((file) => ({
+      path: file.path,
+      content: file.content,
+    })),
+  ).fingerprint;
+  return {
+    registrySkill: {
+      ...registrySkill,
+      version: packageResponse.release.versionLabel || registrySkill.version,
+      directory_fingerprint: desktopFingerprint,
+    },
+    content,
+    releaseId: packageResponse.release.id,
+    desktopFingerprint,
+    cloudFingerprint: packageResponse.release.contentFingerprint,
+  };
+}
+
+function getCloudInstallIdempotencyKey(): string {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) return `desktop-${randomUuid}`;
+  return `desktop-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function sanitizeCloudInstallFailure(error: unknown): string {
+  const raw = error instanceof Error ? error.message : "Desktop installation failed";
+  return raw
+    .replace(/(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, "$1[REDACTED]@")
+    .replace(/([?&](?:token|secret|password|key)=[^&\s]+)/gi, "$1=[REDACTED]")
+    .slice(0, 300);
+}
+
+async function createCloudInstallIntent(
+  registrySkill: RegistrySkill,
+  releaseId: string,
+  cloudFingerprint: string,
+  operation: "install" | "update",
+  currentFingerprint?: string,
+): Promise<string | null> {
+  if (!isCloudRegistrySkill(registrySkill) || !window.api.cloud?.store) return null;
+  const listingId = registrySkill.source_id?.slice("cloud:".length).trim();
+  if (!listingId) return null;
+  const result = await window.api.cloud.store.createInstallIntent({
+    listingId,
+    operation,
+    idempotencyKey: getCloudInstallIdempotencyKey(),
+    expectedReleaseId: releaseId,
+    expectedFingerprint: cloudFingerprint,
+    ...(currentFingerprint ? { currentFingerprint } : {}),
+    target: "my-skills",
+  });
+  return result.install.id;
+}
+
+async function reportCloudInstallStatus(
+  installId: string | null,
+  status: "started" | "succeeded" | "failed",
+  error?: unknown,
+): Promise<void> {
+  if (!installId || !window.api.cloud?.store) return;
+  try {
+    await window.api.cloud.store.updateInstallStatus(installId, {
+      status,
+      ...(status === "failed"
+        ? {
+            failureCode: "desktop_install_failed",
+            failureSummary: sanitizeCloudInstallFailure(error),
+          }
+        : {}),
+    });
+  } catch (reportError) {
+    console.warn("Failed to report Cloud Store installation status:", reportError);
+  }
 }
 
 function buildRegistryInstallPayload(
@@ -428,7 +549,6 @@ async function rollbackIncompleteRegistryInstall(
     `Failed to create local repo for registry skill "${registrySkill.slug}":`,
     error,
   );
-  if (!shouldCloneRegistrySkillPackage(registrySkill)) return;
   try {
     await window.api.skill.delete(skill.id);
   } catch (deleteError) {
@@ -444,17 +564,32 @@ async function installRegistrySkill(
   get: SkillStoreGet,
   registrySkill: RegistrySkill,
 ): Promise<Skill | null> {
+  let installRegistrySkill = registrySkill;
+  let cloudInstallId: string | null = null;
   try {
-    const content = await resolveInstallContent(registrySkill);
+    const cloudPackage = isCloudRegistrySkill(registrySkill)
+      ? await resolveCloudInstallPackage(registrySkill)
+      : null;
+    if (cloudPackage) {
+      installRegistrySkill = cloudPackage.registrySkill;
+      cloudInstallId = await createCloudInstallIntent(
+        installRegistrySkill,
+        cloudPackage.releaseId,
+        cloudPackage.cloudFingerprint,
+        "install",
+      );
+    }
+    await reportCloudInstallStatus(cloudInstallId, "started");
+    const content = cloudPackage?.content ?? (await resolveInstallContent(installRegistrySkill));
     const contentHash = await computeSkillContentHash(content);
     const directoryFingerprint = getRegistrySkillInstallPackageFingerprint(
-      registrySkill,
+      installRegistrySkill,
       contentHash,
     );
     const installedAt = Date.now();
     const skill = await window.api.skill.create(
       buildRegistryInstallPayload(
-        registrySkill,
+        installRegistrySkill,
         content,
         contentHash,
         directoryFingerprint,
@@ -462,10 +597,12 @@ async function installRegistrySkill(
       ),
     );
     if (!skill) return null;
-    await syncRegistryInstallOrRollback(skill, registrySkill, content);
+    await syncRegistryInstallOrRollback(skill, installRegistrySkill, content);
+    await reportCloudInstallStatus(cloudInstallId, "succeeded");
     await get().loadSkills();
     return skill;
   } catch (error) {
+    await reportCloudInstallStatus(cloudInstallId, "failed", error);
     throw new Error(getErrorMessage(error) || "Failed to install skill");
   }
 }

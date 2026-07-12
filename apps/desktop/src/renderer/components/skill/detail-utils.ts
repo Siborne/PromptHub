@@ -742,9 +742,11 @@ export function resolveSkillDescription(instructions?: string): string {
  * Returns the default chat model config, or undefined if none is available.
  */
 export function getSafetyScanAIConfig(
-  aiModels: AIModelConfig[],
+  aiModels?: AIModelConfig[],
 ): SafetyScanAIConfig | undefined {
-  const chatModels = aiModels.filter((m) => (m.type ?? "chat") === "chat");
+  const chatModels = (aiModels ?? []).filter(
+    (m) => (m.type ?? "chat") === "chat",
+  );
   const model = chatModels.find((m) => m.isDefault) ?? chatModels[0];
   if (!model?.apiKey || !model?.apiUrl || !model?.model) {
     return undefined;
