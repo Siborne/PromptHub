@@ -410,6 +410,27 @@ describe("self-hosted-sync", () => {
         },
       ],
       versions: [],
+      promptRelations: [
+        {
+          id: "relation-1",
+          sourcePromptId: "prompt-1",
+          targetPromptId: "prompt-2",
+          kind: "next_step",
+          note: "Follow-up",
+          createdAt: "2026-04-16T01:02:03.000Z",
+          updatedAt: "2026-04-16T01:02:03.000Z",
+        },
+      ],
+      outputFormatItems: [
+        {
+          id: "output-1",
+          sourcePromptId: "prompt-1",
+          targetPromptId: null,
+          sortOrder: 0,
+          createdAt: "2026-04-16T01:02:03.000Z",
+          updatedAt: "2026-04-16T01:02:03.000Z",
+        },
+      ],
       images: {
         "local-image.png": "image-base64",
       },
@@ -519,6 +540,10 @@ describe("self-hosted-sync", () => {
           expect(parsedBody.payload.skillFiles).toEqual({
             "skill-1": [{ relativePath: "SKILL.md", content: "# Skill One" }],
           });
+          expect(parsedBody.payload.promptRelations).toHaveLength(1);
+          expect(parsedBody.payload.outputFormatItems).toEqual([
+            expect.objectContaining({ id: "output-1" }),
+          ]);
           expect(parsedBody.payload.settings).toEqual({
             theme: "dark",
             language: "en",
@@ -633,6 +658,27 @@ describe("self-hosted-sync", () => {
               },
             ],
             promptVersions: [],
+            promptRelations: [
+              {
+                id: "relation-remote",
+                sourcePromptId: "prompt-remote",
+                targetPromptId: "prompt-target",
+                kind: "next_step",
+                note: null,
+                createdAt: "2026-04-16T02:03:04.000Z",
+                updatedAt: "2026-04-16T02:03:04.000Z",
+              },
+            ],
+            outputFormatItems: [
+              {
+                id: "output-remote",
+                sourcePromptId: "prompt-remote",
+                targetPromptId: null,
+                sortOrder: 0,
+                createdAt: "2026-04-16T02:03:04.000Z",
+                updatedAt: "2026-04-16T02:03:04.000Z",
+              },
+            ],
             folders: [
               {
                 id: "folder-remote",
@@ -731,6 +777,8 @@ describe("self-hosted-sync", () => {
           }),
         ],
         folders: [expect.objectContaining({ name: "Remote Folder" })],
+        promptRelations: undefined,
+        outputFormatItems: [expect.objectContaining({ id: "output-remote" })],
         images: {
           "remote-image.png": "remote-image-base64",
         },

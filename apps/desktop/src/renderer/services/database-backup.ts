@@ -14,10 +14,10 @@ import type {
 } from "@prompthub/shared/types/skill";
 import {
   clearDatabase,
-  createOutputFormatItem,
   getAllFolders,
   getAllPrompts,
   getDatabase,
+  listPromptRelations,
   listOutputFormatItems,
 } from "./database";
 import {
@@ -606,6 +606,7 @@ export interface ImportPreviewSummary {
     prompts: number;
     folders: number;
     versions: number;
+    promptRelations: number;
     outputFormatItems: number;
     rules: number;
     skills: number;
@@ -667,6 +668,7 @@ export async function previewImportFile(
       prompts: backup.prompts.length,
       folders: backup.folders.length,
       versions: backup.versions.length,
+      promptRelations: backup.promptRelations?.length ?? 0,
       outputFormatItems: backup.outputFormatItems?.length ?? 0,
       rules: backup.rules?.length ?? 0,
       skills: backup.skills?.length ?? 0,
@@ -759,6 +761,19 @@ async function importDatabaseViaMainProcess(
     return false;
   }
 
+  if (
+    (normalizedBackup.promptRelations?.length ?? 0) > 0 &&
+    !window.api.prompt.insertRelationDirect
+  ) {
+    return false;
+  }
+  if (
+    (normalizedBackup.outputFormatItems?.length ?? 0) > 0 &&
+    !window.api.prompt.insertOutputFormatDirect
+  ) {
+    return false;
+  }
+
   const existingPrompts = await getAllPrompts();
   for (const prompt of existingPrompts) {
     await window.api.prompt.delete(prompt.id);
@@ -781,14 +796,29 @@ async function importDatabaseViaMainProcess(
     await window.api.version.insertDirect(version);
   }
 
-  if (normalizedBackup.outputFormatItems) {
-    for (const item of normalizedBackup.outputFormatItems) {
-      await createOutputFormatItem({
-        sourcePromptId: item.sourcePromptId,
-        targetPromptId: item.targetPromptId,
-        sortOrder: item.sortOrder,
-      });
+  const restoredPromptIds = new Set(
+    normalizedBackup.prompts.map((prompt) => prompt.id),
+  );
+  for (const relation of normalizedBackup.promptRelations ?? []) {
+    if (
+      relation.sourcePromptId === relation.targetPromptId ||
+      !restoredPromptIds.has(relation.sourcePromptId) ||
+      !restoredPromptIds.has(relation.targetPromptId)
+    ) {
+      continue;
     }
+    await window.api.prompt.insertRelationDirect(relation);
+  }
+
+  for (const item of normalizedBackup.outputFormatItems ?? []) {
+    if (
+      !restoredPromptIds.has(item.sourcePromptId) ||
+      (item.targetPromptId !== null &&
+        !restoredPromptIds.has(item.targetPromptId))
+    ) {
+      continue;
+    }
+    await window.api.prompt.insertOutputFormatDirect(item);
   }
 
   await window.api.prompt.syncWorkspace?.();
@@ -826,6 +856,7 @@ export async function exportDatabase(options?: {
     mcpLibrary,
     pluginSnapshot,
     agentAssetFiles,
+    promptRelations,
     outputFormatItems,
   ] = await Promise.all([
     collectImages(prompts, imageLimits),
@@ -837,6 +868,7 @@ export async function exportDatabase(options?: {
     collectMcpLibrary(),
     collectPluginSnapshot(),
     collectAgentAssetFilesSnapshot(),
+    listPromptRelations(),
     listOutputFormatItems(),
   ]);
 
@@ -851,6 +883,7 @@ export async function exportDatabase(options?: {
     prompts,
     folders,
     versions,
+    promptRelations: promptRelations.length > 0 ? promptRelations : undefined,
     outputFormatItems:
       outputFormatItems.length > 0 ? outputFormatItems : undefined,
     images,
@@ -900,6 +933,16 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
   const restoredViaMainProcess =
     await importDatabaseViaMainProcess(normalizedBackup);
 
+  const hasGraphRecords =
+    (normalizedBackup.promptRelations?.length ?? 0) > 0 ||
+    (normalizedBackup.outputFormatItems?.length ?? 0) > 0;
+  if (!restoredViaMainProcess && hasGraphRecords) {
+    throw new Error(
+      "Backup restore was blocked because this runtime cannot preserve " +
+        "prompt relation/output IDs. Local data was not cleared.",
+    );
+  }
+
   if (!restoredViaMainProcess) {
     const database = await getDatabase();
 
@@ -930,21 +973,6 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
     });
-  }
-
-  if (!restoredViaMainProcess && normalizedBackup.outputFormatItems) {
-    for (const item of normalizedBackup.outputFormatItems) {
-      try {
-        await createOutputFormatItem({
-          sourcePromptId: item.sourcePromptId,
-          targetPromptId: item.targetPromptId,
-          sortOrder: item.sortOrder,
-        });
-      } catch (error) {
-        restoreFailures.push(`output format ${item.id}`);
-        console.warn(`Failed to restore output format ${item.id}:`, error);
-      }
-    }
   }
 
   if (normalizedBackup.images) {
@@ -1226,6 +1254,9 @@ export async function downloadSelectiveExport(
     prompts: normalized.prompts ? fullBackup.prompts : [],
     folders: normalized.folders ? fullBackup.folders : [],
     versions: normalized.versions ? fullBackup.versions : [],
+    promptRelations: normalized.prompts
+      ? fullBackup.promptRelations
+      : undefined,
     outputFormatItems: normalized.prompts
       ? fullBackup.outputFormatItems
       : undefined,

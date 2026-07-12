@@ -5,7 +5,10 @@ let initialized = false;
 
 export function getServerDatabase() {
   if (!initialized) {
-    initDatabase(getDatabasePath());
+    // The Web image is a single-server deployment per mounted DATA_ROOT. Allow
+    // the shared initializer to recover a lock left by a pre-lease/crashed run;
+    // live registered clients are still protected by the lease scan.
+    initDatabase(getDatabasePath(), { recoverUnregisteredLock: true });
     initialized = true;
   }
 

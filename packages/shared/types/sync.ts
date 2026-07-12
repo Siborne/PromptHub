@@ -73,6 +73,10 @@ export interface SyncOperationSummary {
   folders: number;
   rules: number;
   skills: number;
+  promptRelations?: number;
+  promptRelationsSkipped?: number;
+  outputFormatItems?: number;
+  outputFormatItemsSkipped?: number;
   mcpServers?: number;
   plugins?: number;
 }

@@ -10,8 +10,10 @@ import type {
   CreatePromptDTO,
   Folder,
   OutputFormatItemQuery,
+  OutputFormatItem,
   Prompt,
   PromptRelationQuery,
+  PromptRelation,
   PromptVersion,
   SearchQuery,
   UpdateOutputFormatItemDTO,
@@ -291,6 +293,11 @@ export function registerPromptIPC(db: PromptDB, folderDb: FolderDB, rawDb: Datab
     return relation;
   });
 
+  ipcMain.handle(IPC_CHANNELS.PROMPT_RELATION_INSERT_DIRECT, async (_, relation: PromptRelation) => {
+    relationDb.insertRelationDirect(relation);
+    return true;
+  });
+
   ipcMain.handle(IPC_CHANNELS.PROMPT_RELATION_LIST, async (_, query?: PromptRelationQuery) => {
     return relationDb.list(query);
   });
@@ -315,6 +322,11 @@ export function registerPromptIPC(db: PromptDB, folderDb: FolderDB, rawDb: Datab
     const item = outputFormatDb.create(data);
     syncWorkspace();
     return item;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROMPT_OUTPUT_FORMAT_INSERT_DIRECT, async (_, item: OutputFormatItem) => {
+    outputFormatDb.insertItemDirect(item);
+    return true;
   });
 
   ipcMain.handle(IPC_CHANNELS.PROMPT_OUTPUT_FORMAT_LIST, async (_, query?: OutputFormatItemQuery) => {

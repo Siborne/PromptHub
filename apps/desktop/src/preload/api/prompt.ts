@@ -6,7 +6,9 @@ import type {
   CreatePromptDTO,
   Folder,
   OutputFormatItemQuery,
+  OutputFormatItem,
   Prompt,
+  PromptRelation,
   PromptRelationQuery,
   PromptVersion,
   SearchQuery,
@@ -50,6 +52,8 @@ export const promptApi = {
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_MOVE, promptId, newParentId, newOrder),
   createRelation: (data: CreatePromptRelationDTO) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_RELATION_CREATE, data),
+  insertRelationDirect: (relation: PromptRelation) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROMPT_RELATION_INSERT_DIRECT, relation),
   listRelations: (query?: PromptRelationQuery) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_RELATION_LIST, query),
   updateRelation: (id: string, data: UpdatePromptRelationDTO) =>
@@ -58,6 +62,8 @@ export const promptApi = {
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_RELATION_DELETE, id),
   createOutputFormat: (data: CreateOutputFormatItemDTO) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_OUTPUT_FORMAT_CREATE, data),
+  insertOutputFormatDirect: (item: OutputFormatItem) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROMPT_OUTPUT_FORMAT_INSERT_DIRECT, item),
   listOutputFormat: (query?: OutputFormatItemQuery) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_OUTPUT_FORMAT_LIST, query),
   updateOutputFormat: (id: string, data: UpdateOutputFormatItemDTO) =>

@@ -245,6 +245,8 @@ function buildLegacyBackupData(
     prompts: fullBackup.prompts || [],
     folders: fullBackup.folders || [],
     versions: fullBackup.versions || [],
+    promptRelations: fullBackup.promptRelations,
+    outputFormatItems: fullBackup.outputFormatItems,
     images: includeMedia ? fullBackup.images : undefined,
     videos: includeMedia ? fullBackup.videos : undefined,
     aiConfig: fullBackup.aiConfig,
@@ -269,6 +271,8 @@ function buildIncrementalCoreData(fullBackup: DatabaseBackup): BackupData {
     prompts: fullBackup.prompts || [],
     folders: fullBackup.folders || [],
     versions: fullBackup.versions || [],
+    promptRelations: fullBackup.promptRelations,
+    outputFormatItems: fullBackup.outputFormatItems,
     aiConfig: fullBackup.aiConfig,
     settings: fullBackup.settings,
     settingsUpdatedAt: fullBackup.settingsUpdatedAt,
@@ -298,6 +302,8 @@ async function serializeLegacyBackup(
     prompts: backupData.prompts,
     folders: backupData.folders,
     versions: backupData.versions,
+    promptRelations: backupData.promptRelations,
+    outputFormatItems: backupData.outputFormatItems,
     aiConfig: backupData.aiConfig,
     settings: backupData.settings,
     settingsUpdatedAt: backupData.settingsUpdatedAt,
@@ -467,12 +473,41 @@ async function restoreImages(images: Record<string, string>): Promise<number> {
   return restoredCount;
 }
 
-async function downloadAndRestoreMedia(
+type VerifiedMedia = Record<string, string>;
+
+async function downloadAndVerifyMedia(
   entries:
     | Record<string, { hash: string; size: number; uploadedAt: string }>
     | undefined,
   resolvePath: (fileName: string) => string,
   downloadText: (path: string) => Promise<RemoteDownloadResult>,
+  label: string,
+): Promise<VerifiedMedia> {
+  const verified: VerifiedMedia = {};
+
+  for (const fileName of Object.keys(entries || {})) {
+    const result = await downloadText(resolvePath(fileName));
+    if (!result.success || result.data === undefined) {
+      throw new Error(`Missing ${label} payload: ${fileName}`);
+    }
+
+    const expected = entries?.[fileName];
+    const actualHash = await computeHash(result.data);
+    if (actualHash !== expected?.hash) {
+      throw new Error(`media hash mismatch: ${label} ${fileName}`);
+    }
+    if (result.data.length !== expected?.size) {
+      throw new Error(`media size mismatch: ${label} ${fileName}`);
+    }
+
+    verified[fileName] = result.data;
+  }
+
+  return verified;
+}
+
+async function restoreVerifiedMedia(
+  entries: VerifiedMedia,
   restoreFile: (
     fileName: string,
     base64: string,
@@ -481,15 +516,9 @@ async function downloadAndRestoreMedia(
 ): Promise<number> {
   let restoredCount = 0;
 
-  for (const fileName of Object.keys(entries || {})) {
+  for (const [fileName, base64] of Object.entries(entries)) {
     try {
-      const result = await downloadText(resolvePath(fileName));
-      if (!result.success || !result.data) {
-        continue;
-      }
-
-      const success = await restoreFile(fileName, result.data);
-      if (success) {
+      if (await restoreFile(fileName, base64)) {
         restoredCount++;
       }
     } catch (error) {
@@ -512,33 +541,66 @@ async function restoreSharedSnapshots(data: BackupData): Promise<void> {
   }
 }
 
+function maxTimestamp(current: Date, value: unknown): Date {
+  const candidate =
+    typeof value === "number"
+      ? new Date(value)
+      : typeof value === "string"
+        ? new Date(value)
+        : null;
+  if (!candidate || Number.isNaN(candidate.getTime())) {
+    return current;
+  }
+  return candidate > current ? candidate : current;
+}
+
+function getBackupTimestampCandidates(backup: DatabaseBackup): unknown[] {
+  const candidates: unknown[] = [
+    ...backup.prompts.map((prompt) => prompt.updatedAt),
+    ...backup.folders.map((folder) => folder.updatedAt),
+    ...backup.versions.map((version) => version.createdAt),
+    ...(backup.promptRelations ?? []).map((relation) => relation.updatedAt),
+    ...(backup.outputFormatItems ?? []).map((item) => item.updatedAt),
+    ...(backup.skills ?? []).map((skill) => skill.updated_at),
+    ...(backup.skillVersions ?? []).map((version) => version.createdAt),
+    backup.mcpLibrary?.updatedAt,
+    backup.pluginLibrary?.updatedAt,
+    backup.settingsUpdatedAt,
+  ];
+
+  for (const rule of backup.rules ?? []) {
+    candidates.push(...rule.versions.map((version) => version.savedAt));
+  }
+
+  return candidates;
+}
+
 async function getLocalLatestTimestamp(): Promise<Date> {
-  const [localPrompts, localFolders] = await Promise.all([
+  const [localPrompts, localFolders, backup] = await Promise.all([
     getAllPrompts(),
     getAllFolders(),
+    exportDatabase({ skipVideoContent: true, limitMedia: true }),
   ]);
   let localLatestTime = new Date(0);
 
   for (const prompt of localPrompts) {
-    const updatedAt = new Date(prompt.updatedAt);
-    if (updatedAt > localLatestTime) {
-      localLatestTime = updatedAt;
-    }
+    localLatestTime = maxTimestamp(localLatestTime, prompt.updatedAt);
   }
 
   for (const folder of localFolders) {
-    const updatedAt = new Date(folder.updatedAt);
-    if (updatedAt > localLatestTime) {
-      localLatestTime = updatedAt;
-    }
+    localLatestTime = maxTimestamp(localLatestTime, folder.updatedAt);
+  }
+
+  for (const value of getBackupTimestampCandidates(backup)) {
+    localLatestTime = maxTimestamp(localLatestTime, value);
   }
 
   const settingsSnapshot = getSettingsStateSnapshot();
   if (settingsSnapshot?.settingsUpdatedAt) {
-    const settingsUpdatedAt = new Date(settingsSnapshot.settingsUpdatedAt);
-    if (settingsUpdatedAt > localLatestTime) {
-      localLatestTime = settingsUpdatedAt;
-    }
+    localLatestTime = maxTimestamp(
+      localLatestTime,
+      settingsSnapshot.settingsUpdatedAt,
+    );
   }
 
   return localLatestTime;
@@ -603,6 +665,8 @@ async function downloadLegacySyncBackup(
       prompts: data.prompts,
       folders: data.folders,
       versions: getBackupVersions(data),
+      promptRelations: data.promptRelations,
+      outputFormatItems: data.outputFormatItems,
       videos: videos || {},
       rules: data.rules,
       skills: data.skills,
@@ -912,10 +976,28 @@ export async function incrementalDownloadSyncBackup(
       };
     }
 
+    const actualDataHash = await computeHash(dataResult.data);
+    if (actualDataHash !== manifest.dataHash) {
+      throw new Error("Incremental data hash mismatch");
+    }
+
     const coreData = await parseIncrementalCorePayload(
       dataResult.data,
       manifest,
       options,
+    );
+
+    const verifiedImages = await downloadAndVerifyMedia(
+      manifest.images,
+      adapter.paths.image,
+      adapter.downloadText,
+      "media image",
+    );
+    const verifiedVideos = await downloadAndVerifyMedia(
+      manifest.videos,
+      adapter.paths.video,
+      adapter.downloadText,
+      "media video",
     );
 
     await restoreFromBackup({
@@ -924,6 +1006,8 @@ export async function incrementalDownloadSyncBackup(
       prompts: coreData.prompts,
       folders: coreData.folders,
       versions: getBackupVersions(coreData),
+      promptRelations: coreData.promptRelations,
+      outputFormatItems: coreData.outputFormatItems,
       rules: coreData.rules,
       skills: coreData.skills,
       skillVersions: coreData.skillVersions,
@@ -935,18 +1019,14 @@ export async function incrementalDownloadSyncBackup(
       agentAssetFiles: coreData.agentAssetFiles,
     });
 
-    const imagesDownloaded = await downloadAndRestoreMedia(
-      manifest.images,
-      adapter.paths.image,
-      adapter.downloadText,
+    const imagesDownloaded = await restoreVerifiedMedia(
+      verifiedImages,
       async (fileName, base64) =>
         window.electron?.saveImageBase64?.(fileName, base64),
       "image",
     );
-    const videosDownloaded = await downloadAndRestoreMedia(
-      manifest.videos,
-      adapter.paths.video,
-      adapter.downloadText,
+    const videosDownloaded = await restoreVerifiedMedia(
+      verifiedVideos,
       async (fileName, base64) =>
         window.electron?.saveVideoBase64?.(fileName, base64),
       "video",

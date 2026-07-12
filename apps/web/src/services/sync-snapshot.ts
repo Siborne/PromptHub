@@ -3,9 +3,11 @@ import type {
   AgentAssetFilesSnapshot,
   Folder,
   McpLibraryFile,
+  OutputFormatItem,
   PluginLibraryFile,
   PluginPackageSnapshot,
   Prompt,
+  PromptRelation,
   PromptVersion,
   RuleBackupRecord,
   Settings,
@@ -215,7 +217,23 @@ const skillSchema = z.object({
     .string()
     .refine(isHttpUrl, 'source_url must use HTTP(S)')
     .optional(),
-  local_repo_path: z.string().optional(),
+  source_id: z.string().optional(),
+  source_label: z.string().optional(),
+  source_branch: z.string().optional(),
+  source_directory: z.string().optional(),
+  canonical_skill_path: z.string().optional(),
+  logical_name: z.string().optional(),
+  variant_key: z.string().optional(),
+  directory_fingerprint: z.string().optional(),
+  installed_directory_fingerprint: z.string().optional(),
+  fingerprint_algorithm: z
+    .enum(['skill-package-sha256-v1', 'legacy-stable-text-v1'])
+    .optional(),
+  source_last_checked_at: z.number().int().nonnegative().optional(),
+  source_last_error: z.string().nullable().optional(),
+  source_binding_state: z
+    .enum(['bound', 'detached', 'missing-baseline'])
+    .optional(),
   tags: z.array(z.string()).optional(),
   original_tags: z.array(z.string()).optional(),
   is_favorite: z.boolean(),
@@ -816,6 +834,10 @@ export function normalizeSyncSnapshot(
     skillFiles: payload.skillFiles as
       | Record<string, SkillFileSnapshot[]>
       | undefined,
+    promptRelations: payload.promptRelations as PromptRelation[] | undefined,
+    outputFormatItems: payload.outputFormatItems as
+      | OutputFormatItem[]
+      | undefined,
     mcpLibrary: payload.mcpLibrary as McpLibraryFile | undefined,
     pluginLibrary: payload.pluginLibrary as PluginLibraryFile | undefined,
     pluginPackages: payload.pluginPackages as
@@ -870,9 +892,26 @@ export function buildImportedSyncSummary(result: {
   foldersImported: number;
   rulesImported?: number;
   skillsImported: number;
+  promptRelationsImported?: number;
+  promptRelationsSkipped?: number;
+  outputFormatItemsImported?: number;
+  outputFormatItemsSkipped?: number;
   mcpServersImported?: number;
   pluginsImported?: number;
 }): SyncOperationSummary {
+  const dependencySummary =
+    result.promptRelationsImported !== undefined ||
+    result.promptRelationsSkipped !== undefined ||
+    result.outputFormatItemsImported !== undefined ||
+    result.outputFormatItemsSkipped !== undefined
+      ? {
+          promptRelations: result.promptRelationsImported ?? 0,
+          promptRelationsSkipped: result.promptRelationsSkipped ?? 0,
+          outputFormatItems: result.outputFormatItemsImported ?? 0,
+          outputFormatItemsSkipped: result.outputFormatItemsSkipped ?? 0,
+        }
+      : {};
+
   return {
     prompts: result.promptsImported,
     folders: result.foldersImported,
@@ -880,5 +919,6 @@ export function buildImportedSyncSummary(result: {
     skills: result.skillsImported,
     mcpServers: result.mcpServersImported ?? 0,
     plugins: result.pluginsImported ?? 0,
+    ...dependencySummary,
   };
 }

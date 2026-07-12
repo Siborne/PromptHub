@@ -2,8 +2,10 @@ import type {
   AgentAssetFilesSnapshot,
   AgentAssetStoreSourcesSnapshot,
   McpLibraryFile,
+  OutputFormatItem,
   PluginLibraryFile,
   PluginPackageSnapshot,
+  PromptRelation,
   RuleBackupRecord,
   Settings,
 } from "@prompthub/shared/types";
@@ -16,6 +18,10 @@ import type {
 } from "@prompthub/shared/types/skill";
 import { exportDatabase, restoreFromBackup } from "./database-backup";
 import type { DatabaseBackup } from "./database-backup-format";
+import {
+  mergeSkillSnapshots,
+  normalizeSkillsForWebSync,
+} from "./self-hosted-skill-sync";
 import {
   issueSolvedPromptHubCaptcha,
   isPromptHubCaptchaAuthBoundaryError,
@@ -34,6 +40,10 @@ export interface SelfHostedSyncSummary {
   folders: number;
   rules: number;
   skills: number;
+  promptRelations?: number;
+  promptRelationsSkipped?: number;
+  outputFormatItems?: number;
+  outputFormatItemsSkipped?: number;
   mcpServers?: number;
   plugins?: number;
 }
@@ -76,6 +86,8 @@ interface WebSyncPayload {
   skills: Skill[];
   skillVersions: SkillVersion[];
   skillFiles?: Record<string, SkillFileSnapshot[]>;
+  promptRelations?: PromptRelation[];
+  outputFormatItems?: OutputFormatItem[];
   mcpLibrary?: McpLibraryFile;
   pluginLibrary?: PluginLibraryFile;
   pluginPackages?: PluginPackageSnapshot[];
@@ -91,6 +103,10 @@ interface WebSyncPushResult {
   foldersImported: number;
   rulesImported?: number;
   skillsImported: number;
+  promptRelationsImported?: number;
+  promptRelationsSkipped?: number;
+  outputFormatItemsImported?: number;
+  outputFormatItemsSkipped?: number;
 }
 
 function normalizeBaseUrl(url: string): string {
@@ -468,36 +484,35 @@ function mergePromptVersions(
   );
 }
 
-function mergeSkillVersions(
-  localVersions: SkillVersion[],
-  remoteVersions: SkillVersion[],
-): SkillVersion[] {
-  return mergeLatestById(
-    localVersions,
-    remoteVersions,
-    (version) => `${version.skillId}:${version.version}`,
-    (version) => version.createdAt,
+function filterPromptRelations(
+  relations: PromptRelation[] | undefined,
+  promptIds: Set<string>,
+): PromptRelation[] | undefined {
+  const valid = (relations ?? []).filter(
+    (relation) =>
+      relation.sourcePromptId !== relation.targetPromptId &&
+      promptIds.has(relation.sourcePromptId) &&
+      promptIds.has(relation.targetPromptId),
   );
+  return valid.length > 0 ? valid : undefined;
+}
+
+function filterOutputFormatItems(
+  items: OutputFormatItem[] | undefined,
+  promptIds: Set<string>,
+): OutputFormatItem[] | undefined {
+  const valid = (items ?? []).filter(
+    (item) =>
+      promptIds.has(item.sourcePromptId) &&
+      (item.targetPromptId === null || promptIds.has(item.targetPromptId)),
+  );
+  return valid.length > 0 ? valid : undefined;
 }
 
 function mergeMediaMaps(
   localFiles: Record<string, string> | undefined,
   remoteFiles: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
-  if (!localFiles && !remoteFiles) {
-    return undefined;
-  }
-
-  return {
-    ...(localFiles || {}),
-    ...(remoteFiles || {}),
-  };
-}
-
-function mergeSkillFileMaps(
-  localFiles: Record<string, SkillFileSnapshot[]> | undefined,
-  remoteFiles: Record<string, SkillFileSnapshot[]> | undefined,
-): Record<string, SkillFileSnapshot[]> | undefined {
   if (!localFiles && !remoteFiles) {
     return undefined;
   }
@@ -558,18 +573,27 @@ function mergeDesktopBackupWithRemote(
     localBackup.versions,
     payload.promptVersions || payload.versions || [],
   ).filter((version) => mergedPromptIds.has(version.promptId));
+  const mergedPromptRelations = mergeLatestById(
+    localBackup.promptRelations ?? [],
+    payload.promptRelations ?? [],
+    (relation) => relation.id,
+    (relation) => relation.updatedAt,
+  );
+  const mergedOutputFormatItems = mergeLatestById(
+    localBackup.outputFormatItems ?? [],
+    payload.outputFormatItems ?? [],
+    (item) => item.id,
+    (item) => item.updatedAt,
+  );
 
-  const normalizedSkills = mergeLatestById(
+  const mergedSkills = mergeSkillSnapshots(
     localBackup.skills || [],
     payload.skills,
-    (skill) => skill.id,
-    (skill) => skill.updated_at,
-  );
-  const mergedSkillIds = new Set(normalizedSkills.map((skill) => skill.id));
-  const normalizedSkillVersions = mergeSkillVersions(
     localBackup.skillVersions || [],
     payload.skillVersions,
-  ).filter((version) => mergedSkillIds.has(version.skillId));
+    localBackup.skillFiles,
+    payload.skillFiles,
+  );
   const useRemoteMcpLibrary =
     payload.mcpLibrary &&
     toTimestamp(payload.mcpLibrary.updatedAt) >=
@@ -585,6 +609,14 @@ function mergeDesktopBackupWithRemote(
     prompts: normalizedPrompts,
     folders: normalizedFolders,
     versions: normalizedPromptVersions,
+    promptRelations: filterPromptRelations(
+      mergedPromptRelations,
+      mergedPromptIds,
+    ),
+    outputFormatItems: filterOutputFormatItems(
+      mergedOutputFormatItems,
+      mergedPromptIds,
+    ),
     images: mergeMediaMaps(localBackup.images, remoteImages),
     videos: mergeMediaMaps(localBackup.videos, remoteVideos),
     aiConfig: localBackup.aiConfig,
@@ -598,9 +630,9 @@ function mergeDesktopBackupWithRemote(
       (rule) => rule.id,
       (rule) => rule.versions[0]?.savedAt || 0,
     ),
-    skills: normalizedSkills,
-    skillVersions: normalizedSkillVersions,
-    skillFiles: mergeSkillFileMaps(localBackup.skillFiles, payload.skillFiles),
+    skills: mergedSkills.skills,
+    skillVersions: mergedSkills.skillVersions,
+    skillFiles: mergedSkills.skillFiles,
     mcpLibrary: useRemoteMcpLibrary
       ? payload.mcpLibrary
       : localBackup.mcpLibrary,
@@ -648,9 +680,21 @@ function buildDesktopBackupFromRemote(
     payload.versions ||
     []
   ).filter((version) => remotePromptIds.has(version.promptId));
-  const remoteSkillIds = new Set(payload.skills.map((skill) => skill.id));
-  const normalizedSkillVersions = payload.skillVersions.filter((version) =>
-    remoteSkillIds.has(version.skillId),
+  const normalizedPromptRelations = filterPromptRelations(
+    payload.promptRelations,
+    remotePromptIds,
+  );
+  const normalizedOutputFormatItems = filterOutputFormatItems(
+    payload.outputFormatItems,
+    remotePromptIds,
+  );
+  const normalizedSkills = mergeSkillSnapshots(
+    [],
+    payload.skills,
+    [],
+    payload.skillVersions,
+    undefined,
+    payload.skillFiles,
   );
 
   return {
@@ -659,15 +703,17 @@ function buildDesktopBackupFromRemote(
     prompts: normalizedPrompts,
     folders: normalizedFolders,
     versions: normalizedPromptVersions,
+    promptRelations: normalizedPromptRelations,
+    outputFormatItems: normalizedOutputFormatItems,
     images: remoteImages,
     videos: remoteVideos,
     aiConfig: localBackup.aiConfig,
     settings: remoteSettingsSnapshot || localBackup.settings,
     settingsUpdatedAt: remoteSettingsUpdatedAt || localBackup.settingsUpdatedAt,
     rules: payload.rules,
-    skills: payload.skills,
-    skillVersions: normalizedSkillVersions,
-    skillFiles: payload.skillFiles,
+    skills: normalizedSkills.skills,
+    skillVersions: normalizedSkills.skillVersions,
+    skillFiles: normalizedSkills.skillFiles,
     mcpLibrary: payload.mcpLibrary,
     pluginLibrary: payload.pluginLibrary,
     pluginPackages: payload.pluginPackages,
@@ -704,8 +750,10 @@ export async function pushToSelfHostedWeb(
     promptVersions: backup.versions,
     versions: backup.versions,
     folders: backup.folders,
+    promptRelations: backup.promptRelations,
+    outputFormatItems: backup.outputFormatItems,
     rules: backup.rules || [],
-    skills: backup.skills || [],
+    skills: normalizeSkillsForWebSync(backup.skills || []),
     skillVersions: backup.skillVersions || [],
     skillFiles: backup.skillFiles,
     mcpLibrary: backup.mcpLibrary,
@@ -724,6 +772,19 @@ export async function pushToSelfHostedWeb(
     { payload },
   );
 
+  const dependencySummary =
+    result.promptRelationsImported !== undefined ||
+    result.promptRelationsSkipped !== undefined ||
+    result.outputFormatItemsImported !== undefined ||
+    result.outputFormatItemsSkipped !== undefined
+      ? {
+          promptRelations: result.promptRelationsImported ?? 0,
+          promptRelationsSkipped: result.promptRelationsSkipped ?? 0,
+          outputFormatItems: result.outputFormatItemsImported ?? 0,
+          outputFormatItemsSkipped: result.outputFormatItemsSkipped ?? 0,
+        }
+      : {};
+
   return {
     prompts: result.promptsImported,
     folders: result.foldersImported,
@@ -731,6 +792,7 @@ export async function pushToSelfHostedWeb(
     skills: result.skillsImported,
     mcpServers: backup.mcpLibrary?.servers.length ?? 0,
     plugins: backup.pluginLibrary?.plugins.length ?? 0,
+    ...dependencySummary,
   };
 }
 

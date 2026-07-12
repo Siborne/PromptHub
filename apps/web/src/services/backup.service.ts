@@ -1,12 +1,20 @@
-import { FolderDB, PromptDB, SkillDB } from '@prompthub/db';
+import {
+  FolderDB,
+  PromptDB,
+  PromptOutputFormatDB,
+  PromptRelationDB,
+  SkillDB,
+} from '@prompthub/db';
 import type {
   AgentAssetFilesSnapshot,
   AgentAssetStoreSourcesSnapshot,
   Folder,
   McpLibraryFile,
+  OutputFormatItem,
   PluginLibraryFile,
   PluginPackageSnapshot,
   Prompt,
+  PromptRelation,
   PromptVersion,
   RuleBackupRecord,
   Settings,
@@ -52,6 +60,8 @@ export interface WebBackupPayload {
   skills: Skill[];
   skillVersions: SkillVersion[];
   skillFiles?: Record<string, SkillFileSnapshot[]>;
+  promptRelations?: PromptRelation[];
+  outputFormatItems?: OutputFormatItem[];
   mcpLibrary?: McpLibraryFile;
   pluginLibrary?: PluginLibraryFile;
   pluginPackages?: PluginPackageSnapshot[];
@@ -66,6 +76,10 @@ export interface BackupImportResult {
   foldersImported: number;
   rulesImported: number;
   skillsImported: number;
+  promptRelationsImported?: number;
+  promptRelationsSkipped?: number;
+  outputFormatItemsImported?: number;
+  outputFormatItemsSkipped?: number;
   mcpServersImported?: number;
   pluginsImported?: number;
   settingsUpdated: boolean;
@@ -93,9 +107,16 @@ interface SkillRecordRow {
   visibility: 'private' | 'shared';
 }
 
+interface DependencyImportStats {
+  imported: number;
+  skipped: number;
+}
+
 export class BackupService {
   private readonly db = getServerDatabase();
   private readonly promptDb = new PromptDB(this.db);
+  private readonly promptRelationDb = new PromptRelationDB(this.db);
+  private readonly promptOutputFormatDb = new PromptOutputFormatDB(this.db);
   private readonly folderDb = new FolderDB(this.db);
   private readonly skillDb = new SkillDB(this.db);
   private readonly settingsService = new SettingsService();
@@ -117,6 +138,15 @@ export class BackupService {
         createdAt: this.normalizeIsoTimestamp(version.createdAt),
       }));
     const skillFiles = collectSkillWorkspaceFiles(skills);
+    const visiblePromptIds = new Set(prompts.map((prompt) => prompt.id));
+    const promptRelations = this.filterPromptRelations(
+      this.promptRelationDb.list(),
+      visiblePromptIds,
+    );
+    const outputFormatItems = this.filterOutputFormatItems(
+      this.promptOutputFormatDb.list(),
+      visiblePromptIds,
+    );
     const settings = this.settingsService.get(actor.userId);
     const agentAssets = readAgentAssetsSnapshot(actor.userId);
 
@@ -131,6 +161,8 @@ export class BackupService {
       skills,
       skillVersions,
       skillFiles,
+      promptRelations,
+      outputFormatItems,
       mcpLibrary: agentAssets.mcpLibrary,
       pluginLibrary: agentAssets.pluginLibrary,
       pluginPackages: agentAssets.pluginPackages,
@@ -187,6 +219,14 @@ export class BackupService {
       }
 
       this.mergePromptVersions(payload);
+      const promptRelations = this.mergePromptRelations(
+        actor,
+        payload.promptRelations ?? [],
+      );
+      const outputFormatItems = this.mergeOutputFormatItems(
+        actor,
+        payload.outputFormatItems ?? [],
+      );
 
       for (const skill of payload.skills) {
         if (this.mergeSkill(actor, skill)) {
@@ -206,6 +246,18 @@ export class BackupService {
         foldersImported,
         rulesImported,
         skillsImported,
+        ...(payload.promptRelations?.length
+          ? {
+              promptRelationsImported: promptRelations.imported,
+              promptRelationsSkipped: promptRelations.skipped,
+            }
+          : {}),
+        ...(payload.outputFormatItems?.length
+          ? {
+              outputFormatItemsImported: outputFormatItems.imported,
+              outputFormatItemsSkipped: outputFormatItems.skipped,
+            }
+          : {}),
         mcpServersImported: payload.mcpLibrary?.servers.length ?? 0,
         pluginsImported: payload.pluginLibrary?.plugins.length ?? 0,
         settingsUpdated,
@@ -486,6 +538,99 @@ export class BackupService {
 
       this.promptDb.insertVersionDirect(version);
     }
+  }
+
+  private filterPromptRelations(
+    relations: PromptRelation[],
+    promptIds: Set<string>,
+  ): PromptRelation[] | undefined {
+    const valid = relations.filter(
+      (relation) =>
+        relation.sourcePromptId !== relation.targetPromptId &&
+        promptIds.has(relation.sourcePromptId) &&
+        promptIds.has(relation.targetPromptId),
+    );
+    return valid.length > 0 ? valid : undefined;
+  }
+
+  private filterOutputFormatItems(
+    items: OutputFormatItem[],
+    promptIds: Set<string>,
+  ): OutputFormatItem[] | undefined {
+    const valid = items.filter(
+      (item) =>
+        promptIds.has(item.sourcePromptId) &&
+        (item.targetPromptId === null || promptIds.has(item.targetPromptId)),
+    );
+    return valid.length > 0 ? valid : undefined;
+  }
+
+  private canReadPrompt(actor: BackupActor, promptId: string): boolean {
+    const includeShared = actor.role === 'admin' ? 1 : 0;
+    const row = this.db
+      .prepare(
+        'SELECT id FROM prompts WHERE id = ? AND ((owner_user_id = ? AND visibility = ?) OR (? = 1 AND visibility = ?))',
+      )
+      .get(promptId, actor.userId, 'private', includeShared, 'shared') as
+      | { id: string }
+      | undefined;
+    return Boolean(row);
+  }
+
+  private mergePromptRelations(
+    actor: BackupActor,
+    relations: PromptRelation[],
+  ): DependencyImportStats {
+    const stats: DependencyImportStats = { imported: 0, skipped: 0 };
+    for (const relation of relations) {
+      if (
+        relation.sourcePromptId === relation.targetPromptId ||
+        !this.canReadPrompt(actor, relation.sourcePromptId) ||
+        !this.canReadPrompt(actor, relation.targetPromptId)
+      ) {
+        stats.skipped += 1;
+        continue;
+      }
+      const existing = this.promptRelationDb.getById(relation.id);
+      if (
+        existing &&
+        !this.shouldReplaceByTimestamp(existing.updatedAt, relation.updatedAt)
+      ) {
+        stats.skipped += 1;
+        continue;
+      }
+      this.promptRelationDb.insertRelationDirect(relation);
+      stats.imported += 1;
+    }
+    return stats;
+  }
+
+  private mergeOutputFormatItems(
+    actor: BackupActor,
+    items: OutputFormatItem[],
+  ): DependencyImportStats {
+    const stats: DependencyImportStats = { imported: 0, skipped: 0 };
+    for (const item of items) {
+      if (
+        !this.canReadPrompt(actor, item.sourcePromptId) ||
+        (item.targetPromptId !== null &&
+          !this.canReadPrompt(actor, item.targetPromptId))
+      ) {
+        stats.skipped += 1;
+        continue;
+      }
+      const existing = this.promptOutputFormatDb.getById(item.id);
+      if (
+        existing &&
+        !this.shouldReplaceByTimestamp(existing.updatedAt, item.updatedAt)
+      ) {
+        stats.skipped += 1;
+        continue;
+      }
+      this.promptOutputFormatDb.insertItemDirect(item);
+      stats.imported += 1;
+    }
+    return stats;
   }
 
   private resolveSkillId(skill: Skill): string {

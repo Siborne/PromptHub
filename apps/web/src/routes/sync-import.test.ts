@@ -643,4 +643,144 @@ describe("web sync import merge and settings", () => {
     },
     SYNC_ROUTE_TEST_TIMEOUT,
   );
+
+  it(
+    "round-trips prompt relations and output formats while dropping dangling dependencies",
+    async () => {
+      const dataDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "prompthub-web-sync-prompt-graph-"),
+      );
+
+      try {
+        const app = await createTestApp(dataDir);
+        const { payload: registerPayload } = await registerUser(
+          app,
+          "syncpromptgraph",
+          "debugpass001",
+        );
+        const token = registerPayload.data.accessToken;
+        const prompt = (id: string, title: string) => ({
+          id,
+          title,
+          userPrompt: `${title} body`,
+          variables: [],
+          tags: [],
+          isFavorite: false,
+          isPinned: false,
+          version: 1,
+          currentVersion: 1,
+          usageCount: 0,
+          createdAt: "2026-04-23T00:00:00.000Z",
+          updatedAt: "2026-04-23T00:00:00.000Z",
+        });
+
+        const importResponse = await app.request(
+          new Request("http://local/api/sync/data", {
+            method: "PUT",
+            headers: authHeaders(token),
+            body: JSON.stringify({
+              payload: {
+                version: "web-backup-v2",
+                exportedAt: "2026-04-23T00:00:00.000Z",
+                prompts: [
+                  prompt("prompt-graph-1", "Source"),
+                  prompt("prompt-graph-2", "Target"),
+                ],
+                promptVersions: [],
+                folders: [],
+                promptRelations: [
+                  {
+                    id: "relation-graph-1",
+                    sourcePromptId: "prompt-graph-1",
+                    targetPromptId: "prompt-graph-2",
+                    kind: "next_step",
+                    note: "Follow-up",
+                    createdAt: "2026-04-23T00:00:00.000Z",
+                    updatedAt: "2026-04-23T00:00:00.000Z",
+                  },
+                  {
+                    id: "relation-dangling",
+                    sourcePromptId: "prompt-graph-1",
+                    targetPromptId: "missing-prompt",
+                    kind: "next_step",
+                    note: null,
+                    createdAt: "2026-04-23T00:00:00.000Z",
+                    updatedAt: "2026-04-23T00:00:00.000Z",
+                  },
+                ],
+                outputFormatItems: [
+                  {
+                    id: "output-graph-1",
+                    sourcePromptId: "prompt-graph-1",
+                    targetPromptId: "prompt-graph-2",
+                    sortOrder: 0,
+                    createdAt: "2026-04-23T00:00:00.000Z",
+                    updatedAt: "2026-04-23T00:00:00.000Z",
+                  },
+                  {
+                    id: "output-dangling",
+                    sourcePromptId: "prompt-graph-1",
+                    targetPromptId: "missing-prompt",
+                    sortOrder: 1,
+                    createdAt: "2026-04-23T00:00:00.000Z",
+                    updatedAt: "2026-04-23T00:00:00.000Z",
+                  },
+                ],
+                skills: [],
+                skillVersions: [],
+                settings: DEFAULT_SETTINGS,
+              },
+            }),
+          }),
+        );
+
+        expect(importResponse.status).toBe(200);
+        const importBody = (await importResponse.json()) as {
+          data: {
+            promptRelationsImported?: number;
+            promptRelationsSkipped?: number;
+            outputFormatItemsImported?: number;
+            outputFormatItemsSkipped?: number;
+            summary?: {
+              promptRelations?: number;
+              promptRelationsSkipped?: number;
+              outputFormatItems?: number;
+              outputFormatItemsSkipped?: number;
+            };
+          };
+        };
+        expect(importBody.data.promptRelationsImported).toBe(1);
+        expect(importBody.data.promptRelationsSkipped).toBe(1);
+        expect(importBody.data.outputFormatItemsImported).toBe(1);
+        expect(importBody.data.outputFormatItemsSkipped).toBe(1);
+        expect(importBody.data.summary).toMatchObject({
+          promptRelations: 1,
+          promptRelationsSkipped: 1,
+          outputFormatItems: 1,
+          outputFormatItemsSkipped: 1,
+        });
+        const dataResponse = await app.request(
+          new Request("http://local/api/sync/data", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        );
+        const dataBody = (await dataResponse.json()) as {
+          data: {
+            promptRelations?: Array<{ id: string }>;
+            outputFormatItems?: Array<{ id: string }>;
+          };
+        };
+
+        expect(dataBody.data.promptRelations).toEqual([
+          expect.objectContaining({ id: "relation-graph-1" }),
+        ]);
+        expect(dataBody.data.outputFormatItems).toEqual([
+          expect.objectContaining({ id: "output-graph-1" }),
+        ]);
+      } finally {
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      }
+    },
+    SYNC_ROUTE_TEST_TIMEOUT,
+  );
 });

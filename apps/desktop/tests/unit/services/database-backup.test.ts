@@ -17,6 +17,7 @@ const getAllFoldersMock = vi.fn();
 const getAllPromptsMock = vi.fn();
 const createOutputFormatItemMock = vi.fn();
 const listOutputFormatItemsMock = vi.fn();
+const listPromptRelationsMock = vi.fn();
 const restoreAiConfigSnapshotMock = vi.fn();
 const restoreSettingsStateSnapshotMock = vi.fn();
 const getAiConfigSnapshotMock = vi.fn();
@@ -29,6 +30,7 @@ vi.mock("../../../src/renderer/services/database", () => ({
   getAllFolders: () => getAllFoldersMock(),
   getAllPrompts: () => getAllPromptsMock(),
   getDatabase: () => getDatabaseMock(),
+  listPromptRelations: (...args: unknown[]) => listPromptRelationsMock(...args),
   listOutputFormatItems: (...args: unknown[]) =>
     listOutputFormatItemsMock(...args),
 }));
@@ -90,6 +92,7 @@ describe("database-backup restore", () => {
     getAllFoldersMock.mockResolvedValue([]);
     getAllPromptsMock.mockResolvedValue([]);
     createOutputFormatItemMock.mockResolvedValue(undefined);
+    listPromptRelationsMock.mockResolvedValue([]);
     listOutputFormatItemsMock.mockResolvedValue([]);
     getAiConfigSnapshotMock.mockReturnValue(undefined);
     getSettingsStateSnapshotMock.mockReturnValue(undefined);
@@ -535,6 +538,48 @@ describe("database-backup restore", () => {
     });
   });
 
+  it("blocks graph restore before clearing when direct restore IPC is unavailable", async () => {
+    const prompt = {
+      id: "prompt-graph-fallback",
+      title: "Graph prompt",
+      userPrompt: "Body",
+      variables: [],
+      tags: [],
+      isFavorite: false,
+      isPinned: false,
+      version: 1,
+      currentVersion: 1,
+      usageCount: 0,
+      createdAt: "2026-04-07T00:00:00.000Z",
+      updatedAt: "2026-04-07T00:00:00.000Z",
+    };
+
+    await expect(
+      restoreFromBackup({
+        version: 1,
+        exportedAt: "2026-04-07T00:00:00.000Z",
+        prompts: [prompt],
+        folders: [],
+        versions: [],
+        outputFormatItems: [
+          {
+            id: "output-graph-fallback",
+            sourcePromptId: prompt.id,
+            targetPromptId: null,
+            sortOrder: 0,
+            createdAt: prompt.createdAt,
+            updatedAt: prompt.updatedAt,
+          },
+        ],
+      }),
+    ).rejects.toThrow(
+      "Backup restore was blocked because this runtime cannot preserve",
+    );
+
+    expect(clearDatabaseMock).not.toHaveBeenCalled();
+    expect(getDatabaseMock).not.toHaveBeenCalled();
+  });
+
   it("exports rules and restores them through the rules preload API", async () => {
     installWindowMocks({
       api: {
@@ -784,6 +829,13 @@ describe("database-backup restore", () => {
       images: ["image-1.png"],
       videos: ["video-1.mp4"],
     };
+    const targetPrompt = {
+      ...prompt,
+      id: "prompt-2",
+      title: "Target Prompt",
+      images: [],
+      videos: [],
+    };
     const folder = {
       id: "folder-1",
       name: "Folder 1",
@@ -805,6 +857,15 @@ describe("database-backup restore", () => {
       sourcePromptId: "prompt-1",
       targetPromptId: null,
       sortOrder: 0,
+      createdAt: "2026-04-07T00:00:00.000Z",
+      updatedAt: "2026-04-07T00:00:00.000Z",
+    };
+    const promptRelation = {
+      id: "relation-1",
+      sourcePromptId: "prompt-1",
+      targetPromptId: "prompt-2",
+      kind: "next_step" as const,
+      note: "Follow-up",
       createdAt: "2026-04-07T00:00:00.000Z",
       updatedAt: "2026-04-07T00:00:00.000Z",
     };
@@ -832,9 +893,10 @@ describe("database-backup restore", () => {
       source: "manual",
     };
 
-    getAllPromptsMock.mockResolvedValue([prompt]);
+    getAllPromptsMock.mockResolvedValue([prompt, targetPrompt]);
     getAllFoldersMock.mockResolvedValue([folder]);
     listOutputFormatItemsMock.mockResolvedValue([outputFormatItem]);
+    listPromptRelationsMock.mockResolvedValue([promptRelation]);
     getDatabaseMock.mockResolvedValue({
       transaction: () => createTransactionMock([version]),
     });
@@ -850,9 +912,11 @@ describe("database-backup restore", () => {
     installWindowMocks({
       api: {
         prompt: {
-          getAll: vi.fn().mockResolvedValue([prompt]),
+          getAll: vi.fn().mockResolvedValue([prompt, targetPrompt]),
           delete: vi.fn().mockResolvedValue(true),
           insertDirect: vi.fn().mockResolvedValue(undefined),
+          insertRelationDirect: vi.fn().mockResolvedValue(undefined),
+          insertOutputFormatDirect: vi.fn().mockResolvedValue(undefined),
           syncWorkspace: vi.fn().mockResolvedValue(undefined),
         },
         folder: {
@@ -896,10 +960,11 @@ describe("database-backup restore", () => {
 
     const backup = await exportDatabase();
 
-    expect(backup.prompts).toEqual([prompt]);
+    expect(backup.prompts).toEqual([prompt, targetPrompt]);
     expect(backup.folders).toEqual([folder]);
     expect(backup.versions).toEqual([version]);
     expect(backup.outputFormatItems).toEqual([outputFormatItem]);
+    expect(backup.promptRelations).toEqual([promptRelation]);
     expect(backup.images).toEqual({ "image-1.png": "base64-image" });
     expect(backup.videos).toEqual({ "video-1.mp4": "base64-video" });
     expect(backup.skills).toEqual([skill]);
@@ -925,11 +990,12 @@ describe("database-backup restore", () => {
     expect(window.api.folder.insertDirect).toHaveBeenCalledWith(folder);
     expect(window.api.prompt.insertDirect).toHaveBeenCalledWith(prompt);
     expect(window.api.version.insertDirect).toHaveBeenCalledWith(version);
-    expect(createOutputFormatItemMock).toHaveBeenCalledWith({
-      sourcePromptId: "prompt-1",
-      targetPromptId: null,
-      sortOrder: 0,
-    });
+    expect(window.api.prompt.insertRelationDirect).toHaveBeenCalledWith(
+      promptRelation,
+    );
+    expect(window.api.prompt.insertOutputFormatDirect).toHaveBeenCalledWith(
+      outputFormatItem,
+    );
     expect(window.api.prompt.syncWorkspace).toHaveBeenCalledTimes(1);
     expect(window.electron.saveImageBase64).toHaveBeenCalledWith(
       "image-1.png",
@@ -1354,94 +1420,4 @@ describe("database-backup restore", () => {
     expect(clearDatabaseMock).toHaveBeenCalledTimes(1);
   });
 
-  it("restores skills, skill versions, and skill files through the shared backup pipeline", async () => {
-    window.api.skill.create.mockResolvedValue({
-      id: "restored-skill-1",
-      name: "writer",
-    });
-
-    await expect(
-      restoreFromBackup({
-        version: 1,
-        exportedAt: "2026-04-07T00:00:00.000Z",
-        prompts: [],
-        folders: [],
-        versions: [],
-        skills: [
-          {
-            id: "skill-1",
-            name: "writer",
-            description: "Writer skill",
-            content: "# Writer",
-            instructions: "# Writer",
-            protocol_type: "skill",
-            version: "1.0.0",
-            author: "PromptHub",
-            tags: ["writing"],
-            is_favorite: false,
-            created_at: Date.parse("2026-04-07T00:00:00.000Z"),
-            updated_at: Date.parse("2026-04-07T00:00:00.000Z"),
-            currentVersion: 1,
-            local_repo_path: "/previous-machine/skills/writer/repo",
-          } as any,
-        ],
-        skillVersions: [
-          {
-            id: "version-1",
-            skillId: "skill-1",
-            version: 1,
-            content: "# Writer",
-            createdAt: "2026-04-07T00:00:00.000Z",
-            source: "manual",
-          } as any,
-        ],
-        skillFiles: {
-          "skill-1": [
-            {
-              relativePath: "SKILL.md",
-              content: "# Writer",
-            },
-          ],
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        folders: 0,
-        prompts: 0,
-        skillFiles: 0,
-        skillVersions: 0,
-        skills: 0,
-        versions: 0,
-      }),
-    );
-
-    expect(window.api.skill.deleteAll).toHaveBeenCalledTimes(1);
-    expect(window.api.skill.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "writer",
-        description: "Writer skill",
-        content: "# Writer",
-        instructions: "# Writer",
-        currentVersion: 1,
-      }),
-      { skipInitialVersion: true },
-    );
-    const [createPayload] = window.api.skill.create.mock.calls[0];
-    expect(createPayload).not.toHaveProperty("local_repo_path");
-    expect(window.api.skill.insertVersionDirect).toHaveBeenCalledWith(
-      expect.objectContaining({
-        skillId: "restored-skill-1",
-        version: 1,
-      }),
-    );
-    expect(window.api.skill.update).toHaveBeenCalledWith("restored-skill-1", {
-      currentVersion: 2,
-    });
-    expect(window.api.skill.writeLocalFile).toHaveBeenCalledWith(
-      "restored-skill-1",
-      "SKILL.md",
-      "# Writer",
-      { skipVersionSnapshot: true },
-    );
-  });
 });

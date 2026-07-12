@@ -23,6 +23,7 @@ vi.mock("../../../src/renderer/services/database", () => ({
   clearDatabase: async () => undefined,
   getAllFolders: async () => state.folders,
   getAllPrompts: async () => state.prompts,
+  listPromptRelations: async () => [],
   listOutputFormatItems: async () => [],
   getDatabase: async () => {
     throw new Error("IndexedDB fallback should not be used in filesystem integration test");

@@ -3,6 +3,88 @@ import { describe, expect, it } from 'vitest';
 import { buildSyncSummary, parseSyncSnapshot } from './sync-snapshot.js';
 
 describe('sync-snapshot agent assets', () => {
+  it('preserves prompt relations and output formats in the canonical snapshot', () => {
+    const snapshot = parseSyncSnapshot({
+      version: 'desktop-backup-v1',
+      exportedAt: '2026-07-11T00:00:00.000Z',
+      prompts: [],
+      folders: [],
+      skills: [],
+      skillVersions: [],
+      promptRelations: [
+        {
+          id: 'relation-1',
+          sourcePromptId: 'prompt-1',
+          targetPromptId: 'prompt-2',
+          kind: 'next_step',
+          note: 'Follow-up',
+          createdAt: '2026-07-11T00:00:00.000Z',
+          updatedAt: '2026-07-11T00:00:00.000Z',
+        },
+      ],
+      outputFormatItems: [
+        {
+          id: 'output-1',
+          sourcePromptId: 'prompt-1',
+          targetPromptId: null,
+          sortOrder: 0,
+          createdAt: '2026-07-11T00:00:00.000Z',
+          updatedAt: '2026-07-11T00:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(snapshot.promptRelations).toHaveLength(1);
+    expect(snapshot.outputFormatItems?.[0]?.id).toBe('output-1');
+  });
+
+  it('preserves portable Skill source metadata across desktop sync payloads', () => {
+    const snapshot = parseSyncSnapshot({
+      version: 'desktop-backup-v1',
+      exportedAt: '2026-07-11T00:00:00.000Z',
+      prompts: [],
+      folders: [],
+      skills: [
+        {
+          id: 'skill-remote',
+          name: 'remote-review',
+          protocol_type: 'skill',
+          is_favorite: false,
+          created_at: 1,
+          updated_at: 2,
+          source_id: 'registry:remote-review',
+          source_label: 'Official Skills',
+          source_url: 'https://example.com/skills/remote-review',
+          source_branch: 'main',
+          source_directory: 'skills/remote-review',
+          canonical_skill_path: 'skills/remote-review/SKILL.md',
+          directory_fingerprint: 'package-fingerprint',
+          installed_directory_fingerprint: 'package-fingerprint',
+          fingerprint_algorithm: 'skill-package-sha256-v1',
+          source_binding_state: 'bound',
+          content_url: 'https://example.com/skills/remote-review/SKILL.md',
+          installed_content_hash: 'content-hash',
+          installed_version: '1.2.3',
+          installed_at: 1,
+          updated_from_store_at: 2,
+        },
+      ],
+      skillVersions: [],
+    });
+
+    expect(snapshot.skills[0]).toMatchObject({
+      source_id: 'registry:remote-review',
+      source_label: 'Official Skills',
+      source_branch: 'main',
+      source_directory: 'skills/remote-review',
+      canonical_skill_path: 'skills/remote-review/SKILL.md',
+      directory_fingerprint: 'package-fingerprint',
+      installed_directory_fingerprint: 'package-fingerprint',
+      fingerprint_algorithm: 'skill-package-sha256-v1',
+      source_binding_state: 'bound',
+    });
+  });
+
   it('preserves current My MCP, My Plugins, plugin packages, and store sources', () => {
     const snapshot = parseSyncSnapshot({
       version: 'web-backup-v2',

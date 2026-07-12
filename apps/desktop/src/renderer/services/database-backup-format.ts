@@ -6,6 +6,7 @@ import type {
   PluginLibraryFile,
   PluginPackageSnapshot,
   Prompt,
+  PromptRelation,
   OutputFormatItem,
   PromptVersion,
   RuleBackupRecord,
@@ -40,6 +41,7 @@ export interface DatabaseBackup {
   prompts: Prompt[];
   folders: Folder[];
   versions: PromptVersion[];
+  promptRelations?: PromptRelation[];
   outputFormatItems?: OutputFormatItem[];
   images?: { [fileName: string]: string };
   videos?: { [fileName: string]: string };
@@ -117,6 +119,9 @@ export function normalizeImportedBackup(
     prompts: Array.isArray(backup?.prompts) ? backup.prompts : [],
     folders: Array.isArray(backup?.folders) ? backup.folders : [],
     versions,
+    promptRelations: Array.isArray(backup?.promptRelations)
+      ? backup.promptRelations
+      : undefined,
     outputFormatItems: Array.isArray(backup?.outputFormatItems)
       ? backup.outputFormatItems
       : undefined,
@@ -218,6 +223,23 @@ function hasOutputFormatItemShape(value: unknown): boolean {
       typeof value.targetPromptId === "string") &&
     typeof value.sortOrder === "number" &&
     Number.isFinite(value.sortOrder) &&
+    typeof value.createdAt === "string" &&
+    typeof value.updatedAt === "string"
+  );
+}
+
+function hasPromptRelationShape(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.sourcePromptId === "string" &&
+    typeof value.targetPromptId === "string" &&
+    ["related_to", "variant_of", "depends_on", "next_step"].includes(
+      String(value.kind),
+    ) &&
+    (value.note === undefined ||
+      value.note === null ||
+      typeof value.note === "string") &&
     typeof value.createdAt === "string" &&
     typeof value.updatedAt === "string"
   );
@@ -400,6 +422,7 @@ export interface ImportSkippedStats {
   prompts: number;
   folders: number;
   versions: number;
+  promptRelations: number;
   outputFormatItems: number;
   rules: number;
   skills: number;
@@ -417,6 +440,7 @@ export function hasMeaningfulBackupContent(backup: DatabaseBackup): boolean {
     backup.prompts.length > 0 ||
     backup.folders.length > 0 ||
     backup.versions.length > 0 ||
+    (backup.promptRelations?.length ?? 0) > 0 ||
     (backup.outputFormatItems?.length ?? 0) > 0 ||
     (backup.rules?.length ?? 0) > 0 ||
     (backup.skills?.length ?? 0) > 0 ||
@@ -443,6 +467,7 @@ export function createEmptySkippedStats(): ImportSkippedStats {
     prompts: 0,
     folders: 0,
     versions: 0,
+    promptRelations: 0,
     outputFormatItems: 0,
     rules: 0,
     skills: 0,
@@ -456,6 +481,7 @@ export function hasAnySkipped(stats: ImportSkippedStats): boolean {
     stats.prompts > 0 ||
     stats.folders > 0 ||
     stats.versions > 0 ||
+    stats.promptRelations > 0 ||
     stats.outputFormatItems > 0 ||
     stats.rules > 0 ||
     stats.skills > 0 ||
@@ -485,6 +511,15 @@ function validateImportedBackupShape(backup: DatabaseBackup): void {
 
   if (!backup.versions.every(hasPromptVersionShape)) {
     throw new Error("Invalid PromptHub backup: versions payload is malformed.");
+  }
+
+  if (
+    backup.promptRelations &&
+    !backup.promptRelations.every(hasPromptRelationShape)
+  ) {
+    throw new Error(
+      "Invalid PromptHub backup: prompt relations payload is malformed.",
+    );
   }
 
   if (
@@ -653,6 +688,28 @@ export function sanitizeImportedBackup(raw: DatabaseBackup): ParsedBackup {
   );
   skipped.versions = originalVersionsLen - validVersions.length;
 
+  let validPromptRelations = raw.promptRelations;
+  if (raw.promptRelations) {
+    const originalPromptRelationsLen = raw.promptRelations.length;
+    const structurallyValid = raw.promptRelations.filter(
+      hasPromptRelationShape,
+    );
+    validPromptRelations = structurallyValid.filter((relation) => {
+      const { sourcePromptId, targetPromptId } = relation as unknown as {
+        sourcePromptId: string;
+        targetPromptId: string;
+      };
+
+      return (
+        sourcePromptId !== targetPromptId &&
+        validPromptIds.has(sourcePromptId) &&
+        validPromptIds.has(targetPromptId)
+      );
+    });
+    skipped.promptRelations =
+      originalPromptRelationsLen - validPromptRelations.length;
+  }
+
   let validOutputFormatItems = raw.outputFormatItems;
   if (raw.outputFormatItems) {
     const originalOutputFormatLen = raw.outputFormatItems.length;
@@ -732,6 +789,7 @@ export function sanitizeImportedBackup(raw: DatabaseBackup): ParsedBackup {
       prompts: validPrompts,
       folders: validFolders,
       versions: validVersions,
+      promptRelations: validPromptRelations,
       outputFormatItems: validOutputFormatItems,
       rules: validRules,
       skills: validSkills,
@@ -760,6 +818,7 @@ function parseEnvelope(text: string): DatabaseBackup {
     "prompts" in parsed ||
     "folders" in parsed ||
     "versions" in parsed ||
+    "promptRelations" in parsed ||
     "outputFormatItems" in parsed ||
     "skills" in parsed ||
     "skillVersions" in parsed ||

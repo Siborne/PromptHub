@@ -35,6 +35,13 @@ describe("WebDAV Service", () => {
     window.api.skill.create.mockReset();
     vi.mocked(database.getAllPrompts).mockResolvedValue([]);
     vi.mocked(database.getAllFolders).mockResolvedValue([]);
+    vi.mocked(backup.exportDatabase).mockResolvedValue({
+      version: 1,
+      exportedAt: "2026-01-01T00:00:00.000Z",
+      prompts: [],
+      folders: [],
+      versions: [],
+    });
 
     Object.defineProperty(global, "crypto", {
       value: {
