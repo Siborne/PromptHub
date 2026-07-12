@@ -31,7 +31,8 @@
 - 默认只有发现并成功清理已死亡或无效的既有租约，且没有活跃或未知所有者时，
   初始化才可清理对应 orphan lock。
 - Desktop 在通过 Electron 单实例 gate 后，可恢复升级前版本遗留的未登记普通
-  lock；CLI 与其它共享调用方不得默认启用该能力。
+  lock；self-hosted Web 在每个 `DATA_ROOT` 只有一个服务进程的部署边界内也可
+  显式启用该能力；CLI 与其它共享调用方不得默认启用该能力。
 - 初始化中途失败必须清理本进程刚创建的租约，避免制造新的假所有者。
 
 ### 4. Contention And Visibility
@@ -69,3 +70,13 @@ When Desktop 已通过 Electron 单实例 gate，且数据目录只剩一个没�
 - Desktop 可将其识别为 legacy orphan lock 并恢复
 - 如存在活跃租约、未知租约项、符号链接或非目录 lock，仍必须拒绝清理
 - CLI 与其它共享调用方面对同一未登记 lock 时仍默认保留
+
+### Scenario: Self-hosted Web restarts after a crash
+
+When a single self-hosted Web process starts with an ownerless legacy lock in
+its mounted `DATA_ROOT`:
+
+- Web may recover the ordinary lock through the guarded initializer hook
+- a live registered client, unknown lease, symlink, or non-directory lock still
+  prevents recovery
+- multiple Web processes must not share the same SQLite data root

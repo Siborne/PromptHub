@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 27 |
+| Active | 30 |
 | Archived | 160 |
 | Legacy | 1 |
 
@@ -38,10 +38,13 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `r2-direct-downloads` | active | `spec/changes/active/r2-direct-downloads/` |
 | `readme-screenshots-v0-5-6` | active | `spec/changes/active/readme-screenshots-v0-5-6/` |
 | `rules-managed-copies` | in progress | `spec/changes/active/rules-managed-copies/` |
+| `self-hosted-skill-sync-reliability` | active | `spec/changes/active/self-hosted-skill-sync-reliability/` |
+| `self-hosted-web-database-lock-recovery` | in progress | `spec/changes/active/self-hosted-web-database-lock-recovery/` |
 | `skill-source-update-reconciliation` | completed | `spec/changes/active/skill-source-update-reconciliation/` |
 | `skill-uninstall-lifecycle` | active | `spec/changes/active/skill-uninstall-lifecycle/` |
 | `unified-custom-store-sources` | implemented | `spec/changes/active/unified-custom-store-sources/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
+| `web-sync-contract-completion` | active | `spec/changes/active/web-sync-contract-completion/` |
 
 ## Archived
 

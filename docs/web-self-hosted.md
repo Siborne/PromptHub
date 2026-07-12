@@ -59,6 +59,14 @@ Current sync provider contract (shared with desktop/web settings) supports:
 
 For web sync operations, `PUT /sync/data`, `POST /sync/push`, and `POST /sync/pull` return a unified `summary` block (`prompts`, `folders`, `rules`, `skills`) to keep cross-client parsing stable.
 
+Complete snapshots also preserve prompt relations and output-format items. When
+an import skips a dangling dependency, the response includes imported/skipped
+counts so a desktop client can report a partial graph restore.
+
+Incremental WebDAV/S3 downloads verify the manifest data hash and media
+hash/size before restoring local records. A mismatch or missing media file is a
+failed sync, not a partial successful restore.
+
 ## First-Run Bootstrap
 
 When a new deployment starts with an empty database:
@@ -169,6 +177,11 @@ Default access URL:
 - `http://localhost:3871`
 
 The compose file mounts PromptHub-managed data roots so your database, workspace files, and uploaded media stay outside the container.
+
+Each mounted `DATA_ROOT` must be used by one Web server process at a time. The
+self-hosted entry point can recover a legacy SQLite lock left by a crashed or
+pre-release process, but this is not multi-replica SQLite support; do not scale
+multiple containers against the same data volume.
 
 ### Deploy from the Published GHCR Image
 

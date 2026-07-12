@@ -28,6 +28,33 @@
 - WebDAV 结构化备份必须保持可恢复：`data.json`、`manifest.json`、以及被 Prompt 引用的媒体文件必须一起参与 push/pull；仅 `404` 可视为远端备份缺失并触发 legacy fallback，其他 HTTP 失败必须原样暴露为诊断错误。
 - WebDAV structured push must upload referenced media before publishing `data.json` and `manifest.json`; pull must verify `data.json` and media bytes against the manifest hash/size before import can continue.
 
+### 1.2 Complete prompt snapshot
+
+- A complete prompt snapshot includes prompts, versions, folders, prompt
+  relations, and output format items. `promptRelations` and
+  `outputFormatItems` are optional for backward compatibility, but providers
+  MUST preserve them when present.
+- Desktop Electron restore preserves relation/output IDs through direct main
+  process inserts and filters records whose prompt endpoints were not restored;
+  graph-bearing fallback restores must fail before clearing data when that
+  bridge is unavailable.
+- Self-hosted Web export/import applies the same endpoint and visibility
+  boundary. WebDAV and S3 legacy/incremental payload builders carry the same
+  fields so provider choice does not change the restored prompt graph.
+- Web import responses expose imported and skipped counts for prompt relations
+  and output-format items whenever those collections are present; dangling
+  dependencies are never reported as fully restored.
+- Incremental WebDAV/S3 downloads verify the serialized data hash and each
+  manifest-listed media hash/size before local restore begins; missing or
+  mismatched payloads fail without clearing local records.
+- Auto-sync freshness includes timestamped Skills, Rules, prompt graph records,
+  MCP/Plugin libraries, and settings in addition to Prompts and Folders. A
+  failed freshness snapshot is an explicit sync failure.
+- MCP/Plugin libraries, package files, store sources, and agent asset files are
+  transported as snapshots. Native reapply ownership, delete tombstones,
+  conflict resolution, and encryption policy remain follow-up work and are not
+  implied by the prompt snapshot contract.
+
 ### 2. Desktop And Web Relationship
 
 - 桌面端可以把自部署 Web 工作区作为备份与恢复目标。
