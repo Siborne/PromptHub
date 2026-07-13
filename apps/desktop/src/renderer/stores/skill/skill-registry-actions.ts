@@ -43,6 +43,7 @@ import {
   getSkillSourceStaleTargets,
   isDeferredSourceUpdateStatus,
   loadBuiltinSkillRegistry,
+  clearSourceErrorAfterSuccessfulCheck,
   recordSourceUnavailableCheck,
   refreshRegistrySkillBaselineIfNeeded,
   resolveRegistrySkillContent,
@@ -113,7 +114,13 @@ async function finalizeRegistryUpdateCheck(
     remoteContent,
     { staleTargets },
   );
-  await refreshRegistrySkillBaselineIfNeeded(check, get().updateSkill);
+  const refreshedSkill = await refreshRegistrySkillBaselineIfNeeded(
+    check,
+    get().updateSkill,
+  );
+  if (!refreshedSkill) {
+    await clearSourceErrorAfterSuccessfulCheck(check, get().updateSkill);
+  }
   return check;
 }
 

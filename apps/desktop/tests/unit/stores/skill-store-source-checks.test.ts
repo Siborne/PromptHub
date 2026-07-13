@@ -228,6 +228,11 @@ describe("skill store", () => {
       }),
     ).resolves.toMatchObject({
       status: "source-unavailable",
+      sourceKind: "content-url",
+      sourceReference: contentUrl,
+      sourceError: expect.stringContaining(
+        "GET https://example.com/skills/matrix/SKILL.md failed",
+      ),
       localModified: false,
       remoteChanged: false,
     });
@@ -251,6 +256,72 @@ describe("skill store", () => {
         }),
       ],
     });
+  });
+
+  it("clears a stale source error after a successful non-up-to-date check", async () => {
+    const originalContent = "# Matrix Skill\n\nOriginal\n";
+    const localContent = "# Matrix Skill\n\nLocal edit\n";
+    const originalHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash(originalContent);
+    const registrySkill: RegistrySkill = {
+      slug: "matrix-source-error",
+      source_id: "source-matrix-source-error",
+      name: "Matrix Source Error",
+      description: "Stale error regression",
+      category: "general",
+      author: "PromptHub",
+      source_url: "",
+      content_url: "https://example.com/skills/matrix-source-error/SKILL.md",
+      tags: [],
+      version: "1.0.0",
+      content: originalContent,
+    };
+    const update = vi.fn().mockImplementation(async (_id, data) => ({
+      ...createSkillFixture({
+        id: "skill-matrix-source-error",
+        name: "matrix-source-error",
+        content: localContent,
+        instructions: localContent,
+      }),
+      ...data,
+      id: "skill-matrix-source-error",
+    }));
+    (window as any).api.skill.fetchRemoteContent = vi
+      .fn()
+      .mockResolvedValue(originalContent);
+    (window as any).api.skill.update = update;
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-matrix-source-error",
+          name: "matrix-source-error",
+          registry_slug: "matrix-source-error",
+          content_url: registrySkill.content_url,
+          content: localContent,
+          instructions: localContent,
+          installed_content_hash: originalHash,
+          directory_fingerprint: "local-directory",
+          installed_directory_fingerprint: "baseline-directory",
+          fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+          source_binding_state: "bound",
+          source_last_error: "previous source failure",
+        }),
+      ],
+      registrySkills: [registrySkill],
+    });
+
+    await expect(
+      useSkillStore.getState().getRegistrySkillUpdateStatus(registrySkill),
+    ).resolves.toMatchObject({ status: "conflict" });
+    expect(update).toHaveBeenCalledWith(
+      "skill-matrix-source-error",
+      expect.objectContaining({
+        source_last_checked_at: expect.any(Number),
+        source_last_error: null,
+        source_binding_state: "bound",
+      }),
+    );
   });
 
   it("checks package source updates against the synced repo content instead of stale DB content", async () => {
@@ -1165,5 +1236,183 @@ describe("skill store", () => {
     expect(
       (window as any).api.skill.getLocalPackageFingerprint,
     ).toHaveBeenCalledWith("/tmp/local-writer");
+  });
+
+  it("reports the local source path when a local source becomes unavailable", async () => {
+    const content = "# Local Writer\n";
+    const registrySkill: RegistrySkill = {
+      slug: "local-writer",
+      source_id: "source-local-writer",
+      name: "Local Writer",
+      description: "Local source skill",
+      category: "general",
+      author: "Local",
+      source_url: "/tmp/local-writer",
+      content_url: "/tmp/local-writer/SKILL.md",
+      tags: ["local"],
+      version: "1.0.0",
+      content,
+    };
+    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
+      content,
+    });
+    (window as any).api.skill.getLocalPackageFingerprint = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          "ENOENT: no such file or directory, scandir '/tmp/local-writer'",
+        ),
+      );
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-local-writer",
+          name: "local-writer",
+          source_id: registrySkill.source_id,
+          source_url: registrySkill.source_url,
+          content_url: registrySkill.content_url,
+          content,
+          instructions: content,
+        }),
+      ],
+      registrySkills: [registrySkill],
+    });
+
+    const check = await useSkillStore
+      .getState()
+      .getRegistrySkillUpdateStatus(registrySkill);
+
+    expect(check).toMatchObject({
+      status: "source-unavailable",
+      sourceKind: "local-linked",
+      sourceReference: "/tmp/local-writer",
+      sourceError: expect.stringContaining("ENOENT"),
+    });
+  });
+
+  it("checks a copied Agent import against its original local source", async () => {
+    const sourceDirectory = "/Users/me/.claude/skills/local-writer";
+    const managedDirectory =
+      "/Users/me/Library/Application Support/PromptHub/data/skills/local-writer/repo";
+    const baselineContent = "# Local Writer\n\nOriginal\n";
+    const sourceContent = "# Local Writer\n\nChanged in Claude\n";
+    const baselineHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash(baselineContent);
+    const installedSkill = createSkillFixture({
+      id: "skill-local-writer",
+      name: "local-writer",
+      source_url: sourceDirectory,
+      local_repo_path: managedDirectory,
+      content: baselineContent,
+      instructions: baselineContent,
+      installed_content_hash: baselineHash,
+      directory_fingerprint: "a".repeat(64),
+      installed_directory_fingerprint: "a".repeat(64),
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+    });
+    (window as any).api.skill.syncFromRepo = vi
+      .fn()
+      .mockResolvedValue(installedSkill);
+    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
+      content: sourceContent,
+    });
+    (window as any).api.skill.getLocalPackageFingerprint = vi
+      .fn()
+      .mockResolvedValue("b".repeat(64));
+    useSkillStore.setState({
+      skills: [installedSkill],
+      registrySkills: [],
+      remoteStoreEntries: {},
+    });
+
+    const check = await useSkillStore
+      .getState()
+      .getInstalledSkillSourceUpdateStatus(installedSkill.id);
+
+    expect(check).toMatchObject({
+      status: "update-available",
+      installedSkill: expect.objectContaining({
+        local_repo_path: managedDirectory,
+      }),
+      registrySkill: expect.objectContaining({
+        source_url: sourceDirectory,
+      }),
+    });
+    expect((window as any).api.skill.readLocalFileByPath).toHaveBeenCalledWith(
+      sourceDirectory,
+      "SKILL.md",
+    );
+    expect(
+      (window as any).api.skill.getLocalPackageFingerprint,
+    ).toHaveBeenCalledWith(sourceDirectory);
+  });
+
+  it("updates a copied Agent import from the changed local source directory", async () => {
+    const sourceDirectory = "/Users/me/.codex/skills/local-writer";
+    const managedDirectory =
+      "/Users/me/Library/Application Support/PromptHub/data/skills/local-writer/repo";
+    const baselineContent = "# Local Writer\n\nOriginal\n";
+    const sourceContent = "# Local Writer\n\nChanged in Codex\n";
+    const baselineHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash(baselineContent);
+    const installedSkill = createSkillFixture({
+      id: "skill-local-writer",
+      name: "local-writer",
+      source_url: sourceDirectory,
+      local_repo_path: managedDirectory,
+      content: baselineContent,
+      instructions: baselineContent,
+      installed_content_hash: baselineHash,
+      installed_version: "1.0.0",
+      version: "1.0.0",
+      directory_fingerprint: "a".repeat(64),
+      installed_directory_fingerprint: "a".repeat(64),
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+    });
+    const updatedSkill = {
+      ...installedSkill,
+      content: sourceContent,
+      instructions: sourceContent,
+      version: "1.1.0",
+      installed_version: "1.1.0",
+    };
+    (window as any).api.skill.syncFromRepo = vi
+      .fn()
+      .mockResolvedValue(installedSkill);
+    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
+      content: sourceContent,
+    });
+    (window as any).api.skill.getLocalPackageFingerprint = vi
+      .fn()
+      .mockResolvedValue("b".repeat(64));
+    const runPackageOperation = vi.fn().mockResolvedValue({
+      status: "completed",
+      operation: "update",
+      skill: updatedSkill,
+    });
+    (window as any).api.skill.runPackageOperation = runPackageOperation;
+    useSkillStore.setState({
+      skills: [installedSkill],
+      registrySkills: [],
+      remoteStoreEntries: {},
+    });
+
+    const result = await useSkillStore
+      .getState()
+      .updateInstalledSkillFromSource(installedSkill.id);
+
+    expect(result).toMatchObject({ status: "updated" });
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "update",
+        skillId: installedSkill.id,
+        source: {
+          kind: "local-directory",
+          directory: sourceDirectory,
+        },
+      }),
+    );
   });
 });

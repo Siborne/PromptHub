@@ -18,7 +18,10 @@ import {
   MAX_SKILL_PACKAGE_ENTRIES,
   MAX_SKILL_PACKAGE_FILES,
 } from "@prompthub/shared/constants/skill-package";
-import { computeStableTextHash } from "@prompthub/shared/utils/skill-identity";
+import {
+  computeStableTextHash,
+  shouldIgnoreSkillDirectoryEntry,
+} from "@prompthub/shared/utils/skill-identity";
 import {
   fileExists,
   getErrorCode,
@@ -395,6 +398,9 @@ async function walkRepoDir<T>(opts: {
       if (isInternalSkillRepoEntry(relativePath)) {
         continue;
       }
+      if (shouldIgnoreSkillDirectoryEntry(relativePath)) {
+        continue;
+      }
       if (entryCount >= MAX_SKILL_PACKAGE_ENTRIES) return;
       if (!isDirectory && fileCount >= MAX_SKILL_PACKAGE_FILES) return;
       entryCount += 1;
@@ -484,6 +490,9 @@ export async function copyMaterializedSkillDirectory(
     filter: async (src: string) => {
       const relativePath = path.relative(canonicalSourceDir, src);
       if (relativePath && isInternalSkillRepoEntry(relativePath)) {
+        return false;
+      }
+      if (relativePath && shouldIgnoreSkillDirectoryEntry(relativePath)) {
         return false;
       }
       try {
@@ -641,6 +650,9 @@ export async function copyRepoByPathToDirectory(
         return true;
       }
       if (isInternalSkillRepoEntry(relativePath)) {
+        return false;
+      }
+      if (shouldIgnoreSkillDirectoryEntry(relativePath)) {
         return false;
       }
       try {

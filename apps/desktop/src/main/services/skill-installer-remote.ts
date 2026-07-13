@@ -35,6 +35,11 @@ interface ResolvedAddress {
 export interface ResolvePublicAddressOptions {
   allowPrivateNetwork?: boolean;
   /**
+   * Allows synthetic 198.18/15 DNS answers used by a configured local proxy.
+   * Real private addresses remain blocked unless allowPrivateNetwork is set.
+   */
+  allowProxyCompatibilityAddress?: boolean;
+  /**
    * Allows plain HTTP only after DNS/IP validation proves the target is a
    * private network address. This is for user-selected LAN Git/Gitea servers,
    * not for arbitrary public remote content.
@@ -199,15 +204,13 @@ function decodeTrustedCompatibilityIPv6(address: string): string | null {
   return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
 }
 
-function isTrustedRemoteCompatibilityAddress(address: string): boolean {
+function isProxyCompatibilityAddress(address: string): boolean {
   if (address.startsWith("198.18.") || address.startsWith("198.19.")) {
     return true;
   }
 
   const decodedIPv4 = decodeTrustedCompatibilityIPv6(address);
-  return (
-    decodedIPv4 !== null && isTrustedRemoteCompatibilityAddress(decodedIPv4)
-  );
+  return decodedIPv4 !== null && isProxyCompatibilityAddress(decodedIPv4);
 }
 
 // ==================== HTTP helpers ====================
@@ -240,8 +243,9 @@ export async function resolvePublicAddress(
         return { address: hostname, family: nodeNet.isIP(hostname) as 4 | 6 };
       }
       if (
-        isTrustedRemoteHostname(hostname) &&
-        isTrustedRemoteCompatibilityAddress(hostname)
+        isProxyCompatibilityAddress(hostname) &&
+        (options.allowProxyCompatibilityAddress ||
+          isTrustedRemoteHostname(hostname))
       ) {
         return { address: hostname, family: nodeNet.isIP(hostname) as 4 | 6 };
       }
@@ -256,12 +260,13 @@ export async function resolvePublicAddress(
   }
 
   const trustedCompatibilityAddresses = addresses.filter((entry) =>
-    isTrustedRemoteCompatibilityAddress(entry.address),
+    isProxyCompatibilityAddress(entry.address),
   );
   if (
     trustedCompatibilityAddresses.length > 0 &&
     trustedCompatibilityAddresses.length === addresses.length &&
-    isTrustedRemoteHostname(hostname)
+    (options.allowProxyCompatibilityAddress ||
+      isTrustedRemoteHostname(hostname))
   ) {
     const firstTrustedAddress = trustedCompatibilityAddresses[0];
     return {
@@ -340,8 +345,10 @@ export async function fetchRemoteText(
   }
 
   const parsedUrl = new URL(targetUrl);
+  const agent = getHttpRequestAgent(parsedUrl);
   const resolvedAddress = await resolvePublicAddress(parsedUrl.hostname, {
     allowPrivateNetwork: options.allowPrivateNetwork,
+    allowProxyCompatibilityAddress: agent !== undefined,
   });
   if (parsedUrl.protocol !== "https:") {
     const isAllowedPrivateHttp =
@@ -356,7 +363,6 @@ export async function fetchRemoteText(
   }
   const requestModule = getRequestModule(parsedUrl.protocol);
   const maxBytes = getRemoteFetchMaxBytes(parsedUrl);
-  const agent = getHttpRequestAgent(parsedUrl);
 
   const baseHeaders: Record<string, string> = {
     Host: parsedUrl.host,
@@ -375,8 +381,8 @@ export async function fetchRemoteText(
     const request = requestModule.request(
       {
         protocol: parsedUrl.protocol,
-        hostname: resolvedAddress.address,
-        family: resolvedAddress.family,
+        hostname: agent ? parsedUrl.hostname : resolvedAddress.address,
+        ...(agent ? {} : { family: resolvedAddress.family }),
         servername: parsedUrl.hostname,
         port: parsedUrl.port
           ? Number(parsedUrl.port)
@@ -442,10 +448,7 @@ export async function fetchRemoteText(
         const contentLength = Array.isArray(contentLengthHeader)
           ? Number.parseInt(contentLengthHeader[0], 10)
           : Number.parseInt(contentLengthHeader ?? "", 10);
-        if (
-          Number.isFinite(contentLength) &&
-          contentLength > maxBytes
-        ) {
+        if (Number.isFinite(contentLength) && contentLength > maxBytes) {
           response.resume();
           reject(new Error("Remote content exceeds size limit"));
           return;
@@ -500,8 +503,10 @@ export async function fetchRemoteBytes(
   }
 
   const parsedUrl = new URL(targetUrl);
+  const agent = getHttpRequestAgent(parsedUrl);
   const resolvedAddress = await resolvePublicAddress(parsedUrl.hostname, {
     allowPrivateNetwork: options.allowPrivateNetwork,
+    allowProxyCompatibilityAddress: agent !== undefined,
   });
   if (parsedUrl.protocol !== "https:") {
     const isAllowedPrivateHttp =
@@ -516,7 +521,6 @@ export async function fetchRemoteBytes(
   }
   const requestModule = getRequestModule(parsedUrl.protocol);
   const maxBytes = getRemoteFetchMaxBytes(parsedUrl);
-  const agent = getHttpRequestAgent(parsedUrl);
 
   const baseHeaders: Record<string, string> = {
     Host: parsedUrl.host,
@@ -534,8 +538,8 @@ export async function fetchRemoteBytes(
     const request = requestModule.request(
       {
         protocol: parsedUrl.protocol,
-        hostname: resolvedAddress.address,
-        family: resolvedAddress.family,
+        hostname: agent ? parsedUrl.hostname : resolvedAddress.address,
+        ...(agent ? {} : { family: resolvedAddress.family }),
         servername: parsedUrl.hostname,
         port: parsedUrl.port
           ? Number(parsedUrl.port)
@@ -599,10 +603,7 @@ export async function fetchRemoteBytes(
         const contentLength = Array.isArray(contentLengthHeader)
           ? Number.parseInt(contentLengthHeader[0], 10)
           : Number.parseInt(contentLengthHeader ?? "", 10);
-        if (
-          Number.isFinite(contentLength) &&
-          contentLength > maxBytes
-        ) {
+        if (Number.isFinite(contentLength) && contentLength > maxBytes) {
           response.resume();
           reject(new Error("Remote content exceeds size limit"));
           return;

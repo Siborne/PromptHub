@@ -13,6 +13,11 @@ export type SkillSourceResolverKind =
   | "local-linked"
   | "managed-copy";
 
+export interface SkillSourceReference {
+  kind: SkillSourceResolverKind;
+  reference: string;
+}
+
 export interface ParsedGitHubSkillLocation {
   owner: string;
   repo: string;
@@ -22,6 +27,7 @@ export interface ParsedGitHubSkillLocation {
 
 type RegistrySkillSourceDescriptor = Pick<
   RegistrySkill,
+  | "source_id"
   | "source_url"
   | "content_url"
   | "package_url"
@@ -121,7 +127,9 @@ export function normalizeLocalRegistryDirectory(
   const candidates = [regSkill.content_url, regSkill.source_url]
     .filter(
       (value): value is string =>
-        typeof value === "string" && value.trim().length > 0,
+        typeof value === "string" &&
+        value.trim().length > 0 &&
+        isLikelyLocalSource(value),
     )
     .map((value) => normalizeLocalSkillDirectoryPath(value));
 
@@ -220,6 +228,72 @@ export function getRegistrySkillSourceResolverKind(
     return "managed-copy";
   }
   return "remote-store";
+}
+
+function getFirstSourceReference(values: unknown[]): string {
+  return (
+    values
+      .find(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      )
+      ?.trim() || "Unknown source"
+  );
+}
+
+export function getRegistrySkillSourceReference(
+  regSkill: RegistrySkillSourceDescriptor,
+  installedSkill?: Pick<Skill, "local_repo_path" | "source_url"> | null,
+): SkillSourceReference {
+  const kind = getRegistrySkillSourceResolverKind(regSkill, installedSkill);
+  let reference: string;
+
+  if (kind === "local-linked") {
+    let localDirectory = "";
+    try {
+      localDirectory = normalizeLocalRegistryDirectory(regSkill);
+    } catch {
+      localDirectory = "";
+    }
+    reference =
+      localDirectory ||
+      getFirstSourceReference([
+        installedSkill?.local_repo_path,
+        regSkill.source_url,
+        regSkill.content_url,
+      ]);
+  } else if (kind === "managed-copy") {
+    reference = getFirstSourceReference([
+      installedSkill?.local_repo_path,
+      regSkill.source_url,
+      regSkill.content_url,
+    ]);
+  } else if (kind === "remote-git") {
+    reference = getFirstSourceReference([
+      regSkill.source_url,
+      regSkill.content_url,
+    ]);
+  } else if (kind === "remote-zip") {
+    reference = getFirstSourceReference([
+      regSkill.package_url,
+      regSkill.source_url,
+    ]);
+  } else if (kind === "content-url") {
+    reference = getFirstSourceReference([
+      regSkill.content_url,
+      regSkill.source_url,
+    ]);
+  } else {
+    reference = getFirstSourceReference([
+      regSkill.source_url,
+      regSkill.content_url,
+      regSkill.store_url,
+      regSkill.source_label,
+      regSkill.source_id,
+    ]);
+  }
+
+  return { kind, reference };
 }
 
 export function normalizeRemoteDirectoryFingerprint(

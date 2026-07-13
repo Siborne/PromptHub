@@ -711,8 +711,9 @@ export function SkillFullDetailPage({
   if (!selectedSkill) return null;
 
   const hasSourceUpdateMetadata = Boolean(
-    !isExternalDetail &&
-    (selectedSkill.source_url || selectedSkill.content_url),
+    (selectedSkill.source_url || selectedSkill.content_url) &&
+    (!isExternalDetail ||
+      Boolean(agentContext?.isManaged && !agentContext.isPlatformBuiltin)),
   );
   const showApplySourceUpdate = sourceUpdateStatus === "update-available";
   const showOverwriteSourceUpdate =

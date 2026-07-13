@@ -1,13 +1,22 @@
 /**
  * @vitest-environment node
  */
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "events";
 
 const httpRequestMock = vi.hoisted(() => vi.fn());
+const getHttpRequestAgentMock = vi.hoisted(() => vi.fn());
 
 vi.mock("http", async () => {
   const actual = await vi.importActual<typeof import("http")>("http");
+  return {
+    ...actual,
+    request: httpRequestMock,
+  };
+});
+
+vi.mock("https", async () => {
+  const actual = await vi.importActual<typeof import("https")>("https");
   return {
     ...actual,
     request: httpRequestMock,
@@ -18,8 +27,13 @@ vi.mock("dns/promises", () => ({
   lookup: vi.fn(),
 }));
 
+vi.mock("../../../src/main/services/network-proxy", () => ({
+  getHttpRequestAgent: getHttpRequestAgentMock,
+}));
+
 import * as dns from "dns/promises";
 import {
+  fetchRemoteBytes,
   fetchRemoteText,
   getRemoteFetchMaxBytes,
   resolvePublicAddress,
@@ -28,6 +42,12 @@ import {
 const REMOTE_FETCH_MAX_BYTES = 10 * 1024 * 1024;
 
 describe("skill-installer-remote", () => {
+  beforeEach(() => {
+    vi.mocked(dns.lookup).mockReset();
+    httpRequestMock.mockReset();
+    getHttpRequestAgentMock.mockReset().mockReturnValue(undefined);
+  });
+
   it("allows the issue 165 GitHub tree payload under the global byte cap", () => {
     const issue165TreePayloadBytes = 6_329_653;
     const githubRecursiveTreeUrl = new URL(
@@ -103,6 +123,99 @@ describe("skill-installer-remote", () => {
 
     await expect(resolvePublicAddress("example.com")).rejects.toThrow(
       /Access to internal network addresses is not allowed/,
+    );
+  });
+
+  it("allows proxy compatibility DNS answers for arbitrary public hosts", async () => {
+    const proxyAgent = { proxy: true };
+    getHttpRequestAgentMock.mockReturnValue(proxyAgent);
+    vi.mocked(dns.lookup).mockResolvedValueOnce([
+      { address: "198.18.0.42", family: 4 },
+    ]);
+    httpRequestMock.mockImplementationOnce((options, callback) => {
+      const response = new EventEmitter() as EventEmitter & {
+        headers: Record<string, string>;
+        resume: () => void;
+        statusCode: number;
+      };
+      response.statusCode = 200;
+      response.headers = {};
+      response.resume = vi.fn();
+      const request = {
+        destroy: vi.fn(),
+        end: vi.fn(() => {
+          callback(response);
+          response.emit("data", Buffer.from("ok"));
+          response.emit("end");
+        }),
+        on: vi.fn(),
+      };
+      return request;
+    });
+
+    await expect(
+      fetchRemoteText("https://community.example/skill.md"),
+    ).resolves.toBe("ok");
+    expect(httpRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostname: "community.example",
+        agent: proxyAgent,
+        path: "/skill.md",
+      }),
+      expect.any(Function),
+    );
+    expect(httpRequestMock.mock.calls[0][0]).not.toHaveProperty("family");
+  });
+
+  it("still blocks real private addresses when a proxy is configured", async () => {
+    getHttpRequestAgentMock.mockReturnValue({ proxy: true });
+    vi.mocked(dns.lookup).mockResolvedValueOnce([
+      { address: "192.168.31.12", family: 4 },
+    ]);
+
+    await expect(
+      fetchRemoteText("https://internal.example/skill.md"),
+    ).rejects.toThrow(/Access to internal network addresses is not allowed/);
+    expect(httpRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("allows proxy compatibility DNS answers for remote package bytes", async () => {
+    const proxyAgent = { proxy: true };
+    getHttpRequestAgentMock.mockReturnValue(proxyAgent);
+    vi.mocked(dns.lookup).mockResolvedValueOnce([
+      { address: "198.19.0.42", family: 4 },
+    ]);
+    httpRequestMock.mockImplementationOnce((options, callback) => {
+      const response = new EventEmitter() as EventEmitter & {
+        headers: Record<string, string>;
+        resume: () => void;
+        statusCode: number;
+      };
+      response.statusCode = 200;
+      response.headers = {};
+      response.resume = vi.fn();
+      const request = {
+        destroy: vi.fn(),
+        end: vi.fn(() => {
+          callback(response);
+          response.emit("data", Buffer.from([1, 2, 3]));
+          response.emit("end");
+        }),
+        on: vi.fn(),
+      };
+      return request;
+    });
+
+    await expect(
+      fetchRemoteBytes("https://community.example/skill.zip"),
+    ).resolves.toEqual(new Uint8Array([1, 2, 3]));
+    expect(httpRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostname: "community.example",
+        agent: proxyAgent,
+        path: "/skill.zip",
+      }),
+      expect.any(Function),
     );
   });
 

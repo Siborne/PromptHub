@@ -287,9 +287,29 @@ function getScannedPlatformName(scanned: ScannedSkill): string | undefined {
     : undefined;
 }
 
-async function buildScannedSkillPayload(scanned: ScannedSkill, tags: string[]) {
+function getImportedSourcePath(
+  scanned: ScannedSkill,
+  importMode: "copy" | "symlink",
+): string {
+  if (
+    importMode === "copy" &&
+    scanned.installMode === "symlink" &&
+    !scanned.isPromptHubManagedLink &&
+    scanned.symlinkTargetPath?.trim()
+  ) {
+    return scanned.symlinkTargetPath.trim();
+  }
+  return scanned.localPath;
+}
+
+async function buildScannedSkillPayload(
+  scanned: ScannedSkill,
+  tags: string[],
+  importMode: "copy" | "symlink",
+) {
   const importedAt = Date.now();
   const contentHash = await computeSkillContentHash(scanned.instructions);
+  const sourcePath = getImportedSourcePath(scanned, importMode);
   return {
     name: scanned.name,
     description: scanned.description,
@@ -303,9 +323,9 @@ async function buildScannedSkillPayload(scanned: ScannedSkill, tags: string[]) {
     is_favorite: false,
     source_id: buildSkillSourceId({
       sourceType: "installed-source",
-      sourceUrl: scanned.localPath,
+      sourceUrl: sourcePath,
     }),
-    source_url: scanned.localPath,
+    source_url: sourcePath,
     source_label: getScannedPlatformName(scanned),
     local_repo_path: scanned.localPath,
     directory_fingerprint: scanned.directory_fingerprint,
@@ -372,7 +392,7 @@ async function importScannedSkill(
   importMode: "copy" | "symlink",
 ): Promise<Skill | null> {
   const created = await window.api.skill.create(
-    await buildScannedSkillPayload(scanned, tags),
+    await buildScannedSkillPayload(scanned, tags, importMode),
   );
   if (!created) return null;
   await saveCopiedSkillFiles(created, scanned, importMode);

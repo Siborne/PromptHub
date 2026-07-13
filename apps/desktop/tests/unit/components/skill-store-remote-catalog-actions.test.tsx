@@ -626,6 +626,50 @@ describe("SkillStore remote loading", () => {
     });
   });
 
+  it("shows source type, location, and reason when a source check fails", async () => {
+    const registrySkill = makeRegistrySkill("sql", {
+      source_url: "/Users/demo/skills/sql",
+      content_url: "/Users/demo/skills/sql/SKILL.md",
+    });
+    const getRegistrySkillUpdateStatus = vi.fn().mockResolvedValue({
+      status: "source-unavailable",
+      registrySkill,
+      sourceKind: "local-linked",
+      sourceReference: "/Users/demo/skills/sql",
+      sourceError: "ENOENT: no such file or directory",
+    });
+    useSkillStore.setState({
+      getRegistrySkillUpdateStatus,
+      getTranslationState: vi.fn().mockReturnValue({
+        value: null,
+        hasTranslation: false,
+        isStale: false,
+      }),
+    } as never);
+
+    await renderWithI18n(
+      <SkillStoreDetail skill={registrySkill} isInstalled onClose={vi.fn()} />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Check update/i }));
+    });
+
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining("Local source"),
+      "error",
+    );
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining("/Users/demo/skills/sql"),
+      "error",
+    );
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining("ENOENT: no such file or directory"),
+      "error",
+    );
+  });
+
   it("shows linked local guidance when a store update is blocked", async () => {
     const check = { status: "update-available" };
     const getRegistrySkillUpdateStatus = vi.fn().mockResolvedValue(check);

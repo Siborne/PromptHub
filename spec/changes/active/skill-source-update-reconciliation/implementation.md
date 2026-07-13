@@ -43,6 +43,67 @@ Implementation completed as of 2026-07-08 for the v1 scope. The implementation c
 - `spec/knowledge/reference/skill-regression-test-matrix.md`: added required regression rows for remote package update failure ordering, source-unavailable sanitized errors, downstream stale reporting, content-url durability, raw content-url fingerprint normalization, and SHA-256-labeled durable fingerprint writes.
 - `apps/desktop/tests/unit/components/skill-full-detail-async-actions.test.tsx` and `apps/desktop/tests/unit/components/skill-store-remote.test.tsx`: added linked-local guidance UI coverage and source update status action coverage for `up-to-date`, `update-available`, `conflict`, `baseline-missing`, `source-unavailable`, and `no-source`.
 
+## 2026-07-13 Proxy Compatibility Follow-up
+
+- `apps/desktop/src/main/services/skill-installer-remote.ts`: remote text and
+  package-byte fetches now detect a configured request proxy before DNS
+  validation. Proxy-generated RFC 2544 `198.18/15` compatibility answers are
+  allowed for arbitrary public source hostnames, and the original hostname is
+  passed to the proxy agent instead of the synthetic address. Real private
+  addresses and direct requests retain the existing SSRF block.
+- `apps/desktop/tests/unit/main/skill-installer-remote.test.ts`: added install
+  and update regressions for proxy compatibility DNS answers, original-host
+  routing, binary package fetches, and real private-address rejection.
+
+## 2026-07-13 Source Diagnostics Follow-up
+
+- `apps/desktop/src/renderer/services/skill-source-resolver.ts`: source
+  diagnostics now resolve the adapter kind and a safe display reference for
+  local directories, managed copies, Git, ZIP, content URL, and store sources;
+  local metadata is preferred when old entries mix local and remote fields.
+- `apps/desktop/src/renderer/services/skill-store-update.ts` and
+  `apps/desktop/src/renderer/stores/skill/skill-source-update-workflow.ts`:
+  `source-unavailable` checks now carry `sourceKind`, `sourceReference`, and a
+  sanitized `sourceError` while preserving the existing durable
+  `source_last_error` field.
+- `apps/desktop/src/renderer/components/skill/skill-source-update-diagnostics.ts`,
+  `SkillStoreDetail.tsx`, and `useSkillSourceUpdate.ts`: update feedback now
+  identifies source type, path/address, and failure reason; source failures are
+  shown as errors rather than generic informational toasts.
+- Added resolver, local-source store, remote-source store, and detail toast
+  regressions. Focused source tests (30 tests) and full-detail async action
+  tests (22 tests) pass; desktop typecheck and Prettier checks pass.
+
+## 2026-07-13 Agent Local Source Follow-up
+
+- `apps/desktop/src/renderer/stores/skill/skill-library-actions.ts`: copied
+  Agent imports now use an external symlink's concrete target for `source_url`
+  and `source_id`; the Agent shortcut remains the local distribution path so
+  rescan and uninstall behavior are unchanged.
+- `apps/desktop/src/main/services/skill-package-validation.ts` and
+  `apps/desktop/src/main/services/skill-installer-repo.ts`: local package
+  validation, walking, and copying now apply the same shared ignore predicate
+  as package fingerprints. `node_modules`, caches, runtime output, and local
+  environment files therefore cannot make a valid Agent source fail package
+  limits or pollute the managed copy.
+- `apps/desktop/src/renderer/components/skill/SkillFullDetailPage.tsx` and
+  `apps/desktop/src/renderer/components/skill/SkillDetailHeader.tsx`: managed
+  non-builtin Agent details expose source check/update actions while retaining
+  the restricted Agent management action set.
+- Added regressions for ignored dependency files, ignored dependency copying,
+  external symlink source binding, and Agent detail source actions.
+
+Verification for this follow-up: the focused local-source suite passed with 11
+test files and 190 tests; desktop TypeScript, ESLint, Prettier, and
+`git diff --check` passed.
+
+## 2026-07-13 Real Dev-Window Verification
+
+- Started the desktop development environment with `pnpm --dir apps/desktop dev`; Vite served `http://localhost:5173/` and the Electron window loaded the renderer.
+- Exercised the live user flow: `Skills` -> `Agent Skill` -> `Codex CLI` -> `opencode-cli` -> `在我的 Skill 中打开`.
+- Clicked `检查来源更新` for the imported local Agent Skill. The UI displayed `已是最新` and retained the concrete local source `/Users/lingxiaotian/.codex/skills/opencode-cli`; it did not report the generic `来源暂时不可用` error.
+- The development terminal also reported the expected cloud store feed network-unavailable diagnostic in this offline environment; it did not affect local source resolution or the successful local check.
+
 ## Current Findings
 
 - Current Skill update detection already has the statuses `not-installed`, `up-to-date`, `update-available`, `local-modified`, and `conflict`.
@@ -52,6 +113,12 @@ Implementation completed as of 2026-07-08 for the v1 scope. The implementation c
 - Current ignore predicate already excludes `.env` and `.env.*` while preserving `.env.example`, `.env.sample`, and `.env.template`.
 
 ## Verification So Far
+
+- `pnpm --dir apps/desktop exec vitest run tests/unit/main/skill-installer-remote.test.ts` (32 tests passed after proxy compatibility follow-up)
+- `pnpm --dir apps/desktop exec vitest run tests/unit/main/skill-installer-remote.test.ts tests/unit/main/network-proxy.test.ts tests/unit/main/skill-installer-remote-git-package.test.ts tests/unit/services/skill-source-resolver.test.ts` (50 tests passed)
+- `pnpm --dir apps/desktop exec vitest run tests/unit/stores/skill-store-source-checks.test.ts tests/unit/stores/skill-store-package-install.test.ts tests/unit/components/skill-store-remote-source-loading.test.tsx tests/unit/components/skill-store-remote-git-install.test.tsx` (51 tests passed)
+- `pnpm exec eslint src/main/services/skill-installer-remote.ts tests/unit/main/skill-installer-remote.test.ts --report-unused-disable-directives --max-warnings 0` from `apps/desktop`
+- `pnpm install --frozen-lockfile` restored the workspace dependencies required by the existing core package checks, then `pnpm --dir apps/desktop typecheck` passed.
 
 - Documentation-only review of current source paths and stable docs.
 - Applied external design review decisions covering SHA-256 fingerprint migration, downstream stale decoupling, linked local overwrite blocking, `source-moved` deferral, baseline-missing UX, raw content URL fingerprint behavior, and safety scan timing.
@@ -69,6 +136,8 @@ Implementation completed as of 2026-07-08 for the v1 scope. The implementation c
 - `pnpm --filter @prompthub/core typecheck`
 - `pnpm --filter @prompthub/cli typecheck`
 - `pnpm --dir apps/desktop exec vitest run tests/unit/services/skill-source-resolver.test.ts tests/unit/stores/skill.store.test.ts`
+- Source diagnostics follow-up regression suite: 12 files / 157 tests passed, including local-linked, managed-copy, remote Git/ZIP/content URL/store diagnostics and UI toast rendering.
+- `pnpm verify:release:quick` reached the desktop unit-test stage but reported one unrelated existing failure in `tests/unit/main/rules-workspace.test.ts`: the test expects `grok-global`, while the current platform descriptor set does not include it. The failure reproduces in isolation; source diagnostics checks remain green.
 - `pnpm --dir apps/desktop exec vitest run tests/unit/services/skill-source-resolver.test.ts tests/unit/services/skill-store-update.test.ts tests/unit/services/skill-source-update-reconciliation.test.ts tests/unit/stores/skill.store.test.ts tests/unit/main/skill-source-update-db.test.ts tests/unit/main/skill-installer-remote-git-package.test.ts tests/unit/main/skill-safety-scan.test.ts tests/unit/main/skill-local-repo-ipc.test.ts tests/unit/main/skill-repo-sync.test.ts tests/unit/main/skill-version-ipc.test.ts tests/unit/components/skill-full-detail-async-actions.test.tsx tests/unit/components/skill-store-remote.test.tsx`
 - `pnpm --dir apps/desktop exec vitest run tests/unit/services/github-skill-store.test.ts tests/unit/main/skill-source-update-db.test.ts tests/unit/services/skill-source-update-reconciliation.test.ts tests/unit/stores/skill.store.test.ts tests/unit/main/skill-installer.test.ts`
 - `pnpm --dir apps/desktop exec vitest run tests/unit/stores/skill.store.test.ts tests/unit/components/skill-store-remote.test.tsx tests/unit/main/skill-installer-remote-git-package.test.ts`

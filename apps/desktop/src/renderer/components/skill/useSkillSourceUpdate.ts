@@ -7,6 +7,7 @@ import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
 import { useToast } from "../ui/Toast";
 import { formatSkillPackageOperationError } from "./detail-utils";
+import { formatSkillSourceUnavailableMessage } from "./skill-source-update-diagnostics";
 
 type ToastKind = "success" | "warning" | "error" | "info";
 interface PendingSafetyReview {
@@ -98,13 +99,20 @@ function createToastHelpers(
   showToast: (message: string, type: ToastKind) => void,
 ) {
   return {
-    showStatus(status: RegistrySkillUpdateStatus) {
+    showStatus(
+      status: RegistrySkillUpdateStatus,
+      check?: Awaited<ReturnType<SourceUpdateDependencies["getUpdateStatus"]>>,
+    ) {
       const config = STATUS_TOASTS[status] ?? [
         "skill.sourceUpdateUnavailable",
         "No source update target found",
         "error",
       ];
-      showToast(t(config[0], config[1]), config[2]);
+      const message =
+        status === "source-unavailable" && check
+          ? formatSkillSourceUnavailableMessage(check, t)
+          : t(config[0], config[1]);
+      showToast(message, config[2]);
     },
     showError(error: unknown) {
       showToast(
@@ -147,7 +155,7 @@ function createCheckAction(
     try {
       const result = await dependencies.getUpdateStatus(selectedSkill.id);
       state.setStatus(result?.status ?? null);
-      toast.showStatus(result?.status ?? "source-unavailable");
+      toast.showStatus(result?.status ?? "source-unavailable", result);
     } catch (error) {
       console.error("Failed to check source updates:", error);
       toast.showError(error);
@@ -174,7 +182,7 @@ async function handleApplyResult(
     toast.showLinkedLocalBlocked();
   } else if (result.status !== "updated") {
     state.setStatus(result.check.status);
-    toast.showStatus(result.check.status);
+    toast.showStatus(result.check.status, result.check);
   } else {
     state.setStatus("up-to-date");
     await dependencies.loadSkills();

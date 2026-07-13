@@ -13,6 +13,7 @@ import type {
   SkillPackageOperationRequest,
 } from "@prompthub/shared/types";
 import {
+  MAX_SKILL_PACKAGE_DEPTH,
   MAX_SKILL_PACKAGE_PATH_LENGTH,
   MAX_SKILL_PACKAGE_TEXT_BYTES,
 } from "@prompthub/shared/constants/skill-package";
@@ -170,12 +171,40 @@ describe("Skill package operation policy", () => {
             sourceUrl: "https://cloud.example.com/writer",
             files: [
               { path: "SKILL.md", content: "# Writer" },
-              { path: "a/b/c/d/e/f/g.txt", content: "too deep" },
+              {
+                path: `${Array.from(
+                  { length: MAX_SKILL_PACKAGE_DEPTH + 2 },
+                  (_, index) => `level-${index}`,
+                ).join("/")}/g.txt`,
+                content: "too deep",
+              },
             ],
           },
         }),
       ),
     ).toThrow(/depth limit/);
+  });
+
+  it("accepts legitimate nested template files within the package depth budget", () => {
+    const nestedPath = `${Array.from(
+      { length: 12 },
+      (_, index) => `level-${index}`,
+    ).join("/")}/template.md`;
+
+    expect(() =>
+      validateSkillPackageOperationRequest(
+        installRequest({
+          source: {
+            kind: "files",
+            sourceUrl: "https://cloud.example.com/writer",
+            files: [
+              { path: "SKILL.md", content: "# Writer" },
+              { path: nestedPath, content: "template\n" },
+            ],
+          },
+        }),
+      ),
+    ).not.toThrow();
   });
 
   it("accepts Skill markdown larger than ordinary metadata fields", () => {

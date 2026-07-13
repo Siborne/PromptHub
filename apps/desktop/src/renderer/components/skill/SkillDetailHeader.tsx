@@ -153,6 +153,9 @@ export function SkillDetailHeader({
             )}
           />
         ) : null}
+        {agentContext?.isManaged && !agentContext.isPlatformBuiltin ? (
+          <SourceUpdateHeaderAction sourceUpdate={sourceUpdate} />
+        ) : null}
         {!isExternalDetail ? (
           <ManagedSkillHeaderActions
             isCreatingSnapshot={isCreatingSnapshot}
@@ -271,60 +274,7 @@ function ManagedSkillHeaderActions({
   const { t } = useTranslation();
   return (
     <>
-      {sourceUpdate.hasMetadata ? (
-        <>
-          <button
-            type="button"
-            onClick={() =>
-              void (sourceUpdate.showApply
-                ? sourceUpdate.onApply()
-                : sourceUpdate.onCheck())
-            }
-            disabled={sourceUpdate.checking || sourceUpdate.updating}
-            className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary disabled:opacity-50"
-            title={sourceUpdate.buttonLabel}
-            aria-label={sourceUpdate.buttonLabel}
-          >
-            {sourceUpdate.checking || sourceUpdate.updating ? (
-              <Loader2Icon
-                className="h-4 w-4 animate-spin"
-                aria-hidden="true"
-              />
-            ) : sourceUpdate.showApply ? (
-              <RefreshCwIcon className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <CheckCircleIcon className="h-4 w-4" aria-hidden="true" />
-            )}
-            {sourceUpdate.checking
-              ? t("skill.checkingUpdates", "Checking")
-              : sourceUpdate.updating
-                ? t("skill.updatingFromSource", "Updating")
-                : sourceUpdate.showApply
-                  ? t("skill.updateFromSource", "Update from Source")
-                  : t("skill.checkSourceUpdates", "Check Updates")}
-          </button>
-          {sourceUpdate.showOverwrite ? (
-            <button
-              type="button"
-              onClick={() => void sourceUpdate.onApply(true)}
-              disabled={sourceUpdate.updating}
-              className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-700 transition-all hover:bg-amber-500/20 disabled:opacity-50 dark:text-amber-300"
-              title={sourceUpdate.overwriteLabel}
-              aria-label={sourceUpdate.overwriteLabel}
-            >
-              {sourceUpdate.updating ? (
-                <Loader2Icon
-                  className="h-4 w-4 animate-spin"
-                  aria-hidden="true"
-                />
-              ) : (
-                <RefreshCwIcon className="h-4 w-4" aria-hidden="true" />
-              )}
-              {sourceUpdate.overwriteLabel}
-            </button>
-          ) : null}
-        </>
-      ) : null}
+      <SourceUpdateHeaderAction sourceUpdate={sourceUpdate} />
       <button
         type="button"
         onClick={onOpenSnapshot}
@@ -370,6 +320,64 @@ function ManagedSkillHeaderActions({
         onClick={onDelete}
         icon={<TrashIcon className="w-5 h-5" aria-hidden="true" />}
       />
+    </>
+  );
+}
+
+function SourceUpdateHeaderAction({
+  sourceUpdate,
+}: {
+  sourceUpdate: SourceUpdateHeaderState;
+}) {
+  const { t } = useTranslation();
+  if (!sourceUpdate.hasMetadata) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          void (sourceUpdate.showApply
+            ? sourceUpdate.onApply()
+            : sourceUpdate.onCheck())
+        }
+        disabled={sourceUpdate.checking || sourceUpdate.updating}
+        className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary disabled:opacity-50"
+        title={sourceUpdate.buttonLabel}
+        aria-label={sourceUpdate.buttonLabel}
+      >
+        {sourceUpdate.checking || sourceUpdate.updating ? (
+          <Loader2Icon className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : sourceUpdate.showApply ? (
+          <RefreshCwIcon className="h-4 w-4" aria-hidden="true" />
+        ) : (
+          <CheckCircleIcon className="h-4 w-4" aria-hidden="true" />
+        )}
+        {sourceUpdate.checking
+          ? t("skill.checkingUpdates", "Checking")
+          : sourceUpdate.updating
+            ? t("skill.updatingFromSource", "Updating")
+            : sourceUpdate.showApply
+              ? t("skill.updateFromSource", "Update from Source")
+              : t("skill.checkSourceUpdates", "Check Updates")}
+      </button>
+      {sourceUpdate.showOverwrite ? (
+        <button
+          type="button"
+          onClick={() => void sourceUpdate.onApply(true)}
+          disabled={sourceUpdate.updating}
+          className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-700 transition-all hover:bg-amber-500/20 disabled:opacity-50 dark:text-amber-300"
+          title={sourceUpdate.overwriteLabel}
+          aria-label={sourceUpdate.overwriteLabel}
+        >
+          {sourceUpdate.updating ? (
+            <Loader2Icon className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCwIcon className="h-4 w-4" aria-hidden="true" />
+          )}
+          {sourceUpdate.overwriteLabel}
+        </button>
+      ) : null}
     </>
   );
 }

@@ -28,8 +28,17 @@
 - [x] `T-SU-021`: Update existing store update checks to use complete package baselines when package metadata exists.
 - [x] `T-SU-022`: Update existing fingerprint callers to record and respect fingerprint algorithm versions.
 - [x] `T-SU-023`: Resolve installed ClawHub page sources through the ClawHub
-  content/package APIs instead of Git. Covers `FR-SU-013`, `DES-SU-011`,
-  `TEST-SU-013`.
+      content/package APIs instead of Git. Covers `FR-SU-013`, `DES-SU-011`,
+      `TEST-SU-013`.
+- [x] `T-SU-024`: Preserve source adapter kind, source location, and sanitized
+      failure reason in `source-unavailable` checks; show local and remote source
+      diagnostics in update feedback. Covers `FR-SU-014`, `DES-SU-012`,
+      `TEST-SU-014`.
+- [x] `T-SU-025`: Make local Agent copy imports updateable by binding external
+      symlink scans to their concrete source target, aligning package validation,
+      copy, and fingerprint ignore rules, and exposing source actions on managed
+      Agent detail views. Covers `FR-SU-002`, `FR-SU-006`, `FR-SU-007`,
+      `DES-SU-002`, `DES-SU-006`, `DES-SU-007`, `TEST-SU-015`.
 
 Progress note 2026-07-07: `T-SU-016` is closed for registry/source update checks through the shared `buildSkillSourceUpdateCheck()` reconciliation builder; sanitized source errors remain recorded at the renderer side-effect boundary. `T-SU-017` is still not complete enough to close. Implemented safe-apply slices include non-local remote source materialization before metadata baseline writes, staged safety preflight for remote package writes, and managed repo staging/backup swap on partial copy failure. `T-SU-022` is closed for durable DB writes; remaining DTO-only fingerprints intentionally do not carry the DB algorithm field.
 
@@ -44,6 +53,28 @@ Progress note 2026-07-08: `T-SU-017` is closed. Remote Git/Zip sources stage and
 Progress note 2026-07-08 review follow-up: external review found tree/API paths still deriving legacy blob-hash manifests as `directory_fingerprint`. Main and renderer registry tree loaders now leave package fingerprints empty unless a v1 package hash is available; content-url install baselines use the content hash; source error sanitization strips URL userinfo; DB migration marks existing directory fingerprints as `legacy-stable-text-v1`.
 
 Progress note 2026-07-09 regression follow-up: ClawHub page URLs are not Git repositories. Installed ClawHub sources now derive `content_url` and `package_url` from the page slug, avoid Git package fingerprint checks, and do not reuse the installed local package fingerprint as the remote package fingerprint when the store entry is absent.
+
+Progress note 2026-07-13 proxy compatibility follow-up: remote text and byte
+fetches now recognize active proxy-generated `198.18/15` DNS answers for
+arbitrary public source hostnames, preserve the original hostname for proxy
+routing, and continue to reject real private addresses. Added focused install,
+update, binary-fetch, and SSRF regression coverage.
+
+Progress note 2026-07-13 source diagnostics follow-up: `source-unavailable`
+checks now preserve the resolver adapter kind, a sanitized local path or
+remote source reference, and the sanitized failure reason. Skill detail and
+full-detail update actions show those fields instead of implying every source
+is a URL. Added local-directory, mixed local/remote metadata, invalid
+`file://`, and component toast regressions.
+
+Progress note 2026-07-13 Agent local source follow-up: copied Agent imports now
+persist the concrete target of an external symlink as `source_url` and
+`source_id`, while keeping the copied Agent shortcut as the distribution path.
+Local package validation and copy now share the fingerprint ignore predicate,
+so dependency/runtime output cannot make an otherwise valid local source
+unavailable. Managed non-builtin Agent detail views expose the same source
+check/update actions as My Skills without exposing unrelated library CRUD
+actions.
 
 ## Verification Tasks
 
@@ -60,7 +91,13 @@ Progress note 2026-07-09 regression follow-up: ClawHub page URLs are not Git rep
 - [x] `TEST-SU-011`: Regression tests proving existing store update checks still preserve imported state while detecting package resource updates.
 - [x] `TEST-SU-012`: Regression tests proving legacy fingerprints are migrated only when local and source packages match.
 - [x] `TEST-SU-013`: Regression tests proving store-backed and missing-store
-  ClawHub updates use package APIs and never Git-clone page URLs.
+      ClawHub updates use package APIs and never Git-clone page URLs.
+- [x] `TEST-SU-014`: Regression tests proving source-unavailable feedback
+      identifies local and remote source locations and preserves sanitized reasons.
+- [x] `TEST-SU-015`: Regression tests proving copied Agent local sources remain
+      updateable after source changes, external symlink imports bind to the real
+      source target, ignored dependency files do not trip package limits or copy
+      into managed repos, and managed Agent detail exposes source actions.
 
 Progress note 2026-07-07: added focused store regressions for source-unavailable sanitized error recording, remote package/content-url update persistence failure ordering, project/agent copied target stale auxiliary reporting, and detail-page status actions. Full end-to-end status integration coverage remains open under `TEST-SU-010`.
 

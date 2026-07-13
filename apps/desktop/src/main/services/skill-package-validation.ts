@@ -7,6 +7,7 @@ import {
   MAX_SKILL_PACKAGE_FILES,
   MAX_SKILL_PACKAGE_TOTAL_BYTES,
 } from "@prompthub/shared/constants/skill-package";
+import { shouldIgnoreSkillDirectoryEntry } from "@prompthub/shared/utils/skill-identity";
 import { isPathWithin } from "./skill-installer-internal";
 import { isInternalSkillRepoEntry } from "./skill-installer-repo";
 
@@ -72,7 +73,12 @@ async function inspectDirectory(
   for (const entry of entries) {
     const fullPath = path.join(currentDir, entry.name);
     const relativePath = path.relative(rootDir, fullPath);
-    if (isInternalSkillRepoEntry(relativePath)) continue;
+    if (
+      isInternalSkillRepoEntry(relativePath) ||
+      shouldIgnoreSkillDirectoryEntry(relativePath)
+    ) {
+      continue;
+    }
     assertEntryBudget(state);
     if (entry.isSymbolicLink()) continue;
     const realPath = await fs.realpath(fullPath);

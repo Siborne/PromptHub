@@ -16,6 +16,7 @@ import {
 } from "../../services/clawhub-store";
 import {
   getRegistrySkillDirectory,
+  getRegistrySkillSourceReference,
   isLinkedLocalSkill,
   isLocalRegistrySkill,
   normalizeLocalRegistryDirectory,
@@ -423,11 +424,38 @@ export async function refreshRegistrySkillBaselineIfNeeded(
   });
 }
 
+export async function clearSourceErrorAfterSuccessfulCheck(
+  check: RegistrySkillUpdateCheck,
+  updateSkill: SkillState["updateSkill"],
+): Promise<void> {
+  const installedSkill = check.installedSkill;
+  if (
+    !installedSkill ||
+    check.status === "source-unavailable" ||
+    !installedSkill.source_last_error?.trim()
+  ) {
+    return;
+  }
+  await updateSkill(installedSkill.id, {
+    source_last_checked_at: Date.now(),
+    source_last_error: null,
+    source_binding_state: installedSkill.source_binding_state || "bound",
+  });
+}
+
 async function buildSourceUnavailableCheck(
   registrySkill: RegistrySkill,
   installedSkill: Skill | null,
-  staleTargets: SkillSourceStaleTarget[] = [],
+  options: {
+    staleTargets?: SkillSourceStaleTarget[];
+    sourceError?: string;
+  } = {},
 ): Promise<RegistrySkillUpdateCheck> {
+  const staleTargets = options.staleTargets || [];
+  const sourceReference = getRegistrySkillSourceReference(
+    registrySkill,
+    installedSkill,
+  );
   const localContent = installedSkill
     ? (installedSkill.content ?? installedSkill.instructions ?? "")
     : "";
@@ -453,6 +481,9 @@ async function buildSourceUnavailableCheck(
     installedHash: installedSkill?.installed_content_hash,
     remoteHash,
     remoteContent,
+    sourceKind: sourceReference.kind,
+    sourceReference: sourceReference.reference,
+    ...(options.sourceError ? { sourceError: options.sourceError } : {}),
     localModified: false,
     remoteChanged: false,
     shouldInitializeBaseline: false,
@@ -478,11 +509,10 @@ export async function recordSourceUnavailableCheck(options: {
         source_binding_state: installedSkill.source_binding_state || "bound",
       })) ?? installedSkill;
   }
-  return buildSourceUnavailableCheck(
-    options.registrySkill,
-    installedSkill,
-    options.staleTargets,
-  );
+  return buildSourceUnavailableCheck(options.registrySkill, installedSkill, {
+    staleTargets: options.staleTargets,
+    sourceError: sourceLastError,
+  });
 }
 
 export function isDeferredSourceUpdateStatus(

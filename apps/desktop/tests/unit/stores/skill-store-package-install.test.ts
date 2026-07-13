@@ -178,6 +178,53 @@ describe("skill store", () => {
     expect(getAll).toHaveBeenCalled();
   });
 
+  it("binds a copied Agent symlink import to its concrete local source target", async () => {
+    const shortcutPath = "/Users/demo/.claude/skills/local-writer";
+    const sourceTargetPath = "/Users/demo/shared-skills/local-writer";
+    const created = createSkillFixture({
+      id: "skill-local-writer",
+      name: "local-writer",
+      source_url: sourceTargetPath,
+      local_repo_path: shortcutPath,
+    });
+    const create = vi.fn().mockResolvedValue(created);
+    const saveToRepo = vi.fn().mockResolvedValue("/managed/local-writer/repo");
+    const update = vi.fn().mockResolvedValue({
+      ...created,
+      local_repo_path: "/managed/local-writer/repo",
+    });
+    (window as any).api.skill.create = create;
+    (window as any).api.skill.saveToRepo = saveToRepo;
+    (window as any).api.skill.update = update;
+    (window as any).api.skill.getAll = vi.fn().mockResolvedValue([]);
+
+    const result = await useSkillStore.getState().importScannedSkills(
+      [
+        {
+          ...createScannedLocalSkill("local-writer", shortcutPath),
+          installMode: "symlink",
+          symlinkTargetPath: sourceTargetPath,
+          isPromptHubManagedLink: false,
+        },
+      ],
+      {},
+      "copy",
+    );
+
+    expect(result.importedCount).toBe(1);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source_id: buildSkillSourceId({
+          sourceType: "installed-source",
+          sourceUrl: sourceTargetPath,
+        }),
+        source_url: sourceTargetPath,
+        local_repo_path: shortcutPath,
+      }),
+    );
+    expect(saveToRepo).toHaveBeenCalledWith(created.id, shortcutPath, "copy");
+  });
+
   it("rolls back a scanned copy import when managed package persistence fails", async () => {
     const sourcePath = "/Users/demo/skills/copy-writer";
     const created = createSkillFixture({

@@ -8,6 +8,7 @@ import { strToU8, zipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { extractSkillZipArchive } from "../../../src/main/services/skill-archive-extractor";
 import {
+  MAX_SKILL_PACKAGE_DEPTH,
   MAX_SKILL_PACKAGE_FILE_BYTES,
   MAX_SKILL_PACKAGE_FILES,
 } from "../../../src/main/services/skill-package-validation";
@@ -86,9 +87,13 @@ describe("Skill Zip extraction", () => {
   });
 
   it("rejects over-deep paths before writing archive entries", async () => {
+    const tooDeepPath = `${Array.from(
+      { length: MAX_SKILL_PACKAGE_DEPTH + 2 },
+      (_, index) => `level-${index}`,
+    ).join("/")}/g.txt`;
     const archive = zipSync({
       "SKILL.md": strToU8("# Skill\n"),
-      "a/b/c/d/e/f/g.txt": strToU8("too deep"),
+      [tooDeepPath]: strToU8("too deep"),
     });
 
     await expect(extractSkillZipArchive(archive, tempDir)).rejects.toThrow(
@@ -97,5 +102,22 @@ describe("Skill Zip extraction", () => {
     await expect(fs.stat(path.join(tempDir, "a"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("extracts legitimate nested template paths within the package depth budget", async () => {
+    const nestedPath = `${Array.from(
+      { length: 12 },
+      (_, index) => `level-${index}`,
+    ).join("/")}/template.md`;
+    const archive = zipSync({
+      "SKILL.md": strToU8("# Skill\n"),
+      [nestedPath]: strToU8("template\n"),
+    });
+
+    await extractSkillZipArchive(archive, tempDir);
+
+    await expect(
+      fs.readFile(path.join(tempDir, nestedPath), "utf8"),
+    ).resolves.toBe("template\n");
   });
 });

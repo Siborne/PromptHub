@@ -61,10 +61,31 @@ state. The renderer resolver classifies each source into one adapter kind:
 - `local-linked`: external local folder used directly as the My Skills source.
 - `managed-copy`: PromptHub-managed local package directory.
 
+When a source check fails, the resolver also returns the adapter kind and a
+safe display reference. The update check carries that reference with a
+sanitized failure reason so local folder failures identify the missing path and
+remote failures identify the endpoint without exposing credentials or query
+secrets. The detail and full-detail surfaces render the same diagnostic data.
+
 The resolver feeds the shared `B/L/R` reconciliation service. Raw `content-url`
 sources are modeled as a single-file package, so their package fingerprint is
 the fetched `SKILL.md` content hash rather than any registry-provided directory
 fingerprint.
+
+Agent and Project scan imports keep distribution paths separate from source
+identity. A copied import uses the concrete external symlink target, when one
+exists, for source checks and updates while retaining the scanned shortcut for
+the downstream Agent or Project installation. A PromptHub-managed symlink keeps
+its managed identity. Local validation and managed-repo copying must use the
+same shared ignore predicate as package fingerprinting so dependency and
+runtime artifacts cannot change source availability or package contents.
+
+Remote text and package fetches resolve the target before direct requests so
+the SSRF boundary can pin the resolved address. When a user-configured proxy
+agent is active, the fetcher also accepts proxy-generated RFC 2544 `198.18/15`
+compatibility answers and passes the original hostname to that agent; real
+loopback and RFC1918 addresses remain blocked unless the existing exact-source
+private-network policy applies.
 
 Filesystem-backed package fingerprints are computed through the shared
 `skill-package-sha256-v1` package manifest utility before desktop main or CLI
@@ -104,10 +125,12 @@ simple-skill/
 Create one folder per skill name and put a `SKILL.md` inside it. PromptHub searches these locations:
 
 **Project config:**
+
 - `.prompthub/skills/<skill-name>/SKILL.md`
 - `.claude/skills/<skill-name>/SKILL.md` (Claude-compatible)
 
 **Global config:**
+
 - `~/.config/prompthub/skills/<skill-name>/SKILL.md`
 - `~/.claude/skills/<skill-name>/SKILL.md` (Claude-compatible)
 
@@ -123,17 +146,18 @@ Each `SKILL.md` must start with YAML frontmatter. Only these fields are recogniz
 
 ```yaml
 ---
-name: skill-name           # Required, skill identifier
-description: Brief desc    # Required, 1-1024 characters
-license: MIT               # Optional, license type
-compatibility: prompthub   # Optional, compatibility flag
-metadata:                  # Optional, string-to-string map
+name: skill-name # Required, skill identifier
+description: Brief desc # Required, 1-1024 characters
+license: MIT # Optional, license type
+compatibility: prompthub # Optional, compatibility flag
+metadata: # Optional, string-to-string map
   audience: developers
   workflow: github
 ---
 ```
 
 **Name Validation Rules:**
+
 - Length: 1-64 characters
 - Format: lowercase alphanumeric with single hyphen separators
 - Cannot start or end with `-`
@@ -187,11 +211,11 @@ Control which skills agents can access using pattern-based permissions in `promp
 
 **Permission Types:**
 
-| Permission | Behavior |
-|------------|----------|
-| `allow` | Skill loads immediately |
-| `deny` | Skill hidden from agent, access rejected |
-| `ask` | User prompted for approval before loading |
+| Permission | Behavior                                  |
+| ---------- | ----------------------------------------- |
+| `allow`    | Skill loads immediately                   |
+| `deny`     | Skill hidden from agent, access rejected  |
+| `ask`      | User prompted for approval before loading |
 
 Patterns support wildcards: `internal-*` matches `internal-docs`, `internal-tools`, etc.
 

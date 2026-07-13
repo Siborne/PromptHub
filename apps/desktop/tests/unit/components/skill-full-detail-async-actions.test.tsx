@@ -418,6 +418,49 @@ describe("SkillFullDetailPage async actions", () => {
     });
   });
 
+  it("shows source update actions for an imported Agent detail", async () => {
+    const selectedSkill = {
+      ...makeSkill(),
+      source_url: "/Users/demo/.claude/skills/local-writer",
+      content_url: undefined,
+      local_repo_path:
+        "/Users/demo/Library/Application Support/PromptHub/data/skills/local-writer/repo",
+    };
+    const check = makeUpdateCheck(selectedSkill);
+    storeState.getInstalledSkillSourceUpdateStatus = vi
+      .fn()
+      .mockResolvedValue(check);
+    storeState.skills = [selectedSkill];
+
+    await act(async () => {
+      await renderWithI18n(
+        <SkillFullDetailPage
+          overrideSkill={selectedSkill}
+          agentContext={{
+            installMode: "copy",
+            isManaged: true,
+            platformId: "claude",
+            platformName: "Claude Code",
+            sourcePath: "/Users/demo/.claude/skills/local-writer",
+          }}
+          agentActions={{}}
+        />,
+        { language: "en" },
+      );
+    });
+
+    const checkUpdatesButton = screen.getByRole("button", {
+      name: "Check Source Updates",
+    });
+    await act(async () => {
+      fireEvent.click(checkUpdatesButton);
+    });
+
+    expect(storeState.getInstalledSkillSourceUpdateStatus).toHaveBeenCalledWith(
+      selectedSkill.id,
+    );
+  });
+
   it("ignores repeated source update clicks while the first update is pending", async () => {
     let resolveUpdate:
       | ((value: {

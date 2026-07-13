@@ -6,6 +6,7 @@ import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  MAX_SKILL_PACKAGE_DEPTH,
   MAX_SKILL_PACKAGE_ENTRIES,
   MAX_SKILL_PACKAGE_FILE_BYTES,
   MAX_SKILL_PACKAGE_FILES,
@@ -38,6 +39,37 @@ describe("materialized Skill package validation", () => {
     await expect(validateMaterializedSkillPackage(tempDir)).resolves.toEqual({
       fileCount: 2,
       totalBytes: 15,
+    });
+  });
+
+  it("accepts legitimate nested template directories within the package depth budget", async () => {
+    await fs.writeFile(path.join(tempDir, "SKILL.md"), "# Skill\n");
+    const nestedDir = path.join(
+      tempDir,
+      ...Array.from({ length: 12 }, (_, index) => `level-${index}`),
+    );
+    await fs.mkdir(nestedDir, { recursive: true });
+    await fs.writeFile(path.join(nestedDir, "template.md"), "template\n");
+
+    await expect(validateMaterializedSkillPackage(tempDir)).resolves.toEqual({
+      fileCount: 2,
+      totalBytes: 17,
+    });
+  });
+
+  it("does not reject ignored dependency files when validating a local Agent source", async () => {
+    await fs.writeFile(path.join(tempDir, "SKILL.md"), "# Skill\n");
+    const dependencyDir = path.join(tempDir, "node_modules");
+    await fs.mkdir(dependencyDir);
+    await Promise.all(
+      Array.from({ length: MAX_SKILL_PACKAGE_FILES }, (_, index) =>
+        fs.writeFile(path.join(dependencyDir, `${index}.js`), "ignored\n"),
+      ),
+    );
+
+    await expect(validateMaterializedSkillPackage(tempDir)).resolves.toEqual({
+      fileCount: 1,
+      totalBytes: 8,
     });
   });
 
@@ -104,7 +136,13 @@ describe("materialized Skill package validation", () => {
 
   it("rejects content deeper than the fingerprint walk can represent", async () => {
     await fs.writeFile(path.join(tempDir, "SKILL.md"), "# Skill\n");
-    const deepDir = path.join(tempDir, "1", "2", "3", "4", "5", "6");
+    const deepDir = path.join(
+      tempDir,
+      ...Array.from(
+        { length: MAX_SKILL_PACKAGE_DEPTH + 1 },
+        (_, index) => `${index + 1}`,
+      ),
+    );
     await fs.mkdir(deepDir, { recursive: true });
     await fs.writeFile(path.join(deepDir, "hidden.txt"), "hidden\n");
 

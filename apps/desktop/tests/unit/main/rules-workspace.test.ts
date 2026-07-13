@@ -453,7 +453,12 @@ describe("rules workspace storage", () => {
   });
 
   it("always includes built-in global rule descriptors even when target files are missing", async () => {
-    const descriptors = await listRuleDescriptors();
+    const service = createGlobalRulesTestService();
+    for (const platformRoot of [".claude", "codex", "grok", "opencode"]) {
+      fs.mkdirSync(path.join(tempDir, "home", platformRoot), { recursive: true });
+    }
+
+    const descriptors = await service.listRuleDescriptors();
 
     expect(descriptors).toEqual(
       expect.arrayContaining([

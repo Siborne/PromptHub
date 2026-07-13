@@ -334,6 +334,44 @@ describe("SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId", () => {
     expect(await listRemoteImportTempDirs()).toEqual([]);
   });
 
+  it("fingerprints a real Git package with deeply nested templates", async () => {
+    await SkillInstaller.init();
+
+    const sourceRepo = path.join(tmpDir, "source-deep-git-repo");
+    const nestedTemplate = path.join(
+      "skills",
+      "writer",
+      ...Array.from({ length: 12 }, (_, index) => `level-${index}`),
+      "template.md",
+    );
+    await createCommittedSkillRepo(sourceRepo, {
+      "skills/writer/SKILL.md": "---\nname: writer\n---\n\n# Writer\n",
+      [nestedTemplate]: "template\n",
+    });
+
+    vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(
+      async (_url, destDir, branch) => {
+        await runGit([
+          "clone",
+          "--branch",
+          branch || "main",
+          "--",
+          sourceRepo,
+          destDir,
+        ]);
+      },
+    );
+
+    await expect(
+      SkillInstaller.getRemoteGitSkillPackageFingerprint({
+        repoUrl: "https://gitea.example.com/team/skills",
+        branch: "main",
+        directory: "skills/writer",
+      }),
+    ).resolves.toMatch(/^[a-f0-9]{64}$/);
+    expect(await listRemoteImportTempDirs()).toEqual([]);
+  });
+
   it.each([
     {
       name: "path traversal directory",

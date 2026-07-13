@@ -60,6 +60,7 @@ import { SkillVariantBadgeList } from "./SkillVariantBadgeList";
 import { CloudStoreEngagement } from "./CloudStoreEngagement";
 import { SkillStoreDetailOverlays } from "./SkillStoreDetailOverlays";
 import { useSkillPackageInstall } from "./useSkillPackageInstall";
+import { formatSkillSourceUnavailableMessage } from "./skill-source-update-diagnostics";
 import {
   buildSkillVariantBadges,
   inferSkillVariantSourceDebugLabel,
@@ -749,10 +750,7 @@ export function SkillStoreDetail({
           "Unable to reconcile history. Keep local changes as a baseline, reset from source, or detach the source binding.",
         );
       } else if (check.status === "source-unavailable") {
-        message = t(
-          "skill.sourceUnavailable",
-          "Source is unavailable. Check the source URL or try again later.",
-        );
+        message = formatSkillSourceUnavailableMessage(check, t);
       } else if (check.status === "no-source") {
         message = t("skill.sourceUpdateNoSource", "This Skill is local only.");
       } else if (check.status === "up-to-date") {
@@ -796,7 +794,11 @@ export function SkillStoreDetail({
       }
       showToast(
         message,
-        check.status === "update-available" ? "success" : "info",
+        check.status === "update-available"
+          ? "success"
+          : check.status === "source-unavailable"
+            ? "error"
+            : "info",
       );
     } catch (error) {
       showToast(

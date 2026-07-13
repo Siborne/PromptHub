@@ -159,6 +159,36 @@ describe("SkillInstaller.copyRepoByPathToDirectory", () => {
     ).resolves.toBe("# real source");
   });
 
+  it("does not copy ignored dependency directories from a local Skill source", async () => {
+    const sourceDir = path.join(tmpDir, "source-skill-ignored-files");
+    const targetRootDir = path.join(
+      tmpDir,
+      "project-ignored-files",
+      ".agents",
+      "skills",
+    );
+    await fs.mkdir(path.join(sourceDir, "node_modules"), { recursive: true });
+    await fs.writeFile(path.join(sourceDir, "SKILL.md"), "# source", "utf-8");
+    await fs.writeFile(
+      path.join(sourceDir, "node_modules", "runtime.js"),
+      "runtime",
+      "utf-8",
+    );
+
+    const targetDir = await SkillInstaller.copyRepoByPathToDirectory(
+      sourceDir,
+      "demo-skill",
+      targetRootDir,
+    );
+
+    await expect(
+      fs.readFile(path.join(targetDir, "SKILL.md"), "utf-8"),
+    ).resolves.toBe("# source");
+    await expect(
+      fs.lstat(path.join(targetDir, "node_modules")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("skips an existing project target when requested", async () => {
     const sourceDir = path.join(tmpDir, "source-skill-skip");
     const targetRootDir = path.join(

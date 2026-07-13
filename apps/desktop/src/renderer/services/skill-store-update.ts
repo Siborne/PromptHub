@@ -9,6 +9,7 @@ import {
   buildSkillSourceUpdateCheck,
   type SkillSourceStaleTarget,
 } from "@prompthub/shared/utils/skill-source-update";
+import type { SkillSourceResolverKind } from "./skill-source-resolver";
 
 export type RegistrySkillUpdateStatus =
   | "not-installed"
@@ -36,6 +37,9 @@ export interface RegistrySkillUpdateCheck {
   installedDirectoryFingerprint?: string;
   remoteDirectoryFingerprint?: string;
   remoteContent: string;
+  sourceKind?: SkillSourceResolverKind;
+  sourceReference?: string;
+  sourceError?: string;
   localModified: boolean;
   remoteChanged: boolean;
   shouldInitializeBaseline: boolean;
