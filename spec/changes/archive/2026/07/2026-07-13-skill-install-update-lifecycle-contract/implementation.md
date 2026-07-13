@@ -3,8 +3,8 @@
 ## Status
 
 - Phase: converge
-- Status: Desktop canonical lifecycle and imported-source compatibility are
-  locally verified; release harness, submission, and archive remain pending.
+- Status: released in `v0.5.9`; implementation, publication verification, and
+  stable-document convergence are complete.
 
 ## Implemented Boundary
 
@@ -68,6 +68,10 @@
   the Desktop unit stage by explicit maintainer instruction to publish through
   CI immediately. The full local release harness was not run; tag CI owns the
   final build, signing, notarization, artifact, and self-hosted Web gates.
+- `v0.5.9` Desktop Build and Release run `29247235788` passed every platform,
+  including signed/notarized macOS Intel and Apple Silicon artifacts. The
+  self-hosted Web run `29247235722` passed and published the replacement GHCR
+  image. The stable release contains 20 assets and was promoted on 2026-07-13.
 
 ## Analyze
 
@@ -84,8 +88,8 @@
 - Stable Skill behavior and the regression matrix include canonical lifecycle,
   imported-source continuity, explicit managed baseline reset, linked-local
   protection, and scanned import compensation.
-- The `0.5.9` changelog and release record must include the final lifecycle fixes
-  before the existing stable tag and artifacts are replaced.
+- The `0.5.9` changelog, website metadata, stable behavior, regression matrix,
+  and release record include the final lifecycle fixes and publication proof.
 - Final archive destination:
   `spec/changes/archive/2026/07/2026-07-13-skill-install-update-lifecycle-contract/`
 

@@ -21,11 +21,11 @@ passes.
 ## Release State
 
 The replacement `v0.5.9` tag now points at commit
-`5c64eddcd258e64459a0de30925cb13ab3c61568`, which contains the guarded Web
-startup recovery. GitHub Actions run `29246697490` completed successfully: Web
+`5c125e79ba46aefbeeb96d2b2e48effc677a1d0c`, which contains the guarded Web
+startup recovery. GitHub Actions run `29247235722` completed successfully: Web
 verification passed and the GHCR image was published with the `0.5.9`,
-`v0.5.9`, `latest`, and `sha-5c64edd` tags. The published `v0.5.9` image digest
-is `sha256:9b91fcb6f5623d57f45051055acf2d55eb4ec5630a133a1fda6fd35053cf3351`.
+`v0.5.9`, `latest`, and `sha-5c125e7` tags. The published `v0.5.9` image digest
+is `sha256:2084026d562c766c875ac0b420eca20fd4bfda7d74188269d18ff76cd50751d3`.
 
 Deployment hosts still need to pull the replacement tag and restart the Web
 container; GitHub issue #185 remains open for the broader Skill sync problem.

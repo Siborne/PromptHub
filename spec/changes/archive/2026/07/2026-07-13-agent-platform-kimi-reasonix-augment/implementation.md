@@ -2,8 +2,8 @@
 
 ## Status
 
-- Phase: implement
-- Status: verification-complete; repository-wide gates have unrelated baseline failures
+- Phase: converge
+- Status: released in `v0.5.9`; verification and publication are complete
 
 ## Shipped
 
@@ -53,23 +53,21 @@
   rendering, accessible expand/collapse state, and Edit/Cancel behavior.
 - Repository lint passed, including the file-size gate; the production desktop
   build passed after the settings refactor.
-- A fresh repository typecheck is currently blocked by an unrelated dirty-tree
-  error at `apps/desktop/src/main/services/skill-package-lifecycle-desktop.ts:165`
-  where a remote source union is accessed without narrowing to the `content`
-  variant.
+- The previously unrelated lifecycle type error was resolved before release;
+  shared/core/DB/Desktop typechecks passed on the final release head.
 - Repository lint passed: `pnpm lint` (including file-size and desktop ESLint
   gates).
 - Desktop production build passed: `pnpm --filter @prompthub/desktop build`.
 - Spec index generation and consistency checks passed: `pnpm spec:index` and
   `pnpm spec:index:check`.
-- The full desktop unit suite reached 2,976/2,977 passing tests. Its single
-  failure is a parallel locale-key smoke-test race in
-  `tests/unit/components/skill-i18n-manager.test.tsx`; the same file passes
-  all 14 tests when run in isolation, and no platform-target test failed.
+- The complete Desktop suite later passed 359 files and 3,115 tests, including
+  the locale-key and platform-target regressions.
+- `v0.5.9` Desktop Build and Release run `29247235788` passed every target,
+  including the macOS signing/notarization gates, and published the final
+  platform assets on 2026-07-13.
 
 ## Analyze / Converge
 
 - Analyze: complete; no unresolved design conflict.
-- Converge: implementation, lint, targeted tests, and production build agree;
-  the current typecheck blocker and the documented parallel locale-key smoke
-  test are isolated from this UI change.
+- Converge: implementation, stable reference, lint, targeted/full tests,
+  typecheck, production builds, and the published release agree.

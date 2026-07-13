@@ -33,7 +33,7 @@
 - [x] `T-SIL-009`: Complete focused coverage, filesystem/DB/IPC integration,
       security, concurrency, component regression, and release harness. Covers
       `FR-SIL-008`, `FR-SIL-010`.
-- [ ] `T-SIL-010`: Converge stable Skill behavior, regression matrix, issue and
+- [x] `T-SIL-010`: Converge stable Skill behavior, regression matrix, issue and
       release records; archive the change only after implementation and release
       verification agree.
 
@@ -136,5 +136,7 @@
   completed its first nine stages through Desktop typecheck, then was stopped
   during Desktop unit tests by explicit maintainer instruction; the full local
   harness is intentionally skipped and tag CI is the publication gate.
+- The `v0.5.9` Desktop and self-hosted Web tag workflows passed, the stable
+  release was promoted with 20 assets, and Homebrew/GHCR were refreshed.
 - The active change is ready for convergence and archive after those final
   release gates pass.

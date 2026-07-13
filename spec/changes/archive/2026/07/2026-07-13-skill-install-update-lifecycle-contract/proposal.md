@@ -3,8 +3,8 @@
 ## Phase And Status
 
 - Phase: converge
-- Status: Desktop canonical lifecycle and imported-source compatibility are
-  locally verified; submission and archival remain pending
+- Status: released in `v0.5.9`; all implementation, verification, publication,
+  stable-doc synchronization, and archival gates are complete
 - Primary requirements: `FR-SIL-001` through `FR-SIL-012`
 - Exit condition: every Desktop Skill install/update entry point consumes one
   structured lifecycle contract, reviewable findings never degrade into raw

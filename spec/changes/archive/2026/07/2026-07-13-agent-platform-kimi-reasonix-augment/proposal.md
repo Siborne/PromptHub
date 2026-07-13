@@ -2,8 +2,9 @@
 
 ## Phase And Status
 
-- Phase: implement
-- Status: in-progress
+- Phase: converge
+- Status: released in `v0.5.9`; implementation, stable reference, verification,
+  publication, and archival gates are complete
 - Primary requirement: `FR-AGENT-PLATFORM-001`
 - Exit condition: Qoder remains the canonical Qwen target; Kimi Code CLI,
   Reasonix, and Augment/Auggie are available as built-in Skill platforms with
