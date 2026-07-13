@@ -356,7 +356,9 @@ describe("SkillStore remote loading", () => {
     expect(installRegistrySkill).not.toHaveBeenCalled();
 
     await waitFor(() => {
-      expect(screen.getByText("Review Skill before adding")).toBeInTheDocument();
+      expect(
+        screen.getByText("Review Skill before adding"),
+      ).toBeInTheDocument();
       expect(screen.getByText("static false positive")).toBeInTheDocument();
     });
 
@@ -366,6 +368,107 @@ describe("SkillStore remote loading", () => {
 
     expect(installRegistrySkill).toHaveBeenCalledWith(
       expect.objectContaining({ slug: "pdf" }),
+    );
+  });
+
+  it("turns an authoritative package review into an approved install instead of an error", async () => {
+    const review = {
+      sourceKey: "git:https://gitea.example.com/team/skills#main:skills/writer",
+      packageFingerprint: "a".repeat(64),
+      report: {
+        level: "high-risk" as const,
+        summary: "Review the package script.",
+        findings: [
+          {
+            code: "script-file",
+            severity: "high" as const,
+            title: "Script requires review",
+            detail: "User-authored script",
+            filePath: "scripts/install.sh",
+          },
+        ],
+        recommendedAction: "review" as const,
+        scannedAt: 1,
+        checkedFileCount: 2,
+        scanMethod: "preflight" as const,
+      },
+    };
+    const installedSkill = {
+      id: "installed-writer",
+      name: "writer",
+      content: "# Writer",
+      instructions: "# Writer",
+      tags: [],
+    };
+    const installRegistrySkill = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: "safety-review-required",
+        review,
+      })
+      .mockResolvedValueOnce({
+        status: "installed",
+        skill: installedSkill,
+      });
+    const trustSkillUpdateSource = vi.fn();
+    useSkillStore.setState({ installRegistrySkill, skills: [] } as never);
+    useSettingsStore.setState({
+      aiModels: [],
+      trustSkillUpdateSource,
+    } as never);
+    installWindowMocks({
+      api: {
+        skill: {
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "Entry preview is safe.",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: 1,
+            checkedFileCount: 1,
+            scanMethod: "preflight",
+          }),
+        },
+      },
+    });
+    const skill = {
+      ...makeRegistrySkill("writer"),
+      source_url: "https://gitea.example.com/team/skills",
+      source_branch: "main",
+      source_directory: "skills/writer",
+      content: "# Writer",
+    } as never;
+
+    await renderWithI18n(
+      <SkillStoreDetail skill={skill} isInstalled={false} onClose={vi.fn()} />,
+      { language: "en" },
+    );
+    fireEvent.click(screen.getByText("Import to My Skills"));
+    await waitFor(() =>
+      expect(
+        screen.getByText("Review Skill before adding"),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm and add" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Review Skill Installation")).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByLabelText(
+        "Trust future high-risk packages from this exact Skill source",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Install Anyway" }));
+
+    await waitFor(() => expect(installRegistrySkill).toHaveBeenCalledTimes(2));
+    expect(installRegistrySkill).toHaveBeenLastCalledWith(skill, {
+      approvedPackageFingerprint: review.packageFingerprint,
+    });
+    expect(trustSkillUpdateSource).toHaveBeenCalledWith(review.sourceKey);
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining("Writer"),
+      "success",
     );
   });
 

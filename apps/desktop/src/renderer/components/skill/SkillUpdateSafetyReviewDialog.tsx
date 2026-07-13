@@ -5,6 +5,7 @@ import { getSkillSafetyFindingTitle } from "./safety-i18n";
 
 interface SkillUpdateSafetyReviewDialogProps {
   review: SkillUpdateSafetyReview | null;
+  operation?: "install" | "update";
   trustSource: boolean;
   isLoading: boolean;
   t: TFunction;
@@ -15,6 +16,7 @@ interface SkillUpdateSafetyReviewDialogProps {
 
 export function SkillUpdateSafetyReviewDialog({
   review,
+  operation = "update",
   trustSource,
   isLoading,
   t,
@@ -22,6 +24,7 @@ export function SkillUpdateSafetyReviewDialog({
   onClose,
   onConfirm,
 }: SkillUpdateSafetyReviewDialogProps) {
+  const isInstall = operation === "install";
   return (
     <ConfirmDialog
       isOpen={Boolean(review)}
@@ -29,7 +32,11 @@ export function SkillUpdateSafetyReviewDialog({
       onConfirm={onConfirm}
       isLoading={isLoading}
       variant="destructive"
-      title={t("skill.updateSafetyReviewTitle", "Review Skill Update")}
+      title={
+        isInstall
+          ? t("skill.installSafetyReviewTitle", "Review Skill Installation")
+          : t("skill.updateSafetyReviewTitle", "Review Skill Update")
+      }
       message={
         review ? (
           <div className="space-y-3 text-left">
@@ -50,10 +57,15 @@ export function SkillUpdateSafetyReviewDialog({
                 className="mt-0.5 h-4 w-4 accent-primary"
               />
               <span>
-                {t(
-                  "skill.trustExactUpdateSource",
-                  "Trust future high-risk updates from this exact Skill source",
-                )}
+                {isInstall
+                  ? t(
+                      "skill.trustExactPackageSource",
+                      "Trust future high-risk packages from this exact Skill source",
+                    )
+                  : t(
+                      "skill.trustExactUpdateSource",
+                      "Trust future high-risk updates from this exact Skill source",
+                    )}
               </span>
             </label>
             <p className="text-xs text-muted-foreground">
@@ -67,7 +79,11 @@ export function SkillUpdateSafetyReviewDialog({
           ""
         )
       }
-      confirmText={t("skill.updateAnyway", "Update Anyway")}
+      confirmText={
+        isInstall
+          ? t("skill.installAnyway", "Install Anyway")
+          : t("skill.updateAnyway", "Update Anyway")
+      }
       cancelText={t("common.cancel", "Cancel")}
     />
   );

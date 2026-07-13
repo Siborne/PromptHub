@@ -13,6 +13,7 @@ import type {
   SkillSafetyScanInput,
   UpdateSkillParams,
 } from "@prompthub/shared/types";
+import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import type { SkillIPCContext } from "./shared";
 import { readCurrentFilesSnapshot } from "./shared";
 
@@ -35,14 +36,13 @@ export function registerSkillCrudHandlers({ db }: SkillIPCContext): void {
 
       if (
         data.source_url &&
-        /^https?:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/.test(
-          data.source_url,
-        ) &&
+        parseGitRepo(data.source_url) &&
         !data.content &&
         !data.instructions
       ) {
-        const id = await SkillInstaller.installFromGithub(data.source_url, db);
-        return db.getById(id);
+        throw new Error(
+          "Remote Skill packages must use skill:runPackageOperation so staging and safety review cannot be bypassed",
+        );
       }
 
       // Strip overwriteExisting from IPC — only internal callers (e2e
@@ -90,10 +90,11 @@ export function registerSkillCrudHandlers({ db }: SkillIPCContext): void {
 
       if (isRenaming && nextName) {
         try {
-          const platformStatus = await SkillInstaller.getSkillMdInstallStatusForSkill(
-            existingSkill,
-            [existingSkill.name],
-          );
+          const platformStatus =
+            await SkillInstaller.getSkillMdInstallStatusForSkill(
+              existingSkill,
+              [existingSkill.name],
+            );
           deployedPlatforms = Object.entries(platformStatus)
             .filter(([, installed]) => installed)
             .map(([platformId]) => platformId);
@@ -305,9 +306,8 @@ export function registerSkillCrudHandlers({ db }: SkillIPCContext): void {
       throw new Error(`Unable to resolve local repo for skill: ${id}`);
     }
 
-    const fileEntries = await SkillInstaller.readLocalRepoFileBuffersByPath(
-      repoPath,
-    );
+    const fileEntries =
+      await SkillInstaller.readLocalRepoFileBuffersByPath(repoPath);
 
     if (fileEntries.length === 0) {
       throw new Error(`Skill repo is empty: ${skill.name}`);

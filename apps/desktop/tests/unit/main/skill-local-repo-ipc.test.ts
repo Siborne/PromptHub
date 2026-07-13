@@ -14,6 +14,10 @@ const getRemoteGitSkillPackageFingerprintMock = vi
 const computeRepoDirectoryFingerprintMock = vi
   .fn()
   .mockResolvedValue("fingerprint-after-copy");
+const validateMaterializedSkillPackageMock = vi.fn().mockResolvedValue({
+  fileCount: 1,
+  totalBytes: 10,
+});
 const isManagedRepoPathMock = vi.fn().mockResolvedValue(true);
 const ensureLocalRepoPathMock = vi
   .fn()
@@ -73,6 +77,10 @@ vi.mock("../../../src/main/services/skill-repo-sync", () => ({
   computeRepoDirectoryFingerprint: computeRepoDirectoryFingerprintMock,
 }));
 
+vi.mock("../../../src/main/services/skill-package-validation", () => ({
+  validateMaterializedSkillPackage: validateMaterializedSkillPackageMock,
+}));
+
 vi.mock("../../../src/main/ipc/skill/shared", () => ({
   ensureLocalRepoPath: ensureLocalRepoPathMock,
   readCurrentFilesSnapshot: vi.fn().mockResolvedValue([]),
@@ -98,6 +106,7 @@ async function setupSkillLocalRepoIpc() {
   saveRemoteZipSkillToLocalRepoBySkillIdMock.mockClear();
   getRemoteGitSkillPackageFingerprintMock.mockClear();
   computeRepoDirectoryFingerprintMock.mockClear();
+  validateMaterializedSkillPackageMock.mockClear();
   isManagedRepoPathMock.mockReset();
   isManagedRepoPathMock.mockResolvedValue(true);
   ensureLocalRepoPathMock.mockReset();
@@ -130,6 +139,7 @@ describe("skill local repo IPC", () => {
     saveRemoteZipSkillToLocalRepoBySkillIdMock.mockClear();
     getRemoteGitSkillPackageFingerprintMock.mockClear();
     computeRepoDirectoryFingerprintMock.mockClear();
+    validateMaterializedSkillPackageMock.mockClear();
     isManagedRepoPathMock.mockReset();
     isManagedRepoPathMock.mockResolvedValue(true);
     ensureLocalRepoPathMock.mockReset();
@@ -202,6 +212,44 @@ describe("skill local repo IPC", () => {
       directory: "skills/spec-init",
     });
     expect(saveRemoteGitSkillToLocalRepoBySkillIdMock).not.toHaveBeenCalled();
+  });
+
+  it("computes a local source package fingerprint through a validated IPC", async () => {
+    const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
+    computeRepoDirectoryFingerprintMock.mockResolvedValueOnce(
+      "local-package-fingerprint",
+    );
+
+    await expect(
+      handlers[IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_FINGERPRINT](
+        null,
+        "/tmp/local-writer",
+      ),
+    ).resolves.toBe("local-package-fingerprint");
+    expect(validateMaterializedSkillPackageMock).toHaveBeenCalledWith(
+      "/tmp/local-writer",
+    );
+    expect(computeRepoDirectoryFingerprintMock).toHaveBeenCalledWith(
+      "/tmp/local-writer",
+    );
+    await expect(
+      handlers[IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_FINGERPRINT](null, ""),
+    ).rejects.toThrow(/non-empty localPath/);
+  });
+
+  it("rejects an invalid local source before computing a partial fingerprint", async () => {
+    const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
+    validateMaterializedSkillPackageMock.mockRejectedValueOnce(
+      new Error("Skill package contains too many files"),
+    );
+
+    await expect(
+      handlers[IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_FINGERPRINT](
+        null,
+        "/tmp/oversized-writer",
+      ),
+    ).rejects.toThrow(/too many files/);
+    expect(computeRepoDirectoryFingerprintMock).not.toHaveBeenCalled();
   });
 
   it("saves a remote zip package to the managed repo and persists the fingerprint", async () => {

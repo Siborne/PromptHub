@@ -223,8 +223,11 @@ describe("SkillStore remote loading", () => {
 
   it("batch installs only selected store skills that are not already imported", async () => {
     const installRegistrySkill = vi.fn().mockResolvedValue({
-      id: "skill-beta",
-      name: "Beta",
+      status: "installed",
+      skill: {
+        id: "skill-beta",
+        name: "Beta",
+      },
     });
     installWindowMocks({
       api: {
@@ -295,6 +298,68 @@ describe("SkillStore remote loading", () => {
       expect(installRegistrySkill).toHaveBeenCalledTimes(1);
     });
     expect(installRegistrySkill.mock.calls[0][0].slug).toBe("beta");
+  });
+
+  it("queues batch install reviews without reporting them as success or failure", async () => {
+    const beta = makeRegistrySkill("beta");
+    const installRegistrySkill = vi.fn().mockResolvedValue({
+      status: "safety-review-required",
+      review: {
+        sourceKey: "git:https://gitea.example.com/team/skills#main:beta",
+        packageFingerprint: "b".repeat(64),
+        report: {
+          level: "high-risk",
+          summary: "Review the package script.",
+          findings: [],
+          recommendedAction: "review",
+          scannedAt: 1,
+          checkedFileCount: 4,
+          scanMethod: "preflight",
+        },
+      },
+    });
+    installWindowMocks({
+      api: {
+        settings: {
+          get: vi.fn().mockResolvedValue({
+            device: { storeAutoSync: false, storeSyncCadence: "1d" },
+          }),
+        },
+        skill: {
+          fetchRemoteContent: vi.fn().mockResolvedValue(""),
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+        },
+      },
+    });
+    useSettingsStore.setState({
+      autoScanStoreSkillsBeforeInstall: false,
+    } as never);
+    useSkillStore.setState({
+      installRegistrySkill,
+      selectedStoreSourceId: "claude-code",
+      remoteStoreEntries: {
+        "claude-code": {
+          loadedAt: Date.now(),
+          skills: [beta],
+        },
+      },
+    } as never);
+
+    await renderWithI18n(<SkillStore />, { language: "en" });
+    await screen.findByText("Beta");
+    fireEvent.click(screen.getByRole("button", { name: "Batch manage store" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select visible store skills" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Install selected" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Review Skill Installation")).toBeInTheDocument();
+    });
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining("1 awaiting review"),
+      "info",
+    );
   });
 
   it("batch removes only selected imported store skills from My Skills", async () => {

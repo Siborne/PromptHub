@@ -47,6 +47,19 @@ const resetSkillStore = () => {
   localStorage.clear();
 };
 
+function mockCompletedPackageOperation(
+  skill: ReturnType<typeof createSkillFixture>,
+  operation: "install" | "update" = "update",
+) {
+  const runPackageOperation = vi.fn().mockResolvedValue({
+    status: "completed",
+    operation,
+    skill,
+  });
+  (window as any).api.skill.runPackageOperation = runPackageOperation;
+  return runPackageOperation;
+}
+
 describe("skill store", () => {
   beforeEach(() => {
     resetSkillStore();
@@ -519,6 +532,18 @@ describe("skill store", () => {
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.update = update;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-github-writer",
+        name: "github-writer",
+        source_url: "https://github.com/example/skills/tree/main/writer",
+        content_url:
+          "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
+        content: remoteContent,
+        instructions: remoteContent,
+        installed_version: "source",
+      }),
+    );
 
     const originalHash = await useSkillStore
       .getState()
@@ -546,21 +571,16 @@ describe("skill store", () => {
       .updateInstalledSkillFromSource("skill-github-writer");
 
     expect(result?.status).toBe("updated");
-    expect(versionCreate).toHaveBeenCalledWith(
-      "skill-github-writer",
-      expect.stringContaining("Source update"),
-    );
-    expect(update).toHaveBeenCalledWith(
-      "skill-github-writer",
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
+        operation: "update",
+        skillId: "skill-github-writer",
         content: remoteContent,
-        instructions: remoteContent,
-        source_url: "https://github.com/example/skills/tree/main/writer",
-        content_url:
-          "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
-        installed_version: "source",
+        note: expect.stringContaining("Source update"),
       }),
     );
+    expect(versionCreate).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("updates an installed GitHub package skill by cloning its package source instead of raw asset fetches", async () => {
@@ -626,6 +646,13 @@ describe("skill store", () => {
     (window as any).api.skill.syncFromRepo = syncFromRepo;
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.update = update;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        ...syncedOriginalSkill,
+        content: remoteContent,
+        instructions: remoteContent,
+      }),
+    );
 
     useSkillStore.setState({
       skills: [
@@ -657,13 +684,21 @@ describe("skill store", () => {
       .updateInstalledSkillFromSource("skill-spec-init");
 
     expect(result?.status).toBe("updated");
-    expect(saveRemoteGitToRepo).toHaveBeenCalledWith("skill-spec-init", {
-      repoUrl:
-        "https://github.com/legeling/spec-init/tree/main/skills/spec-init",
-      branch: "main",
-      directory: "skills/spec-init",
-    });
-    expect(syncFromRepo).toHaveBeenCalledTimes(2);
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "update",
+        skillId: "skill-spec-init",
+        source: {
+          kind: "remote-git",
+          repoUrl:
+            "https://github.com/legeling/spec-init/tree/main/skills/spec-init",
+          branch: "main",
+          directory: "skills/spec-init",
+        },
+      }),
+    );
+    expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
+    expect(syncFromRepo).toHaveBeenCalledTimes(1);
     expect(syncFromRepo).toHaveBeenCalledWith("skill-spec-init");
     expect(fetchRemoteContentBytes).not.toHaveBeenCalled();
   });
@@ -726,6 +761,16 @@ describe("skill store", () => {
       .fn()
       .mockResolvedValue({ id: "version-ssh" });
     (window as any).api.skill.update = update;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-ssh",
+        name: "ssh-skill",
+        source_id: "ssh-skill-source",
+        source_url: "git@github.com:private/skills.git",
+        content: remoteContent,
+        instructions: remoteContent,
+      }),
+    );
 
     useSkillStore.setState({
       skills: [
@@ -755,11 +800,17 @@ describe("skill store", () => {
       .updateInstalledSkillFromSource("skill-ssh");
 
     expect(result?.status).toBe("updated");
-    expect(saveRemoteGitToRepo).toHaveBeenCalledWith("skill-ssh", {
-      repoUrl: "git@github.com:private/skills.git",
-      branch: "main",
-      directory: "skills/ssh-skill",
-    });
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          kind: "remote-git",
+          repoUrl: "git@github.com:private/skills.git",
+          branch: "main",
+          directory: "skills/ssh-skill",
+        },
+      }),
+    );
+    expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
     expect(
       (window as any).api.skill.fetchRemoteContentBytes,
     ).not.toHaveBeenCalled();
@@ -782,6 +833,16 @@ describe("skill store", () => {
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.update = update;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-community-writer",
+        name: "community-writer",
+        source_id: "source-community-writer",
+        content: remoteContent,
+        instructions: remoteContent,
+        installed_version: "1.1.0",
+      }),
+    );
 
     const originalHash = await useSkillStore
       .getState()
@@ -831,18 +892,15 @@ describe("skill store", () => {
       .updateRegistrySkill("source-community-writer");
 
     expect(result?.status).toBe("updated");
-    expect(versionCreate).toHaveBeenCalledWith(
-      "skill-community-writer",
-      expect.stringContaining("Store update"),
-    );
-    expect(update).toHaveBeenCalledWith(
-      "skill-community-writer",
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
+        operation: "update",
+        skillId: "skill-community-writer",
         content: remoteContent,
-        installed_content_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
-        installed_version: "1.1.0",
       }),
     );
+    expect(versionCreate).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("keeps a private Gitea store install up to date and preserves the store label", async () => {
@@ -873,6 +931,34 @@ describe("skill store", () => {
       updated_at: 2,
     }));
 
+    const installedHash = "c".repeat(64);
+    const installedResult = createSkillFixture({
+      id: "skill-clouddrive2-cli",
+      name: "clouddrive2-cli",
+      source_id: "source-private-gitea-clouddrive2-cli",
+      source_label: "Personal Store",
+      installed_content_hash: installedHash,
+      installed_version: "1.0.0",
+    });
+    const updatedResult = createSkillFixture({
+      ...installedResult,
+      source_label: "Personal Store",
+      content: "# clouddrive2-cli\n\nUpdated\n",
+      instructions: "# clouddrive2-cli\n\nUpdated\n",
+    });
+    const runPackageOperation = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: "completed",
+        operation: "install",
+        skill: installedResult,
+      })
+      .mockResolvedValueOnce({
+        status: "completed",
+        operation: "update",
+        skill: updatedResult,
+      });
+    (window as any).api.skill.runPackageOperation = runPackageOperation;
     (window as any).api.skill.create = create;
     (window as any).api.skill.update = update;
     (window as any).api.skill.versionCreate = versionCreate;
@@ -896,12 +982,15 @@ describe("skill store", () => {
       content: remoteContent,
     };
 
-    const installed = await useSkillStore
+    const installResult = await useSkillStore
       .getState()
       .installRegistrySkill(registrySkill);
-    const installedHash = installed?.installed_content_hash;
+    expect(installResult?.status).toBe("installed");
+    const installed =
+      installResult?.status === "installed" ? installResult.skill : null;
+    const returnedInstalledHash = installed?.installed_content_hash;
 
-    expect(installedHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(returnedInstalledHash).toBe(installedHash);
 
     useSkillStore.setState({
       skills: [
@@ -914,7 +1003,7 @@ describe("skill store", () => {
           content_url: registrySkill.content_url,
           content: remoteContent,
           instructions: remoteContent,
-          installed_content_hash: installedHash,
+          installed_content_hash: returnedInstalledHash,
           installed_version: "1.0.0",
         }),
       ],
@@ -940,6 +1029,7 @@ describe("skill store", () => {
 
     expect(check.status).toBe("up-to-date");
 
+    update.mockClear();
     fetchRemoteContent.mockResolvedValue("# clouddrive2-cli\n\nUpdated\n");
 
     const result = await useSkillStore
@@ -947,26 +1037,30 @@ describe("skill store", () => {
       .updateRegistrySkill(registrySkill.source_id);
 
     expect(result?.status).toBe("updated");
-    expect(update).toHaveBeenCalledWith(
-      "skill-clouddrive2-cli",
+    expect(runPackageOperation).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        source_label: "Personal Store",
+        operation: "update",
+        skillId: "skill-clouddrive2-cli",
       }),
     );
+    expect(result?.status === "updated" && result.skill.source_label).toBe(
+      "Personal Store",
+    );
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("installs a skill from a cached local store source entry using the latest local file", async () => {
-    const create = vi.fn().mockResolvedValue(
+    const runPackageOperation = mockCompletedPackageOperation(
       createSkillFixture({
         id: "skill-local-writer",
         name: "local-writer",
         source_id: "source-local-writer",
         registry_slug: "local-writer",
       }),
+      "install",
     );
     const getAll = vi.fn().mockResolvedValue([]);
 
-    (window as any).api.skill.create = create;
     (window as any).api.skill.getAll = getAll;
     (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
       content: "# Local Writer\n\nLatest local content\n",
@@ -1010,20 +1104,66 @@ describe("skill store", () => {
       "/tmp/local-writer",
       "SKILL.md",
     );
-    expect(create).toHaveBeenCalledWith(
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
-        registry_slug: "local-writer",
         content: "# Local Writer\n\nLatest local content\n",
-        instructions: "# Local Writer\n\nLatest local content\n",
+        source: {
+          kind: "local-directory",
+          directory: "/tmp/local-writer",
+        },
       }),
     );
-    expect((window as any).api.skill.saveToRepo).toHaveBeenCalledWith(
-      "skill-local-writer",
-      "/tmp/local-writer",
-      "copy",
-    );
-    expect((window as any).api.skill.syncFromRepo).toHaveBeenCalledWith(
-      "skill-local-writer",
-    );
+    expect((window as any).api.skill.saveToRepo).not.toHaveBeenCalled();
+    expect((window as any).api.skill.syncFromRepo).not.toHaveBeenCalled();
+  });
+
+  it("detects auxiliary-file changes in a local imported Skill source", async () => {
+    const content = "# Local Writer\n";
+    const registrySkill: RegistrySkill = {
+      slug: "local-writer",
+      source_id: "source-local-writer",
+      name: "Local Writer",
+      description: "Local source skill",
+      category: "general",
+      author: "Local",
+      source_url: "/tmp/local-writer",
+      content_url: "/tmp/local-writer/SKILL.md",
+      directory_fingerprint: "a".repeat(64),
+      tags: ["local"],
+      version: "1.0.0",
+      content,
+    };
+    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
+      content,
+    });
+    (window as any).api.skill.getLocalPackageFingerprint = vi
+      .fn()
+      .mockResolvedValue("b".repeat(64));
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-local-writer",
+          name: "local-writer",
+          source_id: registrySkill.source_id,
+          source_url: registrySkill.source_url,
+          content_url: registrySkill.content_url,
+          content,
+          instructions: content,
+          directory_fingerprint: "a".repeat(64),
+          installed_directory_fingerprint: "a".repeat(64),
+          fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+        }),
+      ],
+      registrySkills: [registrySkill],
+    });
+
+    const check = await useSkillStore
+      .getState()
+      .getRegistrySkillUpdateStatus(registrySkill);
+
+    expect(check.status).toBe("update-available");
+    expect(
+      (window as any).api.skill.getLocalPackageFingerprint,
+    ).toHaveBeenCalledWith("/tmp/local-writer");
   });
 });

@@ -6,7 +6,7 @@ import type { RegistrySkillUpdateStatus } from "../../services/skill-store-updat
 import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
 import { useToast } from "../ui/Toast";
-import { getErrorMessage } from "./detail-utils";
+import { formatSkillPackageOperationError } from "./detail-utils";
 
 type ToastKind = "success" | "warning" | "error" | "info";
 interface PendingSafetyReview {
@@ -108,7 +108,7 @@ function createToastHelpers(
     },
     showError(error: unknown) {
       showToast(
-        `${t("skill.updateFailed", "Update failed")}: ${getErrorMessage(error)}`,
+        `${t("skill.updateFailed", "Update failed")}: ${formatSkillPackageOperationError(error, t)}`,
         "error",
       );
     },

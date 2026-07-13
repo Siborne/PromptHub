@@ -6,19 +6,17 @@ import {
   ListChecksIcon,
   SearchIcon,
   Settings2Icon,
-  XIcon,
   RefreshCwIcon,
 } from "lucide-react";
-import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { SkillStoreDetail } from "./SkillStoreDetail";
-import { SkillStoreCustomSources } from "./SkillStoreCustomSources";
-import { SkillStoreSourceEditModal } from "./SkillStoreSourceEditModal";
-import { SkillStoreSourceForm } from "./SkillStoreSourceForm";
-import { parseFrontmatter } from "../../services/github-skill-store";
+import { SkillStoreOverlays } from "./SkillStoreOverlays";
+import { SkillStoreFilterBar } from "./SkillStoreFilterBar";
 import {
-  SKILLS_SH_FILTERS,
-  normalizeSkillsShFilterKey,
-} from "../../services/skills-sh-store";
+  useRegistrySkillUpdateReview,
+  useSkillPackageInstall,
+} from "./useSkillPackageInstall";
+import { SkillStoreCustomSources } from "./SkillStoreCustomSources";
+import { parseFrontmatter } from "../../services/github-skill-store";
+import { normalizeSkillsShFilterKey } from "../../services/skills-sh-store";
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useToast } from "../ui/Toast";
@@ -30,6 +28,7 @@ import type {
 import { SKILL_CATEGORIES } from "@prompthub/shared/constants/skill-categories";
 import {
   formatSkillInstallError,
+  formatSkillPackageOperationError,
   formatSkillSafetyScanError,
   getSafetyScanAIConfig,
 } from "./detail-utils";
@@ -63,12 +62,7 @@ import {
   getCloudStorePackage,
   isCloudRegistrySkill,
 } from "../../services/cloud-store";
-import {
-  CATEGORY_ICONS,
-  CUSTOM_SOURCE_TYPE_OPTIONS,
-  formatStoreSourceHint,
-  getErrorMessage,
-} from "./skill-store-presentation";
+import { formatStoreSourceHint } from "./skill-store-presentation";
 
 const STORE_SEARCH_DEBOUNCE_MS = 300;
 
@@ -89,9 +83,8 @@ export function SkillStore() {
     (state) => state.setStoreSearchQuery,
   );
   const [storeSearchDraft, setStoreSearchDraft] = useState(storeSearchQuery);
-  const installRegistrySkill = useSkillStore(
-    (state) => state.installRegistrySkill,
-  );
+  const installOperation = useSkillPackageInstall();
+  const updateReview = useRegistrySkillUpdateReview();
   const updateRegistrySkill = useSkillStore(
     (state) => state.updateRegistrySkill,
   );
@@ -145,8 +138,7 @@ export function SkillStore() {
     Set<string>
   >(new Set());
   const [batchRemoveConfirmOpen, setBatchRemoveConfirmOpen] = useState(false);
-  const [batchUpdateConfirmOpen, setBatchUpdateConfirmOpen] =
-    useState(false);
+  const [batchUpdateConfirmOpen, setBatchUpdateConfirmOpen] = useState(false);
   const [runningBatchOperation, setRunningBatchOperation] =
     useState<StoreBatchOperation | null>(null);
   const [editingCustomSourceId, setEditingCustomSourceId] = useState<
@@ -532,7 +524,9 @@ export function SkillStore() {
         : null;
       const report = await window.api.skill.scanSafety({
         name: skill.name,
-        content: cloudPackage ? getCloudSkillMarkdown(cloudPackage) : skill.content,
+        content: cloudPackage
+          ? getCloudSkillMarkdown(cloudPackage)
+          : skill.content,
         sourceUrl: cloudPackage ? undefined : skill.source_url,
         contentUrl: cloudPackage ? undefined : skill.content_url,
         securityAudits: skill.security_audits,
@@ -571,17 +565,60 @@ export function SkillStore() {
       if (!canInstall) {
         return;
       }
-      const result = await installRegistrySkill({
+      const result = await installOperation.install({
         ...skill,
         source_label: selectedCustomSource?.name || skill.source_label,
       });
-      if (result) {
+      if (result?.status === "installed") {
         showToast(`${t("skill.addedToLibrary")}: ${skill.name}`, "success");
       }
     } catch (error: unknown) {
       showToast(formatSkillInstallError(error, t), "error");
     } finally {
       setInstallPending(skill, false);
+    }
+  };
+
+  const handleConfirmInstallReview = async () => {
+    const pendingSkill = installOperation.pendingReview?.skill;
+    if (!pendingSkill) return;
+    setInstallPending(pendingSkill, true);
+    try {
+      const result = await installOperation.confirmReview();
+      if (result?.status === "installed") {
+        showToast(
+          `${t("skill.addedToLibrary")}: ${pendingSkill.name}`,
+          "success",
+        );
+      }
+    } catch (error) {
+      showToast(formatSkillInstallError(error, t), "error");
+    } finally {
+      setInstallPending(pendingSkill, false);
+    }
+  };
+
+  const handleConfirmUpdateReview = async () => {
+    const pendingSkill = updateReview.pendingReview?.skill;
+    if (!pendingSkill) return;
+    setInstallPending(pendingSkill, true);
+    try {
+      const result = await updateReview.confirmReview();
+      if (result?.status === "updated") {
+        showToast(
+          `${t("skill.updateSuccess", "Updated")}: ${pendingSkill.name}`,
+          "success",
+        );
+      } else if (result && result.status !== "safety-review-required") {
+        showToast(t("skill.updateFailed", "Update failed"), "warning");
+      }
+    } catch (error) {
+      showToast(
+        `${t("skill.updateFailed", "Update failed")}: ${formatSkillPackageOperationError(error, t)}`,
+        "error",
+      );
+    } finally {
+      setInstallPending(pendingSkill, false);
     }
   };
 
@@ -649,10 +686,16 @@ export function SkillStore() {
   const showBatchResultToast = useCallback(
     (
       operation: StoreBatchOperation,
-      result: { failed: number; skipped: number; succeeded: number },
+      result: {
+        failed: number;
+        reviewRequired: number;
+        skipped: number;
+        succeeded: number;
+      },
     ) => {
       const payload = {
         failed: result.failed,
+        reviewRequired: result.reviewRequired,
         skipped: result.skipped,
         succeeded: result.succeeded,
       };
@@ -660,13 +703,13 @@ export function SkillStore() {
         operation === "install"
           ? t(
               "skill.batchStoreInstallResult",
-              "Batch install finished: {{succeeded}} succeeded, {{skipped}} skipped, {{failed}} failed",
+              "Batch install finished: {{succeeded}} succeeded, {{reviewRequired}} awaiting review, {{skipped}} skipped, {{failed}} failed",
               payload,
             )
           : operation === "update"
             ? t(
                 "skill.batchStoreUpdateResult",
-                "Batch update finished: {{succeeded}} succeeded, {{skipped}} skipped, {{failed}} failed",
+                "Batch update finished: {{succeeded}} succeeded, {{reviewRequired}} awaiting review, {{skipped}} skipped, {{failed}} failed",
                 payload,
               )
             : t(
@@ -674,7 +717,13 @@ export function SkillStore() {
                 "Batch remove finished: {{succeeded}} succeeded, {{skipped}} skipped, {{failed}} failed",
                 payload,
               );
-      showToast(message, result.failed > 0 ? "error" : "success");
+      const toastType =
+        result.failed > 0
+          ? "error"
+          : result.reviewRequired > 0
+            ? "info"
+            : "success";
+      showToast(message, toastType);
     },
     [showToast, t],
   );
@@ -697,6 +746,7 @@ export function SkillStore() {
 
       const result = {
         failed: 0,
+        reviewRequired: 0,
         skipped: selectedStoreSkills.length - targets.length,
         succeeded: 0,
       };
@@ -709,12 +759,14 @@ export function SkillStore() {
               result.skipped += 1;
               continue;
             }
-            const installedSkill = await installRegistrySkill({
+            const installedSkill = await installOperation.install({
               ...skill,
               source_label: selectedCustomSource?.name || skill.source_label,
             });
-            if (installedSkill) {
+            if (installedSkill?.status === "installed") {
               result.succeeded += 1;
+            } else if (installedSkill?.status === "safety-review-required") {
+              result.reviewRequired += 1;
             } else {
               result.failed += 1;
             }
@@ -724,6 +776,9 @@ export function SkillStore() {
             );
             if (updated?.status === "updated") {
               result.succeeded += 1;
+            } else if (updated?.status === "safety-review-required") {
+              updateReview.enqueueReview(skill, updated.review);
+              result.reviewRequired += 1;
             } else if (updated) {
               result.skipped += 1;
             } else {
@@ -754,7 +809,7 @@ export function SkillStore() {
       }
     },
     [
-      installRegistrySkill,
+      installOperation,
       scanStoreSkillBeforeInstall,
       selectedCustomSource?.name,
       selectedInstallTargets,
@@ -768,6 +823,7 @@ export function SkillStore() {
       t,
       uninstallRegistrySkill,
       updateRegistrySkill,
+      updateReview,
     ],
   );
 
@@ -983,9 +1039,9 @@ export function SkillStore() {
         ? "official"
         : selectedStoreSourceId === "prompthub-cloud"
           ? "official"
-        : selectedCustomSource?.type === "local-dir"
-          ? "local"
-          : "git";
+          : selectedCustomSource?.type === "local-dir"
+            ? "local"
+            : "git";
   const isSelectedSkillsShEntryStale =
     selectedStoreSourceId === "community" &&
     Boolean(selectedRemoteEntry) &&
@@ -1152,116 +1208,37 @@ export function SkillStore() {
         </div>
       </div>
 
-      {(shouldShowGenericCategoryFilter ||
-        shouldShowSkillsShFilter ||
-        shouldShowStoreSearch ||
-        selectedStoreSourceId === "new-custom") && (
-        <div
-          className="px-6 py-3 border-b border-border app-wallpaper-section space-y-3"
-          data-testid="skill-store-filter-bar"
-        >
-          {shouldShowStoreSearch && (
-            <form
-              data-testid="skill-store-local-search-form"
-              onSubmit={handleStoreSearchSubmit}
-              className="flex w-full items-center gap-2 rounded-xl border border-border/70 bg-card/70 px-3 py-2 transition-colors focus-within:bg-background"
-            >
-              <SearchIcon
-                aria-hidden="true"
-                className="h-4 w-4 shrink-0 text-muted-foreground"
-              />
-              <input
-                type="text"
-                value={storeSearchDraft}
-                onChange={(event) => setStoreSearchDraft(event.target.value)}
-                placeholder={t("skill.searchStore", "Search skills...")}
-                aria-label={t("skill.searchStore", "Search skills...")}
-                className="h-6 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0"
-              />
-              {storeSearchDraft ? (
-                <button
-                  type="button"
-                  onClick={handleClearStoreSearch}
-                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  aria-label={t("common.clearSearch", "Clear search")}
-                  title={t("common.clearSearch", "Clear search")}
-                >
-                  <XIcon aria-hidden="true" className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
-            </form>
-          )}
-
-          {shouldShowGenericCategoryFilter && (
-            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-              {categories.map((cat) => {
-                const isActive = storeCategory === cat.key;
-                return (
-                  <button
-                    key={cat.key}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() => setStoreCategory(cat.key)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                      isActive
-                        ? "bg-primary text-white shadow-sm"
-                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                    }`}
-                  >
-                    <span aria-hidden="true">{CATEGORY_ICONS[cat.key]}</span>
-                    {cat.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {shouldShowSkillsShFilter && (
-            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-              {SKILLS_SH_FILTERS.map((filter) => {
-                const isActive =
-                  normalizeSkillsShFilterKey(String(storeCategory)) ===
-                  filter.key;
-                return (
-                  <button
-                    key={filter.key}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() =>
-                      setStoreCategory(filter.key as SkillCategory | "all")
-                    }
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                      isActive
-                        ? "bg-primary text-white shadow-sm"
-                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                    }`}
-                  >
-                    {filter.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {selectedStoreSourceId === "new-custom" && (
-            <SkillStoreSourceForm
-              branch={sourceBranch}
-              directory={sourceDirectory}
-              handleAddSource={handleAddSource}
-              setBranch={setSourceBranch}
-              setDirectory={setSourceDirectory}
-              setSourceName={setSourceName}
-              setSourceType={setSourceType}
-              setSourceUrl={setSourceUrl}
-              sourceName={sourceName}
-              sourceType={sourceType}
-              sourceUrl={sourceUrl}
-              t={t}
-              typeOptions={CUSTOM_SOURCE_TYPE_OPTIONS}
-            />
-          )}
-        </div>
-      )}
+      <SkillStoreFilterBar
+        t={t}
+        visible={
+          shouldShowGenericCategoryFilter ||
+          shouldShowSkillsShFilter ||
+          shouldShowStoreSearch ||
+          selectedStoreSourceId === "new-custom"
+        }
+        showSearch={shouldShowStoreSearch}
+        searchDraft={storeSearchDraft}
+        onSearchDraftChange={setStoreSearchDraft}
+        onSearchSubmit={handleStoreSearchSubmit}
+        onClearSearch={handleClearStoreSearch}
+        showGenericCategories={shouldShowGenericCategoryFilter}
+        showSkillsShFilters={shouldShowSkillsShFilter}
+        categories={categories}
+        category={storeCategory}
+        onCategoryChange={setStoreCategory}
+        selectedSourceId={selectedStoreSourceId}
+        sourceName={sourceName}
+        sourceType={sourceType}
+        sourceUrl={sourceUrl}
+        sourceBranch={sourceBranch}
+        sourceDirectory={sourceDirectory}
+        onSourceNameChange={setSourceName}
+        onSourceTypeChange={setSourceType}
+        onSourceUrlChange={setSourceUrl}
+        onSourceBranchChange={setSourceBranch}
+        onSourceDirectoryChange={setSourceDirectory}
+        onAddSource={handleAddSource}
+      />
 
       <div
         ref={storeScrollRef}
@@ -1297,10 +1274,10 @@ export function SkillStore() {
                           "skill.loadingPromptHubCloudStore",
                           "Loading PromptHub Cloud Store releases...",
                         )
-                    : t(
-                        "skill.loadingCustomStore",
-                        "Loading custom store content...",
-                      )}
+                      : t(
+                          "skill.loadingCustomStore",
+                          "Loading custom store content...",
+                        )}
           </div>
         )}
 
@@ -1453,105 +1430,65 @@ export function SkillStore() {
         />
       )}
 
-      <SkillStoreSourceEditModal
-        isOpen={editingCustomSourceId !== null}
-        onClose={() => setEditingCustomSourceId(null)}
-        onDelete={requestDeleteCustomSource}
-        onSave={updateCustomStoreSource}
-        onToggleEnabled={handleToggleCustomSource}
-        onRefresh={handleRefreshCustomSource}
-        refreshingSourceId={loadingSourceId}
-        source={
-          customStoreSources.find(
-            (source) => source.id === editingCustomSourceId,
-          ) ?? null
-        }
-      />
-
-      <ConfirmDialog
-        isOpen={Boolean(pendingDeleteCustomSource)}
-        onClose={() => setPendingDeleteCustomSourceId(null)}
-        onConfirm={() => {
-          if (pendingDeleteCustomSource) {
-            confirmDeleteCustomSource(pendingDeleteCustomSource.id);
-          }
-        }}
-        title={t("skill.deleteStoreSourceTitle", "Delete custom store")}
-        message={t("skill.deleteStoreSourceMessage", {
-          name: pendingDeleteCustomSource?.name ?? "",
-          defaultValue:
-            'Delete custom store "{{name}}"? Installed Skills will stay in My Skills, but this source and its cached store entries will be removed.',
-        })}
-        confirmText={t("common.delete", "Delete")}
-        cancelText={t("common.cancel", "Cancel")}
-        variant="destructive"
-      />
-
-      <ConfirmDialog
-        isOpen={batchRemoveConfirmOpen}
-        onClose={() => setBatchRemoveConfirmOpen(false)}
-        onConfirm={() => {
+      <SkillStoreOverlays
+        t={t}
+        customStoreSources={customStoreSources}
+        editingCustomSourceId={editingCustomSourceId}
+        loadingSourceId={loadingSourceId}
+        onCloseSourceEdit={() => setEditingCustomSourceId(null)}
+        onDeleteSource={requestDeleteCustomSource}
+        onSaveSource={updateCustomStoreSource}
+        onToggleSource={handleToggleCustomSource}
+        onRefreshSource={handleRefreshCustomSource}
+        pendingDeleteSource={pendingDeleteCustomSource}
+        onCancelDeleteSource={() => setPendingDeleteCustomSourceId(null)}
+        onConfirmDeleteSource={confirmDeleteCustomSource}
+        batchRemoveOpen={batchRemoveConfirmOpen}
+        onCancelBatchRemove={() => setBatchRemoveConfirmOpen(false)}
+        onConfirmBatchRemove={() => {
           setBatchRemoveConfirmOpen(false);
           void runBatchStoreOperation("remove");
         }}
-        title={t("skill.batchStoreRemoveTitle", "Remove selected Skills")}
-        message={t(
-          "skill.batchStoreRemoveMessage",
-          "Remove {{count}} selected imported Skills from My Skills? Remote store content will not be deleted.",
-          { count: selectedRemoveTargets.length },
-        )}
-        confirmText={t("skill.batchStoreRemoveSelected", "Remove selected")}
-        cancelText={t("common.cancel", "Cancel")}
-        variant="destructive"
-        isLoading={runningBatchOperation === "remove"}
-      />
-
-      <ConfirmDialog
-        isOpen={batchUpdateConfirmOpen}
-        onClose={() => {
+        selectedRemoveCount={selectedRemoveTargets.length}
+        batchUpdateOpen={batchUpdateConfirmOpen}
+        isBatchBusy={isStoreBatchBusy}
+        onCancelBatchUpdate={() => {
           if (!isStoreBatchBusy) setBatchUpdateConfirmOpen(false);
         }}
-        onConfirm={() => {
+        onConfirmBatchUpdate={() => {
           setBatchUpdateConfirmOpen(false);
           void runBatchStoreOperation("update");
         }}
-        title={t("skill.batchStoreUpdateTitle", "Review selected updates")}
-        message={
-          <div className="space-y-2 text-left">
-            <p>
-              {t(
-                "skill.batchStoreUpdateMessage",
-                "PromptHub will recheck and apply the selected updates after confirmation. Open an individual Skill to inspect its full line diff.",
-              )}
-            </p>
-            <ul className="max-h-32 space-y-1 overflow-y-auto text-xs">
-              {selectedUpdateTargets.map((target) => (
-                <li key={getRegistrySkillSelectionId(target)} className="truncate">
-                  {target.name}
-                </li>
-              ))}
-            </ul>
-          </div>
-        }
-        confirmText={t("skill.batchStoreUpdateSelected", "Update selected")}
-        cancelText={t("common.cancel", "Cancel")}
-        isLoading={runningBatchOperation === "update"}
+        selectedUpdateTargets={selectedUpdateTargets}
+        runningBatchOperation={runningBatchOperation}
+        installReview={{
+          review: installOperation.pendingReview?.review ?? null,
+          trustSource: installOperation.trustReviewedSource,
+          isLoading: installOperation.isConfirmingReview,
+          onTrustSourceChange: installOperation.setTrustReviewedSource,
+          onClose: installOperation.closeReview,
+          onConfirm: () => void handleConfirmInstallReview(),
+        }}
+        updateReview={{
+          review: updateReview.pendingReview?.review ?? null,
+          trustSource: updateReview.trustReviewedSource,
+          isLoading: updateReview.isConfirmingReview,
+          onTrustSourceChange: updateReview.setTrustReviewedSource,
+          onClose: updateReview.closeReview,
+          onConfirm: () => void handleConfirmUpdateReview(),
+        }}
+        selectedDetailSkill={selectedDetailSkill}
+        detailStoreLabel={sourceMeta.title}
+        isDetailInstalled={Boolean(
+          selectedDetailSkill && isSkillInstalled(selectedDetailSkill),
+        )}
+        isDetailInstalling={Boolean(
+          selectedDetailSkill &&
+          installingSourceIds[getRegistrySkillPendingKey(selectedDetailSkill)],
+        )}
+        onDetailInstallPendingChange={setInstallPending}
+        onCloseDetail={() => selectRegistrySkill(null)}
       />
-
-      {selectedDetailSkill && (
-        <SkillStoreDetail
-          skill={selectedDetailSkill}
-          isInstalled={isSkillInstalled(selectedDetailSkill)}
-          storeLabel={sourceMeta.title}
-          isInstalling={Boolean(
-            installingSourceIds[
-              getRegistrySkillPendingKey(selectedDetailSkill)
-            ],
-          )}
-          onInstallPendingChange={setInstallPending}
-          onClose={() => selectRegistrySkill(null)}
-        />
-      )}
     </div>
   );
 }

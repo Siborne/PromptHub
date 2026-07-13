@@ -244,6 +244,17 @@ export async function resolveRemoteRegistryDirectoryFingerprint(
   } = {},
 ): Promise<string | undefined> {
   const sourceUrl = registrySkill.source_url;
+  if (isLocalRegistrySkill(registrySkill)) {
+    const localDir = normalizeLocalRegistryDirectory(registrySkill);
+    const resolvedDirectoryFingerprint = localDir
+      ? await window.api.skill.getLocalPackageFingerprint(localDir)
+      : undefined;
+    return normalizeRemoteDirectoryFingerprint(registrySkill, {
+      remoteContentHash: options.remoteContentHash,
+      resolvedDirectoryFingerprint,
+      installedSkill: options.installedSkill,
+    });
+  }
   if (isCloudRegistrySkill(registrySkill)) {
     const packageResponse = await getCloudStorePackage(registrySkill);
     const fingerprint = computeSkillPackageFingerprintV1Sync(

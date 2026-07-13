@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { CuboidIcon, Maximize2Icon, Minimize2Icon, XIcon } from "lucide-react";
 import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
+import { SkillUpdateSafetyReviewDialog } from "./SkillUpdateSafetyReviewDialog";
 import {
   CreateSkillFullscreenEditor,
   CreateSkillMethodSelection,
@@ -64,6 +65,16 @@ function CreateSkillModalSurface({
         <CreateSkillModalFooters controller={controller} />
       </div>
       <CreateSkillUnsavedChangesDialog controller={controller} />
+      <SkillUpdateSafetyReviewDialog
+        operation="install"
+        review={controller.installReview?.review ?? null}
+        trustSource={controller.trustReviewedInstallSource}
+        isLoading={controller.isConfirmingInstallReview}
+        t={controller.t}
+        onTrustSourceChange={controller.setTrustReviewedInstallSource}
+        onClose={controller.closeInstallReview}
+        onConfirm={() => void controller.confirmInstallReview()}
+      />
     </div>
   );
 }

@@ -51,10 +51,9 @@ describe("CreateSkillModal GitHub import", () => {
     installWindowMocks();
     const onClose = vi.fn();
 
-    await renderWithI18n(
-      <CreateSkillModal isOpen={true} onClose={onClose} />,
-      { language: "en" },
-    );
+    await renderWithI18n(<CreateSkillModal isOpen={true} onClose={onClose} />, {
+      language: "en",
+    });
 
     const backdrop = screen.getByTestId("create-skill-backdrop");
     expect(backdrop).toHaveAttribute("role", "presentation");
@@ -104,10 +103,7 @@ describe("CreateSkillModal GitHub import", () => {
     expect(fullscreenButtons).toHaveLength(2);
     const aiPolishButton = screen.getByRole("button", { name: "AI Polish" });
     expect(aiPolishButton).toHaveAttribute("aria-label", "AI Polish");
-    expect(screen.getByLabelText("Upload .md")).toHaveAttribute(
-      "type",
-      "file",
-    );
+    expect(screen.getByLabelText("Upload .md")).toHaveAttribute("type", "file");
 
     const manualButtons = [
       screen.getByRole("button", { name: "Upload .md" }),
@@ -364,7 +360,9 @@ describe("CreateSkillModal GitHub import", () => {
       expect(view.getByText("Already Imported")).toBeTruthy();
     });
 
-    expect(view.getByRole("button", { name: /Import Selected/ })).toBeDisabled();
+    expect(
+      view.getByRole("button", { name: /Import Selected/ }),
+    ).toBeDisabled();
 
     await act(async () => {
       fireEvent.click(view.getByRole("button", { name: /Import Selected/ }));
@@ -440,8 +438,14 @@ describe("CreateSkillModal GitHub import", () => {
   it("scans a GitHub repo and lets users import multiple discovered skills", async () => {
     const installRegistrySkill = vi
       .fn()
-      .mockResolvedValueOnce({ id: "skill-1", name: "pdf" })
-      .mockResolvedValueOnce({ id: "skill-2", name: "docx" });
+      .mockResolvedValueOnce({
+        status: "installed",
+        skill: { id: "skill-1", name: "pdf" },
+      })
+      .mockResolvedValueOnce({
+        status: "installed",
+        skill: { id: "skill-2", name: "docx" },
+      });
 
     useSkillStore.setState({ installRegistrySkill } as never);
 
@@ -574,6 +578,87 @@ describe("CreateSkillModal GitHub import", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a Gitea import open for authoritative package review and resumes it", async () => {
+    const scannedSkill = {
+      slug: "private-writer",
+      source_id: "source-private-writer",
+      name: "private-writer",
+      install_name: "private-writer",
+      description: "Private writer",
+      category: "general",
+      author: "icelemon",
+      source_url: "https://gitea.example.com/team/skills",
+      source_branch: "main",
+      source_directory: "skills/private-writer",
+      tags: [],
+      version: "1.0.0",
+      content: "# Private Writer",
+    };
+    const review = {
+      sourceKey:
+        "git:https://gitea.example.com/team/skills#main:skills/private-writer",
+      packageFingerprint: "a".repeat(64),
+      report: {
+        level: "high-risk",
+        summary: "Review the package script.",
+        findings: [],
+        recommendedAction: "review",
+        scannedAt: 1,
+        checkedFileCount: 2,
+        scanMethod: "preflight",
+      },
+    };
+    const installRegistrySkill = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: "safety-review-required",
+        review,
+      })
+      .mockResolvedValueOnce({
+        status: "installed",
+        skill: { id: "private-writer", name: "private-writer" },
+      });
+    useSkillStore.setState({ installRegistrySkill } as never);
+    installWindowMocks({
+      api: {
+        skill: {
+          scanRemoteGithub: vi.fn().mockResolvedValue([scannedSkill]),
+        },
+      },
+    });
+    const onClose = vi.fn();
+    const view = await renderWithI18n(
+      <CreateSkillModal isOpen={true} onClose={onClose} />,
+      { language: "en" },
+    );
+
+    fireEvent.click(view.getByText("Install from Git Repository"));
+    fireEvent.change(
+      view.getByPlaceholderText("https://github.com/owner/skill-repo"),
+      { target: { value: "https://gitea.example.com/team/skills" } },
+    );
+    fireEvent.click(view.getByText("Scan Repository"));
+    await waitFor(() =>
+      expect(view.getByText("Found 1 import option(s)")).toBeTruthy(),
+    );
+    fireEvent.click(view.getByText("Import Selected"));
+
+    await waitFor(() =>
+      expect(view.getByText("Review Skill Installation")).toBeTruthy(),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole("button", { name: "Install Anyway" }));
+
+    await waitFor(() => expect(installRegistrySkill).toHaveBeenCalledTimes(2));
+    expect(
+      view.getByText("Installed after review: private-writer"),
+    ).toBeTruthy();
+    expect(installRegistrySkill).toHaveBeenLastCalledWith(
+      expect.objectContaining(scannedSkill),
+      { approvedPackageFingerprint: review.packageFingerprint },
+    );
+  });
+
   it("treats direct Git scan results as imported when only legacy content URL matches", async () => {
     useSkillStore.setState({
       skills: [
@@ -654,20 +739,25 @@ describe("CreateSkillModal GitHub import", () => {
       expect(view.getByText("Already Imported")).toBeTruthy();
     });
 
-    expect(view.getByRole("button", { name: /Import Selected/ })).toBeDisabled();
+    expect(
+      view.getByRole("button", { name: /Import Selected/ }),
+    ).toBeDisabled();
 
     await act(async () => {
       fireEvent.click(view.getByRole("button", { name: /Import Selected/ }));
     });
 
-    expect(useSkillStore.getState().installRegistrySkill).not.toHaveBeenCalled();
+    expect(
+      useSkillStore.getState().installRegistrySkill,
+    ).not.toHaveBeenCalled();
   });
 
   it("keeps a fixed footer and scrollable results area after GitHub scan", async () => {
     useSkillStore.setState({
-      installRegistrySkill: vi
-        .fn()
-        .mockResolvedValue({ id: "skill-1", name: "alpha" }),
+      installRegistrySkill: vi.fn().mockResolvedValue({
+        status: "installed",
+        skill: { id: "skill-1", name: "alpha" },
+      }),
     } as never);
 
     const fetchRemoteContent = vi.fn(async (url: string) => {
@@ -877,7 +967,8 @@ describe("CreateSkillModal GitHub import", () => {
           description: "Spec skill",
           category: "dev",
           author: "legeling",
-          source_url: "https://github.com/legeling/spec-init/tree/main/spec-init",
+          source_url:
+            "https://github.com/legeling/spec-init/tree/main/spec-init",
           content_url:
             "https://raw.githubusercontent.com/legeling/spec-init/main/spec-init/SKILL.md",
           tags: ["spec"],
@@ -1077,9 +1168,10 @@ describe("CreateSkillModal GitHub import", () => {
   });
 
   it("keeps direct Git selections independent for same-slug source variants", async () => {
-    const installRegistrySkill = vi
-      .fn()
-      .mockResolvedValue({ id: "installed-writer", name: "writer" });
+    const installRegistrySkill = vi.fn().mockResolvedValue({
+      status: "installed",
+      skill: { id: "installed-writer", name: "writer" },
+    });
     useSkillStore.setState({ installRegistrySkill } as never);
 
     const scanRemoteGithub = vi.fn().mockResolvedValue([

@@ -13,6 +13,7 @@ import {
 import { useCreateSkillGithubImport } from "./useCreateSkillGithubImport";
 import { useCreateSkillLocalScan } from "./useCreateSkillLocalScan";
 import { useCreateSkillManualForm } from "./useCreateSkillManualForm";
+import { useSkillPackageInstall } from "./useSkillPackageInstall";
 
 export { getImportModeButtonStyle, getRegistrySelectionKey, sanitizeSkillName };
 export type { CreateMode } from "./create-skill-modal-utils";
@@ -29,9 +30,7 @@ export function useCreateSkillModalController({
   const { t } = useTranslation();
   const runtimeCapabilities = getRuntimeCapabilities();
   const createSkill = useSkillStore((state) => state.createSkill);
-  const installRegistrySkill = useSkillStore(
-    (state) => state.installRegistrySkill,
-  );
+  const installOperation = useSkillPackageInstall();
   const importScannedSkills = useSkillStore(
     (state) => state.importScannedSkills,
   );
@@ -55,7 +54,7 @@ export function useCreateSkillModalController({
   });
   const github = useCreateSkillGithubImport({
     existingSkills,
-    installRegistrySkill,
+    installRegistrySkill: installOperation.install,
     setError,
     setIsLoading,
     t,
@@ -67,6 +66,20 @@ export function useCreateSkillModalController({
     setIsLoading,
     t,
   });
+  const confirmInstallReview = useCallback(async () => {
+    const pendingName = installOperation.pendingReview?.skill.name;
+    const result = await installOperation.confirmReview();
+    if (result?.status === "installed" && pendingName) {
+      github.setGithubImportNotice(
+        t(
+          "skill.githubImportReviewedInstalled",
+          "Installed after review: {{name}}",
+          { name: pendingName },
+        ),
+      );
+    }
+    return result;
+  }, [github, installOperation, t]);
   const existingTags = useMemo(
     () => getExistingSkillTags(existingSkills),
     [existingSkills],
@@ -94,8 +107,9 @@ export function useCreateSkillModalController({
     github.resetGitHubImportState();
     manual.reset();
     localScan.reset();
+    installOperation.resetReviews();
     onClose();
-  }, [github, localScan, manual, onClose]);
+  }, [github, installOperation, localScan, manual, onClose]);
   const handleCloseRequest = useCallback(() => {
     if (manual.hasUnsavedChanges() && (mode === "manual" || mode === "ai")) {
       setShowUnsavedDialog(true);
@@ -131,6 +145,7 @@ export function useCreateSkillModalController({
 
   if (!isOpen) return null;
   return {
+    t,
     runtimeCapabilities,
     mode,
     setMode,
@@ -143,6 +158,13 @@ export function useCreateSkillModalController({
     ...github,
     ...manual,
     ...localScan,
+    installReview: installOperation.pendingReview,
+    installReviewCount: installOperation.pendingReviewCount,
+    trustReviewedInstallSource: installOperation.trustReviewedSource,
+    setTrustReviewedInstallSource: installOperation.setTrustReviewedSource,
+    isConfirmingInstallReview: installOperation.isConfirmingReview,
+    confirmInstallReview,
+    closeInstallReview: installOperation.closeReview,
     existingTags,
     handleEnterNativeFullscreen,
     handleExitNativeFullscreen,

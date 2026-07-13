@@ -442,6 +442,119 @@ export interface SkillUpdateSafetyReview {
   sourceKey: string;
 }
 
+/** Fingerprint-pinned authorization for a registry package installation. */
+export interface RegistrySkillInstallOptions {
+  approvedPackageFingerprint?: string;
+}
+
+export type SkillPackageOperationKind = "install" | "update";
+
+export type SkillPackageOperationPhase =
+  | "validation"
+  | "resolving"
+  | "staging"
+  | "scanning"
+  | "applying"
+  | "finalizing"
+  | "rollback";
+
+export type SkillPackageOperationFailureCode =
+  | "SOURCE_UNAVAILABLE"
+  | "INVALID_PACKAGE"
+  | "SAFETY_BLOCKED"
+  | "DUPLICATE_SOURCE"
+  | "CONFLICT"
+  | "STAGING_FAILED"
+  | "PACKAGE_APPLY_FAILED"
+  | "DATABASE_FINALIZE_FAILED"
+  | "ROLLBACK_INCOMPLETE"
+  | "OPERATION_IN_PROGRESS";
+
+export interface SkillPackageOperationFailure {
+  code: SkillPackageOperationFailureCode;
+  phase: SkillPackageOperationPhase;
+  summary: string;
+  sourceLabel?: string;
+}
+
+export interface SkillPackageFileInput {
+  path: string;
+  content: string;
+}
+
+export type SkillPackageOperationSource =
+  | {
+      kind: "remote-git";
+      repoUrl: string;
+      branch?: string;
+      directory?: string;
+    }
+  | { kind: "remote-zip"; zipUrl: string }
+  | { kind: "content"; sourceUrl: string; content: string }
+  | { kind: "local-directory"; directory: string }
+  | {
+      kind: "files";
+      sourceUrl: string;
+      files: SkillPackageFileInput[];
+    };
+
+export interface SkillPackageOperationRequest {
+  operation: SkillPackageOperationKind;
+  skillId?: string;
+  registrySkill: RegistrySkill;
+  source: SkillPackageOperationSource;
+  content: string;
+  markAsBuiltin?: boolean;
+  note?: string;
+  safetyScan?: { aiConfig?: SafetyScanAIConfig };
+  approvedPackageFingerprint?: string;
+}
+
+export type SkillPackageOperationResult =
+  | {
+      status: "completed";
+      operation: SkillPackageOperationKind;
+      skill: Skill;
+    }
+  | {
+      status: "review-required";
+      operation: SkillPackageOperationKind;
+      review: SkillUpdateSafetyReview;
+    }
+  | {
+      status: "blocked";
+      operation: SkillPackageOperationKind;
+      report: SkillSafetyReport;
+      failure: SkillPackageOperationFailure;
+    }
+  | {
+      status: "conflict";
+      operation: SkillPackageOperationKind;
+      failure: SkillPackageOperationFailure;
+    }
+  | {
+      status: "source-unavailable";
+      operation: SkillPackageOperationKind;
+      failure: SkillPackageOperationFailure;
+    }
+  | {
+      status: "cancelled";
+      operation: SkillPackageOperationKind;
+    }
+  | {
+      status: "failed";
+      operation: SkillPackageOperationKind;
+      failure: SkillPackageOperationFailure;
+    };
+
+/** Expected registry install outcomes. Review is resumable, not a failure. */
+export type RegistrySkillInstallResult =
+  | { status: "installed"; skill: Skill }
+  | {
+      status: "safety-review-required";
+      review: SkillUpdateSafetyReview;
+    };
+
 export type RemoteSkillPackageSaveResult =
   | { status: "saved"; repoPath: string }
   | { status: "safety-review-required"; review: SkillUpdateSafetyReview };

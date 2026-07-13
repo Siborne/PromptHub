@@ -1,5 +1,10 @@
 import type {
   RegistrySkill,
+  RegistrySkillInstallOptions,
+  RegistrySkillInstallResult,
+  SkillPackageFileInput,
+  SkillPackageOperationKind,
+  SkillPackageOperationRequest,
   Skill,
   SkillStoreSource,
 } from "@prompthub/shared/types";
@@ -13,26 +18,28 @@ import {
   normalizeGitStoreSourceInput,
   validateStoreSourceInput,
 } from "../../services/skill-store-source";
-import {
-  isLocalRegistrySkill,
-  shouldCloneRegistrySkillPackage,
-} from "../../services/skill-source-resolver";
 import { normalizeSkill } from "../../services/skill-normalize";
-import { SkillUpdateSafetyReviewRequiredError } from "../../services/skill-source-update-review";
 import {
   getCloudSkillMarkdown,
   getCloudStorePackage,
   isCloudRegistrySkill,
 } from "../../services/cloud-store";
-import { computeSkillPackageFingerprintV1Sync } from "@prompthub/shared/utils/skill-source-update";
-import { getErrorMessage, hasMeaningfulSkillBody } from "./skill-store-domain";
 import {
-  applyRegistrySkillUpdateToInstalledSkill,
-  buildSourceBaselineFields,
+  buildSkillPackageOperationSource,
+  resolveSkillPackageOperationResult,
+  runTrustedSkillPackageOperation,
+} from "../../services/skill-package-operation";
+import { computeSkillPackageFingerprintV1Sync } from "@prompthub/shared/utils/skill-source-update";
+import {
+  getErrorMessage,
+  getSafetyScanAIConfig,
+  hasMeaningfulSkillBody,
+} from "./skill-store-domain";
+import { useSettingsStore } from "../settings.store";
+import {
   findInstalledSkillSourceCandidate,
   findRegistrySkillCandidateByKey,
   getLinkedLocalRemoteUpdateBlock,
-  getRegistrySkillInstallPackageFingerprint,
   getSkillSourceStaleTargets,
   isDeferredSourceUpdateStatus,
   loadBuiltinSkillRegistry,
@@ -40,8 +47,6 @@ import {
   refreshRegistrySkillBaselineIfNeeded,
   resolveRegistrySkillContent,
   resolveRemoteRegistryDirectoryFingerprint,
-  syncLocalRegistrySkillRepo,
-  syncRemoteRegistrySkillRepo,
 } from "./skill-source-update-workflow";
 import type {
   RegistrySkillUpdateResult,
@@ -258,6 +263,53 @@ type RegistryUpdateOptions = Parameters<
   SkillRegistrySlice["updateRegistrySkill"]
 >[1];
 
+type RegistryPackageOperationInput = {
+  operation: SkillPackageOperationKind;
+  skillId?: string;
+  registrySkill: RegistrySkill;
+  content: string;
+  packageFiles?: SkillPackageFileInput[];
+  markAsBuiltin?: boolean;
+  note?: string;
+  approvedPackageFingerprint?: string;
+};
+
+function getPackageOperationSafetyScan():
+  | SkillPackageOperationRequest["safetyScan"]
+  | undefined {
+  const settings = useSettingsStore.getState();
+  if (!settings.autoScanStoreSkillsBeforeInstall) return undefined;
+  const aiConfig = getSafetyScanAIConfig(settings.aiModels);
+  return aiConfig ? { aiConfig } : undefined;
+}
+
+async function runRegistryPackageOperation(
+  input: RegistryPackageOperationInput,
+) {
+  const settings = useSettingsStore.getState();
+  const safetyScan = getPackageOperationSafetyScan();
+  const request: SkillPackageOperationRequest = {
+    operation: input.operation,
+    skillId: input.skillId,
+    registrySkill: input.registrySkill,
+    source: buildSkillPackageOperationSource(
+      input.registrySkill,
+      input.content,
+      input.packageFiles,
+    ),
+    content: input.content,
+    markAsBuiltin: input.markAsBuiltin,
+    note: input.note,
+    approvedPackageFingerprint: input.approvedPackageFingerprint,
+    ...(safetyScan ? { safetyScan } : {}),
+  };
+  const result = await runTrustedSkillPackageOperation(
+    request,
+    settings.trustedSkillUpdateSourceKeys,
+  );
+  return resolveSkillPackageOperationResult(result);
+}
+
 async function applyCheckedRegistryUpdate(
   set: SkillStoreSet,
   get: SkillStoreGet,
@@ -309,36 +361,39 @@ async function materializeRegistryUpdate(
 ): Promise<RegistrySkillUpdateResult | null> {
   let cloudInstallId: string | null = null;
   try {
-    if (isCloudRegistrySkill(registrySkill)) {
-      const cloudPackage = await resolveCloudInstallPackage(registrySkill);
+    const cloudPackage = isCloudRegistrySkill(registrySkill)
+      ? await resolveCloudInstallPackage(registrySkill)
+      : null;
+    const operationSkill = cloudPackage?.registrySkill ?? check.registrySkill;
+    const operationContent = cloudPackage?.content ?? check.remoteContent;
+    if (cloudPackage) {
       cloudInstallId = await createCloudInstallIntent(
-        registrySkill,
+        operationSkill,
         cloudPackage.releaseId,
         cloudPackage.cloudFingerprint,
         "update",
       );
       await reportCloudInstallStatus(cloudInstallId, "started");
     }
-    const skill = await applyRegistrySkillUpdateToInstalledSkill(
-      check.installedSkill!,
-      registrySkill,
-      check,
-      {
-        notePrefix,
-        markAsBuiltin,
-        updateSkill: get().updateSkill,
-        approvedPackageFingerprint: options?.approvedPackageFingerprint,
-      },
-    );
-    if (!skill) return null;
-    updateRegistrySkillInMemory(set, skill);
+    const result = await runRegistryPackageOperation({
+      operation: "update",
+      skillId: check.installedSkill!.id,
+      registrySkill: operationSkill,
+      content: operationContent,
+      packageFiles: cloudPackage?.files,
+      markAsBuiltin,
+      note: `${notePrefix}: ${check.installedSkill!.version || "unknown"} -> ${operationSkill.version}`,
+      approvedPackageFingerprint: options?.approvedPackageFingerprint,
+    });
+    if (result.status === "review-required") {
+      return { status: "safety-review-required", check, review: result.review };
+    }
+    if (result.status === "cancelled") return null;
+    updateRegistrySkillInMemory(set, result.skill);
     await reportCloudInstallStatus(cloudInstallId, "succeeded");
-    return { status: "updated", skill, check };
+    return { status: "updated", skill: result.skill, check };
   } catch (error) {
     await reportCloudInstallStatus(cloudInstallId, "failed", error);
-    if (error instanceof SkillUpdateSafetyReviewRequiredError) {
-      return { status: "safety-review-required", check, review: error.review };
-    }
     throw error;
   }
 }
@@ -398,12 +453,15 @@ async function resolveInstallContent(
   return content;
 }
 
-async function resolveCloudInstallPackage(registrySkill: RegistrySkill): Promise<{
+async function resolveCloudInstallPackage(
+  registrySkill: RegistrySkill,
+): Promise<{
   registrySkill: RegistrySkill;
   content: string;
   releaseId: string;
   desktopFingerprint: string;
   cloudFingerprint: string;
+  files: SkillPackageFileInput[];
 }> {
   const packageResponse = await getCloudStorePackage(registrySkill);
   const content = getCloudSkillMarkdown(packageResponse);
@@ -423,6 +481,10 @@ async function resolveCloudInstallPackage(registrySkill: RegistrySkill): Promise
     releaseId: packageResponse.release.id,
     desktopFingerprint,
     cloudFingerprint: packageResponse.release.contentFingerprint,
+    files: packageResponse.package.files.map((file) => ({
+      path: file.path,
+      content: file.content,
+    })),
   };
 }
 
@@ -433,7 +495,8 @@ function getCloudInstallIdempotencyKey(): string {
 }
 
 function sanitizeCloudInstallFailure(error: unknown): string {
-  const raw = error instanceof Error ? error.message : "Desktop installation failed";
+  const raw =
+    error instanceof Error ? error.message : "Desktop installation failed";
   return raw
     .replace(/(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, "$1[REDACTED]@")
     .replace(/([?&](?:token|secret|password|key)=[^&\s]+)/gi, "$1=[REDACTED]")
@@ -447,7 +510,8 @@ async function createCloudInstallIntent(
   operation: "install" | "update",
   currentFingerprint?: string,
 ): Promise<string | null> {
-  if (!isCloudRegistrySkill(registrySkill) || !window.api.cloud?.store) return null;
+  if (!isCloudRegistrySkill(registrySkill) || !window.api.cloud?.store)
+    return null;
   const listingId = registrySkill.source_id?.slice("cloud:".length).trim();
   if (!listingId) return null;
   const result = await window.api.cloud.store.createInstallIntent({
@@ -479,91 +543,18 @@ async function reportCloudInstallStatus(
         : {}),
     });
   } catch (reportError) {
-    console.warn("Failed to report Cloud Store installation status:", reportError);
-  }
-}
-
-function buildRegistryInstallPayload(
-  registrySkill: RegistrySkill,
-  content: string,
-  contentHash: string,
-  directoryFingerprint: string,
-  installedAt: number,
-) {
-  return {
-    name: registrySkill.install_name || registrySkill.slug,
-    description: registrySkill.description,
-    instructions: content,
-    content,
-    protocol_type: "skill" as const,
-    version: registrySkill.version,
-    author: registrySkill.author,
-    source_url: registrySkill.source_url,
-    source_id: registrySkill.source_id,
-    source_label: registrySkill.source_label,
-    source_branch: registrySkill.source_branch,
-    source_directory: registrySkill.source_directory,
-    canonical_skill_path: registrySkill.canonical_skill_path,
-    tags: [],
-    original_tags: registrySkill.tags,
-    is_favorite: false,
-    icon_url: registrySkill.icon_url,
-    icon_emoji: registrySkill.icon_emoji,
-    category: registrySkill.category,
-    is_builtin: true,
-    registry_slug: registrySkill.slug,
-    directory_fingerprint: directoryFingerprint,
-    content_url: registrySkill.content_url,
-    installed_content_hash: contentHash,
-    installed_version: registrySkill.version,
-    installed_at: installedAt,
-    updated_from_store_at: installedAt,
-    ...buildSourceBaselineFields({
-      contentHash,
-      directoryFingerprint,
-      checkedAt: installedAt,
-    }),
-    prerequisites: registrySkill.prerequisites,
-    compatibility: registrySkill.compatibility,
-  };
-}
-
-async function syncInstalledRegistrySkill(
-  skillId: string,
-  registrySkill: RegistrySkill,
-  content: string,
-): Promise<void> {
-  if (isLocalRegistrySkill(registrySkill)) {
-    await syncLocalRegistrySkillRepo(skillId, registrySkill);
-    return;
-  }
-  await syncRemoteRegistrySkillRepo(skillId, registrySkill, content);
-}
-
-async function rollbackIncompleteRegistryInstall(
-  skill: Skill,
-  registrySkill: RegistrySkill,
-  error: unknown,
-): Promise<void> {
-  console.warn(
-    `Failed to create local repo for registry skill "${registrySkill.slug}":`,
-    error,
-  );
-  try {
-    await window.api.skill.delete(skill.id);
-  } catch (deleteError) {
     console.warn(
-      `Failed to roll back incomplete registry skill "${registrySkill.slug}":`,
-      deleteError,
+      "Failed to report Cloud Store installation status:",
+      reportError,
     );
   }
-  throw error;
 }
 
 async function installRegistrySkill(
   get: SkillStoreGet,
   registrySkill: RegistrySkill,
-): Promise<Skill | null> {
+  options?: RegistrySkillInstallOptions,
+): Promise<RegistrySkillInstallResult | null> {
   let installRegistrySkill = registrySkill;
   let cloudInstallId: string | null = null;
   try {
@@ -580,52 +571,39 @@ async function installRegistrySkill(
       );
     }
     await reportCloudInstallStatus(cloudInstallId, "started");
-    const content = cloudPackage?.content ?? (await resolveInstallContent(installRegistrySkill));
-    const contentHash = await computeSkillContentHash(content);
-    const directoryFingerprint = getRegistrySkillInstallPackageFingerprint(
-      installRegistrySkill,
-      contentHash,
-    );
-    const installedAt = Date.now();
-    const skill = await window.api.skill.create(
-      buildRegistryInstallPayload(
-        installRegistrySkill,
-        content,
-        contentHash,
-        directoryFingerprint,
-        installedAt,
-      ),
-    );
-    if (!skill) return null;
-    await syncRegistryInstallOrRollback(skill, installRegistrySkill, content);
+    const content =
+      cloudPackage?.content ??
+      (await resolveInstallContent(installRegistrySkill));
+    const result = await runRegistryPackageOperation({
+      operation: "install",
+      registrySkill: installRegistrySkill,
+      content,
+      packageFiles: cloudPackage?.files,
+      markAsBuiltin: true,
+      approvedPackageFingerprint: options?.approvedPackageFingerprint,
+    });
+    if (result.status === "review-required") {
+      return { status: "safety-review-required", review: result.review };
+    }
+    if (result.status === "cancelled") return null;
     await reportCloudInstallStatus(cloudInstallId, "succeeded");
     await get().loadSkills();
-    return skill;
+    return { status: "installed", skill: result.skill };
   } catch (error) {
     await reportCloudInstallStatus(cloudInstallId, "failed", error);
-    throw new Error(getErrorMessage(error) || "Failed to install skill");
-  }
-}
-
-async function syncRegistryInstallOrRollback(
-  skill: Skill,
-  registrySkill: RegistrySkill,
-  content: string,
-): Promise<void> {
-  try {
-    await syncInstalledRegistrySkill(skill.id, registrySkill, content);
-  } catch (error) {
-    await rollbackIncompleteRegistryInstall(skill, registrySkill, error);
+    throw error;
   }
 }
 
 function createRegistryInstallActions(get: SkillStoreGet) {
   return {
-    installRegistrySkill: (registrySkill) =>
-      installRegistrySkill(get, registrySkill),
-    installFromRegistry: (sourceId) => {
+    installRegistrySkill: (registrySkill, options) =>
+      installRegistrySkill(get, registrySkill, options),
+    installFromRegistry: (sourceId, options) => {
       const registrySkill = findRegistrySkillCandidateByKey(get(), sourceId);
-      return registrySkill ? get().installRegistrySkill(registrySkill) : null;
+      return registrySkill
+        ? get().installRegistrySkill(registrySkill, options)
+        : null;
     },
     uninstallRegistrySkill: async (sourceId) => {
       const registrySkill = findRegistrySkillCandidateByKey(get(), sourceId);

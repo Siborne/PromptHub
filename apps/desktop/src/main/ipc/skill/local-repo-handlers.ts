@@ -11,6 +11,7 @@ import {
   buildSkillSyncUpdateFromRepo,
   computeRepoDirectoryFingerprint,
 } from "../../services/skill-repo-sync";
+import { validateMaterializedSkillPackage } from "../../services/skill-package-validation";
 import type { SkillIPCContext } from "./shared";
 import { ensureLocalRepoPath } from "./shared";
 
@@ -296,6 +297,20 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         branch: options.branch,
         directory: options.directory,
       });
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_FINGERPRINT,
+    async (_, localPath: string) => {
+      if (typeof localPath !== "string" || localPath.trim().length === 0) {
+        throw new Error(
+          "skill:getLocalPackageFingerprint requires a non-empty localPath",
+        );
+      }
+      const normalizedPath = localPath.trim();
+      await validateMaterializedSkillPackage(normalizedPath);
+      return computeRepoDirectoryFingerprint(normalizedPath);
     },
   );
 

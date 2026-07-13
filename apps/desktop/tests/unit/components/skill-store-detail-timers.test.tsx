@@ -36,11 +36,13 @@ function resetStores() {
   useSkillStore.setState({
     skills: [],
     installRegistrySkill: vi.fn().mockResolvedValue({
-      id: "installed-skill",
-      name: "Timer Skill",
+      status: "installed",
+      skill: { id: "installed-skill", name: "Timer Skill" },
     }),
     uninstallRegistrySkill: vi.fn().mockResolvedValue(true),
-    getRegistrySkillUpdateStatus: vi.fn().mockResolvedValue({ status: "up-to-date" }),
+    getRegistrySkillUpdateStatus: vi
+      .fn()
+      .mockResolvedValue({ status: "up-to-date" }),
     updateRegistrySkill: vi.fn().mockResolvedValue(null),
     saveSafetyReport: vi.fn().mockResolvedValue(undefined),
     translateContent: vi.fn().mockResolvedValue(undefined),
@@ -86,17 +88,23 @@ describe("SkillStoreDetail timer lifecycle", () => {
     );
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Import to My Skills" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Import to My Skills" }),
+      );
       await Promise.resolve();
     });
 
-    expect(useSkillStore.getState().installRegistrySkill).not.toHaveBeenCalled();
+    expect(
+      useSkillStore.getState().installRegistrySkill,
+    ).not.toHaveBeenCalled();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Confirm and add" }));
       await Promise.resolve();
     });
 
-    expect(useSkillStore.getState().installRegistrySkill).toHaveBeenCalledTimes(1);
+    expect(useSkillStore.getState().installRegistrySkill).toHaveBeenCalledTimes(
+      1,
+    );
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
 
     clearTimeoutSpy.mockClear();
@@ -121,11 +129,15 @@ describe("SkillStoreDetail timer lifecycle", () => {
     );
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Remove from My Skills" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove from My Skills" }),
+      );
       await Promise.resolve();
     });
 
-    expect(useSkillStore.getState().uninstallRegistrySkill).toHaveBeenCalledTimes(1);
+    expect(
+      useSkillStore.getState().uninstallRegistrySkill,
+    ).toHaveBeenCalledTimes(1);
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
 
     clearTimeoutSpy.mockClear();
@@ -378,7 +390,9 @@ describe("SkillStoreDetail timer lifecycle", () => {
 
     expect(installRegistrySkill).not.toHaveBeenCalled();
 
-    const confirmButton = screen.getByRole("button", { name: "Confirm and add" });
+    const confirmButton = screen.getByRole("button", {
+      name: "Confirm and add",
+    });
     await act(async () => {
       confirmButton.click();
       confirmButton.click();
@@ -466,9 +480,7 @@ describe("SkillStoreDetail timer lifecycle", () => {
     const getRegistrySkillUpdateStatus = vi
       .fn()
       .mockResolvedValue({ status: "update-available" });
-    let resolveUpdate:
-      | ((value: { status: "updated" }) => void)
-      | undefined;
+    let resolveUpdate: ((value: { status: "updated" }) => void) | undefined;
     const updateRegistrySkill = vi.fn(
       () =>
         new Promise<{ status: "updated" }>((resolve) => {

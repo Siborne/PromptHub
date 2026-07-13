@@ -6,6 +6,7 @@ import type {
   UpdateSkillParams,
 } from "@prompthub/shared/types";
 import { shouldIgnoreSkillDirectoryEntry } from "@prompthub/shared/utils/skill-identity";
+import { computeSkillPackageFingerprintV1Sync } from "@prompthub/shared/utils/skill-source-update";
 import {
   getRegistrySkillDirectory,
   isLocalRegistrySkill,
@@ -43,10 +44,6 @@ function getRemoteUpdateSafetyScanOptions():
   return aiConfig ? { aiConfig } : undefined;
 }
 
-function isBlockingSafetyReport(report: Pick<SkillSafetyReport, "level">) {
-  return report.level === "blocked" || report.level === "high-risk";
-}
-
 function createRawContentSafetyBlockedError(
   report: Pick<SkillSafetyReport, "level" | "summary">,
 ): Error {
@@ -58,6 +55,10 @@ function createRawContentSafetyBlockedError(
 async function assertRemoteContentUrlSkillSafe(
   registrySkill: RegistrySkill,
   content: string,
+  approvedPackageFingerprint?: string,
+  packageFingerprint = computeSkillPackageFingerprintV1Sync([
+    { path: "SKILL.md", content },
+  ]).fingerprint,
 ): Promise<void> {
   const safetyScan = getRemoteUpdateSafetyScanOptions();
   if (!safetyScan) return;
@@ -70,8 +71,25 @@ async function assertRemoteContentUrlSkillSafe(
     securityAudits: registrySkill.security_audits,
     aiConfig: safetyScan.aiConfig,
   });
-  if (isBlockingSafetyReport(report)) {
+  if (report.level === "blocked") {
     throw createRawContentSafetyBlockedError(report);
+  }
+  const sourceKey =
+    registrySkill.source_id?.trim() ||
+    registrySkill.content_url?.trim() ||
+    registrySkill.source_url?.trim() ||
+    registrySkill.slug;
+  const isTrusted = getTrustedSkillUpdateSourceKeys().includes(sourceKey);
+  if (
+    report.level === "high-risk" &&
+    approvedPackageFingerprint !== packageFingerprint &&
+    !isTrusted
+  ) {
+    throw new SkillUpdateSafetyReviewRequiredError({
+      report,
+      packageFingerprint,
+      sourceKey,
+    });
   }
 }
 
@@ -254,8 +272,13 @@ async function syncRemoteContentUrlSkill(
   skillId: string,
   registrySkill: RegistrySkill,
   effectiveContent: string,
+  options: RemoteRegistrySyncOptions,
 ): Promise<void> {
-  await assertRemoteContentUrlSkillSafe(registrySkill, effectiveContent);
+  await assertRemoteContentUrlSkillSafe(
+    registrySkill,
+    effectiveContent,
+    options.approvedPackageFingerprint,
+  );
   await window.api.skill.writeLocalFile(skillId, "SKILL.md", effectiveContent, {
     skipVersionSnapshot: true,
   });
@@ -288,7 +311,10 @@ async function rollbackCloudPackageWrite(
         await window.api.skill.deleteLocalFile(skillId, path);
       }
     } catch (rollbackError) {
-      console.warn(`Failed to roll back Cloud package file "${path}":`, rollbackError);
+      console.warn(
+        `Failed to roll back Cloud package file "${path}":`,
+        rollbackError,
+      );
     }
   }
 }
@@ -297,10 +323,22 @@ async function syncCloudSkillPackage(
   skillId: string,
   registrySkill: RegistrySkill,
   effectiveContent: string,
+  options: RemoteRegistrySyncOptions,
 ): Promise<void> {
   const packageResponse = await getCloudStorePackage(registrySkill);
   const effectiveCloudContent = getCloudSkillMarkdown(packageResponse);
-  await assertRemoteContentUrlSkillSafe(registrySkill, effectiveCloudContent);
+  const packageFingerprint = computeSkillPackageFingerprintV1Sync(
+    packageResponse.package.files.map((file) => ({
+      path: file.path,
+      content: file.content,
+    })),
+  ).fingerprint;
+  await assertRemoteContentUrlSkillSafe(
+    registrySkill,
+    effectiveCloudContent,
+    options.approvedPackageFingerprint,
+    packageFingerprint,
+  );
   const previousFiles = (await window.api.skill.readLocalFiles(skillId))
     .filter((file) => !file.isDirectory)
     .map((file) => ({ path: file.path, content: file.content }));
@@ -330,7 +368,12 @@ export async function syncRemoteRegistrySkillRepo(
   options: RemoteRegistrySyncOptions = {},
 ): Promise<Skill | null> {
   if (isCloudRegistrySkill(registrySkill)) {
-    await syncCloudSkillPackage(skillId, registrySkill, effectiveContent);
+    await syncCloudSkillPackage(
+      skillId,
+      registrySkill,
+      effectiveContent,
+      options,
+    );
     return refreshSyncedRegistrySkill(
       skillId,
       registrySkill,
@@ -343,7 +386,12 @@ export async function syncRemoteRegistrySkillRepo(
   if (shouldCloneRegistrySkillPackage(registrySkill)) {
     return syncRemoteGitPackage(skillId, registrySkill, options);
   }
-  await syncRemoteContentUrlSkill(skillId, registrySkill, effectiveContent);
+  await syncRemoteContentUrlSkill(
+    skillId,
+    registrySkill,
+    effectiveContent,
+    options,
+  );
   return null;
 }
 

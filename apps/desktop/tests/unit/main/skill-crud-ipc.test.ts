@@ -101,6 +101,19 @@ describe("skill crud IPC", () => {
     deleteManagedVariantContainerMock.mockClear();
   });
 
+  it("rejects legacy source-only Git creates that bypass package review", async () => {
+    const { db, handlers, IPC_CHANNELS } = await setupSkillCrudIpc();
+
+    await expect(
+      handlers[IPC_CHANNELS.SKILL_CREATE](null, {
+        name: "writer",
+        source_url: "https://github.com/example/skills",
+      }),
+    ).rejects.toThrow(/runPackageOperation/);
+
+    expect(db.create).not.toHaveBeenCalled();
+  });
+
   it("deletes PromptHub-managed repo containers when deleting a skill", async () => {
     const { db, handlers, IPC_CHANNELS } = await setupSkillCrudIpc();
 

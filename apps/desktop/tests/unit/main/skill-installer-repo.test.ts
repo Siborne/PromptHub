@@ -32,10 +32,12 @@ const internalMocks = vi.hoisted(() => ({
     resolvedBasePath: basePath,
     realBasePath: basePath,
   })),
-  resolveRepoTargetPath: vi.fn(async (basePath: string, relativePath: string) => ({
-    fullPath: `${basePath}/${relativePath}`,
-    realBasePath: basePath,
-  })),
+  resolveRepoTargetPath: vi.fn(
+    async (basePath: string, relativePath: string) => ({
+      fullPath: `${basePath}/${relativePath}`,
+      realBasePath: basePath,
+    }),
+  ),
   validateRelativePath: vi.fn(),
   validateSkillName: vi.fn(),
 }));
@@ -62,8 +64,11 @@ import {
   getLocalRepoContainerPathForSkillId,
   getLocalRepoPathForSkillId,
   saveContentToLocalRepoBySkillId,
-  saveToLocalRepoBySkillId,
 } from "../../../src/main/services/skill-installer-repo";
+import {
+  beginManagedRepoReplacement,
+  saveToLocalRepoBySkillId,
+} from "../../../src/main/services/skill-installer-replacement";
 
 describe("skill-installer-repo variant container", () => {
   beforeEach(() => {
@@ -122,8 +127,9 @@ describe("skill-installer-repo variant container", () => {
   });
 
   it("uses a longer readable suffix when the preferred short suffix container belongs to another variant", async () => {
-    internalMocks.fileExists.mockImplementation(async (targetPath: string) =>
-      targetPath === "/prompthub/skills/writer--7dc211f6",
+    internalMocks.fileExists.mockImplementation(
+      async (targetPath: string) =>
+        targetPath === "/prompthub/skills/writer--7dc211f6",
     );
     fsMocks.readFile.mockResolvedValue(
       JSON.stringify({
@@ -143,8 +149,9 @@ describe("skill-installer-repo variant container", () => {
   });
 
   it("writes fallback container metadata with the actual longer variant key", async () => {
-    internalMocks.fileExists.mockImplementation(async (targetPath: string) =>
-      targetPath === "/prompthub/skills/writer--7dc211f6",
+    internalMocks.fileExists.mockImplementation(
+      async (targetPath: string) =>
+        targetPath === "/prompthub/skills/writer--7dc211f6",
     );
     fsMocks.readFile.mockResolvedValue(
       JSON.stringify({
@@ -246,6 +253,121 @@ describe("skill-installer-repo variant container", () => {
       "/prompthub/skills/writer--7dc211f6/.prompthub/variant.json",
       expect.stringContaining('"repoMode": "copy"'),
       "utf-8",
+    );
+  });
+
+  it("keeps the previous repo recoverable until a replacement is committed", async () => {
+    internalMocks.fileExists.mockImplementation(async (targetPath: string) =>
+      targetPath.endsWith("/repo"),
+    );
+    const replacement = await beginManagedRepoReplacement(
+      {
+        id: "skill-1",
+        name: "writer",
+        source_id: "source-writer-main",
+      },
+      "/staged/writer",
+    );
+
+    const backupRename = fsMocks.rename.mock.calls.find(
+      ([from]) => from === "/prompthub/skills/writer--7dc211f6/repo",
+    );
+    expect(backupRename?.[1]).toMatch(/repo\.old-/);
+    fsMocks.rm.mockClear();
+    expect(fsMocks.rm).not.toHaveBeenCalledWith(backupRename?.[1], {
+      recursive: true,
+      force: true,
+    });
+
+    await replacement.commit();
+
+    expect(fsMocks.rm).toHaveBeenCalledWith(backupRename?.[1], {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  it("records recovery intent before mutating the managed container", async () => {
+    internalMocks.fileExists.mockImplementation(async (targetPath: string) =>
+      targetPath.endsWith("/repo"),
+    );
+    const beforeApply = vi.fn(async (recovery) => {
+      expect(recovery).toMatchObject({
+        repoPath: "/prompthub/skills/writer--7dc211f6/repo",
+        hadOriginal: true,
+      });
+      expect(fsMocks.mkdir).not.toHaveBeenCalled();
+      expect(fsMocks.writeFile).not.toHaveBeenCalled();
+      expect(fsMocks.cp).not.toHaveBeenCalled();
+      expect(fsMocks.rename).not.toHaveBeenCalled();
+    });
+
+    await beginManagedRepoReplacement(
+      {
+        id: "skill-1",
+        name: "writer",
+        source_id: "source-writer-main",
+      },
+      "/staged/writer",
+      beforeApply,
+    );
+
+    expect(beforeApply).toHaveBeenCalledTimes(1);
+    expect(fsMocks.mkdir).toHaveBeenCalled();
+    expect(fsMocks.cp).toHaveBeenCalled();
+    expect(fsMocks.rename).toHaveBeenCalled();
+  });
+
+  it("rejects a symlinked managed container before writing recovery intent", async () => {
+    internalMocks.fileExists.mockResolvedValue(true);
+    fsMocks.lstat.mockImplementation(async (targetPath: string) => ({
+      isSymbolicLink: () => targetPath.endsWith("writer--7dc211f6"),
+    }));
+    const beforeApply = vi.fn();
+
+    await expect(
+      beginManagedRepoReplacement(
+        {
+          id: "skill-1",
+          name: "writer",
+          source_id: "source-writer-main",
+        },
+        "/staged/writer",
+        beforeApply,
+      ),
+    ).rejects.toThrow(/symlinked managed container/i);
+
+    expect(beforeApply).not.toHaveBeenCalled();
+    expect(fsMocks.mkdir).not.toHaveBeenCalled();
+    expect(fsMocks.writeFile).not.toHaveBeenCalled();
+    expect(fsMocks.rename).not.toHaveBeenCalled();
+  });
+
+  it("restores the previous repo when a pending replacement rolls back", async () => {
+    internalMocks.fileExists.mockImplementation(async (targetPath: string) =>
+      targetPath.endsWith("/repo"),
+    );
+    const replacement = await beginManagedRepoReplacement(
+      {
+        id: "skill-1",
+        name: "writer",
+        source_id: "source-writer-main",
+      },
+      "/staged/writer",
+    );
+    const backupPath = fsMocks.rename.mock.calls.find(
+      ([from]) => from === "/prompthub/skills/writer--7dc211f6/repo",
+    )?.[1];
+
+    await replacement.rollback();
+
+    expect(fsMocks.rm).toHaveBeenCalledWith(
+      "/prompthub/skills/writer--7dc211f6/repo",
+      { recursive: true, force: true },
+    );
+    expect(fsMocks.rename).toHaveBeenCalledWith(
+      backupPath,
+      "/prompthub/skills/writer--7dc211f6/repo",
     );
   });
 });

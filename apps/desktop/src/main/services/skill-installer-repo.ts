@@ -13,6 +13,11 @@ import type {
   SkillLocalFileTreeEntry,
   SkillLocalPathStatus,
 } from "@prompthub/shared/types";
+import {
+  MAX_SKILL_PACKAGE_DEPTH,
+  MAX_SKILL_PACKAGE_ENTRIES,
+  MAX_SKILL_PACKAGE_FILES,
+} from "@prompthub/shared/constants/skill-package";
 import { computeStableTextHash } from "@prompthub/shared/utils/skill-identity";
 import {
   fileExists,
@@ -34,10 +39,6 @@ export interface CopyRepoByPathToDirectoryOptions {
 
 // ==================== Constants ====================
 
-/** Maximum recursion depth for directory walking */
-const MAX_WALK_DEPTH = 5;
-/** Maximum number of file entries to collect */
-const MAX_WALK_FILES = 500;
 /** Maximum file size (1 MB) for reading text content */
 const MAX_FILE_SIZE_BYTES = 1_048_576;
 /** Maximum file size (5 MB) for inline resource preview data */
@@ -352,7 +353,7 @@ export function isInternalSkillRepoEntry(relativePath: string): boolean {
 /**
  * Generic directory walker with security guards.
  *
- * Recursively traverses `baseDir`, enforcing MAX_WALK_DEPTH, MAX_WALK_FILES,
+ * Recursively traverses `baseDir`, enforcing the shared package limits,
  * symlink rejection, and realpath-within-base validation on every entry.
  * Callers supply an `onEntry` callback that receives each validated entry and
  * returns either `T` (to collect) or `null` (to skip). For directory entries,
@@ -370,15 +371,14 @@ async function walkRepoDir<T>(opts: {
 }): Promise<T[]> {
   const { baseDir, realBasePath, onEntry } = opts;
   const results: T[] = [];
+  let entryCount = 0;
+  let fileCount = 0;
 
   const recurse = async (dir: string, depth: number): Promise<void> => {
-    if (depth > MAX_WALK_DEPTH) return;
-    if (results.length >= MAX_WALK_FILES) return;
+    if (depth > MAX_SKILL_PACKAGE_DEPTH) return;
 
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const dirent of entries) {
-      if (results.length >= MAX_WALK_FILES) return;
-
       if (dirent.isSymbolicLink()) {
         continue;
       }
@@ -395,6 +395,10 @@ async function walkRepoDir<T>(opts: {
       if (isInternalSkillRepoEntry(relativePath)) {
         continue;
       }
+      if (entryCount >= MAX_SKILL_PACKAGE_ENTRIES) return;
+      if (!isDirectory && fileCount >= MAX_SKILL_PACKAGE_FILES) return;
+      entryCount += 1;
+      if (!isDirectory) fileCount += 1;
 
       const item = await onEntry({
         relativePath,
@@ -470,7 +474,7 @@ export async function isManagedRepoPath(
   return isPathWithin(normalizedSkillsDir, normalizedAbsolutePath);
 }
 
-async function copyMaterializedSkillDirectory(
+export async function copyMaterializedSkillDirectory(
   sourceDir: string,
   targetDir: string,
 ): Promise<void> {
@@ -1093,6 +1097,22 @@ export async function ensureManagedVariantContainer(
   _mode: "copy" | "symlink",
 ): Promise<{ containerDir: string; repoDir: string }> {
   const containerDir = await getManagedContainerPathForSkill(skill);
+  return initializeManagedVariantContainer(skill, containerDir);
+}
+
+export async function initializeManagedVariantContainer(
+  skill: Pick<
+    Skill,
+    | "id"
+    | "name"
+    | "source_id"
+    | "source_url"
+    | "directory_fingerprint"
+    | "logical_name"
+    | "variant_key"
+  >,
+  containerDir: string,
+): Promise<{ containerDir: string; repoDir: string }> {
   const repoDir = path.join(containerDir, MANAGED_REPO_DIRNAME);
   const variantKey = path.basename(containerDir);
   await initSkillsDir();
@@ -1175,85 +1195,6 @@ export async function deleteManagedVariantContainer(
 ): Promise<void> {
   const containerPath = await getManagedContainerPathForSkill(skill);
   await deleteRepoByPath(containerPath);
-}
-
-export async function saveToLocalRepoBySkillId(
-  skillOrId:
-    | string
-    | Pick<
-        Skill,
-        | "id"
-        | "name"
-        | "source_id"
-        | "source_url"
-        | "directory_fingerprint"
-        | "logical_name"
-        | "variant_key"
-      >,
-  sourceDir: string,
-  mode: "copy" | "symlink" = "copy",
-): Promise<string> {
-  const skill =
-    typeof skillOrId === "string"
-      ? ({ id: skillOrId, name: skillOrId } as Pick<Skill, "id" | "name">)
-      : skillOrId;
-  const { containerDir, repoDir } = await ensureManagedVariantContainer(
-    skill,
-    mode,
-  );
-  const sourceStat = await fs.stat(sourceDir).catch((error: unknown) => {
-    if (getErrorCode(error) === "ENOENT") {
-      throw new Error(
-        `Invalid sourceDir: directory does not exist: ${sourceDir}`,
-      );
-    }
-    throw error;
-  });
-  if (!sourceStat.isDirectory()) {
-    throw new Error(`Invalid sourceDir: not a directory: ${sourceDir}`);
-  }
-
-  const suffix = `${Date.now()}-${process.pid}`;
-  const stagingDir = `${repoDir}.staging-${suffix}`;
-  const backupDir = `${repoDir}.old-${suffix}`;
-  await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-  await fs.rm(backupDir, { recursive: true, force: true }).catch(() => {});
-
-  let hadOriginal = false;
-  let movedStagingIntoRepo = false;
-  try {
-    await copyMaterializedSkillDirectory(sourceDir, stagingDir);
-
-    hadOriginal = await fileExists(repoDir);
-    if (hadOriginal) {
-      await fs.rename(repoDir, backupDir);
-    }
-
-    await fs.rename(stagingDir, repoDir);
-    movedStagingIntoRepo = true;
-    await writeVariantSidecarFiles(
-      containerDir,
-      buildSkillVariantSourceMetadata(
-        skill,
-        "copy",
-        path.basename(containerDir),
-      ),
-    );
-    if (hadOriginal) {
-      await fs.rm(backupDir, { recursive: true, force: true });
-    }
-  } catch (error) {
-    if (movedStagingIntoRepo) {
-      await fs.rm(repoDir, { recursive: true, force: true }).catch(() => {});
-    }
-    if (hadOriginal) {
-      await fs.rename(backupDir, repoDir).catch(() => {});
-    }
-    throw error;
-  } finally {
-    await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-  }
-  return repoDir;
 }
 
 export async function saveContentToLocalRepoBySkillId(

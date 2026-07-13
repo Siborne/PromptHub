@@ -24,14 +24,10 @@ import type {
   ScannedSkill,
   ScanLocalResult,
   Skill,
-  SkillManifest,
   SkillPlatformScanResult,
 } from "@prompthub/shared/types";
 import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
-import {
-  buildSkillSourceId,
-  shouldIgnoreSkillDirectoryEntry,
-} from "@prompthub/shared/utils/skill-identity";
+import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
 import {
   computeSkillPackageFingerprintV1Sync,
   SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
@@ -40,12 +36,8 @@ import { installSkillFromSource } from "../../../../../packages/core/src/skills/
 import { initDatabase } from "@/main/database";
 import { SkillDB } from "@/main/database/skill";
 import { readGithubTokenSetting } from "@/main/settings/settings-readers";
-import { parseSkillMd } from "./skill-validator";
 import { sanitizeImportedSkillDraft } from "./skill-import-sanitize";
-import {
-  assertStagedRemoteSkillPackageSafe,
-  type RemoteSkillPackageSafetyScanOptions,
-} from "./skill-update-safety";
+import { parseSkillMd } from "./skill-validator";
 export { SkillSafetyReviewRequiredError } from "./skill-update-safety";
 
 function buildSkillFingerprintFields(directoryFingerprint: string) {
@@ -67,10 +59,7 @@ import {
   gitListRemoteBranches,
   resolvePlatformPath,
 } from "./skill-installer-utils";
-import {
-  SKILL_PLATFORMS,
-  type SkillPlatform,
-} from "@prompthub/shared/constants/platforms";
+import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import {
   getCherryStudioPlatformSkillMetadata,
   isCherryStudioPlatform,
@@ -97,41 +86,6 @@ function toTitleCase(value: string): string {
   return value
     .replace(/[-_]+/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function buildRemoteSkillSourceKey(
-  skill: Pick<Skill, "source_id">,
-  repo: NonNullable<ReturnType<typeof parseGitRepo>>,
-  branch?: string,
-  directory?: string,
-): string {
-  if (skill.source_id?.trim()) return skill.source_id.trim();
-  return `git:${repo.host}/${repo.owner}/${repo.repo}@${branch?.trim() || "default"}:${directory?.trim() || "."}`;
-}
-
-function buildRemoteZipSourceKey(
-  skill: Pick<Skill, "id" | "source_id">,
-  zipUrl: string,
-): string {
-  if (skill.source_id?.trim()) return skill.source_id.trim();
-  try {
-    const url = new URL(zipUrl);
-    url.username = "";
-    url.password = "";
-    url.search = "";
-    url.hash = "";
-    return `zip:${url.toString()}`;
-  } catch {
-    return `zip:skill:${skill.id}`;
-  }
-}
-
-function normalizeSkillLookupValue(value: string | null | undefined): string {
-  return (value || "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 function encodePathSegments(value: string): string {
@@ -319,11 +273,22 @@ import {
   saveContentToLocalRepo,
   saveContentToLocalRepoBySkillId,
   saveToLocalRepo,
-  saveToLocalRepoBySkillId,
   writeLocalRepoFile,
   writeLocalRepoFileBufferByPath,
   writeLocalRepoFileByPath,
 } from "./skill-installer-repo";
+import {
+  beginManagedRepoReplacement,
+  saveToLocalRepoBySkillId,
+} from "./skill-installer-replacement";
+import {
+  collectSkillDirs,
+  getDefaultSkillScanEntries,
+  getScannedSkillInstallMetadata,
+  readSkillManifest,
+  resolveSingleSkillDirFromRepo,
+  resolveSkillDirFromRepo,
+} from "./skill-installer-discovery";
 import {
   detectInstalledPlatforms,
   getSkillMdInstallStatusForSkill,
@@ -347,6 +312,14 @@ import {
   importFromJson,
 } from "./skill-installer-export";
 import { scanSkillSafety } from "./skill-safety-scan";
+import {
+  getRemoteGitSkillPackageFingerprint,
+  saveRemoteGitSkillPackage,
+  saveRemoteZipSkillPackage,
+  type RemoteGitPackageOptions,
+  type RemotePackageSkill,
+  type RemoteZipPackageOptions,
+} from "./skill-installer-remote-package";
 
 // ========================================================================
 // Facade class — every static method delegates to the appropriate sub-module
@@ -370,6 +343,7 @@ export class SkillInstaller {
 
   // ---- Repo CRUD (delegated) ----
   static isManagedRepoPath = isManagedRepoPath;
+  static beginManagedRepoReplacement = beginManagedRepoReplacement;
   static saveToLocalRepo = saveToLocalRepo;
   static saveToLocalRepoBySkillId = saveToLocalRepoBySkillId;
   static saveContentToLocalRepo = saveContentToLocalRepo;
@@ -511,75 +485,7 @@ export class SkillInstaller {
   // Methods that orchestrate across multiple sub-modules stay in this file
   // ========================================================================
 
-  /** Scan entries to check for local skills */
-  private static getDefaultScanEntries(): Array<{
-    path: string;
-    platformName: string;
-  }> {
-    const scanEntries: Array<{ path: string; platformName: string }> = [
-      {
-        path: this.skillsDir,
-        platformName: "PromptHub",
-      },
-    ];
-
-    for (const p of SKILL_PLATFORMS) {
-      const resolved = getPlatformSkillsDir(p);
-      if (!scanEntries.find((entry) => entry.path === resolved)) {
-        scanEntries.push({ path: resolved, platformName: p.name });
-      }
-    }
-
-    return scanEntries;
-  }
-
-  /** Read and parse manifest.json from a skill directory */
-  private static async readManifest(dir: string): Promise<SkillManifest> {
-    const manifestPath = path.join(dir, "manifest.json");
-    let content: string;
-
-    try {
-      content = await fs.readFile(manifestPath, "utf-8");
-    } catch (err: unknown) {
-      // File not found is expected (most repos don't have a manifest)
-      if (getErrorCode(err) === "ENOENT") {
-        return {};
-      }
-      // Permission or I/O errors should propagate
-      throw new Error(
-        `Failed to read manifest at ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    try {
-      // Safe: JSON.parse returns `any`; narrowed to Record for property access
-      const parsed = JSON.parse(content) as Record<string, unknown>;
-      const sanitized = sanitizeImportedSkillDraft(
-        {
-          name: parsed.name,
-          description: parsed.description,
-          version: parsed.version,
-          author: parsed.author,
-          tags: parsed.tags,
-          instructions: parsed.instructions,
-        },
-        { defaultTags: [] },
-      );
-      return {
-        name: sanitized.name,
-        description: sanitized.description,
-        version: sanitized.version,
-        author: sanitized.author,
-        tags: sanitized.tags.length > 0 ? sanitized.tags : undefined,
-        instructions: sanitized.instructions,
-      };
-    } catch (err: unknown) {
-      // Malformed JSON is a real error that callers should know about
-      throw new Error(
-        `Failed to parse manifest.json in ${dir}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
+  private static readManifest = readSkillManifest;
 
   // ---- Install methods (orchestrating across sub-modules) ----
 
@@ -920,228 +826,23 @@ export class SkillInstaller {
     return createdSkill.id;
   }
 
-  static async saveRemoteGitSkillToLocalRepoBySkillId(
-    skill: Pick<
-      Skill,
-      | "id"
-      | "name"
-      | "source_id"
-      | "source_url"
-      | "source_directory"
-      | "directory_fingerprint"
-      | "logical_name"
-      | "variant_key"
-    >,
-    options: {
-      repoUrl: string;
-      branch?: string;
-      directory?: string;
-      safetyScan?: RemoteSkillPackageSafetyScanOptions;
-      approvedPackageFingerprint?: string;
-    },
+  static saveRemoteGitSkillToLocalRepoBySkillId(
+    skill: RemotePackageSkill,
+    options: RemoteGitPackageOptions,
   ): Promise<string> {
-    await this.init();
-
-    const parsedRepo = parseGitRepo(options.repoUrl);
-    if (!parsedRepo) {
-      throw new Error(
-        "Invalid git repository URL: must be https://<host>/{owner}/{repo} or git@<host>:{owner}/{repo}.git",
-      );
-    }
-
-    const tempRoot = await fs.mkdtemp(
-      path.join(this.skillsDir, ".remote-import-"),
-    );
-    const repoDir = path.join(
-      tempRoot,
-      `${parsedRepo.owner}-${parsedRepo.repo}`,
-    );
-
-    try {
-      await gitClone(parsedRepo.cloneUrl, repoDir, options.branch);
-
-      const requestedDirectory =
-        options.directory?.trim().replace(/^\/+|\/+$/g, "") ||
-        skill.source_directory?.trim().replace(/^\/+|\/+$/g, "");
-      let skillDir: string;
-
-      if (requestedDirectory) {
-        const candidateDir = path.resolve(repoDir, requestedDirectory);
-        if (!isPathWithin(repoDir, candidateDir)) {
-          throw new Error(
-            "Path traversal detected: skill directory is outside repository",
-          );
-        }
-        if (!(await fileExists(path.join(candidateDir, "SKILL.md")))) {
-          throw new Error(
-            `SKILL.md not found in directory: ${requestedDirectory}`,
-          );
-        }
-        skillDir = candidateDir;
-      } else {
-        skillDir = await this.resolveSkillDirFromRepo(repoDir, skill);
-      }
-
-      await assertStagedRemoteSkillPackageSafe({
-        skill,
-        skillDir,
-        sourceUrl: options.repoUrl,
-        safetyScan: options.safetyScan,
-        packageFingerprint: computePackageDirectoryFingerprint(
-          await this.readLocalRepoFileBuffersByPath(skillDir),
-        ),
-        approvedPackageFingerprint: options.approvedPackageFingerprint,
-        sourceKey: buildRemoteSkillSourceKey(
-          skill,
-          parsedRepo,
-          options.branch,
-          requestedDirectory,
-        ),
-      });
-      return await saveToLocalRepoBySkillId(skill, skillDir, "copy");
-    } finally {
-      await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
-    }
+    return saveRemoteGitSkillPackage(skill, options);
   }
 
-  static async getRemoteGitSkillPackageFingerprint(options: {
-    repoUrl: string;
-    branch?: string;
-    directory?: string;
-  }): Promise<string | undefined> {
-    await this.init();
+  static getRemoteGitSkillPackageFingerprint =
+    getRemoteGitSkillPackageFingerprint;
 
-    const parsedRepo = parseGitRepo(options.repoUrl);
-    if (!parsedRepo) {
-      throw new Error(
-        "Invalid git repository URL: must be https://<host>/{owner}/{repo} or git@<host>:{owner}/{repo}.git",
-      );
-    }
-
-    const tempRoot = await fs.mkdtemp(
-      path.join(this.skillsDir, ".remote-fingerprint-"),
-    );
-    const repoDir = path.join(
-      tempRoot,
-      `${parsedRepo.owner}-${parsedRepo.repo}`,
-    );
-
-    try {
-      await gitClone(parsedRepo.cloneUrl, repoDir, options.branch);
-
-      const requestedDirectory = options.directory
-        ?.trim()
-        .replace(/^\/+|\/+$/g, "");
-      let skillDir: string;
-
-      if (requestedDirectory) {
-        const candidateDir = path.resolve(repoDir, requestedDirectory);
-        if (!isPathWithin(repoDir, candidateDir)) {
-          throw new Error(
-            "Path traversal detected: skill directory is outside repository",
-          );
-        }
-        if (!(await fileExists(path.join(candidateDir, "SKILL.md")))) {
-          throw new Error(
-            `SKILL.md not found in directory: ${requestedDirectory}`,
-          );
-        }
-        skillDir = candidateDir;
-      } else {
-        skillDir = await this.resolveSingleSkillDirFromRepo(repoDir);
-      }
-
-      const repoFiles = await this.readLocalRepoFileBuffersByPath(skillDir);
-      return computePackageDirectoryFingerprint(repoFiles);
-    } finally {
-      await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
-    }
-  }
-
-  static async saveRemoteZipSkillToLocalRepoBySkillId(
-    skill: Pick<
-      Skill,
-      | "id"
-      | "name"
-      | "source_id"
-      | "source_url"
-      | "source_directory"
-      | "directory_fingerprint"
-      | "logical_name"
-      | "variant_key"
-    >,
-    options: {
-      zipUrl: string;
-      safetyScan?: RemoteSkillPackageSafetyScanOptions;
-      approvedPackageFingerprint?: string;
-    },
+  static saveRemoteZipSkillToLocalRepoBySkillId(
+    skill: RemotePackageSkill,
+    options: RemoteZipPackageOptions,
   ): Promise<string> {
-    await this.init();
-
-    const zipUrl = options.zipUrl?.trim();
-    if (!zipUrl) {
-      throw new Error("Remote skill package URL is required");
-    }
-
-    const tempRoot = await fs.mkdtemp(
-      path.join(this.skillsDir, ".remote-zip-"),
+    return saveRemoteZipSkillPackage(skill, options, (url) =>
+      this.fetchRemoteBytes(url),
     );
-    const extractDir = path.join(tempRoot, "package");
-
-    try {
-      const { unzipSync } = await import("fflate");
-      const archiveBytes = await this.fetchRemoteBytes(zipUrl);
-      const files = unzipSync(archiveBytes);
-      await fs.mkdir(extractDir, { recursive: true });
-
-      for (const [rawPath, content] of Object.entries(files)) {
-        const normalizedEntryPath = rawPath.replace(/\\/g, "/");
-        const entryParts = normalizedEntryPath.split("/").filter(Boolean);
-        if (
-          path.isAbsolute(normalizedEntryPath) ||
-          entryParts.some((part) => part === "..")
-        ) {
-          throw new Error(
-            "Path traversal detected: zip entry is outside package directory",
-          );
-        }
-
-        const relativePath = normalizedEntryPath.replace(/^\/+/g, "");
-        if (
-          !relativePath ||
-          relativePath.endsWith("/") ||
-          shouldIgnoreSkillDirectoryEntry(relativePath)
-        ) {
-          continue;
-        }
-
-        const targetPath = path.resolve(extractDir, relativePath);
-        if (!isPathWithin(extractDir, targetPath)) {
-          throw new Error(
-            "Path traversal detected: zip entry is outside package directory",
-          );
-        }
-
-        await fs.mkdir(path.dirname(targetPath), { recursive: true });
-        await fs.writeFile(targetPath, content);
-      }
-
-      const skillDir = await this.resolveSkillDirFromRepo(extractDir, skill);
-      await assertStagedRemoteSkillPackageSafe({
-        skill,
-        skillDir,
-        sourceUrl: zipUrl,
-        safetyScan: options.safetyScan,
-        packageFingerprint: computePackageDirectoryFingerprint(
-          await this.readLocalRepoFileBuffersByPath(skillDir),
-        ),
-        approvedPackageFingerprint: options.approvedPackageFingerprint,
-        sourceKey: buildRemoteZipSourceKey(skill, zipUrl),
-      });
-      return await saveToLocalRepoBySkillId(skill, skillDir, "copy");
-    } finally {
-      await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
-    }
   }
 
   // ---- Scan methods ----
@@ -1151,181 +852,10 @@ export class SkillInstaller {
    *
    * Note: This method only scans SKILL.md format skills, NOT MCP configurations.
    */
-  /**
-   * Discover skill directories under a scan path.
-   * Returns an array of directories that contain a SKILL.md file,
-   * supporting both flat and one-level nested structures.
-   */
-  private static async collectSkillDirs(scanPath: string): Promise<string[]> {
-    const result: string[] = [];
-
-    if (!(await fileExists(scanPath))) {
-      return result;
-    }
-
-    if (await fileExists(path.join(scanPath, "SKILL.md"))) {
-      result.push(scanPath);
-    }
-
-    const entries = await fs.readdir(scanPath, { withFileTypes: true });
-    const dirsToCheck: string[] = [];
-
-    for (const entry of entries) {
-      if (entry.name.startsWith(".")) {
-        continue;
-      }
-
-      const candidateDir = path.join(scanPath, entry.name);
-      if (entry.isDirectory()) {
-        dirsToCheck.push(candidateDir);
-        continue;
-      }
-
-      if (entry.isSymbolicLink()) {
-        const stat = await fs.stat(candidateDir).catch(() => null);
-        if (stat?.isDirectory()) {
-          dirsToCheck.push(candidateDir);
-        }
-      }
-    }
-
-    for (const baseDir of dirsToCheck) {
-      const directMd = path.join(baseDir, "SKILL.md");
-      if (await fileExists(directMd)) {
-        result.push(baseDir);
-      } else {
-        // Check subdirectories for category-nested structures (e.g., Hermes)
-        try {
-          const subEntries = await fs.readdir(baseDir, { withFileTypes: true });
-          for (const sub of subEntries) {
-            if (sub.name.startsWith(".")) {
-              continue;
-            }
-
-            const nestedDir = path.join(baseDir, sub.name);
-            if (sub.isDirectory()) {
-              if (await fileExists(path.join(nestedDir, "SKILL.md"))) {
-                result.push(nestedDir);
-              }
-              continue;
-            }
-
-            if (sub.isSymbolicLink()) {
-              const stat = await fs.stat(nestedDir).catch(() => null);
-              if (
-                stat?.isDirectory() &&
-                (await fileExists(path.join(nestedDir, "SKILL.md")))
-              ) {
-                result.push(nestedDir);
-              }
-            }
-          }
-        } catch (err) {
-          console.warn(
-            `Failed reading skill directory: ${baseDir}, skipping`,
-            err,
-          );
-        }
-      }
-    }
-
-    return result;
-  }
-
-  private static async getScannedSkillInstallMetadata(
-    skillFolderPath: string,
-  ): Promise<{
-    installMode: ScannedSkill["installMode"];
-    symlinkTargetPath?: string;
-    isPromptHubManagedLink?: boolean;
-  }> {
-    const stat = await fs.lstat(skillFolderPath).catch(() => null);
-    if (!stat?.isSymbolicLink()) {
-      return { installMode: "copy" };
-    }
-
-    const rawTarget = await fs.readlink(skillFolderPath).catch(() => null);
-    const resolvedTarget = rawTarget
-      ? path.isAbsolute(rawTarget)
-        ? rawTarget
-        : path.resolve(path.dirname(skillFolderPath), rawTarget)
-      : undefined;
-    const symlinkTargetPath = resolvedTarget;
-    const isPromptHubManagedLink = symlinkTargetPath
-      ? await isManagedRepoPath(symlinkTargetPath).catch(() => false)
-      : false;
-
-    return {
-      installMode: "symlink",
-      symlinkTargetPath,
-      isPromptHubManagedLink,
-    };
-  }
-
-  private static async resolveSingleSkillDirFromRepo(
-    repoDir: string,
-  ): Promise<string> {
-    const skillDirs = await this.collectSkillDirs(repoDir);
-
-    if (skillDirs.length === 0) {
-      throw new Error("Repository does not contain a SKILL.md file.");
-    }
-
-    if (skillDirs.length > 1) {
-      throw new Error(
-        "Repository contains multiple skills. Import it as a local skill folder instead.",
-      );
-    }
-
-    return skillDirs[0];
-  }
-
-  private static async resolveSkillDirFromRepo(
-    repoDir: string,
-    skill: Pick<Skill, "name" | "logical_name" | "variant_key">,
-  ): Promise<string> {
-    const skillDirs = await this.collectSkillDirs(repoDir);
-
-    if (skillDirs.length <= 1) {
-      return this.resolveSingleSkillDirFromRepo(repoDir);
-    }
-
-    const targetNames = new Set(
-      [skill.name, skill.logical_name, skill.variant_key]
-        .map(normalizeSkillLookupValue)
-        .filter(Boolean),
-    );
-    const matches: string[] = [];
-
-    for (const skillDir of skillDirs) {
-      const skillMdPath = path.join(skillDir, "SKILL.md");
-      const content = await fs.readFile(skillMdPath, "utf-8").catch(() => "");
-      const parsedName = parseSkillMd(content)?.frontmatter.name;
-      const candidateNames = [
-        parsedName,
-        path.basename(skillDir),
-        path.basename(path.dirname(skillDir)),
-      ].map(normalizeSkillLookupValue);
-
-      if (candidateNames.some((name) => targetNames.has(name))) {
-        matches.push(skillDir);
-      }
-    }
-
-    if (matches.length === 1) {
-      return matches[0];
-    }
-
-    if (matches.length > 1) {
-      throw new Error(
-        `Repository contains multiple skills matching "${skill.name}". Specify a skill directory.`,
-      );
-    }
-
-    throw new Error(
-      `Repository contains multiple skills, but none matches "${skill.name}". Specify a skill directory.`,
-    );
-  }
+  static collectSkillDirs = collectSkillDirs;
+  static getScannedSkillInstallMetadata = getScannedSkillInstallMetadata;
+  static resolveSingleSkillDirFromRepo = resolveSingleSkillDirFromRepo;
+  static resolveSkillDirFromRepo = resolveSkillDirFromRepo;
 
   static async scanRemoteGithub(
     repoUrl: string,
@@ -1608,7 +1138,9 @@ export class SkillInstaller {
   static async scanLocal(db: SkillDB): Promise<ScanLocalResult> {
     let count = 0;
     const skipped: string[] = [];
-    const scanPaths = this.getDefaultScanEntries().map((entry) => entry.path);
+    const scanPaths = getDefaultSkillScanEntries(this.skillsDir).map(
+      (entry) => entry.path,
+    );
 
     for (const scanPath of scanPaths) {
       if (!(await fileExists(scanPath))) {
@@ -1735,7 +1267,7 @@ export class SkillInstaller {
       }
     } else {
       // No custom paths: scan all default platform directories
-      scanEntries = this.getDefaultScanEntries();
+      scanEntries = getDefaultSkillScanEntries(this.skillsDir);
     }
 
     // Scan all platform directories in parallel.  The inner map-merge uses

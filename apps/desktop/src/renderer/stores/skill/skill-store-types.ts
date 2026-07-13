@@ -2,6 +2,8 @@ import type {
   CreateSkillParams,
   MCPServerConfig,
   RegistrySkill,
+  RegistrySkillInstallOptions,
+  RegistrySkillInstallResult,
   SafetyScanAIConfig,
   ScanLocalResult,
   ScannedSkill,
@@ -237,8 +239,14 @@ export interface SkillState {
       approvedPackageFingerprint?: string;
     },
   ) => Promise<RegistrySkillUpdateResult | null>;
-  installRegistrySkill: (skill: RegistrySkill) => Promise<Skill | null>;
-  installFromRegistry: (sourceId: string) => Promise<Skill | null>;
+  installRegistrySkill: (
+    skill: RegistrySkill,
+    options?: RegistrySkillInstallOptions,
+  ) => Promise<RegistrySkillInstallResult | null>;
+  installFromRegistry: (
+    sourceId: string,
+    options?: RegistrySkillInstallOptions,
+  ) => Promise<RegistrySkillInstallResult | null>;
   uninstallRegistrySkill: (sourceId: string) => Promise<boolean>;
   setStoreCategory: (category: SkillCategory | "all") => void;
   setStoreSearchQuery: (query: string) => void;

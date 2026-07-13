@@ -47,6 +47,19 @@ const resetSkillStore = () => {
   localStorage.clear();
 };
 
+function mockCompletedPackageOperation(
+  skill: ReturnType<typeof createSkillFixture>,
+  operation: "install" | "update" = "install",
+) {
+  const runPackageOperation = vi.fn().mockResolvedValue({
+    status: "completed",
+    operation,
+    skill,
+  });
+  (window as any).api.skill.runPackageOperation = runPackageOperation;
+  return runPackageOperation;
+}
+
 describe("skill store", () => {
   beforeEach(() => {
     resetSkillStore();
@@ -166,6 +179,18 @@ describe("skill store", () => {
     (window as any).api.skill.writeLocalFile = writeLocalFile;
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-gitea-writer",
+        name: "writer",
+        source_id: "source-gitea-writer",
+        registry_slug: "writer",
+        directory_fingerprint: "full-tree-fingerprint",
+        installed_directory_fingerprint: "full-tree-fingerprint",
+        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+        source_binding_state: "bound",
+      }),
+    );
 
     await useSkillStore.getState().installRegistrySkill({
       slug: "writer",
@@ -184,22 +209,20 @@ describe("skill store", () => {
       content: "# Writer\n\nUse the package resources.\n",
     });
 
-    expect(saveRemoteGitToRepo).toHaveBeenCalledWith("skill-gitea-writer", {
-      repoUrl: "https://gitea.example.com/team/skills",
-      branch: "main",
-      directory: "skills/writer",
-    });
-    expect(create).toHaveBeenCalledWith(
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
-        directory_fingerprint: "full-tree-fingerprint",
-        installed_directory_fingerprint: "full-tree-fingerprint",
-        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
-        source_binding_state: "bound",
-        source_last_checked_at: expect.any(Number),
-        source_last_error: null,
+        operation: "install",
+        source: {
+          kind: "remote-git",
+          repoUrl: "https://gitea.example.com/team/skills",
+          branch: "main",
+          directory: "skills/writer",
+        },
       }),
     );
-    expect(syncFromRepo).toHaveBeenCalledWith("skill-gitea-writer");
+    expect(create).not.toHaveBeenCalled();
+    expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
+    expect(syncFromRepo).not.toHaveBeenCalled();
     expect(writeLocalFile).not.toHaveBeenCalledWith(
       "skill-gitea-writer",
       "SKILL.md",
@@ -234,7 +257,9 @@ describe("skill store", () => {
     (window as any).api.skill.create = create;
     (window as any).api.skill.getAll = getAll;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
-    (window as any).api.skill.writeLocalFile = vi.fn().mockResolvedValue(undefined);
+    (window as any).api.skill.writeLocalFile = vi
+      .fn()
+      .mockResolvedValue(undefined);
     (window as any).api.cloud = {
       store: {
         getPackage: vi.fn().mockResolvedValue({
@@ -282,6 +307,16 @@ describe("skill store", () => {
         updateInstallStatus,
       },
     };
+    const localFingerprint = "e".repeat(64);
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-cloud-writer",
+        name: "cloud-writer",
+        source_id: "cloud:listing:cloud-writer",
+        directory_fingerprint: localFingerprint,
+        installed_directory_fingerprint: localFingerprint,
+      }),
+    );
 
     await useSkillStore.getState().installRegistrySkill({
       slug: "cloud-writer",
@@ -304,16 +339,20 @@ describe("skill store", () => {
         expectedFingerprint: "store-release-fingerprint",
       }),
     );
-    expect(create).toHaveBeenCalledWith(
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
-        directory_fingerprint: expect.not.stringMatching(
-          "store-release-fingerprint",
-        ),
-        installed_directory_fingerprint: expect.not.stringMatching(
-          "store-release-fingerprint",
-        ),
+        registrySkill: expect.objectContaining({ version: "1.2.0" }),
+        source: {
+          kind: "files",
+          sourceUrl: "cloud://store/listings/cloud-writer",
+          files: [
+            { path: "SKILL.md", content: "# Cloud Writer\n" },
+            { path: "scripts/run.sh", content: "echo cloud\n" },
+          ],
+        },
       }),
     );
+    expect(create).not.toHaveBeenCalled();
     expect(updateInstallStatus).toHaveBeenCalledWith("cloud-install-1", {
       status: "started",
     });
@@ -371,6 +410,13 @@ describe("skill store", () => {
     (window as any).api.skill.syncFromRepo = vi
       .fn()
       .mockResolvedValue(syncedSkill);
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        ...syncedSkill,
+        installed_content_hash: repoHash,
+        installed_version: "0.5.9-beta.1",
+      }),
+    );
 
     await useSkillStore.getState().installRegistrySkill({
       slug: "writer",
@@ -389,13 +435,13 @@ describe("skill store", () => {
       content: cachedContent,
     });
 
-    expect(update).toHaveBeenCalledWith(
-      "skill-gitea-writer",
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
-        installed_content_hash: repoHash,
-        installed_version: "0.5.9-beta.1",
+        operation: "install",
+        source: expect.objectContaining({ kind: "remote-git" }),
       }),
     );
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("derives the package directory from canonical_skill_path when source_directory is absent", async () => {
@@ -422,6 +468,13 @@ describe("skill store", () => {
     (window as any).api.skill.getAll = vi.fn().mockResolvedValue([]);
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-canonical-writer",
+        name: "writer",
+        source_id: "source-canonical-writer",
+      }),
+    );
 
     await useSkillStore.getState().installRegistrySkill({
       slug: "writer",
@@ -438,15 +491,21 @@ describe("skill store", () => {
       content: "# Writer\n\nUse the package resources.\n",
     });
 
-    expect(saveRemoteGitToRepo).toHaveBeenCalledWith("skill-canonical-writer", {
-      repoUrl: "https://gitea.example.com/team/skills",
-      branch: "stable",
-      directory: "catalog/writer",
-    });
-    expect(syncFromRepo).toHaveBeenCalledWith("skill-canonical-writer");
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          kind: "remote-git",
+          repoUrl: "https://gitea.example.com/team/skills",
+          branch: "stable",
+          directory: "catalog/writer",
+        },
+      }),
+    );
+    expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
+    expect(syncFromRepo).not.toHaveBeenCalled();
   });
 
-  it("uses the content path for GitHub raw registry entries that do not advertise a package", async () => {
+  it("derives the full GitHub package for raw registry entries", async () => {
     const create = vi.fn().mockResolvedValue(
       createSkillFixture({
         id: "skill-github-single",
@@ -468,6 +527,13 @@ describe("skill store", () => {
     (window as any).api.skill.writeLocalFile = writeLocalFile;
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-github-single",
+        name: "single",
+        source_id: "source-github-single",
+      }),
+    );
 
     await useSkillStore.getState().installRegistrySkill({
       slug: "single",
@@ -484,12 +550,17 @@ describe("skill store", () => {
       content: "# Cached Single\n",
     });
 
-    expect(writeLocalFile).toHaveBeenCalledWith(
-      "skill-github-single",
-      "SKILL.md",
-      "# Single\n\nA single-file registry skill.\n",
-      { skipVersionSnapshot: true },
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          kind: "remote-git",
+          repoUrl: "https://github.com/team/skills.git",
+          branch: "main",
+          directory: "single",
+        },
+      }),
     );
+    expect(writeLocalFile).not.toHaveBeenCalled();
     expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
   });
 
@@ -519,6 +590,13 @@ describe("skill store", () => {
     (window as any).api.skill.writeLocalFile = writeLocalFile;
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-write-a-skill",
+        name: "write-a-skill",
+        source_id: "skills-sh-write-a-skill",
+      }),
+    );
 
     await useSkillStore.getState().installRegistrySkill({
       slug: "mattpocock-skills-write-a-skill",
@@ -537,12 +615,18 @@ describe("skill store", () => {
       content: "# Write A Skill\n\nScaffold new agent skills.\n",
     });
 
-    expect(saveRemoteGitToRepo).toHaveBeenCalledWith("skill-write-a-skill", {
-      repoUrl: "https://github.com/mattpocock/skills",
-      branch: undefined,
-      directory: "skills/write-a-skill",
-    });
-    expect(syncFromRepo).toHaveBeenCalledWith("skill-write-a-skill");
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          kind: "remote-git",
+          repoUrl: "https://github.com/mattpocock/skills",
+          branch: undefined,
+          directory: "skills/write-a-skill",
+        },
+      }),
+    );
+    expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
+    expect(syncFromRepo).not.toHaveBeenCalled();
     expect(writeLocalFile).not.toHaveBeenCalledWith(
       "skill-write-a-skill",
       "SKILL.md",
@@ -577,6 +661,13 @@ describe("skill store", () => {
     (window as any).api.skill.writeLocalFile = writeLocalFile;
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-vercel-react",
+        name: "vercel-react-best-practices",
+        source_id: "skills-sh-vercel-react",
+      }),
+    );
 
     await useSkillStore.getState().installRegistrySkill({
       slug: "vercel-labs-agent-skills-vercel-react-best-practices",
@@ -594,12 +685,18 @@ describe("skill store", () => {
       content: "# React Best Practices\n\nReview React apps.\n",
     });
 
-    expect(saveRemoteGitToRepo).toHaveBeenCalledWith("skill-vercel-react", {
-      repoUrl: "https://github.com/vercel-labs/agent-skills",
-      branch: undefined,
-      directory: undefined,
-    });
-    expect(syncFromRepo).toHaveBeenCalledWith("skill-vercel-react");
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          kind: "remote-git",
+          repoUrl: "https://github.com/vercel-labs/agent-skills",
+          branch: undefined,
+          directory: undefined,
+        },
+      }),
+    );
+    expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
+    expect(syncFromRepo).not.toHaveBeenCalled();
     expect(writeLocalFile).not.toHaveBeenCalledWith(
       "skill-vercel-react",
       "SKILL.md",
@@ -634,6 +731,13 @@ describe("skill store", () => {
     (window as any).api.skill.writeLocalFile = writeLocalFile;
     (window as any).api.skill.saveRemoteZipToRepo = saveRemoteZipToRepo;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-gifgrep",
+        name: "gifgrep",
+        source_id: "clawhub-gifgrep",
+      }),
+    );
 
     await useSkillStore.getState().installRegistrySkill({
       slug: "clawhub-gifgrep",
@@ -655,10 +759,16 @@ describe("skill store", () => {
       package_url: "https://clawhub.ai/api/v1/download?slug=gifgrep",
     });
 
-    expect(saveRemoteZipToRepo).toHaveBeenCalledWith("skill-gifgrep", {
-      zipUrl: "https://clawhub.ai/api/v1/download?slug=gifgrep",
-    });
-    expect(syncFromRepo).toHaveBeenCalledWith("skill-gifgrep");
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          kind: "remote-zip",
+          zipUrl: "https://clawhub.ai/api/v1/download?slug=gifgrep",
+        },
+      }),
+    );
+    expect(saveRemoteZipToRepo).not.toHaveBeenCalled();
+    expect(syncFromRepo).not.toHaveBeenCalled();
     expect(writeLocalFile).not.toHaveBeenCalledWith(
       "skill-gifgrep",
       "SKILL.md",
@@ -715,6 +825,18 @@ describe("skill store", () => {
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
     (window as any).api.skill.update = update;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-mineru-document-extractor",
+        name: "mineru-document-extractor",
+        source_id: sourceId,
+        content: remoteContent,
+        instructions: remoteContent,
+        directory_fingerprint: "zip-package-fingerprint-v2",
+        installed_directory_fingerprint: "zip-package-fingerprint-v2",
+      }),
+      "update",
+    );
 
     useSkillStore.setState({
       skills: [
@@ -765,24 +887,20 @@ describe("skill store", () => {
 
     expect(result?.status).toBe("updated");
     expect(getRemoteGitPackageFingerprint).not.toHaveBeenCalled();
-    expect(saveRemoteZipToRepo).toHaveBeenCalledWith(
-      "skill-mineru-document-extractor",
-      {
-        zipUrl:
-          "https://clawhub.ai/api/v1/download?slug=mineru-document-extractor",
-      },
-    );
-    expect(syncFromRepo).toHaveBeenCalledWith(
-      "skill-mineru-document-extractor",
-    );
-    expect(update).toHaveBeenCalledWith(
-      "skill-mineru-document-extractor",
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: remoteContent,
-        source_last_error: null,
-        source_binding_state: "bound",
+        operation: "update",
+        skillId: "skill-mineru-document-extractor",
+        source: {
+          kind: "remote-zip",
+          zipUrl:
+            "https://clawhub.ai/api/v1/download?slug=mineru-document-extractor",
+        },
       }),
     );
+    expect(saveRemoteZipToRepo).not.toHaveBeenCalled();
+    expect(syncFromRepo).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("updates installed ClawHub page-url sources through package zip when store entry is absent", async () => {
@@ -829,6 +947,17 @@ describe("skill store", () => {
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
     (window as any).api.skill.update = update;
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-mineru-document-extractor",
+        name: "mineru-document-extractor",
+        source_url:
+          "https://clawhub.ai/mineru-extract/mineru-document-extractor",
+        content: remoteContent,
+        instructions: remoteContent,
+      }),
+      "update",
+    );
 
     useSkillStore.setState({
       skills: [
@@ -863,12 +992,17 @@ describe("skill store", () => {
     expect(fetchRemoteContent).toHaveBeenCalledWith(
       "https://clawhub.ai/api/v1/skills/mineru-document-extractor/file?path=SKILL.md",
     );
-    expect(saveRemoteZipToRepo).toHaveBeenCalledWith(
-      "skill-mineru-document-extractor",
-      {
-        zipUrl:
-          "https://clawhub.ai/api/v1/download?slug=mineru-document-extractor",
-      },
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "update",
+        skillId: "skill-mineru-document-extractor",
+        source: {
+          kind: "remote-zip",
+          zipUrl:
+            "https://clawhub.ai/api/v1/download?slug=mineru-document-extractor",
+        },
+      }),
     );
+    expect(saveRemoteZipToRepo).not.toHaveBeenCalled();
   });
 });

@@ -12,6 +12,9 @@ import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import { scheduleAllSaveSync } from "../../services/webdav-save-sync";
 import { detectAgentPlatformSkillSource } from "../../services/skill-agent-source";
 import { detectRemoteSourceChannel } from "../../services/skill-source-channel";
+import { formatSkillPackageOperationError } from "../../services/skill-package-operation";
+
+export { formatSkillPackageOperationError };
 
 export const SKILL_NAME_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -99,7 +102,7 @@ export function formatSkillSafetyScanError(
 }
 
 export function formatSkillInstallError(error: unknown, t: TFunction): string {
-  const rawMessage = getErrorMessage(error);
+  const rawMessage = formatSkillPackageOperationError(error, t);
   return `${t("skill.storeInstallFailed", "Install failed")}: ${rawMessage}`;
 }
 

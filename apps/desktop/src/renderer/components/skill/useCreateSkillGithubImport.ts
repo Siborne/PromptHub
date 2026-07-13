@@ -32,6 +32,7 @@ interface GitHubImportOptions {
 interface GitHubImportSummary {
   failed: string[];
   importedCount: number;
+  reviewRequired: string[];
   skipped: string[];
 }
 
@@ -308,7 +309,7 @@ async function importSelectedGitHubSkills({
       isCompleteImport(
         summary.importedCount,
         summary.skipped.length,
-        summary.failed.length,
+        summary.failed.length + summary.reviewRequired.length,
       )
     )
       return true;
@@ -327,14 +328,17 @@ async function installGitHubSkills(
 ): Promise<GitHubImportSummary> {
   const summary: GitHubImportSummary = {
     importedCount: 0,
+    reviewRequired: [],
     skipped: [],
     failed: [],
   };
   for (const skill of skills) {
     try {
-      const createdSkill = await installRegistrySkill(skill);
-      if (createdSkill) summary.importedCount += 1;
-      else summary.skipped.push(skill.name);
+      const result = await installRegistrySkill(skill);
+      if (result?.status === "installed") summary.importedCount += 1;
+      else if (result?.status === "safety-review-required") {
+        summary.reviewRequired.push(skill.name);
+      } else summary.skipped.push(skill.name);
     } catch (error) {
       summary.failed.push(
         `${skill.name}: ${error instanceof Error ? error.message : String(error)}`,
@@ -345,16 +349,17 @@ async function installGitHubSkills(
 }
 
 function formatGitHubImportSummary(
-  { failed, importedCount, skipped }: GitHubImportSummary,
+  { failed, importedCount, reviewRequired, skipped }: GitHubImportSummary,
   total: number,
   t: TFunction,
 ): string {
   return t(
     "skill.githubImportSummary",
-    "Imported {{imported}} / {{total}}, skipped {{skipped}}, failed {{failed}}.",
+    "Imported {{imported}} / {{total}}, awaiting review {{reviewRequired}}, skipped {{skipped}}, failed {{failed}}.",
   )
     .replace("{{imported}}", String(importedCount))
     .replace("{{total}}", String(total))
+    .replace("{{reviewRequired}}", String(reviewRequired.length))
     .replace("{{skipped}}", String(skipped.length))
     .replace("{{failed}}", String(failed.length));
 }

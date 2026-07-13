@@ -10,6 +10,8 @@ import type {
   SkillSafetyScanInput,
   SkillFileSnapshot,
   SkillPlatformScanResult,
+  SkillPackageOperationRequest,
+  SkillPackageOperationResult,
   SkillLocalFileEntry,
   SkillLocalFileTreeEntry,
   SkillLocalPathStatus,
@@ -174,6 +176,10 @@ export const skillApi = {
       skillId,
       options,
     ),
+  runPackageOperation: (
+    request: SkillPackageOperationRequest,
+  ): Promise<SkillPackageOperationResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILL_RUN_PACKAGE_OPERATION, request),
   getRemoteGitPackageFingerprint: (options: {
     repoUrl: string;
     branch?: string;
@@ -182,6 +188,11 @@ export const skillApi = {
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_GET_REMOTE_GIT_PACKAGE_FINGERPRINT,
       options,
+    ),
+  getLocalPackageFingerprint: (localPath: string): Promise<string> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_FINGERPRINT,
+      localPath,
     ),
   listLocalFiles: (skillId: string): Promise<SkillLocalFileTreeEntry[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_LIST_LOCAL_FILES, skillId),

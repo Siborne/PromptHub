@@ -68,6 +68,11 @@ interface SkillVersionRow {
   created_at: number;
 }
 
+export interface FinalizeSkillPackageResult {
+  skill: Skill;
+  version: SkillVersion;
+}
+
 function parseJsonArray<T>(value: string | null | undefined): T[] | undefined {
   return value ? (JSON.parse(value) as T[]) : undefined;
 }
@@ -580,64 +585,120 @@ export class SkillDB {
   ): SkillVersion | null {
     const skill = existingSkill ?? this.getById(skillId);
     if (!skill) return null;
+    const transaction = this.db.transaction(() =>
+      this.insertVersionSnapshot(skillId, note, filesSnapshot, skill),
+    );
+    return transaction();
+  }
 
-    // Use a transaction to atomically insert version + increment counter,
-    // preventing UNIQUE(skill_id, version) conflicts from concurrent calls.
-    // 使用事务原子化地插入版本 + 递增计数器，防止并发调用导致 UNIQUE 约束冲突。
-    const txn = this.db.transaction(() => {
-      // Re-read current_version inside transaction for consistency
-      // 在事务内重新读取 current_version 以保证一致性
-      const freshRow = this.db
-        .prepare("SELECT current_version FROM skills WHERE id = ?")
-        .get(skillId) as { current_version: number } | undefined;
-      if (!freshRow) return null;
+  /** Finalize install metadata and its initial version as one DB mutation. */
+  finalizePackageInstall(
+    skillId: string,
+    data: UpdateSkillParams,
+    note: string,
+    filesSnapshot: SkillFileSnapshot[],
+  ): FinalizeSkillPackageResult | null {
+    const transaction = this.db.transaction(() => {
+      const updated = this.update(skillId, data);
+      if (!updated) return null;
+      const version = this.insertVersionSnapshot(
+        skillId,
+        note,
+        filesSnapshot,
+        updated,
+      );
+      if (!version)
+        throw new Error("Skill disappeared during install finalization");
+      const skill = this.getById(skillId);
+      if (!skill)
+        throw new Error("Skill disappeared after install finalization");
+      return { skill, version };
+    });
+    return transaction();
+  }
 
-      const version = (freshRow.current_version ?? 0) + 1;
-      const id = uuidv4();
-      const now = Date.now();
+  /** Snapshot the old package and finalize update metadata in one transaction. */
+  finalizePackageUpdate(
+    skillId: string,
+    data: UpdateSkillParams,
+    note: string,
+    filesSnapshot: SkillFileSnapshot[] | undefined,
+    expectedSkill?: Skill,
+  ): FinalizeSkillPackageResult | null {
+    const transaction = this.db.transaction(() => {
+      const current = this.getById(skillId);
+      if (!current) return null;
+      this.assertPackageUpdateBaseline(current, expectedSkill);
+      const version = this.insertVersionSnapshot(
+        skillId,
+        note,
+        filesSnapshot,
+        current,
+      );
+      if (!version) throw new Error("Skill disappeared during update snapshot");
+      const skill = this.update(skillId, data);
+      if (!skill)
+        throw new Error("Skill disappeared during update finalization");
+      return { skill, version };
+    });
+    return transaction();
+  }
 
-      this.db
-        .prepare(
-          `INSERT INTO skill_versions (
+  private assertPackageUpdateBaseline(current: Skill, expected?: Skill): void {
+    if (!expected) return;
+    const changed =
+      current.updated_at !== expected.updated_at ||
+      (current.currentVersion ?? 0) !== (expected.currentVersion ?? 0);
+    if (changed)
+      throw new Error("Skill changed during package update finalization");
+  }
+
+  private insertVersionSnapshot(
+    skillId: string,
+    note: string | undefined,
+    filesSnapshot: SkillFileSnapshot[] | undefined,
+    skill: Skill,
+  ): SkillVersion | null {
+    const freshRow = this.db
+      .prepare("SELECT current_version FROM skills WHERE id = ?")
+      .get(skillId) as { current_version: number } | undefined;
+    if (!freshRow) return null;
+    const version = (freshRow.current_version ?? 0) + 1;
+    const id = uuidv4();
+    const now = Date.now();
+    this.db
+      .prepare(
+        `INSERT INTO skill_versions (
           id, skill_id, version, content, files_snapshot, note, created_at
         ) VALUES (
           @id, @skill_id, @version, @content, @files_snapshot, @note, @created_at
         )`,
-        )
-        .run({
-          "@id": id,
-          "@skill_id": skillId,
-          "@version": version,
-          "@content": skill.content || null,
-          "@files_snapshot": filesSnapshot
-            ? JSON.stringify(filesSnapshot)
-            : null,
-          "@note": note || null,
-          "@created_at": now,
-        });
-
-      // Update current version number
-      // 更新当前版本号
-      this.db
-        .prepare("UPDATE skills SET current_version = ? WHERE id = ?")
-        .run(version, skillId);
-
-      this.db
-        .prepare("UPDATE skills SET version_tracking_enabled = 1 WHERE id = ?")
-        .run(skillId);
-
-      return {
-        id,
-        skillId,
-        version,
-        content: skill.content,
-        filesSnapshot,
-        note,
-        createdAt: new Date(now).toISOString(),
-      } as SkillVersion;
-    });
-
-    return txn();
+      )
+      .run({
+        "@id": id,
+        "@skill_id": skillId,
+        "@version": version,
+        "@content": skill.content || null,
+        "@files_snapshot": filesSnapshot ? JSON.stringify(filesSnapshot) : null,
+        "@note": note || null,
+        "@created_at": now,
+      });
+    this.db
+      .prepare(
+        `UPDATE skills
+         SET current_version = ?, version_tracking_enabled = 1
+         WHERE id = ?`,
+      )
+      .run(version, skillId);
+    return {
+      id,
+      skillId,
+      version,
+      content: skill.content,
+      filesSnapshot,
+      note,
+      createdAt: new Date(now).toISOString(),
+    };
   }
 
   /**
@@ -674,6 +735,33 @@ export class SkillDB {
     );
     const result = stmt.run(skillId, versionId);
     return result.changes > 0;
+  }
+
+  /** Remove a failed-operation snapshot and restore its counter when still current. */
+  discardVersionAndRestoreCounter(
+    skillId: string,
+    versionId: string,
+    previousCurrentVersion: number,
+  ): boolean {
+    const transaction = this.db.transaction(() => {
+      const snapshot = this.db
+        .prepare(
+          "SELECT version FROM skill_versions WHERE skill_id = ? AND id = ?",
+        )
+        .get(skillId, versionId) as { version: number } | undefined;
+      if (!snapshot) return false;
+      this.db
+        .prepare("DELETE FROM skill_versions WHERE skill_id = ? AND id = ?")
+        .run(skillId, versionId);
+      this.db
+        .prepare(
+          `UPDATE skills SET current_version = ?
+           WHERE id = ? AND current_version = ?`,
+        )
+        .run(previousCurrentVersion, skillId, snapshot.version);
+      return true;
+    });
+    return transaction();
   }
 
   /**

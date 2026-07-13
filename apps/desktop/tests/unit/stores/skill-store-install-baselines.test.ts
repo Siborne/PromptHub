@@ -47,6 +47,18 @@ const resetSkillStore = () => {
   localStorage.clear();
 };
 
+function mockCompletedPackageOperation(
+  skill: ReturnType<typeof createSkillFixture>,
+) {
+  const runPackageOperation = vi.fn().mockResolvedValue({
+    status: "completed",
+    operation: "install",
+    skill,
+  });
+  (window as any).api.skill.runPackageOperation = runPackageOperation;
+  return runPackageOperation;
+}
+
 describe("skill store", () => {
   beforeEach(() => {
     resetSkillStore();
@@ -76,16 +88,14 @@ describe("skill store", () => {
   });
 
   it("prefers install_name over registry slug when importing a registry skill", async () => {
-    const create = vi.fn().mockResolvedValue(
-      createSkillFixture({
-        id: "skill-2",
-        name: "find-skills",
-        registry_slug: "vercel-labs-skills-find-skills",
-      }),
-    );
+    const installed = createSkillFixture({
+      id: "skill-2",
+      name: "find-skills",
+      registry_slug: "vercel-labs-skills-find-skills",
+    });
+    const runPackageOperation = mockCompletedPackageOperation(installed);
     const getAll = vi.fn().mockResolvedValue([]);
 
-    (window as any).api.skill.create = create;
     (window as any).api.skill.getAll = getAll;
 
     await useSkillStore.getState().installRegistrySkill({
@@ -104,10 +114,13 @@ describe("skill store", () => {
       compatibility: ["opencode", "codex"],
     });
 
-    expect(create).toHaveBeenCalledWith(
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "find-skills",
-        registry_slug: "vercel-labs-skills-find-skills",
+        operation: "install",
+        registrySkill: expect.objectContaining({
+          install_name: "find-skills",
+          slug: "vercel-labs-skills-find-skills",
+        }),
       }),
     );
   });
@@ -145,24 +158,30 @@ description: Use this skill for PDF tasks.
   });
 
   it("stores install fingerprints for registry skills and uses them for update checks", async () => {
-    const create = vi.fn().mockImplementation(async (data) => ({
-      id: "skill-writer",
-      created_at: 1,
-      updated_at: 1,
-      ...data,
-    }));
+    const installedHash = "a".repeat(64);
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-writer",
+        name: "writer",
+        source_id: "source-writer-main",
+        installed_content_hash: installedHash,
+        installed_directory_fingerprint: installedHash,
+        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+        installed_version: "1.0.0",
+        source_binding_state: "bound",
+      }),
+    );
     const fetchRemoteContent = vi
       .fn()
       .mockResolvedValue("# Writer\n\nOriginal\n");
     const writeLocalFile = vi.fn().mockResolvedValue(undefined);
     const getAll = vi.fn().mockResolvedValue([]);
 
-    (window as any).api.skill.create = create;
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
     (window as any).api.skill.writeLocalFile = writeLocalFile;
     (window as any).api.skill.getAll = getAll;
 
-    const installed = await useSkillStore.getState().installRegistrySkill({
+    const result = await useSkillStore.getState().installRegistrySkill({
       slug: "writer",
       source_id: "source-writer-main",
       name: "Writer",
@@ -177,38 +196,39 @@ description: Use this skill for PDF tasks.
       content: "# Writer\n",
     });
 
-    expect(installed?.installed_content_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(result?.status).toBe("installed");
+    const installed = result?.status === "installed" ? result.skill : null;
+    expect(installed?.installed_content_hash).toBe(installedHash);
     expect(installed?.installed_version).toBe("1.0.0");
-    expect(create).toHaveBeenCalledWith(
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
-        installed_content_hash: installed?.installed_content_hash,
-        installed_directory_fingerprint: installed?.installed_content_hash,
-        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
-        installed_version: "1.0.0",
-        source_binding_state: "bound",
-        source_last_checked_at: expect.any(Number),
-        source_last_error: null,
+        operation: "install",
+        content: "# Writer\n\nOriginal\n",
       }),
     );
   });
 
   it("uses the content hash as the baseline for raw content-url installs", async () => {
-    const create = vi.fn().mockImplementation(async (data) => ({
-      id: "skill-raw-url",
-      created_at: 1,
-      updated_at: 1,
-      ...data,
-    }));
+    const installedHash = "b".repeat(64);
+    const runPackageOperation = mockCompletedPackageOperation(
+      createSkillFixture({
+        id: "skill-raw-url",
+        name: "raw-url-skill",
+        installed_content_hash: installedHash,
+        installed_directory_fingerprint: installedHash,
+        directory_fingerprint: installedHash,
+        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+      }),
+    );
     const fetchRemoteContent = vi
       .fn()
       .mockResolvedValue("# Raw URL Skill\n\nCurrent\n");
     const getAll = vi.fn().mockResolvedValue([]);
 
-    (window as any).api.skill.create = create;
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
     (window as any).api.skill.getAll = getAll;
 
-    const installed = await useSkillStore.getState().installRegistrySkill({
+    const result = await useSkillStore.getState().installRegistrySkill({
       slug: "raw-url-skill",
       source_id: "source-raw-url-skill",
       name: "Raw URL Skill",
@@ -223,14 +243,18 @@ description: Use this skill for PDF tasks.
       content: "# Raw URL Skill\n",
     });
 
-    expect(create).toHaveBeenCalledWith(
+    expect(result?.status).toBe("installed");
+    const installed = result?.status === "installed" ? result.skill : null;
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
-        directory_fingerprint: installed?.installed_content_hash,
-        installed_content_hash: installed?.installed_content_hash,
-        installed_directory_fingerprint: installed?.installed_content_hash,
-        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+        source: {
+          kind: "content",
+          sourceUrl: "https://example.com/skills/raw-url/SKILL.md",
+          content: "# Raw URL Skill\n\nCurrent\n",
+        },
       }),
     );
+    expect(installed?.installed_content_hash).toBe(installedHash);
   });
 
   it("treats same-name variants with different source ids as separately installable", () => {
@@ -288,7 +312,7 @@ description: Use this skill for PDF tasks.
   });
 
   it("syncs binary GitHub repo assets into the managed local repo", async () => {
-    const create = vi.fn().mockResolvedValue(
+    const runPackageOperation = mockCompletedPackageOperation(
       createSkillFixture({
         id: "skill-binary",
         name: "binary-skill",
@@ -315,7 +339,6 @@ description: Use this skill for PDF tasks.
     const writeLocalFileBufferByPath = vi.fn().mockResolvedValue(undefined);
     const getRepoPath = vi.fn().mockResolvedValue("/tmp/managed/binary-skill");
 
-    (window as any).api.skill.create = create;
     (window as any).api.skill.getAll = getAll;
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
     (window as any).api.skill.fetchRemoteContentBytes = fetchRemoteContentBytes;
@@ -339,24 +362,23 @@ description: Use this skill for PDF tasks.
       content: "# Binary Skill\n\nCached\n",
     });
 
-    expect(writeLocalFile).toHaveBeenCalledWith(
-      "skill-binary",
-      "SKILL.md",
-      "# Binary Skill\n\nHello\n",
-      { skipVersionSnapshot: true },
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          kind: "remote-git",
+          repoUrl: "https://github.com/example/skills.git",
+          branch: "main",
+          directory: "skills/binary-skill",
+        },
+      }),
     );
-    expect(fetchRemoteContentBytes).toHaveBeenCalledWith(
-      "https://raw.githubusercontent.com/example/skills/main/skills/binary-skill/assets/icon.png",
-    );
-    expect(writeLocalFileBufferByPath).toHaveBeenCalledWith(
-      "/tmp/managed/binary-skill",
-      "assets/icon.png",
-      Uint8Array.from([0x89, 0x50, 0x4e, 0x47]),
-    );
+    expect(fetchRemoteContentBytes).not.toHaveBeenCalled();
+    expect(writeLocalFile).not.toHaveBeenCalled();
+    expect(writeLocalFileBufferByPath).not.toHaveBeenCalled();
   });
 
   it("syncs root GitHub skill packages instead of writing only SKILL.md", async () => {
-    const create = vi.fn().mockResolvedValue(
+    const runPackageOperation = mockCompletedPackageOperation(
       createSkillFixture({
         id: "skill-html-ppt",
         name: "html-ppt",
@@ -389,7 +411,6 @@ description: Use this skill for PDF tasks.
     const writeLocalFileBufferByPath = vi.fn().mockResolvedValue(undefined);
     const getRepoPath = vi.fn().mockResolvedValue("/tmp/managed/html-ppt");
 
-    (window as any).api.skill.create = create;
     (window as any).api.skill.getAll = getAll;
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
     (window as any).api.skill.fetchRemoteContentBytes = fetchRemoteContentBytes;
@@ -412,33 +433,19 @@ description: Use this skill for PDF tasks.
       content: "# HTML PPT\n\nCached\n",
     });
 
-    expect(writeLocalFile).toHaveBeenCalledWith(
-      "skill-html-ppt",
-      "SKILL.md",
-      "# HTML PPT\n\nCreate decks.\n",
-      { skipVersionSnapshot: true },
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          kind: "remote-git",
+          repoUrl: "https://github.com/lewislulu/html-ppt-skill.git",
+          branch: "main",
+          directory: "",
+        },
+      }),
     );
-    expect(fetchRemoteContentBytes).toHaveBeenCalledTimes(4);
-    expect(writeLocalFileBufferByPath).toHaveBeenCalledWith(
-      "/tmp/managed/html-ppt",
-      "assets/runtime.js",
-      Uint8Array.from([1, 2, 3]),
-    );
-    expect(writeLocalFileBufferByPath).toHaveBeenCalledWith(
-      "/tmp/managed/html-ppt",
-      "references/themes.md",
-      Uint8Array.from([4, 5, 6]),
-    );
-    expect(writeLocalFileBufferByPath).toHaveBeenCalledWith(
-      "/tmp/managed/html-ppt",
-      "scripts/render.sh",
-      Uint8Array.from([7, 8, 9]),
-    );
-    expect(writeLocalFileBufferByPath).toHaveBeenCalledWith(
-      "/tmp/managed/html-ppt",
-      ".github/workflows/ci.yml",
-      Uint8Array.from([10, 11, 12]),
-    );
+    expect(fetchRemoteContentBytes).not.toHaveBeenCalled();
+    expect(writeLocalFile).not.toHaveBeenCalled();
+    expect(writeLocalFileBufferByPath).not.toHaveBeenCalled();
   });
 
   it("updates a pristine registry skill after creating a version snapshot", async () => {
@@ -451,17 +458,36 @@ description: Use this skill for PDF tasks.
       id: "skill-writer",
       updated_at: 2,
     }));
-
-    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
-    (window as any).api.skill.versionCreate = versionCreate;
-    (window as any).api.skill.update = update;
-
     const originalHash = await useSkillStore
       .getState()
       .computeRegistrySkillHash("# Writer\n\nOriginal\n");
     const remoteHash = await useSkillStore
       .getState()
       .computeRegistrySkillHash(remoteContent);
+
+    const updatedSkill = createSkillFixture({
+      id: "skill-writer",
+      name: "writer",
+      source_id: "source-writer-main",
+      content: remoteContent,
+      instructions: remoteContent,
+      version: "1.1.0",
+      installed_content_hash: remoteHash,
+      installed_directory_fingerprint: remoteHash,
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+      installed_version: "1.1.0",
+      source_binding_state: "bound",
+    });
+    const runPackageOperation = vi.fn().mockResolvedValue({
+      status: "completed",
+      operation: "update",
+      skill: updatedSkill,
+    });
+
+    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    (window as any).api.skill.versionCreate = versionCreate;
+    (window as any).api.skill.update = update;
+    (window as any).api.skill.runPackageOperation = runPackageOperation;
 
     useSkillStore.setState({
       skills: [
@@ -499,25 +525,16 @@ description: Use this skill for PDF tasks.
       .updateRegistrySkill("source-writer-main");
 
     expect(result?.status).toBe("updated");
-    expect(versionCreate).toHaveBeenCalledWith(
-      "skill-writer",
-      expect.stringContaining("Store update"),
-    );
-    expect(update).toHaveBeenCalledWith(
-      "skill-writer",
+    expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
+        operation: "update",
+        skillId: "skill-writer",
         content: remoteContent,
-        instructions: remoteContent,
-        version: "1.1.0",
-        installed_content_hash: remoteHash,
-        installed_directory_fingerprint: remoteHash,
-        fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
-        installed_version: "1.1.0",
-        source_binding_state: "bound",
-        source_last_checked_at: expect.any(Number),
-        source_last_error: null,
+        note: expect.stringContaining("Store update"),
       }),
     );
+    expect(versionCreate).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("refreshes stale store update baselines when installed content is already current", async () => {

@@ -34,12 +34,13 @@ export class SkillSafetyReviewRequiredError extends Error {
   }
 }
 
-function createBlockedUpdateError(
-  report: Pick<SkillSafetyReport, "level" | "summary">,
-): Error {
-  return new Error(
-    `SAFETY_SCAN_BLOCKED_UPDATE: staged remote Skill package was flagged as ${report.level}: ${report.summary}`,
-  );
+export class SkillSafetyBlockedError extends Error {
+  constructor(readonly report: SkillSafetyReport) {
+    super(
+      `SAFETY_SCAN_BLOCKED_UPDATE: staged remote Skill package was flagged as ${report.level}: ${report.summary}`,
+    );
+    this.name = "SkillSafetyBlockedError";
+  }
 }
 
 function assertSafetyReportAllowed(
@@ -47,7 +48,7 @@ function assertSafetyReportAllowed(
   input: StagedRemoteSkillPackageSafetyInput,
 ): void {
   if (report.level === "blocked") {
-    throw createBlockedUpdateError(report);
+    throw new SkillSafetyBlockedError(report);
   }
   if (
     report.level === "high-risk" &&
@@ -86,7 +87,7 @@ function combineSafetyReports(
 /** Enforce mandatory local checks and fingerprint-pinned review before apply. */
 export async function assertStagedRemoteSkillPackageSafe(
   input: StagedRemoteSkillPackageSafetyInput,
-): Promise<void> {
+): Promise<SkillSafetyReport> {
   const content = await fs.readFile(
     path.join(input.skillDir, "SKILL.md"),
     "utf-8",
@@ -108,7 +109,7 @@ export async function assertStagedRemoteSkillPackageSafe(
   }
   if (!input.safetyScan?.aiConfig) {
     assertSafetyReportAllowed(normalizedPreflight, input);
-    return;
+    return normalizedPreflight;
   }
 
   const aiReport = await (input.safetyScan.scan ?? scanSkillSafety)({
@@ -121,8 +122,7 @@ export async function assertStagedRemoteSkillPackageSafe(
   if (aiReport.level === "blocked") {
     assertSafetyReportAllowed(aiReport, input);
   }
-  assertSafetyReportAllowed(
-    combineSafetyReports(normalizedPreflight, aiReport),
-    input,
-  );
+  const combinedReport = combineSafetyReports(normalizedPreflight, aiReport);
+  assertSafetyReportAllowed(combinedReport, input);
+  return combinedReport;
 }

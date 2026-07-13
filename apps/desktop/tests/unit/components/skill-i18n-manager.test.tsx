@@ -813,6 +813,64 @@ describe("skill i18n smoke", () => {
     expect(screen.getAllByText("Update available").length).toBeGreaterThan(0);
   });
 
+  it("does not show an update pulse after install when another store reuses the slug", () => {
+    const installedSkill = {
+      ...baseSkill,
+      source_id: "source-gitea-write",
+      source_url: "https://gitea.example.com/team/skills/src/branch/main/write",
+    };
+    const skillStoreState = createSkillStoreState({
+      skills: [installedSkill],
+      remoteStoreEntries: {
+        gitea: {
+          loadedAt: Date.now(),
+          error: null,
+          skills: [
+            {
+              slug: "write",
+              source_id: "source-gitea-write",
+              name: "Write",
+              description: "Write better",
+              category: "general",
+              author: "Team",
+              source_url: installedSkill.source_url,
+              tags: ["general"],
+              version: "1.0.0",
+              content: "# Write",
+            },
+          ],
+        },
+        unrelated: {
+          loadedAt: Date.now(),
+          error: null,
+          skills: [
+            {
+              slug: "write",
+              source_id: "source-unrelated-write",
+              name: "Write",
+              description: "Unrelated Skill with the same slug",
+              category: "general",
+              author: "Other",
+              source_url: "https://github.com/unrelated/skills/tree/main/write",
+              tags: ["general"],
+              version: "9.0.0",
+              content: "# Unrelated Write",
+            },
+          ],
+        },
+      },
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
+
+    render(<SkillManager />);
+
+    expect(screen.getByText("write")).toBeInTheDocument();
+    expect(screen.queryByText("Update available")).not.toBeInTheDocument();
+  });
+
   it("ignores legacy remote store cache entries without skills arrays in the skill manager", async () => {
     const skillStoreState = createSkillStoreState({
       remoteStoreEntries: {

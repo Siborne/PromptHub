@@ -24,6 +24,7 @@ import { initDatabase } from "@/main/database";
 import { readGithubTokenSetting } from "@/main/settings/settings-readers";
 import { invalidateCustomPathsCache } from "../../../src/main/services/skill-installer-utils";
 import { SKILL_PLATFORMS } from "@prompthub/shared/constants/platforms";
+import { MAX_SKILL_PACKAGE_FILES } from "@prompthub/shared/constants/skill-package";
 import * as remoteInstaller from "../../../src/main/services/skill-installer-remote";
 import * as skillInstallerUtils from "../../../src/main/services/skill-installer-utils";
 // Direct imports for real DB tests (these are NOT mocked)
@@ -806,6 +807,27 @@ describe("SkillInstaller external repo by-path access", () => {
     await expect(
       fs.access(path.join(repoPath, "docs", "notes.txt")),
     ).rejects.toThrow();
+  });
+
+  it("reads every file when a valid package reaches the file-count limit", async () => {
+    const repoPath = path.join(tmpDir, "project", "skills", "large-skill");
+    const docsPath = path.join(repoPath, "docs");
+    await fs.mkdir(docsPath, { recursive: true });
+    await fs.writeFile(path.join(repoPath, "SKILL.md"), "# Large Skill\n");
+    await Promise.all(
+      Array.from({ length: MAX_SKILL_PACKAGE_FILES - 1 }, (_, index) =>
+        fs.writeFile(
+          path.join(docsPath, `file-${index.toString().padStart(3, "0")}.txt`),
+          String(index),
+        ),
+      ),
+    );
+
+    const files = await SkillInstaller.readLocalRepoFilesByPath(repoPath);
+
+    expect(files.filter((file) => !file.isDirectory)).toHaveLength(
+      MAX_SKILL_PACKAGE_FILES,
+    );
   });
 
   it("accepts a SKILL.md file path as the by-path repo base", async () => {

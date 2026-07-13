@@ -181,8 +181,10 @@ export const IPC_CHANNELS = {
   SKILL_SAVE_TO_REPO: "skill:saveToRepo",
   SKILL_SAVE_REMOTE_GIT_TO_REPO: "skill:saveRemoteGitToRepo",
   SKILL_SAVE_REMOTE_ZIP_TO_REPO: "skill:saveRemoteZipToRepo",
+  SKILL_RUN_PACKAGE_OPERATION: "skill:runPackageOperation",
   SKILL_GET_REMOTE_GIT_PACKAGE_FINGERPRINT:
     "skill:getRemoteGitPackageFingerprint",
+  SKILL_GET_LOCAL_PACKAGE_FINGERPRINT: "skill:getLocalPackageFingerprint",
   SKILL_GET_REPO_PATH: "skill:getRepoPath",
   SKILL_SYNC_FROM_REPO: "skill:syncFromRepo",
 

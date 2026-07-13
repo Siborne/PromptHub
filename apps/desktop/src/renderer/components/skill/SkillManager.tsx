@@ -36,7 +36,7 @@ import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
 import { filterVisibleSkills } from "../../services/skill-filter";
 import { buildMySkillSourceBadges } from "../../services/skill-source-badges";
 import { getRemoteStoreSkills } from "../../services/remote-store-entry";
-import { hasRegistrySkillVersionChanged } from "../../services/skill-store-update";
+import { getSkillsWithStoreUpdates } from "../../services/skill-library-update-status";
 import { getRuntimeCapabilities } from "../../runtime";
 import { useSkillStoreRemoteSync } from "./store-remote-sync";
 import { filterDeployablePlatforms } from "../../services/platform-visibility";
@@ -394,39 +394,20 @@ export function SkillManager() {
   const { remoteStoreEntries } = useSkillStoreRemoteSync({
     eagerRemoteSources: "all",
   });
+  const registrySkills = useSkillStore((state) => state.registrySkills);
 
   const scanLocalPreview = useSkillStore((state) => state.scanLocalPreview);
   const importScannedSkills = useSkillStore(
     (state) => state.importScannedSkills,
   );
   const skillsWithStoreUpdates = useMemo(() => {
-    const registrySkillBySlug = new Map(
-      Object.values(remoteStoreEntries)
-        .flatMap((entry) => getRemoteStoreSkills(entry))
-        .map((skill) => [skill.slug, skill]),
-    );
-
-    return new Set(
-      skills
-        .filter((skill) => {
-          if (!skill.registry_slug) {
-            return false;
-          }
-
-          const registrySkill = registrySkillBySlug.get(skill.registry_slug);
-          if (!registrySkill) {
-            return false;
-          }
-
-          if (skill.installed_content_hash) {
-            return hasRegistrySkillVersionChanged(skill, registrySkill);
-          }
-
-          return hasRegistrySkillVersionChanged(skill, registrySkill);
-        })
-        .map((skill) => skill.id),
-    );
-  }, [remoteStoreEntries, skills]);
+    return getSkillsWithStoreUpdates(skills, [
+      ...(registrySkills ?? []),
+      ...Object.values(remoteStoreEntries).flatMap((entry) =>
+        getRemoteStoreSkills(entry),
+      ),
+    ]);
+  }, [registrySkills, remoteStoreEntries, skills]);
 
   // Delete confirmation dialog state
   // 删除确认对话框状态
