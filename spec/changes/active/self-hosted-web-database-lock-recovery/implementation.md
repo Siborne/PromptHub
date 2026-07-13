@@ -19,6 +19,12 @@ passes.
 
 ## Release State
 
-The fix is local and not present in the published `v0.5.9` image yet. Commit,
-push, and replacement release publication remain intentionally pending explicit
-release direction.
+The fix is committed on `main` but is not present in the published `v0.5.9`
+image yet. The replacement `v0.5.9` Web publication is now explicitly
+authorized. The release tag must point at the commit containing the guarded
+Web startup recovery, and the tag-triggered Web workflow must complete before
+the issue is considered released.
+
+Local Docker image publication remains unavailable because the Docker daemon is
+not running on the release workstation; GitHub Actions is the required real
+image build and push boundary.
