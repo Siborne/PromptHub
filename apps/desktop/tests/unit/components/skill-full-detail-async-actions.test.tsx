@@ -622,7 +622,7 @@ describe("SkillFullDetailPage async actions", () => {
       toastText: "Unable to reconcile history",
       toastType: "warning" as const,
       showsUpdate: false,
-      showsOverwrite: false,
+      showsOverwrite: true,
     },
     {
       status: "source-unavailable" as const,

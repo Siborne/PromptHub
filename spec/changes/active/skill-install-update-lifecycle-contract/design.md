@@ -222,6 +222,11 @@ once or returns a deterministic duplicate/conflict result.
 - Update all `installRegistrySkill` callers in one change; TypeScript must not
   allow a mixed `Skill | null` and structured-result world.
 - Linked local folders retain the current no-overwrite policy.
+- Scanned copy imports persist a hashed `installed-source` identity derived from
+  the exact local directory, plus content/package baselines and source binding.
+  Existing managed copies with no baseline can use an explicit overwrite to
+  restage that source and establish the missing baseline; automatic checks do
+  not mutate content, and linked local folders remain non-overwritable.
 - CLI/Web behavior is not silently changed; reusable core/shared contracts are
   available for later adapters, while this change's acceptance gate covers all
   Desktop entry points named in the proposal.
@@ -244,6 +249,28 @@ reported Gitea install. Verification layers:
   large package inventories.
 - Desktop typecheck/lint/build, file-size gate, focused coverage, and release
   harness before convergence.
+
+## `DES-SIL-011` Imported Source Persistence And Compensation
+
+The scanned-import boundary has two phases:
+
+1. Create a temporary Skill row containing the exact scanned source identity,
+   source path, content hash, directory fingerprint, installed version/time,
+   and an initialized source baseline.
+2. Persist the complete package into the PromptHub-managed repository and then
+   replace `local_repo_path` with the managed path.
+
+The operation is completed only after both phases succeed. A missing copy path,
+failed package copy, or failed path update triggers deletion of the temporary
+row and its PromptHub-owned artifacts. A failed delete returns a chained error
+that preserves the original persistence failure and the compensation failure.
+No failure is downgraded to a warning or counted as a successful import.
+
+When a managed legacy row has `baseline-missing`, an explicit overwrite request
+may bypass only that deferred state and then runs the normal stage, scan, apply,
+and baseline finalization pipeline. `local-linked` policy is evaluated first and
+returns `convert-to-managed-copy`, so this compatibility path cannot overwrite
+an external directory.
 
 ## Alternatives Rejected
 

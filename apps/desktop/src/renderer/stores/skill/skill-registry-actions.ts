@@ -234,6 +234,7 @@ function createRegistryStatusActions(get: SkillStoreGet) {
 
 function getDeferredUpdateResult(
   check: RegistrySkillUpdateCheck,
+  allowBaselineReset: boolean,
 ): RegistrySkillUpdateResult | null {
   if (!check.installedSkill) {
     return {
@@ -243,6 +244,7 @@ function getDeferredUpdateResult(
       check,
     };
   }
+  if (check.status === "baseline-missing" && allowBaselineReset) return null;
   if (isDeferredSourceUpdateStatus(check.status))
     return { status: check.status, check };
   return null;
@@ -319,7 +321,10 @@ async function applyCheckedRegistryUpdate(
   notePrefix: string,
   markAsBuiltin: boolean,
 ): Promise<RegistrySkillUpdateResult | null> {
-  const deferred = getDeferredUpdateResult(check);
+  const deferred = getDeferredUpdateResult(
+    check,
+    options?.overwriteLocalChanges === true,
+  );
   if (deferred) return deferred;
   if (check.status === "up-to-date") {
     const skill = await refreshRegistrySkillBaselineIfNeeded(

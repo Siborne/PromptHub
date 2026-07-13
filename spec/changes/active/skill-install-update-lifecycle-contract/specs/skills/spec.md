@@ -74,6 +74,24 @@ black-box regression. Changed lifecycle branches require line, function,
 branch, and condition coverage, plus integration tests for DB/filesystem/IPC
 rollback and UI tests for every install/update entry point.
 
+### `FR-SIL-011` Imported Local Source Continuity
+
+A Skill copied into My Skills from a scanned Agent or project directory MUST
+persist the exact source identity, content/package baseline, installed version,
+and source binding at import time. Later source checks MUST resolve the same
+directory and MUST be able to update the managed copy when that source changes.
+Legacy managed copies without a baseline MAY establish one only through an
+explicit overwrite/reset action. Linked external directories MUST remain
+non-overwritable and continue to require conversion or manual maintenance.
+
+### `FR-SIL-012` Scanned Copy Import Rollback
+
+A scanned copy import MUST be reported as completed only after the full package
+is persisted and the managed repository path is stored. If package copy or path
+persistence fails, the temporary Skill row MUST be removed. If compensation
+also fails, the operation MUST return a chained rollback diagnostic rather than
+leaving a false success state.
+
 ## Acceptance Scenarios
 
 1. A Gitea Skill whose entry preview is safe but whose four-file staged package
@@ -100,6 +118,17 @@ rollback and UI tests for every install/update entry point.
     a different source with the same slug. The library badge follows exact
     source identity and compatible package fingerprints rather than whichever
     same-slug entry loaded last.
+12. Importing a Claude Code Skill as a managed copy records its exact local
+    source and package baseline. After the source directory changes, check and
+    update read from that same directory and refresh the managed package.
+13. A legacy managed copy with `baseline-missing` remains unchanged during an
+    automatic check, but an explicit overwrite action restages the source and
+    establishes a current baseline.
+14. A linked local Skill with `baseline-missing` never writes into the external
+    source directory, even when overwrite is requested.
+15. If a scanned copy cannot persist its package or managed path, the temporary
+    Skill row is removed and the import is not counted as successful. A failed
+    compensation reports both the original and rollback failures.
 
 ## Traceability
 
@@ -115,3 +144,5 @@ rollback and UI tests for every install/update entry point.
 | `FR-SIL-008` | `DES-SIL-008`                | `TEST-SIL-006`                        | `T-SIL-003`, `T-SIL-009` |
 | `FR-SIL-009` | `DES-SIL-002`, `DES-SIL-009` | `TEST-SIL-008`                        | `T-SIL-003`, `T-SIL-005` |
 | `FR-SIL-010` | `DES-SIL-010`                | `TEST-SIL-001` through `TEST-SIL-009` | `T-SIL-001`, `T-SIL-009` |
+| `FR-SIL-011` | `DES-SIL-009`, `DES-SIL-011` | `TEST-SIL-008`, `TEST-SIL-010`        | `T-SIL-005`, `T-SIL-009` |
+| `FR-SIL-012` | `DES-SIL-005`, `DES-SIL-011` | `TEST-SIL-004`, `TEST-SIL-010`        | `T-SIL-004`, `T-SIL-009` |

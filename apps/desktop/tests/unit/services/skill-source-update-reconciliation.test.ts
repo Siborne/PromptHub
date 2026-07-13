@@ -282,6 +282,16 @@ describe("skill source update reconciliation", () => {
 
     expect(
       getSkillSourceUpdateActionPolicy({
+        status: "baseline-missing",
+        sourceMode: "local-linked",
+      }),
+    ).toMatchObject({
+      canApplyRemoteUpdate: false,
+      recommendedAction: "convert-to-managed-copy",
+    });
+
+    expect(
+      getSkillSourceUpdateActionPolicy({
         status: "update-available",
         sourceMode: "managed-copy",
       }),

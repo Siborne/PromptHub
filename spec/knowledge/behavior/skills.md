@@ -42,8 +42,9 @@
 - My Skills 的来源更新必须按三方对账处理：`B` 是上次来源安装基线，`L` 是当前本地 package，`R` 是当前来源 package。
 - 目录级 Skill 必须优先使用 package fingerprint 对账。`directory_fingerprint` 表示当前本地 package，`installed_directory_fingerprint` 表示上次来源安装基线，`fingerprint_algorithm` 记录算法版本。
 - v1 durable package fingerprint 使用 `skill-package-sha256-v1`；桌面主进程、CLI 和 renderer 远程包指纹解析不得把旧版 stable-text 目录摘要标记为该算法。Git tree/API 中只有 blob hash、没有包文件内容时，不得直接产出 durable `directory_fingerprint`；必须留空等待 clone/materialize 后按 v1 计算，或在未来能取得文件内容时按 v1 manifest 计算。旧版只记录 `SKILL.md` hash 的安装，只能在旧 hash 证明本地与远程入口一致时静默升级基线，否则进入无法确定历史的状态。
-- 兼容旧版安装时，如果缺少 `installed_directory_fingerprint` 但旧 `installed_content_hash` 与远程入口 hash 一致，来源检查可以把当前本地 package fingerprint 作为可推断基线，再判断远程 package 是否变化；这只用于维持旧安装的资源更新检测，不允许绕过 `baseline-missing` 的冲突保护。
+- 兼容旧版安装时，如果缺少 `installed_directory_fingerprint` 但旧 `installed_content_hash` 与远程入口 hash 一致，来源检查可以把当前本地 package fingerprint 作为可推断基线，再判断远程 package 是否变化。自动检查不得绕过 `baseline-missing` 的冲突保护；PromptHub 托管副本只有在用户显式选择覆盖/重置后，才能重新暂存来源并建立基线。链接外部目录即使显式覆盖也不得被 PromptHub 写入。
 - 来源更新检查必须通过共享的 `B/L/R` 对账逻辑产生 `localModified`、`remoteChanged` 和状态，UI/store 不得各自手写不一致的状态机。
+- 从 Project/Agent 扫描结果复制导入 My Skills 时，必须立即持久化基于确切本地目录的 `source_id`、内容 hash、目录 fingerprint、安装版本/时间和来源基线；后续检查与更新必须继续从该来源目录解析，而不是把复制后的 PromptHub 托管 repo 误当成远程来源。
 - My Skills 列表的“有可用更新”徽标必须先按确切来源身份匹配远程条目，优先级为 `source_id`、`content_url`、`source_url`；只有完全缺少来源身份的旧记录才能按唯一 `registry_slug` 回退。同 slug 的不同商店条目不得互相覆盖或触发刚安装即有更新的误报；只有算法兼容的 durable package fingerprint 才能优先于版本标签参与徽标判断。
 - 来源更新状态限定为 `no-source`、`source-unavailable`、`baseline-missing`、`up-to-date`、`update-available`、`local-modified`、`conflict`。`source-moved` 和 `downstream-stale` 不属于 v1 来源更新主状态。
 - `downstream-stale` 属于 Project/Agent 分发拓扑数据，只能作为辅助扫描结果或 `hasStaleTargets` / `staleTargets` 类字段暴露，不得污染 My Skills 来源对账状态机。
@@ -60,6 +61,7 @@
 - Cloud Store 的安装与更新必须先读取已发布 package，展示版本、文件/内容差异和安全扫描结果，等待用户明确确认后才写入本地；“检查更新”本身不得直接覆盖 Skill。
 - Cloud release 的 `store-package-sha256-v1` 只用于远程交付 intent 的版本期望；桌面本地 package 仍必须计算并持久化 `skill-package-sha256-v1`，不得把两种 fingerprint 直接比较或互相标记。
 - Cloud 多文件 package 写入失败时必须恢复已写入文件并清理新建文件；安装失败不得留下半成品 Skill，更新失败不得提前刷新来源基线。
+- 扫描复制导入只有在完整 package 已写入 PromptHub 托管 repo 且 `local_repo_path` 已持久化后才能计为成功。复制、返回路径或路径持久化失败必须删除临时 Skill 记录；补偿删除失败必须报告原始失败与回滚失败，不得吞错或保留假成功状态。
 
 ### 2.2 Install And Update Safety Review Contract
 
@@ -69,7 +71,8 @@
 - “信任此确切来源”只能在复核后的安装或更新真正完成后持久化。取消、失败、fingerprint 变化或 `blocked` 结果不得写入信任列表；信任来源也不得跳过后续扫描。
 - 批量安装与批量更新必须把待复核项目排队并单独计数，不得把它们计为成功或普通失败。Git 导入同样不得在复核完成前计为已导入。
 - `blocked`、路径穿越、无效 package 结构与不安全 archive 始终不可绕过。raw `content-url` 的可复核高风险与 Git/Zip package 使用同一 review 语义，而不是直接硬阻断。
-- 首次安装在 review 或失败前创建过临时记录时，必须确认补偿删除成功。若补偿失败，必须返回稳定的 `ROLLBACK_INCOMPLETE`，并禁止继续展示可恢复批准流程，避免用户在不确定持久化状态上重复安装。
+- 标准生命周期必须在完整暂存、扫描和授权后才创建持久化 Skill 记录。兼容扫描导入等需要临时记录的边界必须确认补偿删除成功；若补偿失败，必须返回稳定的回滚诊断，并禁止继续展示可恢复批准流程，避免用户在不确定持久化状态上重复安装。
+- 安装/更新的业务元数据必须以最终暂存 package 中解析后的 `SKILL.md` frontmatter 为准；商店目录值仅作为缺失字段的回退。用户在 PromptHub 中维护的 `tags` 不得被来源更新覆盖，来源标签写入 `original_tags`；目录版本 `source` 是哨兵值，不得作为已安装版本持久化。
 
 ### 3. Versioning Contract
 

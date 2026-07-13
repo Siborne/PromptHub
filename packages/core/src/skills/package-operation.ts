@@ -9,6 +9,7 @@ import type {
 } from "@prompthub/shared/types";
 import { computeStableTextHash } from "@prompthub/shared/utils/skill-identity";
 import { SKILL_PACKAGE_FINGERPRINT_ALGORITHM } from "@prompthub/shared/utils/skill-source-update";
+import { parseSkillMd } from "./skill-frontmatter";
 import {
   MAX_SKILL_PACKAGE_DEPTH,
   MAX_SKILL_PACKAGE_FILES,
@@ -321,6 +322,44 @@ type StoreSkillDataInput = {
   safetyReport?: SkillSafetyReport;
 };
 
+type StagedPackageMetadata = {
+  description?: string;
+  version?: string;
+  author?: string;
+  tags?: string[];
+  compatibility?: string[];
+};
+
+function parseCompatibility(value?: string): string[] | undefined {
+  const values = value
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return values?.length ? values : undefined;
+}
+
+function getStagedPackageMetadata(content: string): StagedPackageMetadata {
+  const frontmatter = parseSkillMd(content)?.frontmatter;
+  if (!frontmatter) return {};
+  return {
+    description: frontmatter.description,
+    version: frontmatter.version,
+    author: frontmatter.author,
+    tags: frontmatter.tags,
+    compatibility: parseCompatibility(frontmatter.compatibility),
+  };
+}
+
+function getCatalogInstalledVersion(
+  catalogVersion: string,
+  packageVersion?: string,
+  currentVersion?: string,
+): string | undefined {
+  return catalogVersion === "source"
+    ? packageVersion || currentVersion
+    : catalogVersion;
+}
+
 function buildSourceBaseline(input: StoreSkillDataInput) {
   return {
     directory_fingerprint: input.directoryFingerprint,
@@ -337,14 +376,19 @@ export function buildStoreInstallSkillData(
   input: StoreSkillDataInput,
 ): CreateSkillParams {
   const skill = input.registrySkill;
+  const packageMetadata = getStagedPackageMetadata(input.content);
+  const installedVersion = getCatalogInstalledVersion(
+    skill.version,
+    packageMetadata.version,
+  );
   return {
     name: skill.install_name || skill.slug,
-    description: skill.description,
+    description: packageMetadata.description ?? skill.description,
     instructions: input.content,
     content: input.content,
     protocol_type: "skill",
-    version: skill.version,
-    author: skill.author,
+    version: packageMetadata.version ?? installedVersion,
+    author: packageMetadata.author ?? skill.author,
     source_url: skill.source_url,
     source_id: input.sourceId,
     source_label: skill.source_label,
@@ -352,7 +396,7 @@ export function buildStoreInstallSkillData(
     source_directory: skill.source_directory,
     canonical_skill_path: skill.canonical_skill_path,
     tags: [],
-    original_tags: skill.tags,
+    original_tags: packageMetadata.tags ?? skill.tags,
     is_favorite: false,
     icon_url: skill.icon_url,
     icon_emoji: skill.icon_emoji,
@@ -362,11 +406,11 @@ export function buildStoreInstallSkillData(
     registry_slug: skill.slug,
     content_url: skill.content_url,
     installed_content_hash: input.contentHash,
-    installed_version: skill.version,
+    installed_version: installedVersion,
     installed_at: input.now,
     updated_from_store_at: input.now,
     prerequisites: skill.prerequisites,
-    compatibility: skill.compatibility,
+    compatibility: packageMetadata.compatibility ?? skill.compatibility,
     safetyReport: input.safetyReport,
     ...buildSourceBaseline(input),
   };
@@ -382,12 +426,18 @@ export function buildStoreUpdateSkillData(
   input: StoreSkillUpdateInput,
 ): UpdateSkillParams {
   const skill = input.registrySkill;
+  const packageMetadata = getStagedPackageMetadata(input.content);
+  const installedVersion = getCatalogInstalledVersion(
+    skill.version,
+    packageMetadata.version,
+    input.installedSkill.installed_version ?? input.installedSkill.version,
+  );
   return {
-    description: skill.description,
+    description: packageMetadata.description ?? skill.description,
     instructions: input.content,
     content: input.content,
-    version: skill.version,
-    author: skill.author,
+    version: packageMetadata.version ?? installedVersion,
+    author: packageMetadata.author ?? skill.author,
     source_url: skill.source_url,
     source_id: input.sourceId,
     source_label: input.installedSkill.source_label || skill.source_label,
@@ -401,11 +451,11 @@ export function buildStoreUpdateSkillData(
     is_builtin: input.markAsBuiltin ? true : input.installedSkill.is_builtin,
     registry_slug: skill.slug,
     content_url: skill.content_url,
-    original_tags: skill.tags,
+    original_tags: packageMetadata.tags ?? skill.tags,
     prerequisites: skill.prerequisites,
-    compatibility: skill.compatibility,
+    compatibility: packageMetadata.compatibility ?? skill.compatibility,
     installed_content_hash: input.contentHash,
-    installed_version: skill.version,
+    installed_version: installedVersion,
     updated_from_store_at: input.now,
     safetyReport: input.safetyReport,
     ...buildSourceBaseline(input),

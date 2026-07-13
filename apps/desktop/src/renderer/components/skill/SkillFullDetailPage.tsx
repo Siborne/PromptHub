@@ -717,7 +717,8 @@ export function SkillFullDetailPage({
   const showApplySourceUpdate = sourceUpdateStatus === "update-available";
   const showOverwriteSourceUpdate =
     sourceUpdateStatus === "local-modified" ||
-    sourceUpdateStatus === "conflict";
+    sourceUpdateStatus === "conflict" ||
+    sourceUpdateStatus === "baseline-missing";
   const sourceUpdateButtonLabel = showApplySourceUpdate
     ? t("skill.updateFromSource", "Update from Source")
     : t("skill.checkSourceUpdatesAction", "Check Source Updates");

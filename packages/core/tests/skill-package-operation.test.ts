@@ -544,6 +544,96 @@ describe("Skill package operation policy", () => {
     });
   });
 
+  it("uses staged SKILL.md metadata without overwriting user-owned tags", () => {
+    const stagedContent = [
+      "---",
+      "name: writer",
+      "description: Package description",
+      "version: 3.1.0",
+      "author: Package Author",
+      "tags: [package, reviewed]",
+      "compatibility: [claude, codex]",
+      "---",
+      "# Updated package",
+    ].join("\n");
+    const input = {
+      registrySkill: { ...registrySkill, version: "source" },
+      content: stagedContent,
+      contentHash: "updated-hash",
+      directoryFingerprint: "updated-directory",
+      sourceId: registrySkill.source_id!,
+      now: 500,
+    };
+
+    const installData = buildStoreInstallSkillData(input);
+    const updateData = buildStoreUpdateSkillData({
+      ...input,
+      installedSkill: {
+        ...installData,
+        id: "skill-writer",
+        tags: ["my-private-tag"],
+        is_favorite: false,
+        created_at: 1,
+        updated_at: 1,
+      } as Skill,
+      markAsBuiltin: false,
+    });
+
+    expect(installData).toMatchObject({
+      description: "Package description",
+      version: "3.1.0",
+      installed_version: "3.1.0",
+      author: "Package Author",
+      original_tags: ["package", "reviewed"],
+      compatibility: ["claude", "codex"],
+    });
+    expect(updateData).toMatchObject({
+      description: "Package description",
+      version: "3.1.0",
+      installed_version: "3.1.0",
+      author: "Package Author",
+      original_tags: ["package", "reviewed"],
+      compatibility: ["claude", "codex"],
+    });
+    expect(updateData).not.toHaveProperty("tags");
+  });
+
+  it("keeps the current version when source frontmatter is malformed", () => {
+    const installed = {
+      ...buildStoreInstallSkillData({
+        registrySkill,
+        content: "# Writer",
+        contentHash: "content-hash",
+        directoryFingerprint: "directory-fingerprint",
+        sourceId: registrySkill.source_id!,
+        now: 600,
+      }),
+      id: "skill-writer",
+      version: "2.4.0",
+      installed_version: undefined,
+      is_favorite: false,
+      created_at: 1,
+      updated_at: 1,
+    } as Skill;
+
+    const updateData = buildStoreUpdateSkillData({
+      registrySkill: { ...registrySkill, version: "source" },
+      content: "---\ntags: [unterminated\n---\n# Writer",
+      contentHash: "updated-hash",
+      directoryFingerprint: "updated-directory",
+      sourceId: registrySkill.source_id!,
+      now: 700,
+      installedSkill: installed,
+      markAsBuiltin: false,
+    });
+
+    expect(updateData).toMatchObject({
+      description: registrySkill.description,
+      version: "2.4.0",
+      installed_version: "2.4.0",
+    });
+  });
+
   it("redacts URL credentials and bounded secret query values", () => {
     const diagnostic = sanitizeSkillPackageDiagnostic(
       "fetch https://user:pass@example.com/repo?token=abc&mode=raw password=hunter2",

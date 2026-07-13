@@ -552,7 +552,9 @@ export function getSkillSourceUpdateActionPolicy(
 ): SkillSourceUpdateActionPolicy {
   if (
     input.sourceMode === "local-linked" &&
-    (input.status === "update-available" || input.status === "conflict")
+    (input.status === "update-available" ||
+      input.status === "conflict" ||
+      input.status === "baseline-missing")
   ) {
     return {
       canApplyRemoteUpdate: false,

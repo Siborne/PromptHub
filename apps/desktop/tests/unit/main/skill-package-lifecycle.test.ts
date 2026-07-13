@@ -262,6 +262,13 @@ describe("Skill package lifecycle", () => {
       code: "INVALID_PACKAGE",
     },
     {
+      name: "oversized remote package",
+      operationRequest: request,
+      error: new Error("Skill package contains too many files"),
+      status: "failed",
+      code: "INVALID_PACKAGE",
+    },
+    {
       name: "local staging failure",
       operationRequest: {
         ...request,

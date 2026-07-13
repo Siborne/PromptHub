@@ -2,10 +2,10 @@
 
 ## Phase And Status
 
-- Phase: implement
-- Status: Desktop review-flow slice implemented; main-process lifecycle
-  consolidation remains active
-- Primary requirements: `FR-SIL-001` through `FR-SIL-010`
+- Phase: converge
+- Status: Desktop canonical lifecycle and imported-source compatibility are
+  locally verified; submission and archival remain pending
+- Primary requirements: `FR-SIL-001` through `FR-SIL-012`
 - Exit condition: every Desktop Skill install/update entry point consumes one
   structured lifecycle contract, reviewable findings never degrade into raw
   error strings, and release-level regression verification passes.
@@ -36,6 +36,11 @@ path and exceptions in another.
   visible outcomes at every entry point.
 - No install/update path can flatten a known domain outcome into a raw error
   message.
+- Skills imported from Claude Code or another scanned local source immediately
+  record an exact source identity and package baseline, so a later check can
+  update from the original source instead of reporting an indeterminate state.
+- Legacy managed copies without a baseline can be explicitly reset from their
+  source; linked external directories remain protected from PromptHub writes.
 
 ## Scope
 
@@ -49,6 +54,8 @@ path and exceptions in another.
 - Shared operation contracts, main-process orchestration, preload exposure,
   renderer controller, review UI, error codes, rollback, and regression tests.
 - Existing exact-source trust and fingerprint-pinned approval behavior.
+- Scanned local-source copy imports, including baseline initialization and
+  rollback when managed package persistence fails.
 
 ### Out of scope
 

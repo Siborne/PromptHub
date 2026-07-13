@@ -150,6 +150,17 @@ describe("remote Skill package adapter", () => {
     expect(mocks.rm).toHaveBeenCalled();
   });
 
+  it("uses the exact source id for Git package review", async () => {
+    await saveRemoteGitSkillPackage(
+      createRemoteSkill({ source_id: " exact-git-source " }),
+      { repoUrl: "https://gitea.example.com/team/skills" },
+    );
+
+    expect(mocks.assertStagedRemoteSkillPackageSafe).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceKey: "exact-git-source" }),
+    );
+  });
+
   it("uses an explicit or source fallback directory and target staging root", async () => {
     const onSafetyReport = vi.fn();
     const result = await saveRemoteGitSkillPackage(

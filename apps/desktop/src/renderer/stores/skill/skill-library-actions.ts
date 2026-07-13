@@ -5,10 +5,12 @@ import type {
   SkillSafetyReport,
 } from "@prompthub/shared/types";
 import { filterVisibleSkills } from "../../services/skill-filter";
+import { computeSkillContentHash } from "../../services/skill-store-update";
 import {
   normalizeSkill,
   normalizeSkills,
 } from "../../services/skill-normalize";
+import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
 import { scheduleAllSaveSync } from "../../services/webdav-save-sync";
 import { useSettingsStore } from "../settings.store";
 import {
@@ -23,6 +25,7 @@ import type {
   SkillStoreGet,
   SkillStoreSet,
 } from "./skill-store-types";
+import { buildSourceBaselineFields } from "./skill-source-update-baseline";
 
 const DEPLOYED_STATUS_CACHE_TTL_MS = 30_000;
 
@@ -284,7 +287,9 @@ function getScannedPlatformName(scanned: ScannedSkill): string | undefined {
     : undefined;
 }
 
-function buildScannedSkillPayload(scanned: ScannedSkill, tags: string[]) {
+async function buildScannedSkillPayload(scanned: ScannedSkill, tags: string[]) {
+  const importedAt = Date.now();
+  const contentHash = await computeSkillContentHash(scanned.instructions);
   return {
     name: scanned.name,
     description: scanned.description,
@@ -296,10 +301,22 @@ function buildScannedSkillPayload(scanned: ScannedSkill, tags: string[]) {
     tags,
     original_tags: scanned.tags,
     is_favorite: false,
+    source_id: buildSkillSourceId({
+      sourceType: "installed-source",
+      sourceUrl: scanned.localPath,
+    }),
     source_url: scanned.localPath,
     source_label: getScannedPlatformName(scanned),
     local_repo_path: scanned.localPath,
     directory_fingerprint: scanned.directory_fingerprint,
+    installed_content_hash: contentHash,
+    installed_version: scanned.version,
+    installed_at: importedAt,
+    ...buildSourceBaselineFields({
+      contentHash,
+      directoryFingerprint: scanned.directory_fingerprint,
+      checkedAt: importedAt,
+    }),
   };
 }
 
@@ -315,17 +332,38 @@ async function saveCopiedSkillFiles(
       scanned.localPath,
       importMode,
     );
-    if (localRepoPath) {
-      await window.api.skill.update(skill.id, {
-        local_repo_path: localRepoPath,
-      });
+    if (!localRepoPath) {
+      throw new Error("Managed Skill package copy returned no repository path");
     }
+    const updated = await window.api.skill.update(skill.id, {
+      local_repo_path: localRepoPath,
+    });
+    if (!updated) throw new Error("Managed Skill path was not persisted");
   } catch (error) {
-    console.warn(
-      `Skill "${scanned.name}" imported to DB but failed to copy files to local repo:`,
-      getErrorMessage(error),
+    console.error("Failed to persist scanned Skill package:", error);
+    return rollbackScannedSkillImport(skill, error);
+  }
+}
+
+async function rollbackScannedSkillImport(
+  skill: Skill,
+  cause: unknown,
+): Promise<never> {
+  const failure =
+    getErrorMessage(cause) || "Managed package persistence failed";
+  try {
+    const removed = await window.api.skill.delete(skill.id, {
+      removeCopyInstallations: true,
+    });
+    if (!removed) throw new Error("Skill row was not removed");
+  } catch (rollbackError) {
+    console.error("Failed to roll back scanned Skill import:", rollbackError);
+    throw new Error(
+      `${failure}; rollback failed: ${getErrorMessage(rollbackError)}`,
+      { cause: rollbackError },
     );
   }
+  throw cause instanceof Error ? cause : new Error(failure, { cause });
 }
 
 async function importScannedSkill(
@@ -334,7 +372,7 @@ async function importScannedSkill(
   importMode: "copy" | "symlink",
 ): Promise<Skill | null> {
   const created = await window.api.skill.create(
-    buildScannedSkillPayload(scanned, tags),
+    await buildScannedSkillPayload(scanned, tags),
   );
   if (!created) return null;
   await saveCopiedSkillFiles(created, scanned, importMode);

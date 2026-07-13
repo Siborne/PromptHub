@@ -191,14 +191,25 @@ function buildPendingInstallData(data: CreateSkillParams): CreateSkillParams {
   };
 }
 
+function isInvalidPackageDiagnostic(message: string): boolean {
+  return [
+    /invalid/,
+    /traversal/,
+    /skill\.md/,
+    /archive/,
+    /too many (?:files|filesystem entries)/,
+    /(?:file|total|directory|path|package).*limit/,
+    /unsupported filesystem entry/,
+    /outside the package root/,
+  ].some((pattern) => pattern.test(message));
+}
+
 function getStageFailure(
   request: SkillPackageOperationRequest,
   error: unknown,
 ): LifecycleStepError {
   const message = sanitizeSkillPackageDiagnostic(error).toLowerCase();
-  const invalid = /invalid|traversal|skill\.md|archive|package size/.test(
-    message,
-  );
+  const invalid = isInvalidPackageDiagnostic(message);
   const remote = ["remote-git", "remote-zip"].includes(request.source.kind);
   return new LifecycleStepError(
     invalid
