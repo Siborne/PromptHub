@@ -2,6 +2,8 @@ import { useMemo, useState, type DragEvent } from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
   ExternalLinkIcon,
@@ -33,6 +35,7 @@ import {
 } from "../../services/agent-root-paths";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
+import { BuiltinAgentDetails } from "./BuiltinAgentDetails";
 import { SettingSection, ToggleSwitch } from "./shared";
 import { useToast } from "../ui/Toast";
 import { sortSkillPlatformsByPreference } from "../skill/use-skill-platform";
@@ -191,6 +194,9 @@ export function SkillSettings() {
   const [editingBuiltinAgentsPath, setEditingBuiltinAgentsPath] = useState("");
   const [editingBuiltinConfigPaths, setEditingBuiltinConfigPaths] =
     useState("");
+  const [expandedBuiltinAgentIds, setExpandedBuiltinAgentIds] = useState<
+    Set<string>
+  >(() => new Set());
   const [draggingPlatformId, setDraggingPlatformId] = useState<string | null>(
     null,
   );
@@ -314,6 +320,11 @@ export function SkillSettings() {
   };
 
   const startBuiltinEdit = (platformId: string, config: AgentAssetConfig) => {
+    setExpandedBuiltinAgentIds((current) => {
+      const next = new Set(current);
+      next.add(platformId);
+      return next;
+    });
     setEditingBuiltinAgentId(platformId);
     setEditingBuiltinRootPath(config.rootPath || "");
     setEditingBuiltinSkillsPath(config.skillsRelativePath || "");
@@ -325,6 +336,14 @@ export function SkillSettings() {
   };
 
   const cancelBuiltinEdit = () => {
+    const activePlatformId = editingBuiltinAgentId;
+    if (activePlatformId) {
+      setExpandedBuiltinAgentIds((current) => {
+        const next = new Set(current);
+        next.delete(activePlatformId);
+        return next;
+      });
+    }
     setEditingBuiltinAgentId(null);
     setEditingBuiltinRootPath("");
     setEditingBuiltinSkillsPath("");
@@ -333,6 +352,18 @@ export function SkillSettings() {
     setEditingBuiltinRulesPath("");
     setEditingBuiltinAgentsPath("");
     setEditingBuiltinConfigPaths("");
+  };
+
+  const toggleBuiltinAgentDetails = (platformId: string) => {
+    setExpandedBuiltinAgentIds((current) => {
+      const next = new Set(current);
+      if (next.has(platformId)) {
+        next.delete(platformId);
+      } else {
+        next.add(platformId);
+      }
+      return next;
+    });
   };
 
   const resetBuiltinEditForm = (
@@ -687,6 +718,9 @@ export function SkillSettings() {
                 defaultRootPath,
                 activeOverride,
               );
+              const isExpanded =
+                expandedBuiltinAgentIds.has(platform.id) || isEditingBuiltin;
+              const detailsId = `agent-config-details-${platform.id}`;
               const preview = buildAgentRootAssetPreview({
                 rootPath: effectiveConfig.rootPath || "",
                 skillsRelativePath: effectiveConfig.skillsRelativePath,
@@ -704,15 +738,44 @@ export function SkillSettings() {
                   className="px-3 py-3 border-b border-border/70 last:border-0 space-y-3"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <PlatformIcon platformId={platform.id} size={16} />
+                    <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      aria-controls={isExpanded ? detailsId : undefined}
+                      aria-label={`${t(
+                        isExpanded ? "common.collapse" : "common.expand",
+                        isExpanded ? "Collapse" : "Expand",
+                      )} ${platform.name}`}
+                      title={`${t(
+                        isExpanded ? "common.collapse" : "common.expand",
+                        isExpanded ? "Collapse" : "Expand",
+                      )} ${platform.name}`}
+                      onClick={() => toggleBuiltinAgentDetails(platform.id)}
+                      className="group flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-muted/40"
+                    >
+                      {isExpanded ? (
+                        <ChevronDownIcon
+                          aria-hidden="true"
+                          className="h-4 w-4 shrink-0 text-muted-foreground"
+                        />
+                      ) : (
+                        <ChevronRightIcon
+                          aria-hidden="true"
+                          className="h-4 w-4 shrink-0 text-muted-foreground"
+                        />
+                      )}
+                      <PlatformIcon
+                        platformId={platform.id}
+                        size={16}
+                        aria-hidden="true"
+                      />
                       <span className="text-sm font-medium text-foreground">
                         {platform.name}
                       </span>
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                         {t("settings.builtinAgentBadge", "Built-in")}
                       </span>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-2">
                       {isEditingBuiltin ? (
                         <>
@@ -775,80 +838,12 @@ export function SkillSettings() {
                     {t("settings.defaultPathLabel", "Default path")}:
                     <span className="ml-1 font-mono">{defaultRootPath}</span>
                   </div>
-                  <div className="grid gap-2 rounded-lg bg-muted/30 p-3 text-[11px] text-muted-foreground">
-                    <div>
-                      {t(
-                        "settings.platformDerivedSkillPath",
-                        "Derived skills path",
-                      )}
-                      :
-                      <span className="ml-1 font-mono">
-                        {preview.skillScanPaths.join(", ")}
-                      </span>
-                    </div>
-                    {preview.ruleCandidates.length > 0 ? (
-                      <div>
-                        {t(
-                          "settings.platformDerivedRulesPath",
-                          "Derived rules path",
-                        )}
-                        :
-                        <span className="ml-1 font-mono">
-                          {preview.ruleCandidates.join(", ")}
-                        </span>
-                      </div>
-                    ) : null}
-                    {preview.configCandidates.length > 0 ? (
-                      <div>
-                        {t(
-                          "settings.platformDerivedConfigPath",
-                          "Derived config files",
-                        )}
-                        :
-                        <span className="ml-1 font-mono">
-                          {preview.configCandidates.join(", ")}
-                        </span>
-                      </div>
-                    ) : null}
-                    <div>
-                      {t(
-                        "settings.agentDerivedMcpConfigPaths",
-                        "Derived MCP config paths",
-                      )}
-                      :
-                      <span className="ml-1 font-mono">
-                        {preview.mcpConfigPaths.join(", ")}
-                      </span>
-                    </div>
-                    {preview.pluginDirectories.length > 0 ? (
-                      <div>
-                        {t(
-                          "settings.agentDerivedPluginDirs",
-                          "Derived Plugin directories",
-                        )}
-                        :
-                        <span className="ml-1 font-mono">
-                          {preview.pluginDirectories.join(", ")}
-                        </span>
-                      </div>
-                    ) : null}
-                    <div>
-                      {t(
-                        "settings.agentDerivedAgentDirs",
-                        "Derived agent directories",
-                      )}
-                      :
-                      <span className="ml-1 font-mono">
-                        {preview.agentDirectories.join(", ")}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground/80">
-                      {t(
-                        "settings.agentConfigurationsHint",
-                        "PromptHub treats each built-in platform as an agent config. Override any relative path only when the tool uses a non-standard layout.",
-                      )}
-                    </div>
-                  </div>
+                  {isExpanded ? (
+                    <BuiltinAgentDetails
+                      detailsId={detailsId}
+                      preview={preview}
+                    />
+                  ) : null}
                   {isEditingBuiltin ? (
                     <div className="grid gap-3 rounded-xl border border-border/60 bg-muted/20 p-4">
                       <div className="flex items-center gap-2">

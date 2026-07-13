@@ -13,7 +13,9 @@ const useSettingsStoreMock = vi.fn();
 const useToastMock = vi.fn();
 
 vi.mock("../../../src/renderer/stores/settings.store", () => ({
-  useSettingsStore: (selector?: (state: Record<string, unknown>) => unknown) => {
+  useSettingsStore: (
+    selector?: (state: Record<string, unknown>) => unknown,
+  ) => {
     const state = useSettingsStoreMock();
     return selector ? selector(state) : state;
   },
@@ -433,6 +435,60 @@ describe("SkillSettings", () => {
     );
   });
 
+  it("collapses built-in agent details by default and toggles them on demand", async () => {
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const configSection = screen
+      .getByText("Agent Configurations")
+      .closest("section, div");
+    expect(configSection).toBeTruthy();
+
+    const claudeCard = within(configSection as HTMLElement)
+      .getAllByText("Claude Code")[0]
+      .closest("[data-platform-config-id]");
+    expect(claudeCard).toBeTruthy();
+
+    const toggle = within(claudeCard as HTMLElement).getByRole("button", {
+      name: "Expand Claude Code",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      within(claudeCard as HTMLElement).queryByText(/Derived skills path/),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(claudeCard as HTMLElement).getByText(/Derived skills path/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(
+      within(claudeCard as HTMLElement).getByRole("button", {
+        name: "Edit",
+      }),
+    );
+    const editToggle = within(claudeCard as HTMLElement).getByRole("button", {
+      name: "Collapse Claude Code",
+    });
+    expect(editToggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(
+      within(claudeCard as HTMLElement).getByRole("button", {
+        name: "Cancel",
+      }),
+    );
+    expect(
+      within(claudeCard as HTMLElement).getByRole("button", {
+        name: "Expand Claude Code",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("shows Plugin directories only for Agent Plugin package targets", async () => {
     useSettingsStoreMock.mockReturnValue(createSettingsState());
 
@@ -452,6 +508,11 @@ describe("SkillSettings", () => {
       .getAllByText("Codex CLI")[0]
       .closest("[data-platform-config-id]");
     expect(codexCard).toBeTruthy();
+    fireEvent.click(
+      within(codexCard as HTMLElement).getByRole("button", {
+        name: "Expand Codex CLI",
+      }),
+    );
     expect(
       within(codexCard as HTMLElement).getByText(/Derived Plugin directories/),
     ).toBeInTheDocument();
