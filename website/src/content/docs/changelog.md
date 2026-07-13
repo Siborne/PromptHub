@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [0.5.9] - 2026-07-11
+## [0.5.9] - 2026-07-13
 
 ### 新功能 / Features
 
@@ -18,6 +18,8 @@
   - **CLI Resource and Workspace Commands Completed**: Added complete query and management commands for Prompts, Folders, Skills, Rules, MCPs, Plugins, and Workspaces so headless workflows cover the primary resources
 - 🤖 **Grok Build Agent 支持**：依据 Grok Build 当前公开约定接入官方图标、`~/.grok` 根目录，以及 Skill、Rules、配置和 MCP 文件发现
   - **Grok Build Agent Support**: Added the official icon, `~/.grok` root, and Skill, Rules, configuration, and MCP file discovery based on Grok Build's current public conventions
+- 🤖 **Agent 平台继续扩展**：新增 Kimi Code CLI、Reasonix、Augment/Auggie 与 ZCode 的内置目标、官方标识和已验证资产路径，并为 Kimi、Augment、ZCode 接入各自兼容的 MCP 配置边界
+  - **Expanded Agent Platform Coverage**: Added built-in targets, official marks, and verified asset paths for Kimi Code CLI, Reasonix, Augment/Auggie, and ZCode, with compatible MCP configuration boundaries for Kimi, Augment, and ZCode
 - 🧱 **Prompt 自定义输出格式序列**：Prompt 可组合多个引用 Prompt 作为有序输出格式，支持拖拽排序、持久化、备份恢复和删除联动
   - **Custom Prompt Output Format Sequences**: Prompts can compose ordered referenced Prompts as reusable output formats with drag sorting, persistence, backup/restore, and deletion cleanup
 
@@ -25,6 +27,18 @@
 
 - 🔎 **Skill 来源更新校验更可靠**：更新检查改为 SHA-256 包指纹和三方对账，忽略缓存、隐藏产物和 PromptHub 自身元数据，并修复远程 registry 指纹误标、content-url 基线和 URL 脱敏问题
   - **More Reliable Skill Source Update Checks**: Source update checks now use SHA-256 package fingerprints and three-way reconciliation while ignoring caches, hidden artifacts, and PromptHub metadata, with fixes for remote registry fingerprint labeling, content-url baselines, and URL credential redaction
+- 🛡️ **Skill 高风险更新可审查、可精确授权**：自建或私有来源的高风险更新现在展示扫描结果，可对当前包一次性确认，或仅信任精确的仓库、分支和目录来源；阻断级风险、路径穿越和结构错误仍不可绕过
+  - **Reviewable Skill High-Risk Updates**: High-risk updates from self-hosted or private sources now show their scan results and can be approved once for the exact package or trusted only for the exact repository, branch, and directory; blocked findings, path traversal, and structural failures remain non-overridable
+- 🔄 **Skill 安装与更新生命周期统一**：远程 Git、Zip、内容 URL、本地目录与 Cloud 安装/更新统一经过完整包暂存、扫描、指纹确认、原子写入和回滚；快捷、批量与 Git 导入不再把待复核项目误报为失败
+  - **Unified Skill Install and Update Lifecycle**: Remote Git, Zip, content URL, local directory, and Cloud installs/updates now share complete-package staging, scanning, fingerprint approval, atomic apply, and rollback, while quick, batch, and Git imports no longer misreport review-required items as failures
+- 📦 **外部 Skill 导入可持续更新**：从 Claude Code 或其他 Agent 扫描导入的托管副本会保存确切来源与安装基线，后续可从原目录检查并更新；复制或路径持久化失败会完整回滚，不再留下假成功或孤立记录
+  - **Durable Updates for Imported Skills**: Managed copies imported from Claude Code or other Agent scans now preserve their exact source and installed baseline for later source updates, while copy/path persistence failures roll back without false success or orphan records
+- 🧾 **安装元数据以实际包为准**：安装与更新从最终暂存的 `SKILL.md` 读取版本、作者、描述、来源标签和兼容性，同时保留用户自己的标签，避免目录占位版本或陈旧元数据覆盖真实包内容
+  - **Package-Authoritative Install Metadata**: Install and update metadata now comes from the final staged `SKILL.md` for version, author, description, source tags, and compatibility while preserving user-owned tags and ignoring catalog sentinel versions
+- **自建 Skill 来源检查不再卡住更新**：已暂存并完成本地扫描的自建 Git/Gitea package 会在来源地址无法解析时给出可见警告，而不是等待无界 DNS 查询
+  - **Responsive Self-Hosted Skill Checks**: A staged and locally scanned custom Git/Gitea package now surfaces an address-verification warning instead of waiting indefinitely for DNS resolution
+- 🧾 **SKILL.md YAML 元数据保真**：统一 YAML frontmatter 解析和规范化，保留块标量、嵌套字段与 `allowed-tools` 等合法字段，避免编辑或更新后静默丢失元数据
+  - **SKILL.md YAML Metadata Fidelity**: Unified YAML frontmatter parsing and normalization preserve block scalars, nested fields, and valid fields such as `allowed-tools`, preventing silent metadata loss after editing or updating
 - ✅ **Plugin 更新必须先确认**：来源更新和批量商店更新现在先展示差异并要求确认，不再点击后直接覆盖本地 Plugin
   - **Plugin Updates Require Confirmation**: Source updates and batch store updates now show a review step and require confirmation instead of directly overwriting local Plugins
 - 🪟 **Windows / Agent 路径兼容**：补齐 `%LOCALAPPDATA%`、Hermes、Trae Work、WorkBuddy、QClaw 等平台路径、图标和 shell 打开路径处理
@@ -52,6 +66,8 @@
   - **Desktop Release Contract Stability**: Aligned backup filesystem and Prompt main-content selection restoration integration contracts to reduce false failures and timeout risk in full release verification
 - 🧾 **本地 Issue 状态工作流**：新增 GitHub issue 远端状态和本地交付状态分离规则，已完成但未随版本发布的问题标记为本地完成/待发布
   - **Local Issue Status Workflow**: Added a split between remote GitHub issue state and local delivery state so implemented-but-unreleased issues can be tracked as local done / release pending
+- 🧱 **模块边界与 AI 路由收口**：核心、桌面和 Web 共享 AI 协议端点与鉴权推导；大型界面、状态和测试按业务边界拆分，并由源码行数门禁防止文件再次突破硬上限
+  - **Module Boundaries and AI Routing Consolidated**: Core, desktop, and Web now share AI protocol endpoint and authentication derivation; large UI, state, and test surfaces are split by domain boundaries and protected by a source-size gate
 
 ## [0.5.9-beta.2] - 2026-06-27
 
