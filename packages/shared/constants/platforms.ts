@@ -127,6 +127,10 @@ export function getPlatformPluginsRelativePath(
 export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "claude",
   "codex",
+  "kimi",
+  "reasonix",
+  "augment",
+  "zcode",
   "gemini",
   "opencode",
   "cline",
@@ -142,6 +146,8 @@ export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "trae-work-cn",
   "openclaw",
   "qclaw",
+  "qoder",
+  "qoderwork",
   "workbuddy",
   "codebuddy",
   "hermes",
@@ -342,6 +348,63 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     pluginsRelativePath: "plugins/cache/prompthub",
     globalRuleFile: "AGENTS.md",
     configFiles: ["config.toml"],
+  },
+  {
+    id: "kimi",
+    name: "Kimi Code CLI",
+    icon: "Sparkles",
+    rootDir: {
+      darwin: "~/.kimi",
+      win32: "%USERPROFILE%\\.kimi",
+      linux: "~/.kimi",
+    },
+    skillsRelativePath: "skills",
+    mcpRelativePath: "mcp.json",
+    configFiles: ["config.toml", "mcp.json"],
+  },
+  {
+    id: "reasonix",
+    name: "Reasonix",
+    icon: "Code",
+    rootDir: {
+      darwin: "~/.reasonix",
+      win32: "%APPDATA%\\reasonix",
+      linux: "~/.reasonix",
+    },
+    skillsRelativePath: "skills",
+    // Reasonix stores MCP/plugin declarations in TOML, but its schema is not
+    // compatible with the Codex TOML writer. Keep this path discovery-only.
+    mcpRelativePath: "config.toml",
+    configFiles: ["config.toml", "settings.json", "trust.json"],
+  },
+  {
+    id: "augment",
+    name: "Augment / Auggie",
+    icon: "Sparkle",
+    rootDir: {
+      darwin: "~/.augment",
+      win32: "%USERPROFILE%\\.augment",
+      linux: "~/.augment",
+    },
+    skillsRelativePath: "skills",
+    // Auggie persists MCP servers in settings.json; no generic MCP writer is
+    // exposed until the settings schema has a dedicated target adapter.
+    mcpRelativePath: "settings.json",
+    configFiles: ["settings.json"],
+  },
+  {
+    id: "zcode",
+    name: "智谱 ZCode",
+    icon: "Bot",
+    rootDir: {
+      darwin: "~/.zcode",
+      win32: "%USERPROFILE%\\.zcode",
+      linux: "~/.zcode",
+    },
+    skillsRelativePath: "skills",
+    mcpRelativePath: "cli/config.json",
+    globalRuleFile: "AGENTS.md",
+    configFiles: ["cli/config.json"],
   },
   {
     id: "grok",

@@ -7,17 +7,19 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 30 |
-| Archived | 160 |
+| Active | 33 |
+| Archived | 161 |
 | Legacy | 1 |
 
 ## Active
 
 | Change | Recorded status | Path |
 | --- | --- | --- |
+| `agent-platform-kimi-reasonix-augment` | active | `spec/changes/active/agent-platform-kimi-reasonix-augment/` |
 | `app-shell-left-rail` | in progress | `spec/changes/active/app-shell-left-rail/` |
 | `cli-feature-completeness` | active | `spec/changes/active/cli-feature-completeness/` |
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
+| `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
 | `desktop-frontend-animation-system` | active | `spec/changes/active/desktop-frontend-animation-system/` |
 | `desktop-frontend-perf-tuneup` | active | `spec/changes/active/desktop-frontend-perf-tuneup/` |
 | `desktop-home-layout-controls` | active | `spec/changes/active/desktop-home-layout-controls/` |
@@ -40,6 +42,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `rules-managed-copies` | in progress | `spec/changes/active/rules-managed-copies/` |
 | `self-hosted-skill-sync-reliability` | active | `spec/changes/active/self-hosted-skill-sync-reliability/` |
 | `self-hosted-web-database-lock-recovery` | in progress | `spec/changes/active/self-hosted-web-database-lock-recovery/` |
+| `skill-install-update-lifecycle-contract` | active | `spec/changes/active/skill-install-update-lifecycle-contract/` |
 | `skill-source-update-reconciliation` | completed | `spec/changes/active/skill-source-update-reconciliation/` |
 | `skill-uninstall-lifecycle` | active | `spec/changes/active/skill-uninstall-lifecycle/` |
 | `unified-custom-store-sources` | implemented | `spec/changes/active/unified-custom-store-sources/` |
@@ -210,6 +213,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-11-skill-source-update-trust-review` | archived | `spec/changes/archive/2026/07/2026-07-11-skill-source-update-trust-review/` |
 | `2026-07-11-web-release-version-alignment` | archived | `spec/changes/archive/2026/07/2026-07-11-web-release-version-alignment/` |
 | `2026-07-11-web-workspace-capability-alignment` | archived | `spec/changes/archive/2026/07/2026-07-11-web-workspace-capability-alignment/` |
+| `2026-07-13-desktop-issue-186-zcode-agent-support` | archived | `spec/changes/archive/2026/07/2026-07-13-desktop-issue-186-zcode-agent-support/` |
 
 ## Legacy
 

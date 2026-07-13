@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getPlatformById } from "@prompthub/shared/constants/platforms";
+import {
+  getPlatformById,
+  SKILL_PLATFORMS,
+} from "@prompthub/shared/constants/platforms";
 import {
   buildAgentRootAssetPreview,
   getEffectiveBuiltinAgentConfig,
@@ -77,6 +80,30 @@ describe("agent root paths", () => {
     expect(buildAgentRootAssetPreview(config).mcpConfigPaths).toEqual([
       "~/.workbuddy/mcp.json",
     ]);
+  });
+
+  it("resolves ZCode's documented user assets", () => {
+    const platform = getPlatformById("zcode");
+    expect(platform).toBeDefined();
+
+    const config = getEffectiveBuiltinAgentConfig(
+      platform!,
+      "~/.zcode",
+      undefined,
+    );
+
+    expect(config.skillsRelativePath).toBe("skills");
+    expect(config.rulesRelativePath).toBe("AGENTS.md");
+    expect(config.mcpRelativePath).toBe("cli/config.json");
+    expect(config.configRelativePaths).toEqual(["cli/config.json"]);
+    expect(config.pluginsRelativePath).toBeUndefined();
+    expect(buildAgentRootAssetPreview(config)).toMatchObject({
+      skillScanPaths: ["~/.zcode/skills"],
+      mcpConfigPaths: ["~/.zcode/cli/config.json"],
+      ruleCandidates: ["~/.zcode/AGENTS.md"],
+      agentDirectories: ["~/.zcode/agents"],
+      configCandidates: ["~/.zcode/cli/config.json"],
+    });
   });
 
   it("uses CodeBuddy's documented user assets instead of skills-only defaults", () => {
@@ -172,5 +199,88 @@ describe("agent root paths", () => {
       getEffectiveBuiltinAgentConfig(cline!, "~/.cline", undefined)
         .pluginsRelativePath,
     ).toBeUndefined();
+  });
+
+  it("recognizes the current Kimi Code CLI user asset contract", () => {
+    const platform = getPlatformById("kimi");
+    expect(platform).toBeDefined();
+
+    const config = getEffectiveBuiltinAgentConfig(
+      platform!,
+      "~/.kimi",
+      undefined,
+    );
+
+    expect(config.skillsRelativePath).toBe("skills");
+    expect(config.mcpRelativePath).toBe("mcp.json");
+    expect(config.configRelativePaths).toEqual(["config.toml", "mcp.json"]);
+    expect(config.rulesRelativePath).toBeUndefined();
+    expect(buildAgentRootAssetPreview(config)).toMatchObject({
+      skillScanPaths: ["~/.kimi/skills"],
+      mcpConfigPaths: ["~/.kimi/mcp.json"],
+      configCandidates: ["~/.kimi/config.toml", "~/.kimi/mcp.json"],
+    });
+  });
+
+  it("keeps Reasonix MCP and hook files discovery-only", () => {
+    const platform = getPlatformById("reasonix");
+    expect(platform).toBeDefined();
+
+    const config = getEffectiveBuiltinAgentConfig(
+      platform!,
+      "~/.reasonix",
+      undefined,
+    );
+
+    expect(config.skillsRelativePath).toBe("skills");
+    expect(config.mcpRelativePath).toBe("config.toml");
+    expect(config.configRelativePaths).toEqual([
+      "config.toml",
+      "settings.json",
+      "trust.json",
+    ]);
+    expect(config.rulesRelativePath).toBeUndefined();
+    expect(buildAgentRootAssetPreview(config)).toMatchObject({
+      skillScanPaths: ["~/.reasonix/skills"],
+      mcpConfigPaths: ["~/.reasonix/config.toml"],
+      configCandidates: [
+        "~/.reasonix/config.toml",
+        "~/.reasonix/settings.json",
+        "~/.reasonix/trust.json",
+      ],
+    });
+  });
+
+  it("models Auggie's directory-based skills and rules without a fake global rule file", () => {
+    const platform = getPlatformById("augment");
+    expect(platform).toBeDefined();
+
+    const config = getEffectiveBuiltinAgentConfig(
+      platform!,
+      "~/.augment",
+      undefined,
+    );
+
+    expect(config.skillsRelativePath).toBe("skills");
+    expect(config.mcpRelativePath).toBe("settings.json");
+    expect(config.configRelativePaths).toEqual(["settings.json"]);
+    expect(config.rulesRelativePath).toBeUndefined();
+    expect(buildAgentRootAssetPreview(config)).toMatchObject({
+      skillScanPaths: ["~/.augment/skills"],
+      mcpConfigPaths: ["~/.augment/settings.json"],
+      configCandidates: ["~/.augment/settings.json"],
+    });
+  });
+
+  it("keeps Qoder as the Qwen coding-agent target instead of adding a duplicate qwen platform", () => {
+    expect(getPlatformById("qoder")?.name).toBe("Qoder");
+    expect(getPlatformById("qwen")).toBeUndefined();
+  });
+
+  it("keeps the built-in platform registry free of duplicate ids", () => {
+    const ids = SKILL_PLATFORMS.map((platform) => platform.id);
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.filter((id) => id === "augment")).toHaveLength(1);
   });
 });

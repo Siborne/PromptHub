@@ -375,6 +375,7 @@ tags: [search, discovery]
       "codex",
       "cursor",
       "opencode",
+      "zcode",
       "antigravity",
     ]);
   });

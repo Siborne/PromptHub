@@ -35,18 +35,14 @@ describe("PlatformIcon", () => {
   });
 
   it("keeps TRAE IDE and TRAE Work variants on the TRAE brand icon", () => {
-    for (const platformId of [
-      "trae",
-      "trae-work",
-      "trae-cn",
-      "trae-work-cn",
-    ]) {
+    for (const platformId of ["trae", "trae-work", "trae-cn", "trae-work-cn"]) {
       const { unmount } = render(
         <PlatformIcon platformId={platformId} size={20} />,
       );
 
-      expect(screen.getByRole("img", { name: `${platformId} icon` }))
-        .toHaveAttribute("src", expect.stringContaining("trae.png"));
+      expect(
+        screen.getByRole("img", { name: `${platformId} icon` }),
+      ).toHaveAttribute("src", expect.stringContaining("trae.png"));
 
       unmount();
     }
@@ -60,6 +56,13 @@ describe("PlatformIcon", () => {
       "src",
       expect.stringContaining("workbuddy.svg"),
     );
+  });
+
+  it("renders the official ZCode mark", () => {
+    render(<PlatformIcon platformId="zcode" size={20} />);
+
+    const icon = screen.getByRole("img", { name: "zcode icon" });
+    expect(icon).toHaveAttribute("src", expect.stringContaining("zcode.svg"));
   });
 
   it("renders the Grok brand icon in both light and dark themes", () => {
@@ -89,5 +92,32 @@ describe("PlatformIcon", () => {
       });
 
     expect(invalidPngFiles).toEqual([]);
+  });
+
+  it("renders the official Reasonix mark", () => {
+    render(<PlatformIcon platformId="reasonix" size={20} />);
+
+    expect(screen.getByRole("img", { name: "reasonix icon" })).toHaveAttribute(
+      "src",
+      expect.stringContaining("reasonix.svg"),
+    );
+  });
+
+  it("renders distinct official marks for Kimi Code CLI and Auggie", () => {
+    const cases = [
+      ["kimi", "kimi.png"],
+      ["augment", "augment.svg"],
+    ] as const;
+
+    for (const [platformId, assetName] of cases) {
+      const { unmount } = render(
+        <PlatformIcon platformId={platformId} size={20} />,
+      );
+
+      expect(
+        screen.getByRole("img", { name: `${platformId} icon` }),
+      ).toHaveAttribute("src", expect.stringContaining(assetName));
+      unmount();
+    }
   });
 });

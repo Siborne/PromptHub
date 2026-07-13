@@ -31,6 +31,9 @@ export const MCP_JSON_TARGETS: McpTargetKind[] = [
   "kilo",
   "workbuddy",
   "codebuddy",
+  "kimi",
+  "augment",
+  "zcode",
   "custom-json",
 ];
 
@@ -47,7 +50,64 @@ export function getMcpServersJsonKey(
   if (target === "opencode" || target === "kilo") {
     return "mcp";
   }
+  if (target === "zcode") {
+    return "servers";
+  }
   return "mcpServers";
+}
+
+type McpJsonEntries = Record<string, Record<string, unknown>>;
+
+/**
+ * Read a target's MCP entry map without flattening agent-specific nesting.
+ * ZCode stores entries below `mcp.servers`; other JSON targets retain their
+ * existing top-level key.
+ */
+export function getMcpJsonServerEntries(
+  existing: unknown,
+  target: McpTargetKind,
+): McpJsonEntries | undefined {
+  if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
+    return undefined;
+  }
+
+  const root = existing as Record<string, unknown>;
+  const container =
+    target === "zcode"
+      ? root.mcp && typeof root.mcp === "object" && !Array.isArray(root.mcp)
+        ? (root.mcp as Record<string, unknown>)
+        : undefined
+      : root;
+  const entries = container?.[getMcpServersJsonKey(target)];
+  return entries && typeof entries === "object" && !Array.isArray(entries)
+    ? (entries as McpJsonEntries)
+    : undefined;
+}
+
+/**
+ * Write a target's MCP entry map while preserving unrelated JSON settings.
+ */
+export function setMcpJsonServerEntries(
+  existing: unknown,
+  target: McpTargetKind,
+  entries: McpJsonEntries,
+): Record<string, unknown> {
+  const root =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+
+  if (target === "zcode") {
+    const mcp =
+      root.mcp && typeof root.mcp === "object" && !Array.isArray(root.mcp)
+        ? { ...(root.mcp as Record<string, unknown>) }
+        : {};
+    root.mcp = { ...mcp, servers: entries };
+    return root;
+  }
+
+  root[getMcpServersJsonKey(target)] = entries;
+  return root;
 }
 
 const HTTP_TRANSPORTS: McpTransport[] = ["streamable-http", "sse"];
@@ -622,9 +682,10 @@ export function buildMcpTargetJson(
   target: McpTargetKind,
   servers: McpServerConfig[],
 ): Record<string, unknown> {
-  const key = getMcpServersJsonKey(target);
-  return {
-    [key]: Object.fromEntries(
+  return setMcpJsonServerEntries(
+    {},
+    target,
+    Object.fromEntries(
       servers
         .filter((server) => server.enabled)
         .map((server) => [
@@ -632,7 +693,7 @@ export function buildMcpTargetJson(
           getMcpTargetEntryObject(target, server),
         ]),
     ),
-  };
+  );
 }
 
 export function buildCodexMcpToml(servers: McpServerConfig[]): string {
@@ -677,22 +738,15 @@ export function mergeMcpServersJson(
   target: McpTargetKind,
   servers: McpServerConfig[],
 ): Record<string, unknown> {
-  const root =
-    existing && typeof existing === "object" && !Array.isArray(existing)
-      ? { ...(existing as Record<string, unknown>) }
-      : {};
-  const key = getMcpServersJsonKey(target);
-  const existingServers =
-    root[key] && typeof root[key] === "object" && !Array.isArray(root[key])
-      ? { ...(root[key] as Record<string, unknown>) }
-      : {};
+  const existingServers = {
+    ...(getMcpJsonServerEntries(existing, target) ?? {}),
+  };
 
   for (const server of servers.filter((item) => item.enabled)) {
     existingServers[server.name] = getMcpTargetEntryObject(target, server);
   }
 
-  root[key] = existingServers;
-  return root;
+  return setMcpJsonServerEntries(existing, target, existingServers);
 }
 
 /**
@@ -705,21 +759,20 @@ export function removeMcpServersFromJson(
   target: McpTargetKind,
   serverNames: string[],
 ): Record<string, unknown> {
-  const root =
-    existing && typeof existing === "object" && !Array.isArray(existing)
+  const entries = getMcpJsonServerEntries(existing, target);
+  if (!entries) {
+    return existing && typeof existing === "object" && !Array.isArray(existing)
       ? { ...(existing as Record<string, unknown>) }
       : {};
-  const key = getMcpServersJsonKey(target);
-  if (!root[key] || typeof root[key] !== "object" || Array.isArray(root[key])) {
-    return root;
   }
   const names = new Set(serverNames);
-  root[key] = Object.fromEntries(
-    Object.entries(root[key] as Record<string, unknown>).filter(
-      ([name]) => !names.has(name),
+  return setMcpJsonServerEntries(
+    existing,
+    target,
+    Object.fromEntries(
+      Object.entries(entries).filter(([name]) => !names.has(name)),
     ),
   );
-  return root;
 }
 
 /**
@@ -764,16 +817,7 @@ export function listMcpServerNamesInJson(
   existing: unknown,
   target: McpTargetKind,
 ): string[] {
-  if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
-    return [];
-  }
-  const root = existing as Record<string, unknown>;
-  const key = getMcpServersJsonKey(target);
-  const entries = root[key];
-  if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
-    return [];
-  }
-  return Object.keys(entries as Record<string, unknown>);
+  return Object.keys(getMcpJsonServerEntries(existing, target) ?? {});
 }
 
 /**

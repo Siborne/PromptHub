@@ -55,6 +55,7 @@
 
 - `Claude Code`: `~/.claude/CLAUDE.md`
 - `Codex CLI`: `~/.codex/AGENTS.md`
+- `ZCode Agent`: `~/.zcode/AGENTS.md`
 - `Grok Build`: `~/.grok/AGENTS.md`
 - `Gemini CLI`: `~/.gemini/GEMINI.md`
 - `OpenCode`: `~/.config/opencode/AGENTS.md`

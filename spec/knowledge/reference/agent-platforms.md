@@ -18,6 +18,19 @@
 - 当 `packages/shared/constants/rules.ts` 中的全局规则支持集合发生稳定变化时，应同步更新本文档中的 `Rules Support Snapshot`。
 - 对没有公开官方文档、正文不可抓取、或当前只能通过产品 UI/登录后页面确认的平台，必须明确标注为 `PromptHub inferred` 或 `Evidence limited`。
 - 对于“功能存在但本轮未拿到明确本地路径”的资产，可以记录为“feature documented, local path not confirmed in current pass”，不要伪装成已确认路径。
+- 内置平台 id 必须唯一；平台图标不得用相同的通用 fallback 冒充不同品牌。能够确认来源时，优先使用官方 mark 或 favicon，并在本节记录来源。
+
+## Icon Provenance Snapshot
+
+当前内置 Agent 列表使用独立、可追溯的品牌图标：
+
+| Platform | Asset | Source |
+| -------- | ----- | ------ |
+| Kimi Code CLI | `apps/desktop/src/renderer/assets/platforms/kimi.png` | Official Kimi site favicon: `https://www.kimi.com/favicon.ico` |
+| Augment / Auggie | `apps/desktop/src/renderer/assets/platforms/augment.svg` | Official Augment favicon: `https://www.augmentcode.com/favicon.svg` |
+| Reasonix | `apps/desktop/src/renderer/assets/platforms/reasonix.svg` | Official Reasonix repository mark |
+
+Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加载失败，二者也使用不同的命名 fallback。内置平台注册表对 id 做唯一性回归校验，避免把已有平台再次注册。
 
 ## Product Modeling Note
 
@@ -39,6 +52,7 @@ PromptHub MCP 管理第一版建模为“配置库 + 目标文件投影”，不
 | Cline       | `cline`             | `~/.cline/data/settings/cline_mcp_settings.json`                   | JSON `mcpServers`-style settings    | Officially documented                              |
 | WorkBuddy   | `workbuddy`         | `~/.workbuddy/mcp.json`; project `.workbuddy/mcp.json`             | JSON `mcpServers`                   | Officially documented                              |
 | CodeBuddy   | `codebuddy`         | `~/.codebuddy/.mcp.json`; project `.mcp.json`                      | JSON / JSONC `mcpServers`           | Officially documented                              |
+| ZCode Agent | `zcode`             | `~/.zcode/cli/config.json`; project `.zcode/config.json`           | JSON `mcp.servers`                  | Officially documented                              |
 | Custom JSON | `custom-json`       | user-selected file path                                            | JSON `mcpServers`                   | PromptHub generic projection                       |
 | Custom TOML | `custom-toml`       | user-selected file path                                            | Codex-compatible managed TOML block | PromptHub generic projection                       |
 
@@ -68,6 +82,7 @@ Stable product rule:
 
 - Claude Code: `~/.claude/CLAUDE.md`
 - Codex CLI: `~/.codex/AGENTS.md`
+- ZCode Agent: `~/.zcode/AGENTS.md`
 - Gemini CLI: `~/.gemini/GEMINI.md`
 - OpenCode: `~/.config/opencode/AGENTS.md`
 - Windsurf: `~/.codeium/windsurf/memories/global_rules.md`
@@ -77,6 +92,7 @@ Stable product rule:
 - `OpenClaw` 虽然已经有充分官方证据证明其 workspace bootstrap files、memory、sessions、logs 等本地资产存在，但当前并未进入 `Rules` 运行时全局规则白名单。
 - 原因不是证据不足，而是 `Rules` 当前只支持“每个平台一个 canonical 全局规则文件”的单文件模型；`OpenClaw` 的长期上下文表面则是 `~/.openclaw/workspace/` 下的一组 workspace files，而不是单一规则文件。
 - `Cursor`、`Kiro`、`Roo Code`、`GitHub Copilot` 也都已经在资产文档中建模，但当前仍未进入 `Rules` 运行时全局规则白名单。
+- `Reasonix` 不进入当前白名单：它使用项目层级或记忆文件合并；Kimi / Augment 的 Skills 与 MCP 配置已经有可验证的独立目标，但它们仍不映射为单一全局 Rules 文件。
 - 这些平台未进入白名单的主要原因分别是：缺少已确认的单一本地全局规则文件、以 steering / rules directory / multi-entry 结构为主，或其协议本身以 repository-scoped 文件为核心，而非用户级单文件。
 
 项目规则当前稳定支持：
@@ -90,7 +106,7 @@ Stable product rule:
 
 | Filename / Pattern                       | Official Platforms                                                    | PromptHub Interpretation                    | Evidence              | Notes                                                                                                   |
 | ---------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------- |
-| `AGENTS.md`                              | Codex CLI, Grok Build, OpenCode, Cursor, Windsurf, Roo Code, Kiro, GitHub Copilot | 当前最重要的跨平台项目规则 canonical 文件   | Officially documented | Grok Build walks this file family from cwd to repository root; Claude Code 不原生读取 `AGENTS.md`，但官方支持在 `CLAUDE.md` 里 `@AGENTS.md` 导入。                     |
+| `AGENTS.md`                              | Codex CLI, Grok Build, OpenCode, Cursor, Windsurf, Roo Code, Kiro, GitHub Copilot, Kimi Code CLI, Reasonix | 当前最重要的跨平台项目规则 canonical 文件   | Officially documented | Kimi merges the project-root-to-cwd chain (including `.kimi/AGENTS.md`); Reasonix reads `AGENTS.md` as project memory alongside `REASONIX.md`; neither is modeled as a synthetic global single-file target. |
 | `CLAUDE.md`                              | Claude Code                                                           | Claude 原生项目 / 用户 / managed 指令文件   | Officially documented | OpenCode 将其作为兼容 fallback；GitHub Copilot 允许仓库根使用单个 `CLAUDE.md` 作为 agent instructions。 |
 | `GEMINI.md`                              | Gemini CLI                                                            | Gemini 原生上下文文件                       | Officially documented | GitHub Copilot 允许仓库根使用单个 `GEMINI.md` 作为 agent instructions。                                 |
 | `CODEBUDDY.md`                           | CodeBuddy Code                                                        | CodeBuddy memory / instructions file        | Officially documented | 用户级位于 `~/.codebuddy/CODEBUDDY.md`，项目级位于仓库根 `CODEBUDDY.md`。                               |
@@ -102,6 +118,7 @@ Stable product rule:
 | `AGENT.md`                               | Roo Code                                                              | `AGENTS.md` 的 fallback 兼容名              | Officially documented | 仅在 workspace root，且 `AGENTS.md` 不存在时回退。                                                      |
 | `SOUL.md`                                | OpenClaw                                                              | OpenClaw workspace persona / tone file      | Officially documented | OpenClaw 官方文档确认使用小写 `SOUL.md`，并在 normal sessions 注入。                                    |
 | `SOUL.MD`                                | none confirmed                                                        | 不作为稳定官方兼容文件名建模                | Evidence limited      | 当前公开资料只确认 `SOUL.md`，未确认全大写 `SOUL.MD`。                                                  |
+| `REASONIX.md`                            | Reasonix                                                               | Reasonix project memory / instruction document | Officially documented | Current main-v2 guide documents `REASONIX.md` / `AGENTS.md`; PromptHub keeps this repository-scoped and does not add a global Rules card. |
 | `.cursorrules`                           | none confirmed in current pass                                        | 不作为稳定官方资产建模                      | Evidence limited      | Cursor 当前官方主推 `.cursor/rules/` 与 `AGENTS.md`。                                                   |
 | `.windsurfrules`                         | none confirmed in current pass                                        | 不作为稳定官方资产建模                      | Evidence limited      | Windsurf 当前官方主推 `global_rules.md`、`.windsurf/rules/*.md` 与 `AGENTS.md`。                        |
 
@@ -113,10 +130,14 @@ Stable product rule:
 | -------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | Claude Code    | `~/.claude`                                                                                                             | `~/.claude/CLAUDE.md`, project `CLAUDE.md`, `./.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/rules/**/*.md`                                                                                                 | Per-project auto memory in `~/.claude/projects/<project>/memory/` with `MEMORY.md` entrypoint                                                                                                                                                                                                                           | `.claude/skills/<name>/SKILL.md`; subagents documented; `@AGENTS.md` import supported                                                                                                                                                                  | user / local / managed settings documented; exact settings file set not re-listed here                                                       | Officially documented                                            |
 | Codex CLI      | `~/.codex`                                                                                                              | `AGENTS.override.md` or `AGENTS.md`; per-directory discovery; fallback names configurable in `config.toml`                                                                                                    | `~/.codex/memories/`; Chronicle in `~/.codex/memories_extensions/chronicle/`; temp captures in `$TMPDIR/chronicle/screen_recording/`; logs in `~/.codex/log/` and optional `session-*.jsonl`                                                                                                                            | Skills in `.agents/skills/`, `~/.agents/skills/`, `/etc/codex/skills`; plugins are installable bundles with `.codex-plugin/plugin.json` metadata; subagents and workflows documented                                                                   | `~/.codex/config.toml`, `.codex/config.toml`, `/etc/codex/config.toml`, `--profile`, `CODEX_HOME`                                            | Officially documented                                            |
+| Kimi Code CLI | `~/.kimi`                                                                                                               | Project-root-to-cwd `AGENTS.md` merge, including `.kimi/AGENTS.md`; no single global rule file                                                                                                                | Session data and logs are managed by Kimi CLI; exact durable session root is not part of the Skill target contract                                                                                                                                                                                                   | User Skills in `~/.kimi/skills/`, compatible `~/.claude/skills/` / `~/.codex/skills/`, and `~/.config/agents/skills/`; project `.kimi/skills/`, `.claude/skills/`, `.codex/skills/`, `.agents/skills/`; custom YAML agent files use `--agent-file` | `~/.kimi/config.toml`; default MCP `~/.kimi/mcp.json` with `mcpServers`; extra Skills through `extra_skill_dirs` or `--skills-dir`                    | Officially documented                                            |
 | Grok Build     | `~/.grok` or `$GROK_HOME`                                                                                               | Global `~/.grok/AGENTS.md`; supported instruction filename family and `.grok/rules/` from repository root to cwd; Claude/Cursor compatibility is configurable                                                                                                                 | User sessions are stored below `~/.grok/sessions/`; experimental user/workspace memory is under `~/.grok/memory/`; both are runtime state, not PromptHub-managed assets                                                                                                                                                | Skills in `~/.grok/skills/`, `.grok/skills/`, and `.agents/skills/`; plugins in `~/.grok/plugins/` and `.grok/plugins/`; agents in `~/.grok/agents/` and `.grok/agents/`; roles, personas, hooks, MCP servers, and marketplaces are separate Grok surfaces | `~/.grok/config.toml`, `pager.toml`, `settings.json`, `lsp.json`, `sandbox.toml`; project `.grok/config.toml`, `.grok/hooks/`, `.grok/agents/`, `.grok/lsp.json`, `.grok/sandbox.toml`; ACP and headless modes documented | Officially documented                                            |
+| Reasonix       | `~/.reasonix` (macOS/Linux); `%APPDATA%\reasonix` (Windows)                                                            | Project `./reasonix.toml`; `REASONIX.md` / `AGENTS.md` memory documents; no synthetic global Rules entry                                                                                                     | Sessions, archives, memory, logs, and caches are under the Reasonix state/cache roots; these remain Reasonix-owned runtime data                                                                                                                                                                                        | Global Skills in `~/.reasonix/skills/`; global commands in `~/.reasonix/commands/`; Skills support `runAs = subagent`; MCP/plugins are TOML `[[plugins]]` entries rather than a Skill directory | Global `config.toml`, `settings.json` hooks, `trust.json`; project `reasonix.toml`; `.mcp.json` may be merged into plugin configuration | Officially documented (current main-v2)                        |
 | Gemini CLI     | `~/.gemini`                                                                                                             | `~/.gemini/GEMINI.md`; workspace `GEMINI.md`; customizable `context.fileName`; `/memory` manages loaded context                                                                                               | Session transcripts under `~/.gemini/tmp/<project>/chats/`; resume / rewind / checkpointing documented; project memory inbox and patch workflow documented but not all canonical directories are named on one page                                                                                                      | Skills in `~/.gemini/skills/`, `.gemini/skills/`, plus `.agents/skills/` aliases; commands in `~/.gemini/commands/`, `.gemini/commands/`                                                                                                               | `~/.gemini/settings.json`, `.gemini/settings.json`; experimental flags for auto memory / memory v2 / model steering                          | Officially documented                                            |
 | Cline          | `~/.cline`                                                                                                              | `AGENTS.md`; `.clinerules/`; `~/Documents/Cline/Rules`; project `.cline/` instruction assets                                                                                                                  | Session data in `~/.cline/data/sessions/`; additional db state under `~/.cline/data/db/`                                                                                                                                                                                                                                | `~/.cline/skills/`, `.cline/skills/`, `~/.cline/agents/`, `.cline/agents/`, plugins / hooks / workflows documented                                                                                                                                     | `~/.cline/data/settings/global-settings.json`, `providers.json`, `cline_mcp_settings.json`                                                   | Officially documented                                            |
+| Augment / Auggie | `~/.augment`                                                                                                          | User rules in `~/.augment/rules/`; workspace `.augment/rules/` and `.augment-guidelines`; directory rules use `always_apply` / `agent_requested` frontmatter; no single global rule file | Runtime sessions are Auggie-owned; not part of the stable Skill target contract                                                                                                                                                                                                                                         | Skills in `~/.augment/skills/`, `.augment/skills/`, plus compatible `.claude/skills/` and `.agents/skills/`; commands in `~/.augment/commands/` and `.augment/commands/` | Persistent MCP servers in `~/.augment/settings.json` under `mcpServers`; one-shot `--mcp-config` overrides are supported | Officially documented (CLI docs, 2026)                          |
 | CodeBuddy      | `~/.codebuddy`; project `.codebuddy/`; project MCP at `.mcp.json`                                                       | user `~/.codebuddy/CODEBUDDY.md`; project `CODEBUDDY.md`; modular `rules/` documented in SDK reference                                                                                                        | Local conversation resume is documented; exact persisted transcript path not confirmed in current pass                                                                                                                                                                                                                  | user/project Skills in `~/.codebuddy/skills/` and `.codebuddy/skills/`; user/project agents in `~/.codebuddy/agents/` and `.codebuddy/agents/`; commands; hooks; plugin packages with `.codebuddy-plugin/plugin.json`; plugins may include MCP servers | `~/.codebuddy/settings.json`, `.codebuddy/settings.json`, `.codebuddy/settings.local.json`, `~/.codebuddy/.mcp.json`, project `.mcp.json`    | Officially documented                                            |
+| ZCode Agent   | `~/.zcode`; project `.zcode/`                                                                                             | user `~/.zcode/AGENTS.md`; workspace `AGENTS.md`                                                                                                    | Session/task persistence is product-documented; stable transcript path not confirmed in current pass                                                                                                                                                                                                                  | user Skills in `~/.zcode/skills/`; commands in `~/.zcode/commands/`; subagents in `~/.zcode/agents/`; Plugin bundles are documented, but a stable local package marker/path is not confirmed | user MCP `~/.zcode/cli/config.json`; project MCP `.zcode/config.json`; native JSON shape `mcp.servers` | Officially documented (partial) |
 | OpenClaw       | `~/.openclaw`                                                                                                           | workspace bootstrap files in `~/.openclaw/workspace` (or `workspace-<profile>`), including `AGENTS.md`, `SOUL.md`, `USER.md`, `IDENTITY.md`, `TOOLS.md`, optional `HEARTBEAT.md` / `BOOT.md` / `BOOTSTRAP.md` | Session store in `~/.openclaw/agents/<agentId>/sessions/sessions.json`; transcripts in `~/.openclaw/agents/<agentId>/sessions/<sessionId>.jsonl`; daily memory in workspace `memory/YYYY-MM-DD.md`; long-term memory `MEMORY.md`; dreaming surface `DREAMS.md`; gateway logs in `/tmp/openclaw/openclaw-YYYY-MM-DD.log` | Workspace skills in `~/.openclaw/workspace/skills/`; managed skills in `~/.openclaw/skills/`; canvas files in workspace `canvas/`                                                                                                                      | `~/.openclaw/openclaw.json`; profile-specific workspace via `OPENCLAW_PROFILE`; sandbox workspaces in `~/.openclaw/sandboxes`                | Officially documented                                            |
 | QClaw          | PromptHub default `~/.qclaw`; can one-click associate existing OpenClaw                                                 | OpenClaw-compatible assistant; no separate public single-file global rule path confirmed in current pass                                                                                                      | Product docs confirm strong context memory, but public local memory/session paths were not confirmed in current pass                                                                                                                                                                                                    | ClawHub official skill market, GitHub open source Skills, custom/shareable Skills, and MCP Server protocol support documented; PromptHub uses `skills/` as a compatibility surface until local installed-skill paths are public                        | No public config file path confirmed in current pass                                                                                         | Officially documented (partial) + PromptHub local root inferred  |
 | OpenCode       | `~/.config/opencode`                                                                                                    | `~/.config/opencode/AGENTS.md`; local traversal of `AGENTS.md`; Claude fallback `CLAUDE.md`; extra `instructions` via `opencode.json`                                                                         | Snapshot / undo feature documented; canonical persisted conversation-history path not confirmed in current pass                                                                                                                                                                                                         | Agents in `agents/`; skills in `skills/`; commands in `commands/`; plugins in `plugins/`; modes in `modes/`                                                                                                                                            | `~/.config/opencode/opencode.json`, `~/.config/opencode/tui.json`, project `opencode.json`, env-based overrides, managed configs             | Officially documented                                            |
@@ -140,9 +161,13 @@ Stable product rule:
 | TRAE Work    | `trae-work`    | `~/.trae-work`                                                  | TRAE Work international client; PromptHub assigns an isolated root + `skills/` convention              | Product confirmed; local path PromptHub inferred                          |
 | TRAE IDE CN  | `trae-cn`      | `~/.trae-cn`                                                    | China-region TRAE IDE preset; visible built-in platform keeps the existing root convention             | Product confirmed; local path PromptHub inferred                          |
 | TRAE Work CN | `trae-work-cn` | `~/.trae-work-cn`                                               | TRAE Work is a separate China-region client; PromptHub assigns an isolated root + `skills/` convention | Product confirmed; local path PromptHub inferred                          |
-| Qoder        | `qoder`        | `~/.qoder`                                                      | root dir + `skills/` convention only                                                                   | PromptHub inferred                                                        |
+| Qoder        | `qoder`        | `~/.qoder`                                                      | Qoder IDE / CLI target; root dir + `skills/` convention only                                           | Official Qoder product/CLI docs; local Skill path remains PromptHub inferred |
 | QoderWorker  | `qoderwork`    | `~/.qoderwork`                                                  | root dir + `skills/` convention only                                                                   | PromptHub inferred                                                        |
 | Hermes Agent | `hermes`       | macOS/Linux `~/.hermes`; Windows Native `%LOCALAPPDATA%\hermes` | root dir + `skills/` convention only                                                                   | Windows Native root officially documented; skills path PromptHub inferred |
+
+Qwen Cloud currently documents **Qoder** (including Qoder CLI) as its coding-agent
+client. PromptHub therefore keeps `qoder` as the canonical Qwen target and does
+not add a duplicate `qwen` platform id.
 
 ### Marvis Research Watchlist
 
@@ -170,6 +195,7 @@ Current support boundary:
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | WorkBuddy    | Tencent WorkBuddy now has an explicit MCP file contract and a documented custom Skill package structure                                    | user `~/.workbuddy/mcp.json`, project `.workbuddy/mcp.json`, JSON `mcpServers`; custom Skills include `skill.yml`, implementation files, and `README`                                                                                   | Built-in platform; MCP target supported                  |
 | CodeBuddy    | CodeBuddy Code has grown beyond a simple `skills/` surface into settings, memory, agents, commands, hooks, plugins, marketplaces, and MCP  | `~/.codebuddy/settings.json`, `.codebuddy/settings.json`, `.codebuddy/settings.local.json`, `CODEBUDDY.md`, `~/.codebuddy/.mcp.json`, project `.mcp.json`, `skills/`, `agents/`, `commands/`, `rules/`, `.codebuddy-plugin/plugin.json` | Built-in platform; MCP target supported                  |
+| ZCode Agent | ZCode publicly documents Skills, user instructions, commands, subagents, nested MCP config, and Plugin bundles | `~/.zcode/skills/`, `~/.zcode/AGENTS.md`, `~/.zcode/commands/`, `~/.zcode/agents/`, `~/.zcode/cli/config.json`, project `.zcode/config.json`; Plugin marker/path not confirmed | Built-in platform; Skills, Rules, and MCP target supported; Plugin pending |
 | QClaw        | Tencent PC Manager localized OpenClaw assistant with WeChat binding, OpenClaw association, ClawHub/GitHub Skills, and MCP protocol support | Product docs confirm QClaw is based on OpenClaw, can associate existing OpenClaw, and supports ClawHub/GitHub Skills, MCP Server protocol, custom/shareable Skills                                                                      | Built-in OpenClaw-compatible platform; no MCP path yet   |
 | Kilo Code    | Kilo 用户实际 MCP 配置优先使用 `kilo.json`，历史 JSONC 配置仍可通过自定义路径兼容                                                          | `.kilo/skills/`, `~/.kilo/skills/`, `.kilo/rules/`, default global `~/.config/kilo/kilo.json`, default project `kilo.json`, compatible `.config/kilo/kilo.jsonc` / `.kilo/kilo.jsonc` custom config paths, `AGENTS.md`                  | Built-in platform; MCP target supported                  |
 | TRAE Work    | 国际站下载页和文档入口展示 TRAE Work，与 TRAE IDE 分开展示；本轮已作为独立内置 Agent 平台落入 `trae-work`                                  | Product entry available via `trae.ai`; local skills path remains PromptHub inferred                                                                                                                                                     | Promoted to built-in platform with isolated default root |
@@ -184,6 +210,11 @@ Current support boundary:
 - `Kilo Code` 已作为独立 built-in platform 建模，不能与 `Kiro` 混用；MCP 使用 Kilo 自己的 `mcp` JSON/JSONC 配置结构。
 - `Tencent WorkBuddy` 使用 `workbuddy` 平台 id 和 `~/.workbuddy` 默认根目录；MCP 使用官方用户级 `mcp.json` 与项目级 `.workbuddy/mcp.json`。
 - `CodeBuddy` 保留既有 `codebuddy` 平台 id，但不再只建模 `skills/`；默认资产包括 `CODEBUDDY.md`、`.mcp.json`、`settings.json`、`skills/`、`agents/`、`commands/`。
+- `ZCode Agent` 使用 `zcode` 平台 id 和官方用户根目录 `~/.zcode`；Skills、Rules 和 MCP 走已确认的路径，Plugin 只保留 pending 状态，直到官方确认本地包 marker 与安装路径。
+- `Qoder` 是 Qwen Cloud 当前文档中的 IDE / CLI 编程客户端；PromptHub 保留 `qoder` 作为唯一 Qwen 目标，不新增 `qwen` 别名。
+- `Kimi Code CLI` 使用 `kimi` 平台 id，管理官方 `~/.kimi/skills/`，并仅预览 `config.toml` / `mcp.json`，不伪装为 MCP 写入目标。
+- `Reasonix` 使用 `reasonix` 平台 id，管理 `~/.reasonix/skills/`，并把 `config.toml`、`settings.json`、`trust.json` 标记为发现/配置预览；Reasonix 的 TOML Plugin/MCP 语法不复用 Codex writer。
+- `Augment / Auggie` 使用 `augment` 平台 id，管理 `~/.augment/skills/`，预览 `settings.json`；其 `rules/` 目录和 frontmatter 不压平成单一全局规则文件。
 - `QClaw` 使用独立 `qclaw` 平台 id，默认根目录为 PromptHub 兼容约定 `~/.qclaw`；由于官方强调基于 OpenClaw 并可关联 OpenClaw，当前复用 OpenClaw 的 workspace/SOUL.md 规则候选和 `skills/` 兼容面，但不创建未确认的 MCP 配置路径。
 - `Marvis` 暂不作为内置平台。当前公开资料证明产品存在和系统级 Agent 能力，但没有可落地的本地资产路径或 MCP/Skill 文件合同。
 
@@ -229,6 +260,115 @@ Current support boundary:
 - Config and profiles:
   - `~/.codex/config.toml`, `.codex/config.toml`, `/etc/codex/config.toml`
   - named profiles and enterprise `requirements.toml` documented
+
+### Kimi Code CLI
+
+- Root: `~/.kimi`
+- Rules and context:
+  - Kimi merges `AGENTS.md` from the project root to the current directory;
+    `.kimi/AGENTS.md` participates in the same chain.
+  - This is a project-scoped hierarchy, not a user-level single-file Rules
+    target, so PromptHub does not create a `kimi-global` Rules card.
+- Reusable assets:
+  - user Skills: `~/.kimi/skills/`
+  - compatible user roots: `~/.claude/skills/`, `~/.codex/skills/`,
+    `~/.config/agents/skills/`, and `~/.agents/skills/`
+  - project roots: `.kimi/skills/`, `.claude/skills/`, `.codex/skills/`,
+    `.agents/skills/`
+  - custom agent definitions are YAML files loaded with `--agent-file`
+- Config and MCP:
+  - default config: `~/.kimi/config.toml`
+  - default MCP file: `~/.kimi/mcp.json`
+  - additional Skills use `extra_skill_dirs` or repeatable `--skills-dir`
+  - PromptHub projects MCP servers into `~/.kimi/mcp.json` using the documented
+    `mcpServers` JSON shape; OAuth credentials and `mcp-oauth/` tokens remain
+    Kimi-owned and are never copied.
+- Evidence:
+  - `https://moonshotai.github.io/kimi-cli/en/customization/skills.html`
+  - `https://moonshotai.github.io/kimi-cli/en/customization/agents.html`
+  - `https://moonshotai.github.io/kimi-cli/en/reference/kimi-command.html`
+
+### Reasonix
+
+- Root: `~/.reasonix` on macOS/Linux; `%APPDATA%\\reasonix` on Windows;
+  `REASONIX_HOME` can override the root.
+- Rules and context:
+  - project config is `./reasonix.toml` and takes precedence over the user
+    config for project-scoped fields
+  - `REASONIX.md` and `AGENTS.md` are project memory/instruction documents
+  - PromptHub keeps these hierarchy files repository-scoped instead of
+    projecting a synthetic global Rules file
+- Reusable assets:
+  - global Skills: `~/.reasonix/skills/`
+  - global slash commands: `~/.reasonix/commands/`
+  - Skills can declare `runAs = "subagent"`; MCP/plugin servers are declared
+    as `[[plugins]]` in TOML rather than installed as Skill directories
+- Config and protected state:
+  - global config: `~/.reasonix/config.toml`
+  - hooks: `~/.reasonix/settings.json`
+  - hook trust store: `~/.reasonix/trust.json`
+  - provider secrets, sessions, archives, memory, logs, and caches remain
+    Reasonix-owned and are not written by PromptHub
+  - `.mcp.json` can be merged by the Reasonix plugin configuration, but the
+    TOML/Plugin schema is not compatible with PromptHub's Codex writer
+- Evidence:
+  - `https://github.com/esengine/DeepSeek-Reasonix`
+  - `https://github.com/esengine/DeepSeek-Reasonix/blob/main-v2/docs/CONFIG_PATHS.md`
+  - `https://github.com/esengine/DeepSeek-Reasonix/blob/main-v2/docs/GUIDE.md`
+
+### Augment / Auggie
+
+- Root: `~/.augment`
+- Rules and context:
+  - user rules: `~/.augment/rules/` (always applied by the CLI)
+  - workspace rules: `.augment/rules/` with `type: always_apply` or
+    `type: agent_requested`
+  - workspace guideline file: `.augment-guidelines`
+  - the CLI skips `type: manual` workspace rules, so PromptHub does not
+    flatten this directory protocol into a single global Rules file
+- Reusable assets:
+  - user/workspace Skills: `~/.augment/skills/` and `.augment/skills/`
+  - compatible `.claude/skills/` and `.agents/skills/` roots are discovered
+  - commands: `~/.augment/commands/` and `.augment/commands/`
+- Config and MCP:
+  - persistent MCP servers live in `~/.augment/settings.json`; shared project
+    MCP servers live in `<workspace>/.augment/settings.json`
+  - `--mcp-config` provides per-run JSON overrides
+  - PromptHub projects global MCP servers into `~/.augment/settings.json` and
+    registered workspace MCP servers into `<workspace>/.augment/settings.json`,
+    using the documented `mcpServers` JSON shape; local settings remain outside
+    the global target and are not overwritten.
+- Evidence:
+  - `https://docs.augmentcode.com/cli/skills`
+  - `https://docs.augmentcode.com/cli/rules`
+  - `https://docs.augmentcode.com/cli/reference`
+
+### ZCode Agent
+
+- Root: `~/.zcode`
+- Rules and context:
+  - user global instructions: `~/.zcode/AGENTS.md`
+  - workspace instructions: `AGENTS.md` in the current workspace
+- Reusable assets:
+  - user Skills: `~/.zcode/skills/<skill-name>/SKILL.md`
+  - user commands: `~/.zcode/commands/<command-name>.md`
+  - user subagents: `~/.zcode/agents/<name>.md`
+- MCP config:
+  - user/global: `~/.zcode/cli/config.json`, entries under `mcp.servers`
+  - project/workspace: `.zcode/config.json`, entries under `mcp.servers`
+  - ZCode also reads `.agents/mcp.json` as a compatibility fallback; PromptHub's
+    native target writes only the documented `.zcode` files.
+- Plugin boundary:
+  - ZCode documents bundled Skills, commands, subagents, and MCP servers.
+  - A stable local Plugin package marker and installation directory are not
+    confirmed in the current public docs, so PromptHub keeps Plugin target
+    distribution pending rather than writing an invented package format.
+- Evidence:
+  - `https://zcode.z.ai/en/docs/agents`
+  - `https://zcode.z.ai/en/docs/skill`
+  - `https://zcode.z.ai/en/docs/mcp-services`
+  - `https://zcode.z.ai/en/docs/plugin`
+  - official product mark: `https://zcode.z.ai/icon.svg?v=3.0.0`
 
 ### Gemini CLI
 
@@ -538,6 +678,10 @@ Current support boundary:
 - Codex memories: `https://developers.openai.com/codex/memories`
 - Codex Chronicle: `https://developers.openai.com/codex/memories/chronicle`
 - Codex skills: `https://developers.openai.com/codex/skills`
+- ZCode Agent: `https://zcode.z.ai/en/docs/agents`
+- ZCode Skills: `https://zcode.z.ai/en/docs/skill`
+- ZCode MCP servers: `https://zcode.z.ai/en/docs/mcp-services`
+- ZCode Plugins: `https://zcode.z.ai/en/docs/plugin`
 - Grok Build overview: `https://docs.x.ai/build/overview`
 - Grok Build Skills and Plugins: `https://docs.x.ai/build/features/skills-plugins-marketplaces`
 - Grok Build settings: `https://docs.x.ai/build/settings`
@@ -583,6 +727,18 @@ Current support boundary:
 - Kilo Code agents.md: `https://kilo.ai/docs/customize/agents-md`
 - Kilo Code MCP in CLI: `https://kilo.ai/docs/automate/mcp/using-in-cli`
 - Kilo Code MCP in Kilo Code: `https://kilo.ai/docs/automate/mcp/using-in-kilo-code`
+- Qoder / Qwen Cloud developer tools: `https://docs.qwencloud.com/developer-guides/clients-and-developer-tools/qoder`
+- Kimi Code CLI Skills: `https://moonshotai.github.io/kimi-cli/en/customization/skills.html`
+- Kimi Code CLI Agents: `https://moonshotai.github.io/kimi-cli/en/customization/agents.html`
+- Kimi Code CLI command reference: `https://moonshotai.github.io/kimi-cli/en/reference/kimi-command.html`
+- Kimi Code CLI MCP: `https://moonshotai.github.io/kimi-cli/en/customization/mcp.html`
+- Reasonix repository: `https://github.com/esengine/DeepSeek-Reasonix`
+- Reasonix configuration paths: `https://github.com/esengine/DeepSeek-Reasonix/blob/main-v2/docs/CONFIG_PATHS.md`
+- Reasonix guide: `https://github.com/esengine/DeepSeek-Reasonix/blob/main-v2/docs/GUIDE.md`
+- Augment / Auggie Skills: `https://docs.augmentcode.com/cli/skills`
+- Augment / Auggie rules: `https://docs.augmentcode.com/cli/rules`
+- Augment / Auggie CLI reference: `https://docs.augmentcode.com/cli/reference`
+- Augment / Auggie MCP: `https://docs.augmentcode.com/cli/integrations`
 - Cherry Studio storage locations: `https://docs.cherry-ai.com/advanced-basic/data-storage-location`
 - Cherry Studio local source inspected for skill registry behavior:
   - `/Users/lingxiaotian/Programs/public/cherry-studio/src/main/services/agents/skills/SkillService.ts`

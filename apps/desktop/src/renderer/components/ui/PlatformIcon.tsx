@@ -7,6 +7,9 @@ import {
   SparkleIcon,
   ZapIcon,
   BotIcon,
+  CodeIcon,
+  BracesIcon,
+  CommandIcon,
   LayoutGridIcon,
   BugIcon,
 } from "lucide-react";
@@ -37,6 +40,10 @@ import codebuddyLightIcon from "../../assets/platforms/codebuddy-light.svg";
 import codebuddyDarkIcon from "../../assets/platforms/codebuddy-dark.svg";
 import hermesIcon from "../../assets/platforms/hermes.svg";
 import cherryStudioIcon from "../../assets/platforms/cherry-studio.png";
+import zcodeIcon from "../../assets/platforms/zcode.svg";
+import reasonixIcon from "../../assets/platforms/reasonix.svg";
+import augmentIcon from "../../assets/platforms/augment.svg";
+import kimiIcon from "../../assets/platforms/kimi.png";
 
 type PlatformIconSource = string | { light: string; dark: string };
 
@@ -58,6 +65,7 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   workbuddy: workbuddyIcon,
   opencode: opencodeIcon,
   codex: codexIcon,
+  zcode: zcodeIcon,
   grok: {
     light: grokLightIcon,
     dark: grokDarkIcon,
@@ -70,6 +78,9 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   qclaw: qclawIcon,
   qoder: qoderIcon,
   qoderwork: qoderworkIcon,
+  reasonix: reasonixIcon,
+  augment: augmentIcon,
+  kimi: kimiIcon,
   "cherry-studio": cherryStudioIcon,
   codebuddy: {
     light: codebuddyLightIcon,
@@ -102,6 +113,9 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   qclaw: <BugIcon />,
   qoder: <BotIcon />,
   qoderwork: <BotIcon />,
+  kimi: <CommandIcon />,
+  reasonix: <CodeIcon />,
+  augment: <BracesIcon />,
   workbuddy: <BotIcon />,
   codebuddy: <BotIcon />,
   hermes: <BotIcon />,

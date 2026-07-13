@@ -38,6 +38,14 @@ export function deriveProjectMcpTargetPresets(
         platformId: "opencode",
       },
       {
+        id: `project:${project.id}:zcode`,
+        target: "zcode",
+        scope: "workspace",
+        label: `${project.name} / ZCode`,
+        path: joinProjectPath(rootPath, ".zcode/config.json"),
+        platformId: "zcode",
+      },
+      {
         id: `project:${project.id}:kiro`,
         target: "kiro",
         scope: "workspace",
@@ -68,6 +76,14 @@ export function deriveProjectMcpTargetPresets(
         label: `${project.name} / CodeBuddy`,
         path: joinProjectPath(rootPath, ".mcp.json"),
         platformId: "codebuddy",
+      },
+      {
+        id: `project:${project.id}:augment`,
+        target: "augment",
+        scope: "workspace",
+        label: `${project.name} / Augment / Auggie`,
+        path: joinProjectPath(rootPath, ".augment/settings.json"),
+        platformId: "augment",
       },
     ];
   });

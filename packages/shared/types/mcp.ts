@@ -13,7 +13,10 @@ export const MCP_TARGET_KINDS = [
   "kilo",
   "workbuddy",
   "codebuddy",
+  "kimi",
+  "augment",
   "opencode",
+  "zcode",
   "custom-json",
   "custom-toml",
 ] as const;

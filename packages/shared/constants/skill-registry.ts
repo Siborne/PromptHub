@@ -6,6 +6,7 @@ const DEFAULT_SKILL_COMPATIBILITY = [
   "cursor",
   "windsurf",
   "opencode",
+  "zcode",
   "antigravity",
 ] as const;
 import {

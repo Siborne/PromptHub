@@ -50,6 +50,7 @@ These do not qualify as first-version Plugin targets:
 | Cline SDK / CLI / Kanban | `RuntimeOnly` | Official docs define plugin entrypoints through `package.json` `cline.plugins` and `AgentPlugin` files for tools/hooks/commands, not a bundle inventory. |
 | Windsurf / Devin         | `Composite`   | Public docs describe separate Cascade skills, workflows, hooks, MCP, and IDE/plugin surfaces, but not one confirmed Agent plugin bundle format.          |
 | Cherry Studio            | `Composite`   | PromptHub can inspect local skill/agent registries, but no confirmed single plugin package or marketplace format is modeled.                             |
+| ZCode                    | `Pending`     | ZCode documents multi-capability Plugins, but the public docs do not confirm a stable local package marker or installation path for PromptHub distribution. |
 | Amp                      | `Pending`     | Public manual access is insufficient for a stable plugin package claim in the current pass.                                                              |
 | Other Agent targets      | `Pending`     | Default to greyed out until official docs or source code prove an integrated package mechanism and PromptHub defines an adapter.                         |
 
@@ -78,5 +79,6 @@ Runtime-only, composite, and pending targets should remain visible but disabled 
 - VS Code Agent Plugins: `https://code.visualstudio.com/docs/agent-customization/agent-plugins`
 - OpenCode plugins: `https://opencode.ai/docs/plugins/`
 - Cline plugins: `https://docs.cline.bot/customization/plugins`
+- ZCode Plugins: `https://zcode.z.ai/en/docs/plugin`
 - Devin / Windsurf Cascade skills: `https://docs.devin.ai/desktop/cascade/skills`
 - Devin / Windsurf Cascade hooks: `https://docs.devin.ai/desktop/cascade/hooks`

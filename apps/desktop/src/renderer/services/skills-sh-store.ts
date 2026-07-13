@@ -31,6 +31,7 @@ const DEFAULT_COMPATIBILITY = [
   "codex",
   "cursor",
   "opencode",
+  "zcode",
   "antigravity",
 ];
 const DETAIL_PATH_PATTERN = /^\/([^/]+)\/([^/]+)\/([^/?#]+)\/?$/;
@@ -53,7 +54,9 @@ export interface SkillsShLeaderboardEntry {
   weeklyInstalls?: string;
 }
 
-export function normalizeSkillsShFilterKey(value?: string | null): SkillsShFilterKey {
+export function normalizeSkillsShFilterKey(
+  value?: string | null,
+): SkillsShFilterKey {
   return SKILLS_SH_FILTERS.some((filter) => filter.key === value)
     ? (value as SkillsShFilterKey)
     : "all";
@@ -74,8 +77,12 @@ function normalizeHtmlInput(html: string | null | undefined): string {
   return html ?? "";
 }
 
-export function parseSkillsShTotalCount(html: string | null | undefined): number | undefined {
-  const match = normalizeHtmlInput(html).match(/(?:\\?"totalSkills\\?")\s*:\s*(\d+)/);
+export function parseSkillsShTotalCount(
+  html: string | null | undefined,
+): number | undefined {
+  const match = normalizeHtmlInput(html).match(
+    /(?:\\?"totalSkills\\?")\s*:\s*(\d+)/,
+  );
   if (!match) {
     return undefined;
   }
@@ -99,7 +106,11 @@ function decodeHtmlEntities(input: string): string {
 }
 
 function normalizeWhitespace(input: string): string {
-  return input.replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return input
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function normalizeSearchTerm(term: string): string {
@@ -115,7 +126,10 @@ function stripTags(input: string): string {
     decodeHtmlEntities(
       input
         .replace(/<br\s*\/?>/gi, "\n")
-        .replace(/<\/(p|div|section|article|li|ul|ol|h1|h2|h3|h4|h5|h6|pre|code)>/gi, "\n")
+        .replace(
+          /<\/(p|div|section|article|li|ul|ol|h1|h2|h3|h4|h5|h6|pre|code)>/gi,
+          "\n",
+        )
         .replace(/<[^>]+>/g, " "),
     ).replace(/[ \t]{2,}/g, " "),
   );
@@ -129,7 +143,10 @@ function htmlToText(html: string): string {
         .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
         .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, "")
         .replace(/<br\s*\/?>/gi, "\n")
-        .replace(/<\/(p|div|section|article|header|footer|aside|main|nav|li|ul|ol|h1|h2|h3|h4|h5|h6|pre|code|blockquote|table|thead|tbody|tr)>/gi, "\n")
+        .replace(
+          /<\/(p|div|section|article|header|footer|aside|main|nav|li|ul|ol|h1|h2|h3|h4|h5|h6|pre|code|blockquote|table|thead|tbody|tr)>/gi,
+          "\n",
+        )
         .replace(/<[^>]+>/g, ""),
     )
       .replace(/\u00a0/g, " ")
@@ -219,11 +236,16 @@ function normalizeSectionContent(lines: string[]): string {
 
 function extractInstalledOnAgents(lines: string[]): string[] {
   return lines
-    .map((line) => line.match(/^([a-z0-9-]+)\s+\d+/i)?.[1]?.toLowerCase() ?? null)
+    .map(
+      (line) => line.match(/^([a-z0-9-]+)\s+\d+/i)?.[1]?.toLowerCase() ?? null,
+    )
     .filter((value): value is string => Boolean(value));
 }
 
-function extractSimpleMetric(text: string, heading: string): string | undefined {
+function extractSimpleMetric(
+  text: string,
+  heading: string,
+): string | undefined {
   const lines = getSectionLines(text, heading, [
     "Summary",
     "SKILL.md",
@@ -244,7 +266,8 @@ export function parseSkillsShLeaderboard(
   const seen = new Set<string>();
   const limit = options?.limit ?? 24;
   const normalizedHtml = normalizeHtmlInput(html).replace(/\\"/g, '"');
-  const linkPattern = /<a[^>]+href="(\/[^"/?#]+\/[^"/?#]+\/[^"/?#]+\/?)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const linkPattern =
+    /<a[^>]+href="(\/[^"/?#]+\/[^"/?#]+\/[^"/?#]+\/?)"[^>]*>([\s\S]*?)<\/a>/gi;
 
   const addEntry = (entry: SkillsShLeaderboardEntry) => {
     if (seen.has(entry.detailPath) || entries.length >= limit) {
@@ -288,7 +311,10 @@ export function parseSkillsShLeaderboard(
 
   const dataPattern =
     /"source":"([^"]+\/[^"]+)","skillId":"([^"]+)","name":"([^"]+)"/g;
-  while (entries.length < limit && (match = dataPattern.exec(normalizedHtml)) !== null) {
+  while (
+    entries.length < limit &&
+    (match = dataPattern.exec(normalizedHtml)) !== null
+  ) {
     const [, source, skillId] = match;
     const [owner, repo] = source.split("/");
     if (!owner || !repo || !skillId) {
@@ -350,13 +376,18 @@ export function parseSkillsShDetail(
     ]),
   );
   const skillMd = normalizeSectionContent(
-    getSectionLines(text, "SKILL.md", [
-      "Weekly Installs",
-      "Repository",
-      "GitHub Stars",
-      "Installed on",
-      "Security audits",
-    ], true),
+    getSectionLines(
+      text,
+      "SKILL.md",
+      [
+        "Weekly Installs",
+        "Repository",
+        "GitHub Stars",
+        "Installed on",
+        "Security audits",
+      ],
+      true,
+    ),
   );
 
   if (!summary && !skillMd) {
@@ -383,19 +414,22 @@ export function parseSkillsShDetail(
     frontmatter.description?.trim() ||
     `${displayName} community skill`;
   const compatibility =
-    installedOn.length > 0 ? Array.from(new Set(installedOn)) : DEFAULT_COMPATIBILITY;
+    installedOn.length > 0
+      ? Array.from(new Set(installedOn))
+      : DEFAULT_COMPATIBILITY;
   const sourceUrl = repository.match(/^[^/\s]+\/[^/\s]+$/)
     ? `https://github.com/${repository}`
     : new URL(entry.detailPath, SKILLS_SH_BASE_URL).toString();
-  const tags = frontmatter.tags.length > 0
-    ? frontmatter.tags
-    : Array.from(
-        new Set(
-          [entry.owner, entry.repo, ...entry.skillName.split(/[-_]+/)]
-            .map((tag) => tag.trim().toLowerCase())
-            .filter(Boolean),
-        ),
-      );
+  const tags =
+    frontmatter.tags.length > 0
+      ? frontmatter.tags
+      : Array.from(
+          new Set(
+            [entry.owner, entry.repo, ...entry.skillName.split(/[-_]+/)]
+              .map((tag) => tag.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        );
   const packageLocation = getStandardSkillsShPackageLocation(entry);
 
   return {

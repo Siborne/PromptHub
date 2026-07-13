@@ -10,6 +10,7 @@ function requirePlatform(platformId: string) {
 
 const claudePlatform = requirePlatform("claude");
 const codexPlatform = requirePlatform("codex");
+const zcodePlatform = requirePlatform("zcode");
 const grokPlatform = requirePlatform("grok");
 const geminiPlatform = requirePlatform("gemini");
 const opencodePlatform = requirePlatform("opencode");
@@ -24,6 +25,7 @@ export const RULE_FILE_GROUPS = ["workspace", "assistant", "tooling"] as const;
 export const RULE_PLATFORM_ORDER = [
   "claude",
   "codex",
+  "zcode",
   "grok",
   "gemini",
   "opencode",
@@ -55,6 +57,17 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
       "Global Codex instructions stored next to the managed Codex settings directory.",
     name: "AGENTS.md",
     description: "Global Codex instructions loaded from the local Codex configuration.",
+    group: "assistant",
+  },
+  "zcode-global": {
+    id: "zcode-global",
+    platformId: "zcode",
+    platformName: zcodePlatform.name,
+    platformIcon: zcodePlatform.icon,
+    platformDescription:
+      "Global ZCode Agent instructions stored next to the managed ZCode skills directory.",
+    name: "AGENTS.md",
+    description: "Global ZCode Agent instructions loaded from the local ZCode configuration.",
     group: "assistant",
   },
   "grok-global": {

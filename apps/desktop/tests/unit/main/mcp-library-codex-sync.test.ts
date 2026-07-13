@@ -437,12 +437,16 @@ describe("CoreMcpLibraryService", () => {
 
     expect(byId.roo).toBeUndefined();
     expect(byId.grok).toBeUndefined();
+    expect(byId.reasonix).toBeUndefined();
+    expect(byId.kimi.path).toBe("/Users/test/.kimi/mcp.json");
+    expect(byId.augment.path).toBe("/Users/test/.augment/settings.json");
     expect(byId.claude.path).toBe("/Users/test/.claude.json");
     expect(byId.codex.path).toBe("/Users/test/.codex/config.toml");
     expect(byId.gemini.path).toBe("/Users/test/.gemini/settings.json");
     expect(byId.opencode.path).toBe(
       "/Users/test/.config/opencode/opencode.json",
     );
+    expect(byId.zcode.path).toBe("/Users/test/.zcode/cli/config.json");
     expect(byId.kilo.path).toBe("/Users/test/.config/kilo/kilo.json");
     expect(presets.filter((preset) => preset.platformId === "kilo")).toEqual([
       byId.kilo,

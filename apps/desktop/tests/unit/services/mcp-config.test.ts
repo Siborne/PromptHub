@@ -145,6 +145,8 @@ describe("mcp-config", () => {
 
   it("resolves the JSON root key per target", () => {
     expect(getMcpServersJsonKey("claude")).toBe("mcpServers");
+    expect(getMcpServersJsonKey("kimi")).toBe("mcpServers");
+    expect(getMcpServersJsonKey("augment")).toBe("mcpServers");
     expect(getMcpServersJsonKey("gemini")).toBe("mcpServers");
     expect(getMcpServersJsonKey("windsurf")).toBe("mcpServers");
     expect(getMcpServersJsonKey("kiro")).toBe("mcpServers");
@@ -154,6 +156,72 @@ describe("mcp-config", () => {
     expect(getMcpServersJsonKey("vscode")).toBe("servers");
     expect(getMcpServersJsonKey("opencode")).toBe("mcp");
     expect(getMcpServersJsonKey("kilo")).toBe("mcp");
+    expect(getMcpServersJsonKey("zcode")).toBe("servers");
+  });
+
+  it("projects ZCode MCP servers under mcp.servers and preserves sibling config", () => {
+    const built = buildMcpTargetJson("zcode", [baseServer]);
+    expect(built).toEqual({
+      mcp: {
+        servers: {
+          playwright: {
+            command: "npx",
+            args: ["@playwright/mcp@latest", "--headless"],
+            env: { CI: "1" },
+          },
+        },
+      },
+    });
+
+    const merged = mergeMcpServersJson(
+      {
+        model: "glm-5",
+        mcp: {
+          telemetry: { enabled: true },
+          servers: { existing: { command: "node" } },
+        },
+      },
+      "zcode",
+      [baseServer],
+    );
+    expect(merged).toMatchObject({
+      model: "glm-5",
+      mcp: {
+        telemetry: { enabled: true },
+        servers: {
+          existing: { command: "node" },
+          playwright: { command: "npx" },
+        },
+      },
+    });
+
+    expect(
+      removeMcpServersFromJson(merged, "zcode", [baseServer.name]),
+    ).toMatchObject({
+      model: "glm-5",
+      mcp: {
+        telemetry: { enabled: true },
+        servers: { existing: { command: "node" } },
+      },
+    });
+  });
+
+  it("projects Kimi and Augment MCP servers with the documented mcpServers shape", () => {
+    for (const target of ["kimi", "augment"] as const) {
+      const merged = mergeMcpServersJson(
+        { theme: "dark", mcpServers: { existing: { command: "node" } } },
+        target,
+        [baseServer],
+      );
+
+      expect(merged).toMatchObject({
+        theme: "dark",
+        mcpServers: {
+          existing: { command: "node" },
+          playwright: { command: "npx" },
+        },
+      });
+    }
   });
 
   it("projects OpenCode local entries with a combined command array", () => {

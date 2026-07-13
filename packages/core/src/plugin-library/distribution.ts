@@ -564,6 +564,15 @@ const PLUGIN_TARGET_MATRIX: PluginTargetCompatibility[] = [
     enabled: false,
     unsupportedReason: "Public evidence is insufficient for a stable adapter.",
   },
+  {
+    id: "zcode",
+    displayName: "智谱 ZCode",
+    status: "pending",
+    enabled: false,
+    installSurface: "ZCode Marketplace / local Plugin import",
+    unsupportedReason:
+      "ZCode documents Plugin bundles, but a stable local package marker and install path are not publicly confirmed.",
+  },
 ];
 
 export function getPluginTargetMatrix(): PluginTargetCompatibility[] {

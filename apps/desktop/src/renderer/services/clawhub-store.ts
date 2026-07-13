@@ -5,7 +5,13 @@ import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
 export const CLAWHUB_BASE_URL = "https://clawhub.ai";
 export const CLAWHUB_BROWSE_SORT = "recommended";
 
-const DEFAULT_COMPATIBILITY = ["claude", "codex", "cursor", "opencode"];
+const DEFAULT_COMPATIBILITY = [
+  "claude",
+  "codex",
+  "cursor",
+  "opencode",
+  "zcode",
+];
 
 type ClawHubRecord = Record<string, unknown>;
 

@@ -30,6 +30,14 @@ describe("mcp target presets", () => {
         platformId: "opencode",
       },
       {
+        id: "project:project_docs:zcode",
+        target: "zcode",
+        scope: "workspace",
+        label: "Docs / ZCode",
+        path: "/workspace/docs/.zcode/config.json",
+        platformId: "zcode",
+      },
+      {
         id: "project:project_docs:kiro",
         target: "kiro",
         scope: "workspace",
@@ -60,6 +68,14 @@ describe("mcp target presets", () => {
         label: "Docs / CodeBuddy",
         path: "/workspace/docs/.mcp.json",
         platformId: "codebuddy",
+      },
+      {
+        id: "project:project_docs:augment",
+        target: "augment",
+        scope: "workspace",
+        label: "Docs / Augment / Auggie",
+        path: "/workspace/docs/.augment/settings.json",
+        platformId: "augment",
       },
     ]);
   });

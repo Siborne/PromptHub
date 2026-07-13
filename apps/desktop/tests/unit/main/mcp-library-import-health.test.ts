@@ -102,6 +102,65 @@ describe("CoreMcpLibraryService", () => {
     expect(service.read().bindings).toEqual([]);
   });
 
+  it("writes ZCode MCP entries under the native nested config and imports disabled entries", () => {
+    const service = new CoreMcpLibraryService();
+    const server = service.createServer({
+      name: "memory",
+      displayName: "Memory",
+      transport: "stdio",
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-memory"],
+    });
+    const targetPath = path.join(userDataPath, ".zcode", "cli", "config.json");
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(
+      targetPath,
+      JSON.stringify(
+        {
+          model: "glm-5",
+          mcp: {
+            servers: {
+              existing: { command: "node" },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    service.apply({
+      target: "zcode",
+      scope: "global",
+      path: targetPath,
+      serverIds: [server.id],
+    });
+    const afterApply = JSON.parse(fs.readFileSync(targetPath, "utf8"));
+    expect(afterApply.model).toBe("glm-5");
+    expect(afterApply.mcp.servers.existing.command).toBe("node");
+    expect(afterApply.mcp.servers.memory.command).toBe("npx");
+
+    const importedPath = path.join(userDataPath, ".zcode", "config.json");
+    fs.writeFileSync(
+      importedPath,
+      JSON.stringify({
+        mcp: {
+          servers: {
+            disabled: {
+              command: "node",
+              enable: false,
+            },
+          },
+        },
+      }),
+      "utf8",
+    );
+    const imported = service.importFromFile(importedPath).imported[0];
+    expect(imported.name).toBe("disabled");
+    expect(imported.enabled).toBe(false);
+  });
+
   it("removes external target MCP entries by server name without requiring library records", () => {
     const service = new CoreMcpLibraryService();
     const targetPath = path.join(userDataPath, "target", "external.json");

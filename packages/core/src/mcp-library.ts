@@ -1,5 +1,4 @@
 import fs from "fs";
-import os from "os";
 import path from "path";
 
 import {
@@ -27,7 +26,6 @@ import {
   type McpTargetBinding,
   type McpTargetEntryDigest,
   type McpTargetKind,
-  type McpTargetScope,
   type McpTargetSyncApplyResult,
   type McpTargetSyncCheck,
   type McpTargetSyncOptions,
@@ -38,7 +36,7 @@ import {
   buildMcpConfigPreview,
   computeMcpTargetEntryDigest,
   getMcpTargetEntryObject,
-  getMcpServersJsonKey,
+  getMcpJsonServerEntries,
   inferMcpEnvRequirements,
   inferMcpPlaceholderRequirements,
   inferMcpRuntimeDetails,
@@ -57,6 +55,13 @@ import {
 
 import { getConfigDir, getDataDir } from "./runtime-paths";
 import { inferMcpSource } from "./mcp-source";
+import {
+  getMcpTargetPresets,
+  type McpTargetPreset,
+} from "./mcp-target-presets";
+
+export { getMcpTargetPresets } from "./mcp-target-presets";
+export type { McpTargetPreset } from "./mcp-target-presets";
 
 const MCP_LIBRARY_DIR_NAME = "mcp";
 const MCP_LIBRARY_FILE_NAME = "library.json";
@@ -72,19 +77,6 @@ export class CoreMcpError extends Error {
   }
 }
 
-export interface McpTargetPreset {
-  id: string;
-  target: McpTargetKind;
-  scope: McpTargetScope;
-  label: string;
-  path: string;
-  /**
-   * Skill platform id used for brand icon rendering in the renderer.
-   * 用于渲染端品牌图标的平台 id（对应 Skills 平台体系）。
-   */
-  platformId?: string;
-}
-
 export function getMcpLibraryFilePath(): string {
   return path.join(getDataDir(), MCP_LIBRARY_DIR_NAME, MCP_LIBRARY_FILE_NAME);
 }
@@ -95,163 +87,6 @@ export function getLegacyMcpLibraryFilePath(): string {
 
 function readMcpLibraryFile(filePath: string): McpLibraryFile {
   return normalizeLibrary(JSON.parse(fs.readFileSync(filePath, "utf8")));
-}
-
-/**
- * Global MCP config targets for every supported agent platform.
- * Workspace/project-level files are handled through the custom-path target
- * because a packaged desktop app has no meaningful working directory.
- * 各支持平台的全局 MCP 配置目标。项目级文件通过自定义路径目标处理，
- * 因为打包后的桌面应用没有有意义的工作目录。
- */
-export function getMcpTargetPresets(
-  homeDir = os.homedir(),
-  platform: NodeJS.Platform = process.platform,
-): McpTargetPreset[] {
-  const claudeDesktopPath =
-    platform === "darwin"
-      ? path.join(
-          homeDir,
-          "Library",
-          "Application Support",
-          "Claude",
-          "claude_desktop_config.json",
-        )
-      : platform === "win32"
-        ? path.join(
-            homeDir,
-            "AppData",
-            "Roaming",
-            "Claude",
-            "claude_desktop_config.json",
-          )
-        : path.join(homeDir, ".config", "Claude", "claude_desktop_config.json");
-  const vscodeUserPath =
-    platform === "darwin"
-      ? path.join(
-          homeDir,
-          "Library",
-          "Application Support",
-          "Code",
-          "User",
-          "mcp.json",
-        )
-      : platform === "win32"
-        ? path.join(homeDir, "AppData", "Roaming", "Code", "User", "mcp.json")
-        : path.join(homeDir, ".config", "Code", "User", "mcp.json");
-
-  return [
-    {
-      id: "claude",
-      target: "claude",
-      scope: "global",
-      label: "Claude Code",
-      path: path.join(homeDir, ".claude.json"),
-      platformId: "claude",
-    },
-    {
-      id: "codex",
-      target: "codex",
-      scope: "global",
-      label: "Codex CLI",
-      path: path.join(homeDir, ".codex", "config.toml"),
-      platformId: "codex",
-    },
-    {
-      id: "gemini",
-      target: "gemini",
-      scope: "global",
-      label: "Gemini CLI",
-      path: path.join(homeDir, ".gemini", "settings.json"),
-      platformId: "gemini",
-    },
-    {
-      id: "opencode",
-      target: "opencode",
-      scope: "global",
-      label: "OpenCode",
-      path: path.join(homeDir, ".config", "opencode", "opencode.json"),
-      platformId: "opencode",
-    },
-    {
-      id: "kilo",
-      target: "kilo",
-      scope: "global",
-      label: "Kilo Code",
-      path: path.join(homeDir, ".config", "kilo", "kilo.json"),
-      platformId: "kilo",
-    },
-    {
-      id: "cursor",
-      target: "cursor",
-      scope: "global",
-      label: "Cursor",
-      path: path.join(homeDir, ".cursor", "mcp.json"),
-      platformId: "cursor",
-    },
-    {
-      id: "claude-desktop",
-      target: "claude-desktop",
-      scope: "global",
-      label: "Claude Desktop",
-      path: claudeDesktopPath,
-      platformId: "claude",
-    },
-    {
-      id: "vscode",
-      target: "vscode",
-      scope: "global",
-      label: "VS Code",
-      path: vscodeUserPath,
-      platformId: "copilot",
-    },
-    {
-      id: "windsurf",
-      target: "windsurf",
-      scope: "global",
-      label: "Windsurf",
-      path: path.join(homeDir, ".codeium", "windsurf", "mcp_config.json"),
-      platformId: "windsurf",
-    },
-    {
-      id: "kiro",
-      target: "kiro",
-      scope: "global",
-      label: "Kiro",
-      path: path.join(homeDir, ".kiro", "settings", "mcp.json"),
-      platformId: "kiro",
-    },
-    {
-      id: "cline",
-      target: "cline",
-      scope: "global",
-      label: "Cline",
-      path: path.join(
-        homeDir,
-        ".cline",
-        "data",
-        "settings",
-        "cline_mcp_settings.json",
-      ),
-      platformId: "cline",
-    },
-    {
-      id: "workbuddy",
-      target: "workbuddy",
-      scope: "global",
-      label: "Tencent WorkBuddy",
-      path: path.join(homeDir, ".workbuddy", "mcp.json"),
-      platformId: "workbuddy",
-    },
-    {
-      id: "codebuddy",
-      target: "codebuddy",
-      scope: "global",
-      label: "CodeBuddy",
-      path: path.join(homeDir, ".codebuddy", ".mcp.json"),
-      platformId: "codebuddy",
-    },
-  ];
 }
 
 function nowIso(): string {
@@ -494,13 +329,11 @@ function readTargetEntryObject(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return null;
   }
-  const entries = (raw as Record<string, unknown>)[
-    getMcpServersJsonKey(target)
-  ];
-  if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+  const targetEntries = getMcpJsonServerEntries(raw, target);
+  if (!targetEntries) {
     return null;
   }
-  const entry = (entries as Record<string, unknown>)[serverName];
+  const entry = targetEntries[serverName];
   return entry && typeof entry === "object" && !Array.isArray(entry)
     ? (entry as Record<string, unknown>)
     : null;
@@ -927,6 +760,7 @@ function importServerEntry(
         !Array.isArray(headersRecord)
           ? (headersRecord as Record<string, string>)
           : undefined,
+      enabled: record.enable !== false && record.enabled !== false,
       source: { type: "import" },
     },
     now,
@@ -1036,14 +870,19 @@ function parseJsonImportServers(
   now: number,
 ): McpServerConfig[] {
   const raw = parseMcpJsonConfigContent(content) as Record<string, unknown>;
+  const asObjectRecord = (
+    value: unknown,
+  ): Record<string, unknown> | undefined =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
+  const mcp = asObjectRecord(raw.mcp);
   const source =
-    raw.mcpServers && typeof raw.mcpServers === "object"
-      ? raw.mcpServers
-      : raw.servers && typeof raw.servers === "object"
-        ? raw.servers
-        : raw.mcp && typeof raw.mcp === "object"
-          ? raw.mcp
-          : {};
+    asObjectRecord(raw.mcpServers) ??
+    asObjectRecord(raw.servers) ??
+    asObjectRecord(mcp?.servers) ??
+    mcp ??
+    {};
   return Object.entries(source)
     .map(([name, entry]) => importServerEntry(name, entry, now))
     .filter((server): server is McpServerConfig => Boolean(server));
@@ -1118,15 +957,9 @@ function readTargetServers(
   if (isTomlTarget(target)) {
     return parseCodexTomlServers(content, now);
   }
-  const raw = parseMcpJsonConfigContent(content) as Record<string, unknown>;
-  const key =
-    target === "vscode"
-      ? "servers"
-      : target === "opencode" || target === "kilo"
-        ? "mcp"
-        : "mcpServers";
-  const source = raw[key];
-  if (!source || typeof source !== "object" || Array.isArray(source)) {
+  const raw = parseMcpJsonConfigContent(content);
+  const source = getMcpJsonServerEntries(raw, target);
+  if (!source) {
     return [];
   }
   return Object.entries(source)
