@@ -61,16 +61,22 @@
 ### 9. Update Flow Failure Visibility
 
 - 桌面端更新弹窗中的手动升级前备份动作必须在弹窗内处理失败路径；如果预升级快照或导出步骤失败，界面必须进入可见错误态，而不是把 Promise rejection 泄漏到事件处理器外。
+- 更新弹窗只允许渲染主进程更新服务通过 IPC 返回的真实状态；开发构建可以明确提示更新检查已禁用，但不得在运行时注入演示版本、下载进度或其他模拟状态。
 
 ### 9.1 Direct macOS In-App Updates
 
 - 从 PromptHub 官方 DMG 安装、且后续 release ZIP 已完成 Developer ID 签名与 Apple 公证的 macOS 用户，必须可以在应用内下载并重启完成升级；更新流程使用 `electron-updater` 的已验证 ZIP payload，不要求用户手动挂载 DMG 或复制应用。
 - Homebrew Cask 安装仍由 Homebrew 负责升级；应用内更新不得下载或替换 Caskroom 中的应用。
-### 9.2 macOS Menu Bar Icon
 
+### 9.2 macOS Menu Bar Icon
 
 - macOS 菜单栏必须使用独立的 PromptHub 单色 Template Image，不得缩小带蓝色圆角底板、阴影和高光的完整应用图标。
 - 菜单栏资源以透明 `16x16` 72-dpi PNG 和同名 `32x32@2x` 144-dpi PNG 成对提供，文件名保留 `Template` 后缀；主进程不得对首选资源再次做运行时位图缩放。
+
+### 9.3 Background Work After Window Reveal
+
+- 主进程通过菜单栏、全局或本地快捷键、托盘命令、第二实例或既有窗口恢复路径显式显示主窗口时，必须主动向 renderer 发送最终可见状态，不得只依赖平台相关的 `show` / `restore` 事件。
+- renderer 收到可见状态后必须先更新窗口状态，再恢复隐藏期间挂起的 WebDAV、S3、自部署同步和本地数据刷新；重复的可见通知不得启动重复同步。
 - 图形沿用 PromptHub 层叠卡片识别，但必须接近占满画布，并让顶层方片成为主要轮廓；系统负责深浅色、选中态和辅助显示环境下的着色。
 
 ### 9.3 Desktop Tray Agent Asset Actions
@@ -107,6 +113,14 @@
 - 桌面端代码不应再使用裸毫秒（`duration-200`）、裸缩放（`scale-95` / `scale-90`）或手写 spinner；这些应使用 token 或意图组件等价物。
 - 桌面端不再依赖 `framer-motion`；如未来确需 layout / spring 动画，应在 `spec/issues/active/` 先立 issue。
 - 长期工程契约见 `spec/knowledge/structure/desktop-frontend-animation.md`。
+
+### 13. MCP Store Source And Update Boundaries
+
+- MCP 自定义商店源的网络授权真相源位于主进程管理的数据文件中；renderer 只保留兼容展示镜像。新增、编辑、启停和删除来源必须先由主进程原子持久化成功，renderer 才能提交状态。
+- MCP 商店抓取 IPC 必须同时携带 `sourceId` 与目标 URL。主进程只允许已注册来源的相同 origin 和受限 pathname；只有用户显式注册的自定义来源可获得私网和私网 HTTP 权限，内置来源不得继承该权限，重定向仍需逐跳复验。
+- 从内置、MCP Registry、自定义来源或未来 PromptHub Official Store 安装的 MCP 必须保存稳定模板身份、版本和来源字段 fingerprint。更新检查使用安装基线、本地配置和当前模板三方对账，不得把 Agent 目标文件同步冒充为上游版本更新。
+- MCP 上游更新只能由用户显式应用。安全更新可直接执行；本地修改、双向冲突和无基线旧记录必须要求明确复核。应用更新必须保留密钥值、用户状态、记录身份、绑定和目标文件；目标文件只由既有显式分发/同步流程写入。
+- MCP Registry 的 npm/PyPI 模板必须固定已发布版本；无法正确映射为受支持运行时的 package 类型必须跳过，不得生成猜测命令。未来官方商店条目复用同一版本与 fingerprint 合同。
 
 ## Stable Scenarios
 

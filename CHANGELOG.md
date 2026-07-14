@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [0.5.9] - 2026-07-13
+## [0.5.9] - 2026-07-14
 
 ### 新功能 / Features
 
@@ -25,6 +25,20 @@
 
 ### 问题修复 / Fixes
 
+- 🧭 **Skill 更新按完整软件包审查**：检查更新会解析精确的本地、Git、Zip 或商店来源，展示所有新增、修改和删除文件的完整差异，再由用户选择保留本地版本或使用来源版本；不再只比较 `SKILL.md` 或直接覆盖本地修改
+  - **Full-Package Skill Update Review**: Update checks resolve the exact local, Git, ZIP, or marketplace source, show every added, modified, and deleted file, and let users keep the local package or use the source package instead of comparing only `SKILL.md` or overwriting local changes
+- 🛡️ **安全服务不可用不再误阻断安装**：AI 安全扫描遇到无效令牌或服务暂不可用时，会保留本地静态扫描结论并要求用户审查，不再把可恢复的外部服务故障显示为 Skill 包无效或安装失败
+  - **Safety Service Outages No Longer Misblock Installs**: Invalid tokens and temporary AI scan outages preserve local static findings and request user review instead of misreporting a valid Skill package as invalid or failed
+- 🔌 **MCP 私有商店与上游更新边界修复**：自定义内网来源由主进程持久化并按精确 origin/path 授权，从商店安装的 MCP 保存版本、来源与指纹，可区分上游更新、本地修改和 Agent 分发同步
+  - **MCP Private Store and Upstream Update Boundaries Fixed**: Custom private sources are persisted and authorized by the main process at exact origin/path scope, while installed MCPs retain version, source, and fingerprint metadata to distinguish upstream updates, local edits, and Agent distribution sync
+- 🧩 **Plugin 来源更新覆盖完整包**：Plugin 更新基于完整包文件清单和安装基线进行三方对账，新增、修改、删除文件都会进入确认流程，避免只看入口文件造成漏报
+  - **Plugin Source Updates Cover Complete Packages**: Plugin updates reconcile the complete package file inventory against the installed baseline so added, modified, and deleted files all enter review instead of relying on one entry file
+- 🗄️ **可恢复 SQLite freelist 损坏自动修复**：启动时会识别仅影响空闲页链表的可恢复损坏，安全重建数据库并复验完整性；不可恢复损坏仍进入现有恢复流程
+  - **Recoverable SQLite Freelist Corruption Repair**: Startup detects corruption limited to the freelist, safely rebuilds the database, and rechecks integrity while unrecoverable corruption continues through the existing recovery flow
+- 🔄 **应用更新弹窗保持单一状态源**：移除开发环境注入的演示更新状态，一次检查只显示主进程返回的一份真实结果，不再叠出多个更新弹窗
+  - **Single Authoritative App Update State**: Removed development-only demo update injection so one check renders one real main-process result instead of stacking multiple update dialogs
+- ☁️ **未完成的 PromptHub Cloud 入口默认隐藏**：桌面端 Cloud 登录与商店仅在显式能力开关启用时展示，旧选择会回到官方商店，不再向稳定版用户暴露不可用入口
+  - **Unfinished PromptHub Cloud Surfaces Hidden by Default**: Desktop Cloud login and store surfaces appear only behind an explicit capability flag, and stale selections return to the official store instead of exposing unavailable stable-release UI
 - 🔎 **Skill 来源更新校验更可靠**：更新检查改为 SHA-256 包指纹和三方对账，忽略缓存、隐藏产物和 PromptHub 自身元数据，并修复远程 registry 指纹误标、content-url 基线和 URL 脱敏问题
   - **More Reliable Skill Source Update Checks**: Source update checks now use SHA-256 package fingerprints and three-way reconciliation while ignoring caches, hidden artifacts, and PromptHub metadata, with fixes for remote registry fingerprint labeling, content-url baselines, and URL credential redaction
 - 🛡️ **Skill 高风险更新可审查、可精确授权**：自建或私有来源的高风险更新现在展示扫描结果，可对当前包一次性确认，或仅信任精确的仓库、分支和目录来源；阻断级风险、路径穿越和结构错误仍不可绕过
@@ -53,11 +67,15 @@
   - **macOS In-App Updates Restored**: Signed and notarized direct installs from the website or GitHub can download ZIP updates in-app and replace the app after restart, while Homebrew installations remain Brew-managed
 - 🗄️ **CLI 与桌面数据库并发写入修复**：共享 SQLite 数据库写入增加跨进程协调、语句释放和明确的争用错误，并在桌面端恢复可见后刷新数据
   - **CLI and Desktop Database Write Coordination**: Shared SQLite writes now use cross-process coordination, statement finalization, explicit contention errors, and desktop refresh after the app becomes visible again
+- 👁️ **隐藏启动同步可靠恢复**：从菜单栏、快捷键、托盘命令或第二实例恢复窗口时会主动广播权威可见状态，确保隐藏启动期间挂起的 WebDAV、S3 与自部署同步立即继续
+  - **Reliable Hidden-Startup Sync Resume**: Revealing the window from the menu bar, shortcuts, tray commands, or a second instance now broadcasts authoritative visibility so deferred WebDAV, S3, and self-hosted startup sync resumes immediately
 - 🔐 **旧版数据库锁恢复**：桌面端取得单实例所有权后可安全回收无主的旧版 SQLite 锁，同时 CLI 和共享调用方继续采用保守锁策略
   - **Legacy Database Lock Recovery**: Desktop can safely recover ownerless legacy SQLite locks after acquiring the single-instance gate, while CLI and shared callers keep conservative lock behavior
 
 ### 优化 / Improvements
 
+- 🍎 **macOS 菜单栏资产操作补齐**：菜单栏可直接进入 Prompt、Skill、MCP、Plugin 与 Rules 的常用管理动作，并继续使用独立的单色 Template 图标
+  - **Expanded macOS Menu Bar Asset Actions**: The menu bar now opens common Prompt, Skill, MCP, Plugin, and Rules management actions while retaining the dedicated monochrome Template icon
 - 🎛️ **MCP / Plugin UI 与 Skill 对齐**：My MCP、Agent MCP、Plugin Store、Agent Plugin、标签筛选、详情页、卡片宽度、更新提示、安全扫描和分发入口继续复用 Skill 的布局与交互模式
   - **MCP / Plugin UI Aligned with Skills**: My MCP, Agent MCP, Plugin Store, Agent Plugin, tag filters, detail pages, card widths, update badges, safety checks, and distribution entry points now reuse Skill layout and interaction patterns more consistently
 - 🧪 **测试与文档标准补强**：补充白盒/黑盒/边界/安全/性能/回滚验证要求，扩展 MCP、Plugin、同步、CLI、设置和 UI 回归测试覆盖
