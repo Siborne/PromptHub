@@ -33,17 +33,20 @@ describe("dispatchTrayAppCommand", () => {
   it("shows, focuses, and immediately sends to an existing window", async () => {
     const windowRef = createWindow();
     const sendCommand = vi.fn();
+    const onWindowShown = vi.fn();
 
     await expect(
       dispatchTrayAppCommand({
         command: { type: "settings:open" },
         createWindow: vi.fn(),
         getWindow: () => windowRef,
+        onWindowShown,
         sendCommand,
       }),
     ).resolves.toBe(true);
     expect(windowRef.show).toHaveBeenCalledOnce();
     expect(windowRef.focus).toHaveBeenCalledOnce();
+    expect(onWindowShown).toHaveBeenCalledOnce();
     expect(sendCommand).toHaveBeenCalledWith({ type: "settings:open" });
   });
 

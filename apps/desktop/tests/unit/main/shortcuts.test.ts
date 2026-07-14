@@ -47,12 +47,14 @@ describe("main shortcuts", () => {
       hide: vi.fn(),
       focus: vi.fn(),
     };
+    const onVisibilityChange = vi.fn();
 
-    toggleWindowForShowApp(win as any);
+    toggleWindowForShowApp(win as any, onVisibilityChange);
 
     expect(win.hide).toHaveBeenCalledTimes(1);
     expect(win.show).not.toHaveBeenCalled();
     expect(win.focus).not.toHaveBeenCalled();
+    expect(onVisibilityChange).toHaveBeenCalledWith(false);
   });
 
   it("restores and focuses a minimized window for showApp", async () => {
@@ -65,13 +67,15 @@ describe("main shortcuts", () => {
       hide: vi.fn(),
       focus: vi.fn(),
     };
+    const onVisibilityChange = vi.fn();
 
-    toggleWindowForShowApp(win as any);
+    toggleWindowForShowApp(win as any, onVisibilityChange);
 
     expect(win.restore).toHaveBeenCalledTimes(1);
     expect(win.show).toHaveBeenCalledTimes(1);
     expect(win.focus).toHaveBeenCalledTimes(1);
     expect(win.hide).not.toHaveBeenCalled();
+    expect(onVisibilityChange).toHaveBeenCalledWith(true);
   });
 
   it("registers showApp as a true toggle in the global shortcut callback", async () => {
@@ -100,6 +104,10 @@ describe("main shortcuts", () => {
     expect(mockUnregisterAll).toHaveBeenCalledTimes(1);
     expect(mockRegister).toHaveBeenCalled();
     expect(win.hide).toHaveBeenCalledTimes(1);
+    expect(win.webContents.send).toHaveBeenCalledWith(
+      "window:visibility-changed",
+      false,
+    );
     expect(win.webContents.send).toHaveBeenCalledWith(
       "shortcut:triggered",
       "showApp",

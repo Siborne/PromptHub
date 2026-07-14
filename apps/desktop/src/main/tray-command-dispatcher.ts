@@ -16,6 +16,7 @@ interface DispatchTrayAppCommandOptions {
   command: AppCommand;
   createWindow: () => Promise<void>;
   getWindow: () => TrayCommandWindow | null;
+  onWindowShown?: () => void;
   sendCommand: (command: AppCommand) => void;
 }
 
@@ -23,6 +24,7 @@ export async function dispatchTrayAppCommand({
   command,
   createWindow,
   getWindow,
+  onWindowShown,
   sendCommand,
 }: DispatchTrayAppCommandOptions): Promise<boolean> {
   let windowRef = getWindow();
@@ -39,6 +41,7 @@ export async function dispatchTrayAppCommand({
   }
   windowRef.show();
   windowRef.focus();
+  onWindowShown?.();
 
   if (windowRef.webContents.isLoading()) {
     windowRef.webContents.once("did-finish-load", () => {

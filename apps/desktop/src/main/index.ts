@@ -231,6 +231,7 @@ const trayController = createTrayController({
       command,
       createWindow,
       getWindow: () => mainWindow,
+      onWindowShown: () => emitWindowVisibility(true),
       sendCommand: (pendingCommand) =>
         sendToMainWindow(IPC_CHANNELS.APP_COMMAND, pendingCommand),
     }),
@@ -240,7 +241,7 @@ const trayController = createTrayController({
   },
   onToggleWindow: () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      toggleWindowForShowApp(mainWindow);
+      toggleWindowForShowApp(mainWindow, emitWindowVisibility);
     } else {
       void createWindow();
     }
@@ -266,6 +267,7 @@ if (!gotTheLock) {
       }
       mainWindow.show();
       mainWindow.focus();
+      emitWindowVisibility(true);
     } else {
       await createWindow();
     }
@@ -279,6 +281,7 @@ async function createWindow() {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
+    emitWindowVisibility(true);
     return;
   }
 
@@ -508,7 +511,7 @@ ipcMain.handle("window:isVisible", () => {
 
 ipcMain.on("window:toggleVisibility", () => {
   if (mainWindow) {
-    toggleWindowForShowApp(mainWindow);
+    toggleWindowForShowApp(mainWindow, emitWindowVisibility);
   }
 });
 

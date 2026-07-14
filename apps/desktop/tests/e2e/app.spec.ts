@@ -108,7 +108,7 @@ test.describe("E2E: Skill smoke", () => {
         .poll(async () => (await getE2EStats(page))?.webdav.stat ?? -1)
         .toBe(0);
 
-      await showAppWindow(app);
+      await page.evaluate(() => window.electron?.toggleVisibility());
       await expect.poll(() => isAppWindowVisible(app)).toBe(true);
 
       await expect

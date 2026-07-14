@@ -779,7 +779,10 @@ function App() {
         isWindowVisibleRef.current && document.visibilityState !== "hidden",
     });
 
-    const handleBackgroundTaskResume = () => {
+    const handleBackgroundTaskResume = (nextVisibility?: unknown) => {
+      if (typeof nextVisibility === "boolean") {
+        isWindowVisibleRef.current = nextVisibility;
+      }
       void localDataRefresh.refresh().catch((error) => {
         console.error("Failed to refresh local data after resume:", error);
       });

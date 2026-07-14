@@ -61,21 +61,27 @@ type ShortcutWindow = Pick<
   'isMinimized' | 'restore' | 'isVisible' | 'show' | 'hide' | 'focus'
 >;
 
-export function toggleWindowForShowApp(win: ShortcutWindow): void {
+export function toggleWindowForShowApp(
+  win: ShortcutWindow,
+  onVisibilityChange?: (isVisible: boolean) => void,
+): void {
   if (win.isMinimized()) {
     win.restore();
     win.show();
     win.focus();
+    onVisibilityChange?.(true);
     return;
   }
 
   if (win.isVisible()) {
     win.hide();
+    onVisibilityChange?.(false);
     return;
   }
 
   win.show();
   win.focus();
+  onVisibilityChange?.(true);
 }
 
 /**
@@ -181,7 +187,9 @@ function registerSingleShortcut(action: string, accelerator: string): boolean {
         // For show-app shortcut: toggle window visibility
         // 如果是显示应用快捷键，切换窗口显示状态
         if (action === 'showApp') {
-          toggleWindowForShowApp(win);
+          toggleWindowForShowApp(win, (isVisible) => {
+            win.webContents.send('window:visibility-changed', isVisible);
+          });
         }
         
         // Send shortcut event to renderer
