@@ -3,6 +3,7 @@ import type {
   RegistrySkillInstallOptions,
   RegistrySkillInstallResult,
   SkillPackageFileInput,
+  SkillPackageSnapshot,
   SkillPackageOperationKind,
   SkillPackageOperationRequest,
   Skill,
@@ -23,6 +24,7 @@ import {
   getCloudSkillMarkdown,
   getCloudStorePackage,
   isCloudRegistrySkill,
+  normalizeSkillStoreSourceIdForRuntime,
 } from "../../services/cloud-store";
 import {
   buildSkillPackageOperationSource,
@@ -30,6 +32,7 @@ import {
   runTrustedSkillPackageOperation,
 } from "../../services/skill-package-operation";
 import { computeSkillPackageFingerprintV1Sync } from "@prompthub/shared/utils/skill-source-update";
+import { createTextSkillPackageSnapshot } from "../../services/skill-package-snapshot";
 import {
   getErrorMessage,
   getSafetyScanAIConfig,
@@ -47,6 +50,7 @@ import {
   recordSourceUnavailableCheck,
   refreshRegistrySkillBaselineIfNeeded,
   resolveRegistrySkillContent,
+  resolveRegistrySkillPackageSnapshot,
   resolveRemoteRegistryDirectoryFingerprint,
 } from "./skill-source-update-workflow";
 import type {
@@ -63,10 +67,47 @@ function replaceRegistrySkillDirectoryFingerprint(
   return { ...skill, directory_fingerprint: directoryFingerprint };
 }
 
+function applyResolvedPackageDirectory(
+  skill: RegistrySkill,
+  snapshot: SkillPackageSnapshot,
+): RegistrySkill {
+  const resolvedDirectory = snapshot.resolvedDirectory?.trim();
+  if (!resolvedDirectory) return skill;
+  const canonicalSkillPath =
+    resolvedDirectory === "."
+      ? "SKILL.md"
+      : `${resolvedDirectory.replace(/\/+$/u, "")}/SKILL.md`;
+  return {
+    ...skill,
+    source_directory: resolvedDirectory,
+    canonical_skill_path: canonicalSkillPath,
+  };
+}
+
 async function resolveRegistrySkillRemoteState(
   registrySkill: RegistrySkill,
   installedSkill: Skill | null,
-): Promise<{ registrySkill: RegistrySkill; remoteContent: string }> {
+): Promise<{
+  registrySkill: RegistrySkill;
+  remoteContent: string;
+  remotePackageSnapshot: SkillPackageSnapshot;
+}> {
+  const packageSnapshot =
+    await resolveRegistrySkillPackageSnapshot(registrySkill);
+  if (packageSnapshot) {
+    const resolvedRegistrySkill = applyResolvedPackageDirectory(
+      registrySkill,
+      packageSnapshot,
+    );
+    return {
+      registrySkill: replaceRegistrySkillDirectoryFingerprint(
+        resolvedRegistrySkill,
+        packageSnapshot.directoryFingerprint,
+      ),
+      remoteContent: packageSnapshot.content,
+      remotePackageSnapshot: packageSnapshot,
+    };
+  }
   const cloudPackage = isCloudRegistrySkill(registrySkill)
     ? await getCloudStorePackage(registrySkill)
     : null;
@@ -85,6 +126,13 @@ async function resolveRegistrySkillRemoteState(
         remoteContentHash,
         installedSkill,
       });
+  const remotePackageSnapshot = await createTextSkillPackageSnapshot({
+    files: cloudPackage
+      ? cloudPackage.package.files
+      : [{ path: "SKILL.md", content: remoteContent }],
+    directoryFingerprint,
+    scope: cloudPackage ? "package" : "skill-md",
+  });
   return {
     registrySkill: {
       ...replaceRegistrySkillDirectoryFingerprint(
@@ -96,7 +144,29 @@ async function resolveRegistrySkillRemoteState(
         : {}),
     },
     remoteContent,
+    remotePackageSnapshot,
   };
+}
+
+async function resolveInstalledSkillPackageSnapshot(
+  installedSkill: Skill | null,
+): Promise<SkillPackageSnapshot | undefined> {
+  if (!installedSkill) return undefined;
+  if (installedSkill.local_repo_path?.trim()) {
+    return window.api.skill.getLocalPackageSnapshot(
+      installedSkill.local_repo_path.trim(),
+    );
+  }
+  const content = installedSkill.content ?? installedSkill.instructions ?? "";
+  const directoryFingerprint =
+    installedSkill.directory_fingerprint ||
+    installedSkill.installed_directory_fingerprint ||
+    (await computeSkillContentHash(content));
+  return createTextSkillPackageSnapshot({
+    files: [{ path: "SKILL.md", content }],
+    directoryFingerprint,
+    scope: "package",
+  });
 }
 
 async function finalizeRegistryUpdateCheck(
@@ -104,15 +174,22 @@ async function finalizeRegistryUpdateCheck(
   installedSkill: Skill | null,
   registrySkill: RegistrySkill,
   remoteContent: string,
+  remotePackageSnapshot: SkillPackageSnapshot,
 ) {
   const staleTargets = installedSkill
     ? getSkillSourceStaleTargets(get(), installedSkill)
     : [];
+  const localPackageSnapshot =
+    await resolveInstalledSkillPackageSnapshot(installedSkill);
   const check = await getRegistrySkillUpdateStatus(
     installedSkill,
     registrySkill,
     remoteContent,
-    { staleTargets },
+    {
+      staleTargets,
+      localPackageSnapshot,
+      remotePackageSnapshot,
+    },
   );
   const refreshedSkill = await refreshRegistrySkillBaselineIfNeeded(
     check,
@@ -160,6 +237,7 @@ async function getRegistrySkillUpdateCheck(
       installedSkill,
       remote.registrySkill,
       remote.remoteContent,
+      remote.remotePackageSnapshot,
     );
   } catch (error) {
     return recordUnavailableRegistryCheck(
@@ -196,6 +274,7 @@ async function getInstalledSkillSourceUpdateCheck(
       installedSkill,
       remote.registrySkill,
       remote.remoteContent,
+      remote.remotePackageSnapshot,
     );
   } catch (error) {
     return recordUnavailableRegistryCheck(
@@ -644,9 +723,11 @@ function createRegistrySelectionActions(set: SkillStoreSet) {
     setStoreSearchQuery: (storeSearchQuery) => set({ storeSearchQuery }),
     selectRegistrySkill: (selectedRegistrySlug) =>
       set({ selectedRegistrySlug }),
-    selectStoreSource: (selectedStoreSourceId) =>
+    selectStoreSource: (requestedStoreSourceId) =>
       set({
-        selectedStoreSourceId,
+        selectedStoreSourceId: normalizeSkillStoreSourceIdForRuntime(
+          requestedStoreSourceId,
+        ),
         selectedRegistrySlug: null,
         storeSearchQuery: "",
       }),

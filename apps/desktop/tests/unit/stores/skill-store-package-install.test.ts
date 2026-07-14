@@ -789,7 +789,7 @@ describe("skill store", () => {
       expect.objectContaining({
         source: {
           kind: "remote-git",
-          repoUrl: "https://github.com/team/skills.git",
+          repoUrl: "https://github.com/team/skills",
           branch: "main",
           directory: "single",
         },
@@ -843,8 +843,6 @@ describe("skill store", () => {
       author: "mattpocock",
       source_url: "https://github.com/mattpocock/skills",
       store_url: "https://skills.sh/mattpocock/skills/write-a-skill",
-      source_directory: "skills/write-a-skill",
-      canonical_skill_path: "skills/write-a-skill/SKILL.md",
       tags: ["skills"],
       version: "1.0.0",
       content: "# Write A Skill\n\nScaffold new agent skills.\n",
@@ -856,7 +854,8 @@ describe("skill store", () => {
           kind: "remote-git",
           repoUrl: "https://github.com/mattpocock/skills",
           branch: undefined,
-          directory: "skills/write-a-skill",
+          directory: undefined,
+          skillName: "write-a-skill",
         },
       }),
     );
@@ -927,6 +926,7 @@ describe("skill store", () => {
           repoUrl: "https://github.com/vercel-labs/agent-skills",
           branch: undefined,
           directory: undefined,
+          skillName: "vercel-react-best-practices",
         },
       }),
     );
@@ -1054,6 +1054,12 @@ describe("skill store", () => {
     }));
 
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    const getRemoteZipPackageSnapshot = vi.fn().mockResolvedValue({
+      content: remoteContent,
+      directoryFingerprint: "zip-package-fingerprint-v2",
+    });
+    (window as any).api.skill.getRemoteZipPackageSnapshot =
+      getRemoteZipPackageSnapshot;
     (window as any).api.skill.getRemoteGitPackageFingerprint =
       getRemoteGitPackageFingerprint;
     (window as any).api.skill.saveRemoteZipToRepo = saveRemoteZipToRepo;
@@ -1150,6 +1156,10 @@ describe("skill store", () => {
       .fn()
       .mockResolvedValue("/managed/mineru/repo");
     const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
+    const getRemoteZipPackageSnapshot = vi.fn().mockResolvedValue({
+      content: remoteContent,
+      directoryFingerprint: "zip-package-fingerprint-v2",
+    });
     const versionCreate = vi.fn().mockResolvedValue({ id: "version-mineru" });
     const syncFromRepo = vi.fn().mockResolvedValue(
       createSkillFixture({
@@ -1175,6 +1185,8 @@ describe("skill store", () => {
     }));
 
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    (window as any).api.skill.getRemoteZipPackageSnapshot =
+      getRemoteZipPackageSnapshot;
     (window as any).api.skill.getRemoteGitPackageFingerprint =
       getRemoteGitPackageFingerprint;
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
@@ -1224,9 +1236,11 @@ describe("skill store", () => {
     expect(result?.status).toBe("updated");
     expect(getRemoteGitPackageFingerprint).not.toHaveBeenCalled();
     expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
-    expect(fetchRemoteContent).toHaveBeenCalledWith(
-      "https://clawhub.ai/api/v1/skills/mineru-document-extractor/file?path=SKILL.md",
-    );
+    expect(getRemoteZipPackageSnapshot).toHaveBeenCalledWith({
+      zipUrl:
+        "https://clawhub.ai/api/v1/download?slug=mineru-document-extractor",
+    });
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
     expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
         operation: "update",

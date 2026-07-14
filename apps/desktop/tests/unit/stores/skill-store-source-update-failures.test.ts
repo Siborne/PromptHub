@@ -75,6 +75,19 @@ function mockCompletedPackageOperation(
   return runPackageOperation;
 }
 
+function mockRemoteGitSnapshot(
+  content: string,
+  directoryFingerprint = "remote-package-fingerprint",
+) {
+  const getRemoteGitPackageSnapshot = vi.fn().mockResolvedValue({
+    content,
+    directoryFingerprint,
+  });
+  (window as any).api.skill.getRemoteGitPackageSnapshot =
+    getRemoteGitPackageSnapshot;
+  return getRemoteGitPackageSnapshot;
+}
+
 describe("skill store", () => {
   beforeEach(() => {
     resetSkillStore();
@@ -96,6 +109,10 @@ describe("skill store", () => {
           writeLocalFileBufferByPath: vi.fn(),
           getRepoPath: vi.fn(),
           getRemoteGitPackageFingerprint: vi.fn(),
+          getRemoteGitPackageSnapshot: vi.fn().mockResolvedValue({
+            content: "# Test Skill\n",
+            directoryFingerprint: "0".repeat(64),
+          }),
           fetchRemoteContentBytes: vi.fn(),
           saveSafetyReport: vi.fn().mockResolvedValue(undefined),
         },
@@ -189,6 +206,7 @@ describe("skill store", () => {
       .mockRejectedValue(new Error("clone failed"));
 
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    mockRemoteGitSnapshot(remoteContent, "package-fingerprint-v2");
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.update = update;
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
@@ -653,8 +671,8 @@ describe("skill store", () => {
           content,
           instructions: content,
           installed_content_hash: contentHash,
-          installed_directory_fingerprint: "fingerprint-current",
-          directory_fingerprint: "fingerprint-current",
+          installed_directory_fingerprint: contentHash,
+          directory_fingerprint: contentHash,
           fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
           installed_version: "1.0.0",
         }),
@@ -737,13 +755,13 @@ describe("skill store", () => {
           targetType: "project",
           installMode: "copy",
           currentFingerprint: "fingerprint-project-old",
-          expectedFingerprint: "fingerprint-current",
+          expectedFingerprint: contentHash,
         },
         {
           targetType: "agent",
           installMode: "copy",
           currentFingerprint: "fingerprint-agent-old",
-          expectedFingerprint: "fingerprint-current",
+          expectedFingerprint: contentHash,
         },
       ],
     });
@@ -948,9 +966,12 @@ describe("skill store", () => {
 
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.update = update;
-    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
-      content: "# Local Writer\n\nLatest local content\n",
-    });
+    (window as any).api.skill.getLocalPackageSnapshot = vi
+      .fn()
+      .mockResolvedValue({
+        content: "# Local Writer\n\nLatest local content\n",
+        directoryFingerprint: "local-package-fingerprint",
+      });
     (window as any).api.skill.saveToRepo = vi.fn().mockResolvedValue(undefined);
     (window as any).api.skill.syncFromRepo = vi
       .fn()
@@ -1011,10 +1032,9 @@ describe("skill store", () => {
       .updateRegistrySkill("source-local-writer");
 
     expect(result?.status).toBe("updated");
-    expect((window as any).api.skill.readLocalFileByPath).toHaveBeenCalledWith(
-      "/tmp/local-writer",
-      "SKILL.md",
-    );
+    expect(
+      (window as any).api.skill.getLocalPackageSnapshot,
+    ).toHaveBeenCalledWith("/tmp/local-writer");
     expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
         operation: "update",
@@ -1045,6 +1065,7 @@ describe("skill store", () => {
     const saveRemoteGitToRepo = vi.fn();
 
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    const getRemoteGitPackageSnapshot = mockRemoteGitSnapshot(remoteContent);
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.update = update;
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
@@ -1090,9 +1111,12 @@ describe("skill store", () => {
 
     expect(result?.status).toBe("linked-local-blocked");
     expect(result?.check.status).toBe("update-available");
-    expect(fetchRemoteContent).toHaveBeenCalledWith(
-      "https://raw.githubusercontent.com/example/skills/main/remote-writer/SKILL.md",
-    );
+    expect(getRemoteGitPackageSnapshot).toHaveBeenCalledWith({
+      repoUrl: "https://github.com/example/skills",
+      branch: "main",
+      directory: "remote-writer",
+    });
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
     expect(versionCreate).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
     expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
@@ -1111,9 +1135,12 @@ describe("skill store", () => {
 
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.update = update;
-    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
-      content: "# Local Writer\n\nLatest disk content\n",
-    });
+    (window as any).api.skill.getLocalPackageSnapshot = vi
+      .fn()
+      .mockResolvedValue({
+        content: "# Local Writer\n\nLatest disk content\n",
+        directoryFingerprint: "local-package-fingerprint",
+      });
     const runPackageOperation = mockCompletedPackageOperation(
       createSkillFixture({
         id: "skill-local-file",
@@ -1169,10 +1196,9 @@ describe("skill store", () => {
       .updateRegistrySkill("source-local-file");
 
     expect(result?.status).toBe("updated");
-    expect((window as any).api.skill.readLocalFileByPath).toHaveBeenCalledWith(
-      "/tmp/local-writer",
-      "SKILL.md",
-    );
+    expect(
+      (window as any).api.skill.getLocalPackageSnapshot,
+    ).toHaveBeenCalledWith("/tmp/local-writer");
     expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
         operation: "update",
@@ -1192,6 +1218,7 @@ describe("skill store", () => {
     (window as any).api.skill.fetchRemoteContent = vi
       .fn()
       .mockResolvedValue(remoteContent);
+    mockRemoteGitSnapshot(remoteContent);
     const update = vi.fn();
     (window as any).api.skill.update = update;
 

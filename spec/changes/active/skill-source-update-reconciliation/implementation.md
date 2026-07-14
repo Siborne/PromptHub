@@ -4,6 +4,13 @@
 
 Implementation completed as of 2026-07-08 for the v1 scope. The implementation covers shared source update types, shared `B/L/R` reconciliation check construction, pure reconciliation classification, `skill-package-sha256-v1` package fingerprinting, content-url single-file snapshots, legacy baseline upgrade decisions, DB baseline columns, store update baseline writes, linked-local update blocking, source-unavailable error recording, project/agent copied target stale auxiliary reporting, renderer source resolver adapter classification, raw content-url package fingerprint normalization, staged remote package safety preflight, non-local remote source materialization before metadata baseline writes, managed repo staging/backup swap on partial copy failure, raw content-url pre-write safety scan and version rollback, SHA-256-labeled durable package fingerprint writes, and renderer UI messaging for blocked/baseline-missing/source-unavailable states.
 
+The 2026-07-14 follow-up also removes unverified skills.sh directory guesses
+and adds bounded recursive Git package discovery. Install, fingerprint, and
+update-snapshot flows now carry the Skill selector when the physical directory
+is unknown. A real installation smoke against `mattpocock/skills` located
+`skills/productivity/grill-me`, validated the package, and materialized
+`SKILL.md` plus its `agents` directory.
+
 ## Documents Created
 
 - `proposal.md`
@@ -28,6 +35,11 @@ Implementation completed as of 2026-07-08 for the v1 scope. The implementation c
 - `apps/desktop/src/main/services/skill-repo-sync.ts`, `apps/desktop/src/main/ipc/skill/local-repo-handlers.ts`, `apps/desktop/src/main/ipc/skill/version-handlers.ts`, and `apps/desktop/src/main/services/skill-installer.ts`: record `fingerprint_algorithm` when main-process DB writes refresh package fingerprints and compute durable package fingerprints with the shared SHA-256 v1 package manifest utility.
 - `apps/desktop/src/main/services/skill-safety-scan.ts`: added deterministic preflight scanning reusable without AI configuration.
 - `apps/desktop/src/main/services/skill-installer.ts`: runs staged remote git/zip package preflight before copying into the managed repo; blocking findings leave the previous repo intact.
+- `apps/desktop/src/main/services/skill-installer-discovery.ts`: discovers
+  nested Git packages by exact normalized Skill identity with depth/directory
+  limits, shared ignore rules, and no remote symlink traversal.
+- `apps/desktop/src/renderer/services/skills-sh-store.ts`: preserves repository
+  and Skill identity without fabricating a physical package directory.
 - `apps/desktop/src/main/services/skill-installer-repo.ts`: `saveToLocalRepoBySkillId()` now copies into a staging directory and swaps with a backup so partial copy or sidecar write failures preserve the previous managed repo.
 - `apps/desktop/src/main/ipc/skill/local-repo-handlers.ts` and `apps/desktop/src/preload/api/skill.ts`: allow optional staged package safety scan config for remote package saves.
 - `apps/desktop/src/renderer/components/skill/SkillFullDetailPage.tsx` and `apps/desktop/src/renderer/components/skill/SkillStoreDetail.tsx`: added user guidance for baseline-missing/source-unavailable/no-source and linked-local blocked updates.
@@ -93,9 +105,82 @@ Implementation completed as of 2026-07-08 for the v1 scope. The implementation c
 - Added regressions for ignored dependency files, ignored dependency copying,
   external symlink source binding, and Agent detail source actions.
 
-Verification for this follow-up: the focused local-source suite passed with 11
-test files and 190 tests; desktop TypeScript, ESLint, Prettier, and
-`git diff --check` passed.
+## 2026-07-14 Private Gitea Transport Follow-up
+
+- Git-backed registry sources now resolve a canonical repository, branch, and
+  package directory from GitHub/Gitea repository, tree, source, and raw URLs.
+- Source checks no longer fetch Git-backed `content_url` values through the
+  generic HTTP IPC. A typed main/preload IPC clones and validates the repository
+  once, then returns `SKILL.md` content and the complete v1 package fingerprint
+  from the same snapshot.
+- Package install and legacy remote update paths share the same canonical Git
+  descriptor. Local directory adapters still read local files, ClawHub remains
+  on its package API, and raw content URLs retain the generic SSRF-protected
+  fetch path.
+- Added a private-network Gitea regression that forces the generic HTTP path to
+  throw the reported internal-address error and proves the check succeeds via
+  Git without calling that path. Added resolver, IPC validation, one-clone
+  snapshot, install, update, and failure-path coverage.
+- Authenticated Gitea clone URLs remain intact for Git transport, while review
+  identities, Git process diagnostics, ZIP/Git safety inputs, and AI safety
+  prompts use credential-free canonical URLs.
+- Fixed the shared Git and ZIP wrappers to await snapshot reads, package
+  fingerprinting, safety review, and persistence before deleting temporary
+  staging directories; deferred snapshot and real ZIP tests cover the cleanup
+  ordering.
+
+Verification for this follow-up:
+
+- The focused private-Gitea/source-routing suite passed with 7 test files and
+  100 tests. The regression reproduces the reported internal-address HTTP
+  failure and proves the Git snapshot path succeeds without invoking generic
+  HTTP.
+- The complete desktop unit suite passed with 354 test files and 3,123 tests
+  after the transport audit and credential-boundary regressions were added.
+- Desktop production build, shared/desktop type checks, root lint, file-size
+  lint, Prettier, and `git diff --check` passed.
+- Self-hosted web lint, type check, tests, client/server production builds, and
+  Cloudflare worker lint, type check, and tests passed. The release quick-profile
+  checks were covered across the final reruns after stale raw-HTTP test
+  expectations were updated to the canonical Git snapshot contract.
+
+## 2026-07-14 Source Transport Audit Follow-up
+
+- Legacy Gitea/GitHub raw, file, tree, and source URLs now recover canonical
+  repository, decoded branch, and package-directory metadata even when old
+  rows no longer retain a separate repository URL.
+- Installed Skills with a concrete external local source now keep that path as
+  the source of truth even when a remote catalog entry reuses their source id.
+- Added a shared validated package snapshot reader. Local, Git, and ZIP
+  adapters now derive `SKILL.md` plus the v1 fingerprint from the same file
+  inventory; ZIP checks inspect extracted package bytes instead of cached
+  registry content.
+- Added real-filesystem snapshot, main IPC validation, hosted-Git recovery,
+  local/catalog collision, standalone Gitea fingerprint, and ZIP routing
+  regressions.
+
+## 2026-07-14 Multi-Skill Lifecycle Selector Audit
+
+- `SkillPackageOperationSource.remote-git` now carries a validated optional
+  `skillName` selector. The same selector is forwarded through operation
+  validation, source identity, main-process staging, package discovery,
+  materialization, fingerprint snapshots, install, check, and update.
+- Fallback operation and source identities now include the selector, so two
+  Skills from the same repository cannot collide when legacy catalog metadata
+  lacks a stable source id or explicit directory.
+- Repository discovery now uses Unicode-safe identity normalization, searches
+  hidden Agent Skill containers such as `.agents/skills` and
+  `.cursor/skills`, skips VCS/generated directories without blanket-rejecting
+  hidden Agent roots, and never follows repository symlinks.
+- Exact parsed frontmatter identity takes precedence over folder-name fallback.
+  Standard `skills` and `data/skills` containers outrank hidden Agent
+  containers, which outrank generic repository examples. Multiple candidates
+  at the same priority fail with an explicit ambiguity error instead of
+  selecting an arbitrary package.
+- Added regressions for explicit selector forwarding, display-name mismatch,
+  single-package selector mismatch, same-repository identity separation,
+  standard-container precedence, hidden Agent containers, Unicode names,
+  invalid selectors, and unresolved ambiguity.
 
 ## 2026-07-13 Real Dev-Window Verification
 
@@ -103,6 +188,81 @@ test files and 190 tests; desktop TypeScript, ESLint, Prettier, and
 - Exercised the live user flow: `Skills` -> `Agent Skill` -> `Codex CLI` -> `opencode-cli` -> `在我的 Skill 中打开`.
 - Clicked `检查来源更新` for the imported local Agent Skill. The UI displayed `已是最新` and retained the concrete local source `/Users/lingxiaotian/.codex/skills/opencode-cli`; it did not report the generic `来源暂时不可用` error.
 - The development terminal also reported the expected cloud store feed network-unavailable diagnostic in this offline environment; it did not affect local source resolution or the successful local check.
+
+## 2026-07-14 Review-First Skill Detail Update
+
+- Installed Skill details now expose one stable source action: check for
+  updates. The header no longer morphs into an update action or adds an
+  overwrite-local button after reconciliation.
+- Actionable reconciliation results retain the structured local and remote
+  content in renderer state and open the shared Skill update review dialog.
+  The dialog identifies local and source versions, renders the `SKILL.md`
+  line diff, and offers explicit keep-local and use-source decisions.
+- Keeping local or closing the dialog only clears transient review state.
+  Using the source version enters the existing rollback-aware update workflow;
+  explicit overwrite authorization is limited to `local-modified`, `conflict`,
+  and `baseline-missing`.
+- Existing package safety review, linked-local protection, staging, snapshots,
+  rollback, and baseline persistence remain unchanged and are exercised after
+  the version decision rather than bypassed by the header.
+- The comparison now enters with a restrained backdrop fade and panel
+  fade/zoom/slide using the shared motion duration and easing tokens. Existing
+  OS and in-app reduced-motion overrides remain effective.
+- Component regressions passed for the one-action header, all actionable
+  reconciliation states, non-mutating keep-local behavior, source acceptance,
+  high-risk continuation, and linked-local blocking. Related Skill detail and
+  remote-catalog suites passed with 49 tests; desktop type checking and focused
+  lint passed. The development window confirmed that a current Skill retains
+  one check action and an up-to-date result does not open a misleading dialog.
+
+## 2026-07-14 Complete Package Difference Review
+
+- `SkillPackageSnapshot` now carries the validated package scope and a bounded,
+  sorted file inventory with path, size, SHA-256 digest, text/binary kind, and
+  safe preview content. Main-process snapshots derive this inventory from the
+  same buffers used by package validation and fingerprinting.
+- Local, Git, ZIP, store, and Cloud source checks preserve both local and source
+  package snapshots through the renderer workflow. Raw content URLs construct
+  an explicit single-file snapshot and therefore do not claim unrelated local
+  auxiliary files will be removed.
+- The update review now lists every effective added, modified, and removed
+  package file. Selecting a text file renders its own line diff; binary and
+  oversized text files remain visible with complete size/hash comparison
+  semantics rather than unsafe decoding or silent omission.
+- Focused snapshot, package-diff, source-routing, and component suites passed
+  with 33 tests. Desktop lint, typecheck, and production build passed. A live
+  Electron check on `image-to-video` opened the wider package review, showed
+  the exact one-file change for that source, and keeping the local version
+  closed the dialog without applying an update.
+
+## 2026-07-14 Shared-Repository Identity Correction
+
+- The apparent `image-to-video` update was a false sibling comparison: its
+  stale source id missed the current catalog entry, then repository-only
+  fallback selected the first sibling, `video-edit`.
+- Installed-source recovery now tries exact source id, content URL, and registry
+  slug before repository fallback. A repository shared by multiple Skills must
+  produce one unique directory/path/name match; ties no longer select the first
+  entry.
+- Successful up-to-date reconciliation repairs non-empty canonical source
+  metadata through the existing update transaction. The skills.sh parser now
+  rejects display-truncated repository labels such as `r…t-skills` and uses the
+  canonical detail-path repository instead.
+- Remote Git snapshots now return the validated repository-relative Skill
+  directory. Reconciliation persists that discovered directory and canonical
+  `SKILL.md` path, replacing legacy guessed paths such as
+  `skills/image-to-video` when the repository actually uses `image-to-video`.
+- The review header now shows the Skill identity only. The duplicate
+  local/source version cards were removed because catalog version labels did
+  not help decide between package contents.
+- The public `agentspace-so/runcomfy-agent-skills` tree was inspected directly:
+  `image-to-video` is a valid single-file package containing only
+  `image-to-video/SKILL.md`. The earlier `Video Edit` diff was therefore a
+  sibling-selection defect, not omitted auxiliary files.
+- Verification: the seven focused snapshot, package-diff, source-routing,
+  skills.sh parser, locale, and component suites passed with 72 tests; the
+  nested Git-package lifecycle suite passed with 16 tests. Desktop lint,
+  typecheck, production build, formatting, and `git diff --check` passed.
 
 ## Current Findings
 
@@ -113,6 +273,38 @@ test files and 190 tests; desktop TypeScript, ESLint, Prettier, and
 - Current ignore predicate already excludes `.env` and `.env.*` while preserving `.env.example`, `.env.sample`, and `.env.template`.
 
 ## Verification So Far
+
+- 2026-07-14 multi-Skill lifecycle selector audit: focused desktop/core suites
+  passed with 98 tests; shared/core/desktop type checks, root lint, Prettier,
+  `git diff --check`, and the desktop production build passed. The complete
+  desktop suite passed with 359 files and 3,170 tests before the final strict
+  single-package mismatch guard; that final delta is included in the 98 focused
+  passing tests.
+- A live Git snapshot against
+  `https://github.com/mattpocock/skills` resolved selector `grill-me` to
+  `skills/productivity/grill-me`, returned the expected `SKILL.md`, and
+  produced a valid 64-character package SHA-256 fingerprint.
+- The latest `pnpm verify:release:quick` run passed CLI, shared/core/desktop
+  checks and the complete desktop build, then encountered one unrelated Web
+  import/export test timeout under full-suite contention. That exact Web file
+  passed immediately in isolation with 2 tests in 5.58 seconds; the harness is
+  therefore recorded as incomplete rather than falsely reported as green.
+- 2026-07-14 skills.sh nested-package follow-up: 59 focused parser, IPC,
+  store-routing, recursive-discovery, and remote-package tests passed. A real
+  `mattpocock/skills` clone resolved `grill-me` to
+  `skills/productivity/grill-me` and materialized `SKILL.md` plus `agents`;
+  the update snapshot selector is covered with the same repository layout.
+- 2026-07-14 final release harness desktop suite passed with 365 files and
+  3,195 tests.
+- 2026-07-14 `pnpm verify:release:quick` passed all 18 desktop, CLI,
+  self-hosted web, and Cloudflare worker gates in 405.4 seconds after the final
+  selector-aware snapshot change.
+- 2026-07-14 source transport and credential follow-up: focused source,
+  lifecycle, filesystem, safety, and store suite passed with 16 files and 276
+  tests.
+- 2026-07-14 complete desktop unit suite passed with 354 files and 3,123 tests.
+- 2026-07-14 root lint (including file-size policy), shared/desktop type checks,
+  desktop production build, Prettier, and `git diff --check` passed.
 
 - `pnpm --dir apps/desktop exec vitest run tests/unit/main/skill-installer-remote.test.ts` (32 tests passed after proxy compatibility follow-up)
 - `pnpm --dir apps/desktop exec vitest run tests/unit/main/skill-installer-remote.test.ts tests/unit/main/network-proxy.test.ts tests/unit/main/skill-installer-remote-git-package.test.ts tests/unit/services/skill-source-resolver.test.ts` (50 tests passed)

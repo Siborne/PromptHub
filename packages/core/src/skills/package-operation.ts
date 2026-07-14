@@ -139,6 +139,9 @@ function validateOperationSource(source: SkillPackageOperationSource): void {
       requireNonEmptyString(source.repoUrl, "source.repoUrl");
       validateOptionalString(source.branch, "source.branch");
       validateOptionalString(source.directory, "source.directory");
+      if (source.skillName !== undefined) {
+        requireNonEmptyString(source.skillName, "source.skillName");
+      }
       return;
     case "remote-zip":
       requireNonEmptyString(source.zipUrl, "source.zipUrl");
@@ -288,7 +291,7 @@ export function sanitizeSkillPackageSourceUrl(value: string): string {
 function getSourceIdentity(source: SkillPackageOperationSource): string {
   switch (source.kind) {
     case "remote-git":
-      return `${sanitizeSkillPackageSourceUrl(source.repoUrl)}|${source.branch ?? ""}|${source.directory ?? ""}`;
+      return `${sanitizeSkillPackageSourceUrl(source.repoUrl)}|${source.branch ?? ""}|${source.directory ?? ""}|${source.skillName?.trim().toLocaleLowerCase() ?? ""}`;
     case "remote-zip":
       return sanitizeSkillPackageSourceUrl(source.zipUrl);
     case "content":

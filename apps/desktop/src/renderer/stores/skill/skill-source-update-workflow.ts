@@ -1,6 +1,7 @@
 import type {
   RegistrySkill,
   Skill,
+  SkillPackageSnapshot,
   SkillSourceStaleTarget,
 } from "@prompthub/shared/types";
 import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
@@ -15,13 +16,13 @@ import {
   parseClawHubSkillUrl,
 } from "../../services/clawhub-store";
 import {
-  getRegistrySkillDirectory,
   getRegistrySkillSourceReference,
   isLinkedLocalSkill,
   isLocalRegistrySkill,
   normalizeLocalRegistryDirectory,
   normalizeRemoteDirectoryFingerprint,
   parseGitHubSkillLocation,
+  resolveRegistrySkillGitPackage,
   shouldCloneRegistrySkillPackage,
 } from "../../services/skill-source-resolver";
 import {
@@ -93,11 +94,74 @@ function deriveGitHubSkillContentUrl(
   return `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${location.branch}/${location.directoryPath}/SKILL.md`;
 }
 
-function getInstalledSkillSourceCandidateKeys(skill: Skill): string[] {
-  return [skill.source_id, skill.content_url, skill.source_url].filter(
-    (value): value is string =>
-      typeof value === "string" && value.trim().length > 0,
+function normalizeSourceMatchValue(value?: string | null): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function findRegistrySkillByExactField(
+  state: SkillState,
+  field: "source_id" | "content_url" | "slug",
+  value?: string | null,
+): RegistrySkill | null {
+  const normalizedValue = normalizeSourceMatchValue(value);
+  if (!normalizedValue) return null;
+  return (
+    getRegistrySkillCandidates(state).find(
+      (candidate) =>
+        normalizeSourceMatchValue(candidate[field]) === normalizedValue,
+    ) ?? null
   );
+}
+
+function scoreInstalledRegistryCandidate(
+  installedSkill: Skill,
+  candidate: RegistrySkill,
+): number {
+  if (
+    normalizeSourceMatchValue(installedSkill.source_directory) &&
+    normalizeSourceMatchValue(installedSkill.source_directory) ===
+      normalizeSourceMatchValue(candidate.source_directory)
+  ) {
+    return 100;
+  }
+  if (
+    normalizeSourceMatchValue(installedSkill.canonical_skill_path) &&
+    normalizeSourceMatchValue(installedSkill.canonical_skill_path) ===
+      normalizeSourceMatchValue(candidate.canonical_skill_path)
+  ) {
+    return 90;
+  }
+  const installedName = normalizeSourceMatchValue(installedSkill.name);
+  if (
+    installedName &&
+    [candidate.install_name, candidate.name].some(
+      (value) => normalizeSourceMatchValue(value) === installedName,
+    )
+  ) {
+    return 50;
+  }
+  return 0;
+}
+
+function findRegistrySkillBySharedSourceUrl(
+  state: SkillState,
+  installedSkill: Skill,
+): RegistrySkill | null {
+  const sourceUrl = normalizeSourceMatchValue(installedSkill.source_url);
+  if (!sourceUrl) return null;
+  const candidates = getRegistrySkillCandidates(state).filter(
+    (candidate) =>
+      normalizeSourceMatchValue(candidate.source_url) === sourceUrl,
+  );
+  if (candidates.length === 1) return candidates[0];
+  const ranked = candidates
+    .map((candidate) => ({
+      candidate,
+      score: scoreInstalledRegistryCandidate(installedSkill, candidate),
+    }))
+    .sort((left, right) => right.score - left.score);
+  if (!ranked[0]?.score || ranked[0].score === ranked[1]?.score) return null;
+  return ranked[0].candidate;
 }
 
 function resolveInstalledSkillSourceUrls(skill: Skill) {
@@ -191,11 +255,24 @@ export function findInstalledSkillSourceCandidate(
   state: SkillState,
   skill: Skill,
 ): RegistrySkill | null {
-  for (const key of getInstalledSkillSourceCandidateKeys(skill)) {
-    const candidate = findRegistrySkillCandidateByKey(state, key);
-    if (candidate) return candidate;
+  const installedSourceCandidate = buildInstalledSkillSourceCandidate(skill);
+  if (
+    installedSourceCandidate &&
+    isLocalRegistrySkill(installedSourceCandidate)
+  ) {
+    return installedSourceCandidate;
   }
-  return buildInstalledSkillSourceCandidate(skill);
+  const exactSourceCandidate =
+    findRegistrySkillByExactField(state, "source_id", skill.source_id) ||
+    findRegistrySkillByExactField(state, "content_url", skill.content_url) ||
+    findRegistrySkillByExactField(state, "slug", skill.registry_slug);
+  if (exactSourceCandidate) return exactSourceCandidate;
+  const sharedSourceCandidate = findRegistrySkillBySharedSourceUrl(
+    state,
+    skill,
+  );
+  if (sharedSourceCandidate) return sharedSourceCandidate;
+  return installedSourceCandidate;
 }
 
 export function ensureRegistrySkillSourceId(
@@ -215,18 +292,13 @@ export function ensureRegistrySkillSourceId(
 export async function resolveRegistrySkillContent(
   registrySkill: RegistrySkill,
 ): Promise<string> {
-  if (isLocalRegistrySkill(registrySkill)) {
-    const localDir = normalizeLocalRegistryDirectory(registrySkill);
-    const localSkillMd = await window.api.skill.readLocalFileByPath(
-      localDir,
-      "SKILL.md",
-    );
-    return localSkillMd?.content?.trim()
-      ? localSkillMd.content
-      : registrySkill.content;
-  }
   if (isCloudRegistrySkill(registrySkill)) {
     return getCloudSkillMarkdown(await getCloudStorePackage(registrySkill));
+  }
+  const packageSnapshot =
+    await resolveRegistrySkillPackageSnapshot(registrySkill);
+  if (packageSnapshot) {
+    return packageSnapshot.content;
   }
   if (!registrySkill.content_url) return registrySkill.content;
   const freshContent = await window.api.skill.fetchRemoteContent(
@@ -237,6 +309,31 @@ export async function resolveRegistrySkillContent(
     : registrySkill.content;
 }
 
+export async function resolveRegistrySkillPackageSnapshot(
+  registrySkill: RegistrySkill,
+): Promise<SkillPackageSnapshot | null> {
+  if (isLocalRegistrySkill(registrySkill)) {
+    const localDirectory = normalizeLocalRegistryDirectory(registrySkill);
+    if (!localDirectory) return null;
+    const snapshot =
+      await window.api.skill.getLocalPackageSnapshot(localDirectory);
+    return snapshot;
+  }
+  if (registrySkill.package_url?.trim()) {
+    const snapshot = await window.api.skill.getRemoteZipPackageSnapshot({
+      zipUrl: registrySkill.package_url.trim(),
+    });
+    return snapshot;
+  }
+  const gitPackage = shouldCloneRegistrySkillPackage(registrySkill)
+    ? resolveRegistrySkillGitPackage(registrySkill)
+    : null;
+  if (!gitPackage) return null;
+  const snapshot =
+    await window.api.skill.getRemoteGitPackageSnapshot(gitPackage);
+  return snapshot;
+}
+
 export async function resolveRemoteRegistryDirectoryFingerprint(
   registrySkill: RegistrySkill,
   options: {
@@ -244,11 +341,11 @@ export async function resolveRemoteRegistryDirectoryFingerprint(
     installedSkill?: Skill | null;
   } = {},
 ): Promise<string | undefined> {
-  const sourceUrl = registrySkill.source_url;
   if (isLocalRegistrySkill(registrySkill)) {
     const localDir = normalizeLocalRegistryDirectory(registrySkill);
     const resolvedDirectoryFingerprint = localDir
-      ? await window.api.skill.getLocalPackageFingerprint(localDir)
+      ? (await window.api.skill.getLocalPackageSnapshot(localDir))
+          .directoryFingerprint
       : undefined;
     return normalizeRemoteDirectoryFingerprint(registrySkill, {
       remoteContentHash: options.remoteContentHash,
@@ -270,20 +367,21 @@ export async function resolveRemoteRegistryDirectoryFingerprint(
       installedSkill: options.installedSkill,
     });
   }
-  if (!sourceUrl || !shouldCloneRegistrySkillPackage(registrySkill)) {
+  if (!shouldCloneRegistrySkillPackage(registrySkill)) {
     return normalizeRemoteDirectoryFingerprint(registrySkill, {
       remoteContentHash: options.remoteContentHash,
       installedSkill: options.installedSkill,
     });
   }
-  const location = parseGitHubSkillLocation(sourceUrl);
-  const resolvedDirectoryFingerprint =
-    await window.api.skill.getRemoteGitPackageFingerprint({
-      repoUrl: sourceUrl,
-      branch: registrySkill.source_branch || location?.branch,
-      directory:
-        getRegistrySkillDirectory(registrySkill) || location?.directoryPath,
+  const gitPackage = resolveRegistrySkillGitPackage(registrySkill);
+  if (!gitPackage) {
+    return normalizeRemoteDirectoryFingerprint(registrySkill, {
+      remoteContentHash: options.remoteContentHash,
+      installedSkill: options.installedSkill,
     });
+  }
+  const resolvedDirectoryFingerprint =
+    await window.api.skill.getRemoteGitPackageFingerprint(gitPackage);
   return normalizeRemoteDirectoryFingerprint(registrySkill, {
     remoteContentHash: options.remoteContentHash,
     resolvedDirectoryFingerprint,
@@ -393,6 +491,54 @@ export function getSkillSourceStaleTargets(
   return targets;
 }
 
+function buildRegistrySourceMetadata(
+  registrySkill: RegistrySkill,
+): Partial<Skill> {
+  return {
+    ...(registrySkill.source_id ? { source_id: registrySkill.source_id } : {}),
+    ...(registrySkill.source_url
+      ? { source_url: registrySkill.source_url }
+      : {}),
+    ...(registrySkill.content_url
+      ? { content_url: registrySkill.content_url }
+      : {}),
+    ...(registrySkill.source_label
+      ? { source_label: registrySkill.source_label }
+      : {}),
+    ...(registrySkill.slug ? { registry_slug: registrySkill.slug } : {}),
+    ...(registrySkill.source_branch
+      ? { source_branch: registrySkill.source_branch }
+      : {}),
+    ...(registrySkill.source_directory
+      ? { source_directory: registrySkill.source_directory }
+      : {}),
+    ...(registrySkill.canonical_skill_path
+      ? { canonical_skill_path: registrySkill.canonical_skill_path }
+      : {}),
+  };
+}
+
+function hasRegistrySourceMetadataChanged(
+  installedSkill: Skill,
+  sourceMetadata: Partial<Skill>,
+): boolean {
+  const comparableKeys = [
+    "source_id",
+    "source_url",
+    "content_url",
+    "source_label",
+    "registry_slug",
+    "source_branch",
+    "source_directory",
+    "canonical_skill_path",
+  ] as const;
+  return comparableKeys.some(
+    (key) =>
+      sourceMetadata[key] !== undefined &&
+      sourceMetadata[key] !== installedSkill[key],
+  );
+}
+
 export async function refreshRegistrySkillBaselineIfNeeded(
   check: RegistrySkillUpdateCheck,
   updateSkill: SkillState["updateSkill"],
@@ -403,6 +549,7 @@ export async function refreshRegistrySkillBaselineIfNeeded(
     check.remoteDirectoryFingerprint ||
     installedSkill.directory_fingerprint ||
     check.remoteHash;
+  const sourceMetadata = buildRegistrySourceMetadata(check.registrySkill);
   const needsRefresh =
     installedSkill.installed_content_hash !== check.remoteHash ||
     hasRegistrySkillVersionChanged(installedSkill, check.registrySkill) ||
@@ -410,12 +557,14 @@ export async function refreshRegistrySkillBaselineIfNeeded(
     installedSkill.fingerprint_algorithm !==
       SKILL_PACKAGE_FINGERPRINT_ALGORITHM ||
     installedSkill.source_binding_state !== "bound" ||
-    installedSkill.source_last_error != null;
+    installedSkill.source_last_error != null ||
+    hasRegistrySourceMetadataChanged(installedSkill, sourceMetadata);
   if (!needsRefresh) return null;
   const checkedAt = Date.now();
   return updateSkill(installedSkill.id, {
     installed_content_hash: check.remoteHash,
     installed_version: check.registrySkill.version,
+    ...sourceMetadata,
     ...buildSourceBaselineFields({
       contentHash: check.remoteHash,
       directoryFingerprint,

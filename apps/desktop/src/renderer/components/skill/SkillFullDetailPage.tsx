@@ -47,6 +47,7 @@ import { type ProjectDeployedSkillTarget } from "../../services/project-skill-ta
 import { getRuntimeCapabilities } from "../../runtime";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { SkillUpdateSafetyReviewDialog } from "./SkillUpdateSafetyReviewDialog";
+import { SkillStoreUpdateReviewDialog } from "./SkillStoreUpdateReviewDialog";
 import { useSkillSourceUpdate } from "./useSkillSourceUpdate";
 import {
   getProjectDeployTargets,
@@ -101,11 +102,9 @@ export function SkillFullDetailPage({
   const isExternalDetail = isProjectDetail || isAgentDetail;
   const selectedSkillRecordId = selectedSkill?.id ?? null;
   const sourceUpdate = useSkillSourceUpdate(selectedSkill ?? null);
-  const sourceUpdateStatus = sourceUpdate.status;
   const isCheckingSourceUpdate = sourceUpdate.isChecking;
   const isUpdatingSource = sourceUpdate.isUpdating;
   const handleCheckSourceUpdate = sourceUpdate.check;
-  const handleUpdateFromSource = sourceUpdate.apply;
   const projectDistribution = useSkillProjectDistribution(
     selectedSkill ?? null,
   );
@@ -715,17 +714,9 @@ export function SkillFullDetailPage({
     (!isExternalDetail ||
       Boolean(agentContext?.isManaged && !agentContext.isPlatformBuiltin)),
   );
-  const showApplySourceUpdate = sourceUpdateStatus === "update-available";
-  const showOverwriteSourceUpdate =
-    sourceUpdateStatus === "local-modified" ||
-    sourceUpdateStatus === "conflict" ||
-    sourceUpdateStatus === "baseline-missing";
-  const sourceUpdateButtonLabel = showApplySourceUpdate
-    ? t("skill.updateFromSource", "Update from Source")
-    : t("skill.checkSourceUpdatesAction", "Check Source Updates");
-  const overwriteSourceUpdateLabel = t(
-    "skill.overwriteLocalChanges",
-    "Overwrite local changes",
+  const sourceUpdateButtonLabel = t(
+    "skill.checkSourceUpdatesAction",
+    "Check Source Updates",
   );
   const createSnapshotLabel = t("skill.createSnapshot", "Create Snapshot");
   const installedPlatformDetails = Object.values(skillMdInstallDetails).filter(
@@ -1056,11 +1047,7 @@ export function SkillFullDetailPage({
           buttonLabel: sourceUpdateButtonLabel,
           checking: isCheckingSourceUpdate,
           hasMetadata: hasSourceUpdateMetadata,
-          overwriteLabel: overwriteSourceUpdateLabel,
-          showApply: showApplySourceUpdate,
-          showOverwrite: showOverwriteSourceUpdate,
           updating: isUpdatingSource,
-          onApply: handleUpdateFromSource,
           onCheck: handleCheckSourceUpdate,
         }}
         onBack={() =>
@@ -1184,6 +1171,16 @@ export function SkillFullDetailPage({
         onTrustSourceChange={sourceUpdate.setTrustReviewedSource}
         onClose={sourceUpdate.closeReview}
         onConfirm={() => void sourceUpdate.confirmReview()}
+      />
+
+      <SkillStoreUpdateReviewDialog
+        check={sourceUpdate.sourceReviewCheck}
+        overwriteLocalChanges={sourceUpdate.sourceReviewOverwrite}
+        decisionMode
+        isLoading={isUpdatingSource}
+        t={t}
+        onClose={sourceUpdate.closeSourceReview}
+        onConfirm={() => void sourceUpdate.applySourceReview()}
       />
 
       {/* Delete confirmation dialog */}

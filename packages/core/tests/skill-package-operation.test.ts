@@ -113,6 +113,29 @@ describe("Skill package operation policy", () => {
         }),
       ),
     ).toThrow(/duplicate/i);
+    expect(
+      validateSkillPackageOperationRequest(
+        installRequest({
+          source: {
+            kind: "remote-git",
+            repoUrl: registrySkill.source_url,
+            skillName: "writer",
+          },
+        }),
+      ).source,
+    ).toEqual(
+      expect.objectContaining({ kind: "remote-git", skillName: "writer" }),
+    );
+    expect(() =>
+      validateSkillPackageOperationRequest({
+        ...installRequest(),
+        source: {
+          kind: "remote-git",
+          repoUrl: registrySkill.source_url,
+          skillName: 42,
+        },
+      }),
+    ).toThrow(/skillName/);
     expect(() =>
       validateSkillPackageOperationRequest(
         installRequest({ source: { kind: "unknown" } as never }),
@@ -440,6 +463,27 @@ describe("Skill package operation policy", () => {
     expect(key).not.toContain("secret");
     expect(key).not.toContain("token");
     expect(buildSkillPackageOperationKey(request)).toBe(key);
+    const otherSelectedSkill = installRequest({
+      registrySkill: { ...registrySkill, source_id: undefined },
+      source: {
+        kind: "remote-git",
+        repoUrl: "https://user:secret@gitea.example.com/team/skills?token=abc",
+        branch: "main",
+        skillName: "reviewer",
+      },
+    });
+    const selectedWriter = installRequest({
+      registrySkill: { ...registrySkill, source_id: undefined },
+      source: {
+        kind: "remote-git",
+        repoUrl: "https://user:secret@gitea.example.com/team/skills?token=abc",
+        branch: "main",
+        skillName: "writer",
+      },
+    });
+    expect(buildSkillPackageOperationKey(otherSelectedSkill)).not.toBe(
+      buildSkillPackageOperationKey(selectedWriter),
+    );
     const updateRequest = installRequest({
       operation: "update",
       skillId: "skill-writer",

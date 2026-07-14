@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants";
 import type {
+  SkillPackageSnapshot,
   RemoteSkillPackageSaveResult,
   SkillSafetyScanInput,
 } from "@prompthub/shared/types";
@@ -280,6 +281,7 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         repoUrl?: string;
         branch?: string;
         directory?: string;
+        skillName?: string;
       },
     ) => {
       if (
@@ -291,11 +293,67 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
           "skill:getRemoteGitPackageFingerprint requires a non-empty repoUrl",
         );
       }
+      if (
+        options.skillName !== undefined &&
+        typeof options.skillName !== "string"
+      ) {
+        throw new Error(
+          "skill:getRemoteGitPackageFingerprint requires skillName to be a string",
+        );
+      }
 
       return SkillInstaller.getRemoteGitSkillPackageFingerprint({
         repoUrl: options.repoUrl,
         branch: options.branch,
         directory: options.directory,
+        skillName: options.skillName,
+      });
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_GET_REMOTE_GIT_PACKAGE_SNAPSHOT,
+    async (
+      _,
+      options?: {
+        repoUrl?: string;
+        branch?: string;
+        directory?: string;
+        skillName?: string;
+      },
+    ): Promise<SkillPackageSnapshot> => {
+      if (!options?.repoUrl?.trim()) {
+        throw new Error(
+          "skill:getRemoteGitPackageSnapshot requires a non-empty repoUrl",
+        );
+      }
+      if (
+        options.skillName !== undefined &&
+        typeof options.skillName !== "string"
+      ) {
+        throw new Error(
+          "skill:getRemoteGitPackageSnapshot requires skillName to be a string",
+        );
+      }
+      return SkillInstaller.getRemoteGitSkillPackageSnapshot({
+        repoUrl: options.repoUrl,
+        branch: options.branch,
+        directory: options.directory,
+        skillName: options.skillName,
+      });
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_GET_REMOTE_ZIP_PACKAGE_SNAPSHOT,
+    async (_, options?: { zipUrl?: string }): Promise<SkillPackageSnapshot> => {
+      if (!options?.zipUrl?.trim()) {
+        throw new Error(
+          "skill:getRemoteZipPackageSnapshot requires a non-empty zipUrl",
+        );
+      }
+      return SkillInstaller.getRemoteZipSkillPackageSnapshot({
+        zipUrl: options.zipUrl,
       });
     },
   );
@@ -311,6 +369,18 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
       const normalizedPath = localPath.trim();
       await validateMaterializedSkillPackage(normalizedPath);
       return computeRepoDirectoryFingerprint(normalizedPath);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_SNAPSHOT,
+    async (_, localPath?: string): Promise<SkillPackageSnapshot> => {
+      if (typeof localPath !== "string" || localPath.trim().length === 0) {
+        throw new Error(
+          "skill:getLocalPackageSnapshot requires a non-empty localPath",
+        );
+      }
+      return SkillInstaller.getLocalSkillPackageSnapshot(localPath.trim());
     },
   );
 

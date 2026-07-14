@@ -600,6 +600,7 @@ export function SkillStoreDetail({
         contentUrl: isCloudSkill ? undefined : skill.content_url,
         securityAudits: skill.security_audits,
         aiConfig: getSafetyScanAIConfig(aiModels),
+        fallbackToPreflight: true,
       });
       setPendingInstallContent(content);
       setPendingInstallPackage(packageResponse);
@@ -651,6 +652,7 @@ export function SkillStoreDetail({
             contentUrl: isCloudSkill ? undefined : skill.content_url,
             securityAudits: skill.security_audits,
             aiConfig: getSafetyScanAIConfig(aiModels),
+            fallbackToPreflight: true,
           });
           setPendingInstallContent(latestContent);
           setPendingInstallPackage(latestPackage);
@@ -784,6 +786,7 @@ export function SkillStoreDetail({
             contentUrl: isCloudSkill ? undefined : skill.content_url,
             securityAudits: skill.security_audits,
             aiConfig: getSafetyScanAIConfig(aiModels),
+            fallbackToPreflight: true,
           });
           setPendingUpdateSafetyReport(report);
         } catch (error) {

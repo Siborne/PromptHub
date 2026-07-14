@@ -15,9 +15,7 @@ describe("skills-sh-store", () => {
     expect(getSkillsShIndexUrl("all")).toBe("https://skills.sh");
     expect(getSkillsShIndexUrl("official")).toBe("https://skills.sh/official");
     expect(getSkillsShIndexUrl("audits")).toBe("https://skills.sh/audits");
-    expect(getSkillsShIndexUrl("trending")).toBe(
-      "https://skills.sh/trending",
-    );
+    expect(getSkillsShIndexUrl("trending")).toBe("https://skills.sh/trending");
     expect(getSkillsShIndexUrl("hot")).toBe("https://skills.sh/hot");
     expect(getSkillsShIndexUrl("topic:react")).toBe(
       "https://skills.sh/topic/react",
@@ -136,12 +134,12 @@ describe("skills-sh-store", () => {
       { limit: 10 },
     );
 
-    expect(filterSkillsShLeaderboardEntries(entries, "awesome copilot")).toEqual([
-      expect.objectContaining({ skillName: "gh-cli" }),
-    ]);
-    expect(filterSkillsShLeaderboardEntries(entries, "firecrawl parse")).toEqual([
-      expect.objectContaining({ skillName: "firecrawl-parse" }),
-    ]);
+    expect(
+      filterSkillsShLeaderboardEntries(entries, "awesome copilot"),
+    ).toEqual([expect.objectContaining({ skillName: "gh-cli" })]);
+    expect(
+      filterSkillsShLeaderboardEntries(entries, "firecrawl parse"),
+    ).toEqual([expect.objectContaining({ skillName: "firecrawl-parse" })]);
   });
 
   it("maps detail page content into a registry skill", () => {
@@ -201,8 +199,6 @@ Use this skill to look up the right capability for a task.
         category: "general",
         source_url: "https://github.com/vercel-labs/skills",
         store_url: "https://skills.sh/vercel-labs/skills/find-skills",
-        source_directory: "skills/find-skills",
-        canonical_skill_path: "skills/find-skills/SKILL.md",
         weekly_installs: "774.9K",
         github_stars: "8.3K",
         compatibility: ["opencode", "codex", "claude"],
@@ -212,6 +208,8 @@ Use this skill to look up the right capability for a task.
       }),
     );
     expect(skill?.content).toContain("# Finding Skills");
+    expect(skill).not.toHaveProperty("source_directory");
+    expect(skill).not.toHaveProperty("canonical_skill_path");
   });
 
   it("preserves YAML indentation when parsing SKILL.md block values", () => {
@@ -272,8 +270,7 @@ description: Review React apps against Vercel guidance.
       owner: "vercel-labs",
       repo: "agent-skills",
       skillName: "vercel-react-best-practices",
-      detailPath:
-        "/vercel-labs/agent-skills/vercel-react-best-practices",
+      detailPath: "/vercel-labs/agent-skills/vercel-react-best-practices",
       detailUrl:
         "https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices",
     });
@@ -281,9 +278,73 @@ description: Review React apps against Vercel guidance.
     expect(skill).toEqual(
       expect.objectContaining({
         source_url: "https://github.com/vercel-labs/agent-skills",
-        source_directory: undefined,
-        canonical_skill_path: undefined,
       }),
+    );
+    expect(skill).not.toHaveProperty("source_directory");
+    expect(skill).not.toHaveProperty("canonical_skill_path");
+  });
+
+  it("does not guess a flat package directory for skills.sh repos with category folders", () => {
+    const html = `
+      <article>
+        <h2>Summary</h2>
+        <p>Relentless interviewing that sharpens a plan.</p>
+        <h2>SKILL.md</h2>
+        <pre><code>---
+name: grill-me
+description: A relentless interview to sharpen a plan or design.
+---
+
+Run a grilling session.
+        </code></pre>
+        <h2>Repository</h2>
+        <p>mattpocock/skills</p>
+      </article>
+    `;
+
+    const skill = parseSkillsShDetail(html, {
+      owner: "mattpocock",
+      repo: "skills",
+      skillName: "grill-me",
+      detailPath: "/mattpocock/skills/grill-me",
+      detailUrl: "https://skills.sh/mattpocock/skills/grill-me",
+    });
+
+    expect(skill).toEqual(
+      expect.objectContaining({
+        source_url: "https://github.com/mattpocock/skills",
+      }),
+    );
+    expect(skill).not.toHaveProperty("source_directory");
+    expect(skill).not.toHaveProperty("canonical_skill_path");
+  });
+
+  it("rejects a visually truncated repository label and uses the canonical index repository", () => {
+    const html = `
+      <article>
+        <h2>SKILL.md</h2>
+        <pre><code>---
+name: image-to-video
+description: Route image-to-video models.
+---
+
+# Image to Video</code></pre>
+        <h2>Repository</h2>
+        <p>agentspace-so/r…t-skills</p>
+      </article>
+    `;
+
+    const skill = parseSkillsShDetail(html, {
+      owner: "agentspace-so",
+      repo: "runcomfy-agent-skills",
+      skillName: "image-to-video",
+      detailPath: "/agentspace-so/runcomfy-agent-skills/image-to-video",
+      detailUrl:
+        "https://skills.sh/agentspace-so/runcomfy-agent-skills/image-to-video",
+    });
+
+    expect(skill?.source_url).toBe(
+      "https://github.com/agentspace-so/runcomfy-agent-skills",
     );
   });
 

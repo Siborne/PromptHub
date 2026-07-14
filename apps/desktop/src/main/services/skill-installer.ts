@@ -283,6 +283,7 @@ import {
 } from "./skill-installer-replacement";
 import {
   collectSkillDirs,
+  collectSkillDirsFromRepo,
   getDefaultSkillScanEntries,
   getScannedSkillInstallMetadata,
   readSkillManifest,
@@ -314,12 +315,15 @@ import {
 import { scanSkillSafety } from "./skill-safety-scan";
 import {
   getRemoteGitSkillPackageFingerprint,
+  getRemoteGitSkillPackageSnapshot,
+  getRemoteZipSkillPackageSnapshot,
   saveRemoteGitSkillPackage,
   saveRemoteZipSkillPackage,
   type RemoteGitPackageOptions,
   type RemotePackageSkill,
   type RemoteZipPackageOptions,
 } from "./skill-installer-remote-package";
+import { readValidatedSkillPackageSnapshot } from "./skill-package-snapshot";
 
 // ========================================================================
 // Facade class — every static method delegates to the appropriate sub-module
@@ -836,6 +840,11 @@ export class SkillInstaller {
   static getRemoteGitSkillPackageFingerprint =
     getRemoteGitSkillPackageFingerprint;
 
+  static getRemoteGitSkillPackageSnapshot = getRemoteGitSkillPackageSnapshot;
+  static getLocalSkillPackageSnapshot = readValidatedSkillPackageSnapshot;
+  static getRemoteZipSkillPackageSnapshot(options: { zipUrl: string }) {
+    return getRemoteZipSkillPackageSnapshot(options, this.fetchRemoteBytes);
+  }
   static saveRemoteZipSkillToLocalRepoBySkillId(
     skill: RemotePackageSkill,
     options: RemoteZipPackageOptions,
@@ -853,6 +862,7 @@ export class SkillInstaller {
    * Note: This method only scans SKILL.md format skills, NOT MCP configurations.
    */
   static collectSkillDirs = collectSkillDirs;
+  static collectSkillDirsFromRepo = collectSkillDirsFromRepo;
   static getScannedSkillInstallMetadata = getScannedSkillInstallMetadata;
   static resolveSingleSkillDirFromRepo = resolveSingleSkillDirFromRepo;
   static resolveSkillDirFromRepo = resolveSkillDirFromRepo;
@@ -1043,7 +1053,7 @@ export class SkillInstaller {
         );
       }
 
-      const skillDirs = await this.collectSkillDirs(searchRoot);
+      const skillDirs = await this.collectSkillDirsFromRepo(searchRoot);
       const scannedSkills = await Promise.all(
         skillDirs.map(async (skillDir): Promise<RegistrySkill | null> => {
           const skillMdPath = path.join(skillDir, "SKILL.md");

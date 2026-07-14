@@ -61,6 +61,7 @@ import {
   getCloudSkillMarkdown,
   getCloudStorePackage,
   isCloudRegistrySkill,
+  normalizeSkillStoreSourceIdForRuntime,
 } from "../../services/cloud-store";
 import { formatStoreSourceHint } from "./skill-store-presentation";
 
@@ -100,8 +101,11 @@ export function SkillStore() {
     (state) => state.selectedRegistrySlug,
   );
   const registrySkills = useSkillStore((state) => state.registrySkills) ?? [];
-  const selectedStoreSourceId =
-    useSkillStore((state) => state.selectedStoreSourceId) ?? "official";
+  const selectedStoreSourceId = useSkillStore((state) =>
+    normalizeSkillStoreSourceIdForRuntime(
+      state.selectedStoreSourceId ?? "official",
+    ),
+  );
   const selectStoreSource = useSkillStore((state) => state.selectStoreSource);
   const customStoreSources =
     useSkillStore((state) => state.customStoreSources) ?? [];
@@ -531,6 +535,7 @@ export function SkillStore() {
         contentUrl: cloudPackage ? undefined : skill.content_url,
         securityAudits: skill.security_audits,
         aiConfig: getSafetyScanAIConfig(aiModels),
+        fallbackToPreflight: true,
       });
       const shouldBlockInstall =
         report.level === "blocked" || report.level === "high-risk";

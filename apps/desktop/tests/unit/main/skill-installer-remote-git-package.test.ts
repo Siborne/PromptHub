@@ -517,6 +517,142 @@ describe("SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId", () => {
     expect(await listRemoteImportTempDirs()).toEqual([]);
   });
 
+  it("discovers a matching skills.sh package below repository category folders", async () => {
+    await SkillInstaller.init();
+
+    vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(
+      async (_url, destDir) => {
+        const grillDir = path.join(
+          destDir,
+          "skills",
+          "productivity",
+          "grill-me",
+        );
+        const docsDir = path.join(
+          destDir,
+          "skills",
+          "engineering",
+          "grill-with-docs",
+        );
+        await fs.mkdir(grillDir, { recursive: true });
+        await fs.mkdir(docsDir, { recursive: true });
+        await fs.writeFile(
+          path.join(grillDir, "SKILL.md"),
+          "---\nname: grill-me\n---\n\nRun a grilling session.\n",
+          "utf-8",
+        );
+        await fs.writeFile(
+          path.join(grillDir, "reference.md"),
+          "# Interview reference\n",
+          "utf-8",
+        );
+        await fs.writeFile(
+          path.join(docsDir, "SKILL.md"),
+          "---\nname: grill-with-docs\n---\n\nRun with docs.\n",
+          "utf-8",
+        );
+      },
+    );
+
+    const repoPath =
+      await SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(
+        {
+          id: "skill-grill-me",
+          name: "grill-me",
+          source_id: "skills-sh-grill-me",
+          source_url: "https://github.com/mattpocock/skills",
+        },
+        {
+          repoUrl: "https://github.com/mattpocock/skills",
+        },
+      );
+
+    await expect(listRelativeFiles(repoPath)).resolves.toEqual([
+      "SKILL.md",
+      "reference.md",
+    ]);
+    await expect(
+      SkillInstaller.getRemoteGitSkillPackageSnapshot({
+        repoUrl: "https://github.com/mattpocock/skills",
+        skillName: "grill-me",
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        content: expect.stringContaining("name: grill-me"),
+        directoryFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+        resolvedDirectory: "skills/productivity/grill-me",
+      }),
+    );
+    expect(await listRemoteImportTempDirs()).toEqual([]);
+  });
+
+  it("uses the explicit catalog selector instead of a temporary display name", async () => {
+    await SkillInstaller.init();
+
+    vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(
+      async (_url, destDir) => {
+        for (const name of ["grill-me", "grill-with-docs"]) {
+          const skillDir = path.join(destDir, "skills", "productivity", name);
+          await fs.mkdir(skillDir, { recursive: true });
+          await fs.writeFile(
+            path.join(skillDir, "SKILL.md"),
+            `---\nname: ${name}\n---\n\n# ${name}\n`,
+            "utf-8",
+          );
+        }
+      },
+    );
+
+    const repoPath =
+      await SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(
+        {
+          id: "skill-catalog-card",
+          name: "Relentless interviewing",
+          source_id: "skills-sh-grill-me",
+          source_url: "https://github.com/mattpocock/skills",
+        },
+        {
+          repoUrl: "https://github.com/mattpocock/skills",
+          skillName: "grill-me",
+        },
+      );
+
+    await expect(
+      fs.readFile(path.join(repoPath, "SKILL.md"), "utf8"),
+    ).resolves.toContain("name: grill-me");
+  });
+
+  it("rejects an explicit catalog selector that does not match the repository's only Skill", async () => {
+    await SkillInstaller.init();
+
+    vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(
+      async (_url, destDir) => {
+        const skillDir = path.join(destDir, "skills", "different-skill");
+        await fs.mkdir(skillDir, { recursive: true });
+        await fs.writeFile(
+          path.join(skillDir, "SKILL.md"),
+          "---\nname: different-skill\n---\n\n# Different\n",
+          "utf-8",
+        );
+      },
+    );
+
+    await expect(
+      SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(
+        {
+          id: "skill-catalog-card",
+          name: "Catalog display name",
+          source_id: "skills-sh-missing",
+          source_url: "https://github.com/example/skills",
+        },
+        {
+          repoUrl: "https://github.com/example/skills",
+          skillName: "expected-skill",
+        },
+      ),
+    ).rejects.toThrow(/none matches/i);
+  });
+
   it("copies a large package inventory without dropping nested files", async () => {
     await SkillInstaller.init();
 

@@ -60,12 +60,10 @@ describe("imported Skill source lifecycle", () => {
     });
     const getAll = vi.fn(async () => (storedSkill ? [storedSkill] : []));
     const syncFromRepo = vi.fn(async () => storedSkill);
-    const readLocalFileByPath = vi.fn().mockResolvedValue({
+    const getLocalPackageSnapshot = vi.fn().mockResolvedValue({
       content: "# Claude Writer\n\nUpdated source content\n",
+      directoryFingerprint: "b".repeat(64),
     });
-    const getLocalPackageFingerprint = vi
-      .fn()
-      .mockResolvedValue("b".repeat(64));
     const saveToRepo = vi.fn().mockResolvedValue(managedPath);
     const { api } = installWindowMocks({
       api: {
@@ -74,8 +72,7 @@ describe("imported Skill source lifecycle", () => {
           update,
           getAll,
           syncFromRepo,
-          readLocalFileByPath,
-          getLocalPackageFingerprint,
+          getLocalPackageSnapshot,
           saveToRepo,
         },
       },
@@ -125,7 +122,7 @@ describe("imported Skill source lifecycle", () => {
         content: "# Claude Writer\n\nUpdated source content\n",
       }),
     );
-    expect(getLocalPackageFingerprint).toHaveBeenCalledWith(sourcePath);
+    expect(getLocalPackageSnapshot).toHaveBeenCalledWith(sourcePath);
   });
 
   it("allows an explicit source reset for a legacy import without a baseline", async () => {
@@ -156,10 +153,10 @@ describe("imported Skill source lifecycle", () => {
       api: {
         skill: {
           syncFromRepo: vi.fn().mockResolvedValue(legacySkill),
-          readLocalFileByPath: vi.fn().mockResolvedValue({
+          getLocalPackageSnapshot: vi.fn().mockResolvedValue({
             content: updatedSkill.content,
+            directoryFingerprint: "b".repeat(64),
           }),
-          getLocalPackageFingerprint: vi.fn().mockResolvedValue("b".repeat(64)),
         },
       },
     });
@@ -207,10 +204,10 @@ describe("imported Skill source lifecycle", () => {
       api: {
         skill: {
           syncFromRepo: vi.fn().mockResolvedValue(linkedSkill),
-          readLocalFileByPath: vi.fn().mockResolvedValue({
+          getLocalPackageSnapshot: vi.fn().mockResolvedValue({
             content: "# Linked Writer\n\nSource changed after import\n",
+            directoryFingerprint: "c".repeat(64),
           }),
-          getLocalPackageFingerprint: vi.fn().mockResolvedValue("c".repeat(64)),
         },
       },
     });

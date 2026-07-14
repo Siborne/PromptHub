@@ -112,13 +112,23 @@ export async function assertStagedRemoteSkillPackageSafe(
     return normalizedPreflight;
   }
 
-  const aiReport = await (input.safetyScan.scan ?? scanSkillSafety)({
-    name: input.skill.name,
-    content,
-    sourceUrl: input.sourceUrl,
-    localRepoPath: input.skillDir,
-    aiConfig: input.safetyScan.aiConfig,
-  });
+  let aiReport: SkillSafetyReport;
+  try {
+    aiReport = await (input.safetyScan.scan ?? scanSkillSafety)({
+      name: input.skill.name,
+      content,
+      sourceUrl: input.sourceUrl,
+      localRepoPath: input.skillDir,
+      aiConfig: input.safetyScan.aiConfig,
+    });
+  } catch (error) {
+    console.warn(
+      "AI package safety assessment unavailable; enforcing deterministic preflight:",
+      error,
+    );
+    assertSafetyReportAllowed(normalizedPreflight, input);
+    return normalizedPreflight;
+  }
   if (aiReport.level === "blocked") {
     assertSafetyReportAllowed(aiReport, input);
   }

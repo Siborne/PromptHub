@@ -83,6 +83,7 @@ export function formatSkillSafetyScanError(
   t: TFunction,
 ): string {
   const rawMessage = getErrorMessage(error);
+  const normalized = rawMessage.toLowerCase();
 
   if (rawMessage === "AI_NOT_CONFIGURED") {
     return t(
@@ -95,6 +96,19 @@ export function formatSkillSafetyScanError(
     return t(
       "skill.safetyScanBlockedSource",
       "Safety scan blocked this source because it resolves to an internal or restricted address.",
+    );
+  }
+
+  if (
+    normalized.includes("invalid token") ||
+    normalized.includes("invalid api key") ||
+    normalized.includes("unauthorized") ||
+    /(?:^|\D)401(?:\D|$)/.test(normalized) ||
+    /(?:^|\D)403(?:\D|$)/.test(normalized)
+  ) {
+    return t(
+      "skill.safetyScanAuthFailed",
+      "AI safety assessment could not authenticate. Check the selected model API key in Settings.",
     );
   }
 

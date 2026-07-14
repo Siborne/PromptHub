@@ -15,12 +15,14 @@ export function registerSkillPackageOperationHandlers({
     createDesktopSkillPackageLifecycleDependencies(db),
   );
 
-  void cleanupAbandonedSkillPackageOperations(db).catch((error) => {
-    console.warn(
-      "Failed to recover abandoned Skill package operations:",
-      error,
-    );
-  });
+  void cleanupAbandonedSkillPackageOperations(db, { recoverAll: true }).catch(
+    (error) => {
+      console.warn(
+        "Failed to recover abandoned Skill package operations:",
+        error,
+      );
+    },
+  );
 
   ipcMain.handle(
     IPC_CHANNELS.SKILL_RUN_PACKAGE_OPERATION,

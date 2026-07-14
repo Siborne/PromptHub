@@ -1,6 +1,7 @@
 import { ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import type {
+  SkillPackageSnapshot,
   CreateSkillParams,
   MCPServerConfig,
   RemoteSkillPackageSaveResult,
@@ -184,14 +185,37 @@ export const skillApi = {
     repoUrl: string;
     branch?: string;
     directory?: string;
+    skillName?: string;
   }): Promise<string | undefined> =>
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_GET_REMOTE_GIT_PACKAGE_FINGERPRINT,
       options,
     ),
+  getRemoteGitPackageSnapshot: (options: {
+    repoUrl: string;
+    branch?: string;
+    directory?: string;
+    skillName?: string;
+  }): Promise<SkillPackageSnapshot> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_GET_REMOTE_GIT_PACKAGE_SNAPSHOT,
+      options,
+    ),
+  getRemoteZipPackageSnapshot: (options: {
+    zipUrl: string;
+  }): Promise<SkillPackageSnapshot> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_GET_REMOTE_ZIP_PACKAGE_SNAPSHOT,
+      options,
+    ),
   getLocalPackageFingerprint: (localPath: string): Promise<string> =>
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_FINGERPRINT,
+      localPath,
+    ),
+  getLocalPackageSnapshot: (localPath: string): Promise<SkillPackageSnapshot> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_SNAPSHOT,
       localPath,
     ),
   listLocalFiles: (skillId: string): Promise<SkillLocalFileTreeEntry[]> =>

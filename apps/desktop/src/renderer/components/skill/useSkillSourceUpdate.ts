@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { Skill, SkillUpdateSafetyReview } from "@prompthub/shared/types";
-import type { RegistrySkillUpdateStatus } from "../../services/skill-store-update";
+import type {
+  RegistrySkillUpdateCheck,
+  RegistrySkillUpdateStatus,
+} from "../../services/skill-store-update";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
 import { useToast } from "../ui/Toast";
@@ -13,6 +16,23 @@ type ToastKind = "success" | "warning" | "error" | "info";
 interface PendingSafetyReview {
   review: SkillUpdateSafetyReview;
   overwriteLocalChanges: boolean;
+}
+
+function requiresSourceReview(status: RegistrySkillUpdateStatus): boolean {
+  return (
+    status === "update-available" ||
+    status === "local-modified" ||
+    status === "conflict" ||
+    status === "baseline-missing"
+  );
+}
+
+function requiresLocalOverwrite(status: RegistrySkillUpdateStatus): boolean {
+  return (
+    status === "local-modified" ||
+    status === "conflict" ||
+    status === "baseline-missing"
+  );
 }
 
 const STATUS_TOASTS: Partial<
@@ -57,12 +77,17 @@ function useSourceUpdateState(skillId?: string) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [pendingReview, setPendingReview] =
     useState<PendingSafetyReview | null>(null);
+  const [sourceReviewCheck, setSourceReviewCheck] =
+    useState<RegistrySkillUpdateCheck | null>(null);
+  const [sourceReviewOverwrite, setSourceReviewOverwrite] = useState(false);
   const [trustReviewedSource, setTrustReviewedSource] = useState(false);
   const checkInFlightRef = useRef(false);
   const updateInFlightRef = useRef(false);
   useEffect(() => {
     setStatus(null);
     setPendingReview(null);
+    setSourceReviewCheck(null);
+    setSourceReviewOverwrite(false);
     setTrustReviewedSource(false);
   }, [skillId]);
   return {
@@ -74,6 +99,10 @@ function useSourceUpdateState(skillId?: string) {
     setIsUpdating,
     pendingReview,
     setPendingReview,
+    sourceReviewCheck,
+    setSourceReviewCheck,
+    sourceReviewOverwrite,
+    setSourceReviewOverwrite,
     trustReviewedSource,
     setTrustReviewedSource,
     checkInFlightRef,
@@ -154,8 +183,16 @@ function createCheckAction(
     state.setIsChecking(true);
     try {
       const result = await dependencies.getUpdateStatus(selectedSkill.id);
-      state.setStatus(result?.status ?? null);
-      toast.showStatus(result?.status ?? "source-unavailable", result);
+      const status = result?.status ?? "source-unavailable";
+      state.setStatus(status);
+      if (result && requiresSourceReview(status)) {
+        state.setSourceReviewCheck(result);
+        state.setSourceReviewOverwrite(requiresLocalOverwrite(status));
+      } else {
+        state.setSourceReviewCheck(null);
+        state.setSourceReviewOverwrite(false);
+        toast.showStatus(status, result);
+      }
     } catch (error) {
       console.error("Failed to check source updates:", error);
       toast.showError(error);
@@ -175,15 +212,27 @@ async function handleApplyResult(
 ) {
   if (!result) return toast.showStatus("source-unavailable");
   if (result.status === "safety-review-required") {
+    state.setSourceReviewCheck(null);
     state.setPendingReview({ review: result.review, overwriteLocalChanges });
     state.setTrustReviewedSource(false);
   } else if (result.status === "linked-local-blocked") {
+    state.setSourceReviewCheck(null);
     state.setStatus(result.check.status);
     toast.showLinkedLocalBlocked();
   } else if (result.status !== "updated") {
     state.setStatus(result.check.status);
-    toast.showStatus(result.check.status, result.check);
+    if (requiresSourceReview(result.check.status)) {
+      state.setSourceReviewCheck(result.check);
+      state.setSourceReviewOverwrite(
+        requiresLocalOverwrite(result.check.status),
+      );
+    } else {
+      state.setSourceReviewCheck(null);
+      toast.showStatus(result.check.status, result.check);
+    }
   } else {
+    state.setSourceReviewCheck(null);
+    state.setSourceReviewOverwrite(false);
     state.setStatus("up-to-date");
     await dependencies.loadSkills();
     toast.showSuccess();
@@ -276,14 +325,21 @@ export function useSkillSourceUpdate(selectedSkill: Skill | null) {
   const dependencies = useSourceUpdateDependencies();
   const toast = createToastHelpers(t, showToast);
   return {
-    status: state.status,
     isChecking: state.isChecking,
     isUpdating: state.isUpdating,
     pendingReview: state.pendingReview,
+    sourceReviewCheck: state.sourceReviewCheck,
+    sourceReviewOverwrite: state.sourceReviewOverwrite,
     trustReviewedSource: state.trustReviewedSource,
     setTrustReviewedSource: state.setTrustReviewedSource,
     check: createCheckAction(selectedSkill, state, dependencies, toast),
-    apply: createApplyAction(selectedSkill, state, dependencies, toast),
+    applySourceReview: () =>
+      createApplyAction(
+        selectedSkill,
+        state,
+        dependencies,
+        toast,
+      )(state.sourceReviewOverwrite),
     confirmReview: createConfirmAction(
       selectedSkill,
       state,
@@ -292,6 +348,12 @@ export function useSkillSourceUpdate(selectedSkill: Skill | null) {
     ),
     closeReview: () => {
       if (!state.isUpdating) state.setPendingReview(null);
+    },
+    closeSourceReview: () => {
+      if (!state.isUpdating) {
+        state.setSourceReviewCheck(null);
+        state.setSourceReviewOverwrite(false);
+      }
     },
   };
 }

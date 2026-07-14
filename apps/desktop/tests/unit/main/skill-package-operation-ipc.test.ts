@@ -61,7 +61,7 @@ describe("Skill package operation IPC", () => {
     expect(createDependenciesMock).toHaveBeenCalledWith(db);
     expect(lifecycleConstructorMock).toHaveBeenCalledTimes(1);
     expect(runMock).toHaveBeenCalledWith(request);
-    expect(cleanupMock).toHaveBeenCalledWith(db);
+    expect(cleanupMock).toHaveBeenCalledWith(db, { recoverAll: true });
   });
 
   it("keeps the IPC available when startup recovery cannot finish", async () => {

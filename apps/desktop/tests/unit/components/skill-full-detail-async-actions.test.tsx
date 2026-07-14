@@ -498,10 +498,12 @@ describe("SkillFullDetailPage async actions", () => {
       );
     });
 
+    expect(
+      screen.queryByRole("button", { name: "Update from Source" }),
+    ).not.toBeInTheDocument();
     const updateButton = await screen.findByRole("button", {
-      name: "Update from Source",
+      name: "Use source version",
     });
-    expect(updateButton).toHaveAttribute("aria-label", "Update from Source");
     await act(async () => {
       fireEvent.click(updateButton);
       fireEvent.click(updateButton);
@@ -509,6 +511,9 @@ describe("SkillFullDetailPage async actions", () => {
     });
 
     expect(updateInstalledSkillFromSource).toHaveBeenCalledTimes(1);
+    expect(updateInstalledSkillFromSource).toHaveBeenCalledWith(
+      selectedSkill.id,
+    );
 
     await act(async () => {
       resolveUpdate?.({
@@ -568,7 +573,7 @@ describe("SkillFullDetailPage async actions", () => {
     });
     await act(async () => {
       fireEvent.click(
-        await screen.findByRole("button", { name: "Update from Source" }),
+        await screen.findByRole("button", { name: "Use source version" }),
       );
     });
 
@@ -595,13 +600,71 @@ describe("SkillFullDetailPage async actions", () => {
     );
   });
 
-  it("allows explicit source overwrite after a local-modified update check", async () => {
+  it("reviews local and source content after checking without adding a header overwrite action", async () => {
     const selectedSkill = storeState.skills[0];
+    selectedSkill.version = "source";
+    selectedSkill.currentVersion = 5;
     const updateCheck: RegistrySkillUpdateCheck = {
       ...makeUpdateCheck(selectedSkill),
       status: "local-modified",
       localModified: true,
       remoteChanged: false,
+      localPackageSnapshot: {
+        content: "# Async Actions\n\nHelp test duplicate clicks.",
+        directoryFingerprint: "local-package",
+        scope: "package",
+        files: [
+          {
+            path: "SKILL.md",
+            kind: "text",
+            sizeBytes: 50,
+            contentHash: "local-skill",
+            content: "# Async Actions\n\nHelp test duplicate clicks.",
+          },
+          {
+            path: "references/guide.md",
+            kind: "text",
+            sizeBytes: 11,
+            contentHash: "old-guide",
+            content: "Old guide.\n",
+          },
+          {
+            path: "templates/removed.txt",
+            kind: "text",
+            sizeBytes: 9,
+            contentHash: "removed-template",
+            content: "Removed.\n",
+          },
+        ],
+      },
+      remotePackageSnapshot: {
+        content: "# Async Actions\n\nRemote.",
+        directoryFingerprint: "remote-package",
+        scope: "package",
+        files: [
+          {
+            path: "SKILL.md",
+            kind: "text",
+            sizeBytes: 25,
+            contentHash: "remote-skill",
+            content: "# Async Actions\n\nRemote.",
+          },
+          {
+            path: "references/guide.md",
+            kind: "text",
+            sizeBytes: 11,
+            contentHash: "new-guide",
+            content: "New guide.\n",
+          },
+          {
+            path: "scripts/new.sh",
+            kind: "text",
+            sizeBytes: 8,
+            contentHash: "new-script",
+            content: "echo hi\n",
+          },
+        ],
+      },
     };
     const getInstalledSkillSourceUpdateStatus = vi
       .fn()
@@ -625,11 +688,68 @@ describe("SkillFullDetailPage async actions", () => {
       );
     });
 
-    const overwriteButton = await screen.findByRole("button", {
-      name: "Overwrite local changes",
+    expect(await screen.findByText("Review Skill update")).toBeInTheDocument();
+    const updateReviewDialog = screen.getByRole("dialog", {
+      name: "Review Skill update",
+    });
+    expect(updateReviewDialog).toHaveClass(
+      "animate-in",
+      "fade-in",
+      "zoom-in-95",
+      "slide-in-from-bottom-2",
+      "duration-base",
+      "ease-enter",
+    );
+    expect(updateReviewDialog.parentElement).toHaveClass(
+      "animate-in",
+      "fade-in",
+      "duration-base",
+      "ease-enter",
+    );
+    expect(screen.getByText("Remote.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /references\/guide\.md/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /scripts\/new\.sh/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /templates\/removed\.txt/ }),
+    ).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /references\/guide\.md/ }),
+      );
+    });
+    expect(screen.getByText("Old guide.")).toBeInTheDocument();
+    expect(screen.getByText("New guide.")).toBeInTheDocument();
+    expect(screen.queryByText("v5")).not.toBeInTheDocument();
+    expect(screen.queryByText("Latest source version")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Overwrite local changes" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Check Source Updates" }),
+    ).toBeInTheDocument();
+
+    const keepLocalButton = screen.getByRole("button", {
+      name: "Keep local version",
     });
     await act(async () => {
-      fireEvent.click(overwriteButton);
+      fireEvent.click(keepLocalButton);
+    });
+
+    expect(updateInstalledSkillFromSource).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Check Source Updates" }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Use source version" }),
+      );
     });
 
     expect(updateInstalledSkillFromSource).toHaveBeenCalledWith(
@@ -643,47 +763,47 @@ describe("SkillFullDetailPage async actions", () => {
       status: "up-to-date" as const,
       toastText: "Already up to date",
       toastType: "success" as const,
-      showsUpdate: false,
-      showsOverwrite: false,
+      opensReview: false,
     },
     {
       status: "update-available" as const,
       toastText: "Update available",
       toastType: "info" as const,
-      showsUpdate: true,
-      showsOverwrite: false,
+      opensReview: true,
+    },
+    {
+      status: "local-modified" as const,
+      toastText: "",
+      toastType: "warning" as const,
+      opensReview: true,
     },
     {
       status: "conflict" as const,
       toastText: "Source and local content both changed",
       toastType: "warning" as const,
-      showsUpdate: false,
-      showsOverwrite: true,
+      opensReview: true,
     },
     {
       status: "baseline-missing" as const,
       toastText: "Unable to reconcile history",
       toastType: "warning" as const,
-      showsUpdate: false,
-      showsOverwrite: true,
+      opensReview: true,
     },
     {
       status: "source-unavailable" as const,
       toastText: "Source is unavailable",
       toastType: "error" as const,
-      showsUpdate: false,
-      showsOverwrite: false,
+      opensReview: false,
     },
     {
       status: "no-source" as const,
       toastText: "This Skill is local only",
       toastType: "info" as const,
-      showsUpdate: false,
-      showsOverwrite: false,
+      opensReview: false,
     },
   ])(
     "renders source update action state for $status",
-    async ({ status, toastText, toastType, showsUpdate, showsOverwrite }) => {
+    async ({ status, toastText, toastType, opensReview }) => {
       const selectedSkill = storeState.skills[0];
       storeState.getInstalledSkillSourceUpdateStatus = vi
         .fn()
@@ -704,28 +824,23 @@ describe("SkillFullDetailPage async actions", () => {
         );
       });
 
-      expect(showToast).toHaveBeenCalledWith(
-        expect.stringContaining(toastText),
-        toastType,
-      );
-      if (showsUpdate) {
+      if (opensReview) {
         expect(
-          await screen.findByRole("button", { name: "Update from Source" }),
+          await screen.findByText("Review Skill update"),
         ).toBeInTheDocument();
+        expect(showToast).not.toHaveBeenCalled();
       } else {
-        expect(
-          screen.queryByRole("button", { name: "Update from Source" }),
-        ).not.toBeInTheDocument();
+        expect(showToast).toHaveBeenCalledWith(
+          expect.stringContaining(toastText),
+          toastType,
+        );
       }
-      if (showsOverwrite) {
-        expect(
-          screen.getByRole("button", { name: "Overwrite local changes" }),
-        ).toBeInTheDocument();
-      } else {
-        expect(
-          screen.queryByRole("button", { name: "Overwrite local changes" }),
-        ).not.toBeInTheDocument();
-      }
+      expect(
+        screen.queryByRole("button", { name: "Update from Source" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Overwrite local changes" }),
+      ).not.toBeInTheDocument();
     },
   );
 
@@ -753,7 +868,7 @@ describe("SkillFullDetailPage async actions", () => {
 
     await act(async () => {
       fireEvent.click(
-        await screen.findByRole("button", { name: "Update from Source" }),
+        await screen.findByRole("button", { name: "Use source version" }),
       );
     });
 

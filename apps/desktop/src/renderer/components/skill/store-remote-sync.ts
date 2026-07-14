@@ -42,6 +42,7 @@ import {
   PROMPTHUB_CLOUD_STORE_URL,
 } from "../../services/cloud-store";
 import { useSkillStore } from "../../stores/skill.store";
+import { isPromptHubCloudEnabled } from "../../runtime";
 
 const MAX_REMOTE_STORE_DEPTH = 3;
 const PRECONFIGURED_STORE_PAGE_SIZE = 24;
@@ -154,9 +155,8 @@ function appendLocalSourceDirectory(sourceUrl: string, directory?: string) {
     return sourceUrl;
   }
 
-  const separator = sourceUrl.includes("\\") && !sourceUrl.includes("/")
-    ? "\\"
-    : "/";
+  const separator =
+    sourceUrl.includes("\\") && !sourceUrl.includes("/") ? "\\" : "/";
   const normalizedBase = sourceUrl.replace(/[\\/]+$/g, "");
   const normalizedDirectory = trimmedDirectory.replace(/[\\/]+/g, separator);
   return `${normalizedBase}${separator}${normalizedDirectory}`;
@@ -288,9 +288,9 @@ export function useSkillStoreRemoteSync(
   const scanLocalPreview = useSkillStore((state) => state.scanLocalPreview);
 
   const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null);
-  const [loadingMoreSourceId, setLoadingMoreSourceId] = useState<
-    string | null
-  >(null);
+  const [loadingMoreSourceId, setLoadingMoreSourceId] = useState<string | null>(
+    null,
+  );
   const remoteStoreEntriesRef = useRef(remoteStoreEntries);
   const storeCategoryRef = useRef(storeCategory);
   const storeSearchQueryRef = useRef(storeSearchQuery);
@@ -620,28 +620,28 @@ export function useSkillStoreRemoteSync(
     [scanLocalPreview],
   );
 
-  const loadSkillsShIndex = useCallback(async (
-    filterKey: string,
-  ): Promise<SkillsShIndexCache> => {
-    const normalizedFilterKey = normalizeSkillsShFilterKey(filterKey);
-    const cached = skillsShIndexCacheRef.current.get(normalizedFilterKey);
-    if (cached) {
-      return cached;
-    }
+  const loadSkillsShIndex = useCallback(
+    async (filterKey: string): Promise<SkillsShIndexCache> => {
+      const normalizedFilterKey = normalizeSkillsShFilterKey(filterKey);
+      const cached = skillsShIndexCacheRef.current.get(normalizedFilterKey);
+      if (cached) {
+        return cached;
+      }
 
-    const leaderboardHtml =
-      await window.api.skill.fetchRemoteContent(
+      const leaderboardHtml = await window.api.skill.fetchRemoteContent(
         getSkillsShIndexUrl(normalizedFilterKey),
       );
-    const nextCache = {
-      entries: parseSkillsShLeaderboard(leaderboardHtml, {
-        limit: Number.MAX_SAFE_INTEGER,
-      }),
-      totalCount: parseSkillsShTotalCount(leaderboardHtml),
-    };
-    skillsShIndexCacheRef.current.set(normalizedFilterKey, nextCache);
-    return nextCache;
-  }, []);
+      const nextCache = {
+        entries: parseSkillsShLeaderboard(leaderboardHtml, {
+          limit: Number.MAX_SAFE_INTEGER,
+        }),
+        totalCount: parseSkillsShTotalCount(leaderboardHtml),
+      };
+      skillsShIndexCacheRef.current.set(normalizedFilterKey, nextCache);
+      return nextCache;
+    },
+    [],
+  );
 
   const loadSkillsShDetail = useCallback(
     async (entry: SkillsShLeaderboardEntry): Promise<RegistrySkill | null> => {
@@ -702,7 +702,9 @@ export function useSkillStoreRemoteSync(
         : indexedResultCount;
       return {
         currentCursor: offset > 0 ? String(offset) : null,
-        matchedCount: normalizedSearchQuery ? filteredEntries.length : undefined,
+        matchedCount: normalizedSearchQuery
+          ? filteredEntries.length
+          : undefined,
         pageCount: Math.max(
           1,
           Math.ceil(resultCount / PRECONFIGURED_STORE_PAGE_SIZE),
@@ -775,6 +777,9 @@ export function useSkillStoreRemoteSync(
       if (sourceId === "official" || sourceId === "new-custom") {
         return;
       }
+      if (sourceId === PROMPTHUB_CLOUD_STORE_ID && !isPromptHubCloudEnabled()) {
+        return;
+      }
 
       const source =
         BUILTIN_REMOTE_STORES[sourceId] ??
@@ -794,9 +799,9 @@ export function useSkillStoreRemoteSync(
           ? cachedEntry?.nextCursor
           : pageDirection === "previous"
             ? source.type === "clawhub"
-              ? cachedEntry?.cursorHistory?.[
+              ? (cachedEntry?.cursorHistory?.[
                   Math.max(0, (cachedEntry.cursorHistory.length ?? 1) - 2)
-                ] ?? null
+                ] ?? null)
               : getPreviousOffsetCursor(
                   cachedEntry?.currentCursor,
                   PRECONFIGURED_STORE_PAGE_SIZE,
@@ -964,12 +969,17 @@ export function useSkillStoreRemoteSync(
           setRemoteStoreEntry(sourceId, {
             loadedAt: cachedEntry?.loadedAt || 0,
             error:
-              error instanceof Error
-                ? error.message
-                : t(
+              source.type === "cloud"
+                ? t(
                     "skill.remoteStoreLoadFailed",
                     "Failed to load remote store",
-                  ),
+                  )
+                : error instanceof Error
+                  ? error.message
+                  : t(
+                      "skill.remoteStoreLoadFailed",
+                      "Failed to load remote store",
+                    ),
             nextCursor: cachedEntry?.nextCursor ?? null,
             currentCursor: cachedEntry?.currentCursor ?? null,
             cursorHistory: cachedEntry?.cursorHistory,
@@ -1033,7 +1043,7 @@ export function useSkillStoreRemoteSync(
       "openai-codex",
       "community",
       "clawhub",
-      PROMPTHUB_CLOUD_STORE_ID,
+      ...(isPromptHubCloudEnabled() ? [PROMPTHUB_CLOUD_STORE_ID] : []),
       ...enabledCustomSourceIds,
     ];
 

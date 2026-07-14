@@ -9,6 +9,7 @@ import type {
   SkillSafetyScanInput,
 } from "@prompthub/shared/types";
 import { chatCompletion } from "./ai-client";
+import { sanitizeSkillPackageSourceUrl } from "@prompthub/core/skills/package-operation";
 import { resolvePublicAddress } from "./skill-installer-remote";
 import { isInternalSkillRepoEntry } from "./skill-installer-repo";
 
@@ -24,6 +25,30 @@ const TRUSTED_HOSTS = new Set([
   "raw.githubusercontent.com",
   "skills.sh",
 ]);
+
+function sanitizeSafetySourceReference(value?: string): string | undefined {
+  if (!value?.trim()) return value;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol)
+      ? sanitizeSkillPackageSourceUrl(value)
+      : value;
+  } catch {
+    return value;
+  }
+}
+
+function sanitizeSafetyScanInput<
+  T extends Omit<SkillSafetyScanInput, "aiConfig">,
+>(input: T): T;
+function sanitizeSafetyScanInput<T extends SkillSafetyScanInput>(input: T): T;
+function sanitizeSafetyScanInput<T extends SkillSafetyScanInput>(input: T): T {
+  return {
+    ...input,
+    sourceUrl: sanitizeSafetySourceReference(input.sourceUrl),
+    contentUrl: sanitizeSafetySourceReference(input.contentUrl),
+  };
+}
 const HIGH_RISK_FILE_EXTENSIONS = new Set([
   ".exe",
   ".dll",
@@ -208,6 +233,28 @@ export interface SkillSafetyPreflightReport {
   recommendedAction: "allow" | "review" | "block";
   scannedAt: number;
   checkedFileCount: number;
+}
+
+function buildPreflightReport(
+  findings: SkillSafetyFinding[],
+  checkedFileCount: number,
+  scannedAt: number,
+): SkillSafetyPreflightReport {
+  const dedupedFindings = dedupeFindings(findings);
+  const level = deriveLevel(dedupedFindings);
+  return {
+    level,
+    summary: buildSummary(level, dedupedFindings, checkedFileCount),
+    findings: dedupedFindings,
+    recommendedAction:
+      level === "blocked"
+        ? "block"
+        : level === "high-risk"
+          ? "review"
+          : "allow",
+    scannedAt,
+    checkedFileCount,
+  };
 }
 
 function isTextFile(filePath: string): boolean {
@@ -619,47 +666,37 @@ export async function scanSkillSafetyPreflight(
     "now" | "readRepoFiles" | "resolveAddress" | "sourceResolutionTimeoutMs"
   > = {},
 ): Promise<SkillSafetyPreflightReport> {
+  const sanitizedInput = sanitizeSafetyScanInput(input);
   const resolveAddress = deps.resolveAddress ?? resolvePublicAddress;
   const readRepoFiles = deps.readRepoFiles ?? readRepoFilesFromPath;
   const now = deps.now?.() ?? Date.now();
-  const sourceResolutionTimeoutMs = getSourceResolutionTimeoutMs(input, deps);
+  const sourceResolutionTimeoutMs = getSourceResolutionTimeoutMs(
+    sanitizedInput,
+    deps,
+  );
 
-  let checkedFileCount = input.content ? 1 : 0;
+  let checkedFileCount = sanitizedInput.content ? 1 : 0;
   const findings: SkillSafetyFinding[] = [];
 
-  if (input.localRepoPath) {
-    const repoFiles = await readRepoFiles(input.localRepoPath);
+  if (sanitizedInput.localRepoPath) {
+    const repoFiles = await readRepoFiles(sanitizedInput.localRepoPath);
     checkedFileCount = Math.max(
       checkedFileCount,
       scanRepoFiles(repoFiles, findings),
     );
   }
-  if (input.content) {
-    scanTextContent(findings, input.content, "SKILL.md");
+  if (sanitizedInput.content) {
+    scanTextContent(findings, sanitizedInput.content, "SKILL.md");
   }
 
   await scanSourceUrls(
-    input,
+    sanitizedInput,
     findings,
     resolveAddress,
     sourceResolutionTimeoutMs,
   );
 
-  const dedupedFindings = dedupeFindings(findings);
-  const level = deriveLevel(dedupedFindings);
-  return {
-    level,
-    summary: buildSummary(level, dedupedFindings, checkedFileCount),
-    findings: dedupedFindings,
-    recommendedAction:
-      level === "blocked"
-        ? "block"
-        : level === "high-risk"
-          ? "review"
-          : "allow",
-    scannedAt: now,
-    checkedFileCount,
-  };
+  return buildPreflightReport(findings, checkedFileCount, now);
 }
 
 // ─── AI-powered safety scanning ───────────────────────────────────
@@ -1037,23 +1074,26 @@ export async function scanSkillSafety(
   input: SkillSafetyScanInput,
   deps: ScanDeps = {},
 ): Promise<SkillSafetyReport> {
-  if (
-    !input.aiConfig?.apiKey ||
-    !input.aiConfig?.apiUrl ||
-    !input.aiConfig?.model
-  ) {
+  const hasAIConfig = Boolean(
+    input.aiConfig?.apiKey && input.aiConfig.apiUrl && input.aiConfig.model,
+  );
+  if (!hasAIConfig && !input.fallbackToPreflight) {
     throw new Error("AI_NOT_CONFIGURED");
   }
+  const sanitizedInput = sanitizeSafetyScanInput(input);
 
   const resolveAddress = deps.resolveAddress ?? resolvePublicAddress;
   const readRepoFiles = deps.readRepoFiles ?? readRepoFilesFromPath;
-  const sourceResolutionTimeoutMs = getSourceResolutionTimeoutMs(input, deps);
+  const sourceResolutionTimeoutMs = getSourceResolutionTimeoutMs(
+    sanitizedInput,
+    deps,
+  );
 
-  let checkedFileCount = input.content ? 1 : 0;
+  let checkedFileCount = sanitizedInput.content ? 1 : 0;
   let repoFiles: SkillLocalFileEntry[] = [];
   const repoFindings: SkillSafetyFinding[] = [];
-  if (input.localRepoPath) {
-    repoFiles = await readRepoFiles(input.localRepoPath);
+  if (sanitizedInput.localRepoPath) {
+    repoFiles = await readRepoFiles(sanitizedInput.localRepoPath);
     checkedFileCount = Math.max(
       checkedFileCount,
       scanRepoFiles(repoFiles, repoFindings),
@@ -1064,8 +1104,11 @@ export async function scanSkillSafety(
   // synthetic static report. AI remains the source of truth for the final
   // report, while blocked internal sources fail before the model call.
   const preflightFindings: SkillSafetyFinding[] = [];
+  if (sanitizedInput.content) {
+    scanTextContent(preflightFindings, sanitizedInput.content, "SKILL.md");
+  }
   await scanSourceUrls(
-    input,
+    sanitizedInput,
     preflightFindings,
     resolveAddress,
     sourceResolutionTimeoutMs,
@@ -1073,18 +1116,39 @@ export async function scanSkillSafety(
   preflightFindings.push(...repoFindings);
 
   if (
-    !input.localRepoPath &&
+    !sanitizedInput.localRepoPath &&
     preflightFindings.some((finding) => finding.code === "internal-source")
   ) {
     throw new Error(SAFETY_SCAN_BLOCKED_SOURCE_ERROR);
   }
 
-  return runAIScan(
-    input,
-    repoFiles,
-    checkedFileCount,
-    preflightFindings,
-    input.aiConfig,
-    deps,
-  );
+  const preflightReport: SkillSafetyReport = {
+    ...buildPreflightReport(
+      preflightFindings,
+      checkedFileCount,
+      (deps.now ?? Date.now)(),
+    ),
+    scanMethod: "preflight",
+  };
+  if (!hasAIConfig) {
+    return preflightReport;
+  }
+
+  try {
+    return await runAIScan(
+      sanitizedInput,
+      repoFiles,
+      checkedFileCount,
+      preflightFindings,
+      sanitizedInput.aiConfig!,
+      deps,
+    );
+  } catch (error) {
+    if (!sanitizedInput.fallbackToPreflight) throw error;
+    console.warn(
+      "AI safety assessment unavailable; using deterministic preflight:",
+      error,
+    );
+    return preflightReport;
+  }
 }

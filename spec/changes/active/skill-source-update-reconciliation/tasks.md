@@ -39,6 +39,16 @@
       copy, and fingerprint ignore rules, and exposing source actions on managed
       Agent detail views. Covers `FR-SU-002`, `FR-SU-006`, `FR-SU-007`,
       `DES-SU-002`, `DES-SU-006`, `DES-SU-007`, `TEST-SU-015`.
+- [x] `T-SU-026`: Route Git-backed checks and updates through a validated
+      main-process package snapshot, including private-network Gitea, without
+      weakening generic HTTP SSRF protection. Covers `FR-SU-015`, `DES-SU-013`,
+      `TEST-SU-016`.
+- [x] `T-SU-027`: Reconcile legacy raw-only Git locations, local-source
+      precedence, and local/Git/ZIP same-inventory snapshots. Covers
+      `FR-SU-016`, `DES-SU-014`, `TEST-SU-017`.
+- [x] `T-SU-028`: Stop directory catalogs from guessing repository paths and
+      add bounded recursive package discovery for nested repositories. Covers
+      `FR-SU-017`, `DES-SU-015`, `TEST-SU-019`.
 
 Progress note 2026-07-07: `T-SU-016` is closed for registry/source update checks through the shared `buildSkillSourceUpdateCheck()` reconciliation builder; sanitized source errors remain recorded at the renderer side-effect boundary. `T-SU-017` is still not complete enough to close. Implemented safe-apply slices include non-local remote source materialization before metadata baseline writes, staged safety preflight for remote package writes, and managed repo staging/backup swap on partial copy failure. `T-SU-022` is closed for durable DB writes; remaining DTO-only fingerprints intentionally do not carry the DB algorithm field.
 
@@ -98,6 +108,77 @@ actions.
       updateable after source changes, external symlink imports bind to the real
       source target, ignored dependency files do not trip package limits or copy
       into managed repos, and managed Agent detail exposes source actions.
+- [x] `TEST-SU-016`: Regression tests proving private-network Gitea checks read
+      content and package fingerprint from the Git snapshot, never call generic
+      remote content fetching, preserve local-directory routing, and derive
+      legacy Gitea branch/directory metadata from source URLs.
+- [x] `TEST-SU-017`: Regression tests for raw-only hosted Git recovery,
+      encoded file URLs, local-source precedence under catalog collisions,
+      same-inventory local snapshots, and extracted ZIP package snapshots.
+- [x] `TEST-SU-018`: Regression tests proving authenticated Gitea clone
+      descriptors retain transport credentials while review identities, Git
+      failures, and AI safety prompts redact those credentials.
+- [x] `TEST-SU-019`: Regression tests proving skills.sh entries without a
+      verified directory omit guessed path metadata and nested repository
+      packages are discovered, fingerprinted, snapshotted, and materialized by
+      exact Skill identity.
+- [x] `T-SU-029`: Carry a validated Skill selector through the complete Git
+      package lifecycle, include it in fallback identity, and make duplicate
+      repository discovery deterministic.
+- [x] `TEST-SU-020`: Regression tests for lifecycle selector forwarding,
+      same-repository identity separation, standard-container precedence,
+      Unicode names, and unresolved ambiguity.
+- [x] `TEST-SU-021`: Component regressions proving one header action opens a
+      local/source comparison, keeping local is non-mutating, and accepting the
+      source uses explicit overwrite only when required.
+- [x] `T-SU-030`: Replace detail-header update/overwrite actions with the
+      review-first check flow and reuse the Skill update comparison dialog.
+- [x] `TEST-SU-022`: Add main-process snapshot, pure package-diff, store
+      propagation, and component regressions for added, modified, removed,
+      binary, oversized, and single-file-source cases.
+- [x] `T-SU-031`: Carry validated package inventories through source checks and
+      render a selectable complete package diff in the review dialog.
+- [x] `TEST-SU-023`: Reproduce same-repository sibling selection, truncated
+      skills.sh repository labels, discovered-directory metadata repair, and
+      version-card UI.
+- [x] `T-SU-032`: Guard installed-source recovery with exact Skill identity,
+      return the validated Git package directory, repair canonical source
+      metadata, reject truncated repository labels, and remove non-decision
+      version cards from the review.
+
+Progress note 2026-07-14 complete package review: validated local, Git, ZIP,
+store, and Cloud snapshots now carry a bounded file inventory through the
+source check. The review lists every added, modified, and removed file, renders
+independent text diffs, and reports safe size/hash metadata for binary or
+oversized files. Raw content URLs retain explicit `skill-md` scope so unrelated
+local resources are not presented as deletions. Main snapshot, pure diff,
+store propagation, and component regressions passed; desktop lint, typecheck,
+build, and live Electron verification also passed.
+
+Progress note 2026-07-14 review-first detail flow: the installed Skill detail
+header now keeps one source-check action for every reconciliation state.
+Actionable checks open the shared local/source comparison with explicit
+keep-local and use-source decisions; only the use-source decision enters the
+existing safety, staging, rollback, and baseline workflow, with overwrite
+authorization limited to local-change and uncertain-baseline states. Component
+regressions cover update-available, local-modified, conflict, baseline-missing,
+high-risk review, linked-local blocking, and non-mutating cancellation.
+
+Progress note 2026-07-14 skills.sh nested package follow-up: the catalog
+adapter no longer assumes repositories named `skills` use `skills/<slug>`.
+Remote package discovery is bounded, recursive, ignores generated directories,
+and does not follow repository symlinks. Install and update-snapshot IPC share
+the selector. The real `mattpocock/skills` repository resolved and materialized
+`skills/productivity/grill-me`.
+
+Progress note 2026-07-14 lifecycle selector audit: the validated selector now
+crosses the shared operation contract, main-process lifecycle staging,
+materialization, fingerprint snapshot, and fallback source identity. Discovery
+supports Unicode frontmatter names and hidden Agent containers, prioritizes
+standard Skill containers over unrelated examples, and rejects unresolved
+same-priority ambiguity or an explicit selector that mismatches the only
+package. Focused regressions, shared/core/desktop type checks, root lint,
+desktop build, and the complete desktop unit suite passed.
 
 Progress note 2026-07-07: added focused store regressions for source-unavailable sanitized error recording, remote package/content-url update persistence failure ordering, project/agent copied target stale auxiliary reporting, and detail-page status actions. Full end-to-end status integration coverage remains open under `TEST-SU-010`.
 
@@ -108,6 +189,32 @@ Progress note 2026-07-08: static audits are closed. Direct fingerprint writes no
 Progress note 2026-07-08 review follow-up: added regressions for GitHub/Gitea tree scans not exposing legacy fingerprints, legacy algorithm migration/defaulting, content-url install baselines, and URL userinfo redaction.
 
 Progress note 2026-07-09 regression follow-up: added ClawHub/MinerU update regressions proving store-backed and installed-source updates use the ClawHub package zip endpoint and never treat `https://clawhub.ai/<owner>/<skill>` as a Git repository URL.
+
+Progress note 2026-07-14 private Gitea transport follow-up: Git-backed source
+checks now obtain `SKILL.md` content and the complete package fingerprint from
+one validated main-process clone snapshot. Private-network Gitea routes are
+therefore handled by the explicit Git transport instead of the generic HTTP
+content fetcher, while local directories remain local and generic HTTP SSRF
+blocking remains unchanged. Added resolver, IPC, package snapshot, check,
+install, update, and failure-path regressions.
+
+Progress note 2026-07-14 transport audit follow-up: legacy raw-only Gitea and
+GitHub file URLs now recover canonical Git metadata; concrete imported local
+paths override colliding catalog identities; local and ZIP checks join Git in
+using validated content/fingerprint package snapshots. Added real filesystem,
+IPC validation, resolver, store routing, and extracted ZIP regressions.
+
+Progress note 2026-07-14 credential-boundary follow-up: authenticated Gitea
+repository URLs now remain intact only for cloning. Source review keys, Git
+failure/timeout diagnostics, ZIP/Git safety inputs, and AI safety prompts use
+credential-free URLs. Added resolver, adapter, process-error, and AI-prompt
+regressions.
+
+Progress note 2026-07-14 staging lifetime regression: the shared Git and ZIP
+package wrappers now await snapshot reads, fingerprinting, safety scan, and
+persistence before removing temporary clone/extraction directories. Deferred
+snapshot and real archive tests prove checks, install, and blocked-package
+review no longer race temporary cleanup.
 
 ## Static Audit Targets
 

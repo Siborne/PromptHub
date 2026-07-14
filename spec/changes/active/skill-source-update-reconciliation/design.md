@@ -39,17 +39,17 @@ Normalization:
 
 ### Source Kinds
 
-| Kind | Example | Update Behavior |
-| --- | --- | --- |
-| `remote-store` | official/custom marketplace entry | Resolve registry entry, then package/content source |
-| `remote-git` | GitHub/Gitea/SSH repo with branch and directory | Clone or inspect tree, compute package fingerprint |
-| `remote-zip` | release package URL | Download zip to temp, validate package |
-| `content-url` | raw `SKILL.md` URL only | Treat as a single-file package; package fingerprint equals the normalized entry content hash |
-| `local-linked` | external local folder import | Local folder is My Skills source; remote update only if explicit remote metadata also exists |
-| `managed-copy` | PromptHub managed repo | Local managed repo is current package; source metadata decides whether remote exists |
-| `project-scan` | project `.agents/skills` snapshot | Scan-only until imported |
-| `agent-scan` | platform directory snapshot | Scan-only until imported |
-| `backup-restore` | restored source metadata | Use restored metadata; no name collapse |
+| Kind             | Example                                         | Update Behavior                                                                              |
+| ---------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `remote-store`   | official/custom marketplace entry               | Resolve registry entry, then package/content source                                          |
+| `remote-git`     | GitHub/Gitea/SSH repo with branch and directory | Clone or inspect tree, compute package fingerprint                                           |
+| `remote-zip`     | release package URL                             | Download zip to temp, validate package                                                       |
+| `content-url`    | raw `SKILL.md` URL only                         | Treat as a single-file package; package fingerprint equals the normalized entry content hash |
+| `local-linked`   | external local folder import                    | Local folder is My Skills source; remote update only if explicit remote metadata also exists |
+| `managed-copy`   | PromptHub managed repo                          | Local managed repo is current package; source metadata decides whether remote exists         |
+| `project-scan`   | project `.agents/skills` snapshot               | Scan-only until imported                                                                     |
+| `agent-scan`     | platform directory snapshot                     | Scan-only until imported                                                                     |
+| `backup-restore` | restored source metadata                        | Use restored metadata; no name collapse                                                      |
 
 ## `DES-SU-002` Source Origin Versus Install Mode
 
@@ -107,16 +107,16 @@ remoteChanged = baseline exists and remote exists and !samePackage(remote, basel
 
 ### State Classification
 
-| Baseline | Local | Remote | Status |
-| --- | --- | --- | --- |
-| none | any | none | `no-source` or `source-unavailable` depending source metadata |
-| none | L | R | `up-to-date` and initialize baseline if `L == R`; otherwise `baseline-missing` |
-| B | L missing | any | `source-unavailable` for local path failure, with local error |
-| B | L | R missing | `source-unavailable` |
-| B | `L == B` | `R == B` | `up-to-date` |
-| B | `L == B` | `R != B` | `update-available` |
-| B | `L != B` | `R == B` | `local-modified` |
-| B | `L != B` | `R != B` | `conflict` |
+| Baseline | Local     | Remote    | Status                                                                         |
+| -------- | --------- | --------- | ------------------------------------------------------------------------------ |
+| none     | any       | none      | `no-source` or `source-unavailable` depending source metadata                  |
+| none     | L         | R         | `up-to-date` and initialize baseline if `L == R`; otherwise `baseline-missing` |
+| B        | L missing | any       | `source-unavailable` for local path failure, with local error                  |
+| B        | L         | R missing | `source-unavailable`                                                           |
+| B        | `L == B`  | `R == B`  | `up-to-date`                                                                   |
+| B        | `L == B`  | `R != B`  | `update-available`                                                             |
+| B        | `L != B`  | `R == B`  | `local-modified`                                                               |
+| B        | `L != B`  | `R != B`  | `conflict`                                                                     |
 
 In v1, `source-moved` automatic lineage matching is deferred. If the resolved canonical source identity differs from the stored source identity, the check will return `baseline-missing` or require manual rebinding, preventing automated incorrect updates.
 
@@ -140,20 +140,20 @@ Existing fields:
 
 Required additions:
 
-| Column | Type | Purpose |
-| --- | --- | --- |
-| `installed_directory_fingerprint` | `TEXT` | Last successful source package baseline |
-| `fingerprint_algorithm` | `TEXT` | Single algorithm/version for both current and installed package fingerprints |
-| `source_last_checked_at` | `INTEGER` | Last completed source check |
-| `source_last_error` | `TEXT` | Last source check error summary, sanitized |
-| `source_binding_state` | `TEXT` | `bound`, `detached`, `missing-baseline`, or null |
+| Column                            | Type      | Purpose                                                                      |
+| --------------------------------- | --------- | ---------------------------------------------------------------------------- |
+| `installed_directory_fingerprint` | `TEXT`    | Last successful source package baseline                                      |
+| `fingerprint_algorithm`           | `TEXT`    | Single algorithm/version for both current and installed package fingerprints |
+| `source_last_checked_at`          | `INTEGER` | Last completed source check                                                  |
+| `source_last_error`               | `TEXT`    | Last source check error summary, sanitized                                   |
+| `source_binding_state`            | `TEXT`    | `bound`, `detached`, `missing-baseline`, or null                             |
 
 `fingerprint_algorithm` is intentionally a single field. The current package fingerprint and installed baseline must be recomputed together when upgrading from legacy data; v1 must not store mixed algorithms for `directory_fingerprint` and `installed_directory_fingerprint`.
 
 Optional future column:
 
-| Column | Type | Purpose |
-| --- | --- | --- |
+| Column                 | Type   | Purpose                                                   |
+| ---------------------- | ------ | --------------------------------------------------------- |
 | `source_snapshot_json` | `TEXT` | Auditable structured snapshot for remote package metadata |
 
 The first implementation should prefer explicit columns for query and migration clarity. `source_snapshot_json` is useful later for detailed diagnostics, but should not be the only durable source of truth.
@@ -330,31 +330,34 @@ Source update apply sequence:
    - rename staged repo to final path
    - remove backup after DB commit succeeds
 10. Update DB:
-   - content/instructions from staged `SKILL.md`
-   - metadata from frontmatter/source
-   - `directory_fingerprint`
-   - `installed_content_hash`
-   - `installed_directory_fingerprint`
-   - `fingerprint_algorithm`
-   - `installed_version`
-   - `updated_from_store_at`
-   - clear `source_last_error`
+
+- content/instructions from staged `SKILL.md`
+- metadata from frontmatter/source
+- `directory_fingerprint`
+- `installed_content_hash`
+- `installed_directory_fingerprint`
+- `fingerprint_algorithm`
+- `installed_version`
+- `updated_from_store_at`
+- clear `source_last_error`
+
 11. On failure:
-   - restore old repo path if it was moved
-   - leave DB baseline unchanged
-   - record sanitized `source_last_error`
+
+- restore old repo path if it was moved
+- leave DB baseline unchanged
+- record sanitized `source_last_error`
 
 ## `DES-SU-010` Resolution Actions
 
-| Status | Allowed Actions |
-| --- | --- |
-| `no-source` | Edit locally, export, optionally bind source |
-| `source-unavailable` | Retry, open source URL, edit source metadata |
-| `baseline-missing` | Silently initialize baseline only when legacy hashes prove `L == R`; otherwise show “无法确定修改历史 (Unable to reconcile history)” and offer keep local as new baseline, reset from remote, or detach |
-| `up-to-date` | Refresh metadata, open source |
-| `update-available` | Update from source |
-| `local-modified` | Keep local, create snapshot, reset from source with confirmation, detach from source |
-| `conflict` | Compare versions, force source overwrite, keep local and detach, postpone |
+| Status               | Allowed Actions                                                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `no-source`          | Edit locally, export, optionally bind source                                                                                                                                                            |
+| `source-unavailable` | Retry, open source URL, edit source metadata                                                                                                                                                            |
+| `baseline-missing`   | Silently initialize baseline only when legacy hashes prove `L == R`; otherwise show “无法确定修改历史 (Unable to reconcile history)” and offer keep local as new baseline, reset from remote, or detach |
+| `up-to-date`         | Refresh metadata, open source                                                                                                                                                                           |
+| `update-available`   | Update from source                                                                                                                                                                                      |
+| `local-modified`     | Keep local, create snapshot, reset from source with confirmation, detach from source                                                                                                                    |
+| `conflict`           | Compare versions, force source overwrite, keep local and detach, postpone                                                                                                                               |
 
 ## Affected Areas
 
@@ -411,6 +414,144 @@ canonical `SKILL.md` content endpoint and package zip endpoint. Store-backed and
 installed-source checks share these helpers so a missing store row cannot send
 the page URL through Git package resolution.
 
+## `DES-SU-012` Source Diagnostics
+
+The resolver owns source-kind classification and safe display references. The
+reconciliation result carries that classification plus sanitized failures to
+the UI without exposing credentials or internal stack traces.
+
+## `DES-SU-013` Transport-Specific Source Snapshots
+
+The source resolver produces one canonical Git package descriptor containing
+repository URL, branch, and package directory. Renderer checks pass that
+descriptor to a main-process snapshot IPC. Main clones into temporary storage,
+validates the materialized Skill package, reads `SKILL.md`, computes the shared
+v1 package fingerprint, returns the immutable snapshot, and removes staging.
+
+This snapshot is used for both remote content and package comparison so a Git
+check does not first call the raw HTTP adapter and does not clone twice. Local
+directory and raw content sources retain their existing dedicated adapters.
+Private-network access remains disabled for the generic HTTP adapter; only the
+explicit Git transport may access a user-selected private Gitea endpoint.
+
+## `DES-SU-014` Unified Package Snapshot Adapters
+
+The typed package snapshot contract is shared by local, Git, and ZIP adapters.
+Main-process adapters validate the materialized package, enumerate its files
+once, and derive both root `SKILL.md` content and the v1 package fingerprint
+from that inventory. Git clones and ZIP extraction use temporary staging;
+external local sources use the same validated reader without copying.
+
+The renderer resolves source precedence before transport selection. A concrete
+local path persisted on an installed Skill wins over catalog identity matches.
+Hosted Git tree/blob/src/raw URLs recover a canonical descriptor, including
+legacy raw-only records and percent-encoded branch/directory segments. ZIP
+sources use the extracted-package snapshot. Only a source that cannot be
+classified as local, Git, ZIP, Cloud, or ClawHub falls through to raw HTTP.
+
+Authenticated Git descriptors may contain URL userinfo because the Git child
+process needs it, but that value must not cross into source trust keys,
+diagnostics, safety reports, or AI prompts. Those surfaces use the canonical
+credential-free repository URL; Git stderr and timeout messages are sanitized
+before propagation.
+
+## `DES-SU-015` Bounded Repository Package Discovery
+
+Directory catalogs may publish a repository and Skill selector without a
+physical repository path. The renderer therefore persists only verified
+catalog metadata and leaves `source_directory` unset when the catalog does not
+provide it. Install operations already carry the Skill record; fingerprint and
+snapshot IPC carry an explicit `skillName` selector. The main-process Git
+materializer performs a breadth-first scan, bounded by depth and directory
+count, and matches normalized `name`, `logical_name`, `variant_key`, folder
+name, or parsed frontmatter name.
+
+Remote repository discovery does not follow symlinks and reuses the shared
+ignore predicate for generated/cache directories. A catalog-provided explicit
+directory remains authoritative and is path-contained and validated directly;
+fallback discovery is reserved for entries where the directory is genuinely
+unknown.
+
+## `DES-SU-016` Lifecycle-Wide Skill Selector
+
+`SkillPackageOperationSource.remote-git` owns an optional `skillName` selector.
+The renderer derives it from verified install name, display name, or slug only
+when no explicit directory exists. Shared validation bounds it as metadata;
+operation locking and fallback source identity include it so two Skills in one
+repository do not collapse into one source.
+
+The main process passes the selector into staging instead of relying on a
+temporary Skill record's display name. Discovery first resolves exact parsed
+frontmatter names, then folder-name aliases. Duplicate candidates are ranked by
+standard Skill container location; unresolved ties fail explicitly. Name
+normalization preserves Unicode letters and numbers and is identical for
+installation, fingerprinting, and update snapshots.
+
+## `DES-SU-017` Review-First Detail Update Flow
+
+`useSkillSourceUpdate` owns the latest structured reconciliation check and a
+single pending comparison state. The header always invokes `check`; it never
+switches to an update button and never renders a separate overwrite button.
+
+After a successful check, actionable statuses open the existing
+`SkillStoreUpdateReviewDialog`, which renders the local/source line diff and
+version context. Closing or choosing the local version clears only renderer
+review state. Accepting the source version calls the existing source update
+workflow with `overwriteLocalChanges` only for `local-modified`, `conflict`, or
+`baseline-missing`. Safety review, staging, snapshot, rollback, and final
+baseline persistence remain owned by the existing update workflow.
+
+The dialog uses the renderer motion system's `duration-base` and `ease-enter`
+tokens for a restrained backdrop fade plus panel fade/zoom/slide. The global
+motion preference and `prefers-reduced-motion` rules remain authoritative, so
+the transition becomes near-instant when motion is reduced or disabled.
+
+## `DES-SU-018` Validated Package Inventory Diff
+
+`SkillPackageSnapshot` carries an additive, bounded file inventory alongside
+the existing root content and package fingerprint. The main process derives
+the inventory from the exact validated buffers already used for fingerprinting
+so the review cannot disagree with the package that will later be staged.
+Each entry contains a normalized path, byte size, SHA-256 content digest,
+binary/text classification, and bounded text content when it is safe to
+preview. Ignored files, internal metadata, symlinks, and escaping paths remain
+excluded by the existing package reader and validator.
+
+The renderer resolves both the current installed package snapshot and the
+latest source snapshot during a check. A pure package-diff helper joins files
+by normalized path and produces added, modified, and removed rows. Text rows
+provide independent line diffs; binary or preview-truncated rows expose safe
+metadata. `content-url` snapshots declare `skill-md` scope so local auxiliary
+files are not falsely presented as removals when the actual update operation
+only replaces `SKILL.md`.
+
+The comparison dialog owns only file selection and presentation. Source
+resolution, validation, snapshot construction, update authorization, safety
+review, staging, rollback, and persistence stay in their existing layers.
+
+## `DES-SU-019` Shared-Repository Identity Guard
+
+Installed-source catalog recovery uses ordered exact fields: source id,
+content URL, then registry slug. Repository URL is only a fallback candidate
+set. A single repository match is accepted; multiple matches require one
+uniquely highest verified directory/path or Skill-name score. Ties do not pick
+the first entry. Once an exact candidate produces an `up-to-date` check, the
+existing baseline refresh transaction also repairs non-empty canonical source
+metadata so stale ids and display-truncated URLs do not keep influencing later
+checks.
+
+Remote Git snapshots return the validated repository-relative directory that
+was selected by bounded package discovery. The renderer attaches that resolved
+directory and its canonical `SKILL.md` path to the reconciled registry entry
+before the baseline transaction runs. Legacy guessed paths are therefore
+repaired from the exact package that was fingerprinted, not from a catalog
+display label or a renderer-side path guess.
+
+The skills.sh adapter accepts a Repository label only when it is a complete
+GitHub owner/repository slug. Labels containing ellipsis or other display
+truncation fall back to the canonical owner and repository parsed from the
+skills.sh detail path.
+
 ## Verification Strategy
 
 Required test layers:
@@ -420,6 +561,8 @@ Required test layers:
 - Renderer store tests for all status matrix rows.
 - Main-process filesystem tests for staging, atomic replace, rollback, path traversal, symlink behavior.
 - Remote source tests for GitHub, Gitea, SSH Git, zip, raw content URL, unavailable source.
+- Directory-catalog tests for nested category layouts, ambiguous identities,
+  discovery limits, and a real public repository materialization smoke.
 - UI component tests for detail button/badges/actions per status.
 - Integration smoke for install -> local edit -> check -> conflict/update paths.
 
@@ -451,18 +594,26 @@ Inferring upstream from arbitrary local folders can surprise users and create cr
 
 ## Traceability
 
-| Requirement | Design | Verification |
-| --- | --- | --- |
-| `FR-SU-001` | `DES-SU-001` | `TEST-SU-001` |
-| `FR-SU-002` | `DES-SU-002` | `TEST-SU-002` |
-| `FR-SU-003` | `DES-SU-003` | `TEST-SU-003` |
-| `FR-SU-004` | `DES-SU-004` | `TEST-SU-004` |
-| `FR-SU-005` | `DES-SU-005` | `TEST-SU-005` |
-| `FR-SU-006` | `DES-SU-006` | `TEST-SU-006` |
-| `FR-SU-007` | `DES-SU-007` | `TEST-SU-007` |
-| `FR-SU-008` | `DES-SU-008` | `TEST-SU-008` |
-| `FR-SU-009` | `DES-SU-009` | `TEST-SU-009` |
-| `FR-SU-010` | `DES-SU-010` | `TEST-SU-010` |
-| `FR-SU-011` | `DES-SU-003`, `DES-SU-004` | `TEST-SU-011` |
-| `FR-SU-012` | `DES-SU-005`, `DES-SU-006` | `TEST-SU-012` |
-| `FR-SU-013` | `DES-SU-011` | `TEST-SU-013` |
+| Requirement | Design                     | Verification                 |
+| ----------- | -------------------------- | ---------------------------- |
+| `FR-SU-001` | `DES-SU-001`               | `TEST-SU-001`                |
+| `FR-SU-002` | `DES-SU-002`               | `TEST-SU-002`                |
+| `FR-SU-003` | `DES-SU-003`               | `TEST-SU-003`                |
+| `FR-SU-004` | `DES-SU-004`               | `TEST-SU-004`                |
+| `FR-SU-005` | `DES-SU-005`               | `TEST-SU-005`                |
+| `FR-SU-006` | `DES-SU-006`               | `TEST-SU-006`                |
+| `FR-SU-007` | `DES-SU-007`               | `TEST-SU-007`                |
+| `FR-SU-008` | `DES-SU-008`               | `TEST-SU-008`                |
+| `FR-SU-009` | `DES-SU-009`               | `TEST-SU-009`                |
+| `FR-SU-010` | `DES-SU-010`               | `TEST-SU-010`                |
+| `FR-SU-011` | `DES-SU-003`, `DES-SU-004` | `TEST-SU-011`                |
+| `FR-SU-012` | `DES-SU-005`, `DES-SU-006` | `TEST-SU-012`                |
+| `FR-SU-013` | `DES-SU-011`               | `TEST-SU-013`                |
+| `FR-SU-014` | `DES-SU-012`               | `TEST-SU-014`                |
+| `FR-SU-015` | `DES-SU-013`               | `TEST-SU-016`                |
+| `FR-SU-016` | `DES-SU-014`               | `TEST-SU-017`, `TEST-SU-018` |
+| `FR-SU-017` | `DES-SU-015`               | `TEST-SU-019`                |
+| `FR-SU-018` | `DES-SU-016`               | `TEST-SU-020`                |
+| `FR-SU-019` | `DES-SU-017`               | `TEST-SU-021`                |
+| `FR-SU-020` | `DES-SU-018`               | `TEST-SU-022`                |
+| `FR-SU-021` | `DES-SU-019`               | `TEST-SU-023`                |

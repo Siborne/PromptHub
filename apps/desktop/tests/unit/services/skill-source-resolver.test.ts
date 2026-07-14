@@ -7,6 +7,7 @@ import {
   getRegistrySkillSourceResolverKind,
   normalizeLocalRegistryDirectory,
   normalizeRemoteDirectoryFingerprint,
+  resolveRegistrySkillGitPackage,
   shouldCloneRegistrySkillPackage,
 } from "../../../src/renderer/services/skill-source-resolver";
 import { createSkillFixture } from "../../fixtures/skills";
@@ -223,5 +224,118 @@ describe("skill source resolver", () => {
         resolvedDirectoryFingerprint: "stale-registry-package",
       }),
     ).toBe("content-sha");
+  });
+
+  it("resolves a private Gitea Skill page as a Git package without relying on its raw URL", () => {
+    const privateGiteaSkill = createRegistrySkillFixture({
+      source_url:
+        "http://192.168.10.20/team/skills/src/branch/main/tools/writer",
+      content_url:
+        "http://192.168.10.20/team/skills/raw/branch/main/tools/writer/SKILL.md",
+      source_branch: undefined,
+      source_directory: undefined,
+      canonical_skill_path: undefined,
+    });
+
+    expect(resolveRegistrySkillGitPackage(privateGiteaSkill)).toEqual({
+      repoUrl: "http://192.168.10.20/team/skills",
+      branch: "main",
+      directory: "tools/writer",
+    });
+    expect(shouldCloneRegistrySkillPackage(privateGiteaSkill)).toBe(true);
+    expect(getRegistrySkillSourceResolverKind(privateGiteaSkill)).toBe(
+      "remote-git",
+    );
+  });
+
+  it("carries a skills.sh selector when the catalog does not know the package directory", () => {
+    expect(
+      resolveRegistrySkillGitPackage(
+        createRegistrySkillFixture({
+          name: "Grill Me",
+          install_name: "grill-me",
+          source_url: "https://github.com/mattpocock/skills",
+          store_url: "https://skills.sh/mattpocock/skills/grill-me",
+          source_branch: undefined,
+          source_directory: undefined,
+          canonical_skill_path: undefined,
+          content_url: undefined,
+        }),
+      ),
+    ).toEqual({
+      repoUrl: "https://github.com/mattpocock/skills",
+      branch: undefined,
+      directory: undefined,
+      skillName: "grill-me",
+    });
+  });
+
+  it("recovers Git transport from a legacy Gitea raw URL without source metadata", () => {
+    const legacyRawOnlySkill = createRegistrySkillFixture({
+      source_url: "",
+      content_url:
+        "http://10.0.0.8/team/skills/raw/branch/main/tools/writer/SKILL.md",
+      source_branch: undefined,
+      source_directory: undefined,
+      canonical_skill_path: undefined,
+    });
+
+    expect(resolveRegistrySkillGitPackage(legacyRawOnlySkill)).toEqual({
+      repoUrl: "http://10.0.0.8/team/skills",
+      branch: "main",
+      directory: "tools/writer",
+    });
+    expect(getRegistrySkillSourceResolverKind(legacyRawOnlySkill)).toBe(
+      "remote-git",
+    );
+  });
+
+  it("preserves private Gitea clone credentials while canonicalizing a raw content URL", () => {
+    const authenticatedSkill = createRegistrySkillFixture({
+      source_url: "https://alice:secret@gitea.example.com/team/skills",
+      content_url:
+        "https://gitea.example.com/team/skills/raw/branch/main/tools/writer/SKILL.md",
+      source_branch: undefined,
+      source_directory: undefined,
+      canonical_skill_path: undefined,
+    });
+
+    expect(resolveRegistrySkillGitPackage(authenticatedSkill)).toEqual({
+      repoUrl: "https://alice:secret@gitea.example.com/team/skills",
+      branch: "main",
+      directory: "tools/writer",
+    });
+  });
+
+  it("removes SKILL.md when a Gitea source page points at the file", () => {
+    expect(
+      resolveRegistrySkillGitPackage(
+        createRegistrySkillFixture({
+          source_url:
+            "https://gitea.example.com/team/skills/src/branch/main/tools/writer/SKILL.md",
+          content_url: undefined,
+        }),
+      ),
+    ).toEqual({
+      repoUrl: "https://gitea.example.com/team/skills",
+      branch: "main",
+      directory: "tools/writer",
+    });
+  });
+
+  it("decodes a GitHub blob branch and directory without retaining SKILL.md", () => {
+    expect(
+      resolveRegistrySkillGitPackage(
+        createRegistrySkillFixture({
+          source_url:
+            "https://github.com/team/skills/blob/release%2Fnext/tools/writer%20pro/SKILL.md",
+          content_url: undefined,
+        }),
+      ),
+    ).toEqual({
+      repoUrl: "https://github.com/team/skills",
+      branch: "release/next",
+      directory: "tools/writer pro",
+    });
   });
 });

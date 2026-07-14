@@ -11,10 +11,9 @@ import type {
 } from "@prompthub/shared/types";
 import type { TFunction } from "i18next";
 import {
-  getRegistrySkillDirectory,
   isLocalRegistrySkill,
   normalizeLocalRegistryDirectory,
-  parseGitHubSkillLocation,
+  resolveRegistrySkillGitPackage,
   shouldCloneRegistrySkillPackage,
 } from "./skill-source-resolver";
 
@@ -85,23 +84,6 @@ export function formatSkillPackageOperationError(
   return t(copy.key, copy.defaultValue);
 }
 
-function buildGitHubRawSource(
-  registrySkill: RegistrySkill,
-): SkillPackageOperationSource | null {
-  const location = parseGitHubSkillLocation(
-    registrySkill.source_url,
-    registrySkill.content_url,
-  );
-  if (!location) return null;
-  return {
-    kind: "remote-git",
-    repoUrl: `https://github.com/${location.owner}/${location.repo}.git`,
-    branch: registrySkill.source_branch || location.branch,
-    directory:
-      getRegistrySkillDirectory(registrySkill) || location.directoryPath,
-  };
-}
-
 /** Resolve every Store source into the complete package shape sent to main. */
 export function buildSkillPackageOperationSource(
   registrySkill: RegistrySkill,
@@ -125,20 +107,20 @@ export function buildSkillPackageOperationSource(
     return { kind: "remote-zip", zipUrl: registrySkill.package_url.trim() };
   }
   if (shouldCloneRegistrySkillPackage(registrySkill)) {
+    const gitPackage = resolveRegistrySkillGitPackage(registrySkill);
+    if (!gitPackage) {
+      throw new Error("Git-backed Skill source is missing repository metadata");
+    }
     return {
       kind: "remote-git",
-      repoUrl: registrySkill.source_url,
-      branch: registrySkill.source_branch,
-      directory: getRegistrySkillDirectory(registrySkill),
+      ...gitPackage,
     };
   }
-  return (
-    buildGitHubRawSource(registrySkill) || {
-      kind: "content",
-      sourceUrl: registrySkill.content_url || registrySkill.source_url,
-      content,
-    }
-  );
+  return {
+    kind: "content",
+    sourceUrl: registrySkill.content_url || registrySkill.source_url,
+    content,
+  };
 }
 
 /** Preserve the trusted-source policy while pinning approval to exact bytes. */

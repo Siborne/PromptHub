@@ -1,5 +1,5 @@
 import type { RegistrySkill, Skill } from "@prompthub/shared/types";
-import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
+import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import {
   isLikelyLocalSource,
   normalizeLocalSkillDirectoryPath,
@@ -25,14 +25,25 @@ export interface ParsedGitHubSkillLocation {
   directoryPath: string;
 }
 
+export interface ResolvedRegistrySkillGitPackage {
+  repoUrl: string;
+  branch?: string;
+  directory?: string;
+  skillName?: string;
+}
+
 type RegistrySkillSourceDescriptor = Pick<
   RegistrySkill,
   | "source_id"
+  | "slug"
+  | "name"
+  | "install_name"
   | "source_url"
   | "content_url"
   | "package_url"
   | "store_url"
   | "source_label"
+  | "source_branch"
   | "source_directory"
   | "canonical_skill_path"
   | "directory_fingerprint"
@@ -164,10 +175,96 @@ function getPublicDirectoryStoreValues(
 
 function hasPackageMetadata(regSkill: RegistrySkillSourceDescriptor): boolean {
   return Boolean(
-    getRegistrySkillDirectory(regSkill) ||
-    regSkill.canonical_skill_path ||
-    regSkill.directory_fingerprint,
+    getRegistrySkillDirectory(regSkill) || regSkill.canonical_skill_path,
   );
+}
+
+function parseHostedGitSkillLocation(
+  value?: string | null,
+): ResolvedRegistrySkillGitPackage | null {
+  const candidate = value?.trim();
+  if (!candidate || !URL.canParse(candidate)) return null;
+  const url = new URL(candidate);
+  if (!["http:", "https:"].includes(url.protocol)) return null;
+  const encodedParts = url.pathname.split("/").filter(Boolean);
+  let parts: string[];
+  try {
+    parts = encodedParts.map((part) => decodeURIComponent(part));
+  } catch {
+    return null;
+  }
+  if (url.hostname === "raw.githubusercontent.com" && parts.length >= 4) {
+    return {
+      repoUrl: `https://github.com/${encodedParts[0]}/${encodedParts[1]}`,
+      branch: parts[2],
+      directory: parts.slice(3, -1).join("/") || undefined,
+    };
+  }
+  if (parts.length < 4) return null;
+  const repoUrl = `${url.protocol}//${url.host}/${encodedParts[0]}/${encodedParts[1]}`;
+  if (["tree", "blob"].includes(parts[2])) {
+    const locationParts = parts.slice(4);
+    if (locationParts.at(-1)?.toLowerCase() === "skill.md") {
+      locationParts.pop();
+    }
+    return {
+      repoUrl,
+      branch: parts[3],
+      directory: locationParts.join("/") || undefined,
+    };
+  }
+  if (["src", "raw"].includes(parts[2]) && parts[3] === "branch") {
+    const locationParts = parts.slice(5, parts[2] === "raw" ? -1 : undefined);
+    if (locationParts.at(-1)?.toLowerCase() === "skill.md") {
+      locationParts.pop();
+    }
+    return {
+      repoUrl,
+      branch: parts[4],
+      directory: locationParts.join("/") || undefined,
+    };
+  }
+  return null;
+}
+
+export function resolveRegistrySkillGitPackage(
+  regSkill: RegistrySkillSourceDescriptor,
+): ResolvedRegistrySkillGitPackage | null {
+  const sourceUrl = regSkill.source_url?.trim();
+  if (sourceUrl && isLikelyLocalSource(sourceUrl)) return null;
+  const sourceLocation = parseHostedGitSkillLocation(sourceUrl);
+  const contentLocation = parseHostedGitSkillLocation(regSkill.content_url);
+  const parsedRepo = sourceUrl ? parseGitRepo(sourceUrl) : null;
+  const hasGitSignal = Boolean(
+    sourceLocation ||
+    contentLocation ||
+    sourceUrl?.startsWith("git@") ||
+    (sourceUrl ? /\.git\/?$/i.test(sourceUrl) : false) ||
+    regSkill.store_url?.toLowerCase().includes("skills.sh") ||
+    regSkill.source_branch?.trim() ||
+    hasPackageMetadata(regSkill),
+  );
+  if (!hasGitSignal || (!parsedRepo && !sourceLocation && !contentLocation)) {
+    return null;
+  }
+  const location = sourceLocation || contentLocation;
+  const repoUrl = sourceUrl?.startsWith("git@")
+    ? sourceUrl
+    : parsedRepo?.repositoryUrl || location?.repoUrl;
+  if (!repoUrl) return null;
+  const directory =
+    getRegistrySkillDirectory(regSkill) || location?.directory || undefined;
+  const skillName =
+    regSkill.install_name?.trim() ||
+    regSkill.name?.trim() ||
+    regSkill.slug?.trim() ||
+    undefined;
+  return {
+    repoUrl,
+    branch: regSkill.source_branch?.trim() || location?.branch || undefined,
+    directory,
+    ...(!directory && skillName ? { skillName } : {}),
+  };
 }
 
 export function shouldCloneRegistrySkillPackage(
@@ -181,28 +278,7 @@ export function shouldCloneRegistrySkillPackage(
     return false;
   }
 
-  if (!regSkill.source_url || isLikelyLocalSource(regSkill.source_url)) {
-    return false;
-  }
-
-  const parsedRepo = parseGitRepo(regSkill.source_url);
-  if (!parsedRepo) {
-    return false;
-  }
-
-  if (publicDirectoryStoreValues.some((value) => value.includes("skills.sh"))) {
-    return true;
-  }
-
-  if (
-    regSkill.content_url &&
-    isGitHubHost(parsedRepo.host) &&
-    !hasPackageMetadata(regSkill)
-  ) {
-    return false;
-  }
-
-  return hasPackageMetadata(regSkill);
+  return resolveRegistrySkillGitPackage(regSkill) !== null;
 }
 
 export function getRegistrySkillSourceResolverKind(

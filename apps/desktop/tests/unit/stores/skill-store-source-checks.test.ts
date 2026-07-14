@@ -60,6 +60,19 @@ function mockCompletedPackageOperation(
   return runPackageOperation;
 }
 
+function mockRemoteGitSnapshot(
+  content: string,
+  directoryFingerprint = "remote-package-fingerprint",
+) {
+  const getRemoteGitPackageSnapshot = vi.fn().mockResolvedValue({
+    content,
+    directoryFingerprint,
+  });
+  (window as any).api.skill.getRemoteGitPackageSnapshot =
+    getRemoteGitPackageSnapshot;
+  return getRemoteGitPackageSnapshot;
+}
+
 describe("skill store", () => {
   beforeEach(() => {
     resetSkillStore();
@@ -81,6 +94,7 @@ describe("skill store", () => {
           writeLocalFileBufferByPath: vi.fn(),
           getRepoPath: vi.fn(),
           getRemoteGitPackageFingerprint: vi.fn(),
+          getRemoteGitPackageSnapshot: vi.fn(),
           fetchRemoteContentBytes: vi.fn(),
           saveSafetyReport: vi.fn().mockResolvedValue(undefined),
         },
@@ -333,7 +347,6 @@ describe("skill store", () => {
     const currentHash = await useSkillStore
       .getState()
       .computeRegistrySkillHash(remoteContent);
-    const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
     const syncFromRepo = vi.fn().mockResolvedValue(
       createSkillFixture({
         id: "skill-large-package",
@@ -362,7 +375,7 @@ describe("skill store", () => {
       ...data,
     }));
 
-    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    mockRemoteGitSnapshot(remoteContent, "full-package-fingerprint");
     (window as any).api.skill.syncFromRepo = syncFromRepo;
     (window as any).api.skill.update = update;
 
@@ -412,10 +425,10 @@ describe("skill store", () => {
     const installedHash = await useSkillStore
       .getState()
       .computeRegistrySkillHash(skillContent);
-    const fetchRemoteContent = vi.fn().mockResolvedValue(skillContent);
-    const getRemoteGitPackageFingerprint = vi
-      .fn()
-      .mockResolvedValue("remote-package-fingerprint");
+    const getRemoteGitPackageSnapshot = mockRemoteGitSnapshot(
+      skillContent,
+      "remote-package-fingerprint",
+    );
     const syncFromRepo = vi.fn().mockResolvedValue(
       createSkillFixture({
         id: "skill-package",
@@ -436,9 +449,6 @@ describe("skill store", () => {
       }),
     );
 
-    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
-    (window as any).api.skill.getRemoteGitPackageFingerprint =
-      getRemoteGitPackageFingerprint;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
     (window as any).api.skill.update = vi.fn();
 
@@ -472,8 +482,8 @@ describe("skill store", () => {
 
     expect(check?.status).toBe("update-available");
     expect(check?.remoteChanged).toBe(true);
-    expect(getRemoteGitPackageFingerprint).toHaveBeenCalledWith({
-      repoUrl: "https://github.com/example/skills/tree/main/skills/package",
+    expect(getRemoteGitPackageSnapshot).toHaveBeenCalledWith({
+      repoUrl: "https://github.com/example/skills",
       branch: "main",
       directory: "skills/package",
     });
@@ -484,10 +494,10 @@ describe("skill store", () => {
     const installedHash = await useSkillStore
       .getState()
       .computeRegistrySkillHash(skillContent);
-    const fetchRemoteContent = vi.fn().mockResolvedValue(skillContent);
-    const getRemoteGitPackageFingerprint = vi
-      .fn()
-      .mockResolvedValue("package-fingerprint-after-update");
+    const getRemoteGitPackageSnapshot = mockRemoteGitSnapshot(
+      skillContent,
+      "package-fingerprint-after-update",
+    );
     const syncFromRepo = vi.fn().mockResolvedValue(
       createSkillFixture({
         id: "skill-package",
@@ -508,9 +518,6 @@ describe("skill store", () => {
       }),
     );
 
-    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
-    (window as any).api.skill.getRemoteGitPackageFingerprint =
-      getRemoteGitPackageFingerprint;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
     const update = vi.fn().mockImplementation(async (_id, data) => ({
       ...createSkillFixture({
@@ -569,8 +576,8 @@ describe("skill store", () => {
     expect(check?.remoteDirectoryFingerprint).toBe(
       "package-fingerprint-after-update",
     );
-    expect(getRemoteGitPackageFingerprint).toHaveBeenCalledWith({
-      repoUrl: "https://github.com/example/skills/tree/main/skills/package",
+    expect(getRemoteGitPackageSnapshot).toHaveBeenCalledWith({
+      repoUrl: "https://github.com/example/skills",
       branch: "main",
       directory: "skills/package",
     });
@@ -588,7 +595,6 @@ describe("skill store", () => {
 
   it("updates a GitHub-imported skill from its own source metadata without a cached store entry", async () => {
     const remoteContent = "# Writer\n\nRemote update\n";
-    const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
     const versionCreate = vi.fn().mockResolvedValue({ id: "version-github" });
     const update = vi.fn().mockImplementation(async (_id, data) => ({
       ...createSkillFixture({
@@ -600,7 +606,7 @@ describe("skill store", () => {
       updated_at: 2,
     }));
 
-    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    mockRemoteGitSnapshot(remoteContent);
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.update = update;
     const runPackageOperation = mockCompletedPackageOperation(
@@ -656,7 +662,6 @@ describe("skill store", () => {
 
   it("updates an installed GitHub package skill by cloning its package source instead of raw asset fetches", async () => {
     const remoteContent = "# Spec Init\n\nRemote update\n";
-    const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
     const fetchRemoteContentBytes = vi
       .fn()
       .mockRejectedValue(new Error("raw asset fetch should not be used"));
@@ -711,7 +716,7 @@ describe("skill store", () => {
       updated_at: 2,
     }));
 
-    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    mockRemoteGitSnapshot(remoteContent, "full-package-fingerprint");
     (window as any).api.skill.fetchRemoteContentBytes = fetchRemoteContentBytes;
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
@@ -761,8 +766,7 @@ describe("skill store", () => {
         skillId: "skill-spec-init",
         source: {
           kind: "remote-git",
-          repoUrl:
-            "https://github.com/legeling/spec-init/tree/main/skills/spec-init",
+          repoUrl: "https://github.com/legeling/spec-init",
           branch: "main",
           directory: "skills/spec-init",
         },
@@ -822,9 +826,7 @@ describe("skill store", () => {
       updated_at: 2,
     }));
 
-    (window as any).api.skill.fetchRemoteContent = vi
-      .fn()
-      .mockResolvedValue(remoteContent);
+    mockRemoteGitSnapshot(remoteContent, "ssh-remote-package-fingerprint");
     (window as any).api.skill.fetchRemoteContentBytes = vi.fn();
     (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
     (window as any).api.skill.syncFromRepo = syncFromRepo;
@@ -889,7 +891,6 @@ describe("skill store", () => {
 
   it("updates a pristine skill from a cached remote store source", async () => {
     const remoteContent = "# Community Writer\n\nRemote update\n";
-    const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
     const versionCreate = vi.fn().mockResolvedValue({ id: "version-remote" });
     const update = vi.fn().mockImplementation(async (_id, data) => ({
       ...createSkillFixture({
@@ -901,7 +902,7 @@ describe("skill store", () => {
       updated_at: 2,
     }));
 
-    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    mockRemoteGitSnapshot(remoteContent);
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.update = update;
     const runPackageOperation = mockCompletedPackageOperation(
@@ -1034,6 +1035,10 @@ describe("skill store", () => {
     (window as any).api.skill.update = update;
     (window as any).api.skill.versionCreate = versionCreate;
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    const getRemoteGitPackageSnapshot = mockRemoteGitSnapshot(
+      remoteContent,
+      installedHash,
+    );
     (window as any).api.skill.getAll = vi.fn().mockResolvedValue([]);
 
     const registrySkill = {
@@ -1102,6 +1107,10 @@ describe("skill store", () => {
 
     update.mockClear();
     fetchRemoteContent.mockResolvedValue("# clouddrive2-cli\n\nUpdated\n");
+    getRemoteGitPackageSnapshot.mockResolvedValue({
+      content: "# clouddrive2-cli\n\nUpdated\n",
+      directoryFingerprint: "updated-package-fingerprint",
+    });
 
     const result = await useSkillStore
       .getState()
@@ -1133,9 +1142,12 @@ describe("skill store", () => {
     const getAll = vi.fn().mockResolvedValue([]);
 
     (window as any).api.skill.getAll = getAll;
-    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
-      content: "# Local Writer\n\nLatest local content\n",
-    });
+    (window as any).api.skill.getLocalPackageSnapshot = vi
+      .fn()
+      .mockResolvedValue({
+        content: "# Local Writer\n\nLatest local content\n",
+        directoryFingerprint: "local-package-fingerprint",
+      });
     (window as any).api.skill.writeLocalFile = vi
       .fn()
       .mockResolvedValue(undefined);
@@ -1171,10 +1183,9 @@ describe("skill store", () => {
 
     await useSkillStore.getState().installFromRegistry("source-local-writer");
 
-    expect((window as any).api.skill.readLocalFileByPath).toHaveBeenCalledWith(
-      "/tmp/local-writer",
-      "SKILL.md",
-    );
+    expect(
+      (window as any).api.skill.getLocalPackageSnapshot,
+    ).toHaveBeenCalledWith("/tmp/local-writer");
     expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
         content: "# Local Writer\n\nLatest local content\n",
@@ -1204,12 +1215,12 @@ describe("skill store", () => {
       version: "1.0.0",
       content,
     };
-    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
-      content,
-    });
-    (window as any).api.skill.getLocalPackageFingerprint = vi
+    (window as any).api.skill.getLocalPackageSnapshot = vi
       .fn()
-      .mockResolvedValue("b".repeat(64));
+      .mockResolvedValue({
+        content,
+        directoryFingerprint: "b".repeat(64),
+      });
     useSkillStore.setState({
       skills: [
         createSkillFixture({
@@ -1234,7 +1245,7 @@ describe("skill store", () => {
 
     expect(check.status).toBe("update-available");
     expect(
-      (window as any).api.skill.getLocalPackageFingerprint,
+      (window as any).api.skill.getLocalPackageSnapshot,
     ).toHaveBeenCalledWith("/tmp/local-writer");
   });
 
@@ -1253,10 +1264,7 @@ describe("skill store", () => {
       version: "1.0.0",
       content,
     };
-    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
-      content,
-    });
-    (window as any).api.skill.getLocalPackageFingerprint = vi
+    (window as any).api.skill.getLocalPackageSnapshot = vi
       .fn()
       .mockRejectedValue(
         new Error(
@@ -1314,12 +1322,12 @@ describe("skill store", () => {
     (window as any).api.skill.syncFromRepo = vi
       .fn()
       .mockResolvedValue(installedSkill);
-    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
-      content: sourceContent,
-    });
-    (window as any).api.skill.getLocalPackageFingerprint = vi
+    (window as any).api.skill.getLocalPackageSnapshot = vi
       .fn()
-      .mockResolvedValue("b".repeat(64));
+      .mockResolvedValue({
+        content: sourceContent,
+        directoryFingerprint: "b".repeat(64),
+      });
     useSkillStore.setState({
       skills: [installedSkill],
       registrySkills: [],
@@ -1339,12 +1347,8 @@ describe("skill store", () => {
         source_url: sourceDirectory,
       }),
     });
-    expect((window as any).api.skill.readLocalFileByPath).toHaveBeenCalledWith(
-      sourceDirectory,
-      "SKILL.md",
-    );
     expect(
-      (window as any).api.skill.getLocalPackageFingerprint,
+      (window as any).api.skill.getLocalPackageSnapshot,
     ).toHaveBeenCalledWith(sourceDirectory);
   });
 
@@ -1381,12 +1385,12 @@ describe("skill store", () => {
     (window as any).api.skill.syncFromRepo = vi
       .fn()
       .mockResolvedValue(installedSkill);
-    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
-      content: sourceContent,
-    });
-    (window as any).api.skill.getLocalPackageFingerprint = vi
+    (window as any).api.skill.getLocalPackageSnapshot = vi
       .fn()
-      .mockResolvedValue("b".repeat(64));
+      .mockResolvedValue({
+        content: sourceContent,
+        directoryFingerprint: "b".repeat(64),
+      });
     const runPackageOperation = vi.fn().mockResolvedValue({
       status: "completed",
       operation: "update",
@@ -1414,5 +1418,70 @@ describe("skill store", () => {
         },
       }),
     );
+  });
+
+  it("checks a private Gitea source through one Git snapshot instead of raw HTTP", async () => {
+    const sourceUrl =
+      "http://192.168.10.20/team/skills/src/branch/main/tools/writer";
+    const contentUrl =
+      "http://192.168.10.20/team/skills/raw/branch/main/tools/writer/SKILL.md";
+    const baselineContent = "# Writer\n\nOriginal\n";
+    const remoteContent = "# Writer\n\nUpdated in Gitea\n";
+    const baselineHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash(baselineContent);
+    const installedSkill = createSkillFixture({
+      id: "skill-private-gitea-writer",
+      name: "writer",
+      source_id: "source-private-gitea-writer",
+      source_url: sourceUrl,
+      content_url: contentUrl,
+      local_repo_path: "/managed/writer/repo",
+      content: baselineContent,
+      instructions: baselineContent,
+      installed_content_hash: baselineHash,
+      directory_fingerprint: "a".repeat(64),
+      installed_directory_fingerprint: "a".repeat(64),
+      fingerprint_algorithm: SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
+    });
+    const fetchRemoteContent = vi
+      .fn()
+      .mockRejectedValue(
+        new Error("Access to internal network addresses is not allowed"),
+      );
+    const getRemoteGitPackageSnapshot = vi.fn().mockResolvedValue({
+      content: remoteContent,
+      directoryFingerprint: "b".repeat(64),
+    });
+    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    (window as any).api.skill.getRemoteGitPackageSnapshot =
+      getRemoteGitPackageSnapshot;
+    (window as any).api.skill.syncFromRepo = vi
+      .fn()
+      .mockResolvedValue(installedSkill);
+    useSkillStore.setState({
+      skills: [installedSkill],
+      registrySkills: [],
+      remoteStoreEntries: {},
+    });
+
+    const check = await useSkillStore
+      .getState()
+      .getInstalledSkillSourceUpdateStatus(installedSkill.id);
+
+    expect(check).toMatchObject({
+      status: "update-available",
+      remoteContent,
+      remoteDirectoryFingerprint: "b".repeat(64),
+    });
+    expect(getRemoteGitPackageSnapshot).toHaveBeenCalledWith({
+      repoUrl: "http://192.168.10.20/team/skills",
+      branch: "main",
+      directory: "tools/writer",
+    });
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
+    expect(
+      (window as any).api.skill.getRemoteGitPackageFingerprint,
+    ).not.toHaveBeenCalled();
   });
 });

@@ -46,6 +46,33 @@ function createAiChatMock(response: string) {
 }
 
 describe("skill-safety-scan", () => {
+  it("redacts remote source credentials before sending the AI safety prompt", async () => {
+    const aiChat = createAiChatMock(createAiResponse());
+
+    await scanSkillSafety(
+      {
+        name: "private-gitea-skill",
+        content: "# Private Gitea Skill",
+        sourceUrl:
+          "https://alice:secret@gitea.example.com/team/skills?token=private-token#readme",
+        aiConfig,
+      },
+      {
+        aiChat,
+        resolveAddress: vi.fn().mockResolvedValue({
+          address: "93.184.216.34",
+          family: 4,
+        }),
+      },
+    );
+
+    const userPrompt = aiChat.mock.calls[0]?.[1]?.[1]?.content ?? "";
+    expect(userPrompt).toContain("https://gitea.example.com/team/skills");
+    expect(userPrompt).not.toContain("alice");
+    expect(userPrompt).not.toContain("secret");
+    expect(userPrompt).not.toContain("private-token");
+  });
+
   it("sends ordinary package text files to AI, not only SKILL.md and scripts", async () => {
     const repoFiles: SkillLocalFileEntry[] = [
       {
@@ -610,6 +637,73 @@ describe("skill-safety-scan", () => {
         content: "# Writer",
       }),
     ).rejects.toThrow("AI_NOT_CONFIGURED");
+  });
+
+  it("returns a deterministic preflight report when install preview allows fallback and AI is missing", async () => {
+    const report = await scanSkillSafety(
+      {
+        name: "writer",
+        content: "# Writer\n\nWrite concise documentation.",
+        sourceUrl: "https://github.com/example/skills",
+        fallbackToPreflight: true,
+      },
+      {
+        resolveAddress: vi.fn().mockResolvedValue({
+          address: "93.184.216.34",
+          family: 4,
+        }),
+      },
+    );
+
+    expect(report.scanMethod).toBe("preflight");
+    expect(report.level).toBe("safe");
+    expect(report.checkedFileCount).toBe(1);
+  });
+
+  it("falls back to content preflight when an install preview AI token is rejected", async () => {
+    const aiChat = vi.fn().mockRejectedValue(new Error("Invalid token"));
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+
+    const report = await scanSkillSafety(
+      {
+        name: "writer",
+        content: "# Writer\n\nWrite concise documentation.",
+        sourceUrl: "https://github.com/example/skills",
+        aiConfig,
+        fallbackToPreflight: true,
+      },
+      {
+        aiChat,
+        resolveAddress: vi.fn().mockResolvedValue({
+          address: "93.184.216.34",
+          family: 4,
+        }),
+      },
+    );
+
+    expect(report.scanMethod).toBe("preflight");
+    expect(report.level).toBe("safe");
+    expect(aiChat).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "AI safety assessment unavailable; using deterministic preflight:",
+      expect.any(Error),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("keeps explicit manual AI scans strict when the provider rejects its token", async () => {
+    await expect(
+      scanSkillSafety(
+        {
+          name: "writer",
+          content: "# Writer",
+          aiConfig,
+        },
+        { aiChat: vi.fn().mockRejectedValue(new Error("Invalid token")) },
+      ),
+    ).rejects.toThrow("Invalid token");
   });
 
   it("does not treat plain license wording as a persistence signal unless AI reports it", async () => {

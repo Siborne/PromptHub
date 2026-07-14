@@ -312,7 +312,14 @@ export class SkillPackageLifecycleService {
       );
     } finally {
       if (stagingRoot) {
-        await this.dependencies.cleanupStagingRoot(stagingRoot).catch(() => {});
+        await this.dependencies
+          .cleanupStagingRoot(stagingRoot)
+          .catch((cleanupError) => {
+            console.error(
+              "Skill package staging cleanup failed:",
+              cleanupError,
+            );
+          });
       }
     }
   }
@@ -395,7 +402,12 @@ export class SkillPackageLifecycleService {
       );
       if (!finalized)
         throw new Error("Skill row disappeared during finalization");
-      await replacement.commit().catch(() => {});
+      await replacement.commit().catch((commitError) => {
+        console.error(
+          "Skill package install commit cleanup failed:",
+          commitError,
+        );
+      });
       return {
         status: "completed",
         operation: "install",
@@ -502,7 +514,8 @@ export class SkillPackageLifecycleService {
         throw new Error("Skill row rollback returned false");
       }
       return true;
-    } catch {
+    } catch (rollbackError) {
+      console.error("Skill package install rollback failed:", rollbackError);
       return false;
     }
   }
@@ -568,7 +581,12 @@ export class SkillPackageLifecycleService {
       );
       if (!finalized)
         throw new Error("Skill row disappeared during finalization");
-      await replacement.commit().catch(() => {});
+      await replacement.commit().catch((commitError) => {
+        console.error(
+          "Skill package update commit cleanup failed:",
+          commitError,
+        );
+      });
       return {
         status: "completed",
         operation: "update",
@@ -622,7 +640,10 @@ export class SkillPackageLifecycleService {
     if (!replacement) return true;
     return replacement.rollback().then(
       () => true,
-      () => false,
+      (rollbackError) => {
+        console.error("Skill package update rollback failed:", rollbackError);
+        return false;
+      },
     );
   }
 }

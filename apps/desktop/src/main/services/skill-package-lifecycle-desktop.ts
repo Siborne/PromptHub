@@ -62,6 +62,7 @@ type DesktopLifecycleOptions = {
 type CleanupOptions = DesktopLifecycleOptions & {
   now?: () => number;
   leaseMs?: number;
+  recoverAll?: boolean;
 };
 
 type RemotePackageSource = Extract<
@@ -112,7 +113,11 @@ function deriveSourceId(request: SkillPackageOperationRequest): string {
         : request.source.kind === "local-directory"
           ? request.source.directory
           : undefined,
-    skillPath: request.registrySkill.canonical_skill_path,
+    skillPath:
+      request.registrySkill.canonical_skill_path ||
+      (request.source.kind === "remote-git"
+        ? request.source.skillName
+        : undefined),
   });
 }
 
@@ -191,6 +196,7 @@ async function materializeRemoteSource(
       repoUrl: source.repoUrl,
       branch: source.branch,
       directory: source.directory,
+      skillName: source.skillName,
       safetyScan: request.safetyScan,
       approvedPackageFingerprint: request.approvedPackageFingerprint,
       targetRootDir: stagingRoot,
@@ -507,6 +513,7 @@ async function getOldOperationRoots(
   lifecycleRoot: string,
   now: number,
   leaseMs: number,
+  recoverAll: boolean,
 ): Promise<string[]> {
   const entries = await fs
     .readdir(lifecycleRoot, { withFileTypes: true })
@@ -516,7 +523,9 @@ async function getOldOperationRoots(
     if (!entry.isDirectory() || !entry.name.startsWith("op-")) continue;
     const operationRoot = path.join(lifecycleRoot, entry.name);
     const stat = await fs.stat(operationRoot).catch(() => null);
-    if (stat && now - stat.mtimeMs >= leaseMs) roots.push(operationRoot);
+    if (stat && (recoverAll || now - stat.mtimeMs >= leaseMs)) {
+      roots.push(operationRoot);
+    }
   }
   return roots;
 }
@@ -556,10 +565,12 @@ function cleanupExpiredPendingInstallRows(
   now: number,
   leaseMs: number,
   referencedSkillIds: Set<string>,
+  recoverAll: boolean,
 ): void {
   for (const skill of db.getAll()) {
     if (
-      !isExpiredPendingInstall(skill, now, leaseMs) ||
+      (!recoverAll && !isExpiredPendingInstall(skill, now, leaseMs)) ||
+      skill.source_last_error !== PENDING_INSTALL_MARKER ||
       referencedSkillIds.has(skill.id)
     ) {
       continue;
@@ -579,7 +590,13 @@ export async function cleanupAbandonedSkillPackageOperations(
   const lifecycleRoot = getSkillPackageLifecycleRoot(skillsDir);
   const now = (options.now ?? Date.now)();
   const leaseMs = options.leaseMs ?? DEFAULT_STAGING_LEASE_MS;
-  const roots = await getOldOperationRoots(lifecycleRoot, now, leaseMs);
+  const recoverAll = options.recoverAll === true;
+  const roots = await getOldOperationRoots(
+    lifecycleRoot,
+    now,
+    leaseMs,
+    recoverAll,
+  );
   for (const operationRoot of roots) {
     await recoverOperationRoot(db, operationRoot, skillsDir).catch((error) => {
       console.warn(
@@ -592,7 +609,13 @@ export async function cleanupAbandonedSkillPackageOperations(
     lifecycleRoot,
     skillsDir,
   );
-  cleanupExpiredPendingInstallRows(db, now, leaseMs, referencedSkillIds);
+  cleanupExpiredPendingInstallRows(
+    db,
+    now,
+    leaseMs,
+    referencedSkillIds,
+    recoverAll,
+  );
 }
 
 /** Bind the generic lifecycle service to Desktop filesystem and SkillDB APIs. */

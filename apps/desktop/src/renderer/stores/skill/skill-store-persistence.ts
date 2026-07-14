@@ -2,6 +2,7 @@ import type { RegistrySkill, SkillStoreSource } from "@prompthub/shared/types";
 import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
 import { normalizeGitStoreSourceInput } from "../../services/skill-store-source";
 import { isLocalRegistrySkill } from "../../services/skill-source-resolver";
+import { normalizeSkillStoreSourceIdForRuntime } from "../../services/cloud-store";
 import {
   sanitizePersistedAgentScanState,
   sanitizePersistedProjectScanState,
@@ -213,6 +214,11 @@ export function mergePersistedSkillState(
     ...currentState,
     ...persistedState,
     customStoreSources: persistedCustomStoreSources,
+    selectedStoreSourceId: normalizeSkillStoreSourceIdForRuntime(
+      typeof persistedState.selectedStoreSourceId === "string"
+        ? persistedState.selectedStoreSourceId
+        : currentState.selectedStoreSourceId,
+    ),
     projectScanState: sanitizePersistedProjectScanState(
       persistedProjectScanState,
     ),

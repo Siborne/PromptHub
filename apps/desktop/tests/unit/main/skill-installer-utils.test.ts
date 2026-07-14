@@ -929,6 +929,38 @@ describe("skill-installer-utils", () => {
 
       await expect(promise).resolves.toBeUndefined();
     });
+
+    it("redacts clone credentials from Git failure diagnostics", async () => {
+      const stderrHandlers: Array<(chunk: Buffer) => void> = [];
+      const closeHandlers: Array<(code: number) => void> = [];
+
+      vi.mocked(childProcess.spawn).mockReturnValue({
+        stdout: { on: vi.fn() },
+        stderr: {
+          on: vi.fn((event, cb) => event === "data" && stderrHandlers.push(cb)),
+        },
+        on: vi.fn((event, cb) => event === "close" && closeHandlers.push(cb)),
+        kill: vi.fn(),
+      } as childProcess.ChildProcess);
+
+      const promise = gitClone(
+        "https://alice:secret@gitea.example.com/team/skills",
+        "/tmp/dest",
+      );
+      await vi.waitFor(() => expect(childProcess.spawn).toHaveBeenCalled());
+      stderrHandlers[0]?.(
+        Buffer.from(
+          "fatal: unable to access 'https://alice:secret@gitea.example.com/team/skills': authentication failed",
+        ),
+      );
+      closeHandlers[0]?.(128);
+
+      const error = await promise.catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("gitea.example.com");
+      expect((error as Error).message).not.toContain("alice");
+      expect((error as Error).message).not.toContain("secret");
+    });
   });
 
   describe("gitListRemoteBranches", () => {

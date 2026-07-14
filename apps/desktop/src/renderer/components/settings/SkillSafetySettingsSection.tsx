@@ -7,6 +7,22 @@ import { getSafetyScanAIConfig } from "../skill/detail-utils";
 import { useToast } from "../ui/Toast";
 import { SettingSection } from "./shared";
 
+interface TrustedSourceSkill {
+  content_url?: string;
+  name?: string;
+  slug?: string;
+  source_id?: string;
+  source_label?: string;
+  source_url?: string;
+}
+
+interface TrustedUpdateSourceEntry {
+  key: string;
+  label?: string;
+  location?: string;
+  skillNames: string[];
+}
+
 interface SafetyToggleProps {
   pressed: boolean;
   title: string;
@@ -45,7 +61,11 @@ function TrustedUpdateSources() {
   const revoke = useSettingsStore(
     (state) => state.revokeSkillUpdateSourceTrust,
   );
-  const sources = getTrustedUpdateSources(trustedSourceValue);
+  const installedSkills = useSkillStore((state) => state.skills);
+  const sources = getTrustedUpdateSourceEntries(
+    trustedSourceValue,
+    installedSkills,
+  );
   if (sources.length === 0) return null;
   return (
     <div className="border border-border/70 bg-muted/20 p-3">
@@ -53,14 +73,33 @@ function TrustedUpdateSources() {
         {t("settings.trustedSkillUpdateSources", "Trusted Update Sources")}
       </div>
       <div className="mt-2 divide-y divide-border/60">
-        {sources.map((sourceKey) => (
-          <div key={sourceKey} className="flex min-w-0 items-center gap-2 py-2">
-            <code className="min-w-0 flex-1 truncate text-xs">{sourceKey}</code>
+        {sources.map((source) => (
+          <div
+            key={source.key}
+            className="flex min-w-0 items-center gap-2 py-2"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium">
+                {source.label ||
+                  t(
+                    "settings.trustedSkillUpdateSourceLegacy",
+                    "Legacy trusted source",
+                  )}
+              </div>
+              {source.skillNames.length > 0 ? (
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {source.skillNames.join(", ")}
+                </div>
+              ) : null}
+              <code className="mt-0.5 block truncate text-xs text-muted-foreground">
+                {source.location || abbreviateSourceKey(source.key)}
+              </code>
+            </div>
             <button
               type="button"
               title={t("common.remove", "Remove")}
               aria-label={t("common.remove", "Remove")}
-              onClick={() => revoke(sourceKey)}
+              onClick={() => revoke(source.key)}
               className="inline-flex h-8 w-8 shrink-0 items-center justify-center border border-border text-muted-foreground hover:text-destructive"
             >
               <TrashIcon className="h-4 w-4" aria-hidden="true" />
@@ -76,6 +115,81 @@ export function getTrustedUpdateSources(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((source): source is string => typeof source === "string")
     : [];
+}
+
+function sanitizeTrustedSourceLocation(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  try {
+    const url = new URL(trimmed);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return `${url.host}${url.pathname}`.replace(/\/$/u, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function abbreviateSourceKey(key: string): string {
+  return key.length > 20 ? `${key.slice(0, 10)}…${key.slice(-6)}` : key;
+}
+
+function getLegacySourceLocation(key: string): string | undefined {
+  const sanitized = sanitizeTrustedSourceLocation(key);
+  if (sanitized) return sanitized;
+  return /^[a-f\d]{32,}$/iu.test(key) ? undefined : key;
+}
+
+function matchesTrustedSourceKey(
+  sourceKey: string,
+  skill: TrustedSourceSkill,
+): boolean {
+  const identities = [
+    skill.source_id,
+    skill.source_url,
+    skill.content_url,
+    skill.slug,
+  ]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  if (identities.includes(sourceKey)) return true;
+  const location = sanitizeTrustedSourceLocation(
+    skill.source_url || skill.content_url,
+  );
+  return Boolean(location && sourceKey.includes(location));
+}
+
+export function getTrustedUpdateSourceEntries(
+  value: unknown,
+  skills: readonly TrustedSourceSkill[] = [],
+): TrustedUpdateSourceEntry[] {
+  return getTrustedUpdateSources(value).map((key) => {
+    const matches = skills.filter((skill) =>
+      matchesTrustedSourceKey(key, skill),
+    );
+    const sourceSkill = matches[0];
+    return {
+      key,
+      label:
+        sourceSkill?.source_label?.trim() ||
+        sanitizeTrustedSourceLocation(
+          sourceSkill?.source_url || sourceSkill?.content_url,
+        ),
+      location:
+        sanitizeTrustedSourceLocation(
+          sourceSkill?.source_url || sourceSkill?.content_url,
+        ) || getLegacySourceLocation(key),
+      skillNames: Array.from(
+        new Set(
+          matches
+            .map((skill) => skill.name?.trim())
+            .filter((name): name is string => Boolean(name)),
+        ),
+      ),
+    };
+  });
 }
 
 function BatchSafetyScan() {

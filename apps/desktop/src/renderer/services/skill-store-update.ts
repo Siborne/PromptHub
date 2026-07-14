@@ -1,6 +1,7 @@
 import type {
   RegistrySkill,
   Skill,
+  SkillPackageSnapshot,
   SkillSourceSnapshot,
 } from "@prompthub/shared/types";
 import { normalizeSkillMdForHash } from "@prompthub/core/skills/skill-frontmatter";
@@ -37,6 +38,8 @@ export interface RegistrySkillUpdateCheck {
   installedDirectoryFingerprint?: string;
   remoteDirectoryFingerprint?: string;
   remoteContent: string;
+  localPackageSnapshot?: SkillPackageSnapshot;
+  remotePackageSnapshot?: SkillPackageSnapshot;
   sourceKind?: SkillSourceResolverKind;
   sourceReference?: string;
   sourceError?: string;
@@ -158,6 +161,8 @@ export async function getRegistrySkillUpdateStatus(
   options: {
     staleTargets?: SkillSourceStaleTarget[];
     resolvedAt?: number;
+    localPackageSnapshot?: SkillPackageSnapshot;
+    remotePackageSnapshot?: SkillPackageSnapshot;
   } = {},
 ): Promise<RegistrySkillUpdateCheck> {
   const remoteHash = await computeSkillContentHash(remoteContent);
@@ -171,6 +176,9 @@ export async function getRegistrySkillUpdateStatus(
       registrySkill,
       remoteHash,
       remoteContent,
+      ...(options.remotePackageSnapshot
+        ? { remotePackageSnapshot: options.remotePackageSnapshot }
+        : {}),
       localModified: false,
       remoteChanged: true,
       shouldInitializeBaseline: false,
@@ -219,5 +227,11 @@ export async function getRegistrySkillUpdateStatus(
     installedDirectoryFingerprint,
     remoteDirectoryFingerprint,
     remoteContent,
+    ...(options.localPackageSnapshot
+      ? { localPackageSnapshot: options.localPackageSnapshot }
+      : {}),
+    ...(options.remotePackageSnapshot
+      ? { remotePackageSnapshot: options.remotePackageSnapshot }
+      : {}),
   };
 }

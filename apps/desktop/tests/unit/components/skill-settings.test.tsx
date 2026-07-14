@@ -26,11 +26,13 @@ vi.mock("../../../src/renderer/components/ui/Toast", () => ({
 }));
 
 const scanInstalledSkillSafetyMock = vi.fn();
+let installedSkillsMock: Array<Record<string, unknown>> = [];
 
 vi.mock("../../../src/renderer/stores/skill.store", () => ({
   useSkillStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       scanInstalledSkillSafety: scanInstalledSkillSafetyMock,
+      skills: installedSkillsMock,
     }),
 }));
 
@@ -105,6 +107,7 @@ describe("SkillSettings", () => {
       highRisk: 0,
       warn: 0,
     });
+    installedSkillsMock = [];
     useSettingsStoreMock.mockReturnValue(createSettingsState());
     window.electron = createWindowElectronMock();
   });
@@ -266,6 +269,51 @@ describe("SkillSettings", () => {
     expect(revokeSkillUpdateSourceTrust).toHaveBeenCalledWith(
       "github.com/example/skills",
     );
+  });
+
+  it("shows trusted source labels and matching Skill names instead of opaque keys", async () => {
+    const sourceKey = "59495259d8865efe81cf0ca7b5d992584d7f";
+    const revokeSkillUpdateSourceTrust = vi.fn();
+    installedSkillsMock = [
+      {
+        id: "skill-review",
+        name: "review-workflow",
+        source_id: sourceKey,
+        source_label: "Team Gitea",
+        source_url:
+          "https://alice:secret@gitea.internal/team/skills?token=hidden#main",
+      },
+      {
+        id: "skill-release",
+        name: "release-workflow",
+        source_id: sourceKey,
+        source_label: "Team Gitea",
+        source_url:
+          "https://alice:secret@gitea.internal/team/skills?token=hidden#main",
+      },
+    ];
+    useSettingsStoreMock.mockReturnValue({
+      ...createSettingsState(),
+      trustedSkillUpdateSourceKeys: [sourceKey],
+      revokeSkillUpdateSourceTrust,
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSafetySettingsSection />, {
+        language: "en",
+      });
+    });
+
+    expect(screen.getByText("Team Gitea")).toBeTruthy();
+    expect(screen.getByText("review-workflow, release-workflow")).toBeTruthy();
+    expect(screen.getByText("gitea.internal/team/skills")).toBeTruthy();
+    expect(screen.queryByText(sourceKey)).toBeNull();
+    expect(document.body.textContent).not.toContain("alice");
+    expect(document.body.textContent).not.toContain("secret");
+    expect(document.body.textContent).not.toContain("hidden");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(revokeSkillUpdateSourceTrust).toHaveBeenCalledWith(sourceKey);
   });
 
   it("adds a custom agent root and shows derived asset previews", async () => {

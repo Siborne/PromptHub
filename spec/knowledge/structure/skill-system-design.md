@@ -72,6 +72,30 @@ sources are modeled as a single-file package, so their package fingerprint is
 the fetched `SKILL.md` content hash rather than any registry-provided directory
 fingerprint.
 
+Each adapter must preserve its transport boundary. Local adapters read their
+resolved filesystem directory. Git-backed adapters send the canonical
+repo/branch/directory descriptor through the typed preload and IPC boundary;
+the main process validates and clones the repository once, then returns the
+`SKILL.md` content and full package fingerprint from that same snapshot. Local
+directories use the same validated inventory reader, while ZIP sources use it
+after bounded extraction. This path supports explicitly selected
+private-network Gitea repositories without routing them through generic HTTP
+content fetching. Legacy hosted-Git raw/file URLs recover repo, decoded branch,
+and directory metadata before routing. A concrete imported local source path
+is authoritative over colliding catalog identities. Raw content URLs continue
+through the SSRF-protected HTTP fetcher, whose private-address policy is not
+weakened by Git support.
+
+Catalog recovery for an installed Skill must not treat a repository URL as a
+complete Skill identity because one repository may contain many packages.
+Exact source id, content URL, registry slug, verified package path, and unique
+Skill name are ordered ahead of repository fallback. Ambiguous siblings never
+use first-entry ordering. Successful reconciliation can repair non-empty
+canonical source metadata so old truncated catalog URLs and stale ids do not
+remain durable routing inputs. Remote Git snapshots also return the validated
+repository-relative package directory, allowing legacy guessed directory and
+canonical `SKILL.md` paths to be repaired from the package actually compared.
+
 Agent and Project scan imports keep distribution paths separate from source
 identity. A copied import uses the concrete external symlink target, when one
 exists, for source checks and updates while retaining the scanned shortcut for
@@ -95,6 +119,15 @@ old-row comparison; they must not be written with the SHA-256 algorithm label.
 Git tree/API metadata that only exposes blob hashes is not enough to compute
 this v1 package fingerprint, so registry loaders leave `directory_fingerprint`
 empty until a clone/materialized package path can be fingerprinted.
+
+The same validated package snapshot also supplies update-review inventory.
+Each bounded entry records normalized path, byte size, SHA-256 content digest,
+text/binary classification, and safe text preview content when available. The
+renderer joins local and source entries by path to derive added, modified, and
+removed rows; this presentation data never replaces the main-process package
+validation, staging, safety, or rollback boundaries. A `skill-md` snapshot
+scope limits raw content sources to the one file their update operation can
+actually replace.
 
 ### 2.2 File System Structure (Export Format)
 

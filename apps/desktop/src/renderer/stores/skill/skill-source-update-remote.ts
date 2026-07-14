@@ -12,6 +12,7 @@ import {
   isLocalRegistrySkill,
   normalizeLocalRegistryDirectory,
   parseGitHubSkillLocation,
+  resolveRegistrySkillGitPackage,
   shouldCloneRegistrySkillPackage,
 } from "../../services/skill-source-resolver";
 import {
@@ -70,6 +71,7 @@ async function assertRemoteContentUrlSkillSafe(
     contentUrl: registrySkill.content_url,
     securityAudits: registrySkill.security_audits,
     aiConfig: safetyScan.aiConfig,
+    fallbackToPreflight: true,
   });
   if (report.level === "blocked") {
     throw createRawContentSafetyBlockedError(report);
@@ -248,13 +250,15 @@ async function syncRemoteGitPackage(
   registrySkill: RegistrySkill,
   options: RemoteRegistrySyncOptions,
 ): Promise<Skill | null> {
+  const gitPackage = resolveRegistrySkillGitPackage(registrySkill);
+  if (!gitPackage) {
+    throw new Error("Git-backed Skill source is missing repository metadata");
+  }
   const safetyScan = getRemoteUpdateSafetyScanOptions();
   await saveRemotePackageWithTrustedReview(
     ({ approvedPackageFingerprint }) =>
       window.api.skill.saveRemoteGitToRepo(skillId, {
-        repoUrl: registrySkill.source_url,
-        branch: registrySkill.source_branch,
-        directory: getRegistrySkillDirectory(registrySkill),
+        ...gitPackage,
         ...(safetyScan ? { safetyScan } : {}),
         approvedPackageFingerprint,
       }),

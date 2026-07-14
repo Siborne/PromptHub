@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import type { TFunction } from "i18next";
 import {
   downloadSkillZipExport,
+  formatSkillSafetyScanError,
   generateTextDiff,
   getSkillSourceMeta,
   groupSkillSafetyFindings,
@@ -13,6 +15,23 @@ import {
 } from "../../../src/renderer/components/skill/detail-utils";
 
 describe("skill detail utils", () => {
+  it("does not expose provider request ids when an AI safety token is rejected", () => {
+    const message = formatSkillSafetyScanError(
+      new Error(
+        "Error invoking remote method 'skill:scanSafety': Error: Invalid token (request id: secret-provider-id)",
+      ),
+      ((key: string, fallback: string) =>
+        key === "skill.safetyScanAuthFailed"
+          ? "安全扫描所用的 AI 服务认证失败，请在设置中检查所选模型的 API 密钥。"
+          : fallback) as TFunction,
+    );
+
+    expect(message).toBe(
+      "安全扫描所用的 AI 服务认证失败，请在设置中检查所选模型的 API 密钥。",
+    );
+    expect(message).not.toContain("secret-provider-id");
+  });
+
   it("strips YAML frontmatter and keeps markdown body", () => {
     const content = `---
 name: demo

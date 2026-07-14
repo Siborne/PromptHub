@@ -170,23 +170,6 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function getStandardSkillsShPackageLocation(entry: SkillsShLeaderboardEntry):
-  | {
-      sourceDirectory: string;
-      canonicalSkillPath: string;
-    }
-  | undefined {
-  if (entry.repo !== "skills") {
-    return undefined;
-  }
-
-  const sourceDirectory = `skills/${entry.skillName}`;
-  return {
-    sourceDirectory,
-    canonicalSkillPath: `${sourceDirectory}/SKILL.md`,
-  };
-}
-
 function parseFrontmatter(content: string): {
   name?: string;
   description?: string;
@@ -394,8 +377,12 @@ export function parseSkillsShDetail(
     return null;
   }
 
-  const repository =
-    extractSimpleMetric(text, "Repository") || `${entry.owner}/${entry.repo}`;
+  const repositoryLabel = extractSimpleMetric(text, "Repository");
+  const repository = repositoryLabel?.match(
+    /^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?\/[A-Za-z0-9_.-]+$/,
+  )
+    ? repositoryLabel
+    : `${entry.owner}/${entry.repo}`;
   const weeklyInstalls =
     extractSimpleMetric(text, "Weekly Installs") || entry.weeklyInstalls;
   const githubStars = extractSimpleMetric(text, "GitHub Stars");
@@ -430,8 +417,6 @@ export function parseSkillsShDetail(
               .filter(Boolean),
           ),
         );
-  const packageLocation = getStandardSkillsShPackageLocation(entry);
-
   return {
     slug: slugify(`${entry.owner}-${entry.repo}-${entry.skillName}`),
     name: displayName,
@@ -442,8 +427,6 @@ export function parseSkillsShDetail(
       skillPath: entry.detailPath,
     }),
     source_label: "skills.sh",
-    source_directory: packageLocation?.sourceDirectory,
-    canonical_skill_path: packageLocation?.canonicalSkillPath,
     description,
     category: "general",
     author: entry.owner,

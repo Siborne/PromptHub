@@ -76,7 +76,7 @@ describe("renderer Skill package operation adapter", () => {
       skill: BASE_SKILL,
       expected: {
         kind: "remote-git",
-        repoUrl: BASE_SKILL.source_url,
+        repoUrl: "https://gitea.example.com/team/skills",
         branch: "main",
         directory: "skills/writer",
       },
@@ -93,9 +93,27 @@ describe("renderer Skill package operation adapter", () => {
       },
       expected: {
         kind: "remote-git",
-        repoUrl: "https://github.com/acme/skills.git",
+        repoUrl: "https://github.com/acme/skills",
         branch: "release",
         directory: "skills/writer",
+      },
+    },
+    {
+      name: "skills.sh multi-Skill Git package",
+      skill: {
+        ...BASE_SKILL,
+        slug: "mattpocock-skills-grill-me",
+        name: "Relentless interviewing",
+        install_name: "grill-me",
+        source_url: "https://github.com/mattpocock/skills",
+        source_branch: undefined,
+        canonical_skill_path: undefined,
+        store_url: "https://skills.sh/mattpocock/skills/grill-me",
+      },
+      expected: {
+        kind: "remote-git",
+        repoUrl: "https://github.com/mattpocock/skills",
+        skillName: "grill-me",
       },
     },
     {

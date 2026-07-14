@@ -161,6 +161,30 @@ describe("Desktop Skill package lifecycle persistence", () => {
     ).toBe("source-writer");
   });
 
+  it("derives distinct fallback source identities for selectors in one repository", () => {
+    const dependencies = createDesktopSkillPackageLifecycleDependencies(db, {
+      skillsDir,
+    });
+    const buildRequest = (skillName: string): SkillPackageOperationRequest => ({
+      operation: "install",
+      registrySkill: {
+        ...registrySkill,
+        source_id: undefined,
+        canonical_skill_path: undefined,
+      },
+      source: {
+        kind: "remote-git",
+        repoUrl: "https://github.com/mattpocock/skills",
+        skillName,
+      },
+      content: registrySkill.content,
+    });
+
+    expect(dependencies.deriveSourceId(buildRequest("grill-me"))).not.toBe(
+      dependencies.deriveSourceId(buildRequest("grill-with-docs")),
+    );
+  });
+
   it.each([
     {
       kind: "remote-zip" as const,
@@ -328,6 +352,7 @@ describe("Desktop Skill package lifecycle persistence", () => {
               repoUrl: "https://gitea.example.com/team/skills",
               branch: "main",
               directory: "skills/writer",
+              skillName: "writer",
             }
           : {
               kind: "remote-zip" as const,
@@ -351,6 +376,12 @@ describe("Desktop Skill package lifecycle persistence", () => {
       expect(
         sourceKind === "remote-git" ? gitSpy : zipSpy,
       ).toHaveBeenCalledTimes(1);
+      if (sourceKind === "remote-git") {
+        expect(gitSpy).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ skillName: "writer" }),
+        );
+      }
     },
   );
 
@@ -663,6 +694,36 @@ describe("Desktop Skill package lifecycle persistence", () => {
     });
 
     await expect(fs.stat(operationRoot)).resolves.toBeDefined();
+  });
+
+  it("recovers a fresh pending install when startup owns the operation boundary", async () => {
+    storedSkill = createSkill({
+      source_last_error: PENDING_INSTALL_MARKER,
+      created_at: Date.now(),
+    });
+    const operationRoot = await createRecoveryFixture({
+      skillsDir,
+      skillId: storedSkill.id,
+      expectedFingerprint: NEW_FINGERPRINT,
+      operation: "install",
+      repoContent: "partial",
+    });
+
+    await cleanupAbandonedSkillPackageOperations(db, {
+      skillsDir,
+      now: () => Date.now(),
+      leaseMs: 60 * 60 * 1000,
+      recoverAll: true,
+    });
+
+    expect(db.delete).toHaveBeenCalledWith("skill-writer");
+    expect(storedSkill).toBeNull();
+    await expect(fs.stat(operationRoot)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(fs.stat(path.join(skillsDir, "writer"))).rejects.toMatchObject(
+      { code: "ENOENT" },
+    );
   });
 
   it("removes an expired pending install row even when no manifest was written", async () => {

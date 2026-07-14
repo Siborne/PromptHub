@@ -6,7 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { FormEvent } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SkillStore } from "../../../src/renderer/components/skill/SkillStore";
 import { SkillStoreDetail } from "../../../src/renderer/components/skill/SkillStoreDetail";
@@ -67,6 +67,10 @@ describe("SkillStore remote loading", () => {
         storeSyncCadence: "1d",
       },
     } as Partial<ReturnType<typeof useSettingsStore.getState>>);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("does not retry indefinitely after a remote fetch failure", async () => {
@@ -212,6 +216,101 @@ describe("SkillStore remote loading", () => {
     expect(screen.getAllByText(/官方商店暂未开放/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Claude Code/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/后端|backend/i)).not.toBeInTheDocument();
+  });
+
+  it("rejects an unlaunched Cloud source selection without contacting the service", async () => {
+    const listFeed = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          "Error invoking remote method 'cloud:store:feed': Unable to reach PromptHub Cloud",
+        ),
+      );
+    installWindowMocks({
+      api: {
+        cloud: { store: { listFeed } },
+        settings: {
+          get: vi.fn().mockResolvedValue({
+            device: { storeAutoSync: false, storeSyncCadence: "1d" },
+          }),
+        },
+        skill: {
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+    useSkillStore.getState().selectStoreSource("prompthub-cloud");
+    expect(useSkillStore.getState().selectedStoreSourceId).toBe("official");
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    expect(listFeed).not.toHaveBeenCalled();
+    expect(
+      screen.getAllByText(/official store is not open yet/i).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText(/Error invoking remote method/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not expose Electron IPC details when an enabled Cloud source is unavailable", async () => {
+    vi.stubEnv("VITE_PROMPTHUB_CLOUD_ENABLED", "true");
+    const listFeed = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          "Error invoking remote method 'cloud:store:feed': Unable to reach PromptHub Cloud",
+        ),
+      );
+    installWindowMocks({
+      api: {
+        cloud: { store: { listFeed } },
+        settings: {
+          get: vi.fn().mockResolvedValue({
+            device: { storeAutoSync: false, storeSyncCadence: "1d" },
+          }),
+        },
+        skill: {
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+    useSkillStore.setState({ selectedStoreSourceId: "prompthub-cloud" });
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    await waitFor(() => {
+      expect(
+        useSkillStore.getState().remoteStoreEntries["prompthub-cloud"]?.error,
+      ).toBe("Failed to load remote store");
+    });
+    expect(listFeed).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText("Failed to load remote store")).toHaveLength(2);
+    expect(
+      screen.queryByText(/Error invoking remote method/i),
+    ).not.toBeInTheDocument();
   });
 
   it("shows network guidance when GitHub cannot be reached", async () => {

@@ -6,6 +6,7 @@ import type { SkillSafetyReport } from "@prompthub/shared/types";
 
 const mocks = vi.hoisted(() => ({
   mkdtemp: vi.fn(),
+  readFile: vi.fn(),
   rm: vi.fn(),
   initSkillsDir: vi.fn(),
   fileExists: vi.fn(),
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("fs/promises", () => ({
   mkdtemp: mocks.mkdtemp,
+  readFile: mocks.readFile,
   rm: mocks.rm,
 }));
 
@@ -70,6 +72,8 @@ vi.mock("../../../src/main/services/skill-update-safety", () => ({
 
 import {
   getRemoteGitSkillPackageFingerprint,
+  getRemoteGitSkillPackageSnapshot,
+  getRemoteZipSkillPackageSnapshot,
   saveRemoteGitSkillPackage,
   saveRemoteZipSkillPackage,
   type RemotePackageSkill,
@@ -102,6 +106,7 @@ describe("remote Skill package adapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mkdtemp.mockImplementation(async (prefix: string) => `${prefix}op`);
+    mocks.readFile.mockResolvedValue("# Writer\n\nFrom private Gitea\n");
     mocks.rm.mockResolvedValue(undefined);
     mocks.initSkillsDir.mockResolvedValue(undefined);
     mocks.fileExists.mockResolvedValue(true);
@@ -148,6 +153,24 @@ describe("remote Skill package adapter", () => {
       }),
     );
     expect(mocks.rm).toHaveBeenCalled();
+  });
+
+  it("redacts credentials from fallback Git review identity", async () => {
+    await saveRemoteGitSkillPackage(createRemoteSkill(), {
+      repoUrl: "https://alice:secret@gitea.example.com/team/skills",
+    });
+
+    expect(mocks.assertStagedRemoteSkillPackageSafe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceKey: "git:gitea.example.com/team/skills@default:.",
+      }),
+    );
+    const scanInput =
+      mocks.assertStagedRemoteSkillPackageSafe.mock.calls[0]?.[0];
+    expect(scanInput?.sourceKey).not.toContain("alice");
+    expect(scanInput?.sourceKey).not.toContain("secret");
+    expect(scanInput?.sourceKey).not.toContain("private-token");
+    expect(scanInput?.sourceUrl).toBe("https://gitea.example.com/team/skills");
   });
 
   it("uses the exact source id for Git package review", async () => {
@@ -229,6 +252,74 @@ describe("remote Skill package adapter", () => {
       ).toHaveBeenCalled();
     },
   );
+
+  it("returns SKILL.md and the package fingerprint from one validated Git snapshot", async () => {
+    const result = await getRemoteGitSkillPackageSnapshot({
+      repoUrl: "http://192.168.10.20/team/skills",
+      branch: "main",
+      directory: "tools/writer",
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        content: "# Writer\n",
+        directoryFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+        resolvedDirectory: "tools/writer",
+      }),
+    );
+    expect(mocks.readFile).not.toHaveBeenCalled();
+    expect(mocks.gitClone).toHaveBeenCalledTimes(1);
+    expect(mocks.validateMaterializedSkillPackage).toHaveBeenCalledTimes(1);
+    expect(mocks.rm).toHaveBeenCalled();
+  });
+
+  it("keeps Git staging alive until the asynchronous snapshot read completes", async () => {
+    let resolveFiles:
+      | ((files: Array<{ path: string; data: Buffer }>) => void)
+      | undefined;
+    mocks.readLocalRepoFileBuffersByPath.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFiles = resolve;
+        }),
+    );
+
+    const snapshotPromise = getRemoteGitSkillPackageSnapshot({
+      repoUrl: "https://gitea.example.com/team/skills",
+      directory: "tools/writer",
+    });
+    await vi.waitFor(() =>
+      expect(mocks.readLocalRepoFileBuffersByPath).toHaveBeenCalled(),
+    );
+    expect(mocks.rm).not.toHaveBeenCalled();
+
+    resolveFiles?.([{ path: "SKILL.md", data: Buffer.from("# Writer\n") }]);
+    await expect(snapshotPromise).resolves.toMatchObject({
+      content: "# Writer\n",
+    });
+    expect(mocks.rm).toHaveBeenCalled();
+  });
+
+  it("returns content and fingerprint from one extracted ZIP snapshot", async () => {
+    const fetchArchive = vi.fn().mockResolvedValue(new Uint8Array([7, 8, 9]));
+
+    const result = await getRemoteZipSkillPackageSnapshot(
+      { zipUrl: "https://example.com/writer.zip" },
+      fetchArchive,
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        content: "# Writer\n",
+        directoryFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
+    expect(fetchArchive).toHaveBeenCalledTimes(1);
+    expect(mocks.extractSkillZipArchive).toHaveBeenCalledTimes(1);
+    expect(mocks.resolveSingleSkillDirFromRepo).toHaveBeenCalledTimes(1);
+    expect(mocks.validateMaterializedSkillPackage).toHaveBeenCalledTimes(1);
+    expect(mocks.rm).toHaveBeenCalled();
+  });
 
   it("sanitizes a URL-derived Zip identity and uses the default fetcher", async () => {
     mocks.rm.mockRejectedValueOnce(new Error("cleanup deferred"));

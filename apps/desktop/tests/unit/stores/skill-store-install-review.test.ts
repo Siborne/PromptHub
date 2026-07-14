@@ -76,6 +76,10 @@ describe("registry Skill install safety review", () => {
       api: {
         skill: {
           getAll: vi.fn().mockResolvedValue([]),
+          getRemoteGitPackageSnapshot: vi.fn().mockResolvedValue({
+            content: GITEA_SKILL.content,
+            directoryFingerprint: "0".repeat(64),
+          }),
           saveSafetyReport: vi.fn().mockResolvedValue(undefined),
         },
       },

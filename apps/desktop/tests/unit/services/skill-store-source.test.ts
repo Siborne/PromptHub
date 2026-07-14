@@ -19,6 +19,22 @@ describe("skill-store-source", () => {
     );
   });
 
+  it("keeps HTTP catalogs blocked unless the owning product explicitly allows LAN sources", () => {
+    expect(() =>
+      validateStoreSourceInput(
+        "http://192.168.1.20/catalog.json",
+        "marketplace-json",
+      ),
+    ).toThrow("STORE_SOURCE_HTTPS_REQUIRED");
+    expect(
+      validateStoreSourceInput(
+        "http://192.168.1.20/catalog.json",
+        "marketplace-json",
+        { allowInsecureHttp: true },
+      ),
+    ).toBe("http://192.168.1.20/catalog.json");
+  });
+
   it("normalizes file URLs into local filesystem paths", () => {
     expect(normalizeLocalSourcePath("file:///Users/demo/skills")).toBe(
       "/Users/demo/skills",
@@ -26,18 +42,20 @@ describe("skill-store-source", () => {
   });
 
   it("accepts hosted and self-hosted git repo URLs plus local paths", () => {
-    expect(isSupportedGitRepoSource("https://github.com/anthropics/skills")).toBe(
-      true,
-    );
-    expect(isSupportedGitRepoSource("https://gitea.example.com/icelemon/skills")).toBe(
-      true,
-    );
-    expect(isSupportedGitRepoSource("git@gitea.example.com:icelemon/skills.git")).toBe(
-      true,
-    );
+    expect(
+      isSupportedGitRepoSource("https://github.com/anthropics/skills"),
+    ).toBe(true);
+    expect(
+      isSupportedGitRepoSource("https://gitea.example.com/icelemon/skills"),
+    ).toBe(true);
+    expect(
+      isSupportedGitRepoSource("git@gitea.example.com:icelemon/skills.git"),
+    ).toBe(true);
     expect(isSupportedGitRepoSource("~/Projects/my-skill-repo")).toBe(true);
     expect(isLikelyLocalSource("file:///Users/demo/skills")).toBe(true);
-    expect(isSupportedGitRepoSource("https://gitlab.com/demo/skills")).toBe(true);
+    expect(isSupportedGitRepoSource("https://gitlab.com/demo/skills")).toBe(
+      true,
+    );
   });
 
   it("normalizes github tree urls into structured git source fields", () => {
@@ -103,8 +121,8 @@ describe("skill-store-source", () => {
   });
 
   it("rejects malformed marketplace JSON responses", () => {
-    expect(() => validateMarketplaceStoreDocument("<html>not json</html>")).toThrow(
-      "MARKETPLACE_STORE_INVALID_JSON",
-    );
+    expect(() =>
+      validateMarketplaceStoreDocument("<html>not json</html>"),
+    ).toThrow("MARKETPLACE_STORE_INVALID_JSON");
   });
 });

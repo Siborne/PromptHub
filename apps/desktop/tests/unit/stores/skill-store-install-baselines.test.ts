@@ -59,6 +59,19 @@ function mockCompletedPackageOperation(
   return runPackageOperation;
 }
 
+function mockRemoteGitSnapshot(
+  content: string,
+  directoryFingerprint = "0".repeat(64),
+) {
+  const getRemoteGitPackageSnapshot = vi.fn().mockResolvedValue({
+    content,
+    directoryFingerprint,
+  });
+  (window as any).api.skill.getRemoteGitPackageSnapshot =
+    getRemoteGitPackageSnapshot;
+  return getRemoteGitPackageSnapshot;
+}
+
 describe("skill store", () => {
   beforeEach(() => {
     resetSkillStore();
@@ -127,12 +140,13 @@ describe("skill store", () => {
 
   it("blocks installing official registry skills when only placeholder frontmatter is available", async () => {
     const create = vi.fn();
-    const fetchRemoteContent = vi
+    const getRemoteGitPackageSnapshot = vi
       .fn()
       .mockRejectedValue(new Error("network down"));
 
     (window as any).api.skill.create = create;
-    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    (window as any).api.skill.getRemoteGitPackageSnapshot =
+      getRemoteGitPackageSnapshot;
 
     await expect(
       useSkillStore.getState().installRegistrySkill({
@@ -174,6 +188,10 @@ description: Use this skill for PDF tasks.
     const fetchRemoteContent = vi
       .fn()
       .mockResolvedValue("# Writer\n\nOriginal\n");
+    const getRemoteGitPackageSnapshot = mockRemoteGitSnapshot(
+      "# Writer\n\nOriginal\n",
+      installedHash,
+    );
     const writeLocalFile = vi.fn().mockResolvedValue(undefined);
     const getAll = vi.fn().mockResolvedValue([]);
 
@@ -206,6 +224,12 @@ description: Use this skill for PDF tasks.
         content: "# Writer\n\nOriginal\n",
       }),
     );
+    expect(getRemoteGitPackageSnapshot).toHaveBeenCalledWith({
+      repoUrl: "https://github.com/example/skills",
+      branch: "main",
+      directory: "writer",
+    });
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
   });
 
   it("uses the content hash as the baseline for raw content-url installs", async () => {
@@ -338,6 +362,9 @@ description: Use this skill for PDF tasks.
     const writeLocalFile = vi.fn().mockResolvedValue(undefined);
     const writeLocalFileBufferByPath = vi.fn().mockResolvedValue(undefined);
     const getRepoPath = vi.fn().mockResolvedValue("/tmp/managed/binary-skill");
+    const getRemoteGitPackageSnapshot = mockRemoteGitSnapshot(
+      "# Binary Skill\n\nHello\n",
+    );
 
     (window as any).api.skill.getAll = getAll;
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
@@ -366,12 +393,14 @@ description: Use this skill for PDF tasks.
       expect.objectContaining({
         source: {
           kind: "remote-git",
-          repoUrl: "https://github.com/example/skills.git",
+          repoUrl: "https://github.com/example/skills",
           branch: "main",
           directory: "skills/binary-skill",
         },
       }),
     );
+    expect(getRemoteGitPackageSnapshot).toHaveBeenCalled();
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
     expect(fetchRemoteContentBytes).not.toHaveBeenCalled();
     expect(writeLocalFile).not.toHaveBeenCalled();
     expect(writeLocalFileBufferByPath).not.toHaveBeenCalled();
@@ -410,6 +439,9 @@ description: Use this skill for PDF tasks.
     const writeLocalFile = vi.fn().mockResolvedValue(undefined);
     const writeLocalFileBufferByPath = vi.fn().mockResolvedValue(undefined);
     const getRepoPath = vi.fn().mockResolvedValue("/tmp/managed/html-ppt");
+    const getRemoteGitPackageSnapshot = mockRemoteGitSnapshot(
+      "# HTML PPT\n\nCreate decks.\n",
+    );
 
     (window as any).api.skill.getAll = getAll;
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
@@ -437,12 +469,15 @@ description: Use this skill for PDF tasks.
       expect.objectContaining({
         source: {
           kind: "remote-git",
-          repoUrl: "https://github.com/lewislulu/html-ppt-skill.git",
+          repoUrl: "https://github.com/lewislulu/html-ppt-skill",
           branch: "main",
-          directory: "",
+          directory: undefined,
+          skillName: "HTML PPT",
         },
       }),
     );
+    expect(getRemoteGitPackageSnapshot).toHaveBeenCalled();
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
     expect(fetchRemoteContentBytes).not.toHaveBeenCalled();
     expect(writeLocalFile).not.toHaveBeenCalled();
     expect(writeLocalFileBufferByPath).not.toHaveBeenCalled();
@@ -464,6 +499,7 @@ description: Use this skill for PDF tasks.
     const remoteHash = await useSkillStore
       .getState()
       .computeRegistrySkillHash(remoteContent);
+    mockRemoteGitSnapshot(remoteContent, remoteHash);
 
     const updatedSkill = createSkillFixture({
       id: "skill-writer",
@@ -556,6 +592,7 @@ description: Use this skill for PDF tasks.
     const currentHash = await useSkillStore
       .getState()
       .computeRegistrySkillHash(remoteContent);
+    mockRemoteGitSnapshot(remoteContent, currentHash);
     const registrySkill: RegistrySkill = {
       slug: "writer",
       source_id: "source-writer-main",
@@ -610,6 +647,13 @@ description: Use this skill for PDF tasks.
     const remoteContent = "# Writer\n\nRemote update\n";
     const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
     (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    const remoteHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash(remoteContent);
+    const getRemoteGitPackageSnapshot = mockRemoteGitSnapshot(
+      remoteContent,
+      remoteHash,
+    );
 
     const originalHash = await useSkillStore
       .getState()
@@ -637,9 +681,12 @@ description: Use this skill for PDF tasks.
       .getInstalledSkillSourceUpdateStatus("skill-github-writer");
 
     expect(check?.status).toBe("update-available");
-    expect(fetchRemoteContent).toHaveBeenCalledWith(
-      "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
-    );
+    expect(getRemoteGitPackageSnapshot).toHaveBeenCalledWith({
+      repoUrl: "https://github.com/example/skills",
+      branch: "main",
+      directory: "writer",
+    });
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
   });
 
   it("checks raw content-url sources as single-file packages instead of trusting stale registry package fingerprints", async () => {

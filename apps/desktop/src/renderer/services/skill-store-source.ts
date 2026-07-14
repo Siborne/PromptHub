@@ -91,7 +91,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getArrayFieldCount(record: Record<string, unknown>, key: string): number {
+function getArrayFieldCount(
+  record: Record<string, unknown>,
+  key: string,
+): number {
   if (!(key in record)) {
     return 0;
   }
@@ -165,6 +168,7 @@ export function normalizeGitStoreSourceInput(
 export function validateStoreSourceInput(
   input: string,
   type: CustomStoreSourceType,
+  options: { allowInsecureHttp?: boolean } = {},
 ): string {
   const trimmed = input.trim();
   if (!trimmed) {
@@ -186,7 +190,10 @@ export function validateStoreSourceInput(
     throw new Error("INVALID_STORE_SOURCE_URL");
   }
 
-  if (parsedUrl.protocol !== "https:") {
+  const allowedProtocols = options.allowInsecureHttp
+    ? new Set(["http:", "https:"])
+    : new Set(["https:"]);
+  if (!allowedProtocols.has(parsedUrl.protocol)) {
     throw new Error("STORE_SOURCE_HTTPS_REQUIRED");
   }
 

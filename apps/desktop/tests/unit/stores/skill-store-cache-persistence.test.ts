@@ -108,6 +108,24 @@ describe("skill store", () => {
   });
 
   describe("remoteStoreEntries cache and persistence", () => {
+    it("recovers a persisted unlaunched Cloud selection to the official store", async () => {
+      localStorage.setItem(
+        "skill-store",
+        JSON.stringify({
+          state: {
+            selectedStoreSourceId: "prompthub-cloud",
+            customStoreSources: [],
+            remoteStoreEntries: {},
+          },
+          version: 0,
+        }),
+      );
+
+      await useSkillStore.persist.rehydrate();
+
+      expect(useSkillStore.getState().selectedStoreSourceId).toBe("official");
+    });
+
     it("setRemoteStoreEntry stores skills with loadedAt and error fields", () => {
       const skills = [
         {

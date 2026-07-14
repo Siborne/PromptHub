@@ -11,6 +11,18 @@ const saveRemoteZipSkillToLocalRepoBySkillIdMock = vi
 const getRemoteGitSkillPackageFingerprintMock = vi
   .fn()
   .mockResolvedValue("remote-package-fingerprint");
+const getRemoteGitSkillPackageSnapshotMock = vi.fn().mockResolvedValue({
+  content: "# Remote writer\n",
+  directoryFingerprint: "remote-package-fingerprint",
+});
+const getRemoteZipSkillPackageSnapshotMock = vi.fn().mockResolvedValue({
+  content: "# Remote ZIP writer\n",
+  directoryFingerprint: "remote-zip-package-fingerprint",
+});
+const getLocalSkillPackageSnapshotMock = vi.fn().mockResolvedValue({
+  content: "# Local writer\n",
+  directoryFingerprint: "local-package-fingerprint",
+});
 const computeRepoDirectoryFingerprintMock = vi
   .fn()
   .mockResolvedValue("fingerprint-after-copy");
@@ -53,6 +65,9 @@ vi.mock("../../../src/main/services/skill-installer", () => ({
       saveRemoteZipSkillToLocalRepoBySkillIdMock,
     getRemoteGitSkillPackageFingerprint:
       getRemoteGitSkillPackageFingerprintMock,
+    getRemoteGitSkillPackageSnapshot: getRemoteGitSkillPackageSnapshotMock,
+    getRemoteZipSkillPackageSnapshot: getRemoteZipSkillPackageSnapshotMock,
+    getLocalSkillPackageSnapshot: getLocalSkillPackageSnapshotMock,
     listLocalRepoFilesByPath: vi.fn().mockResolvedValue([]),
     readLocalRepoFileByPath: vi.fn().mockResolvedValue(null),
     readLocalRepoFilesByPath: vi.fn().mockResolvedValue([]),
@@ -105,6 +120,9 @@ async function setupSkillLocalRepoIpc() {
   saveRemoteGitSkillToLocalRepoBySkillIdMock.mockClear();
   saveRemoteZipSkillToLocalRepoBySkillIdMock.mockClear();
   getRemoteGitSkillPackageFingerprintMock.mockClear();
+  getRemoteGitSkillPackageSnapshotMock.mockClear();
+  getRemoteZipSkillPackageSnapshotMock.mockClear();
+  getLocalSkillPackageSnapshotMock.mockClear();
   computeRepoDirectoryFingerprintMock.mockClear();
   validateMaterializedSkillPackageMock.mockClear();
   isManagedRepoPathMock.mockReset();
@@ -138,6 +156,9 @@ describe("skill local repo IPC", () => {
     saveRemoteGitSkillToLocalRepoBySkillIdMock.mockClear();
     saveRemoteZipSkillToLocalRepoBySkillIdMock.mockClear();
     getRemoteGitSkillPackageFingerprintMock.mockClear();
+    getRemoteGitSkillPackageSnapshotMock.mockClear();
+    getRemoteZipSkillPackageSnapshotMock.mockClear();
+    getLocalSkillPackageSnapshotMock.mockClear();
     computeRepoDirectoryFingerprintMock.mockClear();
     validateMaterializedSkillPackageMock.mockClear();
     isManagedRepoPathMock.mockReset();
@@ -203,6 +224,7 @@ describe("skill local repo IPC", () => {
         repoUrl: "https://github.com/legeling/spec-init",
         branch: "main",
         directory: "skills/spec-init",
+        skillName: "spec-init",
       }),
     ).resolves.toBe("remote-package-fingerprint");
 
@@ -210,9 +232,91 @@ describe("skill local repo IPC", () => {
       repoUrl: "https://github.com/legeling/spec-init",
       branch: "main",
       directory: "skills/spec-init",
+      skillName: "spec-init",
     });
     expect(saveRemoteGitSkillToLocalRepoBySkillIdMock).not.toHaveBeenCalled();
   });
+
+  it("returns a remote Git content and fingerprint snapshot without saving", async () => {
+    const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
+    const options = {
+      repoUrl: "http://192.168.10.20/team/skills",
+      branch: "main",
+      skillName: "writer",
+    };
+
+    await expect(
+      handlers[IPC_CHANNELS.SKILL_GET_REMOTE_GIT_PACKAGE_SNAPSHOT](
+        null,
+        options,
+      ),
+    ).resolves.toEqual({
+      content: "# Remote writer\n",
+      directoryFingerprint: "remote-package-fingerprint",
+    });
+    expect(getRemoteGitSkillPackageSnapshotMock).toHaveBeenCalledWith(options);
+    expect(saveRemoteGitSkillToLocalRepoBySkillIdMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "skill:getRemoteGitPackageFingerprint",
+    "skill:getRemoteGitPackageSnapshot",
+  ])(
+    "rejects a non-string remote Git package selector for %s",
+    async (channel) => {
+      const { handlers } = await setupSkillLocalRepoIpc();
+      await expect(
+        handlers[channel](null, {
+          repoUrl: "https://github.com/team/skills",
+          skillName: 42,
+        }),
+      ).rejects.toThrow(/skillName to be a string/);
+    },
+  );
+
+  it.each([undefined, {}, { repoUrl: " " }])(
+    "rejects invalid remote Git snapshot options: %j",
+    async (options) => {
+      const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
+      await expect(
+        handlers[IPC_CHANNELS.SKILL_GET_REMOTE_GIT_PACKAGE_SNAPSHOT](
+          null,
+          options,
+        ),
+      ).rejects.toThrow(/requires a non-empty repoUrl/);
+      expect(getRemoteGitSkillPackageSnapshotMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("returns a remote ZIP content and fingerprint snapshot", async () => {
+    const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
+    const options = { zipUrl: "https://example.com/writer.zip" };
+
+    await expect(
+      handlers[IPC_CHANNELS.SKILL_GET_REMOTE_ZIP_PACKAGE_SNAPSHOT](
+        null,
+        options,
+      ),
+    ).resolves.toEqual({
+      content: "# Remote ZIP writer\n",
+      directoryFingerprint: "remote-zip-package-fingerprint",
+    });
+    expect(getRemoteZipSkillPackageSnapshotMock).toHaveBeenCalledWith(options);
+  });
+
+  it.each([undefined, {}, { zipUrl: " " }])(
+    "rejects invalid remote ZIP snapshot options: %j",
+    async (options) => {
+      const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
+      await expect(
+        handlers[IPC_CHANNELS.SKILL_GET_REMOTE_ZIP_PACKAGE_SNAPSHOT](
+          null,
+          options,
+        ),
+      ).rejects.toThrow(/requires a non-empty zipUrl/);
+      expect(getRemoteZipSkillPackageSnapshotMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("computes a local source package fingerprint through a validated IPC", async () => {
     const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
@@ -236,6 +340,37 @@ describe("skill local repo IPC", () => {
       handlers[IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_FINGERPRINT](null, ""),
     ).rejects.toThrow(/non-empty localPath/);
   });
+
+  it("returns a validated local content and fingerprint snapshot", async () => {
+    const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
+
+    await expect(
+      handlers[IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_SNAPSHOT](
+        null,
+        "/external/writer",
+      ),
+    ).resolves.toEqual({
+      content: "# Local writer\n",
+      directoryFingerprint: "local-package-fingerprint",
+    });
+    expect(getLocalSkillPackageSnapshotMock).toHaveBeenCalledWith(
+      "/external/writer",
+    );
+  });
+
+  it.each([undefined, null, "", " "])(
+    "rejects an invalid local snapshot path: %j",
+    async (localPath) => {
+      const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();
+      await expect(
+        handlers[IPC_CHANNELS.SKILL_GET_LOCAL_PACKAGE_SNAPSHOT](
+          null,
+          localPath,
+        ),
+      ).rejects.toThrow(/requires a non-empty localPath/);
+      expect(getLocalSkillPackageSnapshotMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects an invalid local source before computing a partial fingerprint", async () => {
     const { handlers, IPC_CHANNELS } = await setupSkillLocalRepoIpc();

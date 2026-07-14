@@ -1,6 +1,10 @@
 import * as childProcess from "child_process";
 import * as os from "os";
 import * as path from "path";
+import {
+  sanitizeSkillPackageDiagnostic,
+  sanitizeSkillPackageSourceUrl,
+} from "@prompthub/core/skills/package-operation";
 import { initDatabase } from "../database";
 import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import {
@@ -181,7 +185,7 @@ export function gitClone(
             proc.kill("SIGKILL");
             reject(
               new Error(
-                `Git clone timed out after ${GIT_CLONE_TIMEOUT_MS / 1000}s for URL: ${url}`,
+                `Git clone timed out after ${GIT_CLONE_TIMEOUT_MS / 1000}s for URL: ${sanitizeSkillPackageSourceUrl(url)}`,
               ),
             );
           }
@@ -198,7 +202,11 @@ export function gitClone(
           if (code === 0) {
             resolve();
           } else {
-            reject(new Error(`Git clone failed with code ${code}: ${stderr}`));
+            reject(
+              new Error(
+                `Git clone failed with code ${code}: ${sanitizeSkillPackageDiagnostic(stderr)}`,
+              ),
+            );
           }
         });
 
@@ -206,7 +214,11 @@ export function gitClone(
           if (settled) return;
           settled = true;
           clearTimeout(timeout);
-          reject(new Error(`Git clone error: ${error.message}`));
+          reject(
+            new Error(
+              `Git clone error: ${sanitizeSkillPackageDiagnostic(error)}`,
+            ),
+          );
         });
       }),
   );
@@ -241,7 +253,7 @@ export function gitListRemoteBranches(url: string): Promise<string[]> {
             proc.kill("SIGKILL");
             reject(
               new Error(
-                `Git remote branch listing timed out after ${GIT_REMOTE_TIMEOUT_MS / 1000}s for URL: ${url}`,
+                `Git remote branch listing timed out after ${GIT_REMOTE_TIMEOUT_MS / 1000}s for URL: ${sanitizeSkillPackageSourceUrl(url)}`,
               ),
             );
           }
@@ -262,7 +274,7 @@ export function gitListRemoteBranches(url: string): Promise<string[]> {
           if (code !== 0) {
             reject(
               new Error(
-                `Git remote branch listing failed with code ${code}: ${stderr}`,
+                `Git remote branch listing failed with code ${code}: ${sanitizeSkillPackageDiagnostic(stderr)}`,
               ),
             );
             return;
@@ -286,7 +298,9 @@ export function gitListRemoteBranches(url: string): Promise<string[]> {
           settled = true;
           clearTimeout(timeout);
           reject(
-            new Error(`Git remote branch listing error: ${error.message}`),
+            new Error(
+              `Git remote branch listing error: ${sanitizeSkillPackageDiagnostic(error)}`,
+            ),
           );
         });
       }),
