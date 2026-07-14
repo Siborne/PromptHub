@@ -216,6 +216,7 @@ export interface PluginSourceUpdateCheck {
   preview?: PluginMarketPreview;
   localPackageHash?: string;
   installedPackageHash?: string;
+  remotePackageHash?: string;
   remoteManifestHash?: string;
   installedManifestHash?: string;
   localModified: boolean;
@@ -347,6 +348,7 @@ export interface PluginMarketPreview {
   tags: string[];
   homepage?: string;
   repository?: string;
+  sourcePackageHash?: string;
   codexDetailUrl?: string;
   manifestUrl?: string;
   canInstall: boolean;

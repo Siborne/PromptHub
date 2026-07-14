@@ -37,6 +37,12 @@ export interface McpServerSource {
   id?: string;
   label?: string;
   url?: string;
+  marketSourceId?: string;
+  marketSourceUrl?: string;
+  installedTemplateVersion?: string;
+  installedTemplateFingerprint?: string;
+  marketLastCheckedAt?: number;
+  marketLastError?: string;
 }
 
 export interface McpServerConfig {
@@ -92,6 +98,11 @@ export interface McpMarketSource {
   trustLevel: "official" | "verified" | "community";
 }
 
+export interface McpMarketFetchRequest {
+  sourceId: string;
+  url: string;
+}
+
 export interface McpTargetBinding {
   id: string;
   serverIds: string[];
@@ -115,6 +126,7 @@ export interface McpLibraryFile {
 
 export interface McpMarketTemplate {
   id: string;
+  version?: string;
   name: string;
   displayName: string;
   description: string;
@@ -138,6 +150,33 @@ export interface McpMarketTemplate {
     trustLevel?: "official" | "verified" | "community";
   };
   requiredEnv?: McpEnvRequirement[];
+}
+
+export type McpMarketUpdateStatus =
+  | "up-to-date"
+  | "update-available"
+  | "local-modified"
+  | "conflict"
+  | "legacy-review"
+  | "source-mismatch";
+
+export interface McpMarketUpdateCheck {
+  serverId: string;
+  templateId: string;
+  status: McpMarketUpdateStatus;
+  localModified: boolean;
+  remoteChanged: boolean;
+  installedFingerprint?: string;
+  localFingerprint: string;
+  remoteFingerprint: string;
+  checkedAt: number;
+  reason: string;
+}
+
+export interface McpMarketUpdateResult {
+  status: "updated" | "up-to-date";
+  check: McpMarketUpdateCheck;
+  server: McpServerConfig;
 }
 
 export interface McpApplyTarget {

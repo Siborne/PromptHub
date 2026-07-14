@@ -488,6 +488,7 @@ export type SkillPackageOperationSource =
       repoUrl: string;
       branch?: string;
       directory?: string;
+      skillName?: string;
     }
   | { kind: "remote-zip"; zipUrl: string }
   | { kind: "content"; sourceUrl: string; content: string }
@@ -559,6 +560,27 @@ export type RemoteSkillPackageSaveResult =
   | { status: "saved"; repoPath: string }
   | { status: "safety-review-required"; review: SkillUpdateSafetyReview };
 
+export type SkillPackageSnapshotScope = "package" | "skill-md";
+
+export interface SkillPackageSnapshotFile {
+  path: string;
+  sizeBytes: number;
+  contentHash: string;
+  kind: "text" | "binary";
+  content?: string;
+  contentTruncated?: boolean;
+}
+
+export interface SkillPackageSnapshot {
+  content: string;
+  directoryFingerprint: string;
+  /** Repository-relative directory resolved by a remote Git package lookup. */
+  resolvedDirectory?: string;
+  /** Legacy snapshot producers may omit these additive preview fields. */
+  scope?: SkillPackageSnapshotScope;
+  files?: SkillPackageSnapshotFile[];
+}
+
 /**
  * Minimal AI model config passed from renderer to main process
  * for AI-powered safety scanning.
@@ -580,6 +602,8 @@ export interface SkillSafetyScanInput {
   securityAudits?: string[];
   /** AI model config for safety scanning. Required for active safety scans. */
   aiConfig?: SafetyScanAIConfig;
+  /** Install/update flows may retain the mandatory local preflight if AI is unavailable. */
+  fallbackToPreflight?: boolean;
 }
 
 export interface ScannedSkill {

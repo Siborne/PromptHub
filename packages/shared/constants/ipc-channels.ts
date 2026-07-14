@@ -185,7 +185,10 @@ export const IPC_CHANNELS = {
   SKILL_RUN_PACKAGE_OPERATION: "skill:runPackageOperation",
   SKILL_GET_REMOTE_GIT_PACKAGE_FINGERPRINT:
     "skill:getRemoteGitPackageFingerprint",
+  SKILL_GET_REMOTE_GIT_PACKAGE_SNAPSHOT: "skill:getRemoteGitPackageSnapshot",
+  SKILL_GET_REMOTE_ZIP_PACKAGE_SNAPSHOT: "skill:getRemoteZipPackageSnapshot",
   SKILL_GET_LOCAL_PACKAGE_FINGERPRINT: "skill:getLocalPackageFingerprint",
+  SKILL_GET_LOCAL_PACKAGE_SNAPSHOT: "skill:getLocalPackageSnapshot",
   SKILL_GET_REPO_PATH: "skill:getRepoPath",
   SKILL_SYNC_FROM_REPO: "skill:syncFromRepo",
 
@@ -205,7 +208,10 @@ export const IPC_CHANNELS = {
   MCP_LIBRARY_RESTORE_FILES: "mcp:library:restoreFiles",
   MCP_MARKET_LIST: "mcp:market:list",
   MCP_MARKET_SOURCES: "mcp:market:sources",
+  MCP_MARKET_SOURCES_REPLACE: "mcp:market:sources:replace",
   MCP_MARKET_INSTALL_TEMPLATE: "mcp:market:installTemplate",
+  MCP_MARKET_CHECK_UPDATE: "mcp:market:checkUpdate",
+  MCP_MARKET_APPLY_UPDATE: "mcp:market:applyUpdate",
   MCP_FETCH_REMOTE_CONTENT: "mcp:fetchRemoteContent",
   MCP_TARGET_PRESETS: "mcp:target:presets",
   MCP_SERVER_CREATE: "mcp:server:create",
