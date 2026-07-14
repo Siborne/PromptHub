@@ -4,8 +4,11 @@ import type { McpLibraryModel } from "./useMcpLibraryModel";
 import type { McpManagerState } from "./useMcpManagerState";
 import type { McpManagerTargets } from "./useMcpManagerTargets";
 import {
-  ALL_MCP_SOURCE_FILTER,
   OPEN_CREATE_MCP_MODAL_EVENT,
+  registerAssetWorkflowEvent,
+} from "../app/app-command-events";
+import {
+  ALL_MCP_SOURCE_FILTER,
 } from "./mcp-manager-utils";
 
 interface McpManagerLifecycleOptions {
@@ -64,20 +67,21 @@ function useMcpCreateModalEvent(
   bindings: McpManagerBindings,
   state: McpManagerState,
 ) {
+  const { selectServer, setSelectedTab } = bindings.mcpStore;
+  const { setDetailServerId, setIsCreateModalOpen } = state;
   useEffect(() => {
     const openCreateModal = () => {
-      bindings.mcpStore.selectServer(null);
-      state.setDetailServerId(null);
-      bindings.mcpStore.setSelectedTab("library");
-      state.setIsCreateModalOpen(true);
+      selectServer(null);
+      setDetailServerId(null);
+      setSelectedTab("library");
+      setIsCreateModalOpen(true);
     };
-    document.addEventListener(OPEN_CREATE_MCP_MODAL_EVENT, openCreateModal);
-    return () =>
-      document.removeEventListener(
-        OPEN_CREATE_MCP_MODAL_EVENT,
-        openCreateModal,
-      );
-  }, [bindings.mcpStore, state]);
+    return registerAssetWorkflowEvent({
+      asset: "mcp",
+      eventName: OPEN_CREATE_MCP_MODAL_EVENT,
+      listener: openCreateModal,
+    });
+  }, [selectServer, setDetailServerId, setIsCreateModalOpen, setSelectedTab]);
 }
 
 function usePendingPluginChildMcpDeployment(

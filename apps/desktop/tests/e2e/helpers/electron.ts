@@ -3,7 +3,11 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-import type { Settings, SyncProviderKind } from "@prompthub/shared/types";
+import type {
+  AppCommand,
+  Settings,
+  SyncProviderKind,
+} from "@prompthub/shared/types";
 
 export interface LaunchedElectronApp {
   app: ElectronApplication;
@@ -167,4 +171,14 @@ export async function showAppWindow(app: ElectronApplication) {
       win.focus();
     }
   });
+}
+
+export async function sendAppCommand(
+  app: ElectronApplication,
+  command: AppCommand,
+): Promise<void> {
+  await app.evaluate(({ BrowserWindow }, nextCommand) => {
+    const appWindow = BrowserWindow.getAllWindows()[0];
+    appWindow?.webContents.send("app:command", nextCommand);
+  }, command);
 }

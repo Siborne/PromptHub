@@ -40,8 +40,6 @@ export const PLUGIN_LIBRARY_GALLERY_AUTO_MIN_WIDTH_PX = 360;
 export const PLUGIN_LIBRARY_GALLERY_MANUAL_MIN_WIDTH_PX = 280;
 export const PLUGIN_LIBRARY_GALLERY_COLUMNS: PluginLibraryGalleryColumnMode[] =
   ["auto", "2", "3", "4"];
-export const OPEN_ADD_PLUGIN_MODAL_EVENT = "open-add-plugin-modal";
-
 export function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

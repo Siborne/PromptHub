@@ -66,6 +66,21 @@
 
 - 从 PromptHub 官方 DMG 安装、且后续 release ZIP 已完成 Developer ID 签名与 Apple 公证的 macOS 用户，必须可以在应用内下载并重启完成升级；更新流程使用 `electron-updater` 的已验证 ZIP payload，不要求用户手动挂载 DMG 或复制应用。
 - Homebrew Cask 安装仍由 Homebrew 负责升级；应用内更新不得下载或替换 Caskroom 中的应用。
+### 9.2 macOS Menu Bar Icon
+
+
+- macOS 菜单栏必须使用独立的 PromptHub 单色 Template Image，不得缩小带蓝色圆角底板、阴影和高光的完整应用图标。
+- 菜单栏资源以透明 `16x16` 72-dpi PNG 和同名 `32x32@2x` 144-dpi PNG 成对提供，文件名保留 `Template` 后缀；主进程不得对首选资源再次做运行时位图缩放。
+- 图形沿用 PromptHub 层叠卡片识别，但必须接近占满画布，并让顶层方片成为主要轮廓；系统负责深浅色、选中态和辅助显示环境下的着色。
+
+### 9.3 Desktop Tray Agent Asset Actions
+
+- 桌面状态栏菜单必须把 Prompt、Skill、MCP、Plugin 和 Rule 视为当前可管理的 Agent 资产；未来的一等 Agent 实体是独立产品边界，不得作为第六种资产类型混入现有创建命令。
+- Prompt、Skill、MCP 与 Plugin 菜单项必须打开各自已有的创建或导入流程；Rule 当前只进入已有管理工作台，不得宣称存在尚未实现的通用新建流程。
+- 状态栏命令必须使用 `packages/shared` 的类型化命令协议，经 main、preload 与 renderer 路由；主进程只负责原生菜单、窗口显示和命令投递，renderer 继续拥有导航与业务弹窗。
+- preload 必须缓冲 renderer 尚未订阅时收到的状态栏命令。MCP 与 Plugin 等按需加载工作台必须先注册创建监听器，再发布就绪状态；卸载时必须先撤销就绪状态，再清理监听器，避免首次点击或重渲染期间因 lazy mount 竞态而丢失命令。
+- 状态栏菜单文案必须覆盖桌面端七种语言，优先读取应用内已保存语言，并在数据库尚未可用时回退到系统语言。Renderer 的语言设置在用户切换和旧版本地状态恢复时都必须同步到 Main 设置数据库；同步恢复回调只能在 Zustand Store 完成初始化后执行，避免界面语言与原生菜单语言分叉。
+- 未来 Agent 管理入口只有在对应能力真正可用时才显示；不得展示不可执行的灰色占位项。
 
 ### 10. Renderer List Virtualization
 

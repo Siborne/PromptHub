@@ -42,7 +42,13 @@ vi.mock("../../../src/renderer/components/prompt/CreatePromptModal", () => ({
 }));
 
 vi.mock("../../../src/renderer/components/prompt/QuickAddModal", () => ({
-  QuickAddModal: () => null,
+  QuickAddModal: ({
+    initialMode,
+    isOpen,
+  }: {
+    initialMode: "analyze" | "generate";
+    isOpen: boolean;
+  }) => (isOpen ? <div>Mock quick add: {initialMode}</div> : null),
 }));
 
 vi.mock(
@@ -147,6 +153,48 @@ describe("TopBar", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["analyze", "Mock quick add: analyze"],
+    ["generate", "Mock quick add: generate"],
+  ] as const)(
+    "opens Quick Add in %s mode from an app command",
+    async (mode, text) => {
+      await act(async () => {
+        await renderWithI18n(
+          <TopBar onOpenSettings={vi.fn()} updateAvailable={null} />,
+          { language: "en" },
+        );
+      });
+
+      act(() => {
+        window.dispatchEvent(
+          new CustomEvent("app:quick-add-prompt", { detail: { mode } }),
+        );
+      });
+
+      expect(await screen.findByText(text)).toBeInTheDocument();
+    },
+  );
+
+  it("ignores an invalid Quick Add app-command mode", async () => {
+    await act(async () => {
+      await renderWithI18n(
+        <TopBar onOpenSettings={vi.fn()} updateAvailable={null} />,
+        { language: "en" },
+      );
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("app:quick-add-prompt", {
+          detail: { mode: "unsupported" },
+        }),
+      );
+    });
+
+    expect(screen.queryByText(/Mock quick add:/)).not.toBeInTheDocument();
   });
 
   it("renders the create mode dropdown in a portal when the split button is opened", async () => {

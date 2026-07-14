@@ -28,6 +28,7 @@ import {
 } from "./database";
 import { registerAllIPC } from "./ipc";
 import { getMinimizeOnLaunchSetting } from "./settings/settings-readers";
+import { readLanguageSetting } from "./settings/language-setting";
 import { createMenu } from "./menu";
 import {
   registerShortcuts,
@@ -95,13 +96,14 @@ import { shouldOpenStartupDevTools } from "./devtools-policy";
 import { handleExternalWindowOpen } from "./external-links";
 import { resolveLocalMediaProtocolPath } from "./local-media-protocol";
 import { applyNetworkProxySettings } from "./services/network-proxy";
+import { createTrayController } from "./tray-controller";
+import { dispatchTrayAppCommand } from "./tray-command-dispatcher";
 
 // Disable GPU acceleration (optional; may be needed on some systems)
 // 禁用 GPU 加速（可选，某些系统上可能需要）
 // app.disableHardwareAcceleration();
 
 let mainWindow: BrowserWindow | null = null;
-let tray: Tray | null = null;
 let minimizeToTray = false;
 // Database instance (module-level for access in createWindow)
 // 数据库实例（模块级变量，供 createWindow 访问）
@@ -161,6 +163,7 @@ export function sendToMainWindow(channel: string, ...args: unknown[]) {
 
 export function emitWindowVisibility(isVisible: boolean) {
   sendToMainWindow("window:visibility-changed", isVisible);
+  trayController.refresh();
 }
 
 // Register privileged schemes (must be called before app is ready)
@@ -211,6 +214,39 @@ configureRuntimePaths({
   platform: process.platform,
 });
 const isDev = shouldUseDevServer(app.isPackaged);
+
+const trayController = createTrayController({
+  agentManagementEnabled: false,
+  buildMenu: (template) => Menu.buildFromTemplate(template),
+  createFromPath: (filePath) => nativeImage.createFromPath(filePath),
+  createTray: (icon) => new Tray(icon),
+  dirname: __dirname,
+  getLocale: () => app.getLocale(),
+  getResourcesPath: () => process.resourcesPath,
+  getStoredLanguage: () => (appDb ? readLanguageSetting(appDb) : null),
+  getWindowVisibility: () => mainWindow?.isVisible() ?? false,
+  isDev,
+  onCommand: (command) =>
+    void dispatchTrayAppCommand({
+      command,
+      createWindow,
+      getWindow: () => mainWindow,
+      sendCommand: (pendingCommand) =>
+        sendToMainWindow(IPC_CHANNELS.APP_COMMAND, pendingCommand),
+    }),
+  onQuit: () => {
+    isQuitting = true;
+    app.quit();
+  },
+  onToggleWindow: () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      toggleWindowForShowApp(mainWindow);
+    } else {
+      void createWindow();
+    }
+  },
+  platform: process.platform,
+});
 
 // Single instance lock (prevent multiple instances)
 // 单实例锁定（防止多开）
@@ -605,144 +641,16 @@ ipcMain.on("window:closeDialogCancel", () => {
   pendingCloseAction = false;
 });
 
-// Create macOS template tray icon
-// 创建 macOS 模板图标
-function createMacTrayIcon(): Electron.NativeImage {
-  // Use app icon as tray icon
-  // 使用应用图标作为托盘图标
-  let iconPath: string;
-  if (isDev) {
-    iconPath = path.join(
-      __dirname,
-      "../../resources/icon.iconset/icon_16x16@2x.png",
-    );
-  } else {
-    iconPath = path.join(
-      process.resourcesPath,
-      "icon.iconset/icon_16x16@2x.png",
-    );
-  }
-
-  const icon = nativeImage.createFromPath(iconPath);
-  if (icon.isEmpty()) {
-    console.error("Failed to load tray icon from:", iconPath);
-    // Try fallback path
-    // 尝试备用路径
-    const altPath = isDev
-      ? path.join(__dirname, "../../resources/icon.iconset/icon_32x32.png")
-      : path.join(process.resourcesPath, "icon.iconset/icon_32x32.png");
-    const altIcon = nativeImage.createFromPath(altPath);
-    altIcon.setTemplateImage(true);
-    return altIcon.resize({ width: 18, height: 18 });
-  }
-
-  icon.setTemplateImage(true);
-  return icon.resize({ width: 18, height: 18 });
-}
-
 // Create system tray
 // 创建系统托盘
 function createTray() {
-  if (tray) return;
-
-  const isMac = process.platform === "darwin";
-
-  try {
-    let icon: Electron.NativeImage;
-
-    if (isMac) {
-      // macOS: use template icon
-      // macOS: 使用 P 字母模板图标
-      icon = createMacTrayIcon();
-    } else {
-      // Windows/Linux: use app icon
-      // Windows/Linux: 使用应用图标
-      let iconPath: string;
-      if (isDev) {
-        iconPath = path.join(__dirname, "../../resources/icon.ico");
-      } else {
-        iconPath = path.join(process.resourcesPath, "icon.ico");
-      }
-      console.log("Loading tray icon from:", iconPath);
-      icon = nativeImage.createFromPath(iconPath);
-      if (icon.isEmpty()) {
-        console.error("Tray icon is empty, trying alternative path");
-        // Try fallback path
-        // 尝试备用路径
-        const altPath = path.join(
-          process.resourcesPath,
-          "app.asar.unpacked",
-          "resources",
-          "icon.ico",
-        );
-        icon = nativeImage.createFromPath(altPath);
-      }
-      if (!icon.isEmpty()) {
-        icon = icon.resize({ width: 16, height: 16 });
-      }
-    }
-
-    tray = new Tray(icon);
-  } catch (e) {
-    console.error("Failed to load tray icon:", e);
-    // Fallback to app icon when tray icon fails to load
-    // 如果加载图标失败，使用应用图标
-    let iconPath: string;
-    if (isDev) {
-      iconPath = path.join(
-        __dirname,
-        "../../resources/icon.iconset/icon_16x16@2x.png",
-      );
-    } else {
-      iconPath = path.join(
-        process.resourcesPath,
-        "icon.iconset/icon_16x16@2x.png",
-      );
-    }
-    const fallbackIcon = nativeImage.createFromPath(iconPath);
-    tray = new Tray(fallbackIcon.resize({ width: 18, height: 18 }));
-  }
-
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: "显示窗口",
-      click: () => {
-        mainWindow?.show();
-        mainWindow?.focus();
-      },
-    },
-    { type: "separator" },
-    {
-      label: "退出",
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-
-  tray.setToolTip("PromptHub");
-  tray.setContextMenu(contextMenu);
-
-  // Show window when tray icon is clicked
-  // 点击托盘图标显示窗口
-  tray.on("click", () => {
-    if (mainWindow?.isVisible()) {
-      mainWindow.focus();
-    } else {
-      mainWindow?.show();
-      mainWindow?.focus();
-    }
-  });
+  trayController.create();
 }
 
 // Destroy tray
 // 销毁托盘
 function destroyTray() {
-  if (tray) {
-    tray.destroy();
-    tray = null;
-  }
+  trayController.destroy();
 }
 
 // Select folder dialog

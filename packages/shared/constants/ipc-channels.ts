@@ -109,6 +109,7 @@ export const IPC_CHANNELS = {
   APP_CLEAR_CACHE: "app:clearCache",
   APP_GET_RUNTIME_PATHS: "app:getRuntimePaths",
   APP_APPEND_AUTO_SYNC_LOG: "app:appendAutoSyncLog",
+  APP_COMMAND: "app:command",
 
   // AI transport
   AI_HTTP_REQUEST: "ai:httpRequest",

@@ -397,12 +397,13 @@ function changeLanguageSafely(language: string): void {
 }
 
 function createReleaseActions(context: SettingsActionContext) {
-  const { get, setTouched } = context;
+  const { get, setTouched, syncSettingsToMain } = context;
   return {
     setLanguage: (language) => {
       const normalized = normalizeLanguage(language);
       setTouched({ language: normalized });
       changeLanguageSafely(normalized);
+      void syncSettingsToMain({ language: normalized });
     },
     setDataPath: (dataPath) => setTouched({ dataPath }),
     setAutoCheckUpdate: (autoCheckUpdate) => setTouched({ autoCheckUpdate }),

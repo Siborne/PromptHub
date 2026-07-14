@@ -8,6 +8,7 @@ import {
   isAppWindowVisible,
   launchPromptHub,
   resetE2EStats,
+  sendAppCommand,
   setAppSettings,
   setAppLanguage,
   showAppWindow,
@@ -142,6 +143,44 @@ test.describe("E2E: Skill smoke", () => {
 
       await showAppWindow(app);
       await expect.poll(() => isAppWindowVisible(app)).toBe(true);
+    } finally {
+      await closePromptHub(app, userDataDir);
+    }
+  });
+
+  test("opens lazy asset and quick-add workflows from main-process app commands", async () => {
+    const { app, page, userDataDir } = await launchPromptHub(null);
+
+    try {
+      await setAppLanguage(page, "en");
+      await expect
+        .poll(() =>
+          page.evaluate(async () => (await window.api.settings.get()).language),
+        )
+        .toBe("en");
+
+      await sendAppCommand(app, { type: "asset:create", asset: "mcp" });
+      const mcpDialog = page.getByRole("dialog", { name: "New MCP" });
+      await expect(
+        mcpDialog.getByTestId("mcp-create-method-chooser"),
+      ).toBeVisible();
+      await mcpDialog.getByRole("button", { name: "Close" }).click();
+      await expect(mcpDialog).not.toBeVisible();
+
+      await sendAppCommand(app, { type: "asset:create", asset: "plugin" });
+      const pluginDialog = page.getByRole("dialog", { name: "New Plugin" });
+      await expect(pluginDialog).toBeVisible();
+      await pluginDialog.getByRole("button", { name: "Close" }).click();
+      await expect(pluginDialog).not.toBeVisible();
+
+      await sendAppCommand(app, {
+        type: "prompt:quick-add",
+        mode: "generate",
+      });
+      await expect(page.getByTestId("quick-add-backdrop")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "AI Generate Prompt" }),
+      ).toHaveAttribute("aria-pressed", "true");
     } finally {
       await closePromptHub(app, userDataDir);
     }

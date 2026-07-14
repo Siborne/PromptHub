@@ -21,14 +21,61 @@ describe("settings language actions", () => {
   });
 
   it("normalizes locale variants before updating settings", async () => {
+    const setSettings = vi.fn().mockResolvedValue(true);
+    window.api.settings.set = setSettings;
     const { useSettingsStore } = await import(
       "../../../src/renderer/stores/settings.store"
     );
+    setSettings.mockClear();
 
     useSettingsStore.getState().setLanguage("fr-FR");
 
     expect(useSettingsStore.getState().language).toBe("fr");
     expect(changeLanguageMock).toHaveBeenCalledWith("fr");
+    await vi.waitFor(() => {
+      expect(setSettings).toHaveBeenCalledWith({ language: "fr" });
+    });
+  });
+
+  it("migrates the persisted renderer language to main-process settings", async () => {
+    const setSettings = vi.fn().mockResolvedValue(true);
+    window.api.settings.set = setSettings;
+    localStorage.setItem(
+      "prompthub-settings",
+      JSON.stringify({
+        state: { language: "zh-TW" },
+        version: 16,
+      }),
+    );
+
+    await import("../../../src/renderer/stores/settings.store");
+
+    await vi.waitFor(() => {
+      expect(setSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ language: "zh-TW" }),
+      );
+    });
+  });
+
+  it("logs storage hydration failures with the original error", async () => {
+    const error = new Error("local storage unavailable");
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const getItem = vi
+      .spyOn(localStorage, "getItem")
+      .mockImplementationOnce(() => {
+        throw error;
+      });
+
+    await import("../../../src/renderer/stores/settings.store");
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to rehydrate settings store:",
+      error,
+    );
+    getItem.mockRestore();
+    consoleError.mockRestore();
   });
 
   it("maps traditional chinese locale aliases to zh-TW", async () => {

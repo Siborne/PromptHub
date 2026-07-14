@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 30 |
+| Active | 32 |
 | Archived | 164 |
 | Legacy | 1 |
 
@@ -19,6 +19,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `cli-feature-completeness` | active | `spec/changes/active/cli-feature-completeness/` |
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
+| `desktop-agent-asset-tray-actions` | implemented | `spec/changes/active/desktop-agent-asset-tray-actions/` |
 | `desktop-frontend-animation-system` | active | `spec/changes/active/desktop-frontend-animation-system/` |
 | `desktop-frontend-perf-tuneup` | active | `spec/changes/active/desktop-frontend-perf-tuneup/` |
 | `desktop-home-layout-controls` | active | `spec/changes/active/desktop-home-layout-controls/` |
@@ -29,6 +30,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
 | `homepage-changelog-route-retirement` | active | `spec/changes/active/homepage-changelog-route-retirement/` |
 | `macos-developer-id-signing` | active | `spec/changes/active/macos-developer-id-signing/` |
+| `macos-menu-bar-template-icon` | implemented | `spec/changes/active/macos-menu-bar-template-icon/` |
 | `mcp-env-sync-reapply` | implemented | `spec/changes/active/mcp-env-sync-reapply/` |
 | `mobile-app-shell` | active | `spec/changes/active/mobile-app-shell/` |
 | `mobile-prompt-persistence-hardening` | implemented | `spec/changes/active/mobile-prompt-persistence-hardening/` |

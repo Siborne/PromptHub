@@ -13,6 +13,7 @@ import { settingsApi } from "./api/settings";
 import { skillApi } from "./api/skill";
 import { upgradeBackupApi } from "./api/upgrade-backup";
 import { versionApi } from "./api/version";
+import { createBufferedSubscription } from "./app-command-subscription";
 import type {
   CliInstallMethod,
   CliInstallResult,
@@ -33,6 +34,7 @@ import type {
   RecoveryCandidate,
   RecoveryPreviewResult,
   RecoveryScanOptions,
+  AppCommand,
 } from "@prompthub/shared/types";
 
 const listenerMap = new Map<
@@ -40,6 +42,11 @@ const listenerMap = new Map<
   (...args: any[]) => void
 >();
 const isE2EEnvironment = process.env.PROMPTHUB_E2E === "1";
+const appCommandSubscription = createBufferedSubscription<AppCommand>();
+
+ipcRenderer.on(IPC_CHANNELS.APP_COMMAND, (_event, command: AppCommand) => {
+  appCommandSubscription.publish(command);
+});
 
 type DataPathChangeAction = "migrate" | "switch" | "overwrite";
 
@@ -433,6 +440,9 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.removeListener("shortcut:triggered", listener);
     };
   },
+  onAppCommand: (callback: (command: AppCommand) => void) => {
+    return appCommandSubscription.subscribe(callback);
+  },
   // Listen for shortcut updates
   // 监听快捷键更新
   onShortcutsUpdated: (
@@ -716,6 +726,9 @@ declare global {
       setShortcutMode?: (modes: Record<string, "global" | "local">) => void;
       onShortcutTriggered?: (
         callback: (action: string) => void,
+      ) => void | (() => void);
+      onAppCommand?: (
+        callback: (command: AppCommand) => void,
       ) => void | (() => void);
       onShortcutsUpdated?: (
         callback: (shortcuts: Record<string, string>) => void,

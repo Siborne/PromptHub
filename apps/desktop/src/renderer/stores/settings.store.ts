@@ -133,12 +133,18 @@ export const useSettingsStore = create<SettingsState>()(
       partialize: stripEphemeralSettings,
       merge: mergeSettingsState,
       migrate: migrateSettingsState,
-      onRehydrateStorage: () => (state) => {
-        rehydrateSettingsState(
-          state,
-          useSettingsStore.setState,
-          syncSettingsToMain,
-        );
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.error("Failed to rehydrate settings store:", error);
+          return;
+        }
+        queueMicrotask(() => {
+          rehydrateSettingsState(
+            state,
+            useSettingsStore.setState,
+            syncSettingsToMain,
+          );
+        });
       },
     },
   ),

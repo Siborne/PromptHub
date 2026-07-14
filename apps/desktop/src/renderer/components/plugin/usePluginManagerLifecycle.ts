@@ -4,8 +4,11 @@ import type { PluginManagerBindings } from "./usePluginManagerBindings";
 import type { PluginManagerState } from "./usePluginManagerState";
 import type { usePluginSourceImport } from "./usePluginSourceImport";
 import {
-  MARKET_PREVIEW_PREFETCH_CONCURRENCY,
   OPEN_ADD_PLUGIN_MODAL_EVENT,
+  registerAssetWorkflowEvent,
+} from "../app/app-command-events";
+import {
+  MARKET_PREVIEW_PREFETCH_CONCURRENCY,
 } from "./plugin-manager-utils";
 
 interface PluginManagerLifecycleOptions {
@@ -137,12 +140,11 @@ function useOpenAddPluginEvent(
       setSelectedTab("library");
       setIsAddPluginModalOpen(true);
     };
-    document.addEventListener(OPEN_ADD_PLUGIN_MODAL_EVENT, openAddPluginModal);
-    return () =>
-      document.removeEventListener(
-        OPEN_ADD_PLUGIN_MODAL_EVENT,
-        openAddPluginModal,
-      );
+    return registerAssetWorkflowEvent({
+      asset: "plugin",
+      eventName: OPEN_ADD_PLUGIN_MODAL_EVENT,
+      listener: openAddPluginModal,
+    });
   }, [setIsAddPluginModalOpen, setSelectedTab]);
 }
 

@@ -56,6 +56,7 @@ import { isWebRuntime } from "./runtime";
 import { useBackupImportController } from "./hooks/useBackupImportController";
 import { waitForPersistHydration } from "./utils/persist-hydration";
 import { createLocalDataRefreshController } from "./services/local-data-refresh";
+import { DesktopAppCommandBridge } from "./components/app/DesktopAppCommandBridge";
 
 // Lazy load heavy components for better initial load performance
 // 懒加载大型组件以提升初始加载性能
@@ -1221,6 +1222,13 @@ function App() {
           {/* Windows title bar */}
           {/* Windows 标题栏 */}
           {!webRuntime && <TitleBar />}
+          {!webRuntime && (
+            <DesktopAppCommandBridge
+              currentPage={currentPage}
+              onNavigate={setCurrentPage}
+              onOpenUpdater={openUpdateDialog}
+            />
+          )}
 
           <div className="flex flex-1 overflow-y-hidden overflow-x-visible">
             <Sidebar

@@ -48,6 +48,13 @@ import {
   isWebRuntime,
   logoutWebSession,
 } from "../../runtime";
+import {
+  APP_QUICK_ADD_PROMPT_EVENT,
+  OPEN_ADD_PLUGIN_MODAL_EVENT,
+  OPEN_CREATE_MCP_MODAL_EVENT,
+  OPEN_CREATE_SKILL_MODAL_EVENT,
+  type QuickAddPromptEventDetail,
+} from "../app/app-command-events";
 
 const CreatePromptModal = lazy(() =>
   import("../prompt/CreatePromptModal").then((module) => ({
@@ -76,8 +83,6 @@ const TopBarRulesSearch = lazy(() =>
 );
 
 const OPEN_CREATE_SKILL_PROJECT_MODAL_EVENT = "open-create-skill-project-modal";
-const OPEN_CREATE_MCP_MODAL_EVENT = "open-create-mcp-modal";
-const OPEN_ADD_PLUGIN_MODAL_EVENT = "open-add-plugin-modal";
 
 interface TopBarProps {
   onOpenSettings: () => void;
@@ -493,15 +498,38 @@ export function TopBar({
   }, []);
 
   useEffect(() => {
+    const handleQuickAddPrompt = (event: Event) => {
+      const mode = (event as CustomEvent<QuickAddPromptEventDetail>).detail
+        ?.mode;
+      if (mode !== "analyze" && mode !== "generate") {
+        return;
+      }
+      setQuickAddInitialMode(mode);
+      setIsQuickAddModalOpen(true);
+    };
+
+    window.addEventListener(APP_QUICK_ADD_PROMPT_EVENT, handleQuickAddPrompt);
+    return () => {
+      window.removeEventListener(
+        APP_QUICK_ADD_PROMPT_EVENT,
+        handleQuickAddPrompt,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
     function handleOpenSkillModal() {
       setIsCreateSkillModalOpen(true);
     }
 
-    document.addEventListener("open-create-skill-modal", handleOpenSkillModal);
+    document.addEventListener(
+      OPEN_CREATE_SKILL_MODAL_EVENT,
+      handleOpenSkillModal,
+    );
 
     return () => {
       document.removeEventListener(
-        "open-create-skill-modal",
+        OPEN_CREATE_SKILL_MODAL_EVENT,
         handleOpenSkillModal,
       );
     };

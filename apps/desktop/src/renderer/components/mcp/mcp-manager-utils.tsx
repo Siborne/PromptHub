@@ -7,7 +7,6 @@ import type {
   McpTargetStatusEntry,
 } from "@prompthub/shared/types/mcp";
 
-export const OPEN_CREATE_MCP_MODAL_EVENT = "open-create-mcp-modal";
 export const ALL_MCP_SOURCE_FILTER = "all";
 export const MCP_GALLERY_COLUMNS = ["auto", "2", "3", "4", "5", "6"] as const;
 export const MCP_LIST_PAGE_SIZE_OPTIONS = [12, 24, 48] as const;

@@ -33,6 +33,10 @@ module.exports = {
       to: "icon.iconset",
     },
     {
+      from: "resources/tray",
+      to: "tray",
+    },
+    {
       from: "../../docs/imgs/icon.png",
       to: "icon.png",
     },

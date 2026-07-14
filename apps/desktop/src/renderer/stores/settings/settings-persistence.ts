@@ -383,7 +383,7 @@ export function rehydrateSettingsState(
     backgroundImageOpacity: state?.backgroundImageOpacity,
     backgroundImageBlur: state?.backgroundImageBlur,
   });
-  void syncSettingsToMain({
+  const mainProcessSettings: Partial<Settings> = {
     builtinAgentOverrides: state?.builtinAgentOverrides || {},
     customAgents: state?.customAgents || [],
     customAgentRootPaths: state?.customAgentRootPaths || [],
@@ -394,5 +394,9 @@ export function rehydrateSettingsState(
     skillProjects: state?.skillProjects || [],
     networkProxy: normalizeNetworkProxySettings(state?.networkProxy),
     sync: buildMainProcessSyncSettings(syncProvider),
-  });
+  };
+  if (state?.language) {
+    mainProcessSettings.language = state.language;
+  }
+  void syncSettingsToMain(mainProcessSettings);
 }
