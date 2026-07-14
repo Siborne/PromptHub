@@ -618,6 +618,7 @@ describe("CorePluginLibraryService", () => {
 
   it("detects and updates marketplace plugins from source while preserving distributed targets", async () => {
     let manifestVersion = "1.0.0";
+    let packageContentVersion = "1.0.0";
     const fetchFn = createFetchMock({
       [marketplaceUrl]: createMarketplaceFixture(),
       [bundleManifestUrl]: JSON.stringify({
@@ -671,16 +672,35 @@ describe("CorePluginLibraryService", () => {
       );
       fs.writeFileSync(
         path.join(localPackagePath, "VERSION.txt"),
-        entry.version ?? "",
+        packageContentVersion,
         "utf8",
       );
       return { managedPath, localRepositoryPath, localPackagePath };
+    });
+    const materializeSourcePackageFn = vi.fn(async () => {
+      const sourcePath = path.join(userDataPath, "source-preview", "bundle");
+      fs.rmSync(sourcePath, { recursive: true, force: true });
+      fs.mkdirSync(path.join(sourcePath, ".codex-plugin"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(sourcePath, ".codex-plugin", "plugin.json"),
+        JSON.stringify({ name: "bundle", version: manifestVersion }),
+        "utf8",
+      );
+      fs.writeFileSync(
+        path.join(sourcePath, "VERSION.txt"),
+        packageContentVersion,
+        "utf8",
+      );
+      return { sourcePath };
     });
     const service = new CorePluginLibraryService({
       fetchFn,
       marketSources: [marketSource],
       materializePackages: true,
       materializePackageFn,
+      materializeSourcePackageFn,
       resolvePluginTargetPath: () =>
         path.join(userDataPath, "agent-targets", "codex", "bundle"),
     });
@@ -717,6 +737,7 @@ describe("CorePluginLibraryService", () => {
     });
 
     manifestVersion = "2.0.0";
+    packageContentVersion = "2.0.0";
     const check = await service.getPluginSourceUpdateStatus(
       installed.plugin.id,
     );
@@ -762,6 +783,33 @@ describe("CorePluginLibraryService", () => {
         "utf8",
       ),
     ).toBe("1.0.0");
+    await expect(
+      service.getPluginSourceUpdateStatus(installed.plugin.id),
+    ).resolves.toMatchObject({ status: "up-to-date" });
+
+    packageContentVersion = "2.0.0-content-only-change";
+    await expect(
+      service.getPluginSourceUpdateStatus(installed.plugin.id),
+    ).resolves.toMatchObject({
+      status: "update-available",
+      localModified: false,
+      remoteChanged: true,
+    });
+    const contentOnlyUpdate = await service.updatePluginFromSource(
+      installed.plugin.id,
+    );
+    expect(contentOnlyUpdate.status).toBe("updated");
+    expect(
+      fs.readFileSync(
+        path.join(
+          contentOnlyUpdate.status === "updated"
+            ? (contentOnlyUpdate.plugin.localPackagePath ?? "")
+            : "",
+          "VERSION.txt",
+        ),
+        "utf8",
+      ),
+    ).toBe("2.0.0-content-only-change");
     await expect(
       service.getPluginSourceUpdateStatus(installed.plugin.id),
     ).resolves.toMatchObject({ status: "up-to-date" });
@@ -822,11 +870,30 @@ describe("CorePluginLibraryService", () => {
       );
       return { managedPath, localRepositoryPath, localPackagePath };
     });
+    const materializeSourcePackageFn = vi.fn(async () => {
+      const sourcePath = path.join(
+        userDataPath,
+        "conflict-source-preview",
+        "bundle",
+      );
+      fs.rmSync(sourcePath, { recursive: true, force: true });
+      fs.mkdirSync(path.join(sourcePath, ".codex-plugin"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(sourcePath, ".codex-plugin", "plugin.json"),
+        JSON.stringify({ name: "bundle", version: manifestVersion }),
+        "utf8",
+      );
+      fs.writeFileSync(path.join(sourcePath, "README.md"), "remote", "utf8");
+      return { sourcePath };
+    });
     const service = new CorePluginLibraryService({
       fetchFn,
       marketSources: [marketSource],
       materializePackages: true,
       materializePackageFn,
+      materializeSourcePackageFn,
     });
     const installed = await service.installMarketPlugin("test-market:bundle");
     fs.writeFileSync(

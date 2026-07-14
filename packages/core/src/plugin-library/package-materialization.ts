@@ -431,28 +431,85 @@ export function remapRestoredPluginPackage(
   };
 }
 
-function runGit(args: string[], cwd?: string): Promise<void> {
+const PLUGIN_GIT_TIMEOUT_MS = 30_000;
+
+export function sanitizePluginSourceUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value.replace(/[^a-z0-9@:/._-]+/gi, "");
+  }
+}
+
+export function sanitizePluginSourceDiagnostic(value: unknown): string {
+  const message = value instanceof Error ? value.message : String(value ?? "");
+  return message
+    .replace(/(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, "$1[REDACTED]@")
+    .replace(/([?&](?:token|secret|password|key)=)[^&\s]+/gi, "$1[REDACTED]")
+    .replace(/\b(token|secret|password|api[_-]?key)=\S+/gi, "$1=[REDACTED]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 500);
+}
+
+function runGit(
+  args: string[],
+  cwd?: string,
+  sourceUrl?: string,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn("git", args, {
       cwd,
       stdio: ["ignore", "ignore", "pipe"],
     });
     let stderr = "";
+    let settled = false;
+    const rejectOnce = (error: CorePluginError): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    };
+    const timeout = setTimeout(() => {
+      proc.kill("SIGKILL");
+      rejectOnce(
+        new CorePluginError(
+          "GIT_FAILED",
+          `Git clone timed out after ${PLUGIN_GIT_TIMEOUT_MS / 1000}s for URL: ${sanitizePluginSourceUrl(sourceUrl ?? "unknown")}`,
+        ),
+      );
+    }, PLUGIN_GIT_TIMEOUT_MS);
+    timeout.unref?.();
     proc.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString("utf8");
     });
     proc.on("error", (error) => {
-      reject(new CorePluginError("GIT_FAILED", error.message));
+      rejectOnce(
+        new CorePluginError(
+          "GIT_FAILED",
+          sanitizePluginSourceDiagnostic(error.message),
+        ),
+      );
     });
     proc.on("close", (code) => {
+      if (settled) return;
       if (code === 0) {
+        settled = true;
+        clearTimeout(timeout);
         resolve();
         return;
       }
-      reject(
+      rejectOnce(
         new CorePluginError(
           "GIT_FAILED",
-          `Git 命令执行失败 (${code ?? "unknown"}): ${stderr.trim()}`,
+          sanitizePluginSourceDiagnostic(
+            `Git 命令执行失败 (${code ?? "unknown"}): ${stderr.trim()}`,
+          ),
         ),
       );
     });
@@ -503,7 +560,14 @@ export function normalizePluginSourceImportRequest(
   const kind = inferPluginSourceKind(url);
   const fingerprint = crypto
     .createHash("sha256")
-    .update([kind, url, branch ?? "", packagePath ?? ""].join("\0"))
+    .update(
+      [
+        kind,
+        sanitizePluginSourceUrl(url),
+        branch ?? "",
+        packagePath ?? "",
+      ].join("\0"),
+    )
     .digest("hex")
     .slice(0, 10);
   return {
@@ -536,11 +600,12 @@ export async function materializeGitSourcePackage(
   try {
     fs.rmSync(tempRoot, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(tempRoot), { recursive: true });
-    await runGit(cloneArgs);
+    await runGit(cloneArgs, undefined, request.url);
     if (request.packagePath) {
       await runGit(
         ["sparse-checkout", "set", "--no-cone", request.packagePath],
         repoDir,
+        request.url,
       );
     }
 
@@ -580,17 +645,25 @@ async function checkoutMarketGitPackage(
   packagePath: string,
   repoDir: string,
 ): Promise<void> {
-  await runGit([
-    "clone",
-    "--depth",
-    "1",
-    "--filter=blob:none",
-    "--sparse",
-    "--",
+  await runGit(
+    [
+      "clone",
+      "--depth",
+      "1",
+      "--filter=blob:none",
+      "--sparse",
+      "--",
+      repository,
+      repoDir,
+    ],
+    undefined,
     repository,
+  );
+  await runGit(
+    ["sparse-checkout", "set", "--no-cone", packagePath],
     repoDir,
-  ]);
-  await runGit(["sparse-checkout", "set", "--no-cone", packagePath], repoDir);
+    repository,
+  );
 }
 
 function finalizeMarketGitPackage(

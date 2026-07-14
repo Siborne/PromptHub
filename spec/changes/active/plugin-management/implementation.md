@@ -416,6 +416,26 @@
     passed (288 files, 2,808 tests).
   - `pnpm verify:release:quick`: passed all 18 checks in 596.8 seconds.
 
+## Plugin Source Reconciliation Hardening
+
+- Plugin update checks now materialize and validate the complete package before comparing fingerprints. Content-only changes in child Skills, MCP configs, commands, hooks, assets, and documentation are detected for local folders, Git/SSH/HTTPS sources, and Git-backed marketplace entries.
+- Source reconciliation now compares the installed baseline, the managed local package, and the current source package. Legacy records without a baseline report a conflict when local and source content differ instead of incorrectly reporting up to date.
+- Credentialed self-hosted Git sources now use a credential-free canonical identity. Git diagnostics remove URL credentials, query values, and fragments while the original URL remains available only to the active clone operation.
+- Git package materialization is bounded by a 30-second timeout, terminates stalled processes, and removes temporary package directories after validation or failure.
+- MCP parity review confirmed that installed MCP entries use normalized configuration records rather than package-directory sources. The equivalent MCP risk is target configuration reconciliation, which remains digest-based and is covered by the MCP library persistence, target, Codex sync, remote-store, renderer-store, and component suites.
+
+Verification:
+
+- Red-first Plugin regressions failed on content-only changes, credential-sensitive identity, credential leakage, and unbounded Git processes before the implementation.
+- `plugin-source-reconciliation.test.ts`: passed 11 tests, including a real local Git repository clone/check/apply flow, credential rotation, sanitized Git failures, timeout termination, legacy baseline conflict, incomplete marketplace source handling, temporary-package cleanup, and reconciliation decision branches.
+- Focused V8 coverage for `source-reconciliation.ts`: 100% statements, branches, functions, and lines across 2 files and 22 tests.
+- Plugin-focused regression group: passed 5 files and 61 tests.
+- MCP and Plugin regression group: passed 29 files and 266 tests.
+- Full desktop suite: passed 362 files and 3,172 tests.
+- Shared, core, and desktop TypeScript checks: passed.
+- `pnpm lint`: passed, including the source/test file-size gate.
+- `pnpm build`: passed with existing bundle chunk-size and dynamic-import warnings only.
+
 ## Synced Docs
 
 - `spec/knowledge/behavior/plugins.md`

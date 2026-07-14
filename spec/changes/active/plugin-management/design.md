@@ -267,6 +267,30 @@ Distribution writes now distinguish native passthrough from adapter output:
 - MCP distribution must use existing MCP preview, backup, conflict, and rollback behavior.
 - Agent target writes must be confirmation-gated when they overwrite existing config.
 - Plugin package scripts, hooks, and commands should be visible as inventory before any enablement.
+- Git source identity and diagnostics use a credential-free canonical URL. The
+  original URL may be passed only to the bounded Git transport required for the
+  current operation; stderr and timeout errors must be sanitized before they
+  cross the service boundary.
+
+## Source Reconciliation
+
+`DES-PLUGIN-010`
+
+Plugin source reconciliation uses the same three-way model as package-capable
+Skills:
+
+- installed baseline: the complete package fingerprint recorded after the last
+  successful install or update;
+- local current: the complete fingerprint of the PromptHub-managed package;
+- source current: the complete fingerprint of a freshly validated local or
+  materialized Git/marketplace package.
+
+Manifest and inventory fingerprints remain useful presentation metadata, but
+they are not sufficient to decide whether a Plugin update exists. Content-only
+changes to child Skills, MCP configs, commands, hooks, assets, or documentation
+must change `remoteChanged`. Source materialization remains static, bounded, and
+non-executing; temporary Git packages are retained until manifest validation,
+inventory extraction, and package fingerprinting complete, then cleaned.
 
 ## Tradeoffs
 
@@ -282,3 +306,4 @@ Distribution writes now distinguish native passthrough from adapter output:
 - `FR-PLUGIN-006` -> `DES-PLUGIN-002` / `DES-PLUGIN-004` -> `TEST-PLUGIN-004` -> `T-PLUGIN-004`
 - `FR-PLUGIN-008` -> `DES-PLUGIN-001` -> `TEST-PLUGIN-005` -> `T-PLUGIN-005`
 - `FR-PLUGIN-009` -> `DES-PLUGIN-006` -> `TEST-PLUGIN-006` -> `T-PLUGIN-006`
+- `FR-PLUGIN-003` / `FR-PLUGIN-006` -> `DES-PLUGIN-010` -> `TEST-PLUGIN-008` / `TEST-PLUGIN-009` -> `T-PLUGIN-007`

@@ -105,6 +105,10 @@ import {
 } from "./distribution";
 import { PluginLibraryStorage } from "./storage";
 import { PluginMarketplaceClient } from "./marketplace-client";
+import {
+  attachMarketSourcePackageHash,
+  getPluginPackageUpdateSignals,
+} from "./source-reconciliation";
 
 interface InstalledPluginOptions {
   id: string;
@@ -353,6 +357,7 @@ function buildPackageSourcePreview(
     homepage:
       safeString(manifest.homepage) || safeString(interfaceRecord.websiteURL),
     repository: safeString(manifest.repository) || source.repository,
+    sourcePackageHash: computePluginPackageFingerprint(sourcePath),
     canInstall: classification === "bundle",
     unsupportedReason: getPluginSemanticUnsupportedReason(classification),
     warnings: [],
@@ -609,12 +614,14 @@ export class CorePluginLibraryService {
     const localPackageHash = computePluginPackageFingerprint(
       getPluginLocalPackagePath(plugin),
     );
-    const localModified = Boolean(
-      plugin.installedPackageHash &&
-      localPackageHash &&
-      localPackageHash !== plugin.installedPackageHash,
-    );
-    const remoteChanged = remoteManifestHash !== installedManifestHash;
+    const remotePackageHash = preview.sourcePackageHash;
+    const { localModified, remoteChanged } = getPluginPackageUpdateSignals({
+      installedManifestHash,
+      installedPackageHash: plugin.installedPackageHash,
+      localPackageHash,
+      remoteManifestHash,
+      remotePackageHash,
+    });
     const status = getPluginUpdateStatus(localModified, remoteChanged);
 
     return {
@@ -623,6 +630,7 @@ export class CorePluginLibraryService {
       preview,
       localPackageHash,
       installedPackageHash: plugin.installedPackageHash,
+      remotePackageHash,
       remoteManifestHash,
       installedManifestHash,
       localModified,
@@ -698,7 +706,11 @@ export class CorePluginLibraryService {
         `Plugin 来源不存在: ${plugin.displayName}`,
       );
     }
-    return this.marketplace.buildPreviewForEntry(entry, sources);
+    const preview = await this.marketplace.buildPreviewForEntry(entry, sources);
+    return attachMarketSourcePackageHash(
+      preview,
+      this.materializeSourcePackageFn,
+    );
   }
 
   private buildPreviewForLocalSource(

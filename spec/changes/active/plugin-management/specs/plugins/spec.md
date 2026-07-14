@@ -84,6 +84,14 @@ PromptHub MUST support plugin intake from marketplace entries, Git repository UR
 - **WHEN** PromptHub reports the error
 - **THEN** PromptHub explains that SSH or waiting/retrying can avoid anonymous API limits
 
+#### Scenario: Private Git credentials do not define Plugin identity
+
+- **GIVEN** a self-hosted Git source is accessed with URL userinfo credentials
+- **WHEN** PromptHub derives source identity, reports a Git failure, or checks the source again with rotated credentials
+- **THEN** the stable source identity excludes credentials, query secrets, and fragments
+- **AND** diagnostics returned to the caller do not contain the username, password, token, or secret query value
+- **AND** the credential-bearing clone operation remains bounded by a timeout
+
 ### Requirement: FR-PLUGIN-004 Manifest and Inventory Preview
 
 PromptHub MUST scan plugin metadata and show a preview before installation.
@@ -239,6 +247,14 @@ PromptHub MUST separate plugin installation from child capability distribution.
 - **AND** the snapshot starts at the next version number, beginning with `v1` when no prior snapshot exists
 - **AND** the snapshot contains the old Plugin metadata and old static package files
 - **AND** source checks that are up-to-date or blocked by local-change conflicts do not create new snapshots
+
+#### Scenario: Detect content-only source updates
+
+- **GIVEN** an installed local, Git, SSH, HTTPS, or marketplace Plugin source changes a child Skill, MCP config, command, hook, asset, or documentation file without changing the Plugin manifest or inventory counts
+- **WHEN** PromptHub checks the installed Plugin source
+- **THEN** PromptHub compares the complete validated package fingerprint rather than only manifest presentation metadata
+- **AND** reports `update-available` when the source package content differs from the installed source baseline
+- **AND** a newly installed unchanged package reports `up-to-date`
 
 ### Requirement: FR-PLUGIN-007 Plugin Store
 

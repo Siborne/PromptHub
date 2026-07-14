@@ -81,6 +81,8 @@
 - [x] Contain installed Plugin detail render failures with the same recoverable boundary pattern used by My Skills detail pages.
 - [ ] Add Agent Assistant callable action contract for plugin install/distribute.
 - [ ] Add full regression coverage for duplicate identity, large inventories, SSH source scanning, and no execution during scan beyond the current adapter-native package-generation coverage.
+- [x] Harden Plugin Git source identity, diagnostics, and clone timeout handling for credentialed self-hosted sources.
+- [x] Compare complete validated Plugin package fingerprints for local, Git/SSH/HTTPS, and marketplace source checks.
 
 ## MVP Verification Completed
 
@@ -135,6 +137,7 @@
 - `T-PLUGIN-004`: Implement install/update/uninstall and child asset distribution rollback. Covers `FR-PLUGIN-006`, `DES-PLUGIN-002`, `DES-PLUGIN-004`, `TEST-PLUGIN-004`.
 - `T-PLUGIN-005`: Expose Assistant-callable scan/install/distribute actions behind the same confirmations as UI. Covers `FR-PLUGIN-008`, `DES-PLUGIN-001`, `TEST-PLUGIN-005`.
 - `T-PLUGIN-006`: Implement Plugin Targets compatibility UI with `Native`, `Adapter`, `RuntimeOnly`, and `Composite` target statuses. Covers `FR-PLUGIN-009`, `DES-PLUGIN-006`, `TEST-PLUGIN-006`.
+- `T-PLUGIN-007`: Harden Plugin source reconciliation and Git transport diagnostics. Covers `FR-PLUGIN-003`, `FR-PLUGIN-006`, `DES-PLUGIN-010`, `TEST-PLUGIN-008`, `TEST-PLUGIN-009`.
 
 ## Verification Plan
 
@@ -146,3 +149,5 @@
 - `TEST-PLUGIN-005`: Assistant action tests prove install/distribute requests call the same API and preserve confirmation gates.
 - `TEST-PLUGIN-006`: Compatibility matrix tests prove Codex appears as native; Claude Code/Cursor/Gemini/Kiro/GitHub Copilot appear as adapter candidates; OpenCode/Cline appear as runtime-only disabled targets; Windsurf/Roo/Cherry Studio appear as composite or lower-priority targets; and evidence-limited targets remain pending/disabled.
 - `TEST-PLUGIN-007`: Semantic gate tests prove single `SKILL.md` sources and single JS/TS hook modules are not rendered as full Plugin bundles.
+- `TEST-PLUGIN-008`: Local and Git-backed fixtures prove content-only child-file changes are detected while unchanged packages remain up to date.
+- `TEST-PLUGIN-009`: Credentialed self-hosted Git fixtures prove stable credential-free identity, sanitized failures, bounded clone timeout, and temporary package cleanup.
