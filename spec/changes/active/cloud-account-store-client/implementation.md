@@ -21,6 +21,7 @@
 - 桌面 Cloud Store 详情补齐公开 metrics/viewerState、点赞/取消、收藏/取消和带原因举报；写请求全部通过 main/preload IPC，renderer 不接触 bearer token，举报字段在 IPC 边界限制为固定原因和 2000 字符说明。
 - 桌面 Cloud 设置补齐套餐与权益摘要，main 侧只返回有效套餐、额度和开关，不把 Stripe customer 或 plan grant 内部字段带到 renderer；旧 Cloud endpoint 暂时缺少权益时不阻断账号资料加载。
 - 2026-07-14 起，Cloud 桌面入口由 `promptHubCloud` runtime capability 统一控制；普通构建默认隐藏设置与商店入口，禁止程序化选择和后台刷新，旧 `prompthub-cloud` 选择回退到 `official`。仅显式设置 `VITE_PROMPTHUB_CLOUD_ENABLED=true` 的桌面构建可启用；启用后的请求错误也不再把 Electron IPC 包装文本展示或保存到 renderer 状态。
+- Web Vite 环境边界声明了共享 renderer runtime 读取的 Cloud build flag，修复 Web typecheck 跟随 Desktop 模块时缺少 `ImportMeta.env` 的发布门禁错误。
 
 ## 本轮验证
 
@@ -35,6 +36,7 @@
 - Cloud backend/admin/web typecheck 与 web lint passed；Cloud backend lint passed。
 - 2026-07-14 Cloud 发布门禁回归：renderer runtime、设置导航、Skill Store 侧栏、旧来源恢复、禁用时零请求与启用后错误净化，共 64 tests passed。
 - 2026-07-14 `pnpm --filter @prompthub/desktop typecheck`、`pnpm --filter @prompthub/desktop lint`、`pnpm --filter @prompthub/desktop build` passed；build 仅保留既有 chunk size 和 fflate dynamic/static import warning。
+- 2026-07-14 `pnpm --filter @prompthub/web typecheck` passed after adding the Web-owned Vite environment declaration.
 
 ## 残余风险
 

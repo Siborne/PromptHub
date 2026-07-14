@@ -48,6 +48,8 @@ Cloud package 的 `contentFingerprint` 作为 Cloud delivery expectation，桌�
 
 持久化的 `selectedStoreSourceId=prompthub-cloud` 在能力关闭时归一化为 `official`。Cloud 错误进入 renderer 状态前转换为本地化的通用远程商店错误，不保存 Electron 的 `Error invoking remote method` 包装文本。
 
+Desktop 与 Web 两个 Vite 应用分别声明共享 renderer build flag 的环境类型。Web 编译器会跟随导入的 Desktop renderer runtime 模块，但不会包含 Desktop 自己的 ambient declaration；因此 Web 必须在应用边界提供同一只读字段声明。
+
 ## 可验证追踪
 
 | ID | Design | Test | Task |
