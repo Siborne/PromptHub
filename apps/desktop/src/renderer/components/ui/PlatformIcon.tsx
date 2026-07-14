@@ -184,7 +184,9 @@ export function PlatformIcon({
           className={`object-contain ${
             platformId === "copilot"
               ? "brightness-0 dark:brightness-0 dark:invert"
-              : ""
+              : platformId === "augment"
+                ? "brightness-0 dark:invert"
+                : ""
           }`}
           onError={() => setImageError(true)}
           loading="lazy"

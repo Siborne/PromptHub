@@ -103,21 +103,24 @@ describe("PlatformIcon", () => {
     );
   });
 
-  it("renders distinct official marks for Kimi Code CLI and Auggie", () => {
-    const cases = [
-      ["kimi", "kimi.png"],
-      ["augment", "augment.svg"],
-    ] as const;
+  it("renders the official Kimi Code CLI mark", () => {
+    render(<PlatformIcon platformId="kimi" size={20} />);
 
-    for (const [platformId, assetName] of cases) {
-      const { unmount } = render(
-        <PlatformIcon platformId={platformId} size={20} />,
-      );
+    expect(screen.getByRole("img", { name: "kimi icon" })).toHaveAttribute(
+      "src",
+      expect.stringContaining("kimi.png"),
+    );
+  });
 
-      expect(
-        screen.getByRole("img", { name: `${platformId} icon` }),
-      ).toHaveAttribute("src", expect.stringContaining(assetName));
-      unmount();
-    }
+  it("keeps the Auggie mark legible in app-controlled light and dark themes", () => {
+    render(<PlatformIcon platformId="augment" size={20} />);
+
+    const icon = screen.getByRole("img", { name: "augment icon" });
+    expect(icon).toHaveAttribute("src", expect.stringContaining("augment.svg"));
+    expect(icon).toHaveClass("brightness-0", "dark:invert");
+
+    const asset = readFileSync(join(platformAssetsDir, "augment.svg"), "utf8");
+    expect(asset).toContain('fill="#000000"');
+    expect(asset).not.toContain("prefers-color-scheme");
   });
 });
