@@ -17,6 +17,89 @@ interface PragmaColumnInfo {
   pk: number;
 }
 
+const QUICK_CHECK_OK = "ok";
+const QUICK_CHECK_DATABASE_HEADER = /^\*{3} in database .+ \*{3}$/;
+const FREELIST_MISMATCH = /^Freelist: size is \d+ but should be \d+$/;
+
+function getQuickCheckDiagnostics(probe: Database.Database): string[] {
+  const rows = probe.pragma("quick_check");
+  if (!Array.isArray(rows)) {
+    throw new Error("SQLite quick check returned an invalid result");
+  }
+  return rows.flatMap((row) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      throw new Error("SQLite quick check returned an invalid row");
+    }
+    return Object.values(row as Record<string, unknown>).flatMap((value) => {
+      if (typeof value !== "string") {
+        throw new Error("SQLite quick check returned a non-text diagnostic");
+      }
+      return value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(
+          (line) => Boolean(line) && !QUICK_CHECK_DATABASE_HEADER.test(line),
+        );
+    });
+  });
+}
+
+function isHealthyQuickCheck(diagnostics: string[]): boolean {
+  return diagnostics.length === 1 && diagnostics[0] === QUICK_CHECK_OK;
+}
+
+function isFreelistOnlyMismatch(diagnostics: string[]): boolean {
+  return (
+    diagnostics.length > 0 &&
+    diagnostics.every((diagnostic) => FREELIST_MISMATCH.test(diagnostic))
+  );
+}
+
+function inspectDatabaseIntegrity(dbPath: string): string[] {
+  const probe = new Database(dbPath);
+  try {
+    return getQuickCheckDiagnostics(probe);
+  } finally {
+    probe.close();
+  }
+}
+
+function repairFreelistIntegrity(dbPath: string, diagnostics: string[]): void {
+  if (!isFreelistOnlyMismatch(diagnostics)) {
+    throw new Error(
+      `Database integrity check failed: ${diagnostics.join("; ").slice(0, 500)}`,
+    );
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${dbPath}.integrity-backup-${timestamp}`;
+  fs.copyFileSync(dbPath, backupPath);
+
+  const repairDatabase = new Database(dbPath);
+  try {
+    repairDatabase.exec("VACUUM");
+  } finally {
+    repairDatabase.close();
+  }
+
+  const repairedDiagnostics = inspectDatabaseIntegrity(dbPath);
+  if (!isHealthyQuickCheck(repairedDiagnostics)) {
+    throw new Error(
+      `Database integrity repair failed: ${repairedDiagnostics.join("; ").slice(0, 500)}`,
+    );
+  }
+  console.log(
+    `[DB] Repaired SQLite freelist metadata; backup=${path.basename(backupPath)}`,
+  );
+}
+
+function ensureDatabaseIntegrity(dbPath: string): void {
+  if (!fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0) return;
+  const diagnostics = inspectDatabaseIntegrity(dbPath);
+  if (isHealthyQuickCheck(diagnostics)) return;
+  repairFreelistIntegrity(dbPath, diagnostics);
+}
+
 /**
  * Hook functions that allow the host application to inject environment-specific
  * behaviour into the database initialization process.
@@ -250,6 +333,7 @@ export function initDatabase(
     recoverUnregisteredLock: hooks?.recoverUnregisteredLock,
   });
   try {
+    ensureDatabaseIntegrity(dbPath);
     backupDatabaseBeforeMigration(dbPath);
     db = new Database(dbPath);
 

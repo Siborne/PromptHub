@@ -41,6 +41,32 @@ function createLegacySkillSchema(dbPath: string): DatabaseAdapter.Database {
   return db;
 }
 
+function createDatabaseWithFreelistMismatch(dbPath: string): void {
+  const db = new DatabaseAdapter(dbPath);
+  db.exec(`
+    CREATE TABLE keeper (id INTEGER PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE churn (id INTEGER PRIMARY KEY, payload BLOB NOT NULL);
+    INSERT INTO keeper (value) VALUES ('preserved');
+    WITH RECURSIVE counter(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM counter WHERE value < 64
+    )
+    INSERT INTO churn (payload) SELECT randomblob(4096) FROM counter;
+    DELETE FROM churn;
+  `);
+  expect(
+    (db.pragma("freelist_count") as Array<{ freelist_count: number }>)[0]
+      .freelist_count,
+  ).toBeGreaterThan(0);
+  db.close();
+
+  const bytes = fs.readFileSync(dbPath);
+  expect(bytes.readUInt32BE(32)).toBeGreaterThan(0);
+  bytes.writeUInt32BE(0, 36);
+  fs.writeFileSync(dbPath, bytes);
+}
+
 describe("database migration locking regression", () => {
   const tempDirs: string[] = [];
 
@@ -72,7 +98,9 @@ describe("database migration locking regression", () => {
   });
 
   it("drops the legacy skills name index during migration without hitting table locks", () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-db-migration-"));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-migration-"),
+    );
     tempDirs.push(tempDir);
 
     const dbPath = path.join(tempDir, "prompthub.db");
@@ -110,7 +138,9 @@ describe("database migration locking regression", () => {
   });
 
   it("does not create pre-migration backups when the schema is already current", () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-db-current-"));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-current-"),
+    );
     tempDirs.push(tempDir);
     const dbPath = path.join(tempDir, "prompthub.db");
 
@@ -126,8 +156,54 @@ describe("database migration locking regression", () => {
     expect(backupFiles).toEqual([]);
   });
 
+  it("repairs a freelist-only integrity mismatch before migrations without losing rows", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-freelist-repair-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    createDatabaseWithFreelistMismatch(dbPath);
+
+    const db = initSharedDatabase(dbPath);
+
+    expect(db.pragma("quick_check")).toEqual([{ quick_check: "ok" }]);
+    expect(db.get("SELECT value FROM keeper WHERE id = 1")).toEqual({
+      value: "preserved",
+    });
+    expect(
+      fs
+        .readdirSync(tempDir)
+        .filter((entry) => entry.includes(".integrity-backup-")),
+    ).toHaveLength(1);
+  });
+
+  it("fails closed without rewriting databases that have unsupported corruption", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-unsupported-corruption-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    const db = new DatabaseAdapter(dbPath);
+    db.exec("CREATE TABLE keeper (id INTEGER PRIMARY KEY, value TEXT)");
+    db.close();
+    const original = fs.readFileSync(dbPath);
+    const corrupted = Buffer.from(original);
+    corrupted[0] = 0;
+    fs.writeFileSync(dbPath, corrupted);
+
+    expect(() => initSharedDatabase(dbPath)).toThrow();
+    expect(fs.readFileSync(dbPath)).toEqual(corrupted);
+    expect(
+      fs
+        .readdirSync(tempDir)
+        .filter((entry) => entry.includes(".integrity-backup-")),
+    ).toEqual([]);
+  });
+
   it("does not report clearing a stale lock when no lock exists", () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-db-no-lock-"));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-no-lock-"),
+    );
     tempDirs.push(tempDir);
     const dbPath = path.join(tempDir, "prompthub.db");
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);

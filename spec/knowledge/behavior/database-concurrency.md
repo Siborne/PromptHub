@@ -43,6 +43,15 @@
   Output Format 与 Folder，并合并同时发生的重复 refresh。
 - Desktop 不通过第二份 renderer 持久状态或持续轮询复制 SQLite 数据。
 
+### 5. Startup Integrity Gate
+
+- 既有数据库在取得进程租约后、执行迁移或业务写入前必须运行
+  `PRAGMA quick_check`；新建或空数据库可直接进入初始化。
+- 只有诊断全部属于 SQLite freelist 计数不一致时，初始化器才可创建带时间戳的
+  原文件备份并通过 `VACUUM` 修复；修复后必须使用新连接再次得到 `ok`。
+- 其它完整性错误不得被误判为锁冲突，也不得猜测性修复。初始化必须停止，并保留
+  原数据库供备份恢复或人工诊断。
+
 ## Stable Scenarios
 
 ### Scenario: CLI writes while Desktop is open
@@ -80,3 +89,12 @@ its mounted `DATA_ROOT`:
 - a live registered client, unknown lease, symlink, or non-directory lock still
   prevents recovery
 - multiple Web processes must not share the same SQLite data root
+
+### Scenario: Existing database has a stale freelist count
+
+When startup quick-check reports only a freelist count mismatch:
+
+- initialization preserves a timestamped byte-for-byte backup
+- SQLite rewrites the database through `VACUUM`
+- normal startup continues only after a fresh quick-check returns `ok`
+- broader corruption still fails closed without automatic salvage
