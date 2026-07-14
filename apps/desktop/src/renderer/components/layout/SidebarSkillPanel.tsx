@@ -127,7 +127,7 @@ interface SkillStoreSource {
 function getBuiltInSkillSources(
   controller: SidebarController,
 ): SkillStoreSource[] {
-  return [
+  const sources: SkillStoreSource[] = [
     {
       id: "official",
       label: controller.t("skill.officialStore", "官方商店"),
@@ -153,12 +153,15 @@ function getBuiltInSkillSources(
       label: controller.t("skill.clawHubStore", "ClawHub 商店"),
       count: controller.clawHubStoreCount,
     },
-    {
+  ];
+  if (controller.runtimeCapabilities.promptHubCloud) {
+    sources.push({
       id: "prompthub-cloud",
       label: controller.t("skill.promptHubCloudStore", "PromptHub Cloud"),
       count: controller.promptHubCloudStoreCount,
-    },
-  ];
+    });
+  }
+  return sources;
 }
 
 function getCustomSkillSources(

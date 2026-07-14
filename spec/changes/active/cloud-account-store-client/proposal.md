@@ -26,6 +26,8 @@ PromptHub Cloud 已具备账号、公开 Store release、安装意图和结果�
 
 Cloud 来源可独立隐藏；删除本地 Cloud credential 文件不会影响已有本地 Skill。API 失败时安装/更新必须保持本地内容不变，安装意图可保留为失败记录供 Cloud 指标使用。
 
+在生产 endpoint 与发布证据完成前，桌面端必须默认隐藏 Cloud 账号入口和 Cloud Skill Store 来源。仅显式构建开关可以启用该能力；隐藏时不得后台请求 Cloud，也不得让旧版本持久化的 Cloud 选中状态继续触发请求。
+
 ## 影响
 
 影响 Electron main/preload/renderer、共享 IPC channel，以及 Cloud auth middleware/API contract。现有第三方 registry 来源和本地 Skill 安装路径保持兼容。

@@ -3,15 +3,28 @@ import type {
   CloudStorePackageResponse,
   RegistrySkill,
 } from "@prompthub/shared/types";
+import { isPromptHubCloudEnabled } from "../runtime";
 
 export const PROMPTHUB_CLOUD_STORE_ID = "prompthub-cloud";
 export const PROMPTHUB_CLOUD_STORE_URL = "https://api.prompthub.cloud";
 
-export function isCloudRegistrySkill(skill: Pick<RegistrySkill, "source_id">): boolean {
+export function normalizeSkillStoreSourceIdForRuntime(
+  sourceId: string,
+): string {
+  return sourceId === PROMPTHUB_CLOUD_STORE_ID && !isPromptHubCloudEnabled()
+    ? "official"
+    : sourceId;
+}
+
+export function isCloudRegistrySkill(
+  skill: Pick<RegistrySkill, "source_id">,
+): boolean {
   return skill.source_id?.startsWith("cloud:") === true;
 }
 
-export function getCloudListingId(skill: Pick<RegistrySkill, "source_id">): string | null {
+export function getCloudListingId(
+  skill: Pick<RegistrySkill, "source_id">,
+): string | null {
   if (!isCloudRegistrySkill(skill)) return null;
   const listingId = skill.source_id.slice("cloud:".length).trim();
   return listingId || null;
@@ -49,10 +62,13 @@ export async function getCloudStorePackage(
   return window.api.cloud.store.getPackage(listingId, currentFingerprint);
 }
 
-export function getCloudSkillMarkdown(packageResponse: CloudStorePackageResponse): string {
+export function getCloudSkillMarkdown(
+  packageResponse: CloudStorePackageResponse,
+): string {
   const skillFile = packageResponse.package.files.find(
     (file) => file.path.toLowerCase() === "skill.md",
   );
-  if (!skillFile?.content.trim()) throw new Error("CLOUD_STORE_SKILL_MD_MISSING");
+  if (!skillFile?.content.trim())
+    throw new Error("CLOUD_STORE_SKILL_MD_MISSING");
   return skillFile.content;
 }

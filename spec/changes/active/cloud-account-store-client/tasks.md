@@ -27,6 +27,7 @@
 - [x] T-STORE-010e：安装 intent、终态回传、安装历史与失败状态展示。
 - [x] T-STORE-010f：公开 Cloud package 检查摘要、Web 版本/差异预览与同包下载。
 - [x] T-STORE-010g：接入桌面 Cloud Store 详情互动：公开 metrics/viewerState、点赞、收藏和带原因举报；补 IPC、输入校验和 renderer 回归。
+- [x] T-STORE-010h：默认隐藏未发布的 Cloud 账号与商店入口；统一门禁持久化恢复、程序化选择和后台刷新，并净化 IPC 错误展示。
 
 ## Verification/converge
 

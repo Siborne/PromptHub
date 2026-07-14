@@ -23,7 +23,7 @@ import { useTranslation } from "react-i18next";
 import type { DataSettingsSubsectionId } from "./DataSettings";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useUIStore, type SettingsSectionId } from "../../stores/ui.store";
-import { isWebRuntime } from "../../runtime";
+import { getRuntimeCapabilities, isWebRuntime } from "../../runtime";
 import { Spinner } from "../ui";
 
 interface BackupImportControllerLike {
@@ -214,7 +214,17 @@ export function SettingsPage({
   backupImportController,
 }: SettingsPageProps) {
   const webRuntime = isWebRuntime();
-  const settingsMenu = webRuntime ? WEB_SETTINGS_MENU : DESKTOP_SETTINGS_MENU;
+  const runtimeCapabilities = getRuntimeCapabilities();
+  const settingsMenu = useMemo(
+    () =>
+      webRuntime
+        ? WEB_SETTINGS_MENU
+        : DESKTOP_SETTINGS_MENU.filter(
+            (item) =>
+              item.id !== "cloudAccount" || runtimeCapabilities.promptHubCloud,
+          ),
+    [runtimeCapabilities.promptHubCloud, webRuntime],
+  );
   const pendingSettingsSection = useUIStore(
     (state) => state.pendingSettingsSection,
   );
@@ -261,7 +271,11 @@ export function SettingsPage({
       case "security":
         return <SecuritySettings />;
       case "cloudAccount":
-        return <CloudAccountSettings />;
+        return runtimeCapabilities.promptHubCloud ? (
+          <CloudAccountSettings />
+        ) : (
+          <GeneralSettings />
+        );
       case "data":
         return (
           <DataSettings

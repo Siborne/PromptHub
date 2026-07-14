@@ -2,6 +2,7 @@ export interface PromptHubRuntimeCapabilities {
   appUpdate: boolean;
   dataRecovery: boolean;
   desktopWindowControls: boolean;
+  promptHubCloud: boolean;
   skillDistribution: boolean;
   skillFileEditing: boolean;
   skillLocalScan: boolean;
@@ -34,12 +35,21 @@ export function isWebRuntime(): boolean {
   return getRuntimeWindow()?.__PROMPTHUB_WEB__ === true;
 }
 
+export function isPromptHubCloudEnabled(): boolean {
+  return (
+    !isWebRuntime() &&
+    import.meta.env.VITE_PROMPTHUB_CLOUD_ENABLED?.trim().toLowerCase() ===
+      "true"
+  );
+}
+
 export function getRuntimeCapabilities(): PromptHubRuntimeCapabilities {
   if (isWebRuntime()) {
     return {
       appUpdate: false,
       dataRecovery: false,
       desktopWindowControls: false,
+      promptHubCloud: false,
       skillDistribution: false,
       skillFileEditing: false,
       skillLocalScan: false,
@@ -52,6 +62,7 @@ export function getRuntimeCapabilities(): PromptHubRuntimeCapabilities {
     appUpdate: true,
     dataRecovery: true,
     desktopWindowControls: true,
+    promptHubCloud: isPromptHubCloudEnabled(),
     skillDistribution: true,
     skillFileEditing: true,
     skillLocalScan: true,

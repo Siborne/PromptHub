@@ -45,3 +45,18 @@ Cloud Skill 详情必须在桌面端支持登录用户点赞、收藏和举报�
 - **THEN** 桌面端调用对应 Cloud API，成功后更新当前详情的计数和 viewer 状态；重复点击执行取消操作。
 - **WHEN** 用户提交举报
 - **THEN** 桌面端要求选择原因并可填写补充说明，成功后只显示提交结果，不展示凭证或服务端内部字段。
+
+## FR-CLOUD-STORE-007 发布门禁与失败呈现
+
+### Scenario: 尚未开放 Cloud 桌面能力
+
+- **GIVEN** 桌面包没有显式启用 PromptHub Cloud 发布开关
+- **THEN** 设置导航和 Skill Store 来源列表都不得展示 PromptHub Cloud。
+- **AND** 自动刷新、旧版本持久化状态和程序化来源选择都不得发起 Cloud 请求。
+- **AND** 旧版本选中的 Cloud 来源必须回退到官方商店。
+
+### Scenario: 显式启用后服务不可用
+
+- **GIVEN** 桌面包显式启用了 PromptHub Cloud
+- **WHEN** Cloud 请求失败
+- **THEN** UI 只展示本地化的产品错误，不得透出 Electron IPC 调用包装或内部错误细节。

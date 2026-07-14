@@ -20,6 +20,7 @@ vi.mock("../../../src/renderer/stores/settings.store", () => ({
 }));
 
 vi.mock("../../../src/renderer/runtime", () => ({
+  getRuntimeCapabilities: () => ({ promptHubCloud: false }),
   isWebRuntime: () => false,
 }));
 
@@ -120,6 +121,29 @@ describe("SettingsPage", () => {
     expect(dataSettingsModuleLoadMock).not.toHaveBeenCalled();
     expect(networkSettingsModuleLoadMock).not.toHaveBeenCalled();
     expect(aiSettingsModuleLoadMock).not.toHaveBeenCalled();
+  });
+
+  it("does not expose PromptHub Cloud before the desktop capability is launched", async () => {
+    useSettingsStoreMock.mockReturnValue({
+      syncProvider: "manual",
+      webdavEnabled: false,
+      selfHostedSyncEnabled: false,
+      s3StorageEnabled: false,
+      desktopHomeModules: ["prompt", "skill", "rules"],
+    });
+    useUIStore.getState().requestSettingsSection("cloudAccount");
+
+    await act(async () => {
+      await renderWithI18n(<SettingsPage onBack={vi.fn()} />, {
+        language: "en",
+      });
+    });
+
+    expect(screen.getByText("general-content")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "PromptHub Cloud" }),
+    ).not.toBeInTheDocument();
+    expect(useUIStore.getState().pendingSettingsSection).toBeNull();
   });
 
   it("shows enabled badge on active cloud backup targets in the data submenu", async () => {

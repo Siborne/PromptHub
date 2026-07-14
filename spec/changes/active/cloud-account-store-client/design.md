@@ -42,6 +42,12 @@ Cloud package 的 `contentFingerprint` 作为 Cloud delivery expectation，桌�
 - Cloud 多文件写入失败：恢复已写入文件和新建条目；安装失败不得留下半成品 Skill，更新失败不得提前刷新 DB 来源基线。
 - safeStorage 不可用：拒绝登录，不落明文 token。
 
+## 发布门禁
+
+`runtime.ts` 是 renderer 能力的单一真源。`promptHubCloud` 仅在桌面构建显式设置 `VITE_PROMPTHUB_CLOUD_ENABLED=true` 时启用，默认和 Web runtime 均为关闭。设置导航、Skill Store 来源、来源状态恢复和远程定时刷新必须消费同一能力，避免入口隐藏但后台仍请求的半门禁状态。
+
+持久化的 `selectedStoreSourceId=prompthub-cloud` 在能力关闭时归一化为 `official`。Cloud 错误进入 renderer 状态前转换为本地化的通用远程商店错误，不保存 Electron 的 `Error invoking remote method` 包装文本。
+
 ## 可验证追踪
 
 | ID | Design | Test | Task |
@@ -55,3 +61,4 @@ Cloud package 的 `contentFingerprint` 作为 Cloud delivery expectation，桌�
 | FR-CLOUD-STORE-004 | DES-STORE-004 | TEST-STORE-013..015 | T-STORE-010d |
 | FR-CLOUD-STORE-005 | DES-STORE-005 | TEST-STORE-016 | T-STORE-010e |
 | FR-CLOUD-STORE-006 | DES-STORE-006 | TEST-STORE-017..019 | T-STORE-010g |
+| FR-CLOUD-STORE-007 | DES-STORE-007 | TEST-STORE-020..023 | T-STORE-010h |

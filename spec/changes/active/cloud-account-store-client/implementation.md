@@ -4,6 +4,8 @@
 
 2026-07-12：已完成 Cloud desktop 账号与 Store 的首段闭环；本轮继续补齐桌面账号自助操作、公开 package 检查摘要和 Web 版本预览，保留生产环境与外部服务证据作为明确残余。
 
+2026-07-14：发现生产 endpoint 尚未完成外部验证时，桌面正式构建已经无条件展示账号与商店入口，并会在后台刷新 Cloud。这与 proposal 中“Cloud 来源可独立隐藏”的回滚边界冲突。当前修复将能力改为显式构建启用，默认关闭，并覆盖旧状态恢复与错误净化。
+
 ## 已实现
 
 - Cloud 新增 desktop login contract；Bearer middleware 同时兼容 cookie 和 bearer session，普通 Web login 不返回 token。
@@ -18,6 +20,7 @@
 - Cloud package 公开响应增加不含 finding 内容、凭证和对象 key 的机器检查摘要；Web Store 详情展示已发布版本、指纹算法、结构化文件差异、安全检查计数，并下载同一 normalized package。
 - 桌面 Cloud Store 详情补齐公开 metrics/viewerState、点赞/取消、收藏/取消和带原因举报；写请求全部通过 main/preload IPC，renderer 不接触 bearer token，举报字段在 IPC 边界限制为固定原因和 2000 字符说明。
 - 桌面 Cloud 设置补齐套餐与权益摘要，main 侧只返回有效套餐、额度和开关，不把 Stripe customer 或 plan grant 内部字段带到 renderer；旧 Cloud endpoint 暂时缺少权益时不阻断账号资料加载。
+- 2026-07-14 起，Cloud 桌面入口由 `promptHubCloud` runtime capability 统一控制；普通构建默认隐藏设置与商店入口，禁止程序化选择和后台刷新，旧 `prompthub-cloud` 选择回退到 `official`。仅显式设置 `VITE_PROMPTHUB_CLOUD_ENABLED=true` 的桌面构建可启用；启用后的请求错误也不再把 Electron IPC 包装文本展示或保存到 renderer 状态。
 
 ## 本轮验证
 
@@ -30,6 +33,8 @@
 - `pnpm --filter @prompthub/desktop exec eslint`（本轮 touched modules）
 - Cloud backend targeted Vitest：auth 26、store review 12、store install 4、store analytics 4 tests passed。
 - Cloud backend/admin/web typecheck 与 web lint passed；Cloud backend lint passed。
+- 2026-07-14 Cloud 发布门禁回归：renderer runtime、设置导航、Skill Store 侧栏、旧来源恢复、禁用时零请求与启用后错误净化，共 64 tests passed。
+- 2026-07-14 `pnpm --filter @prompthub/desktop typecheck`、`pnpm --filter @prompthub/desktop lint`、`pnpm --filter @prompthub/desktop build` passed；build 仅保留既有 chunk size 和 fflate dynamic/static import warning。
 
 ## 残余风险
 

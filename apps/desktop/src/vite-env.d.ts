@@ -4,6 +4,7 @@ interface ImportMetaEnv {
   readonly DEV: boolean;
   readonly PROD: boolean;
   readonly MODE: string;
+  readonly VITE_PROMPTHUB_CLOUD_ENABLED?: string;
 }
 
 interface ImportMeta {

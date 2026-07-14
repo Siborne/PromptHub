@@ -731,6 +731,9 @@ describe("Sidebar", () => {
       name: /Official Store/i,
     });
     expect(within(officialButton).getByText("0")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /PromptHub Cloud/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows preconfigured community store sources in the skill store group", async () => {
