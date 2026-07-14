@@ -26,6 +26,10 @@ Implemented.
     shared adapter.
   - MCP Store source loading skips remote reload for the built-in official
     source and treats custom sources as first-class channel entries.
+  - A later security hardening moved MCP network authorization into the
+    main-process source registry. Renderer persistence remains a compatibility
+    mirror, reconciles additively at startup, and commits mutations only after
+    the main-process registry accepts them.
 - Added Plugin custom store source state, persistence, and source override
   flow.
   - `plugin.store.ts` now persists custom sources and selected source id.

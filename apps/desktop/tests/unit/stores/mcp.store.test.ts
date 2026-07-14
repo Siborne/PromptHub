@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMcpStore } from "../../../src/renderer/stores/mcp.store";
 import type {
   McpLibraryFile,
+  McpMarketSource,
   McpMarketTemplate,
   McpServerConfig,
 } from "@prompthub/shared/types/mcp";
@@ -201,6 +202,125 @@ describe("mcp store remote market cache persistence", () => {
 
     const persisted = JSON.parse(localStorage.getItem("mcp-store") ?? "{}");
     expect(persisted.state.pendingPluginChildDeployServerIds).toBeUndefined();
+  });
+
+  it("commits a custom MCP source only after main-process registration succeeds", async () => {
+    const replaceMarketSources = vi.fn(
+      async (sources: McpMarketSource[]) => sources,
+    );
+    window.api.mcp = {
+      ...(window.api.mcp ?? {}),
+      replaceMarketSources,
+    };
+
+    await useMcpStore
+      .getState()
+      .addCustomStoreSource(
+        "Team Catalog",
+        "http://192.168.1.20/mcp/catalog.json",
+      );
+
+    expect(replaceMarketSources).toHaveBeenCalledWith([
+      expect.objectContaining({
+        label: "Team Catalog",
+        url: "http://192.168.1.20/mcp/catalog.json",
+        trustLevel: "community",
+      }),
+    ]);
+    expect(useMcpStore.getState().customStoreSources).toHaveLength(1);
+
+    replaceMarketSources.mockRejectedValueOnce(new Error("source rejected"));
+    await expect(
+      useMcpStore
+        .getState()
+        .addCustomStoreSource("Blocked", "http://127.0.0.1/mcp.json"),
+    ).rejects.toThrow("source rejected");
+    expect(useMcpStore.getState().customStoreSources).toHaveLength(1);
+  });
+
+  it("merges renderer migration sources with main-process registered sources without deleting either", async () => {
+    const builtins: McpMarketSource[] = [
+      {
+        id: "prompthub-official",
+        label: "Official Store",
+        url: "https://github.com/legeling/PromptHub",
+        trustLevel: "official",
+      },
+      {
+        id: "modelcontextprotocol",
+        label: "MCP Registry",
+        url: "https://registry.modelcontextprotocol.io",
+        trustLevel: "official",
+      },
+    ];
+    const registeredOnly: McpMarketSource = {
+      id: "main-only",
+      label: "Recovered LAN Catalog",
+      url: "http://192.168.1.30/mcp/catalog.json",
+      trustLevel: "community",
+    };
+    const replaceMarketSources = vi.fn(async (sources: McpMarketSource[]) => [
+      ...builtins,
+      ...sources,
+    ]);
+    useMcpStore.setState({
+      customStoreSources: [
+        {
+          id: "renderer-only",
+          name: "Renderer Catalog",
+          type: "marketplace-json",
+          url: "http://192.168.1.20/mcp/catalog.json",
+          enabled: true,
+          order: 0,
+          createdAt: 10,
+        },
+      ],
+    });
+    window.api.mcp = {
+      ...(window.api.mcp ?? {}),
+      getLibrary: vi.fn().mockResolvedValue(mcpLibrary),
+      listMarket: vi.fn().mockResolvedValue([]),
+      listMarketSources: vi
+        .fn()
+        .mockResolvedValue([...builtins, registeredOnly]),
+      replaceMarketSources,
+      getTargetPresets: vi.fn().mockResolvedValue([]),
+      getTargetStatus: vi.fn().mockResolvedValue([]),
+      checkAllServers: vi.fn().mockResolvedValue([]),
+    };
+
+    await useMcpStore.getState().load();
+
+    expect(replaceMarketSources).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: "renderer-only",
+        label: "Renderer Catalog",
+      }),
+      expect.objectContaining({
+        id: "main-only",
+        label: "Recovered LAN Catalog",
+      }),
+    ]);
+    expect(
+      useMcpStore.getState().customStoreSources.map((source) => source.id),
+    ).toEqual(["renderer-only", "main-only"]);
+    expect(useMcpStore.getState().marketSources).toEqual([
+      ...builtins,
+      expect.objectContaining({ id: "renderer-only" }),
+      expect.objectContaining({ id: "main-only" }),
+    ]);
+
+    await useMcpStore.getState().load();
+    expect(
+      useMcpStore.getState().customStoreSources.map((source) => source.id),
+    ).toEqual(["renderer-only", "main-only"]);
+    expect(replaceMarketSources).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: "renderer-only" }),
+      expect.objectContaining({ id: "main-only" }),
+    ]);
+    expect(replaceMarketSources.mock.calls[1]?.[0]).toEqual(
+      replaceMarketSources.mock.calls[0]?.[0],
+    );
   });
 
   it("deletes MCP servers and clears stale detail preview state", async () => {

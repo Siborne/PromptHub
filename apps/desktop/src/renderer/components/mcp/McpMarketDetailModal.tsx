@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BookOpenIcon,
@@ -8,18 +8,33 @@ import {
   KeyRoundIcon,
   Loader2Icon,
   PlusIcon,
+  RefreshCwIcon,
   ServerIcon,
   XIcon,
 } from "lucide-react";
-import type { McpMarketTemplate } from "@prompthub/shared/types/mcp";
+import type {
+  McpMarketTemplate,
+  McpMarketUpdateCheck,
+  McpMarketUpdateResult,
+  McpServerConfig,
+} from "@prompthub/shared/types/mcp";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { getMcpTemplateSourceLabel } from "./mcp-market-labels";
 
 interface McpMarketDetailModalProps {
-  isInstalled: boolean;
+  installedServer?: McpServerConfig;
   template: McpMarketTemplate;
   onClose: () => void;
   onInstall: (template: McpMarketTemplate | string) => Promise<void>;
+  onCheckUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+  ) => Promise<McpMarketUpdateCheck>;
+  onUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+    force?: boolean,
+  ) => Promise<McpMarketUpdateResult>;
 }
 
 function buildTemplateConfig(template: McpMarketTemplate): string {
@@ -177,14 +192,23 @@ function DetailRow({ label, value }: { label: string; value?: string }) {
  * store card opens details first, while install is an explicit action.
  */
 export function McpMarketDetailModal({
-  isInstalled,
+  installedServer,
   template,
   onClose,
   onInstall,
+  onCheckUpdate,
+  onUpdate,
 }: McpMarketDetailModalProps) {
   const { t } = useTranslation();
   const [isInstalling, setIsInstalling] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateCheck, setUpdateCheck] = useState<McpMarketUpdateCheck | null>(
+    null,
+  );
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState(false);
+  const isInstalled = Boolean(installedServer);
   const configContent = useMemo(
     () => buildTemplateConfig(template),
     [template],
@@ -219,6 +243,27 @@ export function McpMarketDetailModal({
   const hasConfigRequirements =
     requiredEnvEntries.length > 0 || placeholderEntries.length > 0;
 
+  const refreshUpdateCheck = useCallback(async () => {
+    if (!installedServer) return;
+    setIsCheckingUpdate(true);
+    setUpdateError(null);
+    try {
+      const result = await onCheckUpdate(installedServer.id, template);
+      setUpdateCheck(result);
+    } catch (error) {
+      console.error("Failed to check MCP market update", error);
+      setUpdateError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }, [installedServer, onCheckUpdate, template]);
+
+  useEffect(() => {
+    setUpdateCheck(null);
+    setUpdateError(null);
+    if (installedServer) void refreshUpdateCheck();
+  }, [installedServer, refreshUpdateCheck]);
+
   const handleInstall = async () => {
     if (isInstalled || isInstalling) {
       return;
@@ -231,6 +276,48 @@ export function McpMarketDetailModal({
       setIsInstalling(false);
     }
   };
+
+  const handleUpdate = async (force: boolean) => {
+    if (!installedServer || isUpdating) return;
+    setIsUpdating(true);
+    setUpdateError(null);
+    try {
+      await onUpdate(installedServer.id, template, force);
+      await refreshUpdateCheck();
+    } catch (error) {
+      console.error("Failed to update MCP market server", error);
+      setUpdateError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const updateStatusText = updateCheck
+    ? {
+        "up-to-date": t("mcp.marketUpToDate", "Up to date"),
+        "update-available": t("mcp.marketUpdateAvailable", "Update available"),
+        "local-modified": t(
+          "mcp.marketLocalModified",
+          "Local configuration differs; upstream has not changed",
+        ),
+        conflict: t(
+          "mcp.marketUpdateConflict",
+          "Local configuration and upstream both changed",
+        ),
+        "legacy-review": t(
+          "mcp.marketLegacyReview",
+          "Installed before update tracking; review before replacing",
+        ),
+        "source-mismatch": t(
+          "mcp.marketSourceMismatch",
+          "Installed item belongs to another source",
+        ),
+      }[updateCheck.status]
+    : null;
+  const canApplySafeUpdate = updateCheck?.status === "update-available";
+  const canForceUpdate =
+    updateCheck?.status === "conflict" ||
+    updateCheck?.status === "legacy-review";
 
   const handleCopy = async () => {
     await copyTextToClipboard(configContent);
@@ -284,6 +371,18 @@ export function McpMarketDetailModal({
                   </span>
                 ))}
               </div>
+              {isInstalled ? (
+                <div
+                  className="mt-3 text-xs text-muted-foreground"
+                  role="status"
+                >
+                  {isCheckingUpdate
+                    ? t("mcp.checkingMarketUpdate", "Checking for updates...")
+                    : updateError
+                      ? t("mcp.marketCheckFailed", "Update check failed")
+                      : updateStatusText}
+                </div>
+              ) : null}
             </div>
           </div>
           <button
@@ -503,6 +602,10 @@ export function McpMarketDetailModal({
                   value={template.runtime}
                 />
                 <DetailRow
+                  label={t("common.version", "Version")}
+                  value={template.version}
+                />
+                <DetailRow
                   label={t("mcp.packageOrScript", "Package / Script")}
                   value={template.packageName}
                 />
@@ -565,25 +668,58 @@ export function McpMarketDetailModal({
         >
           <button
             type="button"
-            onClick={() => void handleInstall()}
-            disabled={isInstalled || isInstalling}
+            onClick={() => {
+              if (!isInstalled) {
+                void handleInstall();
+              } else if (canApplySafeUpdate) {
+                void handleUpdate(false);
+              } else if (canForceUpdate) {
+                void handleUpdate(true);
+              } else if (updateError) {
+                void refreshUpdateCheck();
+              }
+            }}
+            disabled={
+              isInstalling ||
+              isCheckingUpdate ||
+              isUpdating ||
+              (isInstalled &&
+                !canApplySafeUpdate &&
+                !canForceUpdate &&
+                !updateError)
+            }
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isInstalling ? (
+            {isInstalling || isCheckingUpdate || isUpdating ? (
               <Loader2Icon
                 className="h-4 w-4 animate-spin"
                 aria-hidden="true"
               />
-            ) : isInstalled ? (
+            ) : updateError ? (
+              <RefreshCwIcon className="h-4 w-4" aria-hidden="true" />
+            ) : isInstalled && !canApplySafeUpdate && !canForceUpdate ? (
               <CheckIcon className="h-4 w-4" aria-hidden="true" />
+            ) : isInstalled ? (
+              <RefreshCwIcon className="h-4 w-4" aria-hidden="true" />
             ) : (
               <PlusIcon className="h-4 w-4" aria-hidden="true" />
             )}
-            {isInstalled
-              ? t("common.installed", "Installed")
-              : isInstalling
+            {!isInstalled
+              ? isInstalling
                 ? t("skill.installing", "Installing...")
-                : t("common.install", "Install")}
+                : t("common.install", "Install")
+              : isCheckingUpdate
+                ? t("mcp.checkingMarketUpdate", "Checking for updates...")
+                : isUpdating
+                  ? t("mcp.updatingMarketMcp", "Updating...")
+                  : updateError
+                    ? t("mcp.retryMarketUpdateCheck", "Retry update check")
+                    : canApplySafeUpdate
+                      ? t("mcp.updateMarketMcp", "Update")
+                      : canForceUpdate
+                        ? t("mcp.updateMarketMcpAnyway", "Update anyway")
+                        : updateStatusText ||
+                          t("common.installed", "Installed")}
           </button>
         </div>
       </div>

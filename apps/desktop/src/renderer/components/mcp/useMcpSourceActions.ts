@@ -27,7 +27,7 @@ interface McpSourceActionOptions {
 }
 
 function createCustomSourceAdd(options: McpSourceActionOptions) {
-  return () => {
+  return async () => {
     const { bindings, reportError, state } = options;
     if (!state.sourceName.trim() || !state.sourceUrl.trim()) {
       bindings.showToast(
@@ -40,7 +40,7 @@ function createCustomSourceAdd(options: McpSourceActionOptions) {
       return;
     }
     try {
-      bindings.mcpStore.addCustomStoreSource(
+      await bindings.mcpStore.addCustomStoreSource(
         state.sourceName,
         state.sourceUrl,
         state.sourceType,
@@ -64,9 +64,9 @@ function resetMcpCustomSourceForm(state: McpManagerState) {
 }
 
 function createCustomSourceUpdate(options: McpSourceActionOptions) {
-  return (payload: McpCustomSourcePayload) => {
+  return async (payload: McpCustomSourcePayload) => {
     try {
-      options.bindings.mcpStore.updateCustomStoreSource(payload);
+      await options.bindings.mcpStore.updateCustomStoreSource(payload);
       options.state.setEditingCustomSourceId(null);
       void options.bindings.mcpStore.loadMarketSource(payload.id, true);
     } catch (error) {
@@ -76,12 +76,16 @@ function createCustomSourceUpdate(options: McpSourceActionOptions) {
 }
 
 function createCustomSourceDelete(options: McpSourceActionOptions) {
-  return () => {
+  return async () => {
     const source = options.library.pendingDeleteCustomSource;
     if (!source) return;
-    options.bindings.mcpStore.removeCustomStoreSource(source.id);
-    options.state.setPendingDeleteCustomSourceId(null);
-    options.state.setEditingCustomSourceId(null);
+    try {
+      await options.bindings.mcpStore.removeCustomStoreSource(source.id);
+      options.state.setPendingDeleteCustomSourceId(null);
+      options.state.setEditingCustomSourceId(null);
+    } catch (error) {
+      options.reportError(error);
+    }
   };
 }
 

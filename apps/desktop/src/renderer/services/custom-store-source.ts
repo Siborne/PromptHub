@@ -45,6 +45,7 @@ export function createCustomStoreSourceId(prefix = "custom"): string {
 
 export function normalizeCustomStoreSourceInput(
   input: CustomStoreSourceInput,
+  options: { allowInsecureHttp?: boolean } = {},
 ): CustomStoreSourceInput | null {
   const trimmedName = input.name.trim();
   if (!trimmedName) {
@@ -59,7 +60,11 @@ export function normalizeCustomStoreSourceInput(
           input.directory,
         )
       : null;
-  const trimmedUrl = validateStoreSourceInput(input.url.trim(), input.type);
+  const trimmedUrl = validateStoreSourceInput(
+    input.url.trim(),
+    input.type,
+    options,
+  );
 
   return {
     ...input,
@@ -74,11 +79,12 @@ export function addCustomStoreSource<TSource extends CustomStoreSource>(
   sources: TSource[],
   input: CustomStoreSourceInput,
   options: {
+    allowInsecureHttp?: boolean;
     idPrefix?: string;
     mapSource?: (source: CustomStoreSource) => TSource;
   } = {},
 ): { source: TSource; sources: TSource[] } | null {
-  const normalized = normalizeCustomStoreSourceInput(input);
+  const normalized = normalizeCustomStoreSourceInput(input, options);
   if (!normalized) {
     return null;
   }
@@ -108,10 +114,11 @@ export function updateCustomStoreSource<TSource extends CustomStoreSource>(
   sources: TSource[],
   input: CustomStoreSourceInput & { id: string },
   options: {
+    allowInsecureHttp?: boolean;
     mapSource?: (source: CustomStoreSource, previous: TSource) => TSource;
   } = {},
 ): TSource[] {
-  const normalized = normalizeCustomStoreSourceInput(input);
+  const normalized = normalizeCustomStoreSourceInput(input, options);
   if (!normalized) {
     return sources;
   }
@@ -134,7 +141,10 @@ export function updateCustomStoreSource<TSource extends CustomStoreSource>(
   });
 }
 
-export function removeCustomStoreSource<TState extends CustomStoreSourceState<TSource>, TSource extends CustomStoreSource>(
+export function removeCustomStoreSource<
+  TState extends CustomStoreSourceState<TSource>,
+  TSource extends CustomStoreSource,
+>(
   state: TState,
   sourceId: string,
   fallbackSourceId: string,
@@ -159,10 +169,10 @@ export function toggleCustomStoreSource<TSource extends CustomStoreSource>(
   );
 }
 
-export function mergeEnabledCustomSources<TSource extends { id: string }, TCustom extends TSource & CustomStoreSource>(
-  builtinSources: TSource[],
-  customSources: TCustom[],
-): TSource[] {
+export function mergeEnabledCustomSources<
+  TSource extends { id: string },
+  TCustom extends TSource & CustomStoreSource,
+>(builtinSources: TSource[], customSources: TCustom[]): TSource[] {
   const builtinIds = new Set(builtinSources.map((source) => source.id));
   return [
     ...builtinSources,
@@ -172,14 +182,18 @@ export function mergeEnabledCustomSources<TSource extends { id: string }, TCusto
   ];
 }
 
-export function toSkillStoreSource(source: CustomStoreSource): SkillStoreSource {
+export function toSkillStoreSource(
+  source: CustomStoreSource,
+): SkillStoreSource {
   return {
     ...source,
     type: source.type,
   };
 }
 
-export function toMcpMarketSource(source: CustomStoreSource): McpMarketSource | null {
+export function toMcpMarketSource(
+  source: CustomStoreSource,
+): McpMarketSource | null {
   if (!source.enabled || source.type === "local-dir") {
     return null;
   }

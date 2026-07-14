@@ -12,7 +12,11 @@ import { McpManager } from "../../../src/renderer/components/mcp/McpManager";
 import { useMcpStore } from "../../../src/renderer/stores/mcp.store";
 import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
 import type { McpTargetPreset } from "@prompthub/core";
-import type { McpServerConfig } from "@prompthub/shared/types/mcp";
+import { BUILTIN_MCP_MARKET_SOURCES } from "@prompthub/shared/constants/mcp-market";
+import type {
+  McpMarketSource,
+  McpServerConfig,
+} from "@prompthub/shared/types/mcp";
 import { renderWithI18n } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
 
@@ -189,6 +193,7 @@ function resetMcpStore() {
     library: null,
     marketTemplates: [],
     marketSources: [],
+    customStoreSources: [],
     remoteMarketEntries: {},
     loadingMarketSourceId: null,
     marketError: null,
@@ -229,6 +234,8 @@ interface McpMockOptions {
 
 function installMcpMocks(options: McpMockOptions = {}) {
   const servers = options.servers ?? [filesystemServer];
+  const marketSources = (options.marketSources ??
+    BUILTIN_MCP_MARKET_SOURCES) as McpMarketSource[];
   const targetStatus = options.targetStatus ?? [
     {
       presetId: codexTarget.id,
@@ -267,22 +274,18 @@ function installMcpMocks(options: McpMockOptions = {}) {
             },
           ],
         ),
-        listMarketSources: vi.fn().mockResolvedValue(
-          options.marketSources ?? [
-            {
-              id: "prompthub-official",
-              label: "Official Store",
-              url: "https://github.com/legeling/PromptHub",
-              trustLevel: "official",
-            },
-            {
-              id: "modelcontextprotocol",
-              label: "MCP Registry",
-              url: "https://registry.modelcontextprotocol.io",
-              trustLevel: "official",
-            },
-          ],
-        ),
+        listMarketSources: vi.fn().mockResolvedValue(marketSources),
+        replaceMarketSources: vi
+          .fn()
+          .mockImplementation(async (sources: McpMarketSource[]) => [
+            ...BUILTIN_MCP_MARKET_SOURCES,
+            ...sources.filter(
+              (source) =>
+                !BUILTIN_MCP_MARKET_SOURCES.some(
+                  (builtin) => builtin.id === source.id,
+                ),
+            ),
+          ]),
         getTargetPresets: vi
           .fn()
           .mockResolvedValue(
@@ -573,6 +576,7 @@ describe("McpManager", () => {
 
     await waitFor(() => {
       expect(api.mcp.fetchRemoteContent).toHaveBeenCalledWith(
+        "modelcontextprotocol",
         "https://registry.modelcontextprotocol.io/v0/servers?search=adeu",
       );
       expect(screen.getByText("ADeu")).toBeInTheDocument();
@@ -675,6 +679,7 @@ describe("McpManager", () => {
     await waitFor(() => {
       expect(api.mcp.fetchRemoteContent).toHaveBeenNthCalledWith(
         2,
+        "modelcontextprotocol",
         "https://registry.modelcontextprotocol.io/v0/servers?cursor=ai.adeu%2Fadeu%3A1.0.0",
       );
       expect(screen.getByText("Context7")).toBeInTheDocument();
@@ -888,6 +893,7 @@ describe("McpManager", () => {
     await waitFor(() => {
       expect(api.mcp.fetchRemoteContent).toHaveBeenNthCalledWith(
         2,
+        "modelcontextprotocol",
         "https://registry.modelcontextprotocol.io/v0/servers?cursor=ai.adeu%2Fadeu%3A1.0.0",
       );
       expect(screen.getByText("Context7")).toBeInTheDocument();
@@ -895,6 +901,7 @@ describe("McpManager", () => {
     await waitFor(() => {
       expect(api.mcp.fetchRemoteContent).toHaveBeenNthCalledWith(
         3,
+        "modelcontextprotocol",
         "https://registry.modelcontextprotocol.io/v0/servers?cursor=com.upstash%2Fcontext7%3A1.0.0",
       );
       expect(screen.getByText("Browserbase")).toBeInTheDocument();

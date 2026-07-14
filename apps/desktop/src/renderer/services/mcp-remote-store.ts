@@ -24,6 +24,7 @@ export interface LoadMcpRemoteStoreOptions {
 interface OfficialPackage {
   identifier?: string;
   registryType?: string;
+  version?: string;
   transport?: { type?: string };
   environmentVariables?: Array<{
     description?: string;
@@ -52,6 +53,7 @@ interface OfficialRegistryEntry {
     remotes?: OfficialRemote[];
     repository?: string | { url?: string };
     title?: string;
+    version?: string;
     websiteUrl?: string;
   };
 }
@@ -74,6 +76,7 @@ interface GenericRemoteServer {
   tags?: string[];
   title?: string;
   url?: string;
+  version?: string;
 }
 
 const DEFAULT_REMOTE_PAGE_SIZE = 48;
@@ -173,11 +176,15 @@ function parseInstallCommand(commandLine?: string): {
 }
 
 function getPackageCommand(
-  item: Pick<OfficialPackage, "identifier" | "registryType">,
-): { args: string[]; command: string; runtime: string } {
+  item: Pick<OfficialPackage, "identifier" | "registryType" | "version">,
+): { args: string[]; command: string; runtime: string } | null {
   const identifier = item.identifier ?? "";
   if (item.registryType === "pypi") {
-    return { command: "uvx", args: [identifier], runtime: "uvx" };
+    const packageSpec =
+      item.version && !identifier.includes("==")
+        ? `${identifier}==${item.version}`
+        : identifier;
+    return { command: "uvx", args: [packageSpec], runtime: "uvx" };
   }
   if (item.registryType === "oci") {
     return {
@@ -186,7 +193,17 @@ function getPackageCommand(
       runtime: "docker",
     };
   }
-  return { command: "npx", args: ["-y", identifier], runtime: "npx" };
+  if (item.registryType !== "npm") {
+    return null;
+  }
+  const versionSeparator = identifier.lastIndexOf("@");
+  const packageNameEnd = identifier.startsWith("@")
+    ? identifier.indexOf("/")
+    : 0;
+  const hasVersion = versionSeparator > packageNameEnd;
+  const packageSpec =
+    item.version && !hasVersion ? `${identifier}@${item.version}` : identifier;
+  return { command: "npx", args: ["-y", packageSpec], runtime: "npx" };
 }
 
 function requirementsToEnv(
@@ -279,26 +296,31 @@ export function parseOfficialMcpRegistryCatalog(
       if (Array.isArray(server.packages) && server.packages.length > 0) {
         return server.packages
           .filter((item) => item.identifier)
-          .map((item): McpMarketTemplate => {
-            const command = getPackageCommand(item);
+          .flatMap((item): McpMarketTemplate[] => {
+            const version = item.version || server.version;
+            const command = getPackageCommand({ ...item, version });
+            if (!command) return [];
             const env = requirementsToEnv(item.environmentVariables ?? []);
-            return {
-              id: `${source.id}:${name}`,
-              name,
-              displayName,
-              description: server.description || `${displayName} MCP server`,
-              transport: normalizeTransport(item.transport?.type),
-              command: command.command,
-              args: command.args,
-              runtime: command.runtime,
-              packageName: item.identifier,
-              tags,
-              homepage: server.websiteUrl || repository,
-              repository,
-              documentationUrl: server.websiteUrl || repository,
-              source: toSource(source),
-              ...env,
-            };
+            return [
+              {
+                id: `${source.id}:${name}`,
+                version,
+                name,
+                displayName,
+                description: server.description || `${displayName} MCP server`,
+                transport: normalizeTransport(item.transport?.type),
+                command: command.command,
+                args: command.args,
+                runtime: command.runtime,
+                packageName: item.identifier,
+                tags,
+                homepage: server.websiteUrl || repository,
+                repository,
+                documentationUrl: server.websiteUrl || repository,
+                source: toSource(source),
+                ...env,
+              },
+            ];
           });
       }
 
@@ -308,6 +330,7 @@ export function parseOfficialMcpRegistryCatalog(
           const headers = requirementsToEnv(remote.headers ?? []);
           return {
             id: `${source.id}:${name}`,
+            version: server.version,
             name,
             displayName,
             description: server.description || `${displayName} MCP server`,
@@ -491,6 +514,7 @@ function genericServerToTemplate(
 
   return {
     id: `${source.id}:${name}`,
+    version: item.version,
     name,
     displayName,
     description: item.description || `${displayName} MCP server`,

@@ -11,6 +11,8 @@ import type {
   McpLibraryFile,
   McpMarketSource,
   McpMarketTemplate,
+  McpMarketUpdateCheck,
+  McpMarketUpdateResult,
   McpRemoveResult,
   McpRemoveTargetNames,
   McpServerConfig,
@@ -37,8 +39,15 @@ export const mcpApi = {
     ipcRenderer.invoke(IPC_CHANNELS.MCP_MARKET_LIST),
   listMarketSources: (): Promise<McpMarketSource[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.MCP_MARKET_SOURCES),
-  fetchRemoteContent: (url: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.MCP_FETCH_REMOTE_CONTENT, url),
+  replaceMarketSources: (
+    sources: McpMarketSource[],
+  ): Promise<McpMarketSource[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.MCP_MARKET_SOURCES_REPLACE, sources),
+  fetchRemoteContent: (sourceId: string, url: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.MCP_FETCH_REMOTE_CONTENT, {
+      sourceId,
+      url,
+    }),
   getTargetPresets: (): Promise<McpTargetPreset[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.MCP_TARGET_PRESETS),
   createServer: (draft: McpServerDraft): Promise<McpServerConfig> =>
@@ -57,6 +66,26 @@ export const mcpApi = {
     template: McpMarketTemplate,
   ): Promise<McpServerConfig> =>
     ipcRenderer.invoke(IPC_CHANNELS.MCP_MARKET_INSTALL_TEMPLATE, template),
+  checkMarketUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+  ): Promise<McpMarketUpdateCheck> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.MCP_MARKET_CHECK_UPDATE,
+      identifier,
+      template,
+    ),
+  applyMarketUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+    force?: boolean,
+  ): Promise<McpMarketUpdateResult> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.MCP_MARKET_APPLY_UPDATE,
+      identifier,
+      template,
+      force,
+    ),
   preview: (target: McpTargetKind, serverIds: string[]): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.MCP_PREVIEW, target, serverIds),
   apply: (target: McpApplyTarget): Promise<McpApplyResult> =>

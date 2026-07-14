@@ -2,8 +2,8 @@
 
 ## Boundary
 
-- Renderer state owns user-defined custom store sources for Skill, MCP, and Plugin stores.
-- Shared source CRUD helpers live in renderer services because current Skill custom sources are renderer-persisted and MCP/Plugin built-in sources are fetched through existing IPC.
+- Renderer state owns user-defined custom store sources for Skill and Plugin stores. MCP keeps a renderer compatibility mirror for presentation, while the main-process MCP source registry is authoritative for network authorization.
+- Shared source CRUD helpers live in renderer services because Skill/Plugin custom sources and the MCP presentation mirror are renderer-persisted. MCP mutations must persist the security-relevant allowlist through typed IPC before committing renderer state.
 - Product adapters translate the shared source shape into `SkillStoreSource`, `McpMarketSource`, and `PluginMarketSource`.
 - Plugin IPC accepts optional source overrides so preview/install can resolve custom marketplace entries with the same source list the renderer used to show them.
 
@@ -43,4 +43,4 @@ Deletion confirmation is UI-owned. Store mutation methods remain direct state mu
 
 Existing Skill custom sources remain compatible because the shared shape is a superset of the existing Skill source fields.
 
-MCP and Plugin sources are additive. Built-in sources remain available and custom sources are merged after built-ins.
+MCP and Plugin sources are additive. Built-in sources remain available and custom sources are merged after built-ins. MCP startup migration reconciles renderer-only and main-only custom sources without deleting either side, then treats the main-process registry as the fetch authorization source of truth.

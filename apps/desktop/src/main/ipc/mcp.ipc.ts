@@ -10,6 +10,11 @@ import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import { isMcpTargetKind } from "@prompthub/shared/types/mcp";
 import { SkillInstaller } from "../services/skill-installer";
 import {
+  authorizeMcpMarketFetch,
+  readRegisteredMcpMarketSources,
+  replaceCustomMcpMarketSources,
+} from "@prompthub/core/mcp-market-source-registry";
+import {
   exportAgentAssetDirectorySnapshot,
   restoreAgentAssetDirectorySnapshot,
 } from "../services/agent-asset-file-snapshot";
@@ -18,6 +23,8 @@ import type {
   McpCreateFromSourceRequest,
   McpLibraryFile,
   McpMarketTemplate,
+  McpMarketFetchRequest,
+  McpMarketSource,
   McpRemoveTargetNames,
   McpServerDraft,
   McpTargetSyncOptions,
@@ -95,7 +102,10 @@ function normalizeMcpTargetSyncOptions(
   };
 }
 
-function assertNonEmptyIdentifier(identifier: unknown, channel: string): string {
+function assertNonEmptyIdentifier(
+  identifier: unknown,
+  channel: string,
+): string {
   if (typeof identifier !== "string" || identifier.trim().length === 0) {
     throw new Error(`${channel} requires a non-empty server identifier`);
   }
@@ -123,7 +133,12 @@ export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
     service.getMarketTemplates(),
   );
   ipcMain.handle(IPC_CHANNELS.MCP_MARKET_SOURCES, async () =>
-    service.getMarketSources(),
+    readRegisteredMcpMarketSources(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.MCP_MARKET_SOURCES_REPLACE,
+    async (_event, sources: McpMarketSource[]) =>
+      replaceCustomMcpMarketSources(Array.isArray(sources) ? sources : []),
   );
   ipcMain.handle(IPC_CHANNELS.MCP_TARGET_PRESETS, async () =>
     getMcpTargetPresets(),
@@ -155,21 +170,37 @@ export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
       service.installMarketTemplate(template),
   );
   ipcMain.handle(
+    IPC_CHANNELS.MCP_MARKET_CHECK_UPDATE,
+    async (_event, identifier: string, template: McpMarketTemplate) =>
+      service.checkMarketTemplateUpdate(identifier, template),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.MCP_MARKET_APPLY_UPDATE,
+    async (
+      _event,
+      identifier: string,
+      template: McpMarketTemplate,
+      force?: boolean,
+    ) => service.updateFromMarketTemplate(identifier, template, force === true),
+  );
+  ipcMain.handle(
     IPC_CHANNELS.MCP_FETCH_REMOTE_CONTENT,
-    async (_event, url: string) => {
-      if (typeof url !== "string" || url.trim().length === 0) {
+    async (_event, request: McpMarketFetchRequest) => {
+      if (
+        !request ||
+        typeof request !== "object" ||
+        typeof request.sourceId !== "string" ||
+        typeof request.url !== "string" ||
+        request.url.trim().length === 0
+      ) {
         throw new Error("mcp:fetchRemoteContent requires a non-empty url");
       }
-      let parsed: URL;
-      try {
-        parsed = new URL(url);
-      } catch {
-        throw new Error("mcp:fetchRemoteContent received an invalid URL");
-      }
-      if (!["http:", "https:"].includes(parsed.protocol)) {
-        throw new Error("mcp:fetchRemoteContent only allows http/https URLs");
-      }
-      return await SkillInstaller.fetchRemoteContent(url);
+      const authorized = authorizeMcpMarketFetch(request.sourceId, request.url);
+      return await SkillInstaller.fetchRemoteContent(authorized.url, {
+        allowPrivateNetwork: authorized.allowPrivateNetwork,
+        allowInsecurePrivateNetworkHttp:
+          authorized.allowInsecurePrivateNetworkHttp,
+      });
     },
   );
   ipcMain.handle(
@@ -219,7 +250,10 @@ export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
     IPC_CHANNELS.MCP_TARGET_SYNC_CHECK,
     async (_event, identifier: string, options?: McpTargetSyncOptions) =>
       service.checkServerTargetSync(
-        assertNonEmptyIdentifier(identifier, IPC_CHANNELS.MCP_TARGET_SYNC_CHECK),
+        assertNonEmptyIdentifier(
+          identifier,
+          IPC_CHANNELS.MCP_TARGET_SYNC_CHECK,
+        ),
         normalizeMcpTargetSyncOptions(options),
       ),
   );
@@ -227,7 +261,10 @@ export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
     IPC_CHANNELS.MCP_TARGET_SYNC_APPLY,
     async (_event, identifier: string, options?: McpTargetSyncOptions) =>
       service.syncServerToBoundTargets(
-        assertNonEmptyIdentifier(identifier, IPC_CHANNELS.MCP_TARGET_SYNC_APPLY),
+        assertNonEmptyIdentifier(
+          identifier,
+          IPC_CHANNELS.MCP_TARGET_SYNC_APPLY,
+        ),
         normalizeMcpTargetSyncOptions(options),
       ),
   );

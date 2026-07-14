@@ -98,10 +98,11 @@ describe("mcp remote store", () => {
     expect(result.templates).toEqual([
       expect.objectContaining({
         id: "modelcontextprotocol:ai-agenttrust-mcp-server",
+        version: "1.1.1",
         name: "ai-agenttrust-mcp-server",
         displayName: "AgentTrust",
         command: "npx",
-        args: ["-y", "@agenttrust/mcp-server"],
+        args: ["-y", "@agenttrust/mcp-server@1.1.1"],
         env: { AGENTTRUST_API_KEY: "" },
         requiredEnv: [
           expect.objectContaining({
@@ -119,6 +120,74 @@ describe("mcp remote store", () => {
         url: "https://api.agentdm.ai/mcp/v1/grid",
         headers: { Authorization: "" },
       }),
+    ]);
+  });
+
+  it("keeps package runners version-pinned and skips unsupported registry package types", () => {
+    const result = parseOfficialMcpRegistryCatalog(
+      JSON.stringify({
+        servers: [
+          {
+            server: {
+              name: "com.example/versioned-npm",
+              description: "Versioned npm package",
+              packages: [
+                {
+                  registryType: "npm",
+                  identifier: "@example/versioned@3.0.0",
+                  version: "3.0.0",
+                },
+              ],
+            },
+          },
+          {
+            server: {
+              name: "com.example/versioned-pypi",
+              description: "Versioned PyPI package",
+              packages: [
+                {
+                  registryType: "pypi",
+                  identifier: "versioned-mcp==3.0.0",
+                  version: "3.0.0",
+                },
+              ],
+            },
+          },
+          {
+            server: {
+              name: "com.example/versioned-oci",
+              description: "Versioned OCI package",
+              packages: [
+                {
+                  registryType: "oci",
+                  identifier: "ghcr.io/example/versioned:3.0.0",
+                  version: "3.0.0",
+                },
+              ],
+            },
+          },
+          {
+            server: {
+              name: "com.example/versioned-cargo",
+              description: "Unsupported Cargo package",
+              packages: [
+                {
+                  registryType: "cargo",
+                  identifier: "versioned-mcp",
+                  version: "3.0.0",
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      registrySource,
+    );
+
+    expect(result.templates.map((item) => [item.command, item.args])).toEqual([
+      ["npx", ["-y", "@example/versioned@3.0.0"]],
+      ["uvx", ["versioned-mcp==3.0.0"]],
+      ["docker", ["run", "--rm", "-i", "ghcr.io/example/versioned:3.0.0"]],
     ]);
   });
 
@@ -175,6 +244,7 @@ describe("mcp remote store", () => {
                 {
                   registryType: "pypi",
                   identifier: "adeu",
+                  version: "2.4.0",
                   transport: { type: "stdio" },
                 },
               ],
@@ -204,7 +274,7 @@ describe("mcp remote store", () => {
       expect.objectContaining({
         displayName: "ai.adeu/adeu",
         command: "uvx",
-        args: ["adeu"],
+        args: ["adeu==2.4.0"],
       }),
     ]);
   });

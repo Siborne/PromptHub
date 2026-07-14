@@ -193,6 +193,143 @@ describe("CoreMcpLibraryService", () => {
     expect(service.read().servers).toHaveLength(1);
   });
 
+  it("tracks and applies upstream MCP template updates without losing user-owned values", () => {
+    const service = new CoreMcpLibraryService();
+    const template = {
+      id: "prompthub-official:review",
+      version: "1.0.0",
+      name: "review",
+      displayName: "Review MCP",
+      description: "Review source code.",
+      transport: "stdio" as const,
+      command: "npx",
+      args: ["-y", "@prompthub/review-mcp@1.0.0"],
+      env: { REVIEW_TOKEN: "" },
+      tags: ["review"],
+      source: {
+        id: "prompthub-official",
+        label: "Official Store",
+        url: "https://github.com/legeling/PromptHub",
+        trustLevel: "official" as const,
+      },
+    };
+    const installed = service.installMarketTemplate(template);
+    expect(installed.source).toEqual(
+      expect.objectContaining({
+        id: template.id,
+        marketSourceId: "prompthub-official",
+        installedTemplateVersion: "1.0.0",
+        installedTemplateFingerprint: expect.stringMatching(/^sha256:/),
+      }),
+    );
+    expect(service.checkMarketTemplateUpdate(installed.id, template)).toEqual(
+      expect.objectContaining({
+        status: "up-to-date",
+        localModified: false,
+        remoteChanged: false,
+      }),
+    );
+
+    service.updateServer(installed.id, {
+      env: { REVIEW_TOKEN: "private-token" },
+      isFavorite: true,
+      notes: "Keep my note",
+      tags: ["personal"],
+    });
+    const targetPath = path.join(userDataPath, "agent", "mcp.json");
+    service.apply({
+      target: "claude",
+      scope: "custom",
+      path: targetPath,
+      serverIds: [installed.id],
+    });
+    const updatedTemplate = {
+      ...template,
+      version: "2.0.0",
+      description: "Review and explain source code.",
+      args: ["-y", "@prompthub/review-mcp@2.0.0"],
+      env: { REVIEW_TOKEN: "", REVIEW_MODE: "" },
+    };
+
+    expect(
+      service.checkMarketTemplateUpdate(installed.id, updatedTemplate),
+    ).toEqual(
+      expect.objectContaining({
+        status: "update-available",
+        localModified: false,
+        remoteChanged: true,
+      }),
+    );
+
+    const result = service.updateFromMarketTemplate(
+      installed.id,
+      updatedTemplate,
+    );
+    expect(result.status).toBe("updated");
+    expect(result.server).toMatchObject({
+      id: installed.id,
+      name: "review",
+      args: ["-y", "@prompthub/review-mcp@2.0.0"],
+      env: { REVIEW_TOKEN: "private-token", REVIEW_MODE: "" },
+      isFavorite: true,
+      notes: "Keep my note",
+      tags: ["personal"],
+      source: {
+        installedTemplateVersion: "2.0.0",
+      },
+    });
+    expect(
+      service.checkServerTargetSync(installed.id).map((item) => item.status),
+    ).toContain("needs-sync");
+    expect(fs.readFileSync(targetPath, "utf8")).toContain(
+      "@prompthub/review-mcp@1.0.0",
+    );
+  });
+
+  it("requires review for legacy or locally modified MCP market entries", () => {
+    const service = new CoreMcpLibraryService();
+    const template = {
+      id: "registry:demo",
+      version: "1.0.0",
+      name: "demo",
+      displayName: "Demo",
+      description: "Demo MCP",
+      transport: "stdio" as const,
+      command: "npx",
+      args: ["demo@1"],
+      tags: [],
+      source: {
+        id: "registry",
+        label: "Registry",
+        url: "https://registry.example.com/catalog.json",
+        trustLevel: "community" as const,
+      },
+    };
+    const installed = service.installMarketTemplate(template);
+    service.updateServer(installed.id, { command: "custom-command" });
+
+    expect(
+      service.checkMarketTemplateUpdate(installed.id, {
+        ...template,
+        version: "2.0.0",
+        args: ["demo@2"],
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        status: "conflict",
+        localModified: true,
+        remoteChanged: true,
+      }),
+    );
+
+    const library = service.read();
+    library.servers[0].source.installedTemplateFingerprint = undefined;
+    service.write(library);
+    expect(service.checkMarketTemplateUpdate(installed.id, template)).toEqual(
+      expect.objectContaining({ status: "legacy-review" }),
+    );
+  });
+
   it("drops legacy Roo target bindings when reading the MCP library", () => {
     const service = new CoreMcpLibraryService();
     const server = service.createServer({

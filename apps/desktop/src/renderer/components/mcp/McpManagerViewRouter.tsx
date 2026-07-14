@@ -54,7 +54,7 @@ function getMcpStoreDataProps(model: McpManagerViewModel) {
     error: model.selectedMarketEntry?.error ?? model.marketError,
     totalCount: model.selectedMarketEntry?.totalCount,
     totalCountIsLowerBound: model.selectedMarketEntry?.totalCountIsLowerBound,
-    installedNames: model.installedNames,
+    installedServers: model.servers,
     sourceBranch: model.sourceBranch,
     sourceDirectory: model.sourceDirectory,
     sourceName: model.sourceName,
@@ -77,6 +77,8 @@ function getMcpStoreActionProps(model: McpManagerViewModel) {
     onRefresh: () => model.loadMarketSource(model.selectedMarketSourceId, true),
     onSearchChange: model.setSearchQuery,
     onInstall: model.handleInstallTemplate,
+    onCheckUpdate: model.checkMarketUpdate,
+    onUpdate: model.applyMarketUpdate,
   } satisfies Partial<ComponentProps<typeof McpStoreWorkspace>>;
 }
 

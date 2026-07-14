@@ -19,6 +19,8 @@ import {
   type McpLibraryFile,
   type McpMarketTemplate,
   type McpMarketSource,
+  type McpMarketUpdateCheck,
+  type McpMarketUpdateResult,
   type McpRemoveResult,
   type McpRemoveTargetNames,
   type McpServerConfig,
@@ -47,7 +49,6 @@ import {
   mergeMcpServersJson,
   normalizeMcpServerDraft,
   parseMcpJsonConfigContent,
-  parseMcpDotEnv,
   removeCodexMcpTomlServers,
   removeMcpServersFromJson,
   sanitizeMcpServerName,
@@ -55,10 +56,21 @@ import {
 
 import { getConfigDir, getDataDir } from "./runtime-paths";
 import { inferMcpSource } from "./mcp-source";
+import { buildMcpEnvImportResult } from "./mcp-env-import";
+import {
+  applyMcpMarketTemplate,
+  prepareMcpMarketTemplateUpdate,
+  reconcileMcpMarketTemplate,
+} from "./mcp-market-reconciliation";
 import {
   getMcpTargetPresets,
   type McpTargetPreset,
 } from "./mcp-target-presets";
+import {
+  canRewriteTomlManagedSibling,
+  getMcpTargetSyncReason,
+  shouldSkipDisabledMcpPlatform,
+} from "./mcp-target-sync-policy";
 
 export { getMcpTargetPresets } from "./mcp-target-presets";
 export type { McpTargetPreset } from "./mcp-target-presets";
@@ -609,23 +621,6 @@ function createHealthResult(server: McpServerConfig): McpHealthCheckResult {
   };
 }
 
-function createSyncReason(status: McpTargetSyncStatus): string {
-  const reasons: Record<McpTargetSyncStatus, string> = {
-    synced: "target matches current PromptHub MCP projection",
-    "needs-sync": "PromptHub MCP changed after the last target apply",
-    "external-modified": "target MCP entry changed outside PromptHub",
-    conflict: "PromptHub MCP and target MCP entry both changed",
-    "missing-target": "target config file is missing",
-    "missing-entry": "target config file no longer contains this MCP entry",
-    "parse-error": "target config file cannot be parsed",
-    "legacy-needs-review":
-      "legacy binding has no baseline and target differs from PromptHub",
-    "skipped-disabled-platform": "target platform is disabled in settings",
-    "skipped-server-disabled": "MCP server is disabled in PromptHub",
-  };
-  return reasons[status];
-}
-
 function toSyncCheck(
   binding: McpTargetBinding,
   server: McpServerConfig,
@@ -641,7 +636,7 @@ function toSyncCheck(
     serverName: server.name,
     status,
     safeToReapply: status === "needs-sync",
-    reason: createSyncReason(status),
+    reason: getMcpTargetSyncReason(status),
     ...values,
   };
 }
@@ -670,42 +665,6 @@ function classifySyncStatus(
     return "synced";
   }
   return "conflict";
-}
-
-function canRewriteTomlManagedSibling(
-  check: McpTargetSyncCheck,
-  options?: McpTargetSyncOptions,
-): boolean {
-  if (check.status === "synced" || check.status === "needs-sync") {
-    return true;
-  }
-  if (
-    (check.status === "missing-target" || check.status === "missing-entry") &&
-    options?.recreateMissing
-  ) {
-    return true;
-  }
-  if (
-    (check.status === "conflict" ||
-      check.status === "external-modified" ||
-      check.status === "legacy-needs-review" ||
-      check.status === "parse-error") &&
-    options?.forceConflicts
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function shouldSkipDisabledPlatform(
-  binding: McpTargetBinding,
-  options?: McpTargetSyncOptions,
-): boolean {
-  if (options?.includeDisabled) {
-    return false;
-  }
-  const disabledPlatformIds = new Set(options?.disabledPlatformIds ?? []);
-  return disabledPlatformIds.has(binding.target);
 }
 
 function importServerEntry(
@@ -1106,7 +1065,12 @@ export class CoreMcpLibraryService {
       throw new CoreMcpError("NOT_FOUND", `MCP 模板不存在: ${templateId}`);
     }
     const library = this.read();
-    const server = installMcpTemplate(template);
+    const installed = installMcpTemplate(template);
+    const server = applyMcpMarketTemplate(
+      installed,
+      template,
+      installed.updatedAt,
+    );
     assertUniqueName(library.servers, server.name);
     this.write({
       ...library,
@@ -1117,13 +1081,50 @@ export class CoreMcpLibraryService {
 
   installMarketTemplate(template: McpMarketTemplate): McpServerConfig {
     const library = this.read();
-    const server = installMcpTemplate(template);
+    const installed = installMcpTemplate(template);
+    const server = applyMcpMarketTemplate(
+      installed,
+      template,
+      installed.updatedAt,
+    );
     assertUniqueName(library.servers, server.name);
     this.write({
       ...library,
       servers: [server, ...library.servers],
     });
     return server;
+  }
+
+  checkMarketTemplateUpdate(
+    identifier: string,
+    template: McpMarketTemplate,
+  ): McpMarketUpdateCheck {
+    return reconcileMcpMarketTemplate(
+      resolveServer(this.read(), identifier),
+      template,
+    );
+  }
+
+  updateFromMarketTemplate(
+    identifier: string,
+    template: McpMarketTemplate,
+    force = false,
+  ): McpMarketUpdateResult {
+    const library = this.read();
+    const current = resolveServer(library, identifier);
+    const prepared = prepareMcpMarketTemplateUpdate(current, template, force);
+    if ("errorCode" in prepared) {
+      throw new CoreMcpError(prepared.errorCode, prepared.reason);
+    }
+    if (prepared.shouldPersist) {
+      this.write({
+        ...library,
+        servers: library.servers.map((item) =>
+          item.id === current.id ? prepared.result.server : item,
+        ),
+      });
+    }
+    return prepared.result;
   }
 
   preview(target: McpTargetKind, serverIds: string[]): string {
@@ -1388,7 +1389,7 @@ export class CoreMcpLibraryService {
     let shouldWrite = false;
 
     for (const binding of bindings) {
-      if (shouldSkipDisabledPlatform(binding, options)) {
+      if (shouldSkipDisabledMcpPlatform(binding, options)) {
         checks.push(toSyncCheck(binding, server, "skipped-disabled-platform"));
         continue;
       }
@@ -1700,48 +1701,19 @@ export class CoreMcpLibraryService {
   ): McpEnvImportResult {
     const library = this.read();
     const server = resolveServer(library, identifier);
-    const parsedEnv = parseMcpDotEnv(fs.readFileSync(envFilePath, "utf8"));
-    const requiredKeys = inferMcpEnvRequirements(server).map(
-      (item) => item.name,
+    const result = buildMcpEnvImportResult(
+      server,
+      fs.readFileSync(envFilePath, "utf8"),
+      selectedKeys,
+      nowMs(),
     );
-    const allowedKeys = new Set(
-      selectedKeys?.length ? selectedKeys : requiredKeys,
-    );
-    const importedEntries = Object.entries(parsedEnv).filter(([key]) =>
-      allowedKeys.has(key),
-    );
-    const importedKeys = importedEntries.map(([key]) => key);
-    const skippedKeys = Array.from(allowedKeys).filter(
-      (key) => !Object.prototype.hasOwnProperty.call(parsedEnv, key),
-    );
-    const nextServer = normalizeMcpServerDraft({
-      ...server,
-      env: {
-        ...(server.env ?? {}),
-        ...Object.fromEntries(importedEntries),
-      },
-      updatedAt: nowMs(),
-    });
 
     this.write({
       ...library,
       servers: library.servers.map((item) =>
-        item.id === server.id ? nextServer : item,
+        item.id === server.id ? result.server : item,
       ),
     });
-
-    const missingKeys = inferMcpEnvRequirements(nextServer)
-      .filter((item) => {
-        const value = nextServer.env?.[item.name];
-        return item.required && (!value || /^<[^>]+>$/.test(value.trim()));
-      })
-      .map((item) => item.name);
-
-    return {
-      server: nextServer,
-      importedKeys,
-      skippedKeys,
-      missingKeys,
-    };
+    return result;
   }
 }

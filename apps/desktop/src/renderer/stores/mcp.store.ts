@@ -11,6 +11,8 @@ import type {
   McpLibraryFile,
   McpMarketSource,
   McpMarketTemplate,
+  McpMarketUpdateCheck,
+  McpMarketUpdateResult,
   McpRemoveResult,
   McpRemoveTargetNames,
   McpServerConfig,
@@ -21,7 +23,10 @@ import type {
   McpTargetSyncOptions,
   McpTargetStatusEntry,
 } from "@prompthub/shared/types/mcp";
-import { MCP_OFFICIAL_MARKET_SOURCE_ID } from "@prompthub/shared/constants/mcp-market";
+import {
+  BUILTIN_MCP_MARKET_SOURCES,
+  MCP_OFFICIAL_MARKET_SOURCE_ID,
+} from "@prompthub/shared/constants/mcp-market";
 import {
   loadMcpRemoteStore,
   type McpRemoteStoreResult,
@@ -85,7 +90,7 @@ interface McpState {
     url: string,
     type?: CustomStoreSourceType,
     options?: { branch?: string; directory?: string },
-  ) => void;
+  ) => Promise<void>;
   updateCustomStoreSource: (payload: {
     branch?: string;
     directory?: string;
@@ -93,9 +98,9 @@ interface McpState {
     name: string;
     type: CustomStoreSourceType;
     url: string;
-  }) => void;
-  removeCustomStoreSource: (id: string) => void;
-  toggleCustomStoreSource: (id: string) => void;
+  }) => Promise<void>;
+  removeCustomStoreSource: (id: string) => Promise<void>;
+  toggleCustomStoreSource: (id: string) => Promise<void>;
   createServer: (draft: McpServerDraft) => Promise<McpServerConfig>;
   createFromSource: (
     request: McpCreateFromSourceRequest,
@@ -105,6 +110,15 @@ interface McpState {
   installTemplate: (
     templateOrId: McpMarketTemplate | string,
   ) => Promise<McpServerConfig>;
+  checkMarketUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+  ) => Promise<McpMarketUpdateCheck>;
+  applyMarketUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+    force?: boolean,
+  ) => Promise<McpMarketUpdateResult>;
   importFile: (filePath: string) => Promise<void>;
   importEnv: (
     identifier: string,
@@ -261,20 +275,55 @@ async function loadMcpSnapshot(): Promise<{
   };
 }
 
-function mergeMcpMarketSources(
-  builtinSources: McpMarketSource[],
-  customSources: CustomStoreSource[],
+function toRegisteredMcpMarketSources(
+  sources: CustomStoreSource[],
 ): McpMarketSource[] {
-  const builtinIds = new Set(builtinSources.map((source) => source.id));
-  return [
-    ...builtinSources,
-    ...customSources.flatMap((source) => {
-      const marketSource = toMcpMarketSource(source);
-      return marketSource && !builtinIds.has(marketSource.id)
-        ? [marketSource]
-        : [];
-    }),
-  ];
+  return sources.flatMap((source) => {
+    const marketSource = toMcpMarketSource(source);
+    return marketSource ? [marketSource] : [];
+  });
+}
+
+function reconcileMcpMarketSourceMigration(
+  registeredSources: McpMarketSource[],
+  rendererSources: CustomStoreSource[],
+): {
+  customSources: CustomStoreSource[];
+  sourcesToRegister: McpMarketSource[];
+} {
+  const builtinIds = new Set(
+    BUILTIN_MCP_MARKET_SOURCES.map((source) => source.id),
+  );
+  const rendererIds = new Set(rendererSources.map((source) => source.id));
+  const registeredCustomSources = registeredSources.filter(
+    (source) => !builtinIds.has(source.id),
+  );
+  const recoveredSources = registeredCustomSources
+    .filter((source) => !rendererIds.has(source.id))
+    .map(
+      (source, index): CustomStoreSource => ({
+        id: source.id,
+        name: source.label,
+        type: "marketplace-json",
+        url: source.url,
+        enabled: true,
+        order: rendererSources.length + index,
+        createdAt: 0,
+      }),
+    );
+  const customSources = [...rendererSources, ...recoveredSources];
+  return {
+    customSources,
+    sourcesToRegister: toRegisteredMcpMarketSources(customSources),
+  };
+}
+
+async function persistMcpMarketSources(
+  sources: CustomStoreSource[],
+): Promise<McpMarketSource[]> {
+  return window.api.mcp.replaceMarketSources(
+    toRegisteredMcpMarketSources(sources),
+  );
 }
 
 function pruneRemoteMarketEntriesForSources(
@@ -288,14 +337,6 @@ function pruneRemoteMarketEntriesForSources(
       return sourceIds.has(sourceId);
     }),
   );
-}
-
-function getBuiltinMcpMarketSources(
-  marketSources: McpMarketSource[],
-  customSources: CustomStoreSource[],
-): McpMarketSource[] {
-  const customIds = new Set(customSources.map((source) => source.id));
-  return marketSources.filter((source) => !customIds.has(source.id));
 }
 
 export const useMcpStore = create<McpState>()(
@@ -329,9 +370,12 @@ export const useMcpStore = create<McpState>()(
         set({ isLoading: true, error: null });
         try {
           const snapshot = await loadMcpSnapshot();
-          const marketSources = mergeMcpMarketSources(
+          const migration = reconcileMcpMarketSourceMigration(
             snapshot.marketSources,
             get().customStoreSources,
+          );
+          const marketSources = await window.api.mcp.replaceMarketSources(
+            migration.sourcesToRegister,
           );
           const selectedMarketSourceId = resolveMarketSourceId(
             get().selectedMarketSourceId,
@@ -339,6 +383,7 @@ export const useMcpStore = create<McpState>()(
           );
           set({
             ...snapshot,
+            customStoreSources: migration.customSources,
             marketSources,
             marketError: null,
             remoteMarketEntries: pruneRemoteMarketEntriesForSources(
@@ -387,99 +432,93 @@ export const useMcpStore = create<McpState>()(
         })),
       clearFilterTags: () => set({ filterTags: [] }),
 
-      addCustomStoreSource: (name, url, type = "marketplace-json", options) => {
-        const result = addCustomStoreSourceToList(get().customStoreSources, {
-          name,
-          url,
-          type,
-          branch: options?.branch,
-          directory: options?.directory,
-        });
-        if (!result) return;
-        const builtinSources = getBuiltinMcpMarketSources(
-          get().marketSources,
+      addCustomStoreSource: async (
+        name,
+        url,
+        type = "marketplace-json",
+        options,
+      ) => {
+        const result = addCustomStoreSourceToList(
           get().customStoreSources,
+          {
+            name,
+            url,
+            type,
+            branch: options?.branch,
+            directory: options?.directory,
+          },
+          { allowInsecureHttp: true },
         );
+        if (!result) return;
+        const marketSources = await persistMcpMarketSources(result.sources);
         set({
           customStoreSources: result.sources,
-          marketSources: mergeMcpMarketSources(builtinSources, result.sources),
+          marketSources,
           selectedMarketSourceId: result.source.id,
           selectedTab: "market",
         });
       },
 
-      updateCustomStoreSource: (payload) => {
-        set((state) => {
-          const nextSources = updateCustomStoreSourceInList(
-            state.customStoreSources,
-            payload,
-          );
-          const builtinSources = getBuiltinMcpMarketSources(
-            state.marketSources,
-            state.customStoreSources,
-          );
-          const remoteMarketEntries = Object.fromEntries(
-            Object.entries(state.remoteMarketEntries).filter(
-              ([key]) => !key.startsWith(`${payload.id}:`),
-            ),
-          );
-          return {
-            customStoreSources: nextSources,
-            marketSources: mergeMcpMarketSources(builtinSources, nextSources),
-            remoteMarketEntries,
-          };
+      updateCustomStoreSource: async (payload) => {
+        const state = get();
+        const nextSources = updateCustomStoreSourceInList(
+          state.customStoreSources,
+          payload,
+          { allowInsecureHttp: true },
+        );
+        const marketSources = await persistMcpMarketSources(nextSources);
+        const remoteMarketEntries = Object.fromEntries(
+          Object.entries(state.remoteMarketEntries).filter(
+            ([key]) => !key.startsWith(`${payload.id}:`),
+          ),
+        );
+        set({
+          customStoreSources: nextSources,
+          marketSources,
+          remoteMarketEntries,
         });
       },
 
-      removeCustomStoreSource: (id) => {
-        set((state) => {
-          const next = removeCustomStoreSourceFromList(
-            {
-              customStoreSources: state.customStoreSources,
-              selectedStoreSourceId: state.selectedMarketSourceId,
-            },
-            id,
-            DEFAULT_MCP_MARKET_SOURCE_ID,
-          );
-          const builtinSources = getBuiltinMcpMarketSources(
-            state.marketSources,
-            state.customStoreSources,
-          );
-          const remoteMarketEntries = Object.fromEntries(
-            Object.entries(state.remoteMarketEntries).filter(
-              ([key]) => !key.startsWith(`${id}:`),
-            ),
-          );
-          return {
-            customStoreSources: next.customStoreSources,
-            marketSources: mergeMcpMarketSources(
-              builtinSources,
-              next.customStoreSources,
-            ),
-            remoteMarketEntries,
-            selectedMarketSourceId: next.selectedStoreSourceId,
-          };
+      removeCustomStoreSource: async (id) => {
+        const state = get();
+        const next = removeCustomStoreSourceFromList(
+          {
+            customStoreSources: state.customStoreSources,
+            selectedStoreSourceId: state.selectedMarketSourceId,
+          },
+          id,
+          DEFAULT_MCP_MARKET_SOURCE_ID,
+        );
+        const marketSources = await persistMcpMarketSources(
+          next.customStoreSources,
+        );
+        const remoteMarketEntries = Object.fromEntries(
+          Object.entries(state.remoteMarketEntries).filter(
+            ([key]) => !key.startsWith(`${id}:`),
+          ),
+        );
+        set({
+          customStoreSources: next.customStoreSources,
+          marketSources,
+          remoteMarketEntries,
+          selectedMarketSourceId: next.selectedStoreSourceId,
         });
       },
 
-      toggleCustomStoreSource: (id) => {
-        set((state) => {
-          const nextSources = toggleCustomStoreSourceInList(
-            state.customStoreSources,
-            id,
-          );
-          const builtinSources = getBuiltinMcpMarketSources(
-            state.marketSources,
-            state.customStoreSources,
-          );
-          return {
-            customStoreSources: nextSources,
-            marketSources: mergeMcpMarketSources(builtinSources, nextSources),
-            selectedMarketSourceId:
-              state.selectedMarketSourceId === id
-                ? DEFAULT_MCP_MARKET_SOURCE_ID
-                : state.selectedMarketSourceId,
-          };
+      toggleCustomStoreSource: async (id) => {
+        const state = get();
+        const nextSources = toggleCustomStoreSourceInList(
+          state.customStoreSources,
+          id,
+        );
+        const marketSources = await persistMcpMarketSources(nextSources);
+        set({
+          customStoreSources: nextSources,
+          marketSources,
+          selectedMarketSourceId:
+            state.selectedMarketSourceId === id
+              ? DEFAULT_MCP_MARKET_SOURCE_ID
+              : state.selectedMarketSourceId,
         });
       },
 
@@ -561,7 +600,8 @@ export const useMcpStore = create<McpState>()(
           const result = await loadMcpRemoteStore({
             source,
             query,
-            fetchRemoteContent: (url) => window.api.mcp.fetchRemoteContent(url),
+            fetchRemoteContent: (url) =>
+              window.api.mcp.fetchRemoteContent(source.id, url),
           });
           const latest = get();
           if (
@@ -639,7 +679,8 @@ export const useMcpStore = create<McpState>()(
             source,
             query,
             cursor,
-            fetchRemoteContent: (url) => window.api.mcp.fetchRemoteContent(url),
+            fetchRemoteContent: (url) =>
+              window.api.mcp.fetchRemoteContent(source.id, url),
           });
           const latest = get();
           if (
@@ -715,6 +756,20 @@ export const useMcpStore = create<McpState>()(
         await get().load();
         set({ selectedServerId: server.id, selectedTab: "library" });
         return server;
+      },
+
+      checkMarketUpdate: (identifier, template) =>
+        window.api.mcp.checkMarketUpdate(identifier, template),
+
+      applyMarketUpdate: async (identifier, template, force) => {
+        const result = await window.api.mcp.applyMarketUpdate(
+          identifier,
+          template,
+          force,
+        );
+        await get().load();
+        set({ selectedServerId: result.server.id });
+        return result;
       },
 
       importFile: async (filePath) => {

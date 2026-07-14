@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 32 |
+| Active | 33 |
 | Archived | 164 |
 | Legacy | 1 |
 
@@ -44,6 +44,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `self-hosted-skill-sync-reliability` | active | `spec/changes/active/self-hosted-skill-sync-reliability/` |
 | `skill-source-update-reconciliation` | completed | `spec/changes/active/skill-source-update-reconciliation/` |
 | `skill-uninstall-lifecycle` | active | `spec/changes/active/skill-uninstall-lifecycle/` |
+| `source-trust-and-mcp-market-updates` | implemented | `spec/changes/active/source-trust-and-mcp-market-updates/` |
 | `unified-custom-store-sources` | implemented | `spec/changes/active/unified-custom-store-sources/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
 | `web-sync-contract-completion` | active | `spec/changes/active/web-sync-contract-completion/` |

@@ -3,6 +3,9 @@ import type { TFunction } from "i18next";
 import type {
   McpMarketSource,
   McpMarketTemplate,
+  McpMarketUpdateCheck,
+  McpMarketUpdateResult,
+  McpServerConfig,
 } from "@prompthub/shared/types/mcp";
 import type {
   CustomStoreSource,
@@ -26,7 +29,7 @@ export const MCP_CUSTOM_SOURCE_TYPE_OPTIONS = [
 interface McpStoreWorkspaceProps {
   error?: string | null;
   hasMore: boolean;
-  installedNames: Set<string>;
+  installedServers: McpServerConfig[];
   isLoading: boolean;
   isLoadingMore: boolean;
   remoteTemplates: McpMarketTemplate[];
@@ -51,6 +54,15 @@ interface McpStoreWorkspaceProps {
   onChangeSourceUrl: (url: string) => void;
   onEditCustomSource: (sourceId: string) => void;
   onInstall: (templateId: string) => Promise<void>;
+  onCheckUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+  ) => Promise<McpMarketUpdateCheck>;
+  onUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+    force?: boolean,
+  ) => Promise<McpMarketUpdateResult>;
   onLoadMore: () => void;
   onRefresh: () => void;
   onSearchChange: (query: string) => void;
@@ -59,7 +71,7 @@ interface McpStoreWorkspaceProps {
 export function McpStoreWorkspace({
   error,
   hasMore,
-  installedNames,
+  installedServers,
   isLoading,
   isLoadingMore,
   remoteTemplates,
@@ -84,6 +96,8 @@ export function McpStoreWorkspace({
   onChangeSourceUrl,
   onEditCustomSource,
   onInstall,
+  onCheckUpdate,
+  onUpdate,
   onLoadMore,
   onRefresh,
   onSearchChange,
@@ -134,11 +148,13 @@ export function McpStoreWorkspace({
             error={error}
             totalCount={totalCount}
             totalCountIsLowerBound={totalCountIsLowerBound}
-            installedNames={installedNames}
+            installedServers={installedServers}
             onLoadMore={onLoadMore}
             onRefresh={onRefresh}
             onSearchChange={onSearchChange}
             onInstall={onInstall}
+            onCheckUpdate={onCheckUpdate}
+            onUpdate={onUpdate}
           />
         </div>
       )}

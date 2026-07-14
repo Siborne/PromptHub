@@ -13,6 +13,9 @@ import type { FormEvent, UIEvent } from "react";
 import type {
   McpMarketSource,
   McpMarketTemplate,
+  McpMarketUpdateCheck,
+  McpMarketUpdateResult,
+  McpServerConfig,
 } from "@prompthub/shared/types/mcp";
 import { McpMarketDetailModal } from "./McpMarketDetailModal";
 import {
@@ -30,12 +33,21 @@ interface McpMarketViewProps {
   templates: McpMarketTemplate[];
   sources: McpMarketSource[];
   selectedSourceId: string;
-  installedNames: Set<string>;
+  installedServers: McpServerConfig[];
   hasMore?: boolean;
   isLoadingMore?: boolean;
   totalCount?: number;
   totalCountIsLowerBound?: boolean;
   onInstall: (template: McpMarketTemplate | string) => Promise<void>;
+  onCheckUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+  ) => Promise<McpMarketUpdateCheck>;
+  onUpdate: (
+    identifier: string,
+    template: McpMarketTemplate,
+    force?: boolean,
+  ) => Promise<McpMarketUpdateResult>;
   onLoadMore?: () => void;
   onRefresh?: () => void;
   onSearchChange?: (query: string) => void;
@@ -81,12 +93,14 @@ export function McpMarketView({
   templates,
   sources,
   selectedSourceId,
-  installedNames,
+  installedServers,
   hasMore = false,
   isLoadingMore = false,
   totalCount,
   totalCountIsLowerBound = false,
   onInstall,
+  onCheckUpdate,
+  onUpdate,
   onLoadMore,
   onRefresh,
   onSearchChange,
@@ -164,6 +178,14 @@ export function McpMarketView({
   const shouldShowInitialLoading = isLoading && visibleTemplates.length === 0;
   const canLoadMore =
     hasMore && !isLoading && !isLoadingMore && Boolean(onLoadMore);
+  const findInstalledServer = useCallback(
+    (template: McpMarketTemplate) =>
+      installedServers.find(
+        (server) =>
+          server.source.type === "market" && server.source.id === template.id,
+      ) ?? installedServers.find((server) => server.name === template.name),
+    [installedServers],
+  );
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -297,7 +319,7 @@ export function McpMarketView({
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visibleTemplates.map((template, index) => {
-              const installed = installedNames.has(template.name);
+              const installed = Boolean(findInstalledServer(template));
               return (
                 <div
                   key={template.id}
@@ -400,8 +422,10 @@ export function McpMarketView({
       {selectedTemplate ? (
         <McpMarketDetailModal
           template={selectedTemplate}
-          isInstalled={installedNames.has(selectedTemplate.name)}
+          installedServer={findInstalledServer(selectedTemplate)}
           onInstall={onInstall}
+          onCheckUpdate={onCheckUpdate}
+          onUpdate={onUpdate}
           onClose={() => setSelectedTemplate(null)}
         />
       ) : null}
