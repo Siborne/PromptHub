@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UpdateDialog, type UpdateStatus } from "../../../src/renderer/components/UpdateDialog";
 import { renderWithI18n } from "../../helpers/i18n";
@@ -83,6 +83,51 @@ describe("UpdateDialog", () => {
         },
       },
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it("keeps the real development check result instead of injecting three demo states", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.useFakeTimers();
+    installWindowMocks({
+      electron: {
+        updater: {
+          check: vi.fn().mockResolvedValue({
+            success: false,
+            error: "Update check disabled in development mode",
+          }),
+          getVersion: vi.fn().mockResolvedValue("0.5.9"),
+          getPlatform: vi.fn().mockResolvedValue("darwin"),
+          onStatus: vi.fn(() => vi.fn()),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <UpdateDialog isOpen={true} onClose={vi.fn()} initialStatus={null} />,
+        { language: "en" },
+      );
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByText("Update check disabled in development mode"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1600);
+    });
+
+    expect(
+      screen.getByText("Update check disabled in development mode"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("0.2.6-beta")).not.toBeInTheDocument();
+    expect(screen.queryByText(/45\.0%/)).not.toBeInTheDocument();
   });
 
   it("keeps download enabled because install creates an automatic data snapshot", async () => {

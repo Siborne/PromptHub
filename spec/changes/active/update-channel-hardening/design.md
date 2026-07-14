@@ -126,6 +126,15 @@ acknowledgement and explicit install action remain in place.
 - 当前已经是 `available` 或 `downloaded` 时，后台检查不能把 UI 拉回 `checking`
 - 手动打开更新弹窗时，可以使用现有 `available` 状态作为初始值，但不应立即清空顶栏提示并重新进入闪烁竞争
 
+### `DES-UPDATER-006`: Remove runtime demo status injection
+
+`UpdateDialog` is a production workflow component, including when rendered by
+the unpackaged development app. It must subscribe to the updater IPC once and
+render only that state stream. Visual state examples belong in component tests
+or an explicit story harness; the runtime component must not create delayed
+demo timers. This removes the three competing development states that replaced
+the real `Update check disabled in development mode` result after one click.
+
 ## Tradeoffs
 
 - 采用 semver prerelease 版本号后，preview 版本编号会变长，但换来更稳定的更新语义与自动推断能力。
@@ -136,3 +145,4 @@ acknowledgement and explicit install action remain in place.
 | Requirement | Design | Verification | Task |
 | --- | --- | --- | --- |
 | `FR-UPDATER-005` | `DES-UPDATER-005` | `TEST-UPDATER-005`, `TEST-UPDATER-006` | `T-UPDATER-009`, `T-UPDATER-010` |
+| `FR-UPDATER-006` | `DES-UPDATER-006` | `TEST-UPDATER-007` | `T-UPDATER-011` |

@@ -144,34 +144,6 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
 
     const offUpdaterStatus = window.electron?.updater?.onStatus(handleStatus);
 
-    // --- DEV MODE: Simulate update status for testing UI ---
-    // 开发模式：模拟更新状态以测试 UI
-    const devTimers: Array<ReturnType<typeof setTimeout>> = [];
-    if (process.env.NODE_ENV === 'development') {
-      // Uncomment one of the following to test different states
-      // 取消注释以下任一项来测试不同状态
-
-      devTimers.push(setTimeout(() => {
-        setUpdateStatus({
-          status: 'available',
-          info: {
-            version: '0.2.6-beta',
-            releaseNotes: `## 🚀 新功能 / New Features\n- 模拟开发环境下的更新提示\n- Simulated update prompt in dev mode\n\n## ✨ 优化 / Improvements\n- 更好的更新体验\n- Better update experience\n\n## 🐛 修复 / Bug Fixes\n- 修复了一些已知问题\n- Fixed some known issues`,
-            releaseDate: new Date().toISOString(),
-          },
-        });
-      }, 1500));
-
-      devTimers.push(setTimeout(() => {
-        setUpdateStatus({ status: 'not-available', info: { version: '0.2.5' } });
-      }, 1500));
-
-      devTimers.push(setTimeout(() => {
-        setUpdateStatus({ status: 'downloading', progress: { percent: 45, bytesPerSecond: 1024000, total: 50000000, transferred: 22500000 } });
-      }, 1500));
-    }
-    // --- END DEV MODE ---
-
     return () => {
       // Precise cleanup: remove only this dialog's listener, avoid affecting App-level listeners
       // 精确清理：只移除本弹窗的监听，避免影响 App 层监听
@@ -180,7 +152,6 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
       } else {
         window.electron?.updater?.offStatus?.();
       }
-      devTimers.forEach((t) => clearTimeout(t));
     };
   }, []);
 

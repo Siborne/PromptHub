@@ -27,6 +27,12 @@
   download/restart behavior and the Homebrew ownership boundary.
 - `TEST-UPDATER-006`: renderer coverage verifies the direct macOS install
   action without manual DMG or Downloads guidance.
+- Removed three development-only runtime timers that injected conflicting
+  `available`, `not-available`, and `downloading` states after a real manual
+  update check. The dialog now renders only updater IPC results in every build.
+- `TEST-UPDATER-007`: renderer coverage reproduces a development-mode manual
+  check and verifies that its real disabled result remains stable after the
+  former timer window.
 
 ## Verification
 
@@ -34,12 +40,11 @@
 - `pnpm lint`
 - `pnpm build`
 - `pnpm --filter @prompthub/desktop test -- --run tests/unit/main/updater.test.ts tests/unit/main/updater-real-scenario.test.ts tests/unit/components/about-settings.test.tsx tests/unit/components/update-dialog.test.tsx tests/unit/components/renderer-i18n-smoke.test.tsx tests/integration/components/main-content-inline-edit.integration.test.tsx tests/integration/components/main-content-large-dataset.integration.test.tsx tests/unit/cli/run.test.ts`
-- `pnpm --filter @prompthub/desktop lint`
-- `pnpm --filter @prompthub/desktop typecheck`
-- `pnpm --filter @prompthub/desktop build`
-- `git diff --check` for the macOS updater change: passed
-- Targeted Vitest execution: not run locally; release validation is delegated
-  to CI by maintainer direction.
+- `pnpm --filter @prompthub/desktop lint` (passed after `TEST-UPDATER-007`)
+- `pnpm --filter @prompthub/desktop typecheck` (passed after `TEST-UPDATER-007`)
+- `pnpm --filter @prompthub/desktop build` (passed after `TEST-UPDATER-007`)
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/update-dialog.test.tsx tests/unit/components/about-settings.test.tsx tests/unit/main/updater.test.ts tests/unit/main/updater-real-scenario.test.ts` (42 tests passed)
+- `git diff --check` for the current update dialog change: passed
 - `pnpm --filter @prompthub/desktop test -- tests/unit/components/update-dialog.test.tsx --run`
 - `pnpm --filter @prompthub/desktop lint`
 - `pnpm --filter @prompthub/desktop build`

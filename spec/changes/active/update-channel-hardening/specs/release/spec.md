@@ -117,3 +117,17 @@ DMG or copy an application bundle manually.
 - When the user requests an update
 - Then PromptHub does not download or replace the application through `electron-updater`
 - And it continues to direct the user to Homebrew
+
+### `FR-UPDATER-006`: One manual check must keep one authoritative dialog state
+
+The desktop update dialog must render only updater states produced by the real
+main-process check. Development builds may report that update checks are
+disabled, but they must not schedule simulated available, not-available, or
+downloading states after the user's request.
+
+#### Scenario: Developer opens the update dialog once
+
+- Given PromptHub is running unpackaged in development mode
+- When the user clicks Check updates once
+- Then one update dialog reports that the development check is unavailable
+- And no delayed demo status replaces that result or appears as another update prompt
