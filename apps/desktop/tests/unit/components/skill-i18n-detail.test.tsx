@@ -494,11 +494,11 @@ describe("skill i18n smoke", () => {
     });
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: "Update from Source" }),
+        screen.getByRole("button", { name: "Use source version" }),
       ).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Update from Source" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use source version" }));
 
     await waitFor(() => {
       expect(updateInstalledSkillFromSource).toHaveBeenCalledWith(
