@@ -18,6 +18,7 @@ interface PragmaColumnInfo {
 }
 
 const QUICK_CHECK_OK = "ok";
+const DATABASE_BUSY_TIMEOUT_MS = 5_000;
 const QUICK_CHECK_DATABASE_HEADER = /^\*{3} in database .+ \*{3}$/;
 const FREELIST_MISMATCH = /^Freelist: size is \d+ but should be \d+$/;
 
@@ -58,6 +59,7 @@ function isFreelistOnlyMismatch(diagnostics: string[]): boolean {
 function inspectDatabaseIntegrity(dbPath: string): string[] {
   const probe = new Database(dbPath);
   try {
+    probe.pragma(`busy_timeout = ${DATABASE_BUSY_TIMEOUT_MS}`);
     return getQuickCheckDiagnostics(probe);
   } finally {
     probe.close();
@@ -77,6 +79,7 @@ function repairFreelistIntegrity(dbPath: string, diagnostics: string[]): void {
 
   const repairDatabase = new Database(dbPath);
   try {
+    repairDatabase.pragma(`busy_timeout = ${DATABASE_BUSY_TIMEOUT_MS}`);
     repairDatabase.exec("VACUUM");
   } finally {
     repairDatabase.close();
@@ -338,7 +341,7 @@ export function initDatabase(
     db = new Database(dbPath);
 
     // Serialize short cross-process write overlaps before reporting a conflict.
-    db.pragma("busy_timeout = 5000");
+    db.pragma(`busy_timeout = ${DATABASE_BUSY_TIMEOUT_MS}`);
 
     // Enable foreign key constraints
     db.pragma("foreign_keys = ON");

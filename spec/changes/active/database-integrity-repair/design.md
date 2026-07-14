@@ -19,6 +19,13 @@ Normalize quick-check rows into diagnostic strings. Continue immediately for
 repairable. Close the probe, copy the database to an integrity backup, run
 `VACUUM`, close the repair connection, and verify with a fresh read.
 
+## `DES-DBIR-005`: Bounded concurrency wait
+
+The probe and repair connections configure the shared five-second SQLite busy
+timeout before preparing `quick_check` or running `VACUUM`. This keeps integrity
+validation behind real overlapping writers without weakening the bounded
+conflict behavior used by CLI and Desktop callers.
+
 The repair does not delete the backup. SQLite owns `VACUUM` atomicity; PromptHub
 does not copy a partially rewritten database over the original.
 
@@ -42,3 +49,4 @@ to reconcile every journal and pending install immediately.
 | `FR-DBIR-002` | `DES-DBIR-002` | `TEST-DBIR-001` | `T-DBIR-002` |
 | `FR-DBIR-003` | `DES-DBIR-003` | `TEST-DBIR-002` | `T-DBIR-003` |
 | `FR-DBIR-004` | `DES-DBIR-004` | `TEST-DBIR-003` | `T-DBIR-005` |
+| `FR-DBIR-001` | `DES-DBIR-005` | `TEST-DBIR-004` | `T-DBIR-006` |

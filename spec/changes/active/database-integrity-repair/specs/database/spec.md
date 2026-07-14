@@ -5,6 +5,10 @@
 Database initialization must run `PRAGMA quick_check` after acquiring the
 exclusive client lease and before migrations or schema writes.
 
+The integrity probe and a verified repair must honor the same bounded SQLite
+busy timeout as normal initialization. A healthy database held by a short-lived
+concurrent writer must wait instead of failing startup with `database is locked`.
+
 ## `FR-DBIR-002`: Repair only verified freelist metadata mismatch
 
 When every quick-check diagnostic is a freelist-count mismatch, initialization

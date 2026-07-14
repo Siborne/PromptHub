@@ -10,6 +10,9 @@ Implemented and verified locally; not yet submitted or released.
   application writes.
 - Verified freelist-count mismatches create a timestamped integrity backup,
   repair through SQLite `VACUUM`, and require a fresh successful quick check.
+- Integrity probes and repair connections use the same bounded busy timeout as
+  normal initialization, so a concurrent writer is waited on rather than
+  misreported as an immediate startup failure.
 - Other corruption diagnostics stop initialization without guessed repair.
 - Desktop Skill package IPC startup recovers every previous-process journal and
   pending row; runtime cleanup retains its age lease.
@@ -21,6 +24,8 @@ Implemented and verified locally; not yet submitted or released.
 - Targeted database, lifecycle, IPC, remote package, skills.sh parser, store
   install, and renderer operation suites: 8 files, 148 tests passed.
 - `pnpm --filter @prompthub/db typecheck`: passed.
+- `pnpm --filter @prompthub/cli test -- database-concurrency.test.ts`: passed
+  after reproducing the release-harness failure with a real overlapping writer.
 - `pnpm --filter @prompthub/desktop lint`: passed.
 - `pnpm --filter @prompthub/desktop typecheck`: passed.
 - `pnpm --filter @prompthub/desktop build`: passed with existing bundle-size

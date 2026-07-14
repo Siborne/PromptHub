@@ -7,4 +7,6 @@
 - [x] `TEST-DBIR-002`: Prove unsupported quick-check failures are not automatically repaired.
 - [x] `T-DBIR-005`: Recover all previous-process Skill package journals at IPC startup while retaining leased cleanup for runtime calls.
 - [x] `TEST-DBIR-003`: Prove startup mode cleans a fresh pending install and that default cleanup still preserves fresh live work.
+- [x] `T-DBIR-006`: Apply the shared bounded busy timeout to integrity probes and verified repairs.
+- [x] `TEST-DBIR-004`: Hold a real writer transaction in another process and prove a concurrent integrity probe waits and opens after release.
 - [x] `T-DBIR-004`: Run database, Skill lifecycle, lint, type, and build verification and sync stable docs.
