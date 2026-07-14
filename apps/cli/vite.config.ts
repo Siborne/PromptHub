@@ -12,6 +12,9 @@ export default defineConfig({
   test: {
     // CLI tests share process-wide runtime paths, database handles, cwd, and HOME.
     fileParallelism: false,
+    // Real subprocess and SQLite workflows routinely exceed Vitest's 5s default.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
   resolve: {
     alias: {
