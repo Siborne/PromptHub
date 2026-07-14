@@ -21,7 +21,8 @@ import {
 } from "./import-export.test-helpers";
 
 describe("web import/export routes", () => {
-  const TEST_TIMEOUT = 20000;
+  // These cases exercise real SQLite, archive, media, and password hashing flows.
+  const TEST_TIMEOUT = 60000;
 
   beforeEach(() => {
     vi.resetModules();

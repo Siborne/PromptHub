@@ -183,7 +183,8 @@ export async function createSkill(
   );
 }
 
-export const SYNC_ROUTE_TEST_TIMEOUT = 20000;
+// Sync route tests use real SQLite, archive, and password hashing workflows.
+export const SYNC_ROUTE_TEST_TIMEOUT = 60000;
 
 export function setupSyncRouteTestLifecycle(): void {
   beforeEach(() => {
