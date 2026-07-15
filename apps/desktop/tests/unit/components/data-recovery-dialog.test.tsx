@@ -201,6 +201,53 @@ describe("DataRecoveryDialog", () => {
     expect(actionBar).not.toHaveClass("-mb-6");
   });
 
+  it("shows the complete durable inventory for a manually selected directory", async () => {
+    previewRecoveryMock.mockResolvedValue({
+      sourcePath: "D:/Program Files/PromptHub",
+      previewAvailable: true,
+      items: [
+        { kind: "mcp", title: "library.json" },
+        { kind: "rule", title: "AGENTS.md" },
+        { kind: "plugin", title: "writer-kit" },
+        { kind: "config", title: "settings.json" },
+      ],
+      truncated: false,
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <DataRecoveryDialog
+          isOpen={true}
+          onClose={vi.fn()}
+          allowWindowClose={true}
+          databases={[
+            {
+              sourcePath: "D:/Program Files/PromptHub",
+              sourceType: "external-user-data",
+              displayName: "Selected historical directory",
+              displayPath: "D:/Program Files/PromptHub",
+              promptCount: 0,
+              folderCount: 0,
+              skillCount: 0,
+              dbSizeBytes: 4096,
+              lastModified: "2026-07-15T14:12:00.000Z",
+              previewAvailable: true,
+              dataSources: ["mcp", "rules", "plugins", "config"],
+              contentCounts: { mcp: 3, rules: 2, plugins: 1, config: 4 },
+            } as any,
+          ]}
+        />,
+        { language: "en" },
+      );
+    });
+
+    expect(await screen.findByText("library.json")).toBeInTheDocument();
+    expect(screen.getAllByText("3 MCP files").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2 Rule files").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 Plugin file").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("4 Config files").length).toBeGreaterThan(0);
+  });
+
   it("keeps rendered recovery actions non-submit with decorative icons hidden", async () => {
     const handleSubmit = vi.fn();
 

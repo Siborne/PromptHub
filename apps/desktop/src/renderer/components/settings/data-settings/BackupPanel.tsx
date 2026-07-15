@@ -17,6 +17,7 @@ export function BackupPanel() {
     settings,
     upgradeBackups,
     loadingUpgradeBackups,
+    scanningRecoverySources,
     upgradeBackupActionId,
     showAllUpgradeBackups,
     setShowAllUpgradeBackups,
@@ -26,7 +27,7 @@ export function BackupPanel() {
     setIsBackupDropTargetActive,
     exportScope,
     setExportScope,
-    refreshUpgradeBackups,
+    refreshRecoveryBackups,
     formatBytes,
     visibleUpgradeBackups,
     hiddenUpgradeBackupsCount,
@@ -207,7 +208,7 @@ export function BackupPanel() {
                   <div className="text-[11px] text-muted-foreground/80">
                     {t(
                       "settings.backupDropRestoreFormats",
-                      "Supported: .json, .phub.gz, .gz, .zip",
+                      "Supported: .json, .phub.gz, .gz, .zip, PromptHub SQLite backups",
                     )}
                   </div>
                 </div>
@@ -231,12 +232,12 @@ export function BackupPanel() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => void refreshUpgradeBackups()}
-                  disabled={loadingUpgradeBackups}
+                  onClick={() => void refreshRecoveryBackups()}
+                  disabled={loadingUpgradeBackups || scanningRecoverySources}
                   className="h-8 shrink-0 whitespace-nowrap px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   <RefreshCwIcon
-                    className={`w-4 h-4 shrink-0 ${loadingUpgradeBackups ? "animate-spin" : ""}`}
+                    className={`w-4 h-4 shrink-0 ${loadingUpgradeBackups || scanningRecoverySources ? "animate-spin" : ""}`}
                     aria-hidden="true"
                   />
                   {t("common.refresh", "Refresh")}

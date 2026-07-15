@@ -6,6 +6,7 @@ import {
   downloadSelectiveExport,
   exportDatabase,
   formatBackupImportError,
+  isPotentialSqliteBackupFileName,
   restoreFromBackup,
   restoreFromFile,
 } from "../../../src/renderer/services/database-backup";
@@ -44,6 +45,26 @@ vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
   restoreSettingsStateSnapshot: (...args: unknown[]) =>
     restoreSettingsStateSnapshotMock(...args),
 }));
+
+describe("SQLite backup filename detection", () => {
+  it.each([
+    "prompthub.db",
+    "prompthub.db.backup-2026-07-15T13-19-16-810Z",
+    "prompthub.db.backup-before-0.5.3.2026-07-15.db",
+    "prompthub.db.pre-recovery-2026-07-15T13-19-14-753Z",
+    "prompthub.db.integrity-backup-2026-07-15T13-19-14-753Z",
+    "prompthub.db.legacy-conflict-2026-07-15.db",
+  ])("accepts %s", (fileName) => {
+    expect(isPotentialSqliteBackupFileName(fileName)).toBe(true);
+  });
+
+  it.each(["notes.db", "prompthub-export.zip", "prompthub.db.txt"])(
+    "rejects %s",
+    (fileName) => {
+      expect(isPotentialSqliteBackupFileName(fileName)).toBe(false);
+    },
+  );
+});
 
 function createTransactionMock(getAllResult: unknown[] = []) {
   const transaction: {
@@ -1333,6 +1354,74 @@ describe("database-backup restore", () => {
     expect(embedded.payload.settingsUpdatedAt).toBe("2026-04-21T00:00:00.000Z");
   });
 
+  it("exports MCP and Plugin data independently from Skill scope", async () => {
+    const mcpLibrary = {
+      version: 1,
+      updatedAt: "2026-07-15T00:00:00.000Z",
+      servers: [{ id: "mcp-1", name: "filesystem", transport: "stdio" }],
+    };
+    const pluginLibrary = {
+      version: 1,
+      updatedAt: "2026-07-15T00:00:00.000Z",
+      plugins: [{ id: "plugin-1", name: "writer-kit", enabled: true }],
+    };
+    installWindowMocks({
+      electron: { exportZip: vi.fn().mockResolvedValue({ canceled: false }) },
+      api: {
+        mcp: {
+          getLibrary: vi.fn().mockResolvedValue(mcpLibrary),
+          exportDataFiles: vi
+            .fn()
+            .mockResolvedValue([
+              { relativePath: "library.json", contentBase64: "e30=", size: 2 },
+            ]),
+        },
+        plugin: {
+          exportLibrarySnapshot: vi.fn().mockResolvedValue({
+            library: pluginLibrary,
+            packages: [],
+          }),
+          exportDataFiles: vi
+            .fn()
+            .mockResolvedValue([
+              { relativePath: "library.json", contentBase64: "e30=", size: 2 },
+            ]),
+        },
+      },
+    });
+
+    await downloadSelectiveExport({
+      prompts: false,
+      folders: false,
+      versions: false,
+      images: false,
+      videos: false,
+      aiConfig: false,
+      settings: false,
+      rules: false,
+      skills: false,
+      mcp: true,
+      plugins: false,
+    } as any);
+
+    const exportZipArg = window.electron.exportZip.mock.calls[0]?.[0] as {
+      scope: { exportJson?: string };
+    };
+    const embedded = JSON.parse(String(exportZipArg.scope.exportJson)) as {
+      payload: {
+        skills?: unknown;
+        mcpLibrary?: unknown;
+        pluginLibrary?: unknown;
+        agentAssetFiles?: { mcp?: unknown; plugins?: unknown };
+      };
+    };
+    expect(embedded.payload.skills).toBeUndefined();
+    expect(embedded.payload.mcpLibrary).toEqual(mcpLibrary);
+    expect(embedded.payload.agentAssetFiles?.mcp).toBeDefined();
+    expect(embedded.payload.pluginLibrary).toBeUndefined();
+    expect(embedded.payload.agentAssetFiles?.plugins).toBeUndefined();
+  });
+
   it("rejects arbitrary JSON files without clearing existing data", async () => {
     const file = {
       name: "random.json",
@@ -1419,5 +1508,4 @@ describe("database-backup restore", () => {
     expect(skipped.folders).toBe(0);
     expect(clearDatabaseMock).toHaveBeenCalledTimes(1);
   });
-
 });

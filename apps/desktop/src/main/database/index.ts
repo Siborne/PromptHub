@@ -16,6 +16,7 @@ import {
   isDatabaseEmpty,
 } from "@prompthub/db";
 import type { InitDatabaseHooks } from "@prompthub/db";
+import type { RecoveryContentCounts } from "@prompthub/shared/types";
 import {
   getLegacyPromptsWorkspaceDir,
   getDatabasePath,
@@ -57,14 +58,51 @@ export interface RecoverableDatabase {
   hasWorkspaceData?: boolean;
   /** Whether browser storage artifacts exist at this location. */
   hasBrowserStorage?: boolean;
+  /** File counts for durable data that is not represented by SQLite rows. */
+  contentCounts?: RecoveryContentCounts;
 }
 
-const BROWSER_STORAGE_DIRS = [
-  "IndexedDB",
-  "Local Storage",
-  "Session Storage",
-];
+const BROWSER_STORAGE_DIRS = ["IndexedDB", "Local Storage", "Session Storage"];
 const FILE_STORAGE_DIRS = ["workspace", "data"];
+const DURABLE_CONTENT_PATHS = {
+  mcp: ["mcp", path.join("data", "mcp")],
+  rules: ["rules", path.join("data", "rules")],
+  plugins: ["plugins", path.join("data", "plugins")],
+  config: ["config"],
+  media: [
+    "images",
+    "videos",
+    path.join("data", "assets"),
+    path.join("data", "images"),
+    path.join("data", "videos"),
+  ],
+} as const;
+const KNOWN_DATA_ENTRIES = new Set([
+  "assets",
+  "folders.json",
+  "images",
+  "mcp",
+  "plugins",
+  "prompts",
+  "rules",
+  "skills",
+  "videos",
+]);
+const ADDITIONAL_RECOVERY_TABLES = [
+  "prompt_versions",
+  "prompt_relations",
+  "prompt_output_format_items",
+  "settings",
+  "skill_versions",
+  "rules",
+  "rule_versions",
+  "user_settings",
+] as const;
+type RecoveryTableName =
+  | "prompts"
+  | "folders"
+  | "skills"
+  | (typeof ADDITIONAL_RECOVERY_TABLES)[number];
 
 // ── Path resolution ──────────────────────────────────────────────────────────
 
@@ -152,7 +190,10 @@ function ensurePreUpgradeBackup(dbPath: string): void {
   } catch (error) {
     // Backup is defensive — never let it crash startup.
     // 备份属于防御措施，失败不得阻断启动。
-    console.warn("[startup] ensurePreUpgradeBackup failed (continuing):", error);
+    console.warn(
+      "[startup] ensurePreUpgradeBackup failed (continuing):",
+      error,
+    );
   }
 }
 
@@ -198,11 +239,14 @@ export function detectRecoverableDatabases(
     const fileStorageBytes = getFileStorageBytes(candidate);
     const workspaceStats = getWorkspaceRecoveryStats(candidate);
     const fileSkillCount = getFileSkillCount(candidate);
+    const contentCounts = getDurableContentCounts(candidate);
 
     let dbSizeBytes = 0;
     let promptCount = 0;
     let folderCount = 0;
     let skillCount = 0;
+    let hasAdditionalDatabaseData = false;
+    let databaseTemporarilyUnavailable = false;
 
     let candidateDb: DatabaseAdapter.Database | null = null;
     if (dbFile) {
@@ -236,8 +280,12 @@ export function detectRecoverableDatabases(
           } catch {
             // skills table may not exist in very old databases
           }
+          hasAdditionalDatabaseData = databaseHasAdditionalRecords(candidateDb);
         }
       } catch (err) {
+        databaseTemporarilyUnavailable = /(?:locked|busy)/i.test(
+          err instanceof Error ? err.message : String(err),
+        );
         console.warn(
           `[Recovery] Failed to inspect candidate database at ${dbFile}:`,
           err,
@@ -251,8 +299,14 @@ export function detectRecoverableDatabases(
       }
     }
 
-    const effectivePromptCount = Math.max(promptCount, workspaceStats.promptCount);
-    const effectiveFolderCount = Math.max(folderCount, workspaceStats.folderCount);
+    const effectivePromptCount = Math.max(
+      promptCount,
+      workspaceStats.promptCount,
+    );
+    const effectiveFolderCount = Math.max(
+      folderCount,
+      workspaceStats.folderCount,
+    );
     const effectiveSkillCount = Math.max(skillCount, fileSkillCount);
 
     // Only surface candidates that appear to contain real user data.
@@ -261,7 +315,10 @@ export function detectRecoverableDatabases(
     if (
       effectivePromptCount === 0 &&
       effectiveSkillCount === 0 &&
-      browserStorageBytes === 0
+      browserStorageBytes === 0 &&
+      sumContentCounts(contentCounts) === 0 &&
+      !hasAdditionalDatabaseData &&
+      !databaseTemporarilyUnavailable
     ) {
       continue;
     }
@@ -272,11 +329,16 @@ export function detectRecoverableDatabases(
       folderCount: effectiveFolderCount,
       skillCount: effectiveSkillCount,
       dbSizeBytes:
-        dbSizeBytes > 0 ? dbSizeBytes : browserStorageBytes + fileStorageBytes,
+        dbSizeBytes > 0
+          ? dbSizeBytes
+          : browserStorageBytes +
+            fileStorageBytes +
+            getDirectorySize(path.join(candidate, "config")),
       hasDatabaseFile: dbSizeBytes >= 4096,
       hasWorkspaceData:
         workspaceStats.promptCount > 0 || workspaceStats.folderCount > 0,
       hasBrowserStorage: browserStorageBytes > 0,
+      contentCounts,
     });
   }
 
@@ -293,9 +355,7 @@ export function detectRecoverableDatabaseFiles(
   candidateFiles: string[],
 ): RecoverableDatabase[] {
   const results: RecoverableDatabase[] = [];
-  const normalizedCurrentDb = path
-    .resolve(getDatabasePath())
-    .toLowerCase();
+  const normalizedCurrentDb = path.resolve(getDatabasePath()).toLowerCase();
 
   for (const candidateFile of candidateFiles) {
     const normalizedCandidate = path.resolve(candidateFile).toLowerCase();
@@ -303,61 +363,35 @@ export function detectRecoverableDatabaseFiles(
       continue;
     }
 
-    const stat = readLinkSafeStats(candidateFile);
-    if (!stat || stat.isSymbolicLink()) {
-      continue;
+    const inspected = inspectRecoverableDatabaseFile(candidateFile);
+    if (inspected) results.push(inspected);
+  }
+
+  return results;
+}
+
+function inspectRecoverableDatabaseFile(
+  candidateFile: string,
+): RecoverableDatabase | null {
+  const stat = readLinkSafeStats(candidateFile);
+  if (!stat?.isFile() || stat.isSymbolicLink() || stat.size < 4096) return null;
+
+  let candidateDb: DatabaseAdapter.Database | null = null;
+  try {
+    candidateDb = new DatabaseAdapter(candidateFile, { readOnly: true });
+    candidateDb.pragma("foreign_keys = OFF");
+    const promptCount = readRecoveryTableCount(candidateDb, "prompts");
+    const folderCount = readRecoveryTableCount(candidateDb, "folders");
+    const skillCount = readRecoveryTableCount(candidateDb, "skills", true);
+    if (
+      promptCount === 0 &&
+      folderCount === 0 &&
+      skillCount === 0 &&
+      !databaseHasAdditionalRecords(candidateDb)
+    ) {
+      return null;
     }
-
-    if (!stat.isFile() || stat.size < 4096) {
-      continue;
-    }
-
-    let promptCount = 0;
-    let folderCount = 0;
-    let skillCount = 0;
-    let candidateDb: DatabaseAdapter.Database | null = null;
-
-    try {
-      candidateDb = new DatabaseAdapter(candidateFile, { readOnly: true });
-      candidateDb.pragma("foreign_keys = OFF");
-
-      const promptRow = candidateDb
-        .prepare("SELECT COUNT(*) as count FROM prompts")
-        .get() as { count: number } | undefined;
-      promptCount = promptRow?.count ?? 0;
-
-      const folderRow = candidateDb
-        .prepare("SELECT COUNT(*) as count FROM folders")
-        .get() as { count: number } | undefined;
-      folderCount = folderRow?.count ?? 0;
-
-      try {
-        const skillRow = candidateDb
-          .prepare("SELECT COUNT(*) as count FROM skills")
-          .get() as { count: number } | undefined;
-        skillCount = skillRow?.count ?? 0;
-      } catch {
-        // skills table may not exist in very old databases
-      }
-    } catch (err) {
-      console.warn(
-        `[Recovery] Failed to inspect backup database file at ${candidateFile}:`,
-        err,
-      );
-      continue;
-    } finally {
-      try {
-        candidateDb?.close();
-      } catch {
-        // ignore close errors
-      }
-    }
-
-    if (promptCount === 0 && folderCount === 0 && skillCount === 0) {
-      continue;
-    }
-
-    results.push({
+    return {
       sourcePath: candidateFile,
       promptCount,
       folderCount,
@@ -366,10 +400,44 @@ export function detectRecoverableDatabaseFiles(
       hasDatabaseFile: true,
       hasWorkspaceData: false,
       hasBrowserStorage: false,
-    });
+    };
+  } catch (err) {
+    console.warn(
+      `[Recovery] Failed to inspect backup database file at ${candidateFile}:`,
+      err,
+    );
+    return null;
+  } finally {
+    try {
+      candidateDb?.close();
+    } catch {
+      // ignore close errors
+    }
   }
+}
 
-  return results;
+function readRecoveryTableCount(
+  database: DatabaseAdapter.Database,
+  tableName: RecoveryTableName,
+  optional = false,
+): number {
+  try {
+    const row = database
+      .prepare(`SELECT COUNT(*) as count FROM ${tableName}`)
+      .get() as { count: number } | undefined;
+    return row?.count ?? 0;
+  } catch (error) {
+    if (optional) return 0;
+    throw error;
+  }
+}
+
+function databaseHasAdditionalRecords(
+  database: DatabaseAdapter.Database,
+): boolean {
+  return ADDITIONAL_RECOVERY_TABLES.some(
+    (tableName) => readRecoveryTableCount(database, tableName, true) > 0,
+  );
 }
 
 /**
@@ -383,20 +451,20 @@ export function performDatabaseRecovery(
   const sourceStat = readLinkSafeStats(sourcePath);
   const sourceExists = sourceStat !== null;
   const sourceIsDbFile =
-    sourceStat?.isFile() === true &&
-    !sourceStat.isSymbolicLink() &&
-    path.extname(sourcePath).toLowerCase() === ".db";
+    sourceStat?.isFile() === true && !sourceStat.isSymbolicLink();
   const sourceDb = sourceIsDbFile
     ? sourcePath
     : getExistingLinkSafeCanonicalDbPath(sourcePath);
   const targetDb = getCanonicalDbPath(currentDataPath);
 
   if (
-    !sourceDb &&
-    (!sourceExists ||
-      !sourceStat?.isDirectory() ||
-      (getBrowserStorageBytes(sourcePath) === 0 &&
-        getFileStorageBytes(sourcePath) === 0))
+    (sourceIsDbFile && !inspectRecoverableDatabaseFile(sourcePath)) ||
+    (!sourceDb &&
+      (!sourceExists ||
+        !sourceStat?.isDirectory() ||
+        (getBrowserStorageBytes(sourcePath) === 0 &&
+          getFileStorageBytes(sourcePath) === 0 &&
+          sumContentCounts(getDurableContentCounts(sourcePath)) === 0)))
   ) {
     return {
       success: false,
@@ -427,13 +495,14 @@ export function performDatabaseRecovery(
         "images",
         "videos",
         "skills",
+        "mcp",
+        "rules",
+        "plugins",
         ...FILE_STORAGE_DIRS,
         ...BROWSER_STORAGE_DIRS,
       ];
       for (const dir of assetDirs) {
-        const sourceDir = fs.existsSync(path.join(sourcePath, "data", dir))
-          ? path.join(sourcePath, "data", dir)
-          : path.join(sourcePath, dir);
+        const sourceDir = path.join(sourcePath, dir);
         const targetDir = path.join(currentDataPath, dir);
         if (isRecoverableDirectory(sourceDir)) {
           copyDirMerge(sourceDir, targetDir);
@@ -441,19 +510,17 @@ export function performDatabaseRecovery(
         }
       }
 
-      // 4. Copy config files
-      const configFiles = ["shortcuts.json", "shortcut-mode.json"];
-      for (const file of configFiles) {
-        const sourceFile = fs.existsSync(path.join(sourcePath, "config", file))
-          ? path.join(sourcePath, "config", file)
-          : path.join(sourcePath, file);
-        const targetFile = fs.existsSync(path.join(currentDataPath, "config"))
-          ? path.join(currentDataPath, "config", file)
-          : path.join(currentDataPath, file);
-        if (fs.existsSync(sourceFile) && !fs.existsSync(targetFile)) {
-          fs.mkdirSync(path.dirname(targetFile), { recursive: true });
+      // 4. Merge all configuration files without replacing current settings.
+      const sourceConfig = path.join(sourcePath, "config");
+      if (isRecoverableDirectory(sourceConfig)) {
+        copyDirMerge(sourceConfig, path.join(currentDataPath, "config"));
+        console.log("[Recovery] Merged config directory");
+      }
+      for (const file of ["shortcuts.json", "shortcut-mode.json"]) {
+        const sourceFile = path.join(sourcePath, file);
+        const targetFile = path.join(currentDataPath, file);
+        if (isRecoverableFile(sourceFile) && !fs.existsSync(targetFile)) {
           fs.copyFileSync(sourceFile, targetFile);
-          console.log(`[Recovery] Copied config file: ${file}`);
         }
       }
     }
@@ -498,7 +565,11 @@ function readLinkSafeStats(targetPath: string): fs.Stats | null {
   try {
     return fs.lstatSync(targetPath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (
+      ["ENOENT", "ENOTDIR"].includes(
+        (error as NodeJS.ErrnoException).code ?? "",
+      )
+    ) {
       return null;
     }
     throw error;
@@ -506,7 +577,13 @@ function readLinkSafeStats(targetPath: string): fs.Stats | null {
 }
 
 function isRecoverableDirectory(targetPath: string): boolean {
-  return readLinkSafeStats(targetPath)?.isDirectory() === true;
+  const stat = readLinkSafeStats(targetPath);
+  return stat?.isDirectory() === true && !stat.isSymbolicLink();
+}
+
+function isRecoverableFile(targetPath: string): boolean {
+  const stat = readLinkSafeStats(targetPath);
+  return stat?.isFile() === true && !stat.isSymbolicLink();
 }
 
 function getBrowserStorageBytes(basePath: string): number {
@@ -519,7 +596,10 @@ function getWorkspaceRecoveryStats(basePath: string): {
   promptCount: number;
   folderCount: number;
 } {
-  const legacyWorkspaceDir = path.join(basePath, path.basename(getLegacyWorkspaceDir()));
+  const legacyWorkspaceDir = path.join(
+    basePath,
+    path.basename(getLegacyWorkspaceDir()),
+  );
   const legacyPromptsDir = path.join(
     legacyWorkspaceDir,
     path.basename(getLegacyPromptsWorkspaceDir()),
@@ -600,6 +680,68 @@ function getFileStorageBytes(basePath: string): number {
   return FILE_STORAGE_DIRS.reduce((total, dirName) => {
     return total + getDirectorySize(path.join(basePath, dirName));
   }, 0);
+}
+
+function getDurableContentCounts(basePath: string): RecoveryContentCounts {
+  const counts: RecoveryContentCounts = {};
+  for (const [kind, relativePaths] of Object.entries(DURABLE_CONTENT_PATHS)) {
+    let count = 0;
+    for (const relativePath of relativePaths) {
+      count += countLinkSafeFiles(path.join(basePath, relativePath));
+    }
+    if (count > 0) counts[kind as keyof RecoveryContentCounts] = count;
+  }
+
+  const dataPath = path.join(basePath, "data");
+  const otherData = countUnknownDataFiles(dataPath);
+  if (otherData > 0) counts.otherData = otherData;
+  return counts;
+}
+
+function sumContentCounts(counts: RecoveryContentCounts): number {
+  return Object.values(counts).reduce(
+    (total, count) => total + (count ?? 0),
+    0,
+  );
+}
+
+function countUnknownDataFiles(dataPath: string): number {
+  const stat = readLinkSafeStats(dataPath);
+  if (!stat?.isDirectory() || stat.isSymbolicLink()) return 0;
+
+  try {
+    return fs
+      .readdirSync(dataPath, { withFileTypes: true })
+      .reduce((total, entry) => {
+        if (entry.isSymbolicLink() || KNOWN_DATA_ENTRIES.has(entry.name)) {
+          return total;
+        }
+        if (/^prompthub\.db(?:$|[-.])/i.test(entry.name)) return total;
+        return total + countLinkSafeFiles(path.join(dataPath, entry.name));
+      }, 0);
+  } catch {
+    return 0;
+  }
+}
+
+function countLinkSafeFiles(targetPath: string): number {
+  const stat = readLinkSafeStats(targetPath);
+  if (!stat || stat.isSymbolicLink()) return 0;
+  if (!stat.isDirectory()) return stat.isFile() ? 1 : 0;
+
+  try {
+    return fs
+      .readdirSync(targetPath, { withFileTypes: true })
+      .reduce(
+        (total, entry) =>
+          entry.isSymbolicLink()
+            ? total
+            : total + countLinkSafeFiles(path.join(targetPath, entry.name)),
+        0,
+      );
+  } catch {
+    return 0;
+  }
 }
 
 function getCanonicalDbPath(basePath: string): string {

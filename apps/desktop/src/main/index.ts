@@ -825,7 +825,12 @@ ipcMain.handle(
       results.push(
         ...detectRecoverableDatabaseFiles(
           currentPath,
-          listStandaloneDatabaseBackupFiles(currentPath),
+          Array.from(
+            new Set([
+              ...listStandaloneDatabaseBackupFiles(currentPath),
+              ...extraPaths.map((value) => path.resolve(value)),
+            ]),
+          ),
         ).map((candidate) => buildStandaloneDbBackupCandidate(candidate)),
       );
     }

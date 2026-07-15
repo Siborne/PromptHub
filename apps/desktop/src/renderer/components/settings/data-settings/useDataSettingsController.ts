@@ -53,8 +53,15 @@ export function useDataSettingsController({
     currentVersion: runtime.currentVersion,
     securityConfigured: runtime.securityConfigured,
     webRuntime: runtime.webRuntime,
+    onDatabaseBackupPath: runtime.webRuntime
+      ? undefined
+      : recovery.handleInspectDroppedDatabase,
   });
   const sync = useDataSyncController(activeSubsection, runtime.webRuntime);
+  const refreshRecoveryBackups = async () => {
+    await backup.refreshUpgradeBackups();
+    await recovery.handleScanRecoverySources();
+  };
 
   return {
     activeSubsection,
@@ -69,6 +76,7 @@ export function useDataSettingsController({
     ...recovery,
     ...backup,
     ...sync,
+    refreshRecoveryBackups,
     formatBytes,
     DEFAULT_VISIBLE_UPGRADE_BACKUPS,
     EXPANDED_UPGRADE_BACKUP_MAX_HEIGHT,

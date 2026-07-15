@@ -9,7 +9,25 @@ export type RecoveryDataSource =
   | "workspace"
   | "browser-storage"
   | "skills"
+  | "mcp"
+  | "rules"
+  | "plugins"
+  | "config"
+  | "media"
+  | "other-data"
   | "legacy-layout";
+
+export type RecoveryContentKind =
+  | "mcp"
+  | "rules"
+  | "plugins"
+  | "config"
+  | "media"
+  | "otherData";
+
+export type RecoveryContentCounts = Partial<
+  Record<RecoveryContentKind, number>
+>;
 
 export interface RecoveryCandidate {
   sourcePath: string;
@@ -23,13 +41,23 @@ export interface RecoveryCandidate {
   lastModified: string | null;
   previewAvailable: boolean;
   dataSources: RecoveryDataSource[];
+  contentCounts?: RecoveryContentCounts;
   description?: string | null;
   backupId?: string | null;
   fromVersion?: string | null;
   toVersion?: string | null;
 }
 
-export type RecoveryPreviewItemKind = "prompt" | "folder" | "skill";
+export type RecoveryPreviewItemKind =
+  | "prompt"
+  | "folder"
+  | "skill"
+  | "mcp"
+  | "rule"
+  | "plugin"
+  | "config"
+  | "media"
+  | "other-data";
 
 export interface RecoveryPreviewItem {
   kind: RecoveryPreviewItemKind;

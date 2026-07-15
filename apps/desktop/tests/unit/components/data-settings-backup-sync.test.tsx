@@ -51,7 +51,7 @@ vi.mock("../../../src/renderer/stores/skill.store", () => ({
 }));
 
 vi.mock("../../../src/renderer/services/database-backup", () => ({
-  BACKUP_IMPORT_ACCEPT: ".json,.phub,.gz,.zip",
+  BACKUP_IMPORT_ACCEPT: ".json,.phub,.gz,.zip,.db",
   downloadBackup: vi.fn(),
   downloadCompressedBackup: vi.fn(),
   downloadSelectiveExport: vi.fn(),
@@ -62,6 +62,8 @@ vi.mock("../../../src/renderer/services/database-backup", () => ({
     }
     return message;
   },
+  isPotentialSqliteBackupFileName: (fileName: string) =>
+    fileName.toLowerCase().startsWith("prompthub.db."),
   pickSupportedBackupFile: vi.fn(
     (files: FileList | File[]) => Array.from(files)[0] ?? null,
   ),
@@ -270,10 +272,15 @@ describe("DataSettings", { timeout: 60_000 }, () => {
           prompts: 0,
           folders: 0,
           versions: 0,
+          promptRelations: 0,
           outputFormatItems: 0,
+          rules: 3,
           skills: 0,
           skillVersions: 0,
           skillFiles: 0,
+          mcpServers: 2,
+          plugins: 1,
+          pluginFiles: 4,
           images: 0,
           videos: 0,
         },
@@ -327,7 +334,7 @@ describe("DataSettings", { timeout: 60_000 }, () => {
 
     fireEvent.click(importButton);
     expect(input.type).toBe("file");
-    expect(input.accept).toBe(".json,.phub,.gz,.zip");
+    expect(input.accept).toBe(".json,.phub,.gz,.zip,.db");
 
     const file = { name: "prompthub-export.phub.gz" } as File;
 
@@ -342,6 +349,10 @@ describe("DataSettings", { timeout: 60_000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Review import summary")).toBeInTheDocument();
     });
+    expect(screen.getByText(/3 rules/)).toBeInTheDocument();
+    expect(screen.getByText(/2 MCP servers/)).toBeInTheDocument();
+    expect(screen.getByText(/1 plugin/)).toBeInTheDocument();
+    expect(screen.getByText(/4 plugin files/)).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Back up current data and import" }),
@@ -379,6 +390,8 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       });
     });
     expect(showToast).toHaveBeenCalledWith("数据导出成功", "success");
+    expect(screen.getByText("MCP")).toBeInTheDocument();
+    expect(screen.getByText("插件")).toBeInTheDocument();
   });
 
   it("shows a friendly restore error message when import fails", async () => {
@@ -481,6 +494,192 @@ describe("DataSettings", { timeout: 60_000 }, () => {
     await waitFor(() => {
       expect(beginImportFromFile).toHaveBeenCalledWith(file);
     });
+  });
+
+  it("routes a dropped SQLite recovery backup to candidate preview", async () => {
+    const sourcePath =
+      "C:/Users/test/AppData/Roaming/PromptHub/data/prompthub.db.pre-recovery-2026-07-15T13-19-14-753Z";
+    const checkRecovery = vi.fn().mockResolvedValue([
+      {
+        sourcePath,
+        sourceType: "standalone-db-backup",
+        displayName: "Standalone database backup",
+        displayPath: sourcePath,
+        promptCount: 2,
+        folderCount: 1,
+        skillCount: 7,
+        dbSizeBytes: 327680,
+        lastModified: "2026-07-15T13:19:14.753Z",
+        previewAvailable: true,
+        dataSources: ["sqlite"],
+      },
+    ]);
+    const previewRecovery = vi.fn().mockResolvedValue({
+      sourcePath,
+      previewAvailable: true,
+      items: [{ kind: "skill", id: "skill-1", title: "Recovered Skill" }],
+      truncated: false,
+    });
+    installWindowMocks({
+      electron: {
+        getPathForFile: vi.fn(() => sourcePath),
+        checkRecovery,
+        previewRecovery,
+      },
+    });
+    const beginImportFromFile = vi.fn().mockResolvedValue(undefined);
+
+    await act(async () => {
+      await renderWithI18n(
+        <DataSettings
+          activeSubsection="backup"
+          backupImportController={{
+            requestFileSelection: vi.fn(),
+            beginImportFromFile,
+          }}
+        />,
+        { language: "en" },
+      );
+    });
+
+    const heading = screen.getByText("Drag to Restore Backup");
+    const dropTarget = heading.closest("div.rounded-xl") as HTMLDivElement;
+    const file = new File(
+      ["sqlite"],
+      "prompthub.db.pre-recovery-2026-07-15T13-19-14-753Z",
+    );
+
+    fireEvent.drop(dropTarget, {
+      dataTransfer: {
+        items: [{ kind: "file", type: "application/octet-stream" }],
+        files: [file],
+      },
+    });
+
+    await waitFor(() => {
+      expect(checkRecovery).toHaveBeenCalledWith({
+        extraPaths: [sourcePath],
+        ignoreDismissMarker: true,
+      });
+    });
+    expect(beginImportFromFile).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("button", { name: "Restore Selected Source" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Recovered Skill")).toBeInTheDocument();
+  });
+
+  it("routes a SQLite backup selected from the file picker to recovery preview", async () => {
+    const sourcePath =
+      "D:/Program Files/PromptHub/data/prompthub.db.backup-2026-07-15T13-19-16-810Z";
+    const checkRecovery = vi.fn().mockResolvedValue([
+      {
+        sourcePath,
+        sourceType: "standalone-db-backup",
+        displayName: "Standalone database backup",
+        displayPath: sourcePath,
+        promptCount: 2,
+        folderCount: 1,
+        skillCount: 4,
+        dbSizeBytes: 327680,
+        lastModified: "2026-07-15T13:19:16.810Z",
+        previewAvailable: true,
+        dataSources: ["sqlite"],
+      },
+    ]);
+    installWindowMocks({
+      electron: {
+        getPathForFile: vi.fn(() => sourcePath),
+        checkRecovery,
+        previewRecovery: vi.fn().mockResolvedValue({
+          sourcePath,
+          previewAvailable: true,
+          items: [{ kind: "skill", title: "Recovered Skill" }],
+          truncated: false,
+        }),
+      },
+    });
+    const input = {
+      accept: "",
+      click: vi.fn(),
+      onchange: null as null | ((event: Event) => void | Promise<void>),
+      type: "",
+    };
+    await act(async () => {
+      await renderWithI18n(<DataSettings activeSubsection="backup" />, {
+        language: "en",
+      });
+    });
+    vi.spyOn(document, "createElement").mockImplementation((tagName: string) =>
+      tagName === "input"
+        ? (input as unknown as HTMLInputElement)
+        : originalCreateElement(tagName),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Import Data" }));
+    const file = new File(
+      ["sqlite"],
+      sourcePath.split("/").at(-1) ?? "prompthub.db",
+    );
+    await act(async () => {
+      await input.onchange?.({ target: { files: [file] } } as unknown as Event);
+    });
+
+    await waitFor(() => {
+      expect(checkRecovery).toHaveBeenCalledWith({
+        extraPaths: [sourcePath],
+        ignoreDismissMarker: true,
+      });
+    });
+    expect(previewImportFile).not.toHaveBeenCalledWith(file);
+    expect(
+      await screen.findByRole("button", { name: "Restore Selected Source" }),
+    ).toBeInTheDocument();
+  });
+
+  it("refreshes rollback data through the unified recovery scan", async () => {
+    const sourcePath =
+      "C:/Users/test/AppData/Roaming/PromptHub/data/prompthub.db.backup-2026-07-15T13-19-16-810Z";
+    const checkRecovery = vi.fn().mockResolvedValue([
+      {
+        sourcePath,
+        sourceType: "standalone-db-backup",
+        displayName: "Standalone database backup",
+        displayPath: sourcePath,
+        promptCount: 4,
+        folderCount: 2,
+        skillCount: 9,
+        dbSizeBytes: 274432,
+        lastModified: "2026-07-15T13:19:16.810Z",
+        previewAvailable: true,
+        dataSources: ["sqlite"],
+      },
+    ]);
+    installWindowMocks({
+      electron: {
+        checkRecovery,
+        previewRecovery: vi.fn().mockResolvedValue({
+          sourcePath,
+          previewAvailable: true,
+          items: [{ kind: "skill", id: "skill-9", title: "Backup Skill" }],
+          truncated: false,
+        }),
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<DataSettings activeSubsection="backup" />, {
+        language: "en",
+      });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(checkRecovery).toHaveBeenCalledWith({
+        extraPaths: [],
+        ignoreDismissMarker: true,
+      });
+    });
+    expect(await screen.findByText("Backup Skill")).toBeInTheDocument();
   });
 
   it("tests a self-hosted PromptHub connection from desktop settings", async () => {

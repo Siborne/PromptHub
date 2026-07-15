@@ -81,6 +81,8 @@ describe("backup-orchestrator", () => {
       settings: true,
       rules: true,
       skills: true,
+      mcp: true,
+      plugins: true,
     });
     expect(downloadBackup).not.toHaveBeenCalled();
     expect(recordManualBackup).toHaveBeenCalledWith("0.5.5");
@@ -130,6 +132,8 @@ describe("backup-orchestrator", () => {
       settings: true,
       rules: true,
       skills: true,
+      mcp: true,
+      plugins: true,
     });
     expect(downloadBackup).not.toHaveBeenCalled();
     expect(recordManualBackup).toHaveBeenCalledWith("0.5.5");
@@ -232,7 +236,9 @@ describe("backup-orchestrator", () => {
   });
 
   it("returns failure result when self-hosted sync throws", async () => {
-    vi.mocked(pushToSelfHostedWeb).mockRejectedValue(new Error("network error"));
+    vi.mocked(pushToSelfHostedWeb).mockRejectedValue(
+      new Error("network error"),
+    );
 
     const result = await runSelfHostedAutoSync("interval", {
       url: "https://example.com",

@@ -59,7 +59,11 @@ describe("recovery-candidates", () => {
 
     fs.writeFileSync(
       path.join(userDataPath, ".data-layout-v0.5.5.json"),
-      JSON.stringify({ version: "0.5.5", migratedAt: new Date().toISOString(), movedEntries: [] }),
+      JSON.stringify({
+        version: "0.5.5",
+        migratedAt: new Date().toISOString(),
+        movedEntries: [],
+      }),
       "utf8",
     );
     fs.mkdirSync(path.join(userDataPath, "images"), { recursive: true });
@@ -76,7 +80,11 @@ describe("recovery-candidates", () => {
 
     fs.writeFileSync(
       path.join(userDataPath, ".data-layout-v0.5.5.json"),
-      JSON.stringify({ version: "0.5.5", migratedAt: new Date().toISOString(), movedEntries: [] }),
+      JSON.stringify({
+        version: "0.5.5",
+        migratedAt: new Date().toISOString(),
+        movedEntries: [],
+      }),
       "utf8",
     );
     fs.mkdirSync(path.join(userDataPath, "workspace", "prompts", "ops"), {
@@ -92,8 +100,14 @@ describe("recovery-candidates", () => {
       JSON.stringify([{ id: "folder-1", name: "Ops" }]),
       "utf8",
     );
-    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "skills", "demo", "SKILL.md"), "# skill", "utf8");
+    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(userDataPath, "skills", "demo", "SKILL.md"),
+      "# skill",
+      "utf8",
+    );
 
     const candidate = buildResidualLegacyRecoveryCandidate(userDataPath);
     expect(candidate).not.toBeNull();
@@ -122,7 +136,9 @@ describe("recovery-candidates", () => {
       }),
       "utf8",
     );
-    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), { recursive: true });
+    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), {
+      recursive: true,
+    });
     fs.writeFileSync(
       path.join(userDataPath, "skills", "demo", "SKILL.md"),
       "# skill",
@@ -138,7 +154,7 @@ describe("recovery-candidates", () => {
     expect(candidate?.dataSources).toEqual(["skills", "legacy-layout"]);
   });
 
-  it("lists standalone pre-upgrade database backup files newest first", () => {
+  it("lists every generated standalone database backup file newest first", () => {
     const userDataPath = fs.mkdtempSync(
       path.join(os.tmpdir(), "prompthub-recovery-candidate-"),
     );
@@ -152,13 +168,55 @@ describe("recovery-candidates", () => {
       userDataPath,
       "prompthub.db.backup-before-0.5.3.2026-04-18T10-00-00-000Z.db",
     );
-    const ignored = path.join(userDataPath, "prompthub.db.pre-recovery-2026-04-18.db");
+    const dataPath = path.join(userDataPath, "data");
+    fs.mkdirSync(dataPath);
+    const preRecovery = path.join(
+      dataPath,
+      "prompthub.db.pre-recovery-2026-04-18T11-00-00-000Z",
+    );
+    const migrationBackup = path.join(
+      dataPath,
+      "prompthub.db.backup-2026-04-18T12-00-00-000Z",
+    );
+    const integrityBackup = path.join(
+      userDataPath,
+      "prompthub.db.integrity-backup-2026-04-18T13-00-00-000Z",
+    );
+    const conflictBackup = path.join(
+      userDataPath,
+      "prompthub.db.legacy-conflict-2026-04-18T14-00-00-000Z.db",
+    );
+    const ignored = path.join(userDataPath, "notes.db");
 
     fs.writeFileSync(older, "older", "utf8");
     fs.writeFileSync(newer, "newer", "utf8");
+    fs.writeFileSync(preRecovery, "pre-recovery", "utf8");
+    fs.writeFileSync(migrationBackup, "migration", "utf8");
+    fs.writeFileSync(integrityBackup, "integrity", "utf8");
+    fs.writeFileSync(conflictBackup, "conflict", "utf8");
     fs.writeFileSync(ignored, "ignored", "utf8");
+    [
+      older,
+      newer,
+      preRecovery,
+      migrationBackup,
+      integrityBackup,
+      conflictBackup,
+    ].forEach((filePath, index) => {
+      const modifiedAt = new Date(
+        `2026-04-18T${String(9 + index).padStart(2, "0")}:00:00.000Z`,
+      );
+      fs.utimesSync(filePath, modifiedAt, modifiedAt);
+    });
 
-    expect(listStandaloneDatabaseBackupFiles(userDataPath)).toEqual([newer, older]);
+    expect(listStandaloneDatabaseBackupFiles(userDataPath)).toEqual([
+      conflictBackup,
+      integrityBackup,
+      migrationBackup,
+      preRecovery,
+      newer,
+      older,
+    ]);
   });
 
   it("previews prompt data from a standalone database backup candidate", async () => {
@@ -212,7 +270,8 @@ describe("recovery-candidates", () => {
       promptCount: 1,
       folderCount: 1,
       skillCount: 0,
-      dbSizeBytes: fs.statSync(path.join(userDataPath, "data", "prompthub.db")).size,
+      dbSizeBytes: fs.statSync(path.join(userDataPath, "data", "prompthub.db"))
+        .size,
       hasDatabaseFile: true,
       hasWorkspaceData: false,
       hasBrowserStorage: false,
@@ -223,5 +282,83 @@ describe("recovery-candidates", () => {
 
     expect(preview.previewAvailable).toBe(true);
     expect(preview.items.some((item) => item.kind === "prompt")).toBe(true);
+  });
+
+  it("previews MCP, Rule, Plugin, and config files without SQLite", async () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-recovery-candidate-"),
+    );
+    tempDirs.push(userDataPath);
+    for (const [relativePath, content] of [
+      ["data/mcp/library.json", "{}"],
+      ["data/rules/AGENTS.md", "# rules"],
+      ["data/plugins/library.json", "{}"],
+      ["config/settings.json", "{}"],
+    ] as const) {
+      const filePath = path.join(userDataPath, relativePath);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, content, "utf8");
+    }
+
+    const preview = await previewRecoveryCandidate({
+      sourcePath: userDataPath,
+      sourceType: "external-user-data",
+      displayName: "Selected historical directory",
+      displayPath: userDataPath,
+      promptCount: 0,
+      folderCount: 0,
+      skillCount: 0,
+      dbSizeBytes: 32,
+      lastModified: new Date().toISOString(),
+      previewAvailable: true,
+      dataSources: ["mcp", "rules", "plugins", "config"],
+      contentCounts: { mcp: 1, rules: 1, plugins: 1, config: 1 },
+    } as any);
+
+    expect(preview.previewAvailable).toBe(true);
+    expect(preview.items.map((item) => item.kind)).toEqual(
+      expect.arrayContaining(["mcp", "rule", "plugin", "config"]),
+    );
+  });
+
+  it("falls back to durable files when the candidate database is locked", async () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-recovery-candidate-"),
+    );
+    tempDirs.push(userDataPath);
+    const dataPath = path.join(userDataPath, "data");
+    const dbPath = path.join(dataPath, "prompthub.db");
+    fs.mkdirSync(path.join(dataPath, "mcp"), { recursive: true });
+    fs.writeFileSync(path.join(dataPath, "mcp", "library.json"), "{}", "utf8");
+    createTestDatabase(dbPath, { prompts: 1 });
+
+    const lockDb = new DatabaseAdapter(dbPath);
+    lockDb.pragma("journal_mode = DELETE");
+    lockDb.exec("BEGIN EXCLUSIVE");
+    try {
+      const preview = await previewRecoveryCandidate({
+        sourcePath: userDataPath,
+        sourceType: "external-user-data",
+        displayName: "Locked historical directory",
+        displayPath: userDataPath,
+        promptCount: 0,
+        folderCount: 0,
+        skillCount: 0,
+        dbSizeBytes: fs.statSync(dbPath).size,
+        lastModified: new Date().toISOString(),
+        previewAvailable: true,
+        dataSources: ["sqlite", "mcp"],
+        contentCounts: { mcp: 1 },
+      });
+
+      expect(preview.previewAvailable).toBe(true);
+      expect(preview.items).toEqual([
+        expect.objectContaining({ kind: "mcp", title: "library.json" }),
+      ]);
+      expect(preview.description).toMatch(/locked/i);
+    } finally {
+      lockDb.exec("ROLLBACK");
+      lockDb.close();
+    }
   });
 });

@@ -21,7 +21,9 @@ export type ExportScopeKey =
   | "settings"
   | "versions"
   | "rules"
-  | "skills";
+  | "skills"
+  | "mcp"
+  | "plugins";
 
 export type ExportScope = Record<ExportScopeKey, boolean>;
 
