@@ -28,13 +28,20 @@ export type SortBy =
 export type SortOrder = "desc" | "asc";
 // View mode
 // 视图模式
-export type ViewMode = "card" | "list" | "gallery" | "kanban" | "graph";
+export type ViewMode =
+  | "card"
+  | "list"
+  | "gallery"
+  | "kanban"
+  | "graph"
+  | "generation";
 const VIEW_MODES: readonly ViewMode[] = [
   "card",
   "list",
   "gallery",
   "kanban",
   "graph",
+  "generation",
 ];
 export type GalleryImageSize = "small" | "medium" | "large";
 export type KanbanColumns = 2 | 3 | 4;
@@ -74,11 +81,21 @@ interface PromptState {
   updateRelation: (id: string, data: UpdatePromptRelationDTO) => Promise<void>;
   deleteRelation: (id: string) => Promise<void>;
   fetchOutputFormatItems: () => Promise<void>;
-  createOutputFormatItem: (data: CreateOutputFormatItemDTO) => Promise<OutputFormatItem>;
+  createOutputFormatItem: (
+    data: CreateOutputFormatItemDTO,
+  ) => Promise<OutputFormatItem>;
   deleteOutputFormatItem: (id: string) => Promise<void>;
-  reorderOutputFormatItem: (sourcePromptId: string, itemId: string, newSortOrder: number) => Promise<void>;
+  reorderOutputFormatItem: (
+    sourcePromptId: string,
+    itemId: string,
+    newSortOrder: number,
+  ) => Promise<void>;
   movePrompts: (ids: string[], folderId: string) => Promise<void>;
-  movePrompt: (promptId: string, newParentId: string | null, newOrder: number) => Promise<void>;
+  movePrompt: (
+    promptId: string,
+    newParentId: string | null,
+    newOrder: number,
+  ) => Promise<void>;
   deletePrompt: (id: string) => Promise<void>;
   selectPrompt: (id: string | null) => void;
   setSelectedIds: (ids: string[]) => void;
@@ -177,7 +194,9 @@ export const usePromptStore = create<PromptState>()(
                     note: MENTION_RELATION_NOTE,
                   }),
                 ),
-                ...toDelete.map((relationId) => get().deleteRelation(relationId)),
+                ...toDelete.map((relationId) =>
+                  get().deleteRelation(relationId),
+                ),
               ]);
             } catch (error) {
               console.error("Failed to sync description relations:", error);
@@ -241,7 +260,9 @@ export const usePromptStore = create<PromptState>()(
         set((state) => ({
           outputFormatItems: [
             item,
-            ...state.outputFormatItems.filter((existing) => existing.id !== item.id),
+            ...state.outputFormatItems.filter(
+              (existing) => existing.id !== item.id,
+            ),
           ],
         }));
         scheduleAllSaveSync("prompt:output-format:create");
@@ -252,7 +273,9 @@ export const usePromptStore = create<PromptState>()(
         const deleted = await db.deleteOutputFormatItem(id);
         if (!deleted) return;
         set((state) => ({
-          outputFormatItems: state.outputFormatItems.filter((item) => item.id !== id),
+          outputFormatItems: state.outputFormatItems.filter(
+            (item) => item.id !== id,
+          ),
         }));
         scheduleAllSaveSync("prompt:output-format:delete");
       },

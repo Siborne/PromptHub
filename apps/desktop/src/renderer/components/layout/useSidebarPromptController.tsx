@@ -173,7 +173,17 @@ function useSidebarPromptNavigation(
     prompt.setPromptViewMode("graph");
     if (currentPage !== "home") onNavigate("home");
   }, [currentPage, folders, onNavigate, prompt]);
-  return { openPromptTypeFilter, openPromptFolder, openRelationshipGraph };
+  const openGenerationWorkbench = useCallback(() => {
+    folders.selectFolder(null);
+    prompt.setPromptViewMode("generation");
+    if (currentPage !== "home") onNavigate("home");
+  }, [currentPage, folders, onNavigate, prompt]);
+  return {
+    openPromptTypeFilter,
+    openPromptFolder,
+    openRelationshipGraph,
+    openGenerationWorkbench,
+  };
 }
 
 function useSidebarFolderReorder(

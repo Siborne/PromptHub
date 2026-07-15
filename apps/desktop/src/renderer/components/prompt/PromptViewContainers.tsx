@@ -5,16 +5,29 @@ import type { Prompt, PromptRelation } from "@prompthub/shared/types";
 import type { ViewMode } from "../../stores/prompt.store";
 
 const PromptTableView = lazy(() =>
-  import("../prompt/PromptTableView").then((m) => ({ default: m.PromptTableView })),
+  import("../prompt/PromptTableView").then((m) => ({
+    default: m.PromptTableView,
+  })),
 );
 const PromptGalleryView = lazy(() =>
-  import("../prompt/PromptGalleryView").then((m) => ({ default: m.PromptGalleryView })),
+  import("../prompt/PromptGalleryView").then((m) => ({
+    default: m.PromptGalleryView,
+  })),
 );
 const PromptKanbanView = lazy(() =>
-  import("../prompt/PromptKanbanView").then((m) => ({ default: m.PromptKanbanView })),
+  import("../prompt/PromptKanbanView").then((m) => ({
+    default: m.PromptKanbanView,
+  })),
 );
 const PromptGraphView = lazy(() =>
-  import("../prompt/PromptGraphView").then((m) => ({ default: m.PromptGraphView })),
+  import("../prompt/PromptGraphView").then((m) => ({
+    default: m.PromptGraphView,
+  })),
+);
+const ImageGenerationWorkbench = lazy(() =>
+  import("./ImageGenerationWorkbench").then((module) => ({
+    default: module.ImageGenerationWorkbench,
+  })),
 );
 
 const loadingFallback = (
@@ -44,7 +57,11 @@ export interface PromptTableActions {
   onBatchFavorite: (ids: string[], favorite: boolean) => void;
   onBatchMove: (ids: string[], folderId: string | undefined) => void;
   onBatchDelete: (ids: string[]) => void;
-  onMovePrompt: (sourceId: string, targetParentId: string | null, order: number) => void;
+  onMovePrompt: (
+    sourceId: string,
+    targetParentId: string | null,
+    order: number,
+  ) => void;
 }
 
 interface PromptViewContainersProps {
@@ -78,6 +95,14 @@ export function PromptViewContainers({
 }: PromptViewContainersProps) {
   return (
     <>
+      <div className={getViewClass("generation")}>
+        {viewMode === "generation" && (
+          <Suspense fallback={loadingFallback}>
+            <ImageGenerationWorkbench />
+          </Suspense>
+        )}
+      </div>
+
       {/* Relationship graph view */}
       <div className={getViewClass("graph")}>
         {viewMode === "graph" && (
@@ -110,7 +135,9 @@ export function PromptViewContainers({
               onViewDetail={cardActions.onViewDetail}
               aiResults={tableActions.aiResults}
               collapsedPromptIds={tableActions.collapsedPromptIds}
-              onCollapsedPromptIdsChange={tableActions.onCollapsedPromptIdsChange}
+              onCollapsedPromptIdsChange={
+                tableActions.onCollapsedPromptIdsChange
+              }
               onBatchFavorite={tableActions.onBatchFavorite}
               onBatchMove={tableActions.onBatchMove}
               onBatchDelete={tableActions.onBatchDelete}
