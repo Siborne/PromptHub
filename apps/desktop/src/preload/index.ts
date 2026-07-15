@@ -4,6 +4,7 @@ import { aiApi } from "./api/ai";
 import { cliApi } from "./api/cli";
 import { cloudApi } from "./api/cloud";
 import { folderApi } from "./api/folder";
+import { generationApi } from "./api/generation";
 import { ioApi } from "./api/io";
 import { mcpApi } from "./api/mcp";
 import { pluginApi } from "./api/plugin";
@@ -112,6 +113,7 @@ const api = {
   version: versionApi,
 
   folder: folderApi,
+  generation: generationApi,
 
   skill: skillApi,
   settings: settingsApi,

@@ -1,3 +1,4 @@
+import { configureRuntimePaths as configureCoreRuntimePaths } from "@prompthub/core/runtime-paths";
 import {
   app,
   BrowserWindow,
@@ -57,6 +58,7 @@ import {
 import {
   configureRuntimePaths,
   getImagesDir,
+  getGeneratedImagesDir,
   getRulesDir,
   getVideosDir,
   getSkillsDir,
@@ -179,6 +181,15 @@ protocol.registerSchemesAsPrivileged([
     },
   },
   {
+    scheme: "local-generation-image",
+    privileges: {
+      secure: true,
+      standard: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+  {
     scheme: "local-video",
     privileges: {
       secure: true,
@@ -206,6 +217,14 @@ if (!isE2E) {
   app.setPath("userData", resolvedUserDataPath);
 }
 configureRuntimePaths({
+  appDataPath: app.getPath("appData"),
+  userDataPath: app.getPath("userData"),
+  productName: "PromptHub",
+  exePath: process.execPath,
+  isPackaged: app.isPackaged,
+  platform: process.platform,
+});
+configureCoreRuntimePaths({
   appDataPath: app.getPath("appData"),
   userDataPath: app.getPath("userData"),
   productName: "PromptHub",
@@ -1630,6 +1649,23 @@ app.whenReady().then(async () => {
           return;
         }
         console.warn("Blocked local-image protocol path:", request.url);
+        callback({ path: "" });
+      },
+    );
+
+    session.defaultSession.protocol.registerFileProtocol(
+      "local-generation-image",
+      (request, callback) => {
+        const imagePath = resolveLocalMediaProtocolPath(
+          request.url,
+          "local-generation-image",
+          getGeneratedImagesDir(),
+        );
+        if (imagePath) {
+          callback({ path: imagePath });
+          return;
+        }
+        console.warn("Blocked local generation image path:", request.url);
         callback({ path: "" });
       },
     );

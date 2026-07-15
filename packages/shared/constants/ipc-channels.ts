@@ -117,6 +117,19 @@ export const IPC_CHANNELS = {
   AI_HTTP_STREAM_CHUNK: "ai:httpStreamChunk",
   AI_HTTP_STREAM_ERROR: "ai:httpStreamError",
 
+  // Local image generation workbench
+  GENERATION_LIST: "generation:list",
+  GENERATION_GET: "generation:get",
+  GENERATION_CREATE: "generation:create",
+  GENERATION_SLOT_RUNNING: "generation:slotRunning",
+  GENERATION_COMMIT_OUTPUT: "generation:commitOutput",
+  GENERATION_COMMIT_REMOTE_OUTPUT: "generation:commitRemoteOutput",
+  GENERATION_FAIL_SLOT: "generation:failSlot",
+  GENERATION_CANCEL: "generation:cancel",
+  GENERATION_SET_FAVORITE: "generation:setFavorite",
+  GENERATION_RETRY_FAILED: "generation:retryFailed",
+  GENERATION_COPY_TO_PROMPT_MEDIA: "generation:copyToPromptMedia",
+
   // Import/Export
   EXPORT_PROMPTS: "export:prompts",
   IMPORT_PROMPTS: "import:prompts",

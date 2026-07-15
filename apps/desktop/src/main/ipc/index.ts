@@ -17,6 +17,7 @@ import { registerMcpIPC } from "./mcp.ipc";
 import { registerPluginIPC } from "./plugin.ipc";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import { registerCloudIPC } from "./cloud.ipc";
+import { registerGenerationIPC } from "./generation.ipc";
 
 const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.PROMPT_CREATE,
@@ -184,6 +185,16 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.UPGRADE_BACKUP_CREATE,
   IPC_CHANNELS.UPGRADE_BACKUP_RESTORE,
   IPC_CHANNELS.UPGRADE_BACKUP_DELETE,
+  IPC_CHANNELS.GENERATION_LIST,
+  IPC_CHANNELS.GENERATION_GET,
+  IPC_CHANNELS.GENERATION_CREATE,
+  IPC_CHANNELS.GENERATION_SLOT_RUNNING,
+  IPC_CHANNELS.GENERATION_COMMIT_OUTPUT,
+  IPC_CHANNELS.GENERATION_FAIL_SLOT,
+  IPC_CHANNELS.GENERATION_CANCEL,
+  IPC_CHANNELS.GENERATION_SET_FAVORITE,
+  IPC_CHANNELS.GENERATION_RETRY_FAILED,
+  IPC_CHANNELS.GENERATION_COPY_TO_PROMPT_MEDIA,
 ] as const;
 
 function resetAllRegisteredIpcHandlers(): void {
@@ -230,4 +241,5 @@ export function registerAllIPC(
   registerIpcGroup("plugin", () => registerPluginIPC());
   registerIpcGroup("image", () => registerImageIPC());
   registerIpcGroup("ai", () => registerAIIPC());
+  registerIpcGroup("generation", () => registerGenerationIPC(db));
 }

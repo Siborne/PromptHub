@@ -9,6 +9,7 @@ export * from "./platform-paths";
 export * from "./rules-workspace";
 export * from "./ai-client";
 export * from "./ai-config";
+export * from "./image-generation-workbench";
 export * from "./rules-rewrite";
 export * from "./mcp-library";
 export * from "./plugin-library";

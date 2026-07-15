@@ -1,0 +1,276 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { GenerationBatchManifest } from "@prompthub/shared/types";
+
+const generateImage = vi.hoisted(() => vi.fn());
+
+vi.mock("../../../src/renderer/services/ai", () => ({ generateImage }));
+
+function batch(statuses: GenerationBatchManifest["slots"][number]["status"][]) {
+  return {
+    kind: "prompthub-generation-batch" as const,
+    version: 1 as const,
+    id: "8fc4e265-f289-4e68-bc7b-2a23af715a87",
+    title: "Poster",
+    status: "queued" as const,
+    resolvedPrompt: "A poster",
+    model: { id: "model-1", provider: "openai", model: "gpt-image-1" },
+    parameters: { aspectRatio: "4:5", quality: "hd" as const },
+    targetCount: statuses.length,
+    slots: statuses.map((status, index) => ({ index, status })),
+    counts: {
+      total: statuses.length,
+      pending: statuses.filter((status) => status === "pending").length,
+      running: 0,
+      succeeded: statuses.filter((status) => status === "succeeded").length,
+      failed: statuses.filter((status) => status === "failed").length,
+      cancelled: 0,
+      interrupted: 0,
+    },
+    createdAt: "2026-07-15T00:00:00.000Z",
+    updatedAt: "2026-07-15T00:00:00.000Z",
+  } satisfies GenerationBatchManifest;
+}
+
+describe("generation workbench runner", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const initial = batch(["pending"]);
+    Object.assign(window, {
+      api: {
+        generation: {
+          create: vi.fn().mockResolvedValue(initial),
+          markSlotRunning: vi.fn().mockResolvedValue({
+            ...initial,
+            slots: [{ index: 0, status: "running" }],
+          }),
+          commitOutput: vi.fn().mockResolvedValue({
+            ...initial,
+            status: "succeeded",
+            slots: [{ index: 0, status: "succeeded" }],
+          }),
+          commitRemoteOutput: vi.fn().mockResolvedValue({
+            ...initial,
+            status: "succeeded",
+            slots: [{ index: 0, status: "succeeded" }],
+          }),
+          failSlot: vi.fn(),
+          retryFailed: vi.fn(),
+          setFavorite: vi.fn(),
+        },
+      },
+      electron: {
+        downloadImage: vi.fn(),
+        readImageBase64: vi.fn(),
+      },
+    });
+    generateImage.mockResolvedValue({ data: [{ b64_json: "aW1hZ2U=" }] });
+  });
+
+  it("maps workbench parameters to the provider adapter and commits progressively", async () => {
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+    const config = {
+      id: "model-1",
+      type: "image" as const,
+      provider: "openai",
+      apiProtocol: "openai" as const,
+      apiKey: "key",
+      apiUrl: "https://example.com/v1",
+      model: "gpt-image-1",
+    };
+
+    await startGenerationBatch(
+      {
+        prompt: "A poster",
+        model: { id: "model-1", provider: "openai", model: "gpt-image-1" },
+        targetCount: 1,
+        aspectRatio: "4:5",
+        quality: "hd",
+      },
+      config,
+    );
+    await vi.waitFor(() =>
+      expect(window.api.generation.commitOutput).toHaveBeenCalled(),
+    );
+
+    expect(generateImage).toHaveBeenCalledWith(config, "A poster", {
+      quality: "hd",
+      size: "1024x1536",
+      n: 1,
+      response_format: "b64_json",
+    });
+  });
+
+  it("maps workbench ratios to Ideogram's aspect-ratio enum", async () => {
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+    const config = {
+      id: "ideogram-model",
+      type: "image" as const,
+      provider: "ideogram",
+      apiProtocol: "openai" as const,
+      apiKey: "key",
+      apiUrl: "https://api.ideogram.ai",
+      model: "V_3",
+    };
+
+    await startGenerationBatch(
+      {
+        prompt: "A poster",
+        model: {
+          id: config.id,
+          provider: config.provider,
+          model: config.model,
+        },
+        targetCount: 1,
+        aspectRatio: "4:5",
+      },
+      config,
+    );
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalled());
+
+    expect(generateImage).toHaveBeenCalledWith(
+      config,
+      "A poster",
+      expect.objectContaining({ aspect_ratio: "ASPECT_4_5" }),
+    );
+  });
+
+  it("preflights and forwards Prompt references for supported models", async () => {
+    const initial = batch(["pending"]);
+    vi.mocked(window.api.generation.create).mockImplementation(
+      async (input) => ({
+        ...initial,
+        referenceImages: input.referenceImages,
+      }),
+    );
+    vi.mocked(window.electron!.readImageBase64!).mockResolvedValue("cmVm");
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+    const config = {
+      id: "gemini-image",
+      type: "image" as const,
+      provider: "google",
+      apiProtocol: "gemini" as const,
+      apiKey: "key",
+      apiUrl: "https://generativelanguage.googleapis.com/v1beta",
+      model: "gemini-2.5-flash-image",
+    };
+
+    await startGenerationBatch(
+      {
+        prompt: "A poster",
+        model: {
+          id: config.id,
+          provider: config.provider,
+          model: config.model,
+        },
+        targetCount: 1,
+        referenceImages: [{ source: "prompt", fileName: "reference.webp" }],
+      },
+      config,
+    );
+
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalled());
+    expect(generateImage).toHaveBeenCalledWith(
+      config,
+      "A poster",
+      expect.objectContaining({
+        referenceImages: [{ base64: "cmVm", mimeType: "image/webp" }],
+      }),
+    );
+  });
+
+  it("rejects unsupported references before creating a batch", async () => {
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+    const config = {
+      id: "openai-image",
+      type: "image" as const,
+      provider: "openai",
+      apiProtocol: "openai" as const,
+      apiKey: "key",
+      apiUrl: "https://api.openai.com/v1",
+      model: "gpt-image-1",
+    };
+
+    await expect(
+      startGenerationBatch(
+        {
+          prompt: "A poster",
+          model: {
+            id: config.id,
+            provider: config.provider,
+            model: config.model,
+          },
+          targetCount: 1,
+          referenceImages: [{ source: "prompt", fileName: "reference.png" }],
+        },
+        config,
+      ),
+    ).rejects.toThrow(/reference images/i);
+    expect(window.api.generation.create).not.toHaveBeenCalled();
+  });
+
+  it("commits remote outputs without writing temporary Prompt media", async () => {
+    generateImage.mockResolvedValue({
+      data: [{ url: "https://cdn.example.com/output.jpg" }],
+    });
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+
+    await startGenerationBatch(
+      {
+        prompt: "A poster",
+        model: { id: "model-1", provider: "openai", model: "gpt-image-1" },
+        targetCount: 1,
+      },
+      {
+        id: "model-1",
+        type: "image",
+        provider: "openai",
+        apiProtocol: "openai",
+        apiKey: "key",
+        apiUrl: "https://example.com/v1",
+        model: "gpt-image-1",
+      },
+    );
+
+    await vi.waitFor(() =>
+      expect(window.api.generation.commitRemoteOutput).toHaveBeenCalledWith({
+        batchId: expect.any(String),
+        slotIndex: 0,
+        url: "https://cdn.example.com/output.jpg",
+      }),
+    );
+    expect(window.electron?.downloadImage).not.toHaveBeenCalled();
+  });
+
+  it("retries only slots returned as pending", async () => {
+    const retried = batch(["succeeded", "pending"]);
+    vi.mocked(window.api.generation.retryFailed).mockResolvedValue(retried);
+    vi.mocked(window.api.generation.markSlotRunning).mockResolvedValue({
+      ...retried,
+      slots: [retried.slots[0], { index: 1, status: "running" }],
+    });
+    const { retryGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+
+    await retryGenerationBatch(retried, {
+      id: "model-1",
+      type: "image",
+      provider: "openai",
+      apiProtocol: "openai",
+      apiKey: "key",
+      apiUrl: "https://example.com/v1",
+      model: "gpt-image-1",
+    });
+    await vi.waitFor(() =>
+      expect(window.api.generation.markSlotRunning).toHaveBeenCalledWith(
+        retried.id,
+        1,
+      ),
+    );
+    expect(window.api.generation.markSlotRunning).toHaveBeenCalledTimes(1);
+  });
+});

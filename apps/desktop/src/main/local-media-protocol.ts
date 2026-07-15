@@ -1,19 +1,27 @@
 import path from "path";
 
-const LOCAL_MEDIA_EXTENSIONS: Record<"local-image" | "local-video", ReadonlySet<string>> = {
+type LocalMediaScheme =
+  | "local-image"
+  | "local-generation-image"
+  | "local-video";
+
+const LOCAL_MEDIA_EXTENSIONS: Record<LocalMediaScheme, ReadonlySet<string>> = {
   "local-image": new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]),
+  "local-generation-image": new Set([".jpg", ".jpeg", ".png", ".webp"]),
   "local-video": new Set([".mp4", ".webm", ".mov", ".avi", ".mkv"]),
 };
 
 const UNSAFE_SEGMENT_PATTERN = /[\x00-\x1F\x7F:]/;
 
 function isSafeLocalMediaSegment(segment: string): boolean {
-  return segment !== "." && segment !== ".." && !UNSAFE_SEGMENT_PATTERN.test(segment);
+  return (
+    segment !== "." && segment !== ".." && !UNSAFE_SEGMENT_PATTERN.test(segment)
+  );
 }
 
 export function resolveLocalMediaProtocolPath(
   requestUrl: string,
-  scheme: "local-image" | "local-video",
+  scheme: LocalMediaScheme,
   baseDir: string,
 ): string | null {
   const prefix = `${scheme}://`;

@@ -225,6 +225,39 @@ CREATE TABLE IF NOT EXISTS user_settings (
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (user_id, key)
 );
+
+CREATE TABLE IF NOT EXISTS generation_batches (
+  id TEXT PRIMARY KEY,
+  manifest_path TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL,
+  title TEXT NOT NULL,
+  source_prompt_id TEXT REFERENCES prompts(id) ON DELETE SET NULL,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  requested_count INTEGER NOT NULL,
+  succeeded_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  cancelled_count INTEGER NOT NULL DEFAULT 0,
+  interrupted_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS generation_outputs (
+  id TEXT PRIMARY KEY,
+  batch_id TEXT NOT NULL REFERENCES generation_batches(id) ON DELETE CASCADE,
+  slot_index INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  file_name TEXT,
+  mime_type TEXT,
+  byte_size INTEGER,
+  sha256 TEXT,
+  favorite INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT,
+  deleted_at TEXT,
+  UNIQUE(batch_id, slot_index)
+);
 `;
 
 /**
@@ -264,6 +297,11 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON refresh_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id);
+CREATE INDEX IF NOT EXISTS idx_generation_batches_created ON generation_batches(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_generation_batches_status ON generation_batches(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_generation_batches_source ON generation_batches(source_prompt_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_generation_outputs_batch ON generation_outputs(batch_id, slot_index);
+CREATE INDEX IF NOT EXISTS idx_generation_outputs_favorite ON generation_outputs(favorite, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_prompts_pinned ON prompts(is_pinned);
 CREATE INDEX IF NOT EXISTS idx_prompts_created ON prompts(created_at DESC);

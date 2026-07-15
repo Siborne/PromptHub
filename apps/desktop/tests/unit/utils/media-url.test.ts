@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  resolveLocalGenerationImageSrc,
   resolveLocalImageSrc,
   resolveLocalVideoSrc,
 } from "../../../src/renderer/utils/media-url";
@@ -34,6 +35,9 @@ describe("media URL helpers", () => {
     );
     expect(resolveLocalVideoSrc("clip #1?.mp4")).toBe(
       "local-video://clip%20%231%3F.mp4",
+    );
+    expect(resolveLocalGenerationImageSrc("batch 1/output #1.webp")).toBe(
+      "local-generation-image://batch%201%2Foutput%20%231.webp",
     );
   });
 

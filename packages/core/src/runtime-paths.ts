@@ -69,7 +69,10 @@ export function getUserDataPath(): string {
   return resolveInitialUserDataPath();
 }
 
-function resolvePreferredPath(primaryPath: string, legacyPath?: string): string {
+function resolvePreferredPath(
+  primaryPath: string,
+  legacyPath?: string,
+): string {
   if (fs.existsSync(primaryPath)) {
     return primaryPath;
   }
@@ -123,7 +126,10 @@ export function getLegacySkillsDir(): string {
 }
 
 export function getSkillsDir(): string {
-  return resolvePreferredPath(path.join(getDataDir(), "skills"), getLegacySkillsDir());
+  return resolvePreferredPath(
+    path.join(getDataDir(), "skills"),
+    getLegacySkillsDir(),
+  );
 }
 
 export function getRulesDir(): string {
@@ -170,8 +176,40 @@ export function getLegacyImagesDir(): string {
   return path.join(getUserDataPath(), "images");
 }
 
+function containsOnlyObsoleteGenerationAssets(imagesDir: string): boolean {
+  try {
+    const entries = fs.readdirSync(imagesDir);
+    return (
+      entries.includes("generated") &&
+      entries.every((entry) => entry === "generated" || entry === ".DS_Store")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function getImagesDir(): string {
-  return resolvePreferredPath(path.join(getAssetsDir(), "images"), getLegacyImagesDir());
+  const primaryPath = path.join(getAssetsDir(), "images");
+  const legacyPath = getLegacyImagesDir();
+  if (
+    fs.existsSync(legacyPath) &&
+    containsOnlyObsoleteGenerationAssets(primaryPath)
+  ) {
+    return legacyPath;
+  }
+  return resolvePreferredPath(primaryPath, legacyPath);
+}
+
+export function getGenerationsDir(): string {
+  return path.join(getDataDir(), "generations");
+}
+
+export function getGeneratedImagesDir(): string {
+  return path.join(getGenerationsDir(), "assets");
+}
+
+export function getLegacyGeneratedImagesDir(): string {
+  return path.join(getAssetsDir(), "images", "generated");
 }
 
 export function getLegacyVideosDir(): string {
@@ -179,5 +217,8 @@ export function getLegacyVideosDir(): string {
 }
 
 export function getVideosDir(): string {
-  return resolvePreferredPath(path.join(getAssetsDir(), "videos"), getLegacyVideosDir());
+  return resolvePreferredPath(
+    path.join(getAssetsDir(), "videos"),
+    getLegacyVideosDir(),
+  );
 }
