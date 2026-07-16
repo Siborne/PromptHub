@@ -16,6 +16,14 @@
 - 原生文件系统、数据库、加密、备份恢复、平台集成等能力必须位于主进程。
 - 渲染进程通过 preload 暴露的 API 与主进程通信，不直接跨边界访问主进程能力。
 
+### 2.1 Standalone CLI Boundary
+
+- 桌面应用不再把 Electron 主进程作为 CLI runtime；旧 `PromptHub ... --cli` 调用必须在
+  updater、数据库初始化、workspace migration 和窗口创建之前退出，并提示安装独立 CLI。
+- CLI 设置页检测到 userData `bin/` 下旧版 Desktop wrapper 时，只能有界读取并识别该
+  普通文件，不能执行它做版本探测。只有 pnpm/npm 安装独立 CLI 成功后，才可再次确认并
+  删除完全匹配的旧 wrapper；安装失败或文件已被替换时必须保留。
+
 ### 3. Stable Internal Sources
 
 - 长期工程边界和代码结构治理见 `spec/knowledge/structure/code-structure-guidelines.md`。
@@ -76,7 +84,7 @@
 ### 9.3 Background Work After Window Reveal
 
 - 主进程通过菜单栏、全局或本地快捷键、托盘命令、第二实例或既有窗口恢复路径显式显示主窗口时，必须主动向 renderer 发送最终可见状态，不得只依赖平台相关的 `show` / `restore` 事件。
-- renderer 收到可见状态后必须先更新窗口状态，再恢复隐藏期间挂起的 WebDAV、S3、自部署同步和本地数据刷新；重复的可见通知不得启动重复同步。
+- renderer 收到可见状态后必须先更新窗口状态，再恢复隐藏期间挂起的 WebDAV/S3 在线同步、自部署上传备份和本地数据刷新；重复的可见通知不得启动重复操作。
 - 图形沿用 PromptHub 层叠卡片识别，但必须接近占满画布，并让顶层方片成为主要轮廓；系统负责深浅色、选中态和辅助显示环境下的着色。
 
 ### 9.3 Desktop Tray Agent Asset Actions

@@ -15,9 +15,9 @@ This app provides browser-safe workspace capabilities:
 
 - prompts, folders, prompt hierarchy, relations, and output-format sequences
 - skill records, versions, safety review, import/export, and remote import
-- rules, media, settings, backup, and desktop synchronization
+- rules, media, settings, immutable desktop backup, and legacy sync compatibility
 
-MCP and Plugin data remains part of backup and synchronization payloads, but
+MCP and Plugin data remains part of desktop backup and legacy synchronization payloads, but
 the browser does not manage or apply those Desktop-owned resources. The web
 workspace also does not expose local skill package files, agent scans,
 symlinks, platform installation, or native shell operations.
@@ -40,24 +40,43 @@ In desktop `Settings -> Data`, configure:
 - username
 - password
 
-Then desktop can:
+Then the current desktop can:
 
 - test the connection
-- upload its current local workspace to PromptHub Web
-- download and restore from PromptHub Web
-- automatically pull once on startup
-- periodically push updates in the background
+- create a new immutable remote snapshot without changing the live Web workspace
+- explicitly restore the latest verified snapshot after creating a local safety snapshot
+- create an upload-only snapshot once on startup
+- periodically create upload-only snapshots in the background
 
-## Sync Contract Snapshot
+Desktop and Web versions must match exactly, and both sides must support the
+same backup protocol. A mismatch skips automatic backup and blocks manual
+backup/restore before local export or remote write. Automatic tasks never pull,
+merge, or replace local data.
 
-Current sync provider contract (shared with desktop/web settings) supports:
+## Backup And Legacy Sync Contract
 
-- `manual`
-- `webdav`
-- `self-hosted`
-- `s3`
+Live automatic sync selects one of `webdav` or `s3`. Self-hosted Web backup is
+independent from that selection, so it can create recovery snapshots while a
+single live-sync provider remains active. The persisted provider type still
+accepts `self-hosted` for old settings, but the current desktop normalizes that
+legacy value to `manual`.
 
-For web sync operations, `PUT /sync/data`, `POST /sync/push`, and `POST /sync/pull` return a unified `summary` block (`prompts`, `folders`, `rules`, `skills`) to keep cross-client parsing stable.
+Authenticated backup routes live under `/api/backups/desktop`. The server keeps
+up to ten checksummed snapshots per user under
+`DATA_ROOT/backups/desktop/<hashed-user>/`. Snapshot files are immutable,
+symbolic-link paths are rejected, and the live Web database/workspace is not
+imported or changed. The request limit is 50 MiB.
+
+The snapshot contains prompt graph data, Rules, full Skill files and versions,
+MCP/Plugin libraries and packages, store sources, Agent assets, inline media,
+and non-secret settings. Passwords, tokens, API keys, access keys, and proxy
+credentials are excluded because this channel is not encrypted as a secret
+vault.
+
+Legacy web sync operations (`PUT /sync/data`, `POST /sync/push`, and
+`POST /sync/pull`) remain available for older clients and return a unified
+`summary` block (`prompts`, `folders`, `rules`, `skills`). The current desktop
+UI and scheduler do not call these routes for self-hosted backup.
 
 Complete snapshots also preserve prompt relations and output-format items. When
 an import skips a dangling dependency, the response includes imported/skipped

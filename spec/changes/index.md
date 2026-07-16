@@ -7,18 +7,20 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 34 |
-| Archived | 164 |
+| Active | 39 |
+| Archived | 166 |
 | Legacy | 1 |
 
 ## Active
 
 | Change | Recorded status | Path |
 | --- | --- | --- |
+| `agent-management-workbench` | active | `spec/changes/active/agent-management-workbench/` |
 | `app-shell-left-rail` | in progress | `spec/changes/active/app-shell-left-rail/` |
 | `cli-feature-completeness` | active | `spec/changes/active/cli-feature-completeness/` |
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
+| `database-integrity-repair` | implemented | `spec/changes/active/database-integrity-repair/` |
 | `desktop-agent-asset-tray-actions` | implemented | `spec/changes/active/desktop-agent-asset-tray-actions/` |
 | `desktop-frontend-animation-system` | active | `spec/changes/active/desktop-frontend-animation-system/` |
 | `desktop-frontend-perf-tuneup` | active | `spec/changes/active/desktop-frontend-perf-tuneup/` |
@@ -27,6 +29,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-issue-179-configured-skill-targets` | active | `spec/changes/active/desktop-issue-179-configured-skill-targets/` |
 | `desktop-prompt-context-move` | active | `spec/changes/active/desktop-prompt-context-move/` |
 | `desktop-renderer-ui-test-coverage` | active | `spec/changes/active/desktop-renderer-ui-test-coverage/` |
+| `desktop-sqlite-backup-drag-recovery` | implemented | `spec/changes/active/desktop-sqlite-backup-drag-recovery/` |
 | `desktop-update-dialog-polish` | active | `spec/changes/active/desktop-update-dialog-polish/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
 | `homepage-changelog-route-retirement` | active | `spec/changes/active/homepage-changelog-route-retirement/` |
@@ -41,8 +44,10 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `prompt-output-format-contribution` | active | `spec/changes/active/prompt-output-format-contribution/` |
 | `r2-direct-downloads` | active | `spec/changes/active/r2-direct-downloads/` |
 | `readme-screenshots-v0-5-6` | active | `spec/changes/active/readme-screenshots-v0-5-6/` |
+| `republish-0-5-9-20260714` | active | `spec/changes/active/republish-0-5-9-20260714/` |
 | `rules-managed-copies` | in progress | `spec/changes/active/rules-managed-copies/` |
 | `self-hosted-skill-sync-reliability` | active | `spec/changes/active/self-hosted-skill-sync-reliability/` |
+| `skill-install-safety-resilience` | implemented | `spec/changes/active/skill-install-safety-resilience/` |
 | `skill-source-update-reconciliation` | completed | `spec/changes/active/skill-source-update-reconciliation/` |
 | `skill-uninstall-lifecycle` | active | `spec/changes/active/skill-uninstall-lifecycle/` |
 | `source-trust-and-mcp-market-updates` | implemented | `spec/changes/active/source-trust-and-mcp-market-updates/` |
@@ -218,6 +223,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-13-desktop-issue-186-zcode-agent-support` | archived | `spec/changes/archive/2026/07/2026-07-13-desktop-issue-186-zcode-agent-support/` |
 | `2026-07-13-self-hosted-web-database-lock-recovery` | archived | `spec/changes/archive/2026/07/2026-07-13-self-hosted-web-database-lock-recovery/` |
 | `2026-07-13-skill-install-update-lifecycle-contract` | archived | `spec/changes/archive/2026/07/2026-07-13-skill-install-update-lifecycle-contract/` |
+| `2026-07-16-cli-skill-automation-hardening` | archived | `spec/changes/archive/2026/07/2026-07-16-cli-skill-automation-hardening/` |
+| `2026-07-16-self-hosted-backup-only-automation` | archived | `spec/changes/archive/2026/07/2026-07-16-self-hosted-backup-only-automation/` |
 
 ## Legacy
 

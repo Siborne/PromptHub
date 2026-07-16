@@ -34,6 +34,11 @@
   lock；self-hosted Web 在每个 `DATA_ROOT` 只有一个服务进程的部署边界内也可
   显式启用该能力；CLI 与其它共享调用方不得默认启用该能力。
 - 初始化中途失败必须清理本进程刚创建的租约，避免制造新的假所有者。
+- CLI 必须通过不打开 SQLite 的显式 `doctor database-lock` 命令报告 lock、live
+  lease、stale lease 与未知项；普通业务命令不得因发现 ownerless lock 自动删除它。
+- 只有用户明确执行 `doctor database-lock --recover` 时，CLI 才能恢复没有 live/unknown
+  owner 的非符号链接普通 lock 目录。活跃 PID、未知 lease 项、符号链接、非目录 lock
+  或非目录 clients 路径都必须 fail closed 并保留现场。
 
 ### 4. Contention And Visibility
 
@@ -70,6 +75,15 @@ When lock 对应的已登记进程已经死亡：
 - 下一次初始化清理死亡租约
 - 没有其它活跃或未知所有者时恢复 orphan lock
 - 数据库随后按正常初始化和迁移流程打开
+
+### Scenario: User explicitly diagnoses a CLI lock
+
+When CLI 因 ownerless lock 返回 `DATABASE_BUSY`：
+
+- `prompthub doctor database-lock` 只检查租约与路径类型，不打开或迁移数据库
+- 可安全恢复时返回结构化 `recoverable` 状态，但不修改 lock
+- 用户加 `--recover` 后才删除可证明无主的普通 lock，并返回 `recovered`
+- 任一活跃或未知 owner 存在时返回 conflict，原 lock 保持不变
 
 ### Scenario: Desktop upgrades from a pre-lease version
 

@@ -39,7 +39,7 @@ Un espacio de trabajo local-first para prompts, skills y assets de codificación
 
 <br/>
 
-PromptHub mantiene tus prompts, archivos SKILL.md y assets de codificación con IA a nivel proyecto en un único espacio de trabajo local. Permite instalar el mismo Skill en Claude Code, Cursor, Codex, Windsurf, Gemini CLI y una docena de herramientas más, ofrece historial de versiones y pruebas multi-modelo para los prompts, y sincroniza con otros dispositivos vía WebDAV o una instancia Web auto-hospedada.
+PromptHub mantiene tus prompts, archivos SKILL.md y assets de codificación con IA a nivel proyecto en un único espacio de trabajo local. Permite instalar el mismo Skill en Claude Code, Cursor, Codex, Windsurf, Gemini CLI y una docena de herramientas más, ofrece historial de versiones y pruebas multi-modelo para los prompts, sincroniza vía WebDAV y guarda snapshots completos en una instancia Web auto-hospedada.
 
 Tus datos se quedan en tu máquina.
 
@@ -172,7 +172,7 @@ Vuelve a abrir la app. Sustituye la ruta si la instalaste en otro sitio.
 
 - Un único lugar para gestionar `.cursor/rules`, `.claude/CLAUDE.md`, AGENTS.md y similares
 - Reglas de proyecto añadidas manualmente, agrupadas por directorio
-- Integradas con exportación ZIP, WebDAV, sync auto-hospedada e importación/exportación Web
+- Integradas con exportación ZIP, WebDAV, backup/restauración auto-hospedados e importación/exportación Web
 
 ### 🤖 Espacio de proyectos y assets de agente
 
@@ -200,8 +200,9 @@ Vuelve a abrir la app. Sustituye la ruta si la instalaste en otro sitio.
 - Local-first: por defecto tus datos viven en tu máquina
 - Backup / restauración completa en formato comprimido `.phub.gz`
 - Sincronización WebDAV (Jianguoyun, Nextcloud, etc.)
-- Una instancia PromptHub Web auto-hospedada sirve como destino adicional de sync / backup
-- Pull al iniciar y sincronización en segundo plano programada; sólo una fuente activa de sync evita conflictos multi-escritor
+- La sincronización activa WebDAV / S3 usa una sola fuente seleccionada para evitar conflictos multiescritor
+- PromptHub Web auto-hospedado guarda snapshots inmutables de forma independiente; las tareas de inicio y programadas sólo suben y nunca descargan ni sobrescriben datos locales
+- Desktop y Web deben tener exactamente la misma versión antes del backup; la restauración es explícita y crea primero un snapshot local de seguridad
 
 ### 🔐 Privacidad y seguridad
 
@@ -220,7 +221,7 @@ Vuelve a abrir la app. Sustituye la ruta si la instalaste en otro sitio.
 
 3. **Instala en herramientas IA.** Desde el detalle del Skill, elige la plataforma destino. PromptHub instalará el SKILL.md en el directorio esperado por la plataforma, como symlink (edición compartida) o copia independiente.
 
-4. **Sincronización (opcional).** _Ajustes → Datos_ configura WebDAV, o auto-hospeda PromptHub Web como destino de sync.
+4. **Sincronización o backup (opcional).** _Ajustes → Datos_ configura WebDAV / S3 para sync activo, o PromptHub Web auto-hospedado para snapshots de recuperación independientes.
 
 <div id="self-hosted-web"></div>
 
@@ -229,7 +230,7 @@ Vuelve a abrir la app. Sustituye la ruta si la instalaste en otro sitio.
 PromptHub Web es un compañero ligero orientado a navegador que puedes ejecutar con Docker en un NAS, VPS o máquina LAN. **No** es un servicio cloud gestionado. Útil para:
 
 - Acceder a tus datos PromptHub desde un navegador
-- Tener un destino de sync alternativo a WebDAV para la versión escritorio
+- Guardar snapshots inmutables de recuperación del escritorio sin cambiar el workspace Web activo
 - Mantener los datos en tu propia red
 
 ```bash
@@ -246,7 +247,7 @@ En `.env`, como mínimo:
 
 Por defecto: `http://localhost:3871`. La primera visita lleva a `/setup`; el primer usuario será administrador.
 
-Para conectar el escritorio: _Ajustes → Datos → Self-Hosted PromptHub_. Prueba la conexión, sube el workspace local, baja desde Web, activa pull al iniciar o push en segundo plano.
+Para conectar el escritorio: _Ajustes → Datos → Self-Hosted PromptHub_. Comprueba versión y capacidad de backup, crea un snapshot remoto, restaura explícitamente el último snapshot o activa backups de sólo subida al iniciar / programados. Las tareas automáticas nunca descargan, fusionan ni sustituyen datos locales.
 
 Notas detalladas de despliegue / actualización / backup / imagen GHCR / desarrollo en [`web-self-hosted.md`](./web-self-hosted.md).
 
@@ -284,10 +285,11 @@ rules     list / scan / read / save / rewrite
           add-project / remove-project
           export / import
 
-skill     list / get / install / delete / remove
+skill     list / get / import (alias: install) / delete / remove
           versions / create-version / rollback / delete-version
           export / scan / scan-safety / sync-from-repo
-          platforms / platform-status / install-md / uninstall-md
+          platforms / platform-status / distribute / undistribute
+          (alias: install-md / uninstall-md)
           repo-files / repo-read / repo-write / repo-delete / repo-mkdir / repo-rename
 
 ai        providers / provider-add / provider-delete
@@ -295,11 +297,18 @@ ai        providers / provider-add / provider-delete
           routes / route-set / route-clear
 
 workspace export / import
+
+doctor    database-lock [--recover]
 ```
+
+La importación, los snapshots de versión y la distribución de Skills aplican las reglas de exclusión integradas y un `.prompthubignore` en la raíz. Las posibles claves privadas, tokens de acceso y contraseñas se bloquean antes de escribir. La salida correcta es un resumen acotado de forma predeterminada; usa `--full` explícitamente para obtener el contenido del Skill y snapshots completos de archivos.
 
 Flags globales habituales:
 
 - `--output json|table` — formato de salida
+- `--summary` — devuelve un resumen acotado (predeterminado)
+- `--full` — devuelve el contenido completo del recurso
+- `--quiet` — suprime stdout en caso de éxito y conserva los errores en stderr
 - `--data-dir <path>` — sobrescribe el directorio `userData` de PromptHub
 - `--app-data-dir <path>` — sobrescribe la raíz de datos de la app
 - `--version|-v` — imprime la versión de la CLI
@@ -314,7 +323,7 @@ Changelog completo: **[CHANGELOG.md](../CHANGELOG.md)**
 
 - Gestión de Plugins estabilizada: My Plugins / Plugin Store / Agent Plugin siguen el estilo Skill para instalación, detalle, snapshots de versión, revisión de actualización de origen, acciones batch, distribución Agent e importación de Skill / MCP hijos
 - Gestión y sincronización MCP ampliadas: workspace MCP, tienda oficial de plantillas, distribución a targets Agent, health checks, importación selectiva de .env, comandos CLI MCP y diseño de resincronización en un clic quedan consolidados
-- La sincronización completa de assets Agent incluye My Skills, My MCP, My Plugins, Rules y datos relacionados en self-hosted sync y backup/restore
+- La copia completa de assets Agent incluye My Skills, My MCP, My Plugins, Rules y datos relacionados en backup/restauración auto-hospedados
 - Las actualizaciones de origen Skill usan fingerprints SHA-256 de package y conciliación de tres vías, con correcciones para registry fingerprints, content-url baselines y redacción de credenciales en URL
 - Las actualizaciones de origen Plugin y batch store ahora muestran diferencias y requieren confirmación antes de reemplazar packages locales
 - Los Prompts permiten componer, ordenar, persistir y respaldar secuencias de formato de salida personalizadas
@@ -367,7 +376,7 @@ Changelog completo: **[CHANGELOG.md](../CHANGELOG.md)**
 
 **Funcionalidades**
 
-- 🧭 **Espacio Rules.** Una página Rules dedicada en el escritorio que gestiona reglas globales y reglas de proyecto añadidas manualmente — búsqueda, vista previa de snapshots, restaurar a borrador, exportación ZIP / WebDAV / sync auto-hospedada / import-export Web.
+- 🧭 **Espacio Rules.** Una página Rules dedicada en el escritorio que gestiona reglas globales y reglas de proyecto añadidas manualmente — búsqueda, vista previa de snapshots, restaurar a borrador, exportación ZIP / WebDAV / backup-restauración auto-hospedados / import-export Web.
 - 📁 **Espacio Skill por proyecto.** Espacios de Skills por proyecto, escaneo automático de las ubicaciones habituales y previsualización / importación / distribución en contexto de proyecto.
 - 🤖 **Quick Add genera prompts con IA.** Además de analizar un prompt existente, Quick Add ahora puede generar borradores estructurados a partir de objetivos y restricciones.
 - 🏷️ **Gestión global de etiquetas de prompt.** Búsqueda / renombrado / fusión / borrado centralizados en la zona de etiquetas de la barra lateral, sincronizados con la base y los archivos del workspace.
@@ -378,7 +387,7 @@ Changelog completo: **[CHANGELOG.md](../CHANGELOG.md)**
 - ✍️ El detalle de tarjeta admite edición con doble clic para los prompts de usuario y de sistema
 - 🪟 Parpadeo del diálogo de actualización, botón de descarga inestable y `minimizeOnLaunch` que no respetaba el inicio automático
 - ↔️ Regresiones de redimensionado en tres columnas de Skills, doble clic para reset, ajuste de títulos y búsqueda en el store
-- 🔁 Consistencia de Rules / extras de Skill / copias gestionadas entre exportación ZIP, WebDAV, sync auto-hospedada e import/export Web
+- 🔁 Consistencia de Rules / extras de Skill / copias gestionadas entre exportación ZIP, WebDAV, backup-restauración auto-hospedados e import/export Web
 - 🖼️ Inicio de sesión en Web auto-hospedado migrado a desafíos CAPTCHA de imagen de un solo uso
 
 **Mejoras**

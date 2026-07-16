@@ -39,7 +39,7 @@ Un espace de travail local-first pour les prompts, les skills et les assets de c
 
 <br/>
 
-PromptHub regroupe vos prompts, fichiers SKILL.md et assets de codage IA au niveau projet dans un espace de travail local. Il installe le même Skill dans Claude Code, Cursor, Codex, Windsurf, Gemini CLI et une douzaine d'autres outils, propose un historique de versions des prompts et des tests multi-modèles, et synchronise vers d'autres appareils via WebDAV ou une instance Web auto-hébergée.
+PromptHub regroupe vos prompts, fichiers SKILL.md et assets de codage IA au niveau projet dans un espace de travail local. Il installe le même Skill dans Claude Code, Cursor, Codex, Windsurf, Gemini CLI et une douzaine d'autres outils, propose un historique de versions et des tests multi-modèles, synchronise via WebDAV et conserve des snapshots complets dans une instance Web auto-hébergée.
 
 Vos données restent sur votre machine.
 
@@ -172,7 +172,7 @@ Vous voulez tester la prochaine version d'aperçu ? Ouvrez _Paramètres → À p
 
 - Un seul endroit pour gérer `.cursor/rules`, `.claude/CLAUDE.md`, AGENTS.md et leurs cousins
 - Règles de projet ajoutées manuellement, regroupées par dossier
-- Intégrées à l'export ZIP, WebDAV, sync auto-hébergée et import/export Web
+- Intégrées à l'export ZIP, WebDAV, sauvegarde-restauration auto-hébergée et import/export Web
 
 ### 🤖 Espace projet & assets d'agent
 
@@ -200,8 +200,9 @@ Vous voulez tester la prochaine version d'aperçu ? Ouvrez _Paramètres → À p
 - Local-first : par défaut, vos données restent sur votre machine
 - Sauvegarde / restauration complète au format compressé `.phub.gz`
 - Synchronisation WebDAV (Jianguoyun, Nextcloud, etc.)
-- Une instance PromptHub Web auto-hébergée sert de cible de sync / backup additionnelle
-- Pull au lancement + sync planifiée en arrière-plan ; une seule source active de sync pour éviter les conflits multi-écriture
+- La synchronisation active WebDAV / S3 utilise une seule source sélectionnée pour éviter les conflits multi-écriture
+- PromptHub Web auto-hébergé conserve séparément des snapshots immuables ; les tâches au lancement et planifiées envoient uniquement et ne récupèrent ni n'écrasent les données locales
+- Les versions Desktop et Web doivent correspondre exactement avant sauvegarde ; la restauration est explicite et crée d'abord un snapshot local de sécurité
 
 ### 🔐 Confidentialité et sécurité
 
@@ -220,7 +221,7 @@ Vous voulez tester la prochaine version d'aperçu ? Ouvrez _Paramètres → À p
 
 3. **Installez vers vos outils IA.** Depuis le détail d'un Skill, sélectionnez la plateforme cible. PromptHub installe le SKILL.md dans le dossier attendu par la plateforme, en symlink (édition partagée) ou en copie indépendante.
 
-4. **Synchronisation (optionnelle).** _Paramètres → Données_ configure WebDAV, ou auto-hébergez PromptHub Web comme cible de sync.
+4. **Synchronisation ou sauvegarde (optionnelle).** _Paramètres → Données_ configure WebDAV / S3 pour la sync active, ou PromptHub Web auto-hébergé pour des snapshots de récupération indépendants.
 
 <div id="self-hosted-web"></div>
 
@@ -229,7 +230,7 @@ Vous voulez tester la prochaine version d'aperçu ? Ouvrez _Paramètres → À p
 PromptHub Web est un compagnon léger orienté navigateur, à exécuter sur un NAS, un VPS ou une machine LAN avec Docker. Ce **n'est pas** un service cloud managé. Utilisez-le pour :
 
 - Accéder à vos données PromptHub depuis un navigateur
-- Disposer d'une cible de sync autre que WebDAV pour la version desktop
+- Conserver des snapshots immuables du desktop sans modifier l'espace Web actif
 - Garder vos données dans votre propre réseau
 
 ```bash
@@ -246,7 +247,7 @@ Dans `.env`, à minima :
 
 Par défaut : `http://localhost:3871`. La première visite redirige vers `/setup` ; le premier utilisateur devient administrateur.
 
-Pour connecter le desktop : _Paramètres → Données → Self-Hosted PromptHub_. Test de la connexion, push de l'espace local, pull depuis Web, pull au lancement ou push en arrière-plan.
+Pour connecter le desktop : _Paramètres → Données → Self-Hosted PromptHub_. Vérifiez la version et la capacité de sauvegarde, créez un snapshot distant, restaurez explicitement le dernier snapshot ou activez les sauvegardes au lancement / planifiées en envoi uniquement. Les tâches automatiques ne récupèrent, ne fusionnent ni ne remplacent les données locales.
 
 Détails de déploiement / mise à jour / sauvegarde / image GHCR / notes de dev dans [`web-self-hosted.md`](./web-self-hosted.md).
 
@@ -284,10 +285,11 @@ rules     list / scan / read / save / rewrite
           add-project / remove-project
           export / import
 
-skill     list / get / install / delete / remove
+skill     list / get / import (alias : install) / delete / remove
           versions / create-version / rollback / delete-version
           export / scan / scan-safety / sync-from-repo
-          platforms / platform-status / install-md / uninstall-md
+          platforms / platform-status / distribute / undistribute
+          (alias : install-md / uninstall-md)
           repo-files / repo-read / repo-write / repo-delete / repo-mkdir / repo-rename
 
 ai        providers / provider-add / provider-delete
@@ -295,11 +297,18 @@ ai        providers / provider-add / provider-delete
           routes / route-set / route-clear
 
 workspace export / import
+
+doctor    database-lock [--recover]
 ```
+
+L'import, les snapshots de version et la distribution d'un Skill appliquent les règles d'exclusion intégrées et le fichier `.prompthubignore` à la racine. Les clés privées, jetons d'accès et mots de passe probables sont bloqués avant écriture. La sortie de succès est un résumé borné par défaut ; utilisez explicitement `--full` pour obtenir le contenu du Skill et les snapshots de fichiers complets.
 
 Options globales courantes :
 
 - `--output json|table` — format de sortie
+- `--summary` — renvoyer un résumé borné (par défaut)
+- `--full` — renvoyer le contenu complet de la ressource
+- `--quiet` — masquer stdout en cas de succès tout en conservant les erreurs stderr
 - `--data-dir <path>` — surcharger le dossier `userData` de PromptHub
 - `--app-data-dir <path>` — surcharger la racine des données applicatives
 - `--version|-v` — afficher la version CLI
@@ -367,7 +376,7 @@ Journal complet : **[CHANGELOG.md](../CHANGELOG.md)**
 
 **Fonctionnalités**
 
-- 🧭 **Espace Rules.** Une page Rules dédiée sur le bureau, gérant règles globales et règles de projet ajoutées manuellement — recherche, prévisualisation des snapshots, restauration en brouillon, export ZIP / WebDAV / sync auto-hébergée / import-export Web.
+- 🧭 **Espace Rules.** Une page Rules dédiée sur le bureau, gérant règles globales et règles de projet ajoutées manuellement — recherche, prévisualisation des snapshots, restauration en brouillon, export ZIP / WebDAV / sauvegarde-restauration auto-hébergée / import-export Web.
 - 📁 **Espace Skill par projet.** Espaces Skills par projet, scan automatique des emplacements habituels, prévisualisation / import / distribution dans le contexte du projet.
 - 🤖 **Quick Add génère des prompts par IA.** En plus d'analyser un prompt existant, Quick Add peut désormais générer un brouillon de prompt structuré à partir d'objectifs et de contraintes.
 - 🏷️ **Gestion globale des tags de prompt.** Recherche / renommage / fusion / suppression centralisés dans la zone tags de la barre latérale, synchronisés base et fichiers de l'espace de travail.
@@ -378,7 +387,7 @@ Journal complet : **[CHANGELOG.md](../CHANGELOG.md)**
 - ✍️ Le détail de carte permet l'édition par double-clic des prompts utilisateur et système
 - 🪟 Scintillement du dialogue de mise à jour, bouton de téléchargement instable, et `minimizeOnLaunch` ne respectant pas le démarrage automatique
 - ↔️ Régression sur le redimensionnement trois colonnes des Skills, le double-clic de réinitialisation, le retour à la ligne des titres et la recherche dans le store
-- 🔁 Cohérence Rules / extras de Skill / copies gérées entre export ZIP, WebDAV, sync auto-hébergée et import/export Web
+- 🔁 Cohérence Rules / extras de Skill / copies gérées entre export ZIP, WebDAV, sauvegarde-restauration auto-hébergée et import/export Web
 - 🖼️ La connexion Web auto-hébergée utilise désormais des défis CAPTCHA image à usage unique
 
 **Améliorations**

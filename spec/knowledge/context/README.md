@@ -56,7 +56,7 @@ PromptHub 在本地工作区中维护的托管副本，用于保存 Skill 正文
 
 - PromptHub 以本地优先为基础，不把官方云服务作为默认前提
 - `docs/` 只承载对外文档；内部真相源在 `spec/`
-- Web 版是自部署工作区和同步目标，不是多租户 SaaS 平台
+- Web 版是自部署工作区和独立备份/恢复目标，不是多租户 SaaS 平台；旧 live-sync 路由只保留兼容用途
 - `spec/` 是内部 SSD / knowledge / change 的唯一归属
 
 ## 主要交付面

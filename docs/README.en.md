@@ -39,7 +39,7 @@ A local-first workspace for prompts, skills, and AI coding assets.
 
 <br/>
 
-PromptHub keeps your prompts, SKILL.md files, and project-level AI coding assets in one local workspace. It can install the same Skill into Claude Code, Cursor, Codex, Windsurf, Gemini CLI and a dozen other tools, gives prompts version history and multi-model testing, and syncs to other devices via WebDAV or a self-hosted Web instance.
+PromptHub keeps your prompts, SKILL.md files, and project-level AI coding assets in one local workspace. It can install the same Skill into Claude Code, Cursor, Codex, Windsurf, Gemini CLI and a dozen other tools, gives prompts version history and multi-model testing, syncs through WebDAV, and stores complete snapshots in a self-hosted Web instance.
 
 Your data lives on your machine.
 
@@ -172,7 +172,7 @@ Want to try the next dev preview? Open _Settings → About_ and toggle the previ
 
 - One place to manage `.cursor/rules`, `.claude/CLAUDE.md`, AGENTS.md and friends
 - Manually-added project rules grouped by directory
-- Wired into ZIP export, WebDAV, self-hosted sync, and Web import/export
+- Wired into ZIP export, WebDAV, self-hosted backup/restore, and Web import/export
 
 ### 🤖 Project & agent asset workspace
 
@@ -200,8 +200,9 @@ Want to try the next dev preview? Open _Settings → About_ and toggle the previ
 - Local-first: by default your data lives on your own machine
 - Full backup / restore via the `.phub.gz` compressed format
 - WebDAV sync (Jianguoyun, Nextcloud, etc.)
-- Self-hosted PromptHub Web works as an additional sync / backup target
-- Pull on launch + scheduled background sync; only one active sync source drives automatic sync to prevent multi-writer conflicts
+- WebDAV / S3 live sync uses one selected source to prevent multi-writer conflicts
+- Self-hosted PromptHub Web independently stores immutable snapshots; startup and scheduled jobs only upload and never pull or overwrite local data
+- Desktop and Web versions must match exactly before backup; restore is explicit and first creates a local safety snapshot
 
 ### 🔐 Privacy & security
 
@@ -220,7 +221,7 @@ Want to try the next dev preview? Open _Settings → About_ and toggle the previ
 
 3. **Install to AI tools.** From a Skill's detail view, pick a target platform. PromptHub installs the SKILL.md into the platform's expected directory, either as a symlink (live edits) or a standalone copy.
 
-4. **Sync (optional).** _Settings → Data_ configures WebDAV, or you can self-host PromptHub Web as a sync target.
+4. **Sync or back up (optional).** _Settings → Data_ configures WebDAV / S3 live sync, or a self-hosted PromptHub Web instance for independent recovery snapshots.
 
 <div id="self-hosted-web"></div>
 
@@ -229,7 +230,7 @@ Want to try the next dev preview? Open _Settings → About_ and toggle the previ
 PromptHub Web is a lightweight browser companion you can run on a NAS, VPS, or LAN box with Docker. It is **not** a managed cloud service. Use it to:
 
 - Access your PromptHub data from a browser
-- Have a sync target other than WebDAV for the desktop
+- Store immutable desktop recovery snapshots without changing the live Web workspace
 - Keep your data inside your own network
 
 ```bash
@@ -246,7 +247,7 @@ In `.env`, set at minimum:
 
 Default: `http://localhost:3871`. The first visit lands on `/setup`; the first user becomes admin.
 
-To connect the desktop: _Settings → Data → Self-Hosted PromptHub_. Test the connection, push the local workspace up, pull from Web, enable launch-time pull or background push.
+To connect the desktop: _Settings → Data → Self-Hosted PromptHub_. Verify version and backup capability, create a remote snapshot, explicitly restore the latest snapshot, or enable upload-only startup / scheduled backup. Automatic jobs never pull, merge, or replace local data.
 
 Detailed deploy / upgrade / backup / GHCR image / dev notes live in [`web-self-hosted.md`](./web-self-hosted.md).
 
@@ -287,11 +288,12 @@ rules     list / scan / read / save / rewrite
           add-project / remove-project
           export / import
 
-skill     list / get / install / delete / remove
+skill     list / get / import (alias: install) / delete / remove
           versions / create-version / rollback / delete-version
           export / scan / scan-safety / sync-from-repo
           update / check-update
-          platforms / platform-status / install-md / uninstall-md
+          platforms / platform-status / distribute / undistribute
+          (aliases: install-md / uninstall-md)
           project-install / install-project
           repo-files / repo-read / repo-write / repo-delete / repo-mkdir / repo-rename
 
@@ -312,11 +314,18 @@ workspace export / import
            skills + skillFiles, MCP, plugins, rules, media)
 
 sync      status / push / pull
+
+doctor    database-lock [--recover]
 ```
+
+Skill import, version snapshots, and distribution use the built-in ignore policy plus a root `.prompthubignore`, and block likely private keys, access tokens, and passwords before writing. Successful output is a bounded summary by default; use `--full` explicitly for Skill bodies and complete file snapshots.
 
 Common global flags:
 
 - `--output json|table` — output format
+- `--summary` — return a bounded summary (default)
+- `--full` — return complete resource content
+- `--quiet` — suppress successful stdout while preserving stderr errors
 - `--data-dir <path>` — override the PromptHub `userData` directory
 - `--app-data-dir <path>` — override the application data root
 - `--version|-v` — print the CLI version
@@ -331,7 +340,7 @@ Full changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 
 - Plugin management stabilized: My Plugins / Plugin Store / Agent Plugin now follow Skill-style install, detail, version snapshot, source update review, batch action, Agent distribution, and child Skill / MCP import flows
 - MCP management and sync expanded: MCP workspace, official template store, Agent target distribution, health checks, selective .env import, CLI MCP commands, and one-click resync design are consolidated
-- Full Agent asset sync now includes My Skills, My MCP, My Plugins, Rules, and related asset data across self-hosted sync and backup/restore
+- Full Agent asset backup now includes My Skills, My MCP, My Plugins, Rules, and related data in self-hosted backup/restore
 - Skill source update checks now use SHA-256 package fingerprints and three-way reconciliation, with fixes for registry fingerprints, content-url baselines, and URL credential redaction
 - Plugin source updates and batch store updates now show diffs and require confirmation before replacing local packages
 - Prompts can compose, sort, persist, and back up custom output format sequences
@@ -401,7 +410,7 @@ Full changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 
 **Features**
 
-- 🧭 **Rules workspace.** A dedicated Rules page on the desktop, managing both global rules and manually added project rules — search, snapshot preview, restore-to-draft, and ZIP export / WebDAV / self-hosted sync / Web import-export.
+- 🧭 **Rules workspace.** A dedicated Rules page on the desktop, managing both global rules and manually added project rules — search, snapshot preview, restore-to-draft, and ZIP export / WebDAV / self-hosted backup-restore / Web import-export.
 - 📁 **Project Skill workspace.** Per-project skill workspaces that auto-scan the usual locations and let you preview / import / distribute skills in project context.
 - 🤖 **Quick Add can generate prompts with AI.** In addition to analyzing an existing prompt, Quick Add can now generate a structured prompt draft from goals and constraints.
 - 🏷️ **Global prompt tag management.** Centralized search / rename / merge / delete in the sidebar tag area, synced to both the database and the workspace files.
@@ -412,7 +421,7 @@ Full changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 - ✍️ Card detail supports double-click editing for both user and system prompts
 - 🪟 Update dialog flicker, unstable download button, and `minimizeOnLaunch` not honoring launch-at-login
 - ↔️ Skills three-column resizing, double-click reset, title wrapping, store search regressions
-- 🔁 Rules / Skill extras / managed copies stay consistent across ZIP export, WebDAV, self-hosted sync, and Web import/export
+- 🔁 Rules / Skill extras / managed copies stay consistent across ZIP export, WebDAV, self-hosted backup-restore, and Web import/export
 - 🖼️ Self-hosted Web login switched to one-time image captcha challenges
 
 **Improvements**

@@ -39,7 +39,7 @@
 
 <br/>
 
-PromptHub 把你的 Prompt、SKILL.md 和專案級 AI 編程資產放進一個本機工作區。它能把同一份 Skill 一鍵安裝到 Claude Code、Cursor、Codex、Windsurf、Gemini CLI 等十幾個工具，給 Prompt 提供版本管理與多模型測試，並透過 WebDAV 或自部署 Web 同步到其他裝置。
+PromptHub 把你的 Prompt、SKILL.md 和專案級 AI 編程資產放進一個本機工作區。它能把同一份 Skill 一鍵安裝到 Claude Code、Cursor、Codex、Windsurf、Gemini CLI 等十幾個工具，給 Prompt 提供版本管理與多模型測試，透過 WebDAV 同步到其他裝置，並把完整快照備份到自部署 Web。
 
 資料預設存在你自己的電腦上。
 
@@ -172,7 +172,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 
 - 集中管理 `.cursor/rules`、`.claude/CLAUDE.md`、AGENTS.md 等規則檔案
 - 支援手動新增專案級 Rules，依目錄分組瀏覽
-- 與 ZIP 匯出、WebDAV、自託管同步、Web 匯入匯出全鏈路打通
+- 與 ZIP 匯出、WebDAV、自託管備份還原、Web 匯入匯出全鏈路打通
 
 ### 🤖 專案與 Agent 資產工作區
 
@@ -200,8 +200,9 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 - 本機優先：所有資料預設存在你自己的電腦上
 - 全量備份 / 還原使用 `.phub.gz` 壓縮格式
 - WebDAV 同步（堅果雲、Nextcloud 等）
-- 自部署 PromptHub Web 可作為額外的同步來源 / 備份來源
-- 啟動時自動拉取 + 背景定時同步；只允許一個活動同步來源驅動自動同步，避免多源衝突寫入
+- WebDAV / S3 線上同步只使用一個已選取來源，避免多來源衝突寫入
+- 自部署 PromptHub Web 獨立保存不可變快照；啟動與定時任務只上傳，絕不會自動拉取或覆蓋本機資料
+- 桌面版與 Web 版必須完全同版本才會備份；還原由使用者明確觸發，並先建立本機安全快照
 
 ### 🔐 隱私與安全
 
@@ -220,7 +221,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 
 3. **一鍵安裝到 AI 工具。** 在 Skill 詳情頁選擇目標平台。PromptHub 會依平台規範把 SKILL.md 安裝到對應目錄。可以選 symlink（同步編輯）或獨立副本。
 
-4. **設定同步（可選）。**「設定 → 資料」裡設定 WebDAV，或自部署一份 PromptHub Web 當同步目標。
+4. **設定同步或備份（可選）。**「設定 → 資料」裡設定 WebDAV / S3 線上同步，或自部署一份 PromptHub Web 保存獨立還原快照。
 
 <div id="self-hosted-web"></div>
 
@@ -229,7 +230,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 PromptHub Web 是一個輕量的瀏覽器版工作區，你可以用 Docker 把它跑在 NAS、VPS 或區網裡。它**不是**官方雲端服務，主要用途是：
 
 - 在瀏覽器裡存取自己的 PromptHub 資料
-- 給桌面版當作除 WebDAV 之外的另一種同步目標
+- 給桌面版保存不改動線上工作區的不可變還原快照
 - 不想讓資料離開本機區網
 
 ```bash
@@ -246,7 +247,7 @@ docker compose up -d --build
 
 預設在 `http://localhost:3871`。第一次打開會跳到 `/setup`，你建立的第一個使用者就是管理員。
 
-桌面版接入這份 Web：「設定 → 資料 → Self-Hosted PromptHub」，填 URL、使用者名稱、密碼。可以測試連線、上傳目前工作區、從 Web 拉回本機、啟動時自動拉取、背景定時推送。
+桌面版接入這份 Web：「設定 → 資料 → Self-Hosted PromptHub」，填 URL、使用者名稱、密碼。可以驗證版本與備份能力、建立遠端快照、明確還原最近快照，以及啟用只上傳的啟動 / 定時自動備份。自動任務不會拉取、合併或覆蓋本機資料。
 
 更詳細的部署、升級、備份、GHCR 映像檔、開發說明在 [`web-self-hosted.md`](./web-self-hosted.md)。
 
@@ -284,10 +285,11 @@ rules     list / scan / read / save / rewrite
           add-project / remove-project
           export / import
 
-skill     list / get / install / delete / remove
+skill     list / get / import（相容別名：install）/ delete / remove
           versions / create-version / rollback / delete-version
           export / scan / scan-safety / sync-from-repo
-          platforms / platform-status / install-md / uninstall-md
+          platforms / platform-status / distribute / undistribute
+          （相容別名：install-md / uninstall-md）
           repo-files / repo-read / repo-write / repo-delete / repo-mkdir / repo-rename
 
 ai        providers / provider-add / provider-delete
@@ -295,11 +297,18 @@ ai        providers / provider-add / provider-delete
           routes / route-set / route-clear
 
 workspace export / import
+
+doctor    database-lock [--recover]
 ```
+
+Skill 匯入、版本快照與分發會統一套用內建忽略規則和根目錄 `.prompthubignore`，並在寫入前阻止疑似私鑰、存取權杖與密碼。成功輸出預設為有界摘要；只有明確使用 `--full` 才會回傳 Skill 正文與完整檔案快照。
 
 常用全域參數：
 
 - `--output json|table` — 輸出格式
+- `--summary` — 回傳有界摘要（預設）
+- `--full` — 回傳完整資源內容
+- `--quiet` — 成功時不輸出 stdout，錯誤仍輸出 stderr
 - `--data-dir <path>` — 顯式指定 PromptHub 的 `userData` 目錄
 - `--app-data-dir <path>` — 顯式指定應用資料根目錄
 - `--version|-v` — 印出 CLI 版本
@@ -314,7 +323,7 @@ workspace export / import
 
 - Plugin 管理正式收口：My Plugins / Plugin Store / Agent Plugin 對齊 Skill 風格，支援安裝、詳情、版本快照、來源更新確認、批次操作、Agent 分發和子 Skill / MCP 匯入
 - MCP 管理與同步能力擴展：MCP 工作台、官方模板商店、Agent 目標分發、健康檢查、.env 按需匯入、CLI MCP 命令和一鍵重新同步設計完成階段性收口
-- 整套 Agent 資產同步：自託管同步與備份恢復納入 My Skills、My MCP、My Plugins 和 Rules 等資料
+- 整套 Agent 資產備份：自託管備份還原納入 My Skills、My MCP、My Plugins 和 Rules 等資料
 - Skill 來源更新改為 SHA-256 package 指紋和三方對帳，並修復 registry 指紋、content-url 基線和 URL 脫敏問題
 - Plugin 來源更新和批次商店更新現在會先展示差異並要求確認，不再點擊後直接覆蓋本機 Plugin
 - Prompt 支援組合、排序、持久化與備份自訂輸出格式序列
@@ -367,7 +376,7 @@ workspace export / import
 
 **新功能**
 
-- 🧭 **Rules 集中管理工作台**：桌面端獨立的 Rules 頁面，統一管理全域規則和手動新增的專案規則，支援搜尋、歷史快照預覽、還原到草稿，並接入 ZIP 匯出、WebDAV、自託管同步和 Web 匯入匯出
+- 🧭 **Rules 集中管理工作台**：桌面端獨立的 Rules 頁面，統一管理全域規則和手動新增的專案規則，支援搜尋、歷史快照預覽、還原到草稿，並接入 ZIP 匯出、WebDAV、自託管備份還原和 Web 匯入匯出
 - 📁 **專案級 Skill 工作區**：可以為本機專案建立獨立 Skill 工作區，自動掃描常見目錄，在專案上下文中預覽、匯入和分發 Skill
 - 🤖 **Quick Add 支援 AI 直接產生 Prompt**：除了分析已有 Prompt，Quick Add 現在也能根據目標和約束直接產生結構化 Prompt 草稿
 - 🏷️ **全域 Prompt 標籤管理**：側欄標籤區域新增統一入口，可集中搜尋、重新命名、合併和刪除標籤，同步更新資料庫與工作區檔案
@@ -378,7 +387,7 @@ workspace export / import
 - ✍️ 卡片詳情支援雙擊編輯使用者提示詞和系統提示詞
 - 🪟 修復檢查更新對話框閃爍、下載按鈕無法穩定點擊，以及開機自動啟動時不能依 `minimizeOnLaunch` 最小化的問題
 - ↔️ Skills 三欄欄寬調節、雙擊重設、標題換行、商店搜尋的一組易用性回歸
-- 🔁 Rules、Skill 附加檔案和託管副本在 ZIP 匯出、WebDAV、自託管同步和 Web 匯入匯出鏈路中的一致性
+- 🔁 Rules、Skill 附加檔案和託管副本在 ZIP 匯出、WebDAV、自託管備份還原和 Web 匯入匯出鏈路中的一致性
 - 🖼️ 自託管 Web 登入改用一次性圖形驗證碼
 
 **優化**

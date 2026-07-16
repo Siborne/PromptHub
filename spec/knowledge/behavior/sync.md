@@ -2,19 +2,20 @@
 
 ## Purpose
 
-本规范定义 PromptHub 的稳定同步语义，包括 WebDAV、自部署 Web 作为同步/恢复目标、以及内部同步契约边界。
+本规范定义 PromptHub 的稳定同步与远程备份语义，包括 WebDAV/S3 在线同步、自部署 Web 不可变备份与显式恢复，以及内部数据契约边界。
 
 ## Stable Requirements
 
 ### 1. Sync Contract
 
 - 同步必须围绕可恢复的数据对象或稳定数据布局进行，而不是依赖临时 UI 状态。
-- 不同同步后端可以不同，但用户可见的同步语义必须保持一致：连接验证、上传、下载、恢复、周期同步。
-- 同步 provider 稳定联合类型为：`manual | webdav | self-hosted | s3`。
-- 桌面端可以同时启用多个备份目标用于手动上传、下载与恢复，但自动同步在任一时刻只能由一个 `syncProvider` 驱动，避免多源竞争写入。
+- 不同在线同步后端可以不同，但用户可见的同步语义必须保持一致：连接验证、上传、下载、恢复、周期同步。
+- 持久设置中的 provider 联合类型仍为 `manual | webdav | self-hosted | s3`，其中 `self-hosted` 只用于读取历史设置；当前版本加载后必须规范化为 `manual`，不得再把自部署 Web 作为在线同步源。
+- WebDAV 与 S3 是在线同步 provider。桌面端可以同时配置多个目标，但自动在线同步在任一时刻只能由一个 `syncProvider` 驱动，避免多源竞争写入。
+- 自部署 Web 是独立的远程备份目标，不受 `syncProvider` 选择限制。启用后可以与一个 WebDAV/S3 自动同步任务并行配置，但它的启动与定时任务只能上传新快照，不得拉取、合并或修改本地及 Web 在线工作区。
 - 桌面端数据设置中的云备份导航应使用 provider 导向命名，并直接显示每个 provider 是否已启用。
 - 对 `webdav` push/pull 的编排必须通过路由/页面外的 orchestrator 服务完成，避免在入口层直接堆叠远端流程细节。
-- 桌面端必须记录最近的自动同步尝试，覆盖 WebDAV、S3、自部署 Web 的启动、恢复启动和定时同步。记录只包含 provider、触发原因、状态、时间、是否更新本地数据和脱敏摘要，不得保存凭据、远端地址、token、bucket、remote path 或 payload。最近记录保存在设置摘要中，同时追加写入单个本地日志文件 `logs/auto-sync.jsonl`，不是每条记录一个文件。
+- 桌面端必须记录最近的自动操作，覆盖 WebDAV/S3 在线同步和自部署 Web 的启动、恢复启动、定时备份。记录只包含 provider、触发原因、状态、时间、是否更新本地数据和脱敏摘要，不得保存凭据、远端地址、token、bucket、remote path 或 payload。最近记录保存在设置摘要中，同时追加写入单个本地日志文件 `logs/auto-sync.jsonl`，不是每条记录一个文件。
 
 ### 1.1 Stable Web Sync Response Shape
 
@@ -47,9 +48,9 @@
 - Incremental WebDAV/S3 downloads verify the serialized data hash and each
   manifest-listed media hash/size before local restore begins; missing or
   mismatched payloads fail without clearing local records.
-- Auto-sync freshness includes timestamped Skills, Rules, prompt graph records,
-  MCP/Plugin libraries, and settings in addition to Prompts and Folders. A
-  failed freshness snapshot is an explicit sync failure.
+- Online-sync freshness includes timestamped Skills, Rules, prompt graph
+  records, MCP/Plugin libraries, and settings in addition to Prompts and
+  Folders. A failed freshness snapshot is an explicit sync failure.
 - MCP/Plugin libraries, package files, store sources, and agent asset files are
   transported as snapshots. Native reapply ownership, delete tombstones,
   conflict resolution, and encryption policy remain follow-up work and are not
@@ -57,10 +58,15 @@
 
 ### 2. Desktop And Web Relationship
 
-- 桌面端可以把自部署 Web 工作区作为备份与恢复目标。
+- 桌面端只把自部署 Web 作为独立备份与恢复目标；当前 UI、启动任务和定时任务不得调用 live workspace 的 `/api/sync/data` 或媒体写入接口。
+- 自动备份与手动创建备份前，桌面端必须读取本机安装版本和 Web `/health`、受保护 capabilities 返回的服务版本。三者必须完全一致，备份协议也必须匹配；否则在导出本地数据前停止。Web 创建路由必须再次校验客户端版本，且不得回退到旧同步接口。
+- Web 通过 `/api/backups/desktop` 为每个认证用户保存不可变、带 SHA-256 校验的快照，默认保留最近 10 份。快照写入成功且目录元数据持久化后才可清理旧快照；备份目录、用户目录或快照文件不得接受符号链接。
+- 自部署快照包含 Prompt、版本、文件夹、关系、输出格式、Rule、Skill 完整文件和版本、MCP/Plugin 库及包、商店源、Agent 资产文件、内联媒体和非秘密设置。未加密通道必须递归排除密码、token、API key、access key、代理凭据等已知凭据字段。
+- 恢复只能由用户显式触发。桌面端必须先成功创建本地安全快照，再读取服务端已校验的最新快照并执行替换恢复；安全快照失败时不得开始远程恢复。自动任务永远不得调用恢复。
+- 单次备份请求当前上限为 50 MiB；超过上限必须在解析和写盘前拒绝，避免无界 JSON/base64 内存占用。网络读取使用 15 秒超时和一次有限重试；创建快照等写操作不得自动重试，避免产生重复快照。
+- 旧 `/api/sync/data` 路由在兼容窗口内继续存在，但只服务旧客户端；当前桌面 UI 与调度器不再调用它。
 - 面向用户的自部署说明在 `docs/web-self-hosted.md`，内部同步与布局事实在 `spec/`。
-- 自部署 Web 必须在同步与备份 payload 中保留 MCP/Plugin 库、包、商店源与
-  agent asset 文件，即使浏览器不提供这些 Desktop-owned 资源的管理界面。
+- 自部署 Web 备份 payload 必须保留 MCP/Plugin 库、包、商店源与 agent asset 文件，即使浏览器不提供这些 Desktop-owned 资源的管理界面。
 
 ### 3. Stable Internal Sources
 
@@ -89,15 +95,16 @@ When web sync route behavior is changed:
 When desktop users enable more than one cloud backup target:
 
 - manual backup, download, and restore actions can remain available for every enabled target
-- startup sync, interval sync, and save-triggered sync run only for the selected `syncProvider`
+- WebDAV/S3 startup, interval, and save-triggered live sync run only for the selected `syncProvider`
+- self-hosted startup and interval backup can run independently, but only uploads immutable snapshots
 - settings navigation keeps provider-oriented labels and shows which providers are enabled without entering each panel
 
 ### Scenario: Desktop user checks automatic sync history
 
-When desktop automatic sync is enabled for WebDAV, S3, or self-hosted Web:
+When desktop automatic sync or self-hosted automatic backup is enabled:
 
 - each automatic attempt records success, failure, or skipped state
-- skipped state explains common reasons such as offline, hidden window, in-flight sync, inactive provider, or incomplete config
+- skipped state explains common reasons such as offline, hidden window, an in-flight operation, inactive live-sync provider, incomplete config, or Desktop/Web version mismatch
 - the data settings UI shows recent entries so users can confirm background sync activity without opening developer tools
 - the local data paths UI exposes `logs/auto-sync.jsonl` so users can open the durable local log file directly
 

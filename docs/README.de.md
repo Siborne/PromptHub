@@ -39,7 +39,7 @@ Ein Local-First-Arbeitsbereich für Prompts, Skills und KI-Coding-Assets.
 
 <br/>
 
-PromptHub bündelt deine Prompts, SKILL.md-Dateien und projektbezogenen KI-Coding-Assets in einem lokalen Arbeitsbereich. Es installiert dasselbe Skill in Claude Code, Cursor, Codex, Windsurf, Gemini CLI und einem Dutzend weiterer Werkzeuge, bietet Versionsverlauf und Multi-Modell-Tests für Prompts und synchronisiert per WebDAV oder selbst gehostetem Web auf andere Geräte.
+PromptHub bündelt deine Prompts, SKILL.md-Dateien und projektbezogenen KI-Coding-Assets in einem lokalen Arbeitsbereich. Es installiert dasselbe Skill in Claude Code, Cursor, Codex, Windsurf, Gemini CLI und einem Dutzend weiterer Werkzeuge, bietet Versionsverlauf und Multi-Modell-Tests für Prompts, synchronisiert per WebDAV und speichert vollständige Snapshots in selbst gehostetem Web.
 
 Deine Daten bleiben auf deiner Maschine.
 
@@ -172,7 +172,7 @@ Nächste Entwicklungs-Vorschau testen? _Einstellungen → Über_ öffnen und den
 
 - Ein Ort für `.cursor/rules`, `.claude/CLAUDE.md`, AGENTS.md und Verwandte
 - Manuell hinzugefügte Projektregeln nach Verzeichnis gruppiert
-- Verbunden mit ZIP-Export, WebDAV, selbst gehosteter Sync sowie Web-Import/-Export
+- Verbunden mit ZIP-Export, WebDAV, selbst gehosteter Sicherung/Wiederherstellung sowie Web-Import/-Export
 
 ### 🤖 Projekt- und Agent-Asset-Workspace
 
@@ -200,8 +200,9 @@ Nächste Entwicklungs-Vorschau testen? _Einstellungen → Über_ öffnen und den
 - Local-First: deine Daten liegen standardmäßig auf deiner Maschine
 - Vollständige Sicherung / Wiederherstellung im komprimierten `.phub.gz`-Format
 - WebDAV-Sync (Jianguoyun, Nextcloud usw.)
-- Selbst gehostetes PromptHub Web als zusätzliches Sync- / Backup-Ziel
-- Pull beim Start und geplante Hintergrund-Sync; nur eine aktive Sync-Quelle steuert die automatische Synchronisierung, um Multi-Writer-Konflikte zu vermeiden
+- WebDAV- / S3-Live-Sync verwendet genau eine ausgewählte Quelle, um Multi-Writer-Konflikte zu vermeiden
+- Selbst gehostetes PromptHub Web speichert unabhängig unveränderliche Snapshots; Start- und Zeitplan-Jobs laden nur hoch und ziehen oder überschreiben nie lokale Daten
+- Desktop- und Web-Version müssen für Backups exakt übereinstimmen; Wiederherstellung erfolgt ausdrücklich und erstellt zuerst einen lokalen Sicherheitssnapshot
 
 ### 🔐 Datenschutz und Sicherheit
 
@@ -220,7 +221,7 @@ Nächste Entwicklungs-Vorschau testen? _Einstellungen → Über_ öffnen und den
 
 3. **In KI-Werkzeuge installieren.** Auf der Skill-Detailseite die Zielplattform wählen. PromptHub installiert die SKILL.md ins erwartete Verzeichnis der Plattform — als Symlink (Live-Bearbeitung) oder als unabhängige Kopie.
 
-4. **Sync (optional).** _Einstellungen → Daten_ konfiguriert WebDAV oder eine selbst gehostete PromptHub-Web-Instanz als Sync-Ziel.
+4. **Sync oder Backup (optional).** _Einstellungen → Daten_ konfiguriert WebDAV / S3 für Live-Sync oder eine selbst gehostete PromptHub-Web-Instanz für unabhängige Wiederherstellungs-Snapshots.
 
 <div id="self-hosted-web"></div>
 
@@ -229,7 +230,7 @@ Nächste Entwicklungs-Vorschau testen? _Einstellungen → Über_ öffnen und den
 PromptHub Web ist ein leichtgewichtiger Browser-Begleiter, den du per Docker auf einem NAS, VPS oder LAN-Rechner betreiben kannst. Es ist **kein** Managed-Cloud-Service. Einsatzfälle:
 
 - Auf PromptHub-Daten via Browser zugreifen
-- Ein Sync-Ziel neben WebDAV für die Desktop-Variante haben
+- Unveränderliche Desktop-Wiederherstellungs-Snapshots speichern, ohne den aktiven Web-Workspace zu verändern
 - Daten innerhalb des eigenen Netzwerks halten
 
 ```bash
@@ -246,7 +247,7 @@ In `.env` mindestens setzen:
 
 Standard: `http://localhost:3871`. Der erste Aufruf landet auf `/setup`; der erste Nutzer wird Administrator.
 
-Desktop verbinden: _Einstellungen → Daten → Self-Hosted PromptHub_. Verbindung testen, lokalen Workspace hochschieben, vom Web ziehen, beim Start automatisch ziehen oder im Hintergrund pushen.
+Desktop verbinden: _Einstellungen → Daten → Self-Hosted PromptHub_. Version und Backup-Fähigkeit prüfen, Remote-Snapshot erstellen, den neuesten Snapshot ausdrücklich wiederherstellen oder reine Upload-Backups beim Start / nach Zeitplan aktivieren. Automatische Jobs ziehen, mergen oder ersetzen keine lokalen Daten.
 
 Detaillierte Deployment- / Upgrade- / Backup- / GHCR-Image- / Dev-Hinweise in [`web-self-hosted.md`](./web-self-hosted.md).
 
@@ -284,10 +285,11 @@ rules     list / scan / read / save / rewrite
           add-project / remove-project
           export / import
 
-skill     list / get / install / delete / remove
+skill     list / get / import (Alias: install) / delete / remove
           versions / create-version / rollback / delete-version
           export / scan / scan-safety / sync-from-repo
-          platforms / platform-status / install-md / uninstall-md
+          platforms / platform-status / distribute / undistribute
+          (Aliase: install-md / uninstall-md)
           repo-files / repo-read / repo-write / repo-delete / repo-mkdir / repo-rename
 
 ai        providers / provider-add / provider-delete
@@ -295,11 +297,18 @@ ai        providers / provider-add / provider-delete
           routes / route-set / route-clear
 
 workspace export / import
+
+doctor    database-lock [--recover]
 ```
+
+Skill-Import, Versions-Snapshots und Verteilung verwenden gemeinsam die eingebauten Ausschlussregeln sowie eine `.prompthubignore` im Paketstamm. Verdächtige private Schlüssel, Zugriffstoken und Passwörter werden vor dem Schreiben blockiert. Erfolgreiche Ausgaben sind standardmäßig begrenzte Zusammenfassungen; vollständige Skill-Inhalte und Datei-Snapshots werden nur mit `--full` ausgegeben.
 
 Häufige globale Flags:
 
 - `--output json|table` — Ausgabeformat
+- `--summary` — begrenzte Zusammenfassung ausgeben (Standard)
+- `--full` — vollständigen Ressourceninhalt ausgeben
+- `--quiet` — stdout bei Erfolg unterdrücken, stderr-Fehler beibehalten
 - `--data-dir <path>` — überschreibt das `userData`-Verzeichnis
 - `--app-data-dir <path>` — überschreibt die App-Datenwurzel
 - `--version|-v` — gibt die CLI-Version aus
@@ -367,7 +376,7 @@ Vollständiges Changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 
 **Funktionen**
 
-- 🧭 **Rules-Workspace.** Eine eigenständige Rules-Seite im Desktop, die globale Regeln und manuell hinzugefügte Projektregeln verwaltet — Suche, Snapshot-Vorschau, Restore-to-Draft, ZIP-Export / WebDAV / selbst gehostete Sync / Web-Import-Export.
+- 🧭 **Rules-Workspace.** Eine eigenständige Rules-Seite im Desktop, die globale Regeln und manuell hinzugefügte Projektregeln verwaltet — Suche, Snapshot-Vorschau, Restore-to-Draft, ZIP-Export / WebDAV / selbst gehostete Sicherung-Wiederherstellung / Web-Import-Export.
 - 📁 **Projekt-Skill-Workspace.** Skill-Workspaces je Projekt, scannt automatisch die üblichen Orte und erlaubt Vorschau / Import / Verteilung im Projektkontext.
 - 🤖 **Quick Add erzeugt Prompts per KI.** Zusätzlich zur Analyse vorhandener Prompts kann Quick Add nun aus Zielen und Constraints einen strukturierten Prompt-Entwurf erzeugen.
 - 🏷️ **Globale Prompt-Tag-Verwaltung.** Zentrales Suchen / Umbenennen / Zusammenführen / Löschen im Tag-Bereich der Sidebar, synchron mit Datenbank und Workspace-Dateien.
@@ -378,7 +387,7 @@ Vollständiges Changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 - ✍️ Karten-Detail unterstützt Doppelklick-Bearbeitung für User- und System-Prompts
 - 🪟 Flackern des Update-Dialogs, instabiler Download-Button und `minimizeOnLaunch`, das Login-Autostart nicht respektierte
 - ↔️ Drei-Spalten-Resize, Doppelklick-Reset, Titel-Umbruch und Store-Suche der Skills wieder geradegerückt
-- 🔁 Konsistenz von Rules / Skill-Extras / verwalteten Kopien zwischen ZIP-Export, WebDAV, selbst gehosteter Sync und Web-Import/-Export
+- 🔁 Konsistenz von Rules / Skill-Extras / verwalteten Kopien zwischen ZIP-Export, WebDAV, selbst gehosteter Sicherung-Wiederherstellung und Web-Import/-Export
 - 🖼️ Self-hosted Web-Login nutzt jetzt einmalige Bild-CAPTCHAs
 
 **Verbesserungen**

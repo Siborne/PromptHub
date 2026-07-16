@@ -39,7 +39,7 @@
 
 <br/>
 
-PromptHub はあなたのプロンプト、SKILL.md、プロジェクトレベルの AI コーディング資産を 1 つのローカルワークスペースにまとめます。同じ Skill を Claude Code、Cursor、Codex、Windsurf、Gemini CLI など十数のツールへワンクリックでインストールでき、プロンプトのバージョン履歴とマルチモデルテスト、WebDAV やセルフホスト Web による別端末への同期を備えています。
+PromptHub はあなたのプロンプト、SKILL.md、プロジェクトレベルの AI コーディング資産を 1 つのローカルワークスペースにまとめます。同じ Skill を Claude Code、Cursor、Codex、Windsurf、Gemini CLI など十数のツールへワンクリックでインストールでき、プロンプトのバージョン履歴とマルチモデルテスト、WebDAV による別端末への同期、セルフホスト Web への完全スナップショット保存を備えています。
 
 データは既定であなたのマシンに置かれます。
 
@@ -172,7 +172,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 
 - `.cursor/rules`、`.claude/CLAUDE.md`、AGENTS.md などのルールファイルを一元管理
 - 手動で追加したプロジェクトルールはディレクトリ単位でグループ化
-- ZIP エクスポート / WebDAV / セルフホスト同期 / Web インポート・エクスポートと連携
+- ZIP エクスポート / WebDAV / セルフホストのバックアップ・復元 / Web インポート・エクスポートと連携
 
 ### 🤖 プロジェクトと Agent 資産ワークスペース
 
@@ -200,8 +200,9 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 - ローカルファースト：すべてのデータは既定であなたのマシン上に保存
 - `.phub.gz` 圧縮形式でフルバックアップ / リストア
 - WebDAV 同期（Nextcloud などに対応）
-- セルフホストの PromptHub Web を追加の同期 / バックアップ先として利用可能
-- 起動時の自動 Pull とバックグラウンド定期同期、アクティブな同期ソースを 1 つだけにして競合書き込みを防止
+- WebDAV / S3 のライブ同期は選択した 1 つのソースだけを使用し、複数ライターの競合を防止
+- セルフホスト PromptHub Web は変更不可のスナップショットを独立保存。起動時と定期処理はアップロードのみで、ローカルデータを自動取得・上書きしない
+- バックアップには Desktop と Web の完全なバージョン一致が必要。復元は明示操作で、先にローカル安全スナップショットを作成
 
 ### 🔐 プライバシーとセキュリティ
 
@@ -220,7 +221,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 
 3. **AI ツールにインストール。** Skill 詳細画面でターゲットプラットフォームを選択。PromptHub は SKILL.md をプラットフォーム所定のディレクトリに、symlink（ライブ編集）または独立コピーでインストールします。
 
-4. **同期（任意）。**「設定 → データ」で WebDAV を設定するか、PromptHub Web をセルフホストして同期先にできます。
+4. **同期またはバックアップ（任意）。**「設定 → データ」で WebDAV / S3 のライブ同期、またはセルフホスト PromptHub Web の独立復元スナップショットを設定できます。
 
 <div id="self-hosted-web"></div>
 
@@ -229,7 +230,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 PromptHub Web は NAS、VPS、LAN マシン上で Docker により実行できる軽量なブラウザ向けコンパニオンです。マネージドクラウドサービスでは**ありません**。次のような用途に向きます:
 
 - ブラウザから PromptHub のデータにアクセス
-- WebDAV 以外の同期先をデスクトップ用に持つ
+- Web のライブワークスペースを変更せず、デスクトップの復元スナップショットを保存
 - データを自分のネットワーク内に留める
 
 ```bash
@@ -246,7 +247,7 @@ docker compose up -d --build
 
 既定: `http://localhost:3871`。最初のアクセスは `/setup` に遷移、最初の登録ユーザーが管理者になります。
 
-デスクトップから接続:「設定 → データ → Self-Hosted PromptHub」。接続テスト、ローカルワークスペースのアップ、Web からのプル、起動時自動プルやバックグラウンドプッシュを有効化できます。
+デスクトップから接続:「設定 → データ → Self-Hosted PromptHub」。バージョンとバックアップ機能を確認し、リモートスナップショットの作成、最新スナップショットの明示復元、アップロード専用の起動時 / 定期バックアップを設定できます。自動処理はローカルデータを取得、マージ、置換しません。
 
 詳細なデプロイ / アップグレード / バックアップ / GHCR イメージ / 開発メモは [`web-self-hosted.md`](./web-self-hosted.md) に記載しています。
 
@@ -284,10 +285,11 @@ rules     list / scan / read / save / rewrite
           add-project / remove-project
           export / import
 
-skill     list / get / install / delete / remove
+skill     list / get / import（互換エイリアス: install）/ delete / remove
           versions / create-version / rollback / delete-version
           export / scan / scan-safety / sync-from-repo
-          platforms / platform-status / install-md / uninstall-md
+          platforms / platform-status / distribute / undistribute
+          （互換エイリアス: install-md / uninstall-md）
           repo-files / repo-read / repo-write / repo-delete / repo-mkdir / repo-rename
 
 ai        providers / provider-add / provider-delete
@@ -295,11 +297,18 @@ ai        providers / provider-add / provider-delete
           routes / route-set / route-clear
 
 workspace export / import
+
+doctor    database-lock [--recover]
 ```
+
+Skill のインポート、バージョンスナップショット、配布では、組み込みの除外規則とルートの `.prompthubignore` を共通で使用し、書き込み前に秘密鍵、アクセストークン、パスワードの疑いがある内容をブロックします。成功時の出力はデフォルトで上限付きの要約です。Skill 本文や完全なファイルスナップショットが必要な場合だけ `--full` を指定してください。
 
 よく使うグローバルフラグ:
 
 - `--output json|table` — 出力形式
+- `--summary` — 上限付きの要約を返す（デフォルト）
+- `--full` — 完全なリソース内容を返す
+- `--quiet` — 成功時の stdout を抑制し、エラーは stderr に残す
 - `--data-dir <path>` — PromptHub の `userData` ディレクトリを上書き
 - `--app-data-dir <path>` — アプリケーションデータルートを上書き
 - `--version|-v` — CLI バージョンを表示
@@ -367,7 +376,7 @@ workspace export / import
 
 **新機能**
 
-- 🧭 **Rules ワークスペース。** デスクトップ専用の Rules ページ。グローバルルールと手動追加のプロジェクトルールを一元管理。検索、スナップショットプレビュー、ドラフト復元、ZIP エクスポート / WebDAV / セルフホスト同期 / Web インポート・エクスポートを統合
+- 🧭 **Rules ワークスペース。** デスクトップ専用の Rules ページ。グローバルルールと手動追加のプロジェクトルールを一元管理。検索、スナップショットプレビュー、ドラフト復元、ZIP エクスポート / WebDAV / セルフホストのバックアップ・復元 / Web インポート・エクスポートを統合
 - 📁 **プロジェクト Skill ワークスペース。** プロジェクトごとの Skill ワークスペースを作成、一般的な配置を自動スキャンしてプロジェクト文脈でプレビュー / インポート / 配布
 - 🤖 **Quick Add で AI から直接プロンプトを生成。** 既存プロンプトの分析だけでなく、目的と制約から構造化プロンプトドラフトを生成
 - 🏷️ **グローバルなプロンプトタグ管理。** サイドバーのタグ領域で集中検索 / リネーム / 結合 / 削除、データベースとワークスペースファイルに同期
@@ -378,7 +387,7 @@ workspace export / import
 - ✍️ カード詳細でユーザー / システムプロンプトをダブルクリック編集に対応
 - 🪟 アップデートダイアログのちらつき、ダウンロードボタンの不安定なクリック、`minimizeOnLaunch` がログイン時起動を尊重しない問題を修正
 - ↔️ Skills 三列リサイズ、ダブルクリックリセット、タイトルの折り返し、ストア検索のリグレッション群
-- 🔁 ZIP エクスポート / WebDAV / セルフホスト同期 / Web インポート・エクスポート間で Rules / Skill 付随ファイル / 管理コピーを整合
+- 🔁 ZIP エクスポート / WebDAV / セルフホストのバックアップ・復元 / Web インポート・エクスポート間で Rules / Skill 付随ファイル / 管理コピーを整合
 - 🖼️ セルフホスト Web のログインを使い捨て画像 CAPTCHA に切替
 
 **改善**

@@ -43,7 +43,7 @@
 
 <br/>
 
-PromptHub 把你的 Prompt、SKILL.md 和项目级 AI 编程资产放进一个本地工作区。它能把同一份 Skill 一键安装到 Claude Code、Cursor、Codex、Windsurf、Gemini CLI、Cline 等十几个工具，给 Prompt 做版本管理与多模型测试，并通过 WebDAV 或自部署 Web 同步到其他设备。
+PromptHub 把你的 Prompt、SKILL.md 和项目级 AI 编程资产放进一个本地工作区。它能把同一份 Skill 一键安装到 Claude Code、Cursor、Codex、Windsurf、Gemini CLI、Cline 等十几个工具，给 Prompt 做版本管理与多模型测试，并通过 WebDAV 同步到其他设备，或把完整快照备份到自部署 Web。
 
 数据默认存在你自己的电脑上。
 
@@ -176,7 +176,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 
 - 集中管理 `.cursor/rules`、`.claude/CLAUDE.md`、AGENTS.md 等规则文件
 - 支持手动添加项目级 Rules，按目录分组浏览
-- 与 ZIP 导出、WebDAV、自托管同步、Web 导入导出全链路打通
+- 与 ZIP 导出、WebDAV、自托管备份恢复、Web 导入导出全链路打通
 
 ### 🤖 项目与 Agent 资产工作区
 
@@ -204,8 +204,9 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 - 本地优先：所有数据默认存在你自己的电脑上
 - 全量备份 / 恢复使用 `.phub.gz` 压缩格式
 - WebDAV 同步（坚果云、Nextcloud 等）
-- 自部署 PromptHub Web 可作为额外的同步源 / 备份源
-- 启动时自动拉取 + 后台定时同步；只允许一个活动同步源驱动自动同步，避免多源冲突写入
+- WebDAV / S3 在线同步只允许一个活动同步源，避免多源冲突写入
+- 自部署 PromptHub Web 独立保存不可变快照；启动和定时任务只上传，绝不会自动拉取或覆盖本地数据
+- 桌面版与 Web 版必须完全同版本才会备份；恢复由用户显式触发，并先创建本地安全快照
 
 ### 🔐 隐私与安全
 
@@ -227,8 +228,8 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 3. **一键安装到 AI 工具**
    在 Skill 详情页选目标平台。PromptHub 会按平台规范把 SKILL.md 安装到对应目录。可以选 symlink（同步编辑）或独立复制。
 
-4. **配置同步（可选）**
-   「设置 → 数据」里配 WebDAV，或自部署一份 PromptHub Web 当同步目标。
+4. **配置同步或备份（可选）**
+   「设置 → 数据」里配 WebDAV / S3 在线同步，或自部署一份 PromptHub Web 保存独立恢复快照。
 
 <div id="self-hosted-web"></div>
 
@@ -237,7 +238,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 PromptHub Web 是一个轻量的浏览器版工作区，你可以用 Docker 把它跑在 NAS、VPS 或局域网里。它**不是**官方云服务，主要用途是：
 
 - 在浏览器里访问自己的 PromptHub 数据
-- 给桌面版当作除 WebDAV 之外的另一种同步目标
+- 给桌面版保存不改变在线工作区的不可变备份快照
 - 不想让数据出本地局域网
 
 ```bash
@@ -254,11 +255,11 @@ docker compose up -d --build
 
 默认在 `http://localhost:3871`。第一次打开会跳到 `/setup`，你创建的第一个用户就是管理员。
 
-桌面版接入这一份 Web：「设置 → 数据 → Self-Hosted PromptHub」，填 URL、用户名、密码。可以测连接、上传当前工作区、从 Web 拉回本地、启动时自动拉取、后台定时推送。
+桌面版接入这一份 Web：「设置 → 数据 → Self-Hosted PromptHub」，填 URL、用户名、密码。可以测试版本与备份能力、创建远端快照、显式恢复最近快照，以及启用只上传的启动/定时自动备份。自动任务不会拉取、合并或覆盖本地数据。
 
 ### Cloudflare Workers 版（分支实验）
 
-如果你希望把在线自部署版跑在 Cloudflare 边缘网络上，可以使用本分支的 `apps/web-cloudflare`。它把 API 运行在 Workers，账号和同步快照元数据存到 D1，图片 / 视频媒体存到 R2，同时继续保持桌面版「Self-Hosted PromptHub」同步协议：桌面客户端仍然可以测试连接、上传本地工作区、从在线版拉回数据。
+如果你希望把在线自部署版跑在 Cloudflare 边缘网络上，可以使用本分支的 `apps/web-cloudflare`。它把 API 运行在 Workers，账号和旧同步快照元数据存到 D1，图片 / 视频媒体存到 R2。当前该分支仍实现旧 live-sync API；新版桌面端的备份专用 `/api/backups/desktop` 路由补齐前，不会把它当作安全自部署备份端点。
 
 <div align="center">
   <img src="./docs/imgs/cloudflare-login.png" width="70%" alt="PromptHub Cloudflare Workers 登录页"/>
@@ -306,11 +307,12 @@ rules     list / scan / read / save / rewrite
           add-project / remove-project
           export / import
 
-skill     list / get / install / delete / remove
+skill     list / get / import（兼容别名：install）/ delete / remove
           versions / create-version / rollback / delete-version
           export / scan / scan-safety / sync-from-repo
           update / check-update
-          platforms / platform-status / install-md / uninstall-md
+          platforms / platform-status / distribute / undistribute
+          （兼容别名：install-md / uninstall-md）
           project-install / install-project
           repo-files / repo-read / repo-write / repo-delete / repo-mkdir / repo-rename
 
@@ -331,11 +333,18 @@ workspace export / import
            skills + skillFiles、MCP、plugins、rules、媒体）
 
 sync      status / push / pull
+
+doctor    database-lock [--recover]
 ```
+
+Skill 导入、版本快照和分发统一应用内置忽略规则与根目录 `.prompthubignore`，并在写入前阻止疑似私钥、访问令牌和密码。默认成功输出是有界摘要；只有明确使用 `--full` 才返回 Skill 正文与完整文件快照。
 
 常用全局参数：
 
 - `--output json|table` — 输出格式
+- `--summary` — 返回有界摘要（默认）
+- `--full` — 返回完整资源内容
+- `--quiet` — 成功时不输出 stdout，错误仍输出 stderr
 - `--data-dir <path>` — 显式指定 PromptHub 的 `userData` 目录
 - `--app-data-dir <path>` — 显式指定应用数据根目录
 - `--version|-v` — 打印 CLI 版本
@@ -350,7 +359,7 @@ sync      status / push / pull
 
 - Plugin 管理正式收口：My Plugins / Plugin Store / Agent Plugin 对齐 Skill 风格，支持安装、详情、版本快照、来源更新确认、批量操作、Agent 分发和子 Skill / MCP 导入
 - MCP 管理与同步能力扩展：MCP 工作台、官方模板商店、Agent 目标分发、健康检查、.env 按需导入、CLI MCP 命令和一键重同步设计完成阶段性收口
-- 整套 Agent 资产同步：自托管同步与备份恢复纳入 My Skills、My MCP、My Plugins 和 Rules 等数据
+- 整套 Agent 资产备份：自托管备份恢复纳入 My Skills、My MCP、My Plugins 和 Rules 等数据
 - Skill 来源更新改为 SHA-256 包指纹和三方对账，并修复 registry 指纹、content-url 基线和 URL 脱敏问题
 - Plugin 来源更新和批量商店更新现在先展示差异并要求确认，不再点击后直接覆盖本地 Plugin
 - Prompt 支持组合、排序和持久化自定义输出格式序列，并随备份恢复
@@ -421,7 +430,7 @@ sync      status / push / pull
 
 **新功能**
 
-- 🧭 **Rules 集中管理工作台**：桌面端独立的 Rules 页面，统一管理全局规则和手动添加的项目规则，支持搜索、历史快照预览、恢复到草稿，并接入 ZIP 导出、WebDAV、自托管同步和 Web 导入导出
+- 🧭 **Rules 集中管理工作台**：桌面端独立的 Rules 页面，统一管理全局规则和手动添加的项目规则，支持搜索、历史快照预览、恢复到草稿，并接入 ZIP 导出、WebDAV、自托管备份恢复和 Web 导入导出
 - 📁 **项目级 Skill 工作区**：可以为本地项目建立独立 Skill 工作区，自动扫描常见目录，在项目上下文中预览、导入和分发 Skill
 - 🤖 **Quick Add 支持 AI 直接生成 Prompt**：除了分析已有 Prompt，Quick Add 现在也能根据目标和约束直接生成结构化 Prompt 草稿
 - 🏷️ **全局 Prompt 标签管理**：侧栏标签区域新增统一入口，可集中搜索、重命名、合并和删除标签，同步更新数据库与工作区文件
@@ -432,7 +441,7 @@ sync      status / push / pull
 - ✍️ 卡片详情支持双击编辑用户提示词和系统提示词
 - 🪟 修复检查更新弹窗闪烁、下载按钮不可稳定点击，以及开机自启时不能按 `minimizeOnLaunch` 最小化的问题
 - ↔️ Skills 三栏列宽调节、双击重置、标题换行、商店搜索的一组易用性回归
-- 🔁 Rules、Skill 附加文件和托管副本在 ZIP 导出、WebDAV、自托管同步和 Web 导入导出链路中的一致性
+- 🔁 Rules、Skill 附加文件和托管副本在 ZIP 导出、WebDAV、自托管备份恢复和 Web 导入导出链路中的一致性
 - 🖼️ 自托管 Web 登录改用一次性图形验证码
 
 **优化**
