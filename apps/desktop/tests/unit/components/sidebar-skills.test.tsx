@@ -559,6 +559,30 @@ describe("Sidebar", () => {
     expect(onNavigate).toHaveBeenCalledWith("home");
   });
 
+  it("opens the image workbench as a Prompts secondary destination", async () => {
+    useUIStore.setState({
+      appModule: "prompt",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+    });
+    usePromptStore.setState({ viewMode: "card" });
+    useFolderStore.setState({ selectedFolderId: "favorites" });
+    const onNavigate = vi.fn();
+
+    await act(async () => {
+      await renderWithI18n(
+        <Sidebar currentPage="settings" onNavigate={onNavigate} />,
+        { language: "en" },
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Image Workbench" }));
+
+    expect(usePromptStore.getState().viewMode).toBe("generation");
+    expect(useFolderStore.getState().selectedFolderId).toBeNull();
+    expect(onNavigate).toHaveBeenCalledWith("home");
+  });
+
   it("returns to card mode when opening ordinary prompt collections", async () => {
     useUIStore.setState({
       appModule: "prompt",

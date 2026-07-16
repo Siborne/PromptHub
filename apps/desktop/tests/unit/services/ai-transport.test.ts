@@ -100,8 +100,18 @@ describe("ai transport", () => {
     expect(result).toEqual({
       success: true,
       models: [
-        { id: "gpt-4.1-mini", name: "gpt-4.1-mini", owned_by: undefined, created: undefined },
-        { id: "gpt-4o", name: "gpt-4o", owned_by: undefined, created: undefined },
+        {
+          id: "gpt-4.1-mini",
+          name: "gpt-4.1-mini",
+          owned_by: undefined,
+          created: undefined,
+        },
+        {
+          id: "gpt-4o",
+          name: "gpt-4o",
+          owned_by: undefined,
+          created: undefined,
+        },
       ],
     });
   });
@@ -298,7 +308,7 @@ describe("ai transport", () => {
       ok: false,
       status: 504,
       statusText: "Gateway Time-out",
-      body: '<!DOCTYPE html><html><head><title>legeling.xyz | 504: Gateway time-out</title></head><body><h1>Gateway time-out</h1></body></html>',
+      body: "<!DOCTYPE html><html><head><title>legeling.xyz | 504: Gateway time-out</title></head><body><h1>Gateway time-out</h1></body></html>",
       headers: { "content-type": "text/html; charset=UTF-8" },
     });
 
@@ -389,7 +399,13 @@ describe("ai transport", () => {
     },
   ])(
     "uses the main-process request transport for $name image generation",
-    async ({ config, responseBody, expectedHeaders, expectedImageUrl, expectedUrl }) => {
+    async ({
+      config,
+      responseBody,
+      expectedHeaders,
+      expectedImageUrl,
+      expectedUrl,
+    }) => {
       window.api.ai.request.mockResolvedValue({
         ok: true,
         status: 200,
@@ -569,7 +585,10 @@ describe("ai transport", () => {
         choices: [
           {
             index: 0,
-            message: { role: "assistant", content: "The image contains a chart." },
+            message: {
+              role: "assistant",
+              content: "The image contains a chart.",
+            },
             finish_reason: "stop",
           },
         ],
@@ -667,7 +686,12 @@ describe("ai transport", () => {
       status: 200,
       statusText: "OK",
       body: JSON.stringify({
-        models: [{ name: "models/gemini-3-flash-preview", displayName: "Gemini 3 Flash Preview" }],
+        models: [
+          {
+            name: "models/gemini-3-flash-preview",
+            displayName: "Gemini 3 Flash Preview",
+          },
+        ],
       }),
       headers: { "content-type": "application/json" },
     });
