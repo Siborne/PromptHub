@@ -11,7 +11,9 @@ function isLegacyDefault(modules: readonly DesktopHomeModule[]): boolean {
     modules.includes("prompt") &&
     modules.includes("skill") &&
     modules.includes("rules") &&
-    (!modules.includes("mcp") || !modules.includes("plugin"))
+    (!modules.includes("agents") ||
+      !modules.includes("mcp") ||
+      !modules.includes("plugin"))
   );
 }
 
@@ -19,9 +21,13 @@ function addLegacyModules(
   modules: readonly DesktopHomeModule[],
 ): DesktopHomeModule[] {
   const next = [...modules];
-  if (!next.includes("mcp")) {
+  if (!next.includes("agents")) {
     const skillIndex = next.indexOf("skill");
-    next.splice(skillIndex === -1 ? next.length : skillIndex + 1, 0, "mcp");
+    next.splice(skillIndex === -1 ? next.length : skillIndex + 1, 0, "agents");
+  }
+  if (!next.includes("mcp")) {
+    const agentsIndex = next.indexOf("agents");
+    next.splice(agentsIndex === -1 ? next.length : agentsIndex + 1, 0, "mcp");
   }
   if (!next.includes("plugin")) {
     const mcpIndex = next.indexOf("mcp");

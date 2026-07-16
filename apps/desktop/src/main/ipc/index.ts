@@ -7,6 +7,7 @@ import { registerImageIPC } from "./image.ipc";
 import { registerRulesIPC } from "./rules.ipc";
 import { registerSkillIPC } from "./skill.ipc";
 import { registerAIIPC } from "./ai.ipc";
+import { registerAgentIPC } from "./agent.ipc";
 import { PromptDB } from "../database/prompt";
 import { FolderDB } from "../database/folder";
 import { SkillDB } from "../database/skill";
@@ -121,6 +122,9 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.SKILL_INSTALL_MD_SYMLINK,
   IPC_CHANNELS.SKILL_FETCH_REMOTE_CONTENT,
   IPC_CHANNELS.SKILL_FETCH_REMOTE_CONTENT_BYTES,
+  IPC_CHANNELS.AGENT_CONFIG_FILES_LIST,
+  IPC_CHANNELS.AGENT_CONFIG_FILE_READ,
+  IPC_CHANNELS.AGENT_CONFIG_FILE_WRITE,
   IPC_CHANNELS.SKILL_LIST_LOCAL_FILES,
   IPC_CHANNELS.SKILL_LIST_LOCAL_FILES_BY_PATH,
   IPC_CHANNELS.SKILL_READ_LOCAL_FILE,
@@ -241,5 +245,6 @@ export function registerAllIPC(
   registerIpcGroup("plugin", () => registerPluginIPC());
   registerIpcGroup("image", () => registerImageIPC());
   registerIpcGroup("ai", () => registerAIIPC());
+  registerIpcGroup("agent", () => registerAgentIPC());
   registerIpcGroup("generation", () => registerGenerationIPC(db));
 }

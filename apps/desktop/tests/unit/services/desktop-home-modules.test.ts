@@ -6,7 +6,7 @@ describe("resolveVisibleDesktopHomeModules", () => {
   it("keeps Desktop legacy module expansion intact", () => {
     expect(
       resolveVisibleDesktopHomeModules(["prompt", "skill", "rules"], false),
-    ).toEqual(["prompt", "skill", "mcp", "plugin", "rules"]);
+    ).toEqual(["prompt", "skill", "agents", "mcp", "plugin", "rules"]);
   });
 
   it("honors an explicit Desktop module selection", () => {
@@ -15,10 +15,10 @@ describe("resolveVisibleDesktopHomeModules", () => {
     ).toEqual(["prompt", "rules"]);
   });
 
-  it("excludes Desktop-owned MCP and Plugin modules in the Web runtime", () => {
+  it("excludes Desktop-owned Agent, MCP, and Plugin modules in the Web runtime", () => {
     expect(
       resolveVisibleDesktopHomeModules(
-        ["prompt", "skill", "mcp", "plugin", "rules"],
+        ["prompt", "skill", "agents", "mcp", "plugin", "rules"],
         true,
       ),
     ).toEqual(["prompt", "skill", "rules"]);

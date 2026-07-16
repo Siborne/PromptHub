@@ -23,6 +23,7 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 export const DESKTOP_HOME_MODULES = [
   "prompt",
   "skill",
+  "agents",
   "mcp",
   "plugin",
   "rules",

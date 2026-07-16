@@ -55,9 +55,8 @@ export function DesktopAppCommandBridge({
           onOpenUpdater();
           return;
         case "agent:manage":
-          console.warn(
-            "Agent management command received before the capability is enabled",
-          );
+          onNavigate("home");
+          setAppModule("agents");
           return;
         case "asset:create":
         case "asset:manage":

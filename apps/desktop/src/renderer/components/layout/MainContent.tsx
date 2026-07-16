@@ -18,6 +18,11 @@ const PluginManager = lazy(() =>
     default: module.PluginManager,
   })),
 );
+const AgentsWorkspace = lazy(() =>
+  import("../agent/AgentsWorkspace").then((module) => ({
+    default: module.AgentsWorkspace,
+  })),
+);
 
 const loadingFallback = (
   <div className="flex flex-1 items-center justify-center">
@@ -29,6 +34,14 @@ export { PromptCard } from "./PromptVirtualizedList";
 
 export function MainContent() {
   const appModule = useUIStore((state) => state.appModule);
+
+  if (appModule === "agents") {
+    return (
+      <Suspense fallback={loadingFallback}>
+        <AgentsWorkspace />
+      </Suspense>
+    );
+  }
 
   if (appModule === "rules") {
     return (

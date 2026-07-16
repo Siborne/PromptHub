@@ -175,6 +175,15 @@ export const IPC_CHANNELS = {
   SKILL_SCAN_REMOTE_GITHUB: "skill:scanRemoteGithub",
   SKILL_LIST_REMOTE_BRANCHES: "skill:listRemoteBranches",
 
+  // Agent native configuration files
+  AGENT_CONFIG_FILES_LIST: "agent:configFiles:list",
+  AGENT_CONFIG_FILE_READ: "agent:configFile:read",
+  AGENT_CONFIG_FILE_WRITE: "agent:configFile:write",
+  AGENT_MODEL_CONFIG_GET: "agent:modelConfig:get",
+  AGENT_MODEL_CONFIG_SET: "agent:modelConfig:set",
+  AGENT_SESSIONS_LIST: "agent:sessions:list",
+  AGENT_SESSION_READ: "agent:session:read",
+
   // Skill Local Repo Storage
   SKILL_LIST_LOCAL_FILES: "skill:listLocalFiles",
   SKILL_READ_LOCAL_FILE: "skill:readLocalFile",

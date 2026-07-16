@@ -4,7 +4,7 @@ import { isWebRuntime } from "../runtime";
 
 type ViewMode = "prompt" | "skill";
 
-export type AppModule = ViewMode | "rules" | "mcp" | "plugin";
+export type AppModule = ViewMode | "agents" | "rules" | "mcp" | "plugin";
 export type SettingsSectionId =
   | "web"
   | "devices"
@@ -46,6 +46,7 @@ function clamp(value: number, min: number, max: number): number {
 function normalizeAppModule(value: unknown): AppModule {
   const module =
     value === "skill" ||
+    value === "agents" ||
     value === "rules" ||
     value === "mcp" ||
     value === "plugin" ||
@@ -53,7 +54,8 @@ function normalizeAppModule(value: unknown): AppModule {
       ? value
       : "prompt";
 
-  return isWebRuntime() && (module === "mcp" || module === "plugin")
+  return isWebRuntime() &&
+    (module === "agents" || module === "mcp" || module === "plugin")
     ? "prompt"
     : module;
 }

@@ -171,6 +171,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     mcpRelativePath: "../.claude.json",
     pluginsRelativePath: "plugins/cache/prompthub",
     globalRuleFile: "CLAUDE.md",
+    configFiles: ["settings.json"],
   },
   {
     id: "copilot",
@@ -247,6 +248,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     mcpRelativePath: "settings.json",
     pluginsRelativePath: "config/plugins",
     globalRuleFile: "GEMINI.md",
+    configFiles: ["settings.json"],
   },
   {
     id: "antigravity",
@@ -330,7 +332,6 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     mcpRelativePath: "data/settings/cline_mcp_settings.json",
     configFiles: [
       "data/settings/global-settings.json",
-      "data/settings/providers.json",
       "data/settings/cline_mcp_settings.json",
     ],
   },
@@ -463,6 +464,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     },
     skillsRelativePath: "skills",
     globalRuleFile: "workspace/SOUL.md",
+    configFiles: ["openclaw.json"],
   },
   {
     id: "qclaw",

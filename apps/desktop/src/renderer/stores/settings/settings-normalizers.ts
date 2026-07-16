@@ -223,8 +223,12 @@ export function normalizeDesktopHomeModules(
   ) {
     return modules;
   }
-  if (!modules.includes("mcp")) {
+  if (!modules.includes("agents")) {
     const index = modules.indexOf("skill");
+    modules.splice(index === -1 ? modules.length : index + 1, 0, "agents");
+  }
+  if (!modules.includes("mcp")) {
+    const index = modules.indexOf("agents");
     modules.splice(index === -1 ? modules.length : index + 1, 0, "mcp");
   }
   if (!modules.includes("plugin")) {

@@ -5,6 +5,7 @@ import { SidebarPluginPanel } from "./SidebarPluginPanel";
 import { SidebarPromptPanel } from "./SidebarPromptPanel";
 import { SidebarSkillPanel } from "./SidebarSkillPanel";
 import type { SidebarController } from "./sidebar-view-types";
+import { AgentsSidebarPanel } from "../agent/AgentsSidebarPanel";
 
 const RulesSidebarPanel = lazy(() =>
   import("./RulesSidebarPanel").then((module) => ({
@@ -47,6 +48,8 @@ export function SidebarPanel({
       <SidebarPromptPanel controller={controller} />
     ) : controller.activeModule === "skill" ? (
       <SidebarSkillPanel controller={controller} />
+    ) : controller.activeModule === "agents" ? (
+      <AgentsSidebarPanel />
     ) : controller.activeModule === "mcp" ? (
       <SidebarMcpPanel controller={controller} />
     ) : controller.activeModule === "plugin" ? (

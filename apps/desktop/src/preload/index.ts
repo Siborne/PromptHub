@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import { aiApi } from "./api/ai";
+import { agentApi } from "./api/agent";
 import { cliApi } from "./api/cli";
 import { cloudApi } from "./api/cloud";
 import { folderApi } from "./api/folder";
@@ -93,6 +94,7 @@ const api = {
   maximize: () => ipcRenderer.send("window:maximize"),
   close: () => ipcRenderer.send("window:close"),
   prompt: promptApi,
+  agent: agentApi,
 
   // Security
   security: {

@@ -167,6 +167,88 @@ describe("SkillFileEditor", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("limits an Agent config editor to allowlisted files and supports missing declarations", async () => {
+    const listLocalFilesByPath = vi.fn().mockResolvedValue([
+      { path: "config.toml", isDirectory: false, size: 64 },
+      { path: "auth.json", isDirectory: false, size: 128 },
+      { path: "sessions/history.jsonl", isDirectory: false, size: 256 },
+    ]);
+    const writeLocalFileByPath = vi.fn().mockResolvedValue(undefined);
+    installWindowMocks({
+      api: {
+        skill: {
+          listLocalFilesByPath,
+          readLocalFileByPath: vi.fn().mockImplementation((_, path) =>
+            Promise.resolve(
+              path === "config.toml"
+                ? {
+                    path,
+                    isDirectory: false,
+                    content: 'model = "gpt-5"',
+                  }
+                : null,
+            ),
+          ),
+          writeLocalFileByPath,
+        },
+      },
+    });
+
+    const { container } = await renderWithI18n(
+      <SkillFileEditor
+        skillId="agent:codex"
+        localPath="~/.codex"
+        skillName="Codex CLI"
+        isOpen
+        mode="inline"
+        visibleFilePaths={["config.toml", "profile.config.toml"]}
+        initialFilePath="config.toml"
+        includeMissingVisibleFiles
+        allowStructuralMutations={false}
+      />,
+      { language: "en" },
+    );
+
+    const tree = container.querySelector(".skill-file-editor__tree-list");
+    expect(tree).not.toBeNull();
+    await waitFor(() => {
+      expect(
+        within(tree as HTMLElement).getByText("config.toml"),
+      ).toBeVisible();
+    });
+    expect(
+      within(tree as HTMLElement).getByText("profile.config.toml"),
+    ).toBeVisible();
+    expect(
+      within(tree as HTMLElement).queryByText("auth.json"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(tree as HTMLElement).queryByText("sessions"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "New File" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete File" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Code editor" }), {
+      target: { value: 'model = "gpt-5.1"' },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(writeLocalFileByPath).toHaveBeenCalledWith(
+        "~/.codex",
+        "config.toml",
+        'model = "gpt-5.1"',
+      );
+    });
+    expect(scheduleAllSaveSync).not.toHaveBeenCalledWith("skill:file-save");
+  });
+
   it("allows package-specific empty file labels for plugin reuse", async () => {
     installWindowMocks({
       api: {

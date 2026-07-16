@@ -243,6 +243,13 @@ export function AppearanceSettings() {
         "My Skills, projects and store workflows",
       ),
     },
+    agents: {
+      label: t("agents.title", "Agents"),
+      description: t(
+        "settings.desktopModuleAgentsDesc",
+        "Agent status, paths, assets and management capabilities",
+      ),
+    },
     mcp: {
       label: t("mcp.title", "MCP"),
       description: t(

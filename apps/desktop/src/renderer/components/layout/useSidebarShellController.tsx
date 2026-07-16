@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   BookOpenIcon,
+  BotIcon,
   CommandIcon,
   CuboidIcon,
   PackageIcon,
@@ -65,6 +66,7 @@ function useVisibleSidebarModules(
     hasVisibleModule: visibleDesktopModules.length > 0,
     isPromptModuleVisible: visibleDesktopModules.includes("prompt"),
     isSkillModuleVisible: visibleDesktopModules.includes("skill"),
+    isAgentsModuleVisible: visibleDesktopModules.includes("agents"),
     isMcpModuleVisible: visibleDesktopModules.includes("mcp"),
     isPluginModuleVisible: visibleDesktopModules.includes("plugin"),
     isRulesModuleVisible: visibleDesktopModules.includes("rules"),
@@ -83,11 +85,13 @@ function useModuleVisibilityFallback(
         ? modules.isPromptModuleVisible
         : active === "skill"
           ? modules.isSkillModuleVisible
-          : active === "mcp"
-            ? modules.isMcpModuleVisible
-            : active === "plugin"
-              ? modules.isPluginModuleVisible
-              : modules.isRulesModuleVisible;
+          : active === "agents"
+            ? modules.isAgentsModuleVisible
+            : active === "mcp"
+              ? modules.isMcpModuleVisible
+              : active === "plugin"
+                ? modules.isPluginModuleVisible
+                : modules.isRulesModuleVisible;
     if (!isVisible && modules.visibleDesktopModules[0])
       ui.setAppModule(modules.visibleDesktopModules[0]);
   }, [modules, ui]);
@@ -145,11 +149,13 @@ function getRailItemLabel(
     ? t("common.prompts")
     : module === "skill"
       ? t("common.skills")
-      : module === "mcp"
-        ? t("mcp.title", "MCP")
-        : module === "plugin"
-          ? t("plugin.title", "Plugins")
-          : t("rules.title", "Rules");
+      : module === "agents"
+        ? t("agents.title", "Agents")
+        : module === "mcp"
+          ? t("mcp.title", "MCP")
+          : module === "plugin"
+            ? t("plugin.title", "Plugins")
+            : t("rules.title", "Rules");
 }
 
 function getRailItemIcon(module: DesktopHomeModule) {
@@ -157,6 +163,8 @@ function getRailItemIcon(module: DesktopHomeModule) {
     <CommandIcon className="h-5 w-5" />
   ) : module === "skill" ? (
     <CuboidIcon className="h-5 w-5" />
+  ) : module === "agents" ? (
+    <BotIcon className="h-5 w-5" />
   ) : module === "mcp" ? (
     <ServerIcon className="h-5 w-5" />
   ) : module === "plugin" ? (

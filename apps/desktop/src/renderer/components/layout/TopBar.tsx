@@ -164,7 +164,8 @@ export function TopBar({
   const isPluginView = appModule === "plugin";
   const isSkillView = appModule === "skill";
   const isPromptView = appModule === "prompt";
-  const showTopBarSearch = !isSkillStoreCatalogView;
+  const isAgentsView = appModule === "agents";
+  const showTopBarSearch = !isSkillStoreCatalogView && !isAgentsView;
   const showCreateButton =
     isPromptView || isSkillView || isMcpView || isPluginView;
   const selectedPromptForCreate = useMemo(() => {

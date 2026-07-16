@@ -140,14 +140,14 @@ describe("DesktopAppCommandBridge", () => {
     expect(onOpenUpdater).toHaveBeenCalledOnce();
   });
 
-  it("does not expose an unimplemented Agent surface and unsubscribes cleanly", () => {
-    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const view = render(<Harness />);
+  it("opens the Agent workspace and unsubscribes cleanly", async () => {
+    const view = render(<Harness initialPage="settings" />);
 
     act(() => deliverCommand({ type: "agent:manage" }));
-    expect(consoleWarn).toHaveBeenCalledWith(
-      "Agent management command received before the capability is enabled",
-    );
+    await waitFor(() => {
+      expect(view.getByTestId("page")).toHaveTextContent("home");
+      expect(useUIStore.getState().appModule).toBe("agents");
+    });
 
     view.unmount();
     expect(unsubscribe).toHaveBeenCalledOnce();

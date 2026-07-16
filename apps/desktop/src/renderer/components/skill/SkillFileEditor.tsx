@@ -24,6 +24,10 @@ import {
 } from "lucide-react";
 import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { useToast } from "../ui/Toast";
+import type {
+  SkillLocalFileEntry,
+  SkillLocalFileTreeEntry,
+} from "@prompthub/shared/types";
 import { scheduleAllSaveSync } from "../../services/webdav-save-sync";
 import {
   SkillCodeEditor,
@@ -65,9 +69,18 @@ interface SkillFileEditorSurfaceLabels {
   modalTitle?: string;
 }
 
+export interface SkillFileEditorSource {
+  key: string;
+  listFiles: () => Promise<SkillLocalFileTreeEntry[]>;
+  readFile: (relativePath: string) => Promise<SkillLocalFileEntry | null>;
+  writeFile?: (relativePath: string, content: string) => Promise<void>;
+  openInFileManager?: () => void | Promise<void>;
+}
+
 interface SkillFileEditorProps {
   skillId: string;
   localPath?: string;
+  fileSource?: SkillFileEditorSource;
   /** Human-readable skill name shown in the modal header. Falls back to a
    *  truncated skillId when omitted. */
   skillName?: string;
@@ -79,6 +92,16 @@ interface SkillFileEditorProps {
   mode?: "modal" | "inline";
   onUnsavedChange?: (hasUnsaved: boolean) => void;
   readOnly?: boolean;
+  /** Limits the visible tree to exact relative file paths. Parent folders are
+   * synthesized by the tree builder, so unrelated files never reach the UI. */
+  visibleFilePaths?: string[];
+  /** Selects a preferred file after the source is loaded. */
+  initialFilePath?: string;
+  /** Shows declared files even before they exist so an explicit save can
+   * create the native configuration file. */
+  includeMissingVisibleFiles?: boolean;
+  /** Content-only mode keeps Edit/Save while hiding create, rename and delete. */
+  allowStructuralMutations?: boolean;
   surfaceLabels?: SkillFileEditorSurfaceLabels;
 }
 
@@ -101,6 +124,7 @@ function getFileIcon(name: string, isDirectory: boolean, isOpen: boolean) {
 export function SkillFileEditor({
   skillId,
   localPath,
+  fileSource,
   skillName,
   isOpen,
   onClose,
@@ -108,6 +132,10 @@ export function SkillFileEditor({
   mode = "modal",
   onUnsavedChange,
   readOnly = false,
+  visibleFilePaths,
+  initialFilePath,
+  includeMissingVisibleFiles = false,
+  allowStructuralMutations = true,
   surfaceLabels,
 }: SkillFileEditorProps) {
   const { t } = useTranslation();
@@ -149,30 +177,58 @@ export function SkillFileEditor({
   >(null);
 
   const activeSourceKeyRef = useRef<string | null>(null);
-  const isPathMode = Boolean(localPath);
-  const sourceKey = localPath ? `path:${localPath}` : `skill:${skillId}`;
+  const isPathMode = Boolean(localPath || fileSource);
+  const normalizedVisibleFilePaths = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (visibleFilePaths ?? [])
+            .map(normalizeSkillRelativePath)
+            .filter(Boolean),
+        ),
+      ),
+    [visibleFilePaths],
+  );
+  const normalizedInitialFilePath = initialFilePath
+    ? normalizeSkillRelativePath(initialFilePath)
+    : undefined;
+  const hasVisibleFileAllowlist = visibleFilePaths !== undefined;
+  const canMutateStructure = !readOnly && allowStructuralMutations;
+  const sourceKey = `${fileSource?.key ?? (localPath ? `path:${localPath}` : `skill:${skillId}`)}:visible:${normalizedVisibleFilePaths.join("|")}:initial:${normalizedInitialFilePath ?? ""}`;
 
   const listFiles = useCallback(async () => {
+    if (fileSource) {
+      return fileSource.listFiles();
+    }
     if (localPath) {
       return window.api.skill.listLocalFilesByPath(localPath);
     }
     return window.api.skill.listLocalFiles(skillId);
-  }, [localPath, skillId]);
+  }, [fileSource, localPath, skillId]);
 
   const readFile = useCallback(
     async (relativePath: string) => {
+      if (fileSource) {
+        return fileSource.readFile(relativePath);
+      }
       if (localPath) {
         return window.api.skill.readLocalFileByPath(localPath, relativePath);
       }
       return window.api.skill.readLocalFile(skillId, relativePath);
     },
-    [localPath, skillId],
+    [fileSource, localPath, skillId],
   );
 
   const writeFile = useCallback(
     async (relativePath: string, content: string) => {
       if (readOnly) {
         return;
+      }
+      if (fileSource) {
+        if (!fileSource.writeFile) {
+          throw new Error("This file source is read only");
+        }
+        return fileSource.writeFile(relativePath, content);
       }
       if (localPath) {
         return window.api.skill.writeLocalFileByPath(
@@ -183,7 +239,7 @@ export function SkillFileEditor({
       }
       return window.api.skill.writeLocalFile(skillId, relativePath, content);
     },
-    [localPath, readOnly, skillId],
+    [fileSource, localPath, readOnly, skillId],
   );
 
   const createDir = useCallback(
@@ -239,11 +295,38 @@ export function SkillFileEditor({
     try {
       const result = await listFiles();
       const normalizedEntries = result.map(normalizeFileTreeEntry);
-      const visibleEntries = normalizedEntries.filter(
+      const publicEntries = normalizedEntries.filter(
         (entry) => !isHiddenSkillRepoEntry(entry.path),
       );
+      const allowlistedEntries = hasVisibleFileAllowlist
+        ? publicEntries.filter(
+            (entry) =>
+              !entry.isDirectory &&
+              normalizedVisibleFilePaths.includes(entry.path),
+          )
+        : publicEntries;
+      const visibleEntries =
+        hasVisibleFileAllowlist && includeMissingVisibleFiles
+          ? [
+              ...allowlistedEntries,
+              ...normalizedVisibleFilePaths
+                .filter(
+                  (path) =>
+                    !allowlistedEntries.some((entry) => entry.path === path),
+                )
+                .map((path) => ({
+                  path,
+                  isDirectory: false,
+                  size: 0,
+                })),
+            ]
+          : allowlistedEntries;
       setFiles(visibleEntries);
       const firstFile =
+        visibleEntries.find(
+          (entry) =>
+            !entry.isDirectory && entry.path === normalizedInitialFilePath,
+        )?.path ||
         visibleEntries.find(
           (entry) =>
             !entry.isDirectory && entry.path.toLowerCase() === "skill.md",
@@ -279,7 +362,15 @@ export function SkillFileEditor({
     } finally {
       setIsLoading(false);
     }
-  }, [listFiles, showToast, t]);
+  }, [
+    hasVisibleFileAllowlist,
+    includeMissingVisibleFiles,
+    listFiles,
+    normalizedInitialFilePath,
+    normalizedVisibleFilePaths,
+    showToast,
+    t,
+  ]);
 
   const hasAnyUnsaved = useMemo(
     () => Object.keys(modifiedFiles).length > 0,
@@ -620,7 +711,7 @@ export function SkillFileEditor({
 
   // New file
   const handleNewFile = useCallback(async () => {
-    if (readOnly) return;
+    if (!canMutateStructure) return;
     const rawName = dialogInput.trim();
     const name = createParentPath
       ? [createParentPath, rawName].filter(Boolean).join("/")
@@ -654,14 +745,14 @@ export function SkillFileEditor({
     createParentPath,
     dialogInput,
     loadFiles,
-    readOnly,
+    canMutateStructure,
     showToast,
     writeFile,
   ]);
 
   // New folder
   const handleNewFolder = useCallback(async () => {
-    if (readOnly) return;
+    if (!canMutateStructure) return;
     const rawName = dialogInput.trim();
     const name = createParentPath
       ? [createParentPath, rawName].filter(Boolean).join("/")
@@ -685,12 +776,12 @@ export function SkillFileEditor({
     createParentPath,
     dialogInput,
     loadFiles,
-    readOnly,
+    canMutateStructure,
     showToast,
   ]);
 
   const handleRenamePath = useCallback(async () => {
-    if (readOnly || !renameDialogPath) return;
+    if (!canMutateStructure || !renameDialogPath) return;
     const nextName = dialogInput.trim();
     if (!nextName) return;
 
@@ -737,7 +828,7 @@ export function SkillFileEditor({
     dialogInput,
     loadFiles,
     renameDialogPath,
-    readOnly,
+    canMutateStructure,
     selectedFile,
     showToast,
     t,
@@ -746,7 +837,7 @@ export function SkillFileEditor({
 
   // Delete file
   const handleDeleteFile = useCallback(async () => {
-    if (readOnly || !deleteDialogFile) return;
+    if (!canMutateStructure || !deleteDialogFile) return;
     try {
       await deleteFile(deleteDialogFile);
       if (selectedFile === deleteDialogFile) {
@@ -776,7 +867,7 @@ export function SkillFileEditor({
     deleteFile,
     deleteDialogFile,
     loadFiles,
-    readOnly,
+    canMutateStructure,
     selectedFile,
     showToast,
   ]);
@@ -797,6 +888,10 @@ export function SkillFileEditor({
   // Open in system file manager
   const handleOpenInExplorer = useCallback(async () => {
     try {
+      if (fileSource?.openInFileManager) {
+        await fileSource.openInFileManager();
+        return;
+      }
       const repoPath =
         localPath ?? (await window.api.skill.getRepoPath(skillId));
       if (!repoPath) {
@@ -807,7 +902,7 @@ export function SkillFileEditor({
     } catch (error) {
       console.error("Failed to open in file manager:", error);
     }
-  }, [localPath, skillId, showToast, t]);
+  }, [fileSource, localPath, skillId, showToast, t]);
 
   const handleContextMenuAction = (action: SkillFileContextMenuAction) => {
     if (action.type === "rename") {
@@ -847,7 +942,7 @@ export function SkillFileEditor({
             className={`skill-file-editor__tree-item skill-file-editor__tree-item--directory ${depthClass}`}
             onClick={() => toggleDir(node.path)}
             onContextMenu={(event) => {
-              if (readOnly) {
+              if (!canMutateStructure) {
                 return;
               }
               event.preventDefault();
@@ -883,7 +978,7 @@ export function SkillFileEditor({
         key={node.path}
         className="skill-file-editor__tree-file-row"
         onContextMenu={(event) => {
-          if (readOnly) {
+          if (!canMutateStructure) {
             return;
           }
           event.preventDefault();
@@ -909,7 +1004,7 @@ export function SkillFileEditor({
           <span className="skill-file-editor__tree-item-name">{node.name}</span>
           {modified && <span className="skill-file-editor__tree-item-dot" />}
         </button>
-        {!readOnly ? (
+        {canMutateStructure ? (
           <button
             type="button"
             className="skill-file-editor__tree-item-delete"
@@ -957,7 +1052,7 @@ export function SkillFileEditor({
             <span className="skill-file-editor__tree-title">
               {t("skill.fileEditor", "Files")}
             </span>
-            {!readOnly ? (
+            {canMutateStructure ? (
               <div className="skill-file-editor__tree-actions">
                 <button
                   type="button"
@@ -996,7 +1091,7 @@ export function SkillFileEditor({
           <div
             className="skill-file-editor__tree-list"
             onContextMenu={(event) => {
-              if (readOnly) {
+              if (!canMutateStructure) {
                 return;
               }
               if (event.target !== event.currentTarget) {
@@ -1252,7 +1347,7 @@ export function SkillFileEditor({
 
       <SkillFileContextMenu
         contextMenu={contextMenu}
-        readOnly={readOnly}
+        readOnly={!canMutateStructure}
         labels={{
           delete: t("common.delete", "Delete"),
           newFile: t("skill.newFile", "New File"),

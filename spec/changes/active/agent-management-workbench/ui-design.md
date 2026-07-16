@@ -1,0 +1,415 @@
+# UI Design
+
+## Scope
+
+This document completes the screen-level design for `DES-AGENT-010`. It defines layout, interaction, capability states, responsive behavior, component boundaries, and regression expectations. It does not introduce a separate visual language or a marketing-style dashboard.
+
+## Approved Visual Direction
+
+![Agent Management workspace overview](assets/agent-workbench-overview.png)
+
+The image above is the approved first visual direction for the production workspace. It is a design baseline rather than a literal screenshot or final fixture.
+
+The later product acceptance supersedes the image's generic `Assets` label: Skills, MCP, Rules, and Plugins are direct top-level tabs. The image remains authoritative for pane hierarchy, density, header composition, active-state contrast, and operational visual character.
+
+The following parts are normative:
+
+- Existing application rail on the far left, complete Agent list in the middle, and selected Agent detail on the right.
+- Common and detected Agents appear first, while the list remains scrollable/searchable across the complete registry.
+- Agent rows show icon, name, installation/configuration state, and concise provider/model context.
+- Selection is obvious without disabling or visually suppressing unselected Agents.
+- Every Agent opens the same header, stable tab bar, summary, attention, path, and capability structure.
+- The primary command is contextual, such as `Switch provider`, `Configure`, or `Diagnose`.
+- Unsupported or planned capabilities remain in their stable positions and use disabled styling, as demonstrated by `Usage`.
+- Supported capabilities are visibly actionable. Skills, MCP, Rules, and Plugins use direct top-level tabs; Provider, Config Files, Sessions, and Usage remain visibly disabled until their adapters are ready.
+- Overview favors a compact summary band, an actionable attention queue, and a structured paths/capabilities table instead of decorative dashboard cards.
+
+The following details are illustrative and may change during implementation:
+
+- Example versions, providers, model names, counts, paths, warnings, and session totals.
+- Exact third-party icons when the repository has a different canonical asset.
+- Exact pane widths and spacing when screenshot verification finds a better fit at supported window sizes.
+- Example rail labels that differ from the current PromptHub navigation taxonomy.
+
+Production implementation must preserve the normative interaction and hierarchy even when mock data and visual details are replaced with real application state.
+
+## Design Principles
+
+- All built-in and enabled custom Agents use one workspace and one detail shell.
+- Agent identity is always clickable; capability availability controls actions, not navigation.
+- Common, pinned, installed, and configured Agents are prioritized without hiding the rest.
+- Dense operational information is preferred over decorative cards and oversized headings.
+- Existing PromptHub tokens, wallpaper panels, Lucide icons, typography, and interaction patterns remain authoritative.
+- Skill, MCP, Rules, and Plugin editing remains in each owning workspace; Agents provides context and orchestration.
+- Unsupported capabilities remain visible and disabled so users can understand the platform boundary.
+
+## Global Entry
+
+Add an `Agents` item to the primary rail alongside the existing asset modules.
+
+- Icon: use an existing Lucide Agent/Bot-compatible icon selected consistently with current navigation.
+- Label: localized `Agents`.
+- Active state: reuse the current rail active treatment.
+- Settings continues to own advanced path overrides and custom Agent registration.
+- Opening an Agent from Skill/MCP/Plugin distribution navigates to the same Agent detail route and the relevant top-level asset-domain tab.
+
+## Workspace Frame
+
+The desktop workspace uses two persistent panes inside the existing application shell:
+
+```text
+┌─────────────────────────────── PromptHub shell ───────────────────────────────┐
+│ rail │ Agent list pane │ selected Agent detail shell                         │
+│      │                 │ header                                               │
+│      │ search/filter   │ tabs                                                 │
+│      │ Agent rows      │ selected tab content                                 │
+│      │                 │                                                      │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Dimensions
+
+- Primary rail: reuse current application width.
+- Agent list pane: default `18rem`, resizable within `15rem` to `24rem` if the shared sidebar resize behavior is reused.
+- Detail pane: `min-width: 0`, occupies remaining space.
+- Detail content maximum readable width is applied only to long-form config/transcript text, not to tables and inventories.
+- Header and tab bars use stable heights so loading and status changes do not shift the page.
+- Header, tab bar, page canvas, summary cells, and content panels use distinct opaque surfaces. Avoid stacking translucent gray layers that collapse hierarchy in the light theme.
+- Summary and asset-domain accents use restrained semantic colors; neutral gray remains supporting chrome rather than the dominant content color.
+
+## Agent List Pane
+
+### Toolbar
+
+The list toolbar contains:
+
+- Search input: name, aliases, provider, executable and resolved path metadata.
+- Filter menu: All, Installed, Configured, Needs Attention, Not Detected, Custom.
+- Sort menu: Recommended, Name, Recently Used, Health.
+- Add custom Agent command, routed to the existing configuration workflow.
+- Refresh icon button for detection and summary reload.
+
+Do not expose separate buttons for every filter. Use a menu and compact active-filter summary to preserve list width.
+
+### Default Ordering
+
+Ordering is deterministic:
+
+1. User-pinned Agents.
+2. Detected or explicitly configured Agents.
+3. Curated common priority.
+4. Remaining built-in Agents by localized stable name.
+5. Enabled custom Agents, promoted into steps 1 or 2 when pinned/detected/configured.
+
+Search filters the complete registry, not only the current visible viewport or supported adapters.
+
+### Agent Row
+
+Each row has a stable minimum height and contains:
+
+- Platform icon.
+- Agent display name.
+- Compact installation/configuration status.
+- Current provider/model when supported and known.
+- One health indicator with accessible text.
+- Pin action revealed on hover/focus or available in the row menu.
+
+The row itself always opens Agent detail. A missing executable, directory, provider adapter, or session adapter never disables the row.
+
+Status examples:
+
+- Installed
+- Configured
+- Not detected
+- Needs attention
+- Setup incomplete
+
+Avoid showing multiple competing colored badges in one row. Provider and model use muted secondary text; health owns the primary status color.
+
+## Agent Detail Shell
+
+### Header
+
+The fixed detail header contains:
+
+- Platform icon and Agent name.
+- Installation/version status.
+- Current provider/model summary when available.
+- Primary command: context-dependent `Configure`, `Switch provider`, or `Diagnose`.
+- Refresh icon button.
+- Overflow menu: Pin, Open folder, Advanced path settings, Export diagnostics.
+
+The header does not become disabled when one capability is unsupported. Primary command selection follows this order:
+
+1. Blocking setup action.
+2. Provider switch when provider management is supported.
+3. Diagnose when health is degraded.
+4. Open the first supported asset-domain tab when only asset/path capabilities are available.
+
+### Tabs
+
+Every Agent uses this stable order:
+
+1. Overview
+2. Provider & Model
+3. Skills
+4. MCP
+5. Rules
+6. Plugins
+7. Config Files
+8. Sessions
+9. Usage
+10. Maintenance
+
+Tabs stay in the same position for every Agent. Capability state affects tab interaction:
+
+| Capability state | Tab/action behavior                                                       |
+| ---------------- | ------------------------------------------------------------------------- |
+| `supported`      | Enabled and interactive                                                   |
+| `partial`        | Enabled; supported sub-actions work, unavailable sub-actions are disabled |
+| `planned`        | Visible and disabled with localized “planned” reason                      |
+| `unsupported`    | Visible and disabled with concise platform-specific reason                |
+
+Disabled tabs do not invoke IPC and do not navigate to empty pages. Hover/focus exposes the reason through a tooltip; screen readers receive the same reason through accessible description.
+
+## Overview Tab
+
+Overview is a compact operational summary, not a card dashboard.
+
+### Summary Band
+
+Show four aligned summaries in one full-width band:
+
+- Installation: detected state and executable version.
+- Provider: current verified provider/model or capability reason.
+- Skills: configured path and installed/managed count when available.
+- Sessions: recent count and last activity or capability reason.
+
+### Attention Queue
+
+Display only actionable items:
+
+- Missing executable or invalid path.
+- Native config conflict or external modification.
+- Missing credential reference.
+- Failed provider test.
+- Asset drift or failed distribution.
+- Session parser error.
+
+Each item has one clear action. Do not nest cards inside the summary band.
+
+### Paths And Capabilities
+
+Show resolved root, executable, config roots, asset roots, and a compact capability matrix. Paths have copy and open-folder icon buttons. Unsupported capabilities are muted, not presented as errors.
+
+## Provider & Model Tab
+
+Use a split operational layout:
+
+- Left column: Provider Profile list, search, add/import actions.
+- Right column: selected profile form, model mappings, connection status, activation controls.
+
+### Provider Profile Row
+
+- Name and provider kind.
+- Endpoint origin without sensitive query content.
+- Model summary.
+- Active/verified marker derived from native config.
+- Last test result and age.
+- Overflow: duplicate, export, archive.
+
+### Profile Editor
+
+Use structured inputs based on adapter schema:
+
+- Provider preset/custom selector.
+- Endpoint.
+- Secure credential field with replace/remove actions; never re-render existing secret.
+- Model route fields.
+- Adapter-specific advanced options in a disclosure section.
+- Test button and Activate primary command.
+
+### Activation Preview
+
+Activation opens a large modal with:
+
+- Agent and target file identity.
+- Current, desired, preserved, backfilled, conflicting and unsupported field groups.
+- Masked secret changes.
+- Backup/rollback statement.
+- Cancel and Activate commands.
+
+Conflicts require explicit per-field resolution or cancellation. Success closes the modal only after post-write verification. Failure keeps diagnostics visible and states whether rollback succeeded.
+
+## Asset-Domain Tabs
+
+Skills, MCP, Rules, and Plugins are four direct top-level tabs. The generic Assets tab is removed. Do not add a segmented control, secondary sidebar, aggregate Assets page, or navigation-only rows.
+
+Each asset-domain page contains:
+
+- Asset kind, detected count, and resolved path.
+- Managed/external or platform-specific status where real state is available.
+- A compact inline inventory or a scoped empty state.
+- A scoped refresh action that reloads the owning store and selected Agent aggregate.
+- A domain-specific semantic accent: cyan for Skills, blue for MCP, amber for Rules, and violet for Plugins. The accent identifies the active domain without replacing standard PromptHub tokens.
+
+The Agent workspace does not introduce an “Agent copy” editor or duplicate durable state. Canonical editing and mutation continue to use the owning Skill/MCP/Rules/Plugin services when inline actions are added.
+
+Cross-kind batch operations are not part of the first delivery. If a future domain needs deeper navigation, it may add navigation inside that domain without restoring a generic Assets parent page.
+
+## Config Files Tab
+
+The first enabled state uses the existing two-pane local file editor inside the Agent detail surface:
+
+- Left pane: only verified config files plus their parent folders.
+- Right pane: syntax-aware text viewing and explicit Edit/Save controls.
+- Header: resolved Agent root, config count, and Open Agent folder action.
+- Missing allowlisted config files remain selectable and are created only after an explicit save.
+- Rename, delete, arbitrary create, snapshots, versions and restore are absent in this phase.
+
+Authentication files, sessions, logs, caches and databases are excluded from the in-app config inventory. The system file manager remains the escape hatch for inspecting the complete Agent directory.
+
+Structured editing, redacted diff and snapshot history appear only after an adapter owns the schema and safe backup/restore behavior.
+
+## Sessions Tab
+
+When supported, use a two-pane layout:
+
+- Session list: search, project filter, date filter, title, updated time, message count.
+- Transcript reader: session metadata, bounded virtualized messages, source status, resume command.
+
+Commands:
+
+- Copy resume command.
+- Resume through a validated executable/argument request when supported.
+- Open project folder.
+- Add local tag or note.
+
+The transcript is read-only. Missing sources retain metadata and local notes with a clear source-missing state.
+
+## Usage Tab
+
+Usage remains the same tab for every Agent but can be disabled by capability.
+
+When available, show:
+
+- Time range control.
+- Requests, tokens, cache, success rate and cost where evidence exists.
+- Trend chart and model/provider breakdown.
+- Evidence source and last updated time.
+
+Do not combine session-derived estimates, provider quota, and future proxy-observed usage into one unlabeled number.
+
+## Maintenance Tab
+
+Show operational settings and diagnostics:
+
+- Detection source, executable path and version.
+- Latest known version/update support.
+- Root and config paths.
+- Adapter names/versions and capability matrix.
+- Re-detect, open paths, test permissions and export diagnostics.
+- Future install/update plan and confirmation actions.
+- Link to advanced Agent path settings.
+
+Unsupported CLI lifecycle actions remain disabled; manual installation guidance may be available through a secondary help action.
+
+## Empty, Loading, And Error States
+
+### Workspace
+
+- Registry loading: list skeleton with stable row heights; detail shell remains stable.
+- No search results: clear search/filter action; do not suggest adding an Agent when the registry is merely filtered.
+- No custom Agents: shown only inside the Custom filter/settings flow.
+
+### Detail
+
+- Detection pending: show last known data as stale where available.
+- Agent not detected: Overview and path/settings actions remain available.
+- Capability planned/unsupported: disabled control plus reason; no generic error illustration.
+- Partial failure: retain successful sections and show scoped retry.
+- Offline provider test: preserve profile editing and return structured network status.
+
+## Responsive Desktop Behavior
+
+### Wide: `>= 1280px`
+
+- Persistent Agent list and detail.
+- Provider and Sessions use split panes.
+- Overview summaries use four columns when content fits.
+
+### Standard: `960px - 1279px`
+
+- Persistent Agent list at minimum width.
+- Summary band uses two columns.
+- Provider and Sessions keep split panes with constrained secondary width.
+
+### Narrow: `< 960px`
+
+- Agent list becomes a navigable page; selecting an Agent opens detail with a Back command.
+- Tabs remain stable and horizontally scroll without shrinking labels into unreadable text.
+- Provider/session split panes become list -> detail navigation.
+- No control or status text overlaps the title bar, header actions, or adjacent content.
+
+## Keyboard And Accessibility
+
+- Agent rows, tabs, menus, list items and disabled reasons are keyboard reachable.
+- Arrow keys may navigate list/tabs only when following established component behavior.
+- Focus returns to the originating control after modal close or detail back navigation.
+- Disabled capability reasons use accessible descriptions, not color alone.
+- Status icons have hidden accessible labels; decorative icons are `aria-hidden`.
+- Live regions announce refresh, activation, rollback and test results without exposing secrets.
+- Reduced motion disables slide transitions while retaining state changes.
+
+## Component Boundaries
+
+```text
+AgentsWorkspace
+├── AgentsListPane
+│   ├── AgentsListToolbar
+│   └── AgentListRow
+└── AgentDetailShell
+    ├── AgentDetailHeader
+    ├── AgentDetailTabs
+    ├── AgentCapabilityGate
+    └── sections/
+        ├── AgentOverviewSection
+        ├── AgentProvidersSection
+        ├── AgentSkillsSection
+        ├── AgentMcpSection
+        ├── AgentRulesSection
+        ├── AgentPluginsSection
+        ├── AgentConfigFilesSection
+        ├── AgentSessionsSection
+        ├── AgentUsageSection
+        └── AgentMaintenanceSection
+```
+
+Behavior hooks remain separate from sections:
+
+- `use-managed-agents.ts`: query, selection, filtering, ordering, pinning.
+- `use-agent-detail.ts`: summary orchestration and refresh.
+- `use-agent-provider-actions.ts`: import, test, preview, activate, rollback.
+- `use-agent-asset-domain.ts`: scoped selectors and owning-domain actions for each direct asset tab.
+- `use-agent-sessions.ts`: scan, pagination, read and resume.
+
+Pure logic belongs in `agent-ui-utils.ts`: ordering, capability presentation, status derivation, filter matching, and view-model formatting.
+
+## Reuse And Migration
+
+- Reuse `PlatformIcon`, shared buttons, menus, tabs, tooltips, dialogs, virtualized lists, toast, titlebar and wallpaper tokens.
+- Reuse successful left-platform/right-detail interaction patterns from `SkillAgentsView` and `McpAgentsView`, but do not import their domain stores into Agent sections.
+- Existing Agent path settings remain available during migration and become advanced configuration links.
+- `PlatformWorkbenchPrototype` remains a prototype reference only; production Agents UI must use real stores, typed contracts and the shared application shell.
+
+## UI Acceptance Checklist
+
+- Every built-in and enabled custom Agent appears in All/search.
+- Common/detected/configured/pinned ordering is deterministic.
+- Every Agent opens the same detail shell.
+- Capability state changes enablement without changing tab order.
+- Unsupported actions are visible, disabled, explained and never invoke IPC.
+- Provider activation cannot report success before verification.
+- Asset actions reconcile with owning domain state.
+- Narrow layout has no overlap, clipped controls, inaccessible tabs, or unreadable longest locale strings.
+- Keyboard, screen reader labels, focus restoration and reduced motion pass regression tests.

@@ -75,9 +75,11 @@
     "d3-force": "^3.0.0",
     "http-proxy-agent": "^7.0.2",
     "https-proxy-agent": "^7.0.6",
+    "jsonc-parser": "^3.3.1",
     "material-icon-theme": "^5.35.0",
     "node-sqlite3-wasm": "^0.8.0",
     "react-force-graph-2d": "^1.29.1",
+    "smol-toml": "^1.7.0",
     "socks-proxy-agent": "^7.0.0",
     "undici": "^7.24.8"
   },
