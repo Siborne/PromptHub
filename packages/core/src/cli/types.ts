@@ -10,6 +10,7 @@ import type { Skill } from "@prompthub/shared/types";
 
 type CliWriter = (message: string) => void;
 export type OutputFormat = "json" | "table";
+export type OutputDetail = "summary" | "full" | "quiet";
 
 export const EXIT_CODES = {
   OK: 0,
@@ -44,6 +45,7 @@ export interface CliDatabaseHooks {
 export interface CliContext {
   io: CliIO;
   output: OutputFormat;
+  detail: OutputDetail;
   skills: CliSkillService;
 }
 

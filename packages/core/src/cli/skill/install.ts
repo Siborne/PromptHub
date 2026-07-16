@@ -1,4 +1,5 @@
 import * as childProcess from "child_process";
+import { randomUUID } from "crypto";
 import fs from "fs/promises";
 import path from "path";
 
@@ -9,6 +10,7 @@ import {
   SKILL_PACKAGE_FINGERPRINT_ALGORITHM,
 } from "@prompthub/shared/utils/skill-source-update";
 import { getSkillsDir } from "../../runtime-paths";
+import { assertSkillPackageEntriesSafe } from "../../skills/package-policy";
 import {
   parseSkillMd,
   sanitizeProtocolType,
@@ -21,7 +23,8 @@ import {
   computeRepoDirectoryFingerprintByPath,
   fileExists,
   GIT_CLONE_TIMEOUT_MS,
-  isInternalSkillRepoEntry,
+  loadSkillPackageIgnoreMatcher,
+  readRepoSecretScanEntries,
 } from "./paths";
 
 export type FetchLike = typeof fetch;
@@ -143,6 +146,118 @@ export async function readManifest(skillDir: string): Promise<SkillManifest> {
   }
 }
 
+function createSkillRepoCopyFilter(
+  sourceDir: string,
+  shouldIgnore: (relativePath: string) => boolean,
+) {
+  return async (sourcePath: string): Promise<boolean> => {
+    try {
+      const stat = await fs.lstat(sourcePath);
+      const relativePath = path.relative(sourceDir, sourcePath);
+      return (
+        !stat.isSymbolicLink() && (!relativePath || !shouldIgnore(relativePath))
+      );
+    } catch {
+      return false;
+    }
+  };
+}
+
+async function pathEntryExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.lstat(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function rollbackManagedRepoReplacement(
+  destinationDir: string,
+  stagingDir: string,
+  backupDir: string,
+): Promise<void> {
+  if (await pathEntryExists(backupDir)) {
+    await fs.rm(destinationDir, { recursive: true, force: true });
+    await fs.rename(backupDir, destinationDir);
+  }
+  await fs.rm(stagingDir, { recursive: true, force: true });
+}
+
+async function replaceSkillDestination(
+  destinationDir: string,
+  createStaging: (stagingDir: string) => Promise<void>,
+): Promise<void> {
+  const suffix = `${process.pid}-${randomUUID()}`;
+  const stagingDir = `${destinationDir}.staging-${suffix}`;
+  const backupDir = `${destinationDir}.backup-${suffix}`;
+  const hadDestination = await pathEntryExists(destinationDir);
+  try {
+    await createStaging(stagingDir);
+    if (hadDestination) {
+      await fs.rename(destinationDir, backupDir);
+    }
+    await fs.rename(stagingDir, destinationDir);
+    if (hadDestination) {
+      await fs.rm(backupDir, { recursive: true, force: true });
+    }
+  } catch (error) {
+    try {
+      await rollbackManagedRepoReplacement(
+        destinationDir,
+        stagingDir,
+        backupDir,
+      );
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [error, rollbackError],
+        "Failed to replace Skill target and restore the previous copy",
+      );
+    }
+    throw error;
+  }
+}
+
+async function replaceSkillRepo(
+  sourceDir: string,
+  destinationDir: string,
+  shouldIgnore: (relativePath: string) => boolean,
+): Promise<void> {
+  await replaceSkillDestination(destinationDir, (stagingDir) =>
+    fs.cp(sourceDir, stagingDir, {
+      recursive: true,
+      filter: createSkillRepoCopyFilter(sourceDir, shouldIgnore),
+    }),
+  );
+}
+
+async function copySkillRepoToNewDestination(
+  sourceDir: string,
+  destinationDir: string,
+  shouldIgnore: (relativePath: string) => boolean,
+): Promise<void> {
+  const stagingDir = `${destinationDir}.staging-${process.pid}-${randomUUID()}`;
+  try {
+    await fs.cp(sourceDir, stagingDir, {
+      recursive: true,
+      filter: createSkillRepoCopyFilter(sourceDir, shouldIgnore),
+    });
+    await fs.rename(stagingDir, destinationDir);
+  } catch (error) {
+    await fs.rm(stagingDir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+export async function linkRepoToTarget(
+  sourceDir: string,
+  destinationDir: string,
+): Promise<void> {
+  await replaceSkillDestination(destinationDir, (stagingDir) =>
+    fs.symlink(sourceDir, stagingDir, "dir"),
+  );
+}
+
 export async function saveRepo(
   skillName: string,
   sourceDir: string,
@@ -154,21 +269,9 @@ export async function saveRepo(
   );
   await fs.mkdir(managedSkillsDir, { recursive: true });
 
-  if (await fileExists(destinationDir)) {
-    await fs.rm(destinationDir, { recursive: true, force: true });
-  }
-
-  await fs.cp(sourceDir, destinationDir, {
-    recursive: true,
-    filter: async (sourcePath: string) => {
-      try {
-        const stat = await fs.lstat(sourcePath);
-        return !stat.isSymbolicLink();
-      } catch {
-        return false;
-      }
-    },
-  });
+  assertSkillPackageEntriesSafe(await readRepoSecretScanEntries(sourceDir));
+  const shouldIgnore = await loadSkillPackageIgnoreMatcher(sourceDir);
+  await replaceSkillRepo(sourceDir, destinationDir, shouldIgnore);
 
   return destinationDir;
 }
@@ -176,25 +279,20 @@ export async function saveRepo(
 export async function copyRepoToPlatform(
   sourceDir: string,
   destinationDir: string,
+  options: { policyChecked?: boolean } = {},
 ): Promise<void> {
-  await fs.rm(destinationDir, { recursive: true, force: true });
-  await fs.cp(sourceDir, destinationDir, {
-    recursive: true,
-    filter: async (_sourcePath: string, targetPath: string) => {
-      const relativePath = path.relative(destinationDir, targetPath);
-      if (!relativePath || relativePath === "") {
-        return true;
-      }
-
-      return !isInternalSkillRepoEntry(relativePath);
-    },
-  });
+  if (!options.policyChecked) {
+    assertSkillPackageEntriesSafe(await readRepoSecretScanEntries(sourceDir));
+  }
+  const shouldIgnore = await loadSkillPackageIgnoreMatcher(sourceDir);
+  await replaceSkillRepo(sourceDir, destinationDir, shouldIgnore);
 }
 
 export async function saveContent(
   skillName: string,
   content: string,
 ): Promise<string> {
+  assertSkillPackageEntriesSafe([{ path: "SKILL.md", content }]);
   const managedSkillsDir = getSkillsDir();
   const destinationDir = path.join(
     managedSkillsDir,
@@ -309,6 +407,7 @@ export async function installFromGithub(
   const owner = matches[1];
   const repoName = matches[2];
   const installDir = path.join(getSkillsDir(), `${owner}-${repoName}`);
+  const checkoutDir = `${installDir}.checkout-${process.pid}-${randomUUID()}`;
   const relative = path.relative(
     path.resolve(getSkillsDir()),
     path.resolve(installDir),
@@ -344,10 +443,11 @@ export async function installFromGithub(
     );
   }
 
+  let managedPackageCreated = false;
   try {
     await fs.mkdir(path.dirname(installDir), { recursive: true });
-    await gitCloneImpl(sourceUrl, installDir);
-    const skillDir = await resolveSingleSkillDirFromRepo(installDir);
+    await gitCloneImpl(sourceUrl, checkoutDir);
+    const skillDir = await resolveSingleSkillDirFromRepo(checkoutDir);
     const manifest = await readManifest(skillDir);
 
     if (!manifest.instructions) {
@@ -364,7 +464,7 @@ export async function installFromGithub(
     if (!manifest.instructions) {
       try {
         manifest.instructions = await fs.readFile(
-          path.join(installDir, "README.md"),
+          path.join(checkoutDir, "README.md"),
           "utf-8",
         );
       } catch {
@@ -372,8 +472,12 @@ export async function installFromGithub(
       }
     }
 
+    assertSkillPackageEntriesSafe(await readRepoSecretScanEntries(skillDir));
+    const shouldIgnore = await loadSkillPackageIgnoreMatcher(skillDir);
+    await copySkillRepoToNewDestination(skillDir, installDir, shouldIgnore);
+    managedPackageCreated = true;
     const directoryFingerprint =
-      await computeRepoDirectoryFingerprintByPath(skillDir);
+      await computeRepoDirectoryFingerprintByPath(installDir);
     return skillDb.create({
       name: manifest.name || repoName,
       description: manifest.description || `Installed from ${sourceUrl}`,
@@ -383,17 +487,23 @@ export async function installFromGithub(
       instructions: manifest.instructions || "",
       protocol_type: "skill",
       source_url: sourceUrl,
-      local_repo_path: skillDir,
+      local_repo_path: installDir,
       ...buildCliFingerprintFields(directoryFingerprint, { bindSource: true }),
       is_favorite: false,
       tags: [],
       original_tags: manifest.tags || ["github"],
     }).id;
   } catch (error) {
-    await fs
-      .rm(installDir, { recursive: true, force: true })
-      .catch(() => undefined);
+    if (managedPackageCreated) {
+      await fs
+        .rm(installDir, { recursive: true, force: true })
+        .catch(() => undefined);
+    }
     throw error;
+  } finally {
+    await fs
+      .rm(checkoutDir, { recursive: true, force: true })
+      .catch(() => undefined);
   }
 }
 
@@ -406,14 +516,20 @@ export async function importFromJson(
   if (!skillName) {
     throw new Error("Invalid skill JSON: missing name");
   }
+  const instructions = sanitizeString(parsed.instructions);
+  if (instructions) {
+    assertSkillPackageEntriesSafe([
+      { path: "SKILL.md", content: instructions },
+    ]);
+  }
 
   return skillDb.create({
     name: skillName,
     description: sanitizeString(parsed.description),
     version: sanitizeString(parsed.version),
     author: sanitizeString(parsed.author),
-    instructions: sanitizeString(parsed.instructions),
-    content: sanitizeString(parsed.instructions),
+    instructions,
+    content: instructions,
     protocol_type: sanitizeProtocolType(parsed.protocol_type),
     tags: sanitizeTags(parsed.tags, ["imported"]),
     is_favorite: false,

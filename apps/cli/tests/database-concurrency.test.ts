@@ -4,10 +4,14 @@ import path from "path";
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import { fileURLToPath } from "url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { runCli } from "@prompthub/core";
-import { acquireDatabaseClientLease } from "@prompthub/db/database-client-lock";
+import {
+  acquireDatabaseClientLease,
+  inspectDatabaseClientLock,
+  recoverDatabaseClientLock,
+} from "@prompthub/db/database-client-lock";
 import { closeDatabase, initDatabase, PromptDB } from "@prompthub/db";
 
 function createFixture(): { root: string; dbPath: string } {
@@ -77,6 +81,7 @@ describe("database client lock coordination", () => {
   const roots: string[] = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
     closeDatabase();
     for (const root of roots.splice(0)) {
       fs.rmSync(root, { recursive: true, force: true });
@@ -124,6 +129,7 @@ describe("database client lock coordination", () => {
     writeLease(fixture.dbPath, 42);
     writeLease(fixture.dbPath, 99, "not-json");
     writeLease(fixture.dbPath, 100, JSON.stringify({ pid: 101 }));
+    writeLease(fixture.dbPath, 102, JSON.stringify({ pid: 0 }));
 
     const lease = acquireDatabaseClientLease(fixture.dbPath, {
       pid: 7,
@@ -135,6 +141,7 @@ describe("database client lock coordination", () => {
     expect(fs.existsSync(`${fixture.dbPath}.clients/42.json`)).toBe(false);
     expect(fs.existsSync(`${fixture.dbPath}.clients/99.json`)).toBe(false);
     expect(fs.existsSync(`${fixture.dbPath}.clients/100.json`)).toBe(false);
+    expect(fs.existsSync(`${fixture.dbPath}.clients/102.json`)).toBe(false);
     expect(fs.existsSync(`${fixture.dbPath}.clients/7.json`)).toBe(true);
     lease.release();
     lease.release();
@@ -153,6 +160,23 @@ describe("database client lock coordination", () => {
     });
 
     expect(fs.existsSync(`${fixture.dbPath}.lock`)).toBe(true);
+    lease.release();
+  });
+
+  it("preserves an unsafe lock path during explicit legacy recovery", () => {
+    const fixture = createFixture();
+    roots.push(fixture.root);
+    const lockPath = `${fixture.dbPath}.lock`;
+    fs.writeFileSync(lockPath, "legacy-owner", "utf8");
+
+    const lease = acquireDatabaseClientLease(fixture.dbPath, {
+      pid: 7,
+      isProcessAlive: () => false,
+      recoverUnregisteredLock: true,
+      registerExitHandler: false,
+    });
+
+    expect(fs.readFileSync(lockPath, "utf8")).toBe("legacy-owner");
     lease.release();
   });
 
@@ -206,6 +230,86 @@ describe("database client lock coordination", () => {
     expect(process.listenerCount("exit")).toBe(listenerCount + 1);
     secondLease.release();
     expect(process.listenerCount("exit")).toBe(listenerCount);
+  });
+
+  it("runs registered lease cleanup through the process exit handler", () => {
+    const fixture = createFixture();
+    roots.push(fixture.root);
+    const listenersBefore = new Set(process.listeners("exit"));
+
+    const lease = acquireDatabaseClientLease(fixture.dbPath);
+    const exitHandler = process
+      .listeners("exit")
+      .find((listener) => !listenersBefore.has(listener));
+
+    expect(exitHandler).toBeDefined();
+    (exitHandler as (code: number) => void)(0);
+    expect(fs.existsSync(`${fixture.dbPath}.clients/${process.pid}.json`)).toBe(
+      false,
+    );
+    lease.release();
+  });
+
+  it("treats EPERM process probes as live clients", () => {
+    const fixture = createFixture();
+    roots.push(fixture.root);
+    fs.mkdirSync(`${fixture.dbPath}.lock`);
+    writeLease(fixture.dbPath, 999_999);
+    vi.spyOn(process, "kill").mockImplementation(((pid: number) => {
+      if (pid === 999_999) {
+        throw Object.assign(new Error("operation not permitted"), {
+          code: "EPERM",
+        });
+      }
+      return true;
+    }) as typeof process.kill);
+
+    expect(inspectDatabaseClientLock(fixture.dbPath)).toMatchObject({
+      status: "blocked",
+      reason: "live-client",
+      livePids: [999_999],
+    });
+  });
+
+  it("blocks recovery when a lock reappears during the recovery attempt", () => {
+    const fixture = createFixture();
+    roots.push(fixture.root);
+    const lockPath = `${fixture.dbPath}.lock`;
+    fs.mkdirSync(lockPath);
+    const removeSync = fs.rmSync.bind(fs);
+    vi.spyOn(fs, "rmSync").mockImplementation(((target, options) => {
+      if (target === lockPath) {
+        return;
+      }
+      return removeSync(target, options);
+    }) as typeof fs.rmSync);
+
+    expect(
+      recoverDatabaseClientLock(fixture.dbPath, {
+        isProcessAlive: () => false,
+      }),
+    ).toMatchObject({
+      status: "blocked",
+      recovered: false,
+      reason: "unknown-client",
+    });
+  });
+
+  it("refuses a symbolic-link client lease directory", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const fixture = createFixture();
+    roots.push(fixture.root);
+    const realClientsDir = path.join(fixture.root, "real-clients");
+    fs.mkdirSync(realClientsDir);
+    fs.symlinkSync(realClientsDir, `${fixture.dbPath}.clients`, "dir");
+
+    expect(() =>
+      acquireDatabaseClientLease(fixture.dbPath, {
+        registerExitHandler: false,
+      }),
+    ).toThrow("Invalid database clients directory");
   });
 
   it("cleans up its lease when database initialization fails", () => {

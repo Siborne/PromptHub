@@ -1082,8 +1082,10 @@ export function SkillFullDetailPage({
         agentContext={agentContext}
         canEditFiles={runtimeCapabilities.skillFileEditing}
         codePaneProps={{
+          availablePlatforms,
           copyStatus,
           handleCopy,
+          installDetails: skillMdInstallDetails,
           selectedSkill,
           skillContent: effectiveSkillMdContent,
           t,

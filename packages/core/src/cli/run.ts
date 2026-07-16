@@ -8,11 +8,17 @@ import { handleAIConfigCommand } from "./ai-config-command";
 import { handlePluginCommand } from "./plugin-command";
 import { handlePromptCommand } from "./prompt-command";
 import { handleFolderCommand } from "./folder-command";
+import { handleDoctorCommand } from "./doctor-command";
 import { handleWorkspaceCommand, handleSyncCommand } from "./workspace-command";
 import { handleRulesCommand } from "./rules-command";
 import { handleSkillCommand } from "./skill-command";
 import { handleMcpCommand } from "./mcp-command";
 import { CliRemoteSyncError } from "./sync-command";
+import {
+  SkillPackageEntryLimitError,
+  SkillPackageScanLimitError,
+  SkillPackageSecretsError,
+} from "../skills/package-policy";
 import { ROOT_HELP } from "./help";
 import {
   CLI_VERSION,
@@ -23,6 +29,7 @@ import {
   type CliDatabaseHooks,
   type CliIO,
   type CliRuntimeHooks,
+  type OutputDetail,
   type OutputFormat,
 } from "./types";
 import {
@@ -47,6 +54,7 @@ function configureCliRuntime(
   runtimeHooks: CliRuntimeHooks,
 ): {
   args: string[];
+  detail: OutputDetail;
   output: OutputFormat;
 } {
   const nextArgs = cloneArgs(args);
@@ -54,6 +62,22 @@ function configureCliRuntime(
   const appDataDir = takeOption(nextArgs, "--app-data-dir");
   const outputOption =
     takeOption(nextArgs, "--output") ?? takeOption(nextArgs, "-o") ?? "json";
+  const detailFlags = nextArgs.filter((arg) =>
+    ["--summary", "--full", "--quiet"].includes(arg),
+  );
+  for (let index = nextArgs.length - 1; index >= 0; index -= 1) {
+    if (["--summary", "--full", "--quiet"].includes(nextArgs[index])) {
+      nextArgs.splice(index, 1);
+    }
+  }
+
+  if (detailFlags.length > 1) {
+    throw new CliError(
+      "USAGE_ERROR",
+      "--summary、--full 和 --quiet 只能选择一个",
+      EXIT_CODES.USAGE,
+    );
+  }
 
   if (outputOption !== "json" && outputOption !== "table") {
     throw new CliError(
@@ -71,7 +95,16 @@ function configureCliRuntime(
     platform: process.platform,
   });
 
-  return { args: nextArgs, output: outputOption };
+  return {
+    args: nextArgs,
+    detail:
+      detailFlags[0] === "--full"
+        ? "full"
+        : detailFlags[0] === "--quiet"
+          ? "quiet"
+          : "summary",
+    output: outputOption,
+  };
 }
 
 function isDatabaseBusyError(error: unknown): boolean {
@@ -133,20 +166,23 @@ async function runCliOperation(
 
   try {
     const configured = configureCliRuntime(argv, runtimeHooks);
+    const commandIo: CliIO =
+      configured.detail === "quiet" ? { ...io, stdout: () => undefined } : io;
     const context: CliContext = {
-      io,
+      io: commandIo,
       output: configured.output,
+      detail: configured.detail,
       skills: skillService,
     };
     const args = configured.args;
 
     if (args[0] === "--version" || args[0] === "-v") {
-      io.stdout(CLI_VERSION);
+      commandIo.stdout(CLI_VERSION);
       return EXIT_CODES.OK;
     }
 
     if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-      io.stdout(ROOT_HELP);
+      commandIo.stdout(ROOT_HELP);
       return EXIT_CODES.OK;
     }
 
@@ -159,6 +195,10 @@ async function runCliOperation(
     }
     if (resource === "folder") {
       await handleFolderCommand(commandArgs, context, databaseHooks);
+      return EXIT_CODES.OK;
+    }
+    if (resource === "doctor") {
+      await handleDoctorCommand(commandArgs, context);
       return EXIT_CODES.OK;
     }
     if (resource === "rules") {
@@ -182,10 +222,18 @@ async function runCliOperation(
       return EXIT_CODES.OK;
     }
     if (resource === "plugin") {
-      return await handlePluginCommand(commandArgs, io, configured.output);
+      return await handlePluginCommand(
+        commandArgs,
+        commandIo,
+        configured.output,
+      );
     }
     if (resource === "ai") {
-      return await handleAIConfigCommand(commandArgs, io, configured.output);
+      return await handleAIConfigCommand(
+        commandArgs,
+        commandIo,
+        configured.output,
+      );
     }
 
     throw new CliError(
@@ -205,18 +253,54 @@ async function runCliOperation(
                 error.message,
                 error.status === 409 ? EXIT_CODES.CONFLICT : EXIT_CODES.IO,
               )
-            : isDatabaseBusyError(error)
+            : error instanceof SkillPackageSecretsError
               ? new CliError(
-                  "DATABASE_BUSY",
-                  "数据库正在被另一个 PromptHub 进程写入，请稍后重试；如持续出现，请关闭其他 PromptHub 进程后重试",
+                  "SKILL_PACKAGE_SECRETS_DETECTED",
+                  "Skill package 包含疑似私钥、访问令牌或密码，已阻止写入；请移除敏感信息或使用 .prompthubignore 排除本地凭据文件",
                   EXIT_CODES.CONFLICT,
+                  {
+                    findings: error.findings,
+                    findingsTruncated: error.findingsTruncated,
+                  },
                 )
-              : new CliError(
-                  "INTERNAL_ERROR",
-                  error instanceof Error ? error.message : String(error),
-                  EXIT_CODES.INTERNAL,
-                );
-    emitError({ io, output: "json", skills: skillService }, cliError);
+              : error instanceof SkillPackageScanLimitError
+                ? new CliError(
+                    "SKILL_PACKAGE_SCAN_LIMIT_EXCEEDED",
+                    "Skill package 文本文件过大，无法在受限内存中完成敏感信息扫描；请拆分文件或使用 .prompthubignore 排除无需打包的内容",
+                    EXIT_CODES.CONFLICT,
+                    {
+                      path: error.path,
+                      limitKind: error.limitKind,
+                      observedBytes: error.observedBytes,
+                      limitBytes: error.limitBytes,
+                    },
+                  )
+                : error instanceof SkillPackageEntryLimitError
+                  ? new CliError(
+                      "SKILL_PACKAGE_ENTRY_LIMIT_EXCEEDED",
+                      "Skill package 文件数量超过安全扫描上限；请拆分 package 或使用 .prompthubignore 排除依赖、缓存和构建产物",
+                      EXIT_CODES.CONFLICT,
+                      {
+                        path: error.path,
+                        observedEntries: error.observedEntries,
+                        limitEntries: error.limitEntries,
+                      },
+                    )
+                  : isDatabaseBusyError(error)
+                    ? new CliError(
+                        "DATABASE_BUSY",
+                        "数据库正在被另一个 PromptHub 进程写入，请稍后重试；如持续出现，请关闭其他 PromptHub 进程后重试",
+                        EXIT_CODES.CONFLICT,
+                      )
+                    : new CliError(
+                        "INTERNAL_ERROR",
+                        error instanceof Error ? error.message : String(error),
+                        EXIT_CODES.INTERNAL,
+                      );
+    emitError(
+      { io, output: "json", detail: "summary", skills: skillService },
+      cliError,
+    );
     return cliError.exitCode;
   } finally {
     restoreConsole();

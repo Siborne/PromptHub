@@ -1,6 +1,7 @@
 import { app } from "electron";
 import { execFile } from "node:child_process";
-import { win32 as pathWin32 } from "node:path";
+import fs from "node:fs";
+import path, { win32 as pathWin32 } from "node:path";
 import type {
   CliInstallMethod,
   CliInstallResult,
@@ -9,6 +10,9 @@ import type {
 
 const CLI_COMMAND = "prompthub";
 const PACKAGE_MANAGER_NOT_FOUND_ERROR = "CLI_PACKAGE_MANAGER_NOT_FOUND";
+const VERSION_PROBE_TIMEOUT_MS = 3_000;
+const COMMAND_TIMEOUT_MS = 120_000;
+const MAX_LEGACY_WRAPPER_BYTES = 4_096;
 type CommandPathSource =
   | "app-env"
   | "login-shell"
@@ -63,14 +67,55 @@ function getManualInstallCommands(): Record<CliInstallMethod, string> {
 async function runCommand(
   command: string,
   args: string[],
+  timeout = COMMAND_TIMEOUT_MS,
 ): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync(command, args, {
     env: process.env,
-    timeout: 120000,
+    timeout,
     windowsHide: true,
     maxBuffer: 1024 * 1024,
     shell: process.platform === "win32",
   });
+}
+
+function getLegacyCliWrapperPath(): string {
+  return path.join(
+    app.getPath("userData"),
+    "bin",
+    process.platform === "win32" ? "prompthub.cmd" : CLI_COMMAND,
+  );
+}
+
+function isRecognizedLegacyWrapper(filePath: string): boolean {
+  try {
+    const stat = fs.lstatSync(filePath);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      stat.size > MAX_LEGACY_WRAPPER_BYTES
+    ) {
+      return false;
+    }
+    const content = fs.readFileSync(filePath, "utf8");
+    const invokesDesktop =
+      /PromptHub(?:\.app[^\r\n"]*)?[\s\S]*--cli(?:\s|%\*|"\$@")/i.test(content);
+    return invokesDesktop && /^(?:#!\/bin\/sh|@echo off)/i.test(content.trim());
+  } catch {
+    return false;
+  }
+}
+
+function findLegacyCliWrapper(): string | null {
+  const candidate = getLegacyCliWrapperPath();
+  return isRecognizedLegacyWrapper(candidate) ? candidate : null;
+}
+
+function removeLegacyCliWrapper(filePath: string | null): boolean {
+  if (!filePath || !isRecognizedLegacyWrapper(filePath)) {
+    return false;
+  }
+  fs.rmSync(filePath);
+  return true;
 }
 
 async function resolveFromLoginShell(command: string): Promise<string | null> {
@@ -132,7 +177,14 @@ async function detectVersionAtPath(
   pathSource: CommandPathSource | null;
 }> {
   try {
-    const { stdout } = await runCommand(commandPath, ["--version"]);
+    if (isRecognizedLegacyWrapper(commandPath)) {
+      return { version: null, path: null, pathSource: null };
+    }
+    const { stdout } = await runCommand(
+      commandPath,
+      ["--version"],
+      VERSION_PROBE_TIMEOUT_MS,
+    );
     return {
       version: stdout.trim() || null,
       path: commandPath,
@@ -216,14 +268,19 @@ async function detectPrompthubFromWindowsNpmPrefix(): Promise<{
   return detectVersionFromCandidates(candidates, "npm-prefix");
 }
 
-async function detectCommandVersion(command: string): Promise<{
+async function detectCommandVersion(
+  command: string,
+  options?: { skipDirect?: boolean },
+): Promise<{
   version: string | null;
   path: string | null;
   pathSource: CommandPathSource | null;
 }> {
-  const directResult = await detectVersionAtPath(command, "app-env");
-  if (directResult.version) {
-    return directResult;
+  if (!options?.skipDirect) {
+    const directResult = await detectVersionAtPath(command, "app-env");
+    if (directResult.version) {
+      return directResult;
+    }
   }
 
   const windowsWhereResult = await detectVersionFromCandidates(
@@ -245,17 +302,7 @@ async function detectCommandVersion(command: string): Promise<{
   if (!shellPath) {
     return { version: null, path: null, pathSource: null };
   }
-
-  try {
-    const { stdout } = await runCommand(shellPath, ["--version"]);
-    return {
-      version: stdout.trim() || null,
-      path: shellPath,
-      pathSource: "login-shell",
-    };
-  } catch {
-    return { version: null, path: null, pathSource: null };
-  }
+  return detectVersionAtPath(shellPath, "login-shell");
 }
 
 async function detectPackageManager(command: CliInstallMethod): Promise<{
@@ -267,11 +314,14 @@ async function detectPackageManager(command: CliInstallMethod): Promise<{
 }
 
 async function detectPrompthubVersion(): Promise<string | null> {
-  const result = await detectCommandVersion(CLI_COMMAND);
+  const result = await detectCommandVersion(CLI_COMMAND, {
+    skipDirect: Boolean(findLegacyCliWrapper()),
+  });
   return result.version;
 }
 
 export async function getCliStatus(): Promise<CliStatus> {
+  const legacyCommandPath = findLegacyCliWrapper();
   const [pnpmInfo, npmInfo, installedVersion] = await Promise.all([
     detectPackageManager("pnpm"),
     detectPackageManager("npm"),
@@ -318,6 +368,7 @@ export async function getCliStatus(): Promise<CliStatus> {
     installCommand,
     manualInstallCommands: getManualInstallCommands(),
     installSource,
+    legacyCommandPath,
   };
 }
 
@@ -356,12 +407,16 @@ export async function installCli(
   try {
     const executable = packageManagerInfo.path || installMethod;
     const { stdout, stderr } = await runCommand(executable, args);
+    const removedLegacyCommand = removeLegacyCliWrapper(
+      status.legacyCommandPath ?? null,
+    );
     return {
       success: true,
       method: installMethod,
       command,
       stdout,
       stderr,
+      removedLegacyCommand,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -14,6 +14,18 @@ export {
   db,
 } from "./init";
 export type { InitDatabaseHooks } from "./init";
+export {
+  acquireDatabaseClientLease,
+  inspectDatabaseClientLock,
+  recoverDatabaseClientLock,
+} from "./database-client-lock";
+export type {
+  DatabaseClientLease,
+  DatabaseClientLeaseOptions,
+  DatabaseLockInspection,
+  DatabaseLockRecoveryReason,
+  DatabaseLockRecoveryResult,
+} from "./database-client-lock";
 
 // DB classes
 export { PromptDB } from "./prompt";

@@ -218,6 +218,7 @@ describe("CLI feature completeness", () => {
 
     const updateRes = await execCli([
       ...withDataDir(root),
+      "--full",
       "skill",
       "update",
       "meta-skill",

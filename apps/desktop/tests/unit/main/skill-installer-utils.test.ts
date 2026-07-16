@@ -18,6 +18,7 @@ vi.mock("../../../src/main/database", () => ({
 import { initDatabase } from "../../../src/main/database";
 import { getPlatformById } from "@prompthub/shared/constants/platforms";
 import {
+  getCustomAgentPlatforms,
   getConfiguredBuiltinAgentPlatformIds,
   getPlatformRootDir,
   getPlatformSkillsDir,
@@ -35,6 +36,49 @@ describe("skill-installer-utils", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     invalidateCustomPathsCache();
+  });
+
+  describe("getCustomAgentPlatforms", () => {
+    it("projects every enabled custom Agent asset path into the shared platform registry", () => {
+      const getMock = vi.fn().mockImplementation((key: string) => {
+        if (key !== "customAgents") return undefined;
+        return {
+          value: JSON.stringify([
+            {
+              id: "team-agent",
+              name: "Team Agent",
+              rootPath: "~/team-agent",
+              skillsRelativePath: "skills-custom",
+              mcpRelativePath: "config/mcp.json",
+              pluginsRelativePath: "extensions",
+              rulesRelativePath: "AGENTS.md",
+              configRelativePaths: ["settings.json"],
+            },
+            {
+              id: "disabled-agent",
+              name: "Disabled Agent",
+              rootPath: "~/disabled-agent",
+              enabled: false,
+            },
+          ]),
+        };
+      });
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({ get: getMock }),
+      } as unknown as ReturnType<typeof initDatabase>);
+
+      expect(getCustomAgentPlatforms()).toEqual([
+        expect.objectContaining({
+          id: "team-agent",
+          skillsRelativePath: "skills-custom",
+          mcpRelativePath: "config/mcp.json",
+          pluginsRelativePath: "extensions",
+          globalRuleFile: "AGENTS.md",
+          configFiles: ["settings.json"],
+          isCustom: true,
+        }),
+      ]);
+    });
   });
 
   describe("getConfiguredBuiltinAgentPlatformIds", () => {

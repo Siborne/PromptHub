@@ -30,6 +30,10 @@ const GENERATED_DIRECTORY_NAMES = new Set([
   ".pnpm-store",
   ".sass-cache",
   ".venv",
+  "build",
+  "dist",
+  "out",
+  "target",
   ".tmp",
   "tmp",
   "temp",
@@ -153,7 +157,8 @@ export function shouldIgnoreSkillDirectoryEntry(relativePath: string): boolean {
     return true;
   }
   return DIRECTORY_FINGERPRINT_EXCLUDES.some(
-    (prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix),
+    (prefix) =>
+      normalized === prefix.slice(0, -1) || normalized.startsWith(prefix),
   );
 }
 
@@ -162,7 +167,10 @@ type TextDirectoryFingerprintEntry = Pick<
   "path" | "content" | "isDirectory"
 >;
 
-type BinaryDirectoryFingerprintEntry = Pick<SkillLocalFileBufferEntry, "path" | "data"> & {
+type BinaryDirectoryFingerprintEntry = Pick<
+  SkillLocalFileBufferEntry,
+  "path" | "data"
+> & {
   isDirectory?: false;
 };
 
@@ -183,7 +191,10 @@ function isTextDirectoryFingerprintEntry(
 }
 
 function getEntryContentHash(entry: DirectoryFingerprintEntry): string {
-  if (isBinaryDirectoryFingerprintEntry(entry) && entry.data instanceof Uint8Array) {
+  if (
+    isBinaryDirectoryFingerprintEntry(entry) &&
+    entry.data instanceof Uint8Array
+  ) {
     return computeStableBinaryHash(entry.data);
   }
   if (!isTextDirectoryFingerprintEntry(entry)) {

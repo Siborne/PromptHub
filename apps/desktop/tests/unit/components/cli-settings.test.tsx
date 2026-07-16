@@ -7,6 +7,17 @@ import { renderWithI18n } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
 
 const showToast = vi.fn();
+const FALLBACK_CLI_STATUS = {
+  installed: false,
+  command: "prompthub",
+  version: null,
+  packageManager: null,
+  packageManagerVersion: null,
+  releaseTag: "v0.5.9",
+  installCommand: null,
+  manualInstallCommands: { pnpm: "", npm: "" },
+  installSource: "",
+};
 
 function hasHiddenSvgAncestor(element: Element): boolean {
   let current: Element | null = element;
@@ -164,6 +175,49 @@ describe("CLISettings", () => {
       "success",
     );
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("explains and completes migration from the retired desktop wrapper", async () => {
+    const legacyCommandPath = "/tmp/PromptHub/bin/prompthub";
+    const install = vi.fn().mockResolvedValue({
+      success: true,
+      method: "pnpm",
+      command: "pnpm add -g prompthub-cli.tgz",
+      removedLegacyCommand: true,
+    });
+    const getStatus = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...FALLBACK_CLI_STATUS,
+        packageManager: "pnpm",
+        packageManagerVersion: "10.0.0",
+        legacyCommandPath,
+      })
+      .mockResolvedValueOnce({
+        ...FALLBACK_CLI_STATUS,
+        installed: true,
+        version: "0.5.9",
+        packageManager: "pnpm",
+        packageManagerVersion: "10.0.0",
+        legacyCommandPath: null,
+      });
+    installWindowMocks({ electron: { cli: { getStatus, install } } });
+
+    await act(async () => {
+      await renderWithI18n(<CLISettings />, { language: "en" });
+    });
+
+    expect(
+      await screen.findByText("Legacy desktop CLI wrapper detected"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(legacyCommandPath)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Replace with pnpm" }));
+
+    await waitFor(() => expect(install).toHaveBeenCalledWith("pnpm"));
+    expect(showToast).toHaveBeenCalledWith(
+      "Standalone PromptHub CLI installed; the legacy desktop wrapper was removed",
+      "success",
+    );
   });
 
   it("does not attempt one-click install when no package manager is detected", async () => {

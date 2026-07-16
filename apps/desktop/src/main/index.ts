@@ -100,6 +100,7 @@ import { resolveLocalMediaProtocolPath } from "./local-media-protocol";
 import { applyNetworkProxySettings } from "./services/network-proxy";
 import { createTrayController } from "./tray-controller";
 import { dispatchTrayAppCommand } from "./tray-command-dispatcher";
+import { handleLegacyDesktopCliInvocation } from "./legacy-cli-invocation";
 
 // Disable GPU acceleration (optional; may be needed on some systems)
 // 禁用 GPU 加速（可选，某些系统上可能需要）
@@ -201,6 +202,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const isE2E = isE2EEnabled();
+const isLegacyCliInvocation = process.argv.includes("--cli");
 configureE2ETestProfile();
 if (!isE2E) {
   const appDataPath = app.getPath("appData");
@@ -270,7 +272,8 @@ const trayController = createTrayController({
 
 // Single instance lock (prevent multiple instances)
 // 单实例锁定（防止多开）
-const gotTheLock = isE2E ? true : app.requestSingleInstanceLock();
+const gotTheLock =
+  isE2E || isLegacyCliInvocation ? true : app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   // Quit immediately if we fail to acquire the lock (another instance is running)
@@ -1625,6 +1628,16 @@ ipcMain.handle(
 // 应用启动
 app.whenReady().then(async () => {
   try {
+    if (
+      handleLegacyDesktopCliInvocation({
+        argv: process.argv,
+        exit: (code) => app.exit(code),
+        writeError: (message) => process.stderr.write(message),
+      })
+    ) {
+      return;
+    }
+
     // A second packaged instance on Windows may still reach whenReady() before quit
     // if we only call app.quit() after failing the single-instance lock.
     // Guard bootstrap here so the loser instance never continues into createWindow/loadFile.

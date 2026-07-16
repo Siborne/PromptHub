@@ -17,6 +17,29 @@ export interface DatabaseClientLease {
   release: () => void;
 }
 
+export type DatabaseLockRecoveryReason =
+  | "live-client"
+  | "unknown-client"
+  | "unsafe-lock";
+
+export interface DatabaseLockInspection {
+  status: "absent" | "recoverable" | "blocked";
+  recovered: false;
+  lockPath: string;
+  reason?: DatabaseLockRecoveryReason;
+  livePids: number[];
+  staleEntries: string[];
+  unknownEntries: string[];
+}
+
+export interface DatabaseLockRecoveryResult extends Omit<
+  DatabaseLockInspection,
+  "status" | "recovered"
+> {
+  status: "absent" | "recovered" | "blocked";
+  recovered: boolean;
+}
+
 interface ClientLeaseScan {
   hasLiveClient: boolean;
   hasRecoverableStaleLease: boolean;
@@ -39,6 +62,117 @@ function defaultIsProcessAlive(pid: number): boolean {
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
+}
+
+function inspectClientLeaseDirectory(
+  clientsDir: string,
+  isProcessAlive: (pid: number) => boolean,
+): Pick<
+  DatabaseLockInspection,
+  "livePids" | "staleEntries" | "unknownEntries"
+> {
+  if (!fs.existsSync(clientsDir)) {
+    return { livePids: [], staleEntries: [], unknownEntries: [] };
+  }
+  const stat = fs.lstatSync(clientsDir);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    return {
+      livePids: [],
+      staleEntries: [],
+      unknownEntries: [path.basename(clientsDir)],
+    };
+  }
+
+  const livePids: number[] = [];
+  const staleEntries: string[] = [];
+  const unknownEntries: string[] = [];
+  for (const entry of fs.readdirSync(clientsDir, { withFileTypes: true })) {
+    const filePath = path.join(clientsDir, entry.name);
+    if (!entry.isFile() || entry.isSymbolicLink()) {
+      unknownEntries.push(entry.name);
+      continue;
+    }
+    const pid = readLeasePid(filePath);
+    if (pid === null || entry.name !== `${pid}.json`) {
+      staleEntries.push(entry.name);
+      continue;
+    }
+    if (isProcessAlive(pid)) {
+      livePids.push(pid);
+    } else {
+      staleEntries.push(entry.name);
+    }
+  }
+  return { livePids, staleEntries, unknownEntries };
+}
+
+export function inspectDatabaseClientLock(
+  dbPath: string,
+  options: { isProcessAlive?: (pid: number) => boolean } = {},
+): DatabaseLockInspection {
+  const lockPath = `${dbPath}.lock`;
+  const empty = { livePids: [], staleEntries: [], unknownEntries: [] };
+  if (!fs.existsSync(lockPath)) {
+    return { status: "absent", recovered: false, lockPath, ...empty };
+  }
+  const lockStat = fs.lstatSync(lockPath);
+  if (!lockStat.isDirectory() || lockStat.isSymbolicLink()) {
+    return {
+      status: "blocked",
+      recovered: false,
+      lockPath,
+      reason: "unsafe-lock",
+      ...empty,
+    };
+  }
+
+  const clients = inspectClientLeaseDirectory(
+    `${dbPath}.clients`,
+    options.isProcessAlive ?? defaultIsProcessAlive,
+  );
+  const reason =
+    clients.livePids.length > 0
+      ? "live-client"
+      : clients.unknownEntries.length > 0
+        ? "unknown-client"
+        : undefined;
+  return {
+    status: reason ? "blocked" : "recoverable",
+    recovered: false,
+    lockPath,
+    ...(reason && { reason }),
+    ...clients,
+  };
+}
+
+export function recoverDatabaseClientLock(
+  dbPath: string,
+  options: { isProcessAlive?: (pid: number) => boolean } = {},
+): DatabaseLockRecoveryResult {
+  const inspection = inspectDatabaseClientLock(dbPath, options);
+  if (inspection.status === "absent") {
+    return { ...inspection, status: "absent" };
+  }
+  if (inspection.status === "blocked") {
+    return { ...inspection, status: "blocked" };
+  }
+
+  const lease = acquireDatabaseClientLease(dbPath, {
+    isProcessAlive: options.isProcessAlive,
+    recoverUnregisteredLock: true,
+    registerExitHandler: false,
+  });
+  lease.release();
+  const after = inspectDatabaseClientLock(dbPath, options);
+  if (after.status === "absent") {
+    return { ...after, status: "recovered", recovered: true };
+  }
+  return {
+    ...after,
+    status: "blocked",
+    recovered: false,
+    reason: after.reason ?? "unknown-client",
+  };
 }
 
 function readLeasePid(filePath: string): number | null {

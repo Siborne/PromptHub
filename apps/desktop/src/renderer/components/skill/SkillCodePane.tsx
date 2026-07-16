@@ -1,41 +1,34 @@
 import { CheckIcon, CopyIcon, ChevronRightIcon } from "lucide-react";
 import type { TFunction } from "i18next";
-import type { Skill } from "@prompthub/shared/types";
-import { getProtocolDisplayLabel, getSkillSourceMeta } from "./detail-utils";
+import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
+import type {
+  Skill,
+  SkillPlatformInstallStatusMap,
+} from "@prompthub/shared/types";
+import { getProtocolDisplayLabel } from "./detail-utils";
+import { SkillAssetTopology } from "./SkillAssetTopology";
 import { useToast } from "../ui/Toast";
 
 interface SkillCodePaneProps {
+  availablePlatforms: SkillPlatform[];
   copyStatus: Record<string, boolean>;
   handleCopy: (text: string, key: string) => void;
+  installDetails: SkillPlatformInstallStatusMap;
   selectedSkill: Skill;
   skillContent: string;
   t: TFunction;
 }
 
 export function SkillCodePane({
+  availablePlatforms,
   copyStatus,
   handleCopy,
+  installDetails,
   selectedSkill,
   skillContent,
   t,
 }: SkillCodePaneProps) {
   const { showToast } = useToast();
-  const sourceMeta = getSkillSourceMeta(selectedSkill, t);
-  const sourceCardClass =
-    "grid grid-cols-[auto,minmax(0,1fr)] items-center gap-3 rounded-2xl border border-border app-wallpaper-surface px-4 py-3 text-left transition-colors hover:bg-accent";
-  const sourceCardContent = sourceMeta ? (
-    <>
-      <div className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
-        {t("skill.source", "Source")}
-      </div>
-      <div className="min-w-0 grid grid-cols-[auto,minmax(0,1fr)] items-center gap-3">
-        <div className="truncate text-sm font-medium">{sourceMeta.sourceLabel}</div>
-        <div className="whitespace-normal break-words text-xs text-muted-foreground">
-          {sourceMeta.displayValue}
-        </div>
-      </div>
-    </>
-  ) : null;
   const handleOpenLocalSource = async (path: string) => {
     try {
       const result = await window.electron?.openPath?.(path);
@@ -71,50 +64,51 @@ export function SkillCodePane({
         <div className="rounded-2xl border border-border app-wallpaper-surface p-4">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div>
-              <div className="text-[11px] font-medium text-muted-foreground">{t("skill.id")}</div>
-              <div className="mt-1 truncate font-mono text-xs">{selectedSkill.id}</div>
+              <div className="text-[11px] font-medium text-muted-foreground">
+                {t("skill.id")}
+              </div>
+              <div className="mt-1 truncate font-mono text-xs">
+                {selectedSkill.id}
+              </div>
             </div>
             <div>
-              <div className="text-[11px] font-medium text-muted-foreground">{t("skill.protocol")}</div>
+              <div className="text-[11px] font-medium text-muted-foreground">
+                {t("skill.protocol")}
+              </div>
               <div className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-primary">
                 <ChevronRightIcon aria-hidden="true" className="w-4 h-4" />
                 {getProtocolDisplayLabel(selectedSkill.protocol_type)}
               </div>
             </div>
             <div>
-              <div className="text-[11px] font-medium text-muted-foreground">{t("skill.createdAt")}</div>
-              <div className="mt-1 text-xs">{new Date(selectedSkill.created_at).toLocaleDateString()}</div>
+              <div className="text-[11px] font-medium text-muted-foreground">
+                {t("skill.createdAt")}
+              </div>
+              <div className="mt-1 text-xs">
+                {new Date(selectedSkill.created_at).toLocaleDateString()}
+              </div>
             </div>
             <div>
-              <div className="text-[11px] font-medium text-muted-foreground">{t("skill.updatedAt")}</div>
-              <div className="mt-1 text-xs">{new Date(selectedSkill.updated_at).toLocaleDateString()}</div>
+              <div className="text-[11px] font-medium text-muted-foreground">
+                {t("skill.updatedAt")}
+              </div>
+              <div className="mt-1 text-xs">
+                {new Date(selectedSkill.updated_at).toLocaleDateString()}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {sourceMeta?.kind === "local" ? (
-        <button
-          type="button"
-          onClick={() => {
-            void handleOpenLocalSource(sourceMeta.value);
-          }}
-          className={sourceCardClass}
-          title={sourceMeta.displayValue}
-        >
-          {sourceCardContent}
-        </button>
-      ) : sourceMeta ? (
-        <a
-          href={sourceMeta.value}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={sourceCardClass}
-          title={sourceMeta.displayValue}
-        >
-          {sourceCardContent}
-        </a>
-      ) : null}
+      <SkillAssetTopology
+        availablePlatforms={availablePlatforms}
+        installDetails={installDetails}
+        onOpenLocalPath={(localPath) => {
+          void handleOpenLocalSource(localPath);
+        }}
+        selectedSkill={selectedSkill}
+        t={t}
+      />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
@@ -151,7 +145,6 @@ export function SkillCodePane({
           )}
         </div>
       </section>
-
     </div>
   );
 }

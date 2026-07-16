@@ -90,6 +90,7 @@ describe("CLI skill commands", () => {
 
     const installRes = await execCli([
       ...withDataDir(root),
+      "--full",
       "skill",
       "install",
       skillJsonPath,
@@ -218,6 +219,7 @@ describe("CLI skill commands", () => {
     const exitCode = await runCli(
       [
         ...withDataDir(root),
+        "--full",
         "skill",
         "install",
         "https://github.com/acme/github-skill",
@@ -281,6 +283,7 @@ describe("CLI skill commands", () => {
     const exitCode = await runCli(
       [
         ...withDataDir(root),
+        "--full",
         "skill",
         "install",
         "https://github.com/acme/nested-skill-repo",
@@ -296,9 +299,17 @@ describe("CLI skill commands", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(JSON.parse(stdout.join("\n")).local_repo_path).toContain(
-      path.join("skills", "nested-skill"),
-    );
+    const installed = JSON.parse(stdout.join("\n"));
+    expect(installed.local_repo_path).toContain("acme-nested-skill-repo");
+    expect(
+      fs.readFileSync(
+        path.join(installed.local_repo_path, "assets", "helper.txt"),
+        "utf8",
+      ),
+    ).toBe("nested");
+    expect(
+      fs.existsSync(path.join(installed.local_repo_path, "README.md")),
+    ).toBe(false);
   });
 
   it("rejects github repo install when multiple skill directories are found", async () => {
@@ -511,6 +522,7 @@ describe("CLI skill commands", () => {
 
     const installRes = await execCli([
       ...withDataDir(root),
+      "--full",
       "skill",
       "install",
       skillDir,
@@ -642,6 +654,7 @@ describe("CLI skill commands", () => {
 
     const syncRes = await execCli([
       ...withDataDir(root),
+      "--full",
       "skill",
       "sync-from-repo",
       "writer-skill",
@@ -719,6 +732,7 @@ describe("CLI skill commands", () => {
 
     const rollbackRes = await execCli([
       ...withDataDir(root),
+      "--full",
       "skill",
       "rollback",
       "writer-skill",

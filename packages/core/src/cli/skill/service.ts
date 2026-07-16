@@ -25,6 +25,7 @@ import {
 import { getSkillsDir } from "../../runtime-paths";
 import { installSkillFromSource } from "../../skills/install-flow";
 import { serializeSkillMd } from "../../skills/skill-frontmatter";
+import { assertSkillPackageEntriesSafe } from "../../skills/package-policy";
 import {
   parseSkillMd,
   sanitizeString,
@@ -39,6 +40,7 @@ import {
   isPathWithin,
   normalizeExistingPath,
   readFileContent,
+  readRepoSecretScanEntries,
   resolvePlatformPath,
   resolveRepoBasePath,
   resolveRepoTargetPath,
@@ -57,6 +59,7 @@ import {
   readManifest,
   saveContent,
   saveRepo,
+  linkRepoToTarget,
   type FetchLike,
 } from "./install";
 import type { CliSkillService, CliSkillServiceDeps } from "./types";
@@ -568,6 +571,10 @@ export function createCliSkillService(
       );
     }
 
+    assertSkillPackageEntriesSafe(
+      await readRepoSecretScanEntries(canonicalRepoPath),
+    );
+
     await fs.mkdir(targetRootDir, { recursive: true });
     const existed = await fileExists(skillDir);
     if (existed) {
@@ -587,13 +594,14 @@ export function createCliSkillService(
           `Skill already exists in target directory: ${skillDir}`,
         );
       }
-      await fs.rm(skillDir, { recursive: true, force: true });
     }
 
     if (mode === "symlink") {
-      await fs.symlink(canonicalRepoPath, skillDir, "dir");
+      await linkRepoToTarget(canonicalRepoPath, skillDir);
     } else {
-      await copyRepoToPlatform(canonicalRepoPath, skillDir);
+      await copyRepoToPlatform(canonicalRepoPath, skillDir, {
+        policyChecked: true,
+      });
     }
 
     return {
@@ -729,6 +737,8 @@ export function createCliSkillService(
     skillDb: SkillDB,
     skillId: string,
   ): Promise<SkillFileSnapshot[]> {
+    const repoPath = await resolveRepoPathForSkill(skillDb, skillId);
+    assertSkillPackageEntriesSafe(await readRepoSecretScanEntries(repoPath));
     const files = await readLocalFiles(skillDb, skillId);
     return files
       .filter(

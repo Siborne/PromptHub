@@ -10,6 +10,11 @@ import { SKILL_HELP } from "./help";
 import type { CliSkillService } from "./skill";
 import { emitSuccess } from "./io";
 import {
+  skillOutputPayload,
+  summarizeSkill,
+  summarizeSkillVersion,
+} from "./skill-output";
+import {
   ensureNoUnknownOptions,
   parseCsv,
   parsePositiveNumberOption,
@@ -103,20 +108,34 @@ export async function handleSkillCommand(
     return;
   }
 
-  const action = requirePositional(args, 0, "skill 子命令");
+  const requestedAction = requirePositional(args, 0, "skill 子命令");
+  const action =
+    requestedAction === "import"
+      ? "install"
+      : requestedAction === "distribute"
+        ? "install-md"
+        : requestedAction === "undistribute"
+          ? "uninstall-md"
+          : requestedAction;
   const db = databaseHooks.initDatabase();
   const skillDb = new SkillDB(db);
 
   if (action === "list") {
     const skills = skillDb.getAll();
-    emitSuccess(context, skills, await skillTableRows(context.skills, skills));
+    emitSuccess(
+      context,
+      context.detail === "full"
+        ? skills
+        : skills.map((skill) => summarizeSkill(skill)),
+      await skillTableRows(context.skills, skills),
+    );
     return;
   }
 
   if (action === "get") {
     const identifier = requirePositional(args, 1, "skill id 或 name");
     const { skill } = resolveSkillIdentifier(skillDb, identifier);
-    emitSuccess(context, skill);
+    emitSuccess(context, await skillOutputPayload(context, skillDb, skill));
     return;
   }
 
@@ -128,7 +147,10 @@ export async function handleSkillCommand(
     const skillId = await context.skills.installFromSource(source, skillDb, {
       name,
     });
-    emitSuccess(context, skillDb.getById(skillId));
+    emitSuccess(
+      context,
+      await skillOutputPayload(context, skillDb, skillDb.getById(skillId)),
+    );
     return;
   }
 
@@ -179,7 +201,15 @@ export async function handleSkillCommand(
     ensureNoUnknownOptions(args.slice(2));
     const { skill } = resolveSkillIdentifier(skillDb, identifier);
     const versions = skillDb.getVersions(skill.id);
-    emitSuccess(context, versions, skillVersionTableRows(versions));
+    emitSuccess(
+      context,
+      context.detail === "full"
+        ? versions
+        : versions.map((version) =>
+            summarizeSkillVersion(version, skill.directory_fingerprint),
+          ),
+      skillVersionTableRows(versions),
+    );
     return;
   }
 
@@ -190,7 +220,12 @@ export async function handleSkillCommand(
     ensureNoUnknownOptions(versionArgs);
     const { skill } = resolveSkillIdentifier(skillDb, identifier);
     const version = await context.skills.createVersion(skillDb, skill.id, note);
-    emitSuccess(context, version);
+    emitSuccess(
+      context,
+      context.detail === "full"
+        ? version
+        : summarizeSkillVersion(version, skill.directory_fingerprint),
+    );
     return;
   }
 
@@ -222,7 +257,7 @@ export async function handleSkillCommand(
         EXIT_CODES.NOT_FOUND,
       );
     }
-    emitSuccess(context, updated);
+    emitSuccess(context, await skillOutputPayload(context, skillDb, updated));
     return;
   }
 
@@ -486,7 +521,14 @@ export async function handleSkillCommand(
     const identifier = requirePositional(args, 1, "skill id 或 name");
     ensureNoUnknownOptions(args.slice(2));
     const { skill } = resolveSkillIdentifier(skillDb, identifier);
-    emitSuccess(context, await context.skills.syncFromRepo(skillDb, skill.id));
+    emitSuccess(
+      context,
+      await skillOutputPayload(
+        context,
+        skillDb,
+        await context.skills.syncFromRepo(skillDb, skill.id),
+      ),
+    );
     return;
   }
 
@@ -534,7 +576,7 @@ export async function handleSkillCommand(
         EXIT_CODES.NOT_FOUND,
       );
     }
-    emitSuccess(context, updated);
+    emitSuccess(context, await skillOutputPayload(context, skillDb, updated));
     return;
   }
 
@@ -585,7 +627,7 @@ export async function handleSkillCommand(
 
   throw new CliError(
     "USAGE_ERROR",
-    `不支持的 skill 子命令: ${action}`,
+    `不支持的 skill 子命令: ${requestedAction}`,
     EXIT_CODES.USAGE,
   );
 }

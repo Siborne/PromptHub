@@ -40,7 +40,7 @@
     "test": "vitest",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "test:i18n": "vitest run tests/unit/services/skill-locale-regression.test.ts tests/unit/components/skill-detail-utils.test.ts tests/unit/components/skill-i18n-smoke.test.tsx tests/unit/services/i18n-init.test.ts tests/unit/stores/settings-language.test.ts",
+    "test:i18n": "vitest run tests/unit/services/skill-locale-regression.test.ts tests/unit/components/skill-detail-utils.test.ts tests/unit/components/renderer-i18n-smoke.test.tsx tests/unit/services/i18n-init.test.ts tests/unit/stores/settings-language.test.ts",
     "test:run": "vitest run",
     "test:coverage": "vitest --coverage",
     "test:perf": "pnpm perf:budget",

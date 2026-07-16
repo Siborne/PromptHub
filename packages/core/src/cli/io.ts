@@ -85,6 +85,9 @@ export function emitSuccess(
   payload: unknown,
   tableRows?: Array<Record<string, unknown>>,
 ): void {
+  if (context.detail === "quiet") {
+    return;
+  }
   if (context.output === "table") {
     if (tableRows) {
       context.io.stdout(renderTable(tableRows));

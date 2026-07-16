@@ -17,6 +17,7 @@ export interface CliStatus {
   installCommand: string | null;
   manualInstallCommands: Record<CliInstallMethod, string>;
   installSource: string;
+  legacyCommandPath?: string | null;
   error?: string;
 }
 
@@ -26,5 +27,6 @@ export interface CliInstallResult {
   command: string;
   stdout?: string;
   stderr?: string;
+  removedLegacyCommand?: boolean;
   error?: string;
 }

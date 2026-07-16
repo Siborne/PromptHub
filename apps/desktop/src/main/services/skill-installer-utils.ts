@@ -652,6 +652,8 @@ export function getCustomAgentPlatforms(): SkillPlatform[] {
         linux: agent.rootPath,
       },
       skillsRelativePath: agent.skillsRelativePath || "skills",
+      mcpRelativePath: agent.mcpRelativePath || undefined,
+      pluginsRelativePath: agent.pluginsRelativePath || undefined,
       globalRuleFile: agent.rulesRelativePath || undefined,
       configFiles: agent.configRelativePaths || [],
       isCustom: true,

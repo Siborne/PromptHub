@@ -11,7 +11,19 @@ import type {
   SkillLocalFileEntry,
 } from "@prompthub/shared/types";
 import { computeSkillPackageFingerprintV1Sync } from "@prompthub/shared/utils/skill-source-update";
+import {
+  createSkillPackageIgnoreMatcher,
+  type SkillPackageIgnoreMatcher,
+  type SkillPackageTextEntry,
+} from "@prompthub/shared/utils/skill-package-policy";
 import { getSkillsDir } from "../../runtime-paths";
+import {
+  SKILL_PACKAGE_MAX_ENTRIES,
+  SKILL_SECRET_SCAN_MAX_FILE_BYTES,
+  SKILL_SECRET_SCAN_MAX_TOTAL_BYTES,
+  SkillPackageEntryLimitError,
+  SkillPackageScanLimitError,
+} from "../../skills/package-policy";
 import { validateSkillName } from "./parse";
 
 export const INTERNAL_REPO_DIRS = new Set([".git", ".prompthub"]);
@@ -45,6 +57,19 @@ export async function fileExists(targetPath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function loadSkillPackageIgnoreMatcher(
+  baseDir: string,
+): Promise<SkillPackageIgnoreMatcher> {
+  const ignorePath = path.join(baseDir, ".prompthubignore");
+  const customRules = await fs.readFile(ignorePath, "utf8").catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return "";
+    }
+    throw error;
+  });
+  return createSkillPackageIgnoreMatcher(customRules);
 }
 
 export function isInternalSkillRepoEntry(relativePath: string): boolean {
@@ -269,7 +294,15 @@ export async function readRepoFileBuffers(
 
   return walkRepoDir<SkillLocalFileBufferEntry>({
     baseDir: resolvedBasePath,
+    entryLimit: SKILL_PACKAGE_MAX_ENTRIES,
     realBasePath,
+    onEntryLimit: ({ relativePath, limit }) => {
+      throw new SkillPackageEntryLimitError({
+        path: relativePath,
+        observedEntries: limit + 1,
+        limitEntries: limit,
+      });
+    },
     onEntry: async ({ relativePath, fullPath, isDirectory }) => {
       if (isDirectory) {
         return null;
@@ -283,6 +316,88 @@ export async function readRepoFileBuffers(
   });
 }
 
+async function readBoundedTextFile(
+  fullPath: string,
+  relativePath: string,
+): Promise<{ content: string; bytes: number } | null> {
+  const handle = await fs.open(fullPath, "r");
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  try {
+    while (bytes <= SKILL_SECRET_SCAN_MAX_FILE_BYTES) {
+      const remaining = SKILL_SECRET_SCAN_MAX_FILE_BYTES + 1 - bytes;
+      const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+      const result = await handle.read(chunk, 0, chunk.length, bytes);
+      if (result.bytesRead === 0) {
+        break;
+      }
+      const data = chunk.subarray(0, result.bytesRead);
+      if (data.includes(0)) {
+        return null;
+      }
+      chunks.push(data);
+      bytes += result.bytesRead;
+    }
+  } finally {
+    await handle.close();
+  }
+
+  if (bytes > SKILL_SECRET_SCAN_MAX_FILE_BYTES) {
+    throw new SkillPackageScanLimitError({
+      path: relativePath,
+      observedBytes: bytes,
+      limitBytes: SKILL_SECRET_SCAN_MAX_FILE_BYTES,
+      limitKind: "file",
+    });
+  }
+  return { content: Buffer.concat(chunks, bytes).toString("utf8"), bytes };
+}
+
+export async function readRepoSecretScanEntries(
+  absoluteBasePath: string,
+): Promise<SkillPackageTextEntry[]> {
+  const { resolvedBasePath, realBasePath } = await resolveRepoBasePath(
+    absoluteBasePath,
+    { allowOutsideSkillsDir: true },
+  );
+  if (!(await fileExists(resolvedBasePath))) {
+    return [];
+  }
+
+  let totalBytes = 0;
+  return walkRepoDir<SkillPackageTextEntry>({
+    baseDir: resolvedBasePath,
+    entryLimit: SKILL_PACKAGE_MAX_ENTRIES,
+    realBasePath,
+    onEntryLimit: ({ relativePath, limit }) => {
+      throw new SkillPackageEntryLimitError({
+        path: relativePath,
+        observedEntries: limit + 1,
+        limitEntries: limit,
+      });
+    },
+    onEntry: async ({ relativePath, fullPath, isDirectory }) => {
+      if (isDirectory) {
+        return null;
+      }
+      const entry = await readBoundedTextFile(fullPath, relativePath);
+      if (!entry) {
+        return null;
+      }
+      totalBytes += entry.bytes;
+      if (totalBytes > SKILL_SECRET_SCAN_MAX_TOTAL_BYTES) {
+        throw new SkillPackageScanLimitError({
+          path: relativePath,
+          observedBytes: totalBytes,
+          limitBytes: SKILL_SECRET_SCAN_MAX_TOTAL_BYTES,
+          limitKind: "package",
+        });
+      }
+      return { path: relativePath, content: entry.content };
+    },
+  });
+}
+
 export async function computeRepoDirectoryFingerprintByPath(
   absoluteBasePath: string,
 ): Promise<string> {
@@ -292,7 +407,9 @@ export async function computeRepoDirectoryFingerprintByPath(
 
 export async function walkRepoDir<T>(opts: {
   baseDir: string;
+  entryLimit?: number;
   realBasePath: string;
+  onEntryLimit?: (entry: { relativePath: string; limit: number }) => void;
   onEntry: (entry: {
     relativePath: string;
     fullPath: string;
@@ -300,17 +417,27 @@ export async function walkRepoDir<T>(opts: {
     dirent: import("fs").Dirent;
   }) => Promise<T | null>;
 }): Promise<T[]> {
-  const { baseDir, realBasePath, onEntry } = opts;
+  const { baseDir, entryLimit, realBasePath, onEntryLimit, onEntry } = opts;
   const results: T[] = [];
+  const shouldIgnore = await loadSkillPackageIgnoreMatcher(baseDir);
+  let visitedEntries = 0;
+  let entryLimitReached = false;
 
   const recurse = async (dir: string, depth: number): Promise<void> => {
-    if (depth > MAX_WALK_DEPTH || results.length >= MAX_WALK_FILES) {
+    if (
+      entryLimitReached ||
+      depth > MAX_WALK_DEPTH ||
+      (entryLimit === undefined && results.length >= MAX_WALK_FILES)
+    ) {
       return;
     }
 
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const dirent of entries) {
-      if (results.length >= MAX_WALK_FILES || dirent.isSymbolicLink()) {
+      if (
+        (entryLimit === undefined && results.length >= MAX_WALK_FILES) ||
+        dirent.isSymbolicLink()
+      ) {
         continue;
       }
 
@@ -321,9 +448,16 @@ export async function walkRepoDir<T>(opts: {
       }
 
       const relativePath = path.relative(baseDir, fullPath);
-      if (isInternalSkillRepoEntry(relativePath)) {
+      if (shouldIgnore(relativePath)) {
         continue;
       }
+
+      if (entryLimit !== undefined && visitedEntries >= entryLimit) {
+        entryLimitReached = true;
+        onEntryLimit?.({ relativePath, limit: entryLimit });
+        return;
+      }
+      visitedEntries += 1;
 
       const isDirectory = dirent.isDirectory();
       const item = await onEntry({

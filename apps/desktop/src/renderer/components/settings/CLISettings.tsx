@@ -80,7 +80,12 @@ export function CLISettings() {
         return;
       }
 
-      showToast(t("settings.cliInstallSuccess"), "success");
+      showToast(
+        result.removedLegacyCommand
+          ? t("settings.cliLegacyMigrationSuccess")
+          : t("settings.cliInstallSuccess"),
+        "success",
+      );
       await refreshStatus();
     } catch (error) {
       console.error("Failed to install CLI:", error);
@@ -101,6 +106,7 @@ export function CLISettings() {
   };
 
   const hasDetectedPackageManager = Boolean(status.packageManager);
+  const hasLegacyWrapper = Boolean(status.legacyCommandPath);
   const primaryInstallMethod = status.packageManager ?? "pnpm";
   const canInstallCli =
     !isLoading &&
@@ -187,9 +193,12 @@ export function CLISettings() {
               ) : (
                 <DownloadIcon aria-hidden="true" className="h-4 w-4" />
               )}
-              {t("settings.cliInstallWith", {
-                manager: primaryInstallMethod,
-              })}
+              {t(
+                hasLegacyWrapper
+                  ? "settings.cliReplaceWith"
+                  : "settings.cliInstallWith",
+                { manager: primaryInstallMethod },
+              )}
             </button>
             {status.packageManager !== "npm" ? (
               <button
@@ -199,7 +208,12 @@ export function CLISettings() {
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <DownloadIcon aria-hidden="true" className="h-4 w-4" />
-                {t("settings.cliInstallWith", { manager: "npm" })}
+                {t(
+                  hasLegacyWrapper
+                    ? "settings.cliReplaceWith"
+                    : "settings.cliInstallWith",
+                  { manager: "npm" },
+                )}
               </button>
             ) : null}
             <button
@@ -215,6 +229,28 @@ export function CLISettings() {
               {t("settings.cliRefreshStatus")}
             </button>
           </div>
+          {!isLoading && status.legacyCommandPath ? (
+            <div
+              role="status"
+              className="flex gap-3 border-y border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-900 dark:text-amber-200"
+            >
+              <AlertCircleIcon
+                aria-hidden="true"
+                className="mt-0.5 h-4 w-4 shrink-0"
+              />
+              <div className="min-w-0 text-xs">
+                <p className="font-medium">
+                  {t("settings.cliLegacyWrapperTitle")}
+                </p>
+                <p className="mt-1 text-amber-800 dark:text-amber-300">
+                  {t("settings.cliLegacyWrapperDesc")}
+                </p>
+                <code className="mt-1.5 block overflow-x-auto whitespace-nowrap text-foreground">
+                  {status.legacyCommandPath}
+                </code>
+              </div>
+            </div>
+          ) : null}
           {!isLoading && !status.installed && !hasDetectedPackageManager ? (
             <p className="text-xs text-amber-700 dark:text-amber-300">
               {t("settings.cliPackageManagerInstallUnavailable")}
