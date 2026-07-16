@@ -3,7 +3,9 @@ import path from "path";
 
 import type {
   RecoveryCandidate,
+  RecoveryContentCounts,
   RecoveryDataSource,
+  RecoveryPreviewItemKind,
   RecoveryPreviewItem,
   RecoveryPreviewResult,
   UpgradeBackupEntry,
@@ -112,6 +114,19 @@ function inferDataSources(raw: RecoverableDatabase): RecoveryDataSource[] {
   if (raw.skillCount > 0) {
     sources.push("skills");
   }
+  const contentSourceMap: Array<
+    [keyof RecoveryContentCounts, RecoveryDataSource]
+  > = [
+    ["mcp", "mcp"],
+    ["rules", "rules"],
+    ["plugins", "plugins"],
+    ["config", "config"],
+    ["media", "media"],
+    ["otherData", "other-data"],
+  ];
+  for (const [kind, source] of contentSourceMap) {
+    if ((raw.contentCounts?.[kind] ?? 0) > 0) sources.push(source);
+  }
   return sources;
 }
 
@@ -152,7 +167,9 @@ export function buildResidualLegacyRecoveryCandidate(
     countWorkspacePromptFiles(path.join(currentPath, "data", "prompts")),
   );
   const folderCount = Math.max(
-    readWorkspaceFolderCount(path.join(currentPath, "workspace", "folders.json")),
+    readWorkspaceFolderCount(
+      path.join(currentPath, "workspace", "folders.json"),
+    ),
     readWorkspaceFolderCount(path.join(currentPath, "data", "folders.json")),
   );
   const skillCount = Math.max(
@@ -189,21 +206,31 @@ export function buildResidualLegacyRecoveryCandidate(
   };
 }
 
-export function listStandaloneDatabaseBackupFiles(currentPath: string): string[] {
-  if (!fs.existsSync(currentPath)) {
-    return [];
-  }
+export function listStandaloneDatabaseBackupFiles(
+  currentPath: string,
+): string[] {
+  const searchRoots = [currentPath, path.join(currentPath, "data")];
+  return Array.from(
+    new Set(searchRoots.flatMap(listGeneratedDatabaseBackupsInDirectory)),
+  ).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+}
 
+function listGeneratedDatabaseBackupsInDirectory(
+  directoryPath: string,
+): string[] {
   try {
+    const rootStat = fs.lstatSync(directoryPath);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) return [];
     return fs
-      .readdirSync(currentPath, { withFileTypes: true })
+      .readdirSync(directoryPath, { withFileTypes: true })
       .filter(
         (entry) =>
           entry.isFile() &&
-          /^prompthub\.db\.backup-before-.*\.db$/i.test(entry.name),
+          /^prompthub\.db(?:$|\.(?:backup(?:-before)?-|pre-recovery-|integrity-backup-|legacy-conflict-).+)/i.test(
+            entry.name,
+          ),
       )
-      .map((entry) => path.join(currentPath, entry.name))
-      .sort((a, b) => path.basename(b).localeCompare(path.basename(a)));
+      .map((entry) => path.join(directoryPath, entry.name));
   } catch {
     return [];
   }
@@ -228,7 +255,9 @@ export function buildDirectoryRecoveryCandidate(
   const dataSources = inferDataSources(raw);
   const sourceType = options?.sourceType ?? "external-user-data";
   const previewAvailable =
-    raw.hasDatabaseFile === true || raw.hasWorkspaceData === true;
+    raw.hasDatabaseFile === true ||
+    raw.hasWorkspaceData === true ||
+    Object.values(raw.contentCounts ?? {}).some((count) => (count ?? 0) > 0);
 
   return {
     sourcePath: raw.sourcePath,
@@ -242,7 +271,9 @@ export function buildDirectoryRecoveryCandidate(
     lastModified: options?.lastModified ?? latestModifiedIso(raw.sourcePath),
     previewAvailable,
     dataSources,
-    description: options?.description ?? candidateDescription(sourceType, dataSources),
+    contentCounts: raw.contentCounts,
+    description:
+      options?.description ?? candidateDescription(sourceType, dataSources),
     backupId: options?.backupId ?? null,
     fromVersion: options?.fromVersion ?? null,
     toVersion: options?.toVersion ?? null,
@@ -326,23 +357,22 @@ function extractFrontmatterTitle(raw: string): string | null {
   const value = titleLine.slice(titleLine.indexOf(":") + 1).trim();
   try {
     const parsed = JSON.parse(value);
-    return typeof parsed === "string" && parsed.trim().length > 0 ? parsed : null;
+    return typeof parsed === "string" && parsed.trim().length > 0
+      ? parsed
+      : null;
   } catch {
     return value.replace(/^['"]|['"]$/g, "") || null;
   }
 }
 
 function collectWorkspacePromptFiles(basePath: string): string[] {
-  if (!fs.existsSync(basePath)) {
-    return [];
-  }
-
   let stat: fs.Stats;
   try {
-    stat = fs.statSync(basePath);
+    stat = fs.lstatSync(basePath);
   } catch {
     return [];
   }
+  if (stat.isSymbolicLink()) return [];
 
   if (!stat.isDirectory()) {
     return path.basename(basePath) === "prompt.md" ? [basePath] : [];
@@ -354,6 +384,119 @@ function collectWorkspacePromptFiles(basePath: string): string[] {
     files.push(...collectWorkspacePromptFiles(path.join(basePath, entry.name)));
   }
   return files;
+}
+
+interface FilePreviewSource {
+  kind: RecoveryPreviewItemKind;
+  paths: string[];
+}
+
+const FILE_PREVIEW_SOURCES: FilePreviewSource[] = [
+  { kind: "mcp", paths: ["mcp", path.join("data", "mcp")] },
+  { kind: "rule", paths: ["rules", path.join("data", "rules")] },
+  { kind: "plugin", paths: ["plugins", path.join("data", "plugins")] },
+  { kind: "config", paths: ["config"] },
+  {
+    kind: "media",
+    paths: [
+      "images",
+      "videos",
+      path.join("data", "assets"),
+      path.join("data", "images"),
+      path.join("data", "videos"),
+    ],
+  },
+];
+const KNOWN_DATA_PREVIEW_ENTRIES = new Set([
+  "assets",
+  "folders.json",
+  "images",
+  "mcp",
+  "plugins",
+  "prompts",
+  "rules",
+  "skills",
+  "videos",
+]);
+
+function collectLinkSafeFiles(targetPath: string): string[] {
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(targetPath);
+  } catch {
+    return [];
+  }
+  if (stat.isSymbolicLink()) return [];
+  if (!stat.isDirectory()) return stat.isFile() ? [targetPath] : [];
+
+  try {
+    return fs
+      .readdirSync(targetPath, { withFileTypes: true })
+      .flatMap((entry) =>
+        entry.isSymbolicLink()
+          ? []
+          : collectLinkSafeFiles(path.join(targetPath, entry.name)),
+      );
+  } catch {
+    return [];
+  }
+}
+
+function appendFilePreviews(
+  basePath: string,
+  items: RecoveryPreviewItem[],
+): number {
+  let total = 0;
+  for (const source of FILE_PREVIEW_SOURCES) {
+    const files = Array.from(
+      new Set(
+        source.paths.flatMap((relativePath) =>
+          collectLinkSafeFiles(path.join(basePath, relativePath)),
+        ),
+      ),
+    );
+    total += files.length;
+    for (const filePath of files.slice(
+      0,
+      Math.max(0, PREVIEW_LIMIT - items.length),
+    )) {
+      items.push({
+        kind: source.kind,
+        title: path.basename(filePath),
+        subtitle: path.relative(basePath, filePath),
+        updatedAt: latestModifiedIso(filePath),
+      });
+    }
+  }
+  const dataPath = path.join(basePath, "data");
+  try {
+    const unknownFiles = fs
+      .readdirSync(dataPath, { withFileTypes: true })
+      .filter(
+        (entry) =>
+          !entry.isSymbolicLink() &&
+          !KNOWN_DATA_PREVIEW_ENTRIES.has(entry.name) &&
+          !/^prompthub\.db(?:$|[-.])/i.test(entry.name),
+      )
+      .flatMap((entry) =>
+        collectLinkSafeFiles(path.join(dataPath, entry.name)),
+      );
+    total += unknownFiles.length;
+    for (const filePath of unknownFiles.slice(
+      0,
+      Math.max(0, PREVIEW_LIMIT - items.length),
+    )) {
+      items.push({
+        kind: "other-data",
+        title: path.basename(filePath),
+        subtitle: path.relative(basePath, filePath),
+        updatedAt: latestModifiedIso(filePath),
+      });
+    }
+  } catch {
+    // No readable unified data directory.
+  }
+  return total;
 }
 
 function previewFromWorkspace(basePath: string): RecoveryPreviewResult {
@@ -394,7 +537,10 @@ function previewFromWorkspace(basePath: string): RecoveryPreviewResult {
         name?: string;
         createdAt?: unknown;
       }>;
-      for (const folder of parsed.slice(0, Math.max(0, PREVIEW_LIMIT - items.length))) {
+      for (const folder of parsed.slice(
+        0,
+        Math.max(0, PREVIEW_LIMIT - items.length),
+      )) {
         items.push({
           kind: "folder",
           id: folder.id,
@@ -424,7 +570,10 @@ function previewFromWorkspace(basePath: string): RecoveryPreviewResult {
       const entries = fs
         .readdirSync(skillsDir, { withFileTypes: true })
         .filter((entry) => entry.isDirectory());
-      for (const entry of entries.slice(0, Math.max(0, PREVIEW_LIMIT - items.length))) {
+      for (const entry of entries.slice(
+        0,
+        Math.max(0, PREVIEW_LIMIT - items.length),
+      )) {
         items.push({
           kind: "skill",
           title: entry.name,
@@ -438,6 +587,8 @@ function previewFromWorkspace(basePath: string): RecoveryPreviewResult {
     }
   }
 
+  const filePreviewCount = appendFilePreviews(basePath, items);
+
   return {
     sourcePath: basePath,
     previewAvailable: items.length > 0,
@@ -446,7 +597,7 @@ function previewFromWorkspace(basePath: string): RecoveryPreviewResult {
         ? null
         : "Preview is unavailable because this candidate only contains legacy browser storage.",
     items,
-    truncated: promptPaths.length > PREVIEW_LIMIT,
+    truncated: promptPaths.length + filePreviewCount > items.length,
   };
 }
 
@@ -532,6 +683,33 @@ function previewFromSqlite(dbPath: string): RecoveryPreviewResult {
       }
     }
 
+    if (items.length < PREVIEW_LIMIT) {
+      try {
+        const ruleRows = candidateDb
+          .prepare(
+            "SELECT id, canonical_file_name as name, updated_at as updatedAt FROM rules ORDER BY updated_at DESC LIMIT ?",
+          )
+          .all(PREVIEW_LIMIT - items.length) as Array<{
+          id?: string;
+          name?: string;
+          updatedAt?: unknown;
+        }>;
+        for (const row of ruleRows) {
+          items.push({
+            kind: "rule",
+            id: row.id,
+            title:
+              typeof row.name === "string" && row.name.trim().length > 0
+                ? row.name
+                : "Untitled rule",
+            updatedAt: toIsoTimestamp(row.updatedAt),
+          });
+        }
+      } catch {
+        // rules table may not exist in older snapshots
+      }
+    }
+
     const promptTotal = candidateDb
       .prepare("SELECT COUNT(*) as count FROM prompts")
       .get() as { count: number } | undefined;
@@ -539,6 +717,7 @@ function previewFromSqlite(dbPath: string): RecoveryPreviewResult {
       .prepare("SELECT COUNT(*) as count FROM folders")
       .get() as { count: number } | undefined;
     let skillTotal = 0;
+    let ruleTotal = 0;
     try {
       const skillRow = candidateDb
         .prepare("SELECT COUNT(*) as count FROM skills")
@@ -547,12 +726,25 @@ function previewFromSqlite(dbPath: string): RecoveryPreviewResult {
     } catch {
       skillTotal = 0;
     }
+    try {
+      const ruleRow = candidateDb
+        .prepare("SELECT COUNT(*) as count FROM rules")
+        .get() as { count: number } | undefined;
+      ruleTotal = ruleRow?.count ?? 0;
+    } catch {
+      ruleTotal = 0;
+    }
 
     return {
       sourcePath: dbPath,
       previewAvailable: true,
       items,
-      truncated: (promptTotal?.count ?? 0) + (folderTotal?.count ?? 0) + skillTotal > items.length,
+      truncated:
+        (promptTotal?.count ?? 0) +
+          (folderTotal?.count ?? 0) +
+          skillTotal +
+          ruleTotal >
+        items.length,
     };
   } catch (error) {
     return {
@@ -604,11 +796,23 @@ export async function previewRecoveryCandidate(
     return previewFromSqlite(candidate.sourcePath);
   }
 
-  const sqlitePath = fs.existsSync(path.join(candidate.sourcePath, "data", "prompthub.db"))
+  const sqlitePath = fs.existsSync(
+    path.join(candidate.sourcePath, "data", "prompthub.db"),
+  )
     ? path.join(candidate.sourcePath, "data", "prompthub.db")
     : path.join(candidate.sourcePath, "prompthub.db");
   if (fs.existsSync(sqlitePath)) {
-    return previewFromSqlite(sqlitePath);
+    const sqlitePreview = previewFromSqlite(sqlitePath);
+    if (sqlitePreview.previewAvailable) return sqlitePreview;
+
+    const filePreview = previewFromWorkspace(candidate.sourcePath);
+    if (filePreview.previewAvailable) {
+      return {
+        ...filePreview,
+        description: sqlitePreview.description ?? filePreview.description,
+      };
+    }
+    return sqlitePreview;
   }
 
   return previewFromWorkspace(candidate.sourcePath);

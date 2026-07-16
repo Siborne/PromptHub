@@ -81,6 +81,8 @@ export type ExportScope = {
   settings?: boolean;
   rules?: boolean;
   skills?: boolean;
+  mcp?: boolean;
+  plugins?: boolean;
 };
 
 export type PromptHubFile =

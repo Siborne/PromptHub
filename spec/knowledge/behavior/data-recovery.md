@@ -31,11 +31,25 @@
   不得把 `userData` 外部引用作为快照内容保存、迁移或恢复进当前数据目录。
 - 数据库恢复合并附带资产、工作区文件或浏览器存储目录时必须跳过符号链接；
   不得把所选恢复来源之外的文件内容导入当前数据目录。
-- 数据库恢复候选中的 `prompthub.db`、`data/prompthub.db`、独立 `.db`
-  备份文件、以及直接选择的 `.db` 恢复源必须是 link-safe 普通文件；
-  不得通过符号链接读取或恢复外部数据库内容。
+- 数据库恢复候选中的 `prompthub.db`、`data/prompthub.db`、独立数据库
+  备份文件、以及用户直接拖入的数据库恢复源必须是 link-safe 普通文件，并通过
+  真实 SQLite 表读取确认含有 PromptHub Prompt、Folder、Version、Rule、Skill、
+  Setting 或其它可恢复业务记录；不得仅依赖 `.db` 后缀判断，也不得通过符号链接
+  读取或恢复外部数据库内容。损坏或无法识别的文件必须拒绝；暂时被锁定的有效
+  SQLite 文件应保留为候选，并在可用时回退展示同目录的持久文件清单。
+- 桌面端备份拖拽入口必须区分导出包合并导入与 SQLite 整库恢复。PromptHub 生成的
+  `backup-*`、`backup-before-*`、`pre-recovery-*`、`integrity-backup-*` 和
+  `legacy-conflict-*` 数据库备份，无论是否带最终 `.db` 后缀，都应进入恢复候选预览，
+  并在用户明确确认后才替换当前数据库。
 - 恢复候选检测不得把符号链接指向的外部 workspace、renderer storage、
   file storage 或 skill 目录计为可恢复数据。
+- 用户明确添加的历史目录只要含有 link-safe 的 `data/` 或 `config/` 持久数据就必须
+  进入候选，包括 MCP、Rule、Plugin、Skill、媒体与未来新增的数据子目录；不得因
+  Prompt/Skill 行数为零或 SQLite 暂时锁定而丢弃。恢复界面必须展示这些数据类别，
+  目录恢复必须无覆盖地合并完整 `data/` 与 `config/` 树。
+- 选择性导出中的 Skill、MCP 与 Plugin 是独立范围。全量备份和导入确认必须明确
+  展示 Prompt、Folder、Version、媒体、AI 配置、系统设置、Rule、Skill、MCP 与
+  Plugin，不能用 Skill 代指其它 Agent 资产。
 - 手动数据路径迁移复制当前 `userData` 到新根目录时必须跳过源目录树中的符号链接；
   不得把当前数据根之外的链接目标变成新数据根中的真实文件。
 - 数据路径预览/检测不得把符号链接形式的 marker 目录或数据库文件计为真实

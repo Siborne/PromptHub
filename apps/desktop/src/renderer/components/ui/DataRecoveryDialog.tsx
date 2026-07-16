@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   RecoveryCandidate,
+  RecoveryContentCounts,
   RecoveryDataSource,
   RecoveryPreviewItem,
   RecoveryPreviewResult,
@@ -90,6 +91,25 @@ function databaseStatusLabel(
   });
 }
 
+const CONTENT_COUNT_KEYS: Array<[keyof RecoveryContentCounts, string]> = [
+  ["mcp", "recovery.mcpCount"],
+  ["rules", "recovery.ruleCount"],
+  ["plugins", "recovery.pluginCount"],
+  ["config", "recovery.configCount"],
+  ["media", "recovery.mediaCount"],
+  ["otherData", "recovery.otherDataCount"],
+];
+
+function contentCountLabels(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  counts?: RecoveryContentCounts,
+): string[] {
+  return CONTENT_COUNT_KEYS.flatMap(([kind, translationKey]) => {
+    const count = counts?.[kind] ?? 0;
+    return count > 0 ? [t(translationKey, { count })] : [];
+  });
+}
+
 export function DataRecoveryDialog({
   isOpen,
   onClose,
@@ -115,7 +135,9 @@ export function DataRecoveryDialog({
       return databases[0] ?? null;
     }
     return (
-      databases.find((candidate) => candidate.sourcePath === selectedSourcePath) ??
+      databases.find(
+        (candidate) => candidate.sourcePath === selectedSourcePath,
+      ) ??
       databases[0] ??
       null
     );
@@ -217,7 +239,9 @@ export function DataRecoveryDialog({
       }
     } catch (recoverError) {
       setError(
-        recoverError instanceof Error ? recoverError.message : String(recoverError),
+        recoverError instanceof Error
+          ? recoverError.message
+          : String(recoverError),
       );
       setIsRecovering(false);
     }
@@ -285,12 +309,18 @@ export function DataRecoveryDialog({
                   {databases.map((candidate) => {
                     const isSelected =
                       candidate.sourcePath === selectedCandidate.sourcePath;
+                    const durableCounts = contentCountLabels(
+                      t,
+                      candidate.contentCounts,
+                    );
                     return (
                       <button
                         key={candidate.sourcePath}
                         type="button"
                         aria-pressed={isSelected}
-                        onClick={() => setSelectedSourcePath(candidate.sourcePath)}
+                        onClick={() =>
+                          setSelectedSourcePath(candidate.sourcePath)
+                        }
                         className={`rounded-lg border p-2.5 text-left transition-colors ${
                           isSelected
                             ? "border-primary bg-primary/10"
@@ -311,18 +341,35 @@ export function DataRecoveryDialog({
                           </span>
                         </div>
 
-                        {candidate.promptCount === 0 && candidate.skillCount > 0 && (
-                          <div className="mt-2">
-                            <span className="text-[11px] rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-amber-600 dark:text-amber-400">
-                              {t("recovery.skillsOnly", "仅含 Skill 数据")}
-                            </span>
-                          </div>
-                        )}
+                        {candidate.promptCount === 0 &&
+                          candidate.skillCount > 0 &&
+                          durableCounts.length === 0 && (
+                            <div className="mt-2">
+                              <span className="text-[11px] rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-amber-600 dark:text-amber-400">
+                                {t("recovery.skillsOnly", "仅含 Skill 数据")}
+                              </span>
+                            </div>
+                          )}
 
                         <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-foreground/70">
-                          <span>{t("recovery.promptCount", { count: candidate.promptCount })}</span>
-                          <span>{t("recovery.folderCount", { count: candidate.folderCount })}</span>
-                          <span>{t("recovery.skillCount", { count: candidate.skillCount })}</span>
+                          <span>
+                            {t("recovery.promptCount", {
+                              count: candidate.promptCount,
+                            })}
+                          </span>
+                          <span>
+                            {t("recovery.folderCount", {
+                              count: candidate.folderCount,
+                            })}
+                          </span>
+                          <span>
+                            {t("recovery.skillCount", {
+                              count: candidate.skillCount,
+                            })}
+                          </span>
+                          {durableCounts.map((label) => (
+                            <span key={label}>{label}</span>
+                          ))}
                         </div>
 
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -370,22 +417,42 @@ export function DataRecoveryDialog({
                         aria-hidden="true"
                         className="w-3.5 h-3.5 text-primary/70"
                       />
-                      {t("recovery.promptCount", { count: selectedCandidate.promptCount })}
+                      {t("recovery.promptCount", {
+                        count: selectedCandidate.promptCount,
+                      })}
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-foreground/70">
                       <FolderOpen
                         aria-hidden="true"
                         className="w-3.5 h-3.5 text-primary/70"
                       />
-                      {t("recovery.folderCount", { count: selectedCandidate.folderCount })}
+                      {t("recovery.folderCount", {
+                        count: selectedCandidate.folderCount,
+                      })}
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-foreground/70">
                       <HardDrive
                         aria-hidden="true"
                         className="w-3.5 h-3.5 text-primary/70"
                       />
-                      {t("recovery.skillCount", { count: selectedCandidate.skillCount })}
+                      {t("recovery.skillCount", {
+                        count: selectedCandidate.skillCount,
+                      })}
                     </div>
+                    {contentCountLabels(t, selectedCandidate.contentCounts).map(
+                      (label) => (
+                        <div
+                          key={label}
+                          className="flex items-center gap-1.5 text-xs text-foreground/70"
+                        >
+                          <HardDrive
+                            aria-hidden="true"
+                            className="w-3.5 h-3.5 text-primary/70"
+                          />
+                          {label}
+                        </div>
+                      ),
+                    )}
                   </div>
 
                   <div className="text-xs text-muted-foreground">
@@ -454,7 +521,9 @@ export function DataRecoveryDialog({
                   className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5"
                 />
                 <p className="text-xs text-yellow-700 dark:text-yellow-400">
-                  {t("recovery.overwriteWarning", { count: currentPromptCount })}
+                  {t("recovery.overwriteWarning", {
+                    count: currentPromptCount,
+                  })}
                 </p>
               </div>
             )}

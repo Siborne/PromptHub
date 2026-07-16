@@ -109,12 +109,22 @@ const STORE_SOURCE_SNAPSHOT_TARGETS = {
   },
 } as const;
 
-export const BACKUP_IMPORT_ACCEPT = ".json,.phub,.gz,.zip";
+export const BACKUP_IMPORT_ACCEPT = ".json,.phub,.gz,.zip,.db";
 
 export function isSupportedBackupFileName(fileName: string): boolean {
   const normalized = fileName.trim().toLowerCase();
   return SUPPORTED_BACKUP_EXTENSIONS.some((extension) =>
     normalized.endsWith(extension),
+  );
+}
+
+export function isPotentialSqliteBackupFileName(fileName: string): boolean {
+  const normalized = fileName.trim().toLowerCase();
+  return (
+    normalized === "prompthub.db" ||
+    /^prompthub\.db\.(?:backup(?:-before)?-|pre-recovery-|integrity-backup-|legacy-conflict-)/.test(
+      normalized,
+    )
   );
 }
 
@@ -389,9 +399,7 @@ function normalizeStoreSourceSnapshot(
   };
 }
 
-function readPersistedStoreState(
-  key: string,
-): {
+function readPersistedStoreState(key: string): {
   envelope: Record<string, unknown>;
   state: Record<string, unknown>;
 } | null {
@@ -1242,6 +1250,8 @@ export async function downloadSelectiveExport(
     settings: !!scope.settings,
     rules: !!scope.rules,
     skills: !!scope.skills,
+    mcp: !!scope.mcp,
+    plugins: !!scope.plugins,
   };
 
   const fullBackup = await exportDatabase({
@@ -1271,11 +1281,30 @@ export async function downloadSelectiveExport(
     skills: normalized.skills ? fullBackup.skills : undefined,
     skillVersions: normalized.skills ? fullBackup.skillVersions : undefined,
     skillFiles: normalized.skills ? fullBackup.skillFiles : undefined,
-    mcpLibrary: normalized.skills ? fullBackup.mcpLibrary : undefined,
-    pluginLibrary: normalized.skills ? fullBackup.pluginLibrary : undefined,
-    pluginPackages: normalized.skills ? fullBackup.pluginPackages : undefined,
-    storeSources: normalized.skills ? fullBackup.storeSources : undefined,
-    agentAssetFiles: normalized.skills ? fullBackup.agentAssetFiles : undefined,
+    mcpLibrary: normalized.mcp ? fullBackup.mcpLibrary : undefined,
+    pluginLibrary: normalized.plugins ? fullBackup.pluginLibrary : undefined,
+    pluginPackages: normalized.plugins ? fullBackup.pluginPackages : undefined,
+    storeSources:
+      normalized.skills || normalized.mcp || normalized.plugins
+        ? {
+            skills: normalized.skills
+              ? fullBackup.storeSources?.skills
+              : undefined,
+            mcp: normalized.mcp ? fullBackup.storeSources?.mcp : undefined,
+            plugins: normalized.plugins
+              ? fullBackup.storeSources?.plugins
+              : undefined,
+          }
+        : undefined,
+    agentAssetFiles:
+      normalized.mcp || normalized.plugins
+        ? {
+            mcp: normalized.mcp ? fullBackup.agentAssetFiles?.mcp : undefined,
+            plugins: normalized.plugins
+              ? fullBackup.agentAssetFiles?.plugins
+              : undefined,
+          }
+        : undefined,
   };
 
   const exportFile: PromptHubFile = {

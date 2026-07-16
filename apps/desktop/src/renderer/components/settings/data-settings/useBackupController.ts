@@ -9,6 +9,7 @@ interface BackupControllerOptions {
   currentVersion: string;
   securityConfigured: boolean;
   webRuntime: boolean;
+  onDatabaseBackupPath?: (sourcePath: string) => Promise<void>;
 }
 
 /** Composes independent export, import, rollback, and destructive-data flows. */
@@ -17,9 +18,13 @@ export function useBackupController({
   currentVersion,
   securityConfigured,
   webRuntime,
+  onDatabaseBackupPath,
 }: BackupControllerOptions) {
   const exportActions = useBackupExportActions(currentVersion);
-  const importFlow = useBackupImportFlow(backupImportController);
+  const importFlow = useBackupImportFlow(
+    backupImportController,
+    onDatabaseBackupPath,
+  );
   const upgradeBackups = useUpgradeBackupFlow(webRuntime);
   const clearData = useClearDataFlow(securityConfigured);
 

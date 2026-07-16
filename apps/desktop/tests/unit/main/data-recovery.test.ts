@@ -191,7 +191,11 @@ describe("Data Recovery", () => {
 
       const candidateDir = path.join(tmpBase, "candidate-unified");
       fs.mkdirSync(candidateDir);
-      createUnifiedTestDatabase(candidateDir, { prompts: 4, folders: 2, skills: 1 });
+      createUnifiedTestDatabase(candidateDir, {
+        prompts: 4,
+        folders: 2,
+        skills: 1,
+      });
 
       const results = detectRecoverableDatabases(currentDir, [candidateDir]);
       expect(results).toHaveLength(1);
@@ -274,6 +278,32 @@ describe("Data Recovery", () => {
       expect(results).toEqual([]);
     });
 
+    it("keeps a valid database candidate when SQLite is temporarily locked", () => {
+      const currentDir = path.join(tmpBase, "current");
+      const candidateDir = path.join(tmpBase, "locked");
+      fs.mkdirSync(currentDir);
+      fs.mkdirSync(candidateDir);
+      createTestDatabase(candidateDir, { prompts: 1 });
+
+      const dbPath = path.join(candidateDir, "prompthub.db");
+      const lockDb = new DatabaseAdapter(dbPath);
+      lockDb.pragma("journal_mode = DELETE");
+      lockDb.exec("BEGIN EXCLUSIVE");
+      try {
+        const results = detectRecoverableDatabases(currentDir, [candidateDir]);
+        expect(results).toHaveLength(1);
+        expect(results[0]).toEqual(
+          expect.objectContaining({
+            sourcePath: candidateDir,
+            hasDatabaseFile: true,
+          }),
+        );
+      } finally {
+        lockDb.exec("ROLLBACK");
+        lockDb.close();
+      }
+    });
+
     it("does not surface candidates whose database file is a symlink", () => {
       const currentDir = path.join(tmpBase, "current");
       const candidateDir = path.join(tmpBase, "candidate");
@@ -352,6 +382,49 @@ describe("Data Recovery", () => {
       expect(results[0].folderCount).toBe(1);
     });
 
+    it("detects a manually selected directory containing only durable agent data", () => {
+      const currentDir = path.join(tmpBase, "current");
+      const candidateDir = path.join(tmpBase, "Program Files", "PromptHub");
+      fs.mkdirSync(currentDir, { recursive: true });
+      fs.mkdirSync(path.join(candidateDir, "data", "mcp"), {
+        recursive: true,
+      });
+      fs.mkdirSync(path.join(candidateDir, "data", "rules"), {
+        recursive: true,
+      });
+      fs.mkdirSync(path.join(candidateDir, "data", "plugins"), {
+        recursive: true,
+      });
+      fs.mkdirSync(path.join(candidateDir, "config"), { recursive: true });
+      fs.writeFileSync(
+        path.join(candidateDir, "data", "mcp", "library.json"),
+        "{}",
+      );
+      fs.writeFileSync(
+        path.join(candidateDir, "data", "rules", "AGENTS.md"),
+        "# rules",
+      );
+      fs.writeFileSync(
+        path.join(candidateDir, "data", "plugins", "library.json"),
+        "{}",
+      );
+      fs.writeFileSync(
+        path.join(candidateDir, "config", "settings.json"),
+        "{}",
+      );
+
+      const results = detectRecoverableDatabases(currentDir, [candidateDir]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].sourcePath).toBe(candidateDir);
+      expect((results[0] as any).contentCounts).toMatchObject({
+        mcp: 1,
+        rules: 1,
+        plugins: 1,
+        config: 1,
+      });
+    });
+
     it("does not surface candidates whose only workspace prompts are symlinks", () => {
       const currentDir = path.join(tmpBase, "current");
       const candidateDir = path.join(tmpBase, "candidate");
@@ -414,6 +487,51 @@ describe("Data Recovery", () => {
       expect(results[0].folderCount).toBe(1);
       expect(results[0].skillCount).toBe(2);
       expect(results[0].dbSizeBytes).toBeGreaterThan(4096);
+    });
+
+    it("detects standalone database backups containing only rule data", () => {
+      const currentDir = path.join(tmpBase, "current");
+      fs.mkdirSync(currentDir);
+      createTestDatabase(currentDir);
+      const dbPath = path.join(currentDir, "prompthub.db");
+      const db = new DatabaseAdapter(dbPath);
+      db.prepare(
+        `INSERT INTO rules (
+          id, scope, platform_id, platform_name, platform_icon,
+          platform_description, canonical_file_name, description,
+          managed_path, target_path, sync_status, content_hash,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "rule-1",
+        "global",
+        "codex",
+        "Codex",
+        "",
+        "",
+        "AGENTS.md",
+        "Recovered rule",
+        "/managed/AGENTS.md",
+        "/target/AGENTS.md",
+        "synced",
+        "hash",
+        Date.now(),
+        Date.now(),
+      );
+      db.close();
+
+      const backupFile = path.join(currentDir, "prompthub.db.backup-rules.db");
+      fs.copyFileSync(dbPath, backupFile);
+      const results = detectRecoverableDatabaseFiles(currentDir, [backupFile]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual(
+        expect.objectContaining({
+          promptCount: 0,
+          folderCount: 0,
+          skillCount: 0,
+        }),
+      );
     });
 
     it("skips standalone backup files with no prompts, folders, or skills", () => {
@@ -538,7 +656,10 @@ describe("Data Recovery", () => {
       fs.mkdirSync(sourceDir);
       fs.mkdirSync(externalAssets, { recursive: true });
       createTestDatabase(sourceDir, { prompts: 1 });
-      fs.writeFileSync(path.join(externalAssets, "secret.png"), "external-image");
+      fs.writeFileSync(
+        path.join(externalAssets, "secret.png"),
+        "external-image",
+      );
       fs.symlinkSync(externalAssets, path.join(sourceDir, "images"), "dir");
 
       const targetDir = path.join(tmpBase, "target");
@@ -551,9 +672,9 @@ describe("Data Recovery", () => {
       expect(fs.existsSync(path.join(targetDir, "images", "secret.png"))).toBe(
         false,
       );
-      expect(fs.readFileSync(path.join(externalAssets, "secret.png"), "utf8")).toBe(
-        "external-image",
-      );
+      expect(
+        fs.readFileSync(path.join(externalAssets, "secret.png"), "utf8"),
+      ).toBe("external-image");
     });
 
     it("skips symlinked asset files during recovery", () => {
@@ -561,9 +682,16 @@ describe("Data Recovery", () => {
       const externalFile = path.join(tmpBase, "outside-image.png");
       fs.mkdirSync(path.join(sourceDir, "images"), { recursive: true });
       createTestDatabase(sourceDir, { prompts: 1 });
-      fs.writeFileSync(path.join(sourceDir, "images", "safe.png"), "safe-image");
+      fs.writeFileSync(
+        path.join(sourceDir, "images", "safe.png"),
+        "safe-image",
+      );
       fs.writeFileSync(externalFile, "external-image");
-      fs.symlinkSync(externalFile, path.join(sourceDir, "images", "linked.png"), "file");
+      fs.symlinkSync(
+        externalFile,
+        path.join(sourceDir, "images", "linked.png"),
+        "file",
+      );
 
       const targetDir = path.join(tmpBase, "target");
       fs.mkdirSync(targetDir);
@@ -642,7 +770,10 @@ describe("Data Recovery", () => {
       performDatabaseRecovery(sourceDir, targetDir);
 
       expect(
-        fs.readFileSync(path.join(targetDir, "config", "shortcuts.json"), "utf-8"),
+        fs.readFileSync(
+          path.join(targetDir, "config", "shortcuts.json"),
+          "utf-8",
+        ),
       ).toBe('{"showApp":"Alt+Shift+P"}');
     });
 
@@ -754,6 +885,95 @@ describe("Data Recovery", () => {
       recoveredDb.close();
     });
 
+    it("restores an extensionless pre-recovery database backup file", () => {
+      const sourceDir = path.join(tmpBase, "source");
+      fs.mkdirSync(sourceDir);
+      createTestDatabase(sourceDir, { prompts: 2, folders: 1, skills: 3 });
+
+      const backupFile = path.join(
+        sourceDir,
+        "prompthub.db.pre-recovery-2026-07-15T13-19-14-753Z",
+      );
+      fs.copyFileSync(path.join(sourceDir, "prompthub.db"), backupFile);
+
+      const targetDir = path.join(tmpBase, "target");
+      fs.mkdirSync(targetDir);
+      createTestDatabase(targetDir);
+
+      const result = performDatabaseRecovery(backupFile, targetDir);
+
+      expect(result.success).toBe(true);
+      const recoveredDb = new DatabaseAdapter(
+        path.join(targetDir, "prompthub.db"),
+        { readonly: true },
+      );
+      expect(
+        (
+          recoveredDb.prepare("SELECT COUNT(*) as count FROM skills").get() as {
+            count: number;
+          }
+        ).count,
+      ).toBe(3);
+      recoveredDb.close();
+    });
+
+    it("merges complete data and config trees without overwriting current files", () => {
+      const sourceDir = path.join(tmpBase, "source");
+      const targetDir = path.join(tmpBase, "target");
+      fs.mkdirSync(path.join(sourceDir, "data", "mcp"), { recursive: true });
+      fs.mkdirSync(path.join(sourceDir, "data", "rules"), { recursive: true });
+      fs.mkdirSync(path.join(sourceDir, "config"), { recursive: true });
+      fs.mkdirSync(path.join(targetDir, "config"), { recursive: true });
+      fs.writeFileSync(
+        path.join(sourceDir, "data", "mcp", "library.json"),
+        '{"source":true}',
+      );
+      fs.writeFileSync(
+        path.join(sourceDir, "data", "rules", "AGENTS.md"),
+        "# source rules",
+      );
+      fs.writeFileSync(
+        path.join(sourceDir, "config", "settings.json"),
+        '{"source":true}',
+      );
+      fs.writeFileSync(
+        path.join(sourceDir, "config", "custom-agents.json"),
+        '{"agents":[]}',
+      );
+      fs.writeFileSync(
+        path.join(targetDir, "config", "settings.json"),
+        '{"target":true}',
+      );
+
+      const result = performDatabaseRecovery(sourceDir, targetDir);
+
+      expect(result.success).toBe(true);
+      expect(
+        fs.readFileSync(
+          path.join(targetDir, "data", "mcp", "library.json"),
+          "utf8",
+        ),
+      ).toBe('{"source":true}');
+      expect(
+        fs.readFileSync(
+          path.join(targetDir, "data", "rules", "AGENTS.md"),
+          "utf8",
+        ),
+      ).toBe("# source rules");
+      expect(
+        fs.readFileSync(
+          path.join(targetDir, "config", "settings.json"),
+          "utf8",
+        ),
+      ).toBe('{"target":true}');
+      expect(
+        fs.readFileSync(
+          path.join(targetDir, "config", "custom-agents.json"),
+          "utf8",
+        ),
+      ).toBe('{"agents":[]}');
+    });
+
     it("refuses directory recovery when the source database is a symlink", () => {
       const sourceDir = path.join(tmpBase, "source");
       const externalDir = path.join(tmpBase, "external");
@@ -774,9 +994,12 @@ describe("Data Recovery", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Source path has no recoverable data");
-      const targetDb = new DatabaseAdapter(path.join(targetDir, "prompthub.db"), {
-        readonly: true,
-      });
+      const targetDb = new DatabaseAdapter(
+        path.join(targetDir, "prompthub.db"),
+        {
+          readonly: true,
+        },
+      );
       const promptRow = targetDb
         .prepare("SELECT COUNT(*) as count FROM prompts")
         .get() as { count: number };
@@ -807,9 +1030,12 @@ describe("Data Recovery", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Source path has no recoverable data");
-      const targetDb = new DatabaseAdapter(path.join(targetDir, "prompthub.db"), {
-        readonly: true,
-      });
+      const targetDb = new DatabaseAdapter(
+        path.join(targetDir, "prompthub.db"),
+        {
+          readonly: true,
+        },
+      );
       const promptRow = targetDb
         .prepare("SELECT COUNT(*) as count FROM prompts")
         .get() as { count: number };

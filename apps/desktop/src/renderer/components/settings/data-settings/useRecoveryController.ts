@@ -143,6 +143,53 @@ function useRecoveryScan(manualRecoveryPaths: string[]) {
   };
 }
 
+function normalizeRecoveryPath(value: string): string {
+  return value.replace(/\\/g, "/").toLowerCase();
+}
+
+function useDroppedDatabaseRecovery(
+  setCandidates: (candidates: RecoveryCandidate[]) => void,
+  setShowBrowser: (show: boolean) => void,
+  setScanning: (scanning: boolean) => void,
+) {
+  const { t } = useTranslation();
+  const { showToast } = useToast();
+  return async (sourcePath: string) => {
+    setScanning(true);
+    try {
+      const candidates =
+        (await window.electron?.checkRecovery?.({
+          extraPaths: [sourcePath],
+          ignoreDismissMarker: true,
+        })) ?? [];
+      const normalizedSource = normalizeRecoveryPath(sourcePath);
+      const matched = candidates.filter(
+        (candidate) =>
+          normalizeRecoveryPath(candidate.sourcePath) === normalizedSource,
+      );
+      if (matched.length === 0) {
+        showToast(
+          t(
+            "settings.backupDropDatabaseInvalid",
+            "This file is not a recoverable PromptHub database backup.",
+          ),
+          "error",
+        );
+        return;
+      }
+      setCandidates(matched);
+      setShowBrowser(true);
+    } catch (error) {
+      showToast(
+        `${t("settings.recoveryScanFailed", "Failed to scan recovery sources")}: ${getErrorMessage(error)}`,
+        "error",
+      );
+    } finally {
+      setScanning(false);
+    }
+  };
+}
+
 export function useRecoveryController(webRuntime: boolean) {
   const pathState = useManualRecoveryPathState(webRuntime);
   const pathMutation = useRecoveryPathMutation(
@@ -155,12 +202,18 @@ export function useRecoveryController(webRuntime: boolean) {
     pathMutation.updateManualRecoveryPaths,
   );
   const scan = useRecoveryScan(pathState.manualRecoveryPaths);
+  const handleInspectDroppedDatabase = useDroppedDatabaseRecovery(
+    scan.setManualRecoveryCandidates,
+    scan.setShowRecoveryBrowser,
+    scan.setScanningRecoverySources,
+  );
 
   return {
     ...pathState,
     ...pathMutation,
     ...additions,
     ...scan,
+    handleInspectDroppedDatabase,
     handleRemoveManualRecoveryPath: (targetPath: string) =>
       pathMutation.handleRemoveManualRecoveryPath(
         pathState.manualRecoveryPaths,

@@ -14,6 +14,32 @@ interface BackupImportConfirmDialogProps {
   onConfirm: () => void;
 }
 
+function formatImportCounts(
+  t: ReturnType<typeof useTranslation>["t"],
+  counts: BackupImportPreviewState["summary"]["counts"],
+): string {
+  return [
+    t("settings.importCountPrompts", { count: counts.prompts }),
+    t("settings.importCountFolders", { count: counts.folders }),
+    t("settings.importCountVersions", { count: counts.versions }),
+    t("settings.importCountPromptRelations", {
+      count: counts.promptRelations,
+    }),
+    t("settings.importCountOutputFormats", {
+      count: counts.outputFormatItems,
+    }),
+    t("settings.importCountRules", { count: counts.rules }),
+    t("settings.importCountSkills", { count: counts.skills }),
+    t("settings.importCountSkillVersions", { count: counts.skillVersions }),
+    t("settings.importCountSkillFiles", { count: counts.skillFiles }),
+    t("settings.importCountMcpServers", { count: counts.mcpServers }),
+    t("settings.importCountPlugins", { count: counts.plugins }),
+    t("settings.importCountPluginFiles", { count: counts.pluginFiles }),
+    t("settings.importCountImages", { count: counts.images }),
+    t("settings.importCountVideos", { count: counts.videos }),
+  ].join(", ");
+}
+
 export function BackupImportConfirmDialog({
   importPreview,
   confirmingImport,
@@ -32,15 +58,16 @@ export function BackupImportConfirmDialog({
         importPreview ? (
           <div className="space-y-2 text-left">
             <p>
-              {t("settings.importPreviewFile", "File")}: {importPreview.file.name}
+              {t("settings.importPreviewFile", "File")}:{" "}
+              {importPreview.file.name}
             </p>
             <p>
-              {t("settings.importPreviewExportedAt", "Exported at")}: {new Date(
-                importPreview.summary.exportedAt,
-              ).toLocaleString()}
+              {t("settings.importPreviewExportedAt", "Exported at")}:{" "}
+              {new Date(importPreview.summary.exportedAt).toLocaleString()}
             </p>
             <p>
-              {t("settings.importPreviewCounts", "Will import")}: {importPreview.summary.counts.prompts} prompts, {importPreview.summary.counts.folders} folders, {importPreview.summary.counts.versions} versions, {importPreview.summary.counts.promptRelations} {t("settings.importPreviewPromptRelations", "prompt relations")}, {importPreview.summary.counts.outputFormatItems} output format items, {importPreview.summary.counts.rules} rules, {importPreview.summary.counts.skills} skills
+              {t("settings.importPreviewCounts", "Will import")}:{" "}
+              {formatImportCounts(t, importPreview.summary.counts)}
             </p>
             <p>
               {t(
@@ -50,7 +77,11 @@ export function BackupImportConfirmDialog({
             </p>
             {hasAnySkipped(importPreview.summary.skipped) ? (
               <p>
-                {t("settings.importPreviewSkipped", "Invalid records that will be skipped")}: {formatImportSkippedDetails(importPreview.summary.skipped)}
+                {t(
+                  "settings.importPreviewSkipped",
+                  "Invalid records that will be skipped",
+                )}
+                : {formatImportSkippedDetails(importPreview.summary.skipped)}
               </p>
             ) : null}
           </div>

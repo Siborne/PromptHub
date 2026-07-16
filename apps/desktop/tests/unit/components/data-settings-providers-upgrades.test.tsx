@@ -62,6 +62,8 @@ vi.mock("../../../src/renderer/services/database-backup", () => ({
     }
     return message;
   },
+  isPotentialSqliteBackupFileName: (fileName: string) =>
+    fileName.toLowerCase().startsWith("prompthub.db."),
   pickSupportedBackupFile: vi.fn(
     (files: FileList | File[]) => Array.from(files)[0] ?? null,
   ),
