@@ -353,9 +353,7 @@ export function normalizeSkillListPageSize(value: unknown): number {
 }
 
 export function normalizeSyncProvider(value: unknown): SyncProviderKind {
-  return value === "webdav" || value === "self-hosted" || value === "s3"
-    ? value
-    : "manual";
+  return value === "webdav" || value === "s3" ? value : "manual";
 }
 
 function normalizeStartupSyncDelay(value: unknown): number {
@@ -419,12 +417,6 @@ export function inferLegacySyncProvider(
   )
     active.push("webdav");
   if (
-    state.selfHostedSyncEnabled &&
-    (state.selfHostedSyncOnStartup ||
-      (state.selfHostedAutoSyncInterval ?? 0) > 0)
-  )
-    active.push("self-hosted");
-  if (
     state.s3StorageEnabled &&
     (state.s3SyncOnStartup ||
       (state.s3AutoSyncInterval ?? 0) > 0 ||
@@ -442,8 +434,7 @@ export function clampSyncProvider(
   >,
 ): SyncProviderKind {
   if (provider === "webdav" && !state.webdavEnabled) return "manual";
-  if (provider === "self-hosted" && !state.selfHostedSyncEnabled)
-    return "manual";
+  if (provider === "self-hosted") return "manual";
   if (provider === "s3" && !state.s3StorageEnabled) return "manual";
   return provider;
 }

@@ -352,10 +352,10 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       screen.getByRole("button", { name: "Test Connection" }),
     ).not.toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Back up to remote" }),
+      screen.getByRole("button", { name: "Create remote backup" }),
     ).not.toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Update from remote" }),
+      screen.getByRole("button", { name: "Restore latest backup" }),
     ).not.toBeDisabled();
   });
 
@@ -414,7 +414,9 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       });
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Back up to remote" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create remote backup" }),
+    );
 
     await waitFor(() => {
       expect(runS3Upload).toHaveBeenCalledWith({
@@ -456,7 +458,9 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       });
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Update from remote" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore latest backup" }),
+    );
 
     await waitFor(() => {
       expect(runS3Download).toHaveBeenCalledWith({

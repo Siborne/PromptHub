@@ -6,6 +6,7 @@ import {
 import { UploadIcon, DownloadIcon, RefreshCwIcon } from "lucide-react";
 import { Select } from "../../ui/Select";
 import { ToggleSwitch, PasswordInput } from "../shared";
+import { SyncProviderSelector } from "./SyncProviderSelector";
 
 export function S3SyncPanel() {
   const {
@@ -49,6 +50,8 @@ export function S3SyncPanel() {
                 onChange={settings.setS3StorageEnabled}
               />
             </div>
+
+            <SyncProviderSelector />
 
             <div className={getSyncPanelContentClassName(s3ControlsDisabled)}>
               <fieldset

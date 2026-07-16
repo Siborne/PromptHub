@@ -60,16 +60,17 @@ export interface PeriodicAutoSyncController {
 
 function selectPeriodicAutoSync(
   settings: PeriodicAutoSyncSettings,
-): PeriodicAutoSyncSelection | null {
+): PeriodicAutoSyncSelection[] {
+  const selections: PeriodicAutoSyncSelection[] = [];
   if (
     settings.syncProvider === "webdav" &&
     settings.webdavAutoSyncInterval > 0 &&
     hasValidWebDAVConfig(settings)
   ) {
-    return {
+    selections.push({
       provider: "webdav",
       intervalMinutes: settings.webdavAutoSyncInterval,
-    };
+    });
   }
 
   if (
@@ -77,31 +78,35 @@ function selectPeriodicAutoSync(
     settings.s3AutoSyncInterval > 0 &&
     hasValidS3Config(settings)
   ) {
-    return {
+    selections.push({
       provider: "s3",
       intervalMinutes: settings.s3AutoSyncInterval,
-    };
+    });
   }
 
   if (
-    settings.syncProvider === "self-hosted" &&
     settings.selfHostedAutoSyncInterval > 0 &&
     hasValidSelfHostedConfig(settings)
   ) {
-    return {
+    selections.push({
       provider: "self-hosted",
       intervalMinutes: settings.selfHostedAutoSyncInterval,
-    };
+    });
   }
 
-  return null;
+  return selections;
 }
 
 function buildSelectionSignature(
-  selection: PeriodicAutoSyncSelection | null,
+  selections: PeriodicAutoSyncSelection[],
 ): string {
-  return selection
-    ? `${selection.provider}:${selection.intervalMinutes}`
+  return selections.length > 0
+    ? selections
+        .map(
+          (selection) => `${selection.provider}:${selection.intervalMinutes}`,
+        )
+        .sort()
+        .join("|")
     : "none";
 }
 
@@ -127,38 +132,42 @@ export function registerPeriodicAutoSyncController(
 ): PeriodicAutoSyncController {
   const setIntervalFn = options.setIntervalFn ?? setInterval;
   const clearIntervalFn = options.clearIntervalFn ?? clearInterval;
-  let intervalHandle: ReturnType<typeof setInterval> | null = null;
+  const intervalHandles = new Map<
+    PeriodicProvider,
+    ReturnType<typeof setInterval>
+  >();
   let activeSignature = "";
 
-  const clearActiveInterval = () => {
-    if (intervalHandle) {
+  const clearActiveIntervals = () => {
+    for (const intervalHandle of intervalHandles.values()) {
       clearIntervalFn(intervalHandle);
-      intervalHandle = null;
     }
+    intervalHandles.clear();
   };
 
   const refresh = () => {
-    const selection = selectPeriodicAutoSync(options.getSettings());
-    const signature = buildSelectionSignature(selection);
+    const selections = selectPeriodicAutoSync(options.getSettings());
+    const signature = buildSelectionSignature(selections);
 
     if (signature === activeSignature) {
       return;
     }
 
-    clearActiveInterval();
+    clearActiveIntervals();
     activeSignature = signature;
 
-    if (!selection) {
-      return;
+    for (const selection of selections) {
+      const intervalMs = selection.intervalMinutes * 60 * 1000;
+      options.log?.(
+        `${selection.provider} automatic operation interval: ${selection.intervalMinutes} minutes`,
+      );
+      intervalHandles.set(
+        selection.provider,
+        setIntervalFn(() => {
+          runSelectedProvider(selection, options);
+        }, intervalMs),
+      );
     }
-
-    const intervalMs = selection.intervalMinutes * 60 * 1000;
-    options.log?.(
-      `${selection.provider} auto sync interval: ${selection.intervalMinutes} minutes`,
-    );
-    intervalHandle = setIntervalFn(() => {
-      runSelectedProvider(selection, options);
-    }, intervalMs);
   };
 
   const unsubscribe = options.subscribe(() => {
@@ -171,7 +180,7 @@ export function registerPeriodicAutoSyncController(
     refresh,
     dispose: () => {
       unsubscribe();
-      clearActiveInterval();
+      clearActiveIntervals();
       activeSignature = "";
     },
   };

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 import type {
   AgentAssetFilesSnapshot,
   Folder,
@@ -17,20 +17,20 @@ import type {
   AgentAssetStoreSourcesSnapshot,
   SyncOperationSummary,
   SyncSnapshot,
-} from '@prompthub/shared';
+} from "@prompthub/shared";
 import {
   DEFAULT_SETTINGS,
   isRuleFileId,
   isRulePlatformId,
-} from '@prompthub/shared';
-import { importedSettingsSchema } from './settings-validation.js';
-import { isHttpUrl, isSafeSkillIconUrl } from './skill-url-validation.js';
+} from "@prompthub/shared";
+import { importedSettingsSchema } from "./settings-validation.js";
+import { isHttpUrl, isSafeSkillIconUrl } from "./skill-url-validation.js";
 
 const ruleVersionSchema = z.object({
   id: z.string(),
   savedAt: z.string(),
   content: z.string(),
-  source: z.enum(['manual-save', 'ai-rewrite', 'create']),
+  source: z.enum(["manual-save", "ai-rewrite", "create"]),
 });
 
 const ruleSchema = z.object({
@@ -46,7 +46,7 @@ const ruleSchema = z.object({
   targetPath: z.string().optional(),
   projectRootPath: z.string().nullable().optional(),
   syncStatus: z
-    .enum(['synced', 'target-missing', 'out-of-sync', 'sync-error'])
+    .enum(["synced", "target-missing", "out-of-sync", "sync-error"])
     .optional(),
   content: z.string(),
   versions: z.array(ruleVersionSchema),
@@ -54,7 +54,7 @@ const ruleSchema = z.object({
 
 const skillSafetyFindingSchema = z.object({
   code: z.string(),
-  severity: z.enum(['info', 'warn', 'high']),
+  severity: z.enum(["info", "warn", "high"]),
   title: z.string(),
   detail: z.string(),
   filePath: z.string().optional(),
@@ -62,15 +62,15 @@ const skillSafetyFindingSchema = z.object({
 });
 
 const skillSafetyReportSchema = z.object({
-  level: z.enum(['safe', 'warn', 'high-risk', 'blocked']),
+  level: z.enum(["safe", "warn", "high-risk", "blocked"]),
   summary: z.string(),
   findings: z.array(skillSafetyFindingSchema),
-  recommendedAction: z.enum(['allow', 'review', 'block']),
+  recommendedAction: z.enum(["allow", "review", "block"]),
   scannedAt: z.number().int().nonnegative(),
   checkedFileCount: z.number().int().nonnegative(),
   scanMethod: z
-    .union([z.literal('ai'), z.literal('static')])
-    .transform(() => 'ai' as const),
+    .union([z.literal("ai"), z.literal("static")])
+    .transform(() => "ai" as const),
   score: z.number().min(0).max(100).optional(),
 });
 
@@ -79,18 +79,18 @@ function normalizeSkillFileRelativePath(relativePath: string): string | null {
     return null;
   }
 
-  const normalized = relativePath.replace(/\\/g, '/');
+  const normalized = relativePath.replace(/\\/g, "/");
   const segments: string[] = [];
 
-  if (normalized.startsWith('/') || /^[a-zA-Z]:/u.test(relativePath)) {
+  if (normalized.startsWith("/") || /^[a-zA-Z]:/u.test(relativePath)) {
     return null;
   }
 
-  for (const segment of normalized.split('/')) {
-    if (!segment || segment === '.') {
+  for (const segment of normalized.split("/")) {
+    if (!segment || segment === ".") {
       continue;
     }
-    if (segment === '..') {
+    if (segment === "..") {
       return null;
     }
     segments.push(segment);
@@ -100,7 +100,7 @@ function normalizeSkillFileRelativePath(relativePath: string): string | null {
     return null;
   }
 
-  return segments.join('/');
+  return segments.join("/");
 }
 
 function isSafeSkillFileRelativePath(relativePath: string): boolean {
@@ -111,9 +111,9 @@ function isSafeSkillFileRelativePath(relativePath: string): boolean {
 
   const lower = normalized.toLowerCase();
   return (
-    lower !== 'skill.json' &&
-    lower !== 'versions' &&
-    !lower.startsWith('versions/')
+    lower !== "skill.json" &&
+    lower !== "versions" &&
+    !lower.startsWith("versions/")
   );
 }
 
@@ -124,17 +124,17 @@ function isSafePluginFileRelativePath(relativePath: string): boolean {
 const skillFileSnapshotSchema = z.object({
   relativePath: z
     .string()
-    .refine(isSafeSkillFileRelativePath, 'Invalid skill file path'),
+    .refine(isSafeSkillFileRelativePath, "Invalid skill file path"),
   content: z.string(),
 });
 
 const promptSchema = z.object({
   id: z.string(),
   ownerUserId: z.string().nullable().optional(),
-  visibility: z.enum(['private', 'shared']).optional(),
+  visibility: z.enum(["private", "shared"]).optional(),
   title: z.string(),
   description: z.string().nullable().optional(),
-  promptType: z.enum(['text', 'image', 'video']).optional(),
+  promptType: z.enum(["text", "image", "video"]).optional(),
   systemPrompt: z.string().nullable().optional(),
   systemPromptEn: z.string().nullable().optional(),
   userPrompt: z.string(),
@@ -142,7 +142,7 @@ const promptSchema = z.object({
   variables: z.array(
     z.object({
       name: z.string(),
-      type: z.enum(['text', 'textarea', 'number', 'select']),
+      type: z.enum(["text", "textarea", "number", "select"]),
       label: z.string().optional(),
       defaultValue: z.string().optional(),
       options: z.array(z.string()).optional(),
@@ -176,7 +176,7 @@ const promptVersionSchema = z.object({
   variables: z.array(
     z.object({
       name: z.string(),
-      type: z.enum(['text', 'textarea', 'number', 'select']),
+      type: z.enum(["text", "textarea", "number", "select"]),
       label: z.string().optional(),
       defaultValue: z.string().optional(),
       options: z.array(z.string()).optional(),
@@ -191,7 +191,7 @@ const promptVersionSchema = z.object({
 const folderSchema = z.object({
   id: z.string(),
   ownerUserId: z.string().nullable().optional(),
-  visibility: z.enum(['private', 'shared']).optional(),
+  visibility: z.enum(["private", "shared"]).optional(),
   name: z.string(),
   icon: z.string().nullable().optional(),
   parentId: z.string().nullable().optional(),
@@ -204,18 +204,18 @@ const folderSchema = z.object({
 const skillSchema = z.object({
   id: z.string(),
   ownerUserId: z.string().nullable().optional(),
-  visibility: z.enum(['private', 'shared']).optional(),
+  visibility: z.enum(["private", "shared"]).optional(),
   name: z.string(),
   description: z.string().optional(),
   instructions: z.string().optional(),
   content: z.string().optional(),
   mcp_config: z.string().optional(),
-  protocol_type: z.enum(['skill', 'mcp', 'claude-code']),
+  protocol_type: z.enum(["skill", "mcp", "claude-code"]),
   version: z.string().optional(),
   author: z.string().optional(),
   source_url: z
     .string()
-    .refine(isHttpUrl, 'source_url must use HTTP(S)')
+    .refine(isHttpUrl, "source_url must use HTTP(S)")
     .optional(),
   source_id: z.string().optional(),
   source_label: z.string().optional(),
@@ -227,12 +227,12 @@ const skillSchema = z.object({
   directory_fingerprint: z.string().optional(),
   installed_directory_fingerprint: z.string().optional(),
   fingerprint_algorithm: z
-    .enum(['skill-package-sha256-v1', 'legacy-stable-text-v1'])
+    .enum(["skill-package-sha256-v1", "legacy-stable-text-v1"])
     .optional(),
   source_last_checked_at: z.number().int().nonnegative().optional(),
   source_last_error: z.string().nullable().optional(),
   source_binding_state: z
-    .enum(['bound', 'detached', 'missing-baseline'])
+    .enum(["bound", "detached", "missing-baseline"])
     .optional(),
   tags: z.array(z.string()).optional(),
   original_tags: z.array(z.string()).optional(),
@@ -245,30 +245,30 @@ const skillSchema = z.object({
     .string()
     .refine(
       isSafeSkillIconUrl,
-      'icon_url must use HTTP(S) or a base64 image data URL',
+      "icon_url must use HTTP(S) or a base64 image data URL",
     )
     .optional(),
   icon_emoji: z.string().optional(),
   icon_background: z.string().optional(),
   category: z
     .enum([
-      'general',
-      'office',
-      'dev',
-      'ai',
-      'data',
-      'management',
-      'deploy',
-      'design',
-      'security',
-      'meta',
+      "general",
+      "office",
+      "dev",
+      "ai",
+      "data",
+      "management",
+      "deploy",
+      "design",
+      "security",
+      "meta",
     ])
     .optional(),
   is_builtin: z.boolean().optional(),
   registry_slug: z.string().optional(),
   content_url: z
     .string()
-    .refine(isHttpUrl, 'content_url must use HTTP(S)')
+    .refine(isHttpUrl, "content_url must use HTTP(S)")
     .optional(),
   installed_content_hash: z.string().optional(),
   installed_version: z.string().optional(),
@@ -291,7 +291,7 @@ const skillVersionSchema = z.object({
 
 const mcpLibrarySchema = z
   .object({
-    kind: z.literal('prompthub-mcp-library'),
+    kind: z.literal("prompthub-mcp-library"),
     version: z.literal(1),
     updatedAt: z.string(),
     servers: z.array(z.unknown()).default([]),
@@ -301,7 +301,7 @@ const mcpLibrarySchema = z
 
 const pluginLibrarySchema = z
   .object({
-    kind: z.literal('prompthub-plugin-library'),
+    kind: z.literal("prompthub-plugin-library"),
     version: z.literal(1),
     updatedAt: z.string(),
     plugins: z.array(z.unknown()).default([]),
@@ -311,7 +311,7 @@ const pluginLibrarySchema = z
 const pluginFileSnapshotSchema = z.object({
   relativePath: z
     .string()
-    .refine(isSafePluginFileRelativePath, 'Invalid plugin file path'),
+    .refine(isSafePluginFileRelativePath, "Invalid plugin file path"),
   contentBase64: z.string(),
   size: z.number().int().nonnegative(),
 });
@@ -324,7 +324,7 @@ const pluginPackageSnapshotSchema = z.object({
 const agentAssetFileSnapshotSchema = z.object({
   relativePath: z
     .string()
-    .refine(isSafePluginFileRelativePath, 'Invalid agent asset file path'),
+    .refine(isSafePluginFileRelativePath, "Invalid agent asset file path"),
   contentBase64: z.string(),
   size: z.number().int().nonnegative(),
 });
@@ -333,11 +333,11 @@ const storeSourceSnapshotSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: z.enum([
-    'official',
-    'community',
-    'marketplace-json',
-    'git-repo',
-    'local-dir',
+    "official",
+    "community",
+    "marketplace-json",
+    "git-repo",
+    "local-dir",
   ]),
   url: z.string(),
   branch: z.string().optional(),
@@ -380,7 +380,7 @@ export const syncSnapshotSchema = z.object({
         id: z.string(),
         sourcePromptId: z.string(),
         targetPromptId: z.string(),
-        kind: z.enum(['related_to', 'variant_of', 'depends_on', 'next_step']),
+        kind: z.enum(["related_to", "variant_of", "depends_on", "next_step"]),
         note: z.string().nullable().optional(),
         createdAt: z.string(),
         updatedAt: z.string(),
@@ -411,19 +411,19 @@ export const syncSnapshotSchema = z.object({
 });
 
 const promptHubEnvelopeSchema = z.object({
-  kind: z.enum(['prompthub-backup', 'prompthub-export']),
+  kind: z.enum(["prompthub-backup", "prompthub-export"]),
   exportedAt: z.string(),
   payload: z.unknown(),
 });
 
 const SUPPORTED_SYNC_SNAPSHOT_VERSIONS = new Set([
-  '1',
-  'desktop-backup-v1',
-  'web-backup-v2',
+  "1",
+  "desktop-backup-v1",
+  "web-backup-v2",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function unwrapPromptHubEnvelope(rawPayload: unknown): unknown {
@@ -436,11 +436,11 @@ function unwrapPromptHubEnvelope(rawPayload: unknown): unknown {
 }
 
 function normalizeSnapshotVersion(version: unknown): string | null {
-  if (typeof version === 'number' && Number.isFinite(version)) {
+  if (typeof version === "number" && Number.isFinite(version)) {
     return String(version);
   }
 
-  if (typeof version === 'string' && version.trim()) {
+  if (typeof version === "string" && version.trim()) {
     return version;
   }
 
@@ -478,23 +478,23 @@ function normalizeDesktopSettingsSnapshot(
   const language = state.language;
   const autoSave = state.autoSave;
 
-  if (themeMode !== 'light' && themeMode !== 'dark' && themeMode !== 'system') {
+  if (themeMode !== "light" && themeMode !== "dark" && themeMode !== "system") {
     return undefined;
   }
 
   if (
-    language !== 'en' &&
-    language !== 'zh' &&
-    language !== 'zh-TW' &&
-    language !== 'ja' &&
-    language !== 'fr' &&
-    language !== 'de' &&
-    language !== 'es'
+    language !== "en" &&
+    language !== "zh" &&
+    language !== "zh-TW" &&
+    language !== "ja" &&
+    language !== "fr" &&
+    language !== "de" &&
+    language !== "es"
   ) {
     return undefined;
   }
 
-  if (typeof autoSave !== 'boolean') {
+  if (typeof autoSave !== "boolean") {
     return undefined;
   }
 
@@ -503,19 +503,19 @@ function normalizeDesktopSettingsSnapshot(
     language,
     autoSave,
     defaultFolderId:
-      typeof state.defaultFolderId === 'string'
+      typeof state.defaultFolderId === "string"
         ? state.defaultFolderId
         : undefined,
     customPlatformRootPaths: isRecord(state.customPlatformRootPaths)
       ? Object.fromEntries(
           Object.entries(state.customPlatformRootPaths).filter(
-            (entry): entry is [string, string] => typeof entry[1] === 'string',
+            (entry): entry is [string, string] => typeof entry[1] === "string",
           ),
         )
       : undefined,
     disabledPlatformIds: Array.isArray(state.disabledPlatformIds)
       ? state.disabledPlatformIds.filter(
-          (value): value is string => typeof value === 'string',
+          (value): value is string => typeof value === "string",
         )
       : Array.isArray(
             (state as { trackedRulePlatformIds?: unknown })
@@ -524,101 +524,101 @@ function normalizeDesktopSettingsSnapshot(
         ? (
             state as { trackedRulePlatformIds: unknown[] }
           ).trackedRulePlatformIds.filter(
-            (value): value is string => typeof value === 'string',
+            (value): value is string => typeof value === "string",
           )
         : undefined,
     customSkillPlatformPaths: isRecord(state.customSkillPlatformPaths)
       ? Object.fromEntries(
           Object.entries(state.customSkillPlatformPaths).filter(
-            (entry): entry is [string, string] => typeof entry[1] === 'string',
+            (entry): entry is [string, string] => typeof entry[1] === "string",
           ),
         )
       : undefined,
     skillPlatformOrder: Array.isArray(state.skillPlatformOrder)
       ? state.skillPlatformOrder.filter(
-          (value): value is string => typeof value === 'string',
+          (value): value is string => typeof value === "string",
         )
       : undefined,
     skillProjects: Array.isArray(state.skillProjects)
-      ? (state.skillProjects as Settings['skillProjects'])
+      ? (state.skillProjects as Settings["skillProjects"])
       : undefined,
     backgroundImageFileName:
-      typeof state.backgroundImageFileName === 'string'
+      typeof state.backgroundImageFileName === "string"
         ? state.backgroundImageFileName
         : undefined,
     backgroundImageOpacity:
-      typeof state.backgroundImageOpacity === 'number'
+      typeof state.backgroundImageOpacity === "number"
         ? state.backgroundImageOpacity
         : undefined,
     backgroundImageBlur:
-      typeof state.backgroundImageBlur === 'number'
+      typeof state.backgroundImageBlur === "number"
         ? state.backgroundImageBlur
         : undefined,
     lastManualBackupAt:
-      typeof state.lastManualBackupAt === 'string'
+      typeof state.lastManualBackupAt === "string"
         ? state.lastManualBackupAt
         : undefined,
     lastManualBackupVersion:
-      typeof state.lastManualBackupVersion === 'string'
+      typeof state.lastManualBackupVersion === "string"
         ? state.lastManualBackupVersion
         : undefined,
     githubToken:
-      typeof state.githubToken === 'string' ? state.githubToken : undefined,
+      typeof state.githubToken === "string" ? state.githubToken : undefined,
     sync:
       isRecord(state.sync) &&
-      typeof state.sync.enabled === 'boolean' &&
-      (state.sync.provider === 'manual' ||
-        state.sync.provider === 'webdav' ||
-        state.sync.provider === 'self-hosted' ||
-        state.sync.provider === 's3')
+      typeof state.sync.enabled === "boolean" &&
+      (state.sync.provider === "manual" ||
+        state.sync.provider === "webdav" ||
+        state.sync.provider === "self-hosted" ||
+        state.sync.provider === "s3")
         ? {
             enabled: state.sync.enabled,
             provider: state.sync.provider,
             endpoint:
-              typeof state.sync.endpoint === 'string'
+              typeof state.sync.endpoint === "string"
                 ? state.sync.endpoint
                 : undefined,
             username:
-              typeof state.sync.username === 'string'
+              typeof state.sync.username === "string"
                 ? state.sync.username
                 : undefined,
             password:
-              typeof state.sync.password === 'string'
+              typeof state.sync.password === "string"
                 ? state.sync.password
                 : undefined,
             remotePath:
-              typeof state.sync.remotePath === 'string'
+              typeof state.sync.remotePath === "string"
                 ? state.sync.remotePath
                 : undefined,
             autoSync:
-              typeof state.sync.autoSync === 'boolean'
+              typeof state.sync.autoSync === "boolean"
                 ? state.sync.autoSync
                 : undefined,
             lastSyncAt:
-              typeof state.sync.lastSyncAt === 'string'
+              typeof state.sync.lastSyncAt === "string"
                 ? state.sync.lastSyncAt
                 : undefined,
           }
         : undefined,
     device: isRecord(state.device)
-      ? (state.device as Settings['device'])
+      ? (state.device as Settings["device"])
       : undefined,
     updateChannel:
-      state.updateChannel === 'stable' || state.updateChannel === 'preview'
+      state.updateChannel === "stable" || state.updateChannel === "preview"
         ? state.updateChannel
         : undefined,
     launchAtStartup:
-      typeof state.launchAtStartup === 'boolean'
+      typeof state.launchAtStartup === "boolean"
         ? state.launchAtStartup
         : undefined,
     minimizeOnLaunch:
-      typeof state.minimizeOnLaunch === 'boolean'
+      typeof state.minimizeOnLaunch === "boolean"
         ? state.minimizeOnLaunch
         : undefined,
     security:
       isRecord(state.security) &&
-      typeof state.security.masterPasswordConfigured === 'boolean' &&
-      typeof state.security.unlocked === 'boolean'
+      typeof state.security.masterPasswordConfigured === "boolean" &&
+      typeof state.security.unlocked === "boolean"
         ? {
             masterPasswordConfigured: state.security.masterPasswordConfigured,
             unlocked: state.security.unlocked,
@@ -649,10 +649,10 @@ function normalizeImportedSettings(
   throw new Error(
     `Sync snapshot is invalid: ${parsedDesktopSettings.error.issues
       .map((issue) => {
-        const issuePath = ['settings', ...issue.path].join('.');
+        const issuePath = ["settings", ...issue.path].join(".");
         return `${issuePath}: ${issue.message}`;
       })
-      .join(', ')}`,
+      .join(", ")}`,
   );
 }
 
@@ -687,7 +687,7 @@ function normalizeImportedSnapshot(
 ): z.infer<typeof syncSnapshotSchema> {
   const unwrapped = unwrapPromptHubEnvelope(rawPayload);
   if (!isRecord(unwrapped)) {
-    throw new Error('Sync snapshot is invalid: expected an object');
+    throw new Error("Sync snapshot is invalid: expected an object");
   }
 
   const normalized: Record<string, unknown> = {
@@ -737,10 +737,10 @@ function normalizeImportedSnapshot(
     throw new Error(
       `Sync snapshot is invalid: ${parsed.error.issues
         .map((issue) => {
-          const issuePath = issue.path.join('.');
+          const issuePath = issue.path.join(".");
           return issuePath ? `${issuePath}: ${issue.message}` : issue.message;
         })
-        .join(', ')}`,
+        .join(", ")}`,
     );
   }
 
@@ -750,11 +750,11 @@ function normalizeImportedSnapshot(
 }
 
 function toIsoString(value: string | number): string {
-  return typeof value === 'number' ? new Date(value).toISOString() : value;
+  return typeof value === "number" ? new Date(value).toISOString() : value;
 }
 
 function normalizeRuleRecords(
-  rules: z.infer<typeof syncSnapshotSchema>['rules'],
+  rules: z.infer<typeof syncSnapshotSchema>["rules"],
 ): RuleBackupRecord[] | undefined {
   return rules?.map((rule): RuleBackupRecord => {
     if (!isRuleFileId(rule.id)) {

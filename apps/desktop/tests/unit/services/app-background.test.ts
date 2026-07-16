@@ -201,7 +201,7 @@ describe("app-background", () => {
     ).toBe(false);
   });
 
-  it("prevents self-hosted auto sync when another sync provider is selected", () => {
+  it("keeps self-hosted backup automation independent from the sync provider", () => {
     expect(
       shouldRunStartupSelfHostedSync(
         {
@@ -214,7 +214,7 @@ describe("app-background", () => {
           isRunning: false,
         },
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("blocks s3 startup sync while hidden or already running", () => {

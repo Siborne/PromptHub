@@ -806,8 +806,7 @@ function App() {
       if (
         pendingSelfHostedStartupSyncRef.current &&
         isWindowVisibleRef.current &&
-        navigator.onLine !== false &&
-        useSettingsStore.getState().syncProvider === "self-hosted"
+        navigator.onLine !== false
       ) {
         void runSelfHostedAutoSync("startup-resume");
       }
@@ -943,11 +942,15 @@ function App() {
         });
 
         if (!result.success) {
-          console.error(`⚠️ self-hosted ${reason} sync error:`, result.message);
+          const status = result.skipped ? "skipped" : "failed";
+          console.error(
+            `⚠️ self-hosted ${reason} backup ${status}:`,
+            result.message,
+          );
           await recordAutoSyncHistory({
             provider: "self-hosted",
             reason,
-            status: "failed",
+            status,
             startedAt,
             message: result.message,
             localChanged: result.localChanged,
@@ -964,18 +967,17 @@ function App() {
           localChanged: result.localChanged,
         });
         logWhenDebugEnabled(`✅ ${result.message}`);
-        if (result.localChanged) {
-          await Promise.all([fetchPrompts(), fetchFolders()]);
-        }
-      } catch (syncError) {
-        console.error(`⚠️ self-hosted ${reason} sync error:`, syncError);
+      } catch (backupError) {
+        console.error(`⚠️ self-hosted ${reason} backup error:`, backupError);
         await recordAutoSyncHistory({
           provider: "self-hosted",
           reason,
           status: "failed",
           startedAt,
           message:
-            syncError instanceof Error ? syncError.message : String(syncError),
+            backupError instanceof Error
+              ? backupError.message
+              : String(backupError),
         });
       } finally {
         isSelfHostedSyncInFlightRef.current = false;
@@ -1098,13 +1100,12 @@ function App() {
       }
 
       if (
-        settings.syncProvider === "self-hosted" &&
         settings.selfHostedSyncOnStartup &&
         hasValidSelfHostedConfig(settings)
       ) {
         const delay = (settings.selfHostedSyncOnStartupDelay ?? 10) * 1000;
         logWhenDebugEnabled(
-          `🔄 Will sync with self-hosted PromptHub in ${delay / 1000}s...`,
+          `🔄 Will back up to self-hosted PromptHub in ${delay / 1000}s...`,
         );
         selfHostedStartupSyncTimer = setTimeout(() => {
           if (!isWindowVisibleRef.current || navigator.onLine === false) {

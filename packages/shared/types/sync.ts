@@ -134,6 +134,36 @@ export interface SyncSnapshot {
   videos?: Record<string, string>;
 }
 
+export const SELF_HOSTED_BACKUP_PROTOCOL_VERSION = 1;
+
+export interface SelfHostedBackupCapabilities {
+  serverVersion: string;
+  protocolVersion: typeof SELF_HOSTED_BACKUP_PROTOCOL_VERSION;
+  retentionLimit: number;
+}
+
+export interface SelfHostedBackupMetadata {
+  id: string;
+  createdAt: string;
+  clientVersion: string;
+  serverVersion: string;
+  protocolVersion: typeof SELF_HOSTED_BACKUP_PROTOCOL_VERSION;
+  summary: SyncOperationSummary;
+}
+
+export interface SelfHostedBackupSnapshot extends SyncSnapshot {
+  desktopSettings?: {
+    state: Record<string, unknown>;
+  };
+  desktopAiConfig?: Record<string, unknown>;
+}
+
+export interface SelfHostedBackupEnvelope extends SelfHostedBackupMetadata {
+  kind: "prompthub-self-hosted-backup";
+  payloadSha256: string;
+  snapshot: SelfHostedBackupSnapshot;
+}
+
 export interface RemoteSyncState {
   snapshot: SyncSnapshot;
   media?: SyncMediaFiles;

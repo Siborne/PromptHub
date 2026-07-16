@@ -39,9 +39,9 @@ interface BackgroundTaskState {
 export function hasValidWebDAVConfig(settings: WebDAVSyncSettings): boolean {
   return Boolean(
     settings.webdavEnabled &&
-      settings.webdavUrl?.trim() &&
-      settings.webdavUsername?.trim() &&
-      settings.webdavPassword?.trim(),
+    settings.webdavUrl?.trim() &&
+    settings.webdavUsername?.trim() &&
+    settings.webdavPassword?.trim(),
   );
 }
 
@@ -61,10 +61,10 @@ export function shouldRunStartupWebDAVSync(
   return Boolean(
     settings.syncProvider === "webdav" &&
     settings.webdavSyncOnStartup &&
-      hasValidWebDAVConfig(settings) &&
-      state.isVisible &&
-      state.isOnline &&
-      !state.isRunning,
+    hasValidWebDAVConfig(settings) &&
+    state.isVisible &&
+    state.isOnline &&
+    !state.isRunning,
   );
 }
 
@@ -75,10 +75,10 @@ export function shouldRunPeriodicWebDAVSync(
   return Boolean(
     settings.syncProvider === "webdav" &&
     settings.webdavAutoSyncInterval > 0 &&
-      hasValidWebDAVConfig(settings) &&
-      state.isVisible &&
-      state.isOnline &&
-      !state.isRunning,
+    hasValidWebDAVConfig(settings) &&
+    state.isVisible &&
+    state.isOnline &&
+    !state.isRunning,
   );
 }
 
@@ -87,9 +87,9 @@ export function hasValidSelfHostedConfig(
 ): boolean {
   return Boolean(
     settings.selfHostedSyncEnabled &&
-      settings.selfHostedSyncUrl?.trim() &&
-      settings.selfHostedSyncUsername?.trim() &&
-      settings.selfHostedSyncPassword?.trim(),
+    settings.selfHostedSyncUrl?.trim() &&
+    settings.selfHostedSyncUsername?.trim() &&
+    settings.selfHostedSyncPassword?.trim(),
   );
 }
 
@@ -98,12 +98,11 @@ export function shouldRunStartupSelfHostedSync(
   state: BackgroundTaskState,
 ): boolean {
   return Boolean(
-    settings.syncProvider === "self-hosted" &&
     settings.selfHostedSyncOnStartup &&
-      hasValidSelfHostedConfig(settings) &&
-      state.isVisible &&
-      state.isOnline &&
-      !state.isRunning,
+    hasValidSelfHostedConfig(settings) &&
+    state.isVisible &&
+    state.isOnline &&
+    !state.isRunning,
   );
 }
 
@@ -112,23 +111,22 @@ export function shouldRunPeriodicSelfHostedSync(
   state: BackgroundTaskState,
 ): boolean {
   return Boolean(
-    settings.syncProvider === "self-hosted" &&
     settings.selfHostedAutoSyncInterval > 0 &&
-      hasValidSelfHostedConfig(settings) &&
-      state.isVisible &&
-      state.isOnline &&
-      !state.isRunning,
+    hasValidSelfHostedConfig(settings) &&
+    state.isVisible &&
+    state.isOnline &&
+    !state.isRunning,
   );
 }
 
 export function hasValidS3Config(settings: S3SyncSettings): boolean {
   return Boolean(
     settings.s3StorageEnabled &&
-      settings.s3Endpoint?.trim() &&
-      settings.s3Region?.trim() &&
-      settings.s3Bucket?.trim() &&
-      settings.s3AccessKeyId?.trim() &&
-      settings.s3SecretAccessKey?.trim(),
+    settings.s3Endpoint?.trim() &&
+    settings.s3Region?.trim() &&
+    settings.s3Bucket?.trim() &&
+    settings.s3AccessKeyId?.trim() &&
+    settings.s3SecretAccessKey?.trim(),
   );
 }
 
@@ -139,10 +137,10 @@ export function shouldRunStartupS3Sync(
   return Boolean(
     settings.syncProvider === "s3" &&
     settings.s3SyncOnStartup &&
-      hasValidS3Config(settings) &&
-      state.isVisible &&
-      state.isOnline &&
-      !state.isRunning,
+    hasValidS3Config(settings) &&
+    state.isVisible &&
+    state.isOnline &&
+    !state.isRunning,
   );
 }
 
@@ -153,9 +151,9 @@ export function shouldRunPeriodicS3Sync(
   return Boolean(
     settings.syncProvider === "s3" &&
     settings.s3AutoSyncInterval > 0 &&
-      hasValidS3Config(settings) &&
-      state.isVisible &&
-      state.isOnline &&
-      !state.isRunning,
+    hasValidS3Config(settings) &&
+    state.isVisible &&
+    state.isOnline &&
+    !state.isRunning,
   );
 }

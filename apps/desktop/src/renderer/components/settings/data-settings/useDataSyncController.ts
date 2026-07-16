@@ -125,7 +125,6 @@ function getSyncAvailability(settings: SettingsState) {
       settings.s3AccessKeyId.trim().length > 0 &&
       settings.s3SecretAccessKey.trim().length > 0,
     s3ControlsDisabled: !settings.s3StorageEnabled,
-    selfHostedIsSyncSource: settings.syncProvider === "self-hosted",
     webdavIsSyncSource: settings.syncProvider === "webdav",
     s3IsSyncSource: settings.syncProvider === "s3",
   };
@@ -146,18 +145,16 @@ function useSelfHostedActions(
     )
       return;
     try {
-      const summary = await operations.selfHostedTesting.run(() =>
+      const capabilities = await operations.selfHostedTesting.run(() =>
         runSelfHostedConnectionCheck(createSelfHostedConfig(settings)),
       );
       showToast(
         t(
           "toast.selfHostedSyncConnectionSuccess",
-          "Connection successful. Remote workspace currently stores {{prompts}} prompts, {{folders}} folders, {{rules}} rules, and {{skills}} skills.",
+          "Backup endpoint ready. Desktop and Web are both version {{version}}; up to {{retention}} snapshots are retained.",
           {
-            prompts: summary.prompts,
-            folders: summary.folders,
-            rules: summary.rules,
-            skills: summary.skills,
+            version: capabilities.serverVersion,
+            retention: capabilities.retentionLimit,
           },
         ),
         "success",
@@ -181,7 +178,7 @@ function useSelfHostedActions(
       showToast(
         t(
           "toast.selfHostedSyncPushSuccess",
-          "Uploaded {{prompts}} prompts, {{folders}} folders, {{rules}} rules, and {{skills}} skills to PromptHub Web.",
+          "Created a remote backup with {{prompts}} prompts, {{folders}} folders, {{rules}} rules, and {{skills}} skills.",
           {
             prompts: summary.prompts,
             folders: summary.folders,
@@ -210,7 +207,7 @@ function useSelfHostedActions(
       showToast(
         t(
           "toast.selfHostedSyncPullSuccess",
-          "Restored {{prompts}} prompts, {{folders}} folders, {{rules}} rules, and {{skills}} skills from PromptHub Web.",
+          "Restored {{prompts}} prompts, {{folders}} folders, {{rules}} rules, and {{skills}} skills from the latest verified backup.",
           {
             prompts: summary.prompts,
             folders: summary.folders,
@@ -372,14 +369,6 @@ export function useDataSyncController(
   const availability = getSyncAvailability(settings);
   const syncProviderOptions = [
     { value: "manual", label: getSyncProviderOptionLabel("manual", t) },
-    ...(settings.selfHostedSyncEnabled
-      ? [
-          {
-            value: "self-hosted",
-            label: getSyncProviderOptionLabel("self-hosted", t),
-          },
-        ]
-      : []),
     ...(settings.webdavEnabled
       ? [{ value: "webdav", label: getSyncProviderOptionLabel("webdav", t) }]
       : []),

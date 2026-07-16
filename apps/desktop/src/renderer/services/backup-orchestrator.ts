@@ -10,13 +10,15 @@ import {
 import { type ManualBackupStatus, recordManualBackup } from "./backup-status";
 import { createUpgradeBackup } from "./upgrade-backup";
 import {
-  pullFromSelfHostedWeb,
-  pushToSelfHostedWeb,
-  testSelfHostedConnection,
+  createSelfHostedRemoteBackup,
+  restoreLatestSelfHostedRemoteBackup,
+  SelfHostedBackupCompatibilityError,
+  testSelfHostedBackupConnection,
   type PullFromSelfHostedOptions,
   type SelfHostedSyncConfig,
   type SelfHostedSyncSummary,
 } from "./self-hosted-sync";
+import type { SelfHostedBackupCapabilities } from "@prompthub/shared/types";
 import {
   autoSync as autoSyncS3,
   downloadFromS3,
@@ -56,6 +58,7 @@ export type AutoSyncReason = "startup" | "startup-resume" | "interval";
 
 export interface SelfHostedAutoSyncResult {
   success: boolean;
+  skipped?: boolean;
   localChanged: boolean;
   message: string;
   summary?: SelfHostedSyncSummary;
@@ -132,20 +135,21 @@ export async function runWebDAVAutoSync(
 
 export async function runSelfHostedConnectionCheck(
   config: SelfHostedSyncConfig,
-): Promise<SelfHostedSyncSummary> {
-  return testSelfHostedConnection(config);
+): Promise<SelfHostedBackupCapabilities> {
+  return testSelfHostedBackupConnection(config);
 }
 
 export async function runSelfHostedPush(
   config: SelfHostedSyncConfig,
 ): Promise<SelfHostedSyncSummary> {
-  return pushToSelfHostedWeb(config);
+  return createSelfHostedRemoteBackup(config);
 }
 
 export async function runSelfHostedPull(
   input: SelfHostedPullOptions,
 ): Promise<SelfHostedSyncSummary> {
-  return pullFromSelfHostedWeb(input.config, input.options);
+  await createSnapshotIfPossible();
+  return restoreLatestSelfHostedRemoteBackup(input.config);
 }
 
 export async function runSelfHostedAutoSync(
@@ -153,26 +157,30 @@ export async function runSelfHostedAutoSync(
   config: SelfHostedSyncConfig,
 ): Promise<SelfHostedAutoSyncResult> {
   try {
-    const summary =
-      reason === "interval"
-        ? await pushToSelfHostedWeb(config)
-        : await pullFromSelfHostedWeb(config, { mode: "replace" });
+    const summary = await createSelfHostedRemoteBackup(config);
 
     return {
       success: true,
-      localChanged: reason !== "interval",
-      message:
-        reason === "interval"
-          ? `self-hosted push synced: ${summary.prompts} prompts, ${summary.folders} folders, ${summary.skills} skills`
-          : `self-hosted pull synced: ${summary.prompts} prompts, ${summary.folders} folders, ${summary.skills} skills`,
+      localChanged: false,
+      message: `self-hosted ${reason} backup created: ${summary.prompts} prompts, ${summary.folders} folders, ${summary.skills} skills`,
       summary,
     };
   } catch (error) {
+    if (error instanceof SelfHostedBackupCompatibilityError) {
+      return {
+        success: false,
+        skipped: true,
+        localChanged: false,
+        message: error.message,
+      };
+    }
     return {
       success: false,
       localChanged: false,
       message:
-        error instanceof Error ? error.message : "self-hosted auto sync failed",
+        error instanceof Error
+          ? error.message
+          : "self-hosted automatic backup failed",
     };
   }
 }

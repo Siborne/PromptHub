@@ -9,7 +9,10 @@ import {
 function createSettingsHarness(initial: PeriodicAutoSyncSettings) {
   let settings = initial;
   const listeners = new Set<
-    (state: PeriodicAutoSyncSettings, previous: PeriodicAutoSyncSettings) => void
+    (
+      state: PeriodicAutoSyncSettings,
+      previous: PeriodicAutoSyncSettings,
+    ) => void
   >();
 
   return {
@@ -98,7 +101,6 @@ describe("periodic auto sync controller", () => {
 
     await vi.advanceTimersByTimeAsync(1);
     expect(runS3).toHaveBeenCalledTimes(1);
-
   });
 
   it("clears the previous provider interval when the active sync provider changes", async () => {
@@ -174,5 +176,41 @@ describe("periodic auto sync controller", () => {
     await vi.advanceTimersByTimeAsync(120);
 
     expect(runS3).not.toHaveBeenCalled();
+  });
+
+  it("runs self-hosted backup scheduling alongside the selected sync provider", async () => {
+    const harness = createSettingsHarness({
+      ...manualSettings,
+      syncProvider: "s3",
+      s3StorageEnabled: true,
+      s3Endpoint: "https://s3.example.com",
+      s3Region: "us-east-1",
+      s3Bucket: "prompthub-backups",
+      s3AccessKeyId: "access",
+      s3SecretAccessKey: "secret",
+      s3AutoSyncInterval: 0.001,
+      selfHostedSyncEnabled: true,
+      selfHostedSyncUrl: "https://backup.example.com",
+      selfHostedSyncUsername: "owner",
+      selfHostedSyncPassword: "secret",
+      selfHostedAutoSyncInterval: 0.001,
+    });
+    const runS3 = vi.fn();
+    const runSelfHosted = vi.fn();
+
+    controllers.push(
+      registerPeriodicAutoSyncController({
+        getSettings: harness.getSettings,
+        subscribe: harness.subscribe,
+        runWebDAV: vi.fn(),
+        runS3,
+        runSelfHosted,
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(60);
+
+    expect(runS3).toHaveBeenCalledTimes(1);
+    expect(runSelfHosted).toHaveBeenCalledTimes(1);
   });
 });

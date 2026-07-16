@@ -141,7 +141,7 @@ describe("settings sync provider guards", () => {
     expect(useSettingsStore.getState().syncProvider).toBe("s3");
   });
 
-  it("falls back to manual when legacy settings contain multiple active auto-sync providers", async () => {
+  it("ignores self-hosted backup automation when migrating the active sync provider", async () => {
     localStorage.setItem(
       "prompthub-settings",
       JSON.stringify({
@@ -157,7 +157,7 @@ describe("settings sync provider guards", () => {
 
     const { useSettingsStore } = await importStoreWithSettingsSpies();
 
-    expect(useSettingsStore.getState().syncProvider).toBe("manual");
+    expect(useSettingsStore.getState().syncProvider).toBe("s3");
   });
 
   it("clamps an invalid persisted sync provider after migration", async () => {

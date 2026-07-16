@@ -20,11 +20,19 @@ vi.mock("../../../src/renderer/services/webdav", () => ({
   uploadToWebDAV: vi.fn(),
 }));
 
-vi.mock("../../../src/renderer/services/self-hosted-sync", () => ({
-  pullFromSelfHostedWeb: vi.fn(),
-  pushToSelfHostedWeb: vi.fn(),
-  testSelfHostedConnection: vi.fn(),
-}));
+vi.mock("../../../src/renderer/services/self-hosted-sync", () => {
+  class SelfHostedBackupCompatibilityError extends Error {}
+
+  return {
+    createSelfHostedRemoteBackup: vi.fn(),
+    pullFromSelfHostedWeb: vi.fn(),
+    pushToSelfHostedWeb: vi.fn(),
+    restoreLatestSelfHostedRemoteBackup: vi.fn(),
+    SelfHostedBackupCompatibilityError,
+    testSelfHostedBackupConnection: vi.fn(),
+    testSelfHostedConnection: vi.fn(),
+  };
+});
 
 vi.mock("../../../src/renderer/services/s3-sync", () => ({
   autoSync: vi.fn(),
@@ -38,6 +46,7 @@ import {
   runS3AutoSync,
   runPreUpgradeBackup,
   runSelfHostedAutoSync,
+  runSelfHostedPull,
   runWebDAVAutoSync,
 } from "../../../src/renderer/services/backup-orchestrator";
 
@@ -49,8 +58,11 @@ import { recordManualBackup } from "../../../src/renderer/services/backup-status
 import { createUpgradeBackup } from "../../../src/renderer/services/upgrade-backup";
 import { autoSync } from "../../../src/renderer/services/webdav";
 import {
+  createSelfHostedRemoteBackup,
   pullFromSelfHostedWeb,
   pushToSelfHostedWeb,
+  restoreLatestSelfHostedRemoteBackup,
+  SelfHostedBackupCompatibilityError,
 } from "../../../src/renderer/services/self-hosted-sync";
 import { autoSync as autoSyncS3 } from "../../../src/renderer/services/s3-sync";
 
@@ -188,12 +200,14 @@ describe("backup-orchestrator", () => {
     expect(result.message).toBe("ok");
   });
 
-  it("uses push for self-hosted interval auto sync", async () => {
-    vi.mocked(pushToSelfHostedWeb).mockResolvedValue({
+  it("uses immutable backup creation for self-hosted interval automation", async () => {
+    vi.mocked(createSelfHostedRemoteBackup).mockResolvedValue({
       prompts: 3,
       folders: 2,
       rules: 1,
       skills: 4,
+      mcpServers: 0,
+      plugins: 0,
     });
 
     const result = await runSelfHostedAutoSync("interval", {
@@ -202,18 +216,21 @@ describe("backup-orchestrator", () => {
       password: "p",
     });
 
-    expect(pushToSelfHostedWeb).toHaveBeenCalledTimes(1);
+    expect(createSelfHostedRemoteBackup).toHaveBeenCalledTimes(1);
+    expect(pushToSelfHostedWeb).not.toHaveBeenCalled();
     expect(pullFromSelfHostedWeb).not.toHaveBeenCalled();
     expect(result.success).toBe(true);
     expect(result.localChanged).toBe(false);
   });
 
-  it("uses replace pull for self-hosted startup auto sync", async () => {
-    vi.mocked(pullFromSelfHostedWeb).mockResolvedValue({
+  it("uses the same upload-only backup behavior on self-hosted startup", async () => {
+    vi.mocked(createSelfHostedRemoteBackup).mockResolvedValue({
       prompts: 5,
       folders: 2,
       rules: 1,
       skills: 4,
+      mcpServers: 0,
+      plugins: 0,
     });
 
     const result = await runSelfHostedAutoSync("startup", {
@@ -222,21 +239,81 @@ describe("backup-orchestrator", () => {
       password: "p",
     });
 
-    expect(pullFromSelfHostedWeb).toHaveBeenCalledWith(
-      {
+    expect(createSelfHostedRemoteBackup).toHaveBeenCalledWith({
+      url: "https://example.com",
+      username: "u",
+      password: "p",
+    });
+    expect(pullFromSelfHostedWeb).not.toHaveBeenCalled();
+    expect(pushToSelfHostedWeb).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.localChanged).toBe(false);
+  });
+
+  it("creates a local safety snapshot before restoring the latest remote backup", async () => {
+    vi.mocked(restoreLatestSelfHostedRemoteBackup).mockResolvedValue({
+      prompts: 1,
+      folders: 1,
+      rules: 1,
+      skills: 1,
+    });
+
+    await runSelfHostedPull({
+      config: {
         url: "https://example.com",
         username: "u",
         password: "p",
       },
-      { mode: "replace" },
+    });
+
+    expect(createUpgradeBackup).toHaveBeenCalledWith(undefined);
+    expect(restoreLatestSelfHostedRemoteBackup).toHaveBeenCalledTimes(1);
+    expect(
+      vi.mocked(createUpgradeBackup).mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(restoreLatestSelfHostedRemoteBackup).mock
+        .invocationCallOrder[0],
     );
-    expect(pushToSelfHostedWeb).not.toHaveBeenCalled();
-    expect(result.success).toBe(true);
-    expect(result.localChanged).toBe(true);
+  });
+
+  it("does not begin remote restore when the local safety snapshot fails", async () => {
+    vi.mocked(createUpgradeBackup).mockRejectedValue(
+      new Error("local snapshot failed"),
+    );
+
+    await expect(
+      runSelfHostedPull({
+        config: {
+          url: "https://example.com",
+          username: "u",
+          password: "p",
+        },
+      }),
+    ).rejects.toThrow("local snapshot failed");
+    expect(restoreLatestSelfHostedRemoteBackup).not.toHaveBeenCalled();
+  });
+
+  it("reports an exact-version mismatch as a skipped automatic backup", async () => {
+    vi.mocked(createSelfHostedRemoteBackup).mockRejectedValue(
+      new SelfHostedBackupCompatibilityError("version mismatch"),
+    );
+
+    const result = await runSelfHostedAutoSync("interval", {
+      url: "https://example.com",
+      username: "u",
+      password: "p",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      skipped: true,
+      localChanged: false,
+      message: "version mismatch",
+    });
   });
 
   it("returns failure result when self-hosted sync throws", async () => {
-    vi.mocked(pushToSelfHostedWeb).mockRejectedValue(
+    vi.mocked(createSelfHostedRemoteBackup).mockRejectedValue(
       new Error("network error"),
     );
 

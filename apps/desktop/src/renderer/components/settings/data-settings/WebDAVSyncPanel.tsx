@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Select } from "../../ui/Select";
 import { ToggleSwitch, PasswordInput } from "../shared";
+import { SyncProviderSelector } from "./SyncProviderSelector";
 
 export function WebDAVSyncPanel() {
   const {
@@ -50,6 +51,7 @@ export function WebDAVSyncPanel() {
                 onChange={settings.setWebdavEnabled}
               />
             </div>
+            <SyncProviderSelector />
             <div
               className={getSyncPanelContentClassName(!settings.webdavEnabled)}
             >

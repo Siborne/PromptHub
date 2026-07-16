@@ -693,10 +693,9 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       selfHostedSyncPassword: "secret",
     });
     vi.mocked(runSelfHostedConnectionCheck).mockResolvedValue({
-      prompts: 3,
-      folders: 2,
-      rules: 4,
-      skills: 1,
+      serverVersion: "0.5.9",
+      protocolVersion: 1,
+      retentionLimit: 10,
     });
 
     await act(async () => {
@@ -725,12 +724,12 @@ describe("DataSettings", { timeout: 60_000 }, () => {
       });
     });
     expect(showToast).toHaveBeenCalledWith(
-      "Connection successful. Remote workspace currently stores 3 prompts, 2 folders, 4 rules, and 1 skills.",
+      "Backup endpoint ready. Desktop and Web are both version 0.5.9; up to 10 snapshots are retained.",
       "success",
     );
   });
 
-  it("lets users choose one active sync source while keeping multiple backup targets enabled", async () => {
+  it("keeps self-hosted backup independent while selecting a live sync source", async () => {
     const settingsState = createSettingsState();
     settingsState.selfHostedSyncEnabled = true;
     settingsState.webdavEnabled = true;
@@ -739,7 +738,7 @@ describe("DataSettings", { timeout: 60_000 }, () => {
     useSettingsStoreMock.mockReturnValue(settingsState);
 
     await act(async () => {
-      await renderWithI18n(<DataSettings activeSubsection="selfHosted" />, {
+      await renderWithI18n(<DataSettings activeSubsection="webdav" />, {
         language: "en",
       });
     });
@@ -767,12 +766,12 @@ describe("DataSettings", { timeout: 60_000 }, () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Self-Hosted PromptHub Automatic Sync",
+        name: "Self-Hosted PromptHub Automatic Backup",
       }),
     ).toBeEnabled();
     expect(
       screen.getByRole("button", {
-        name: "Self-Hosted PromptHub Run Once on Startup",
+        name: "Self-Hosted PromptHub Back Up Once on Startup",
       }),
     ).toBeEnabled();
 

@@ -22,8 +22,6 @@ export function SelfHostedSyncPanel() {
     selfHostedUploading,
     selfHostedDownloading,
     selfHostedConfigComplete,
-    selfHostedIsSyncSource,
-    syncProviderOptions,
     handleSelfHostedConnectionCheck,
     handleSelfHostedPush,
     handleSelfHostedPull,
@@ -36,37 +34,6 @@ export function SelfHostedSyncPanel() {
           title={t("settings.selfHostedSyncMenu", "Self-Hosted PromptHub")}
         >
           <div className="p-4 space-y-4">
-            <div className="rounded-xl border border-border bg-muted/30 px-3 py-3">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium">
-                    {t("settings.syncProviderTitle", "Current sync source")}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {t(
-                      "settings.syncProviderDesc",
-                      "You can enable multiple backup targets, but automatic sync uses only one source at a time to avoid conflicts.",
-                    )}
-                  </p>
-                </div>
-                <div className="min-w-[220px]">
-                  <Select
-                    ariaLabel={t(
-                      "settings.syncProviderTitle",
-                      "Current sync source",
-                    )}
-                    value={settings.syncProvider}
-                    onChange={(value) =>
-                      settings.setSyncProvider(
-                        value as "manual" | "webdav" | "self-hosted" | "s3",
-                      )
-                    }
-                    options={syncProviderOptions}
-                  />
-                </div>
-              </div>
-            </div>
-
             <div className="flex items-center gap-3">
               <ServerCogIcon className="w-5 h-5 text-muted-foreground" />
               <div className="flex-1">
@@ -76,7 +43,7 @@ export function SelfHostedSyncPanel() {
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {t(
                     "settings.selfHostedSyncDesc",
-                    "Use your deployed PromptHub Web as an authenticated backup target and restore source for desktop data without WebDAV.",
+                    "Store independent desktop snapshots in your deployed PromptHub Web. Automatic backup never pulls, merges, or changes the live Web workspace.",
                   )}
                 </p>
               </div>
@@ -168,7 +135,7 @@ export function SelfHostedSyncPanel() {
                     className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
                     <UploadIcon className="w-4 h-4" aria-hidden="true" />
-                    {t("settings.backupToRemote", "Back up to remote")}
+                    {t("settings.backupToRemote", "Create remote backup")}
                   </button>
                   <button
                     type="button"
@@ -179,30 +146,25 @@ export function SelfHostedSyncPanel() {
                     className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
                     <DownloadIcon className="w-4 h-4" aria-hidden="true" />
-                    {t("settings.updateFromRemote", "Update from remote")}
+                    {t("settings.updateFromRemote", "Restore latest backup")}
                   </button>
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-border">
                   <div className="flex-1 mr-4">
                     <p className="text-sm font-medium">
-                      {t("settings.selfHostedAutoRun", "Automatic Sync")}
+                      {t("settings.selfHostedAutoRun", "Automatic Backup")}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {selfHostedIsSyncSource
-                        ? t(
-                            "settings.selfHostedAutoRunDesc",
-                            "Keep desktop and your self-hosted PromptHub workspace aligned on a background schedule.",
-                          )
-                        : t(
-                            "settings.syncSourceInactiveDesc",
-                            "This target stays available for manual backup and restore, but automatic sync only runs for the current sync source.",
-                          )}
+                      {t(
+                        "settings.selfHostedAutoRunDesc",
+                        "Create a new remote snapshot on a background schedule. A backup is skipped unless Desktop and Web versions match exactly.",
+                      )}
                     </p>
                   </div>
                   <div className="min-w-[140px]">
                     <Select
-                      ariaLabel={`${t("settings.selfHostedSyncMenu", "Self-Hosted PromptHub")} ${t("settings.selfHostedAutoRun", "Automatic Sync")}`}
+                      ariaLabel={`${t("settings.selfHostedSyncMenu", "Self-Hosted PromptHub")} ${t("settings.selfHostedAutoRun", "Automatic Backup")}`}
                       value={String(settings.selfHostedAutoSyncInterval)}
                       onChange={(val) =>
                         settings.setSelfHostedAutoSyncInterval(Number(val))
@@ -241,7 +203,7 @@ export function SelfHostedSyncPanel() {
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {t(
                         "settings.selfHostedSyncOnStartupDesc",
-                        "Automatically pull from your self-hosted PromptHub workspace after desktop startup. Changes take effect on next launch.",
+                        "Create an upload-only backup after desktop startup. This never restores or changes local data.",
                       )}
                     </p>
                   </div>

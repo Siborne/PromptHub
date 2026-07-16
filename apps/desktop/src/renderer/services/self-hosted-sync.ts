@@ -1,3 +1,4 @@
+import { SELF_HOSTED_BACKUP_PROTOCOL_VERSION } from "@prompthub/shared/types";
 import type {
   AgentAssetFilesSnapshot,
   AgentAssetStoreSourcesSnapshot,
@@ -7,6 +8,9 @@ import type {
   PluginPackageSnapshot,
   PromptRelation,
   RuleBackupRecord,
+  SelfHostedBackupCapabilities,
+  SelfHostedBackupEnvelope,
+  SelfHostedBackupMetadata,
   Settings,
 } from "@prompthub/shared/types";
 import type { Folder } from "@prompthub/shared/types/folder";
@@ -95,6 +99,26 @@ interface WebSyncPayload {
   agentAssetFiles?: AgentAssetFilesSnapshot;
   settings: Settings;
   settingsUpdatedAt?: string;
+  images?: Record<string, string>;
+  videos?: Record<string, string>;
+  desktopSettings?: DatabaseBackup["settings"];
+  desktopAiConfig?: DatabaseBackup["aiConfig"];
+}
+
+export interface SelfHostedRemoteBackupResult extends SelfHostedSyncSummary {
+  id: string;
+  createdAt: string;
+  clientVersion: string;
+  serverVersion: string;
+}
+
+export class SelfHostedBackupCompatibilityError extends Error {
+  readonly code = "SELF_HOSTED_VERSION_MISMATCH";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "SelfHostedBackupCompatibilityError";
+  }
 }
 
 interface WebSyncPushResult {
@@ -107,6 +131,55 @@ interface WebSyncPushResult {
   promptRelationsSkipped?: number;
   outputFormatItemsImported?: number;
   outputFormatItemsSkipped?: number;
+}
+
+const SELF_HOSTED_REQUEST_TIMEOUT_MS = 15_000;
+const SELF_HOSTED_READ_RETRY_DELAY_MS = 250;
+
+async function waitForRetry(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    globalThis.setTimeout(resolve, SELF_HOSTED_READ_RETRY_DELAY_MS);
+  });
+}
+
+async function fetchSelfHosted(
+  input: string,
+  init: RequestInit,
+  options: { retries?: number } = {},
+): Promise<Response> {
+  const retries = Math.max(0, Math.floor(options.retries ?? 0));
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = globalThis.setTimeout(
+      () => controller.abort(),
+      SELF_HOSTED_REQUEST_TIMEOUT_MS,
+    );
+    try {
+      const response = await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+      if (response.status < 500 || attempt === retries) {
+        return response;
+      }
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(
+          `Self-hosted PromptHub request timed out after ${SELF_HOSTED_REQUEST_TIMEOUT_MS / 1000} seconds`,
+        );
+      }
+      if (attempt === retries) {
+        throw error;
+      }
+    } finally {
+      globalThis.clearTimeout(timeoutId);
+    }
+
+    await waitForRetry();
+  }
+
+  throw new Error("Self-hosted PromptHub request failed");
 }
 
 function normalizeBaseUrl(url: string): string {
@@ -172,6 +245,36 @@ async function readJsonEnvelope<T>(response: Response): Promise<T> {
   return payload.data;
 }
 
+async function readHealthVersion(baseUrl: string): Promise<string> {
+  const response = await fetchSelfHosted(
+    `${baseUrl}/health`,
+    { cache: "no-store" },
+    { retries: 1 },
+  );
+  if (!response.ok) {
+    throw new SelfHostedBackupCompatibilityError(
+      `Unable to verify the self-hosted Web version (HTTP ${response.status}). Backup was not started.`,
+    );
+  }
+  const payload = (await response.json()) as { version?: unknown };
+  if (typeof payload.version !== "string" || !payload.version.trim()) {
+    throw new SelfHostedBackupCompatibilityError(
+      "The self-hosted Web server did not report a version. Backup was not started.",
+    );
+  }
+  return payload.version;
+}
+
+async function readDesktopVersion(): Promise<string> {
+  const version = await window.electron?.updater?.getVersion?.();
+  if (typeof version !== "string" || !version.trim()) {
+    throw new SelfHostedBackupCompatibilityError(
+      "PromptHub could not determine the installed desktop version. Backup was not started.",
+    );
+  }
+  return version;
+}
+
 async function loginToSelfHostedWeb(
   config: SelfHostedSyncConfig,
 ): Promise<{ baseUrl: string; accessToken: string }> {
@@ -188,7 +291,7 @@ async function loginToSelfHostedWeb(
     captchaBoundaryError = error;
   }
 
-  const response = await fetch(`${baseUrl}/api/auth/login`, {
+  const response = await fetchSelfHosted(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
@@ -222,12 +325,16 @@ async function apiGet<T>(
   accessToken: string,
   path: string,
 ): Promise<T> {
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
+  const response = await fetchSelfHosted(
+    `${baseUrl}${path}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
     },
-    cache: "no-store",
-  });
+    { retries: 1 },
+  );
   return readJsonEnvelope<T>(response);
 }
 
@@ -237,7 +344,7 @@ async function apiPut<T>(
   path: string,
   body: unknown,
 ): Promise<T> {
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetchSelfHosted(`${baseUrl}${path}`, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -255,7 +362,7 @@ async function apiPost<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetchSelfHosted(`${baseUrl}${path}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -273,6 +380,180 @@ async function registerDesktopHeartbeat(
 ): Promise<void> {
   const payload = await buildDesktopHeartbeatPayload();
   await apiPost(baseUrl, accessToken, "/api/devices/heartbeat", payload);
+}
+
+async function openCompatibleBackupSession(config: SelfHostedSyncConfig) {
+  const baseUrl = normalizeBaseUrl(config.url);
+  const clientVersion = await readDesktopVersion();
+  const healthVersion = await readHealthVersion(baseUrl);
+  if (clientVersion !== healthVersion) {
+    throw new SelfHostedBackupCompatibilityError(
+      `Desktop/Web version mismatch: desktop ${clientVersion}, Web ${healthVersion}. Backup was skipped until both deployments use the same version.`,
+    );
+  }
+
+  const session = await loginToSelfHostedWeb(config);
+  let capabilities: SelfHostedBackupCapabilities;
+  try {
+    capabilities = await apiGet<SelfHostedBackupCapabilities>(
+      session.baseUrl,
+      session.accessToken,
+      "/api/backups/desktop/capabilities",
+    );
+  } catch (error) {
+    throw new SelfHostedBackupCompatibilityError(
+      `The self-hosted Web deployment does not support safe desktop backups. ${error instanceof Error ? error.message : "Update the Web deployment and try again."}`,
+    );
+  }
+  if (
+    capabilities.serverVersion !== clientVersion ||
+    capabilities.protocolVersion !== SELF_HOSTED_BACKUP_PROTOCOL_VERSION
+  ) {
+    throw new SelfHostedBackupCompatibilityError(
+      `Desktop/Web backup compatibility check failed: desktop ${clientVersion}, Web ${capabilities.serverVersion}. Backup was not written.`,
+    );
+  }
+  return { ...session, clientVersion, capabilities };
+}
+
+const REMOTE_BACKUP_LOCAL_ONLY_SETTINGS_FIELDS = new Set([
+  "webdavUsername",
+  "webdavPassword",
+  "webdavEncryptionPassword",
+  "selfHostedSyncUsername",
+  "selfHostedSyncPassword",
+  "s3AccessKeyId",
+  "s3SecretAccessKey",
+  "s3EncryptionPassword",
+  "aiApiKey",
+  "githubToken",
+  "networkProxy",
+]);
+
+const REMOTE_BACKUP_CREDENTIAL_KEY_PATTERN =
+  /(?:password|secret|token|api[_-]?key|access[_-]?key(?:id)?)/iu;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function removeCredentialFields(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => removeCredentialFields(item));
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(
+        ([key]) =>
+          !REMOTE_BACKUP_CREDENTIAL_KEY_PATTERN.test(key) &&
+          !REMOTE_BACKUP_LOCAL_ONLY_SETTINGS_FIELDS.has(key),
+      )
+      .map(([key, nestedValue]) => [key, removeCredentialFields(nestedValue)]),
+  );
+}
+
+function sanitizeDesktopSettingsForRemoteBackup(
+  settings: DatabaseBackup["settings"],
+): DatabaseBackup["settings"] {
+  if (!isRecord(settings?.state)) {
+    return undefined;
+  }
+  return {
+    state: removeCredentialFields(settings.state),
+  };
+}
+
+function sanitizeDesktopAiConfigForRemoteBackup(
+  aiConfig: DatabaseBackup["aiConfig"],
+): DatabaseBackup["aiConfig"] {
+  if (!isRecord(aiConfig)) {
+    return undefined;
+  }
+  return removeCredentialFields(aiConfig) as DatabaseBackup["aiConfig"];
+}
+
+function mergeArrayItemCredentials(
+  remoteItems: unknown,
+  localItems: unknown,
+): unknown {
+  if (!Array.isArray(remoteItems) || !Array.isArray(localItems)) {
+    return remoteItems;
+  }
+
+  return remoteItems.map((remoteItem) => {
+    if (!isRecord(remoteItem) || typeof remoteItem.id !== "string") {
+      return remoteItem;
+    }
+    const localItem = localItems.find(
+      (candidate) => isRecord(candidate) && candidate.id === remoteItem.id,
+    );
+    if (!isRecord(localItem)) {
+      return remoteItem;
+    }
+
+    const credentials = Object.fromEntries(
+      Object.entries(localItem).filter(([key]) =>
+        REMOTE_BACKUP_CREDENTIAL_KEY_PATTERN.test(key),
+      ),
+    );
+    return { ...remoteItem, ...credentials };
+  });
+}
+
+function mergeDesktopSettingsForRestore(
+  localSettings: DatabaseBackup["settings"],
+  remoteSettings: DatabaseBackup["settings"],
+): DatabaseBackup["settings"] {
+  if (!isRecord(remoteSettings?.state)) {
+    return localSettings;
+  }
+  const localState = isRecord(localSettings?.state) ? localSettings.state : {};
+  const nextState: Record<string, unknown> = { ...remoteSettings.state };
+
+  for (const field of REMOTE_BACKUP_LOCAL_ONLY_SETTINGS_FIELDS) {
+    if (localState[field] !== undefined) {
+      nextState[field] = localState[field];
+    }
+  }
+  for (const field of ["aiProviders", "aiModels"] as const) {
+    if (nextState[field] !== undefined) {
+      nextState[field] = mergeArrayItemCredentials(
+        nextState[field],
+        localState[field],
+      );
+    }
+  }
+
+  return { state: nextState };
+}
+
+function mergeDesktopAiConfigForRestore(
+  localAiConfig: DatabaseBackup["aiConfig"],
+  remoteAiConfig: DatabaseBackup["aiConfig"],
+): DatabaseBackup["aiConfig"] {
+  if (!isRecord(remoteAiConfig)) {
+    return localAiConfig;
+  }
+  const localConfig = isRecord(localAiConfig) ? localAiConfig : {};
+  const nextConfig: Record<string, unknown> = { ...remoteAiConfig };
+
+  if (localConfig.aiApiKey !== undefined) {
+    nextConfig.aiApiKey = localConfig.aiApiKey;
+  }
+  for (const field of ["aiProviders", "aiModels"] as const) {
+    if (nextConfig[field] !== undefined) {
+      nextConfig[field] = mergeArrayItemCredentials(
+        nextConfig[field],
+        localConfig[field],
+      );
+    }
+  }
+
+  return nextConfig as DatabaseBackup["aiConfig"];
 }
 
 function toWebSettings(backup: DatabaseBackup): Settings {
@@ -659,6 +940,14 @@ function buildDesktopBackupFromRemote(
     payload.settings,
     remoteSettingsUpdatedAt,
   );
+  const restoredSettings = mergeDesktopSettingsForRestore(
+    localBackup.settings,
+    payload.desktopSettings ?? remoteSettingsSnapshot,
+  );
+  const restoredAiConfig = mergeDesktopAiConfigForRestore(
+    localBackup.aiConfig,
+    payload.desktopAiConfig,
+  );
   const remoteFolderIds = new Set(payload.folders.map((folder) => folder.id));
   const normalizedFolders = payload.folders.map((folder) => ({
     ...folder,
@@ -707,8 +996,8 @@ function buildDesktopBackupFromRemote(
     outputFormatItems: normalizedOutputFormatItems,
     images: remoteImages,
     videos: remoteVideos,
-    aiConfig: localBackup.aiConfig,
-    settings: remoteSettingsSnapshot || localBackup.settings,
+    aiConfig: restoredAiConfig,
+    settings: restoredSettings,
     settingsUpdatedAt: remoteSettingsUpdatedAt || localBackup.settingsUpdatedAt,
     rules: payload.rules,
     skills: normalizedSkills.skills,
@@ -722,6 +1011,53 @@ function buildDesktopBackupFromRemote(
   };
 }
 
+function buildRemoteBackupSnapshot(backup: DatabaseBackup): WebSyncPayload {
+  return {
+    version: "desktop-backup-v1",
+    exportedAt: backup.exportedAt,
+    prompts: backup.prompts,
+    promptVersions: backup.versions,
+    versions: backup.versions,
+    folders: backup.folders,
+    promptRelations: backup.promptRelations,
+    outputFormatItems: backup.outputFormatItems,
+    rules: backup.rules || [],
+    skills: normalizeSkillsForWebSync(backup.skills || []),
+    skillVersions: backup.skillVersions || [],
+    skillFiles: backup.skillFiles,
+    mcpLibrary: backup.mcpLibrary,
+    pluginLibrary: backup.pluginLibrary,
+    pluginPackages: backup.pluginPackages,
+    storeSources: backup.storeSources,
+    agentAssetFiles: backup.agentAssetFiles,
+    settings: toWebSettings(backup),
+    settingsUpdatedAt: backup.settingsUpdatedAt,
+    desktopSettings: sanitizeDesktopSettingsForRemoteBackup(backup.settings),
+    desktopAiConfig: sanitizeDesktopAiConfigForRemoteBackup(backup.aiConfig),
+    images: backup.images,
+    videos: backup.videos,
+  };
+}
+
+function metadataToBackupResult(
+  metadata: SelfHostedBackupMetadata,
+): SelfHostedRemoteBackupResult {
+  return {
+    id: metadata.id,
+    createdAt: metadata.createdAt,
+    clientVersion: metadata.clientVersion,
+    serverVersion: metadata.serverVersion,
+    prompts: metadata.summary.prompts,
+    folders: metadata.summary.folders,
+    rules: metadata.summary.rules,
+    skills: metadata.summary.skills,
+    promptRelations: metadata.summary.promptRelations,
+    outputFormatItems: metadata.summary.outputFormatItems,
+    mcpServers: metadata.summary.mcpServers,
+    plugins: metadata.summary.plugins,
+  };
+}
+
 export async function testSelfHostedConnection(
   config: SelfHostedSyncConfig,
 ): Promise<SelfHostedSyncSummary> {
@@ -731,6 +1067,72 @@ export async function testSelfHostedConnection(
   }>(baseUrl, accessToken, "/api/sync/manifest");
 
   return manifest.counts;
+}
+
+export async function testSelfHostedBackupConnection(
+  config: SelfHostedSyncConfig,
+): Promise<SelfHostedBackupCapabilities> {
+  const { capabilities } = await openCompatibleBackupSession(config);
+  return capabilities;
+}
+
+export async function createSelfHostedRemoteBackup(
+  config: SelfHostedSyncConfig,
+): Promise<SelfHostedRemoteBackupResult> {
+  const { baseUrl, accessToken, clientVersion } =
+    await openCompatibleBackupSession(config);
+  const backup = await exportDatabase();
+  const metadata = await apiPost<SelfHostedBackupMetadata>(
+    baseUrl,
+    accessToken,
+    "/api/backups/desktop",
+    {
+      clientVersion,
+      payload: buildRemoteBackupSnapshot(backup),
+    },
+  );
+  return metadataToBackupResult(metadata);
+}
+
+export async function restoreLatestSelfHostedRemoteBackup(
+  config: SelfHostedSyncConfig,
+): Promise<SelfHostedSyncSummary> {
+  const { baseUrl, accessToken, clientVersion } =
+    await openCompatibleBackupSession(config);
+  const envelope = await apiGet<SelfHostedBackupEnvelope>(
+    baseUrl,
+    accessToken,
+    "/api/backups/desktop/latest",
+  );
+  if (
+    envelope.clientVersion !== clientVersion ||
+    envelope.serverVersion !== clientVersion ||
+    envelope.protocolVersion !== SELF_HOSTED_BACKUP_PROTOCOL_VERSION ||
+    !envelope.snapshot.settings
+  ) {
+    throw new SelfHostedBackupCompatibilityError(
+      "The latest self-hosted backup is not compatible with this desktop version. Local data was not changed.",
+    );
+  }
+
+  const localBackup = await exportDatabase();
+  const backup = buildDesktopBackupFromRemote(
+    localBackup,
+    envelope.snapshot as WebSyncPayload,
+    envelope.snapshot.images,
+    envelope.snapshot.videos,
+  );
+  await restoreFromBackup(backup);
+  return {
+    prompts: envelope.summary.prompts,
+    folders: envelope.summary.folders,
+    rules: envelope.summary.rules,
+    skills: envelope.summary.skills,
+    promptRelations: envelope.summary.promptRelations,
+    outputFormatItems: envelope.summary.outputFormatItems,
+    mcpServers: envelope.summary.mcpServers,
+    plugins: envelope.summary.plugins,
+  };
 }
 
 export async function pushToSelfHostedWeb(
