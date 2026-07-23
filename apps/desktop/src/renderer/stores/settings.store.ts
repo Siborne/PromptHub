@@ -44,6 +44,7 @@ import type {
   ModelRouteDefaults,
   SettingsState,
 } from "./settings/settings-types";
+import { normalizeAgentIdentityPreferences } from "../services/agent-identity";
 
 export {
   FONT_SIZES,
@@ -91,8 +92,18 @@ function refreshRulesWorkspace(): void {
   });
 }
 
+function refreshLoadedAgentWorkspace(): void {
+  void import("./agent.store").then(({ useAgentStore }) => {
+    const agentState = useAgentStore.getState();
+    if (agentState.hasLoaded) void agentState.refresh();
+  });
+}
+
 function syncSettingsToMainThenRefreshRules(settings: Partial<Settings>): void {
-  void syncSettingsToMain(settings).then(refreshRulesWorkspace);
+  void syncSettingsToMain(settings).then(() => {
+    refreshRulesWorkspace();
+    refreshLoadedAgentWorkspace();
+  });
 }
 
 function sanitizeGithubToken(token: string): string {
@@ -129,7 +140,7 @@ export const useSettingsStore = create<SettingsState>()(
     },
     {
       name: "prompthub-settings",
-      version: 16,
+      version: 18,
       partialize: stripEphemeralSettings,
       merge: mergeSettingsState,
       migrate: migrateSettingsState,
@@ -227,10 +238,14 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
   const networkProxy = normalizeNetworkProxySettings(
     settings.networkProxy ?? state.networkProxy,
   );
+  const agentIdentityPreferences = normalizeAgentIdentityPreferences(
+    settings.agentIdentityPreferences ?? state.agentIdentityPreferences,
+  );
 
   useSettingsStore.setState({
     customAgents,
     builtinAgentOverrides,
+    agentIdentityPreferences,
     customPlatformRootPaths: deriveLegacyCustomPlatformRootPaths(
       builtinAgentOverrides,
     ),

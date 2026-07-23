@@ -12,6 +12,8 @@ const claudePlatform = requirePlatform("claude");
 const codexPlatform = requirePlatform("codex");
 const zcodePlatform = requirePlatform("zcode");
 const grokPlatform = requirePlatform("grok");
+const qwenPlatform = requirePlatform("qwen");
+const kimiPlatform = requirePlatform("kimi");
 const geminiPlatform = requirePlatform("gemini");
 const opencodePlatform = requirePlatform("opencode");
 const windsurfPlatform = requirePlatform("windsurf");
@@ -27,6 +29,8 @@ export const RULE_PLATFORM_ORDER = [
   "codex",
   "zcode",
   "grok",
+  "qwen",
+  "kimi",
   "gemini",
   "opencode",
   "windsurf",
@@ -45,7 +49,8 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     platformDescription:
       "Global Claude Code rules stored next to the managed Claude skills directory.",
     name: "CLAUDE.md",
-    description: "Global Claude rules loaded from the local Claude configuration.",
+    description:
+      "Global Claude rules loaded from the local Claude configuration.",
     group: "assistant",
   },
   "codex-global": {
@@ -56,7 +61,8 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     platformDescription:
       "Global Codex instructions stored next to the managed Codex settings directory.",
     name: "AGENTS.md",
-    description: "Global Codex instructions loaded from the local Codex configuration.",
+    description:
+      "Global Codex instructions loaded from the local Codex configuration.",
     group: "assistant",
   },
   "zcode-global": {
@@ -67,7 +73,8 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     platformDescription:
       "Global ZCode Agent instructions stored next to the managed ZCode skills directory.",
     name: "AGENTS.md",
-    description: "Global ZCode Agent instructions loaded from the local ZCode configuration.",
+    description:
+      "Global ZCode Agent instructions loaded from the local ZCode configuration.",
     group: "assistant",
   },
   "grok-global": {
@@ -81,6 +88,29 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     description: "Global Grok Build instructions loaded for every project.",
     group: "assistant",
   },
+  "qwen-global": {
+    id: "qwen-global",
+    platformId: "qwen",
+    platformName: qwenPlatform.name,
+    platformIcon: qwenPlatform.icon,
+    platformDescription:
+      "Global Qwen Code instructions stored in the Qwen user configuration directory.",
+    name: "QWEN.md",
+    description: "Global Qwen Code instructions loaded for every project.",
+    group: "assistant",
+  },
+  "kimi-global": {
+    id: "kimi-global",
+    platformId: "kimi",
+    platformName: kimiPlatform.name,
+    platformIcon: kimiPlatform.icon,
+    platformDescription:
+      "Global Kimi Code instructions stored in the local Kimi Code configuration directory.",
+    name: "AGENTS.md",
+    description:
+      "Global Kimi Code instructions loaded from the local Kimi Code configuration.",
+    group: "assistant",
+  },
   "gemini-global": {
     id: "gemini-global",
     platformId: "gemini",
@@ -89,7 +119,8 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     platformDescription:
       "Global Gemini CLI context stored next to the managed Gemini settings directory.",
     name: "GEMINI.md",
-    description: "Global Gemini CLI context loaded from the local Gemini configuration.",
+    description:
+      "Global Gemini CLI context loaded from the local Gemini configuration.",
     group: "assistant",
   },
   "opencode-global": {
@@ -100,7 +131,8 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     platformDescription:
       "Global OpenCode rules stored next to the managed OpenCode skills directory.",
     name: "AGENTS.md",
-    description: "Global OpenCode rules loaded from the local OpenCode configuration.",
+    description:
+      "Global OpenCode rules loaded from the local OpenCode configuration.",
     group: "tooling",
   },
   "windsurf-global": {

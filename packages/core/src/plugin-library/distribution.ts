@@ -511,6 +511,16 @@ const PLUGIN_TARGET_MATRIX: PluginTargetCompatibility[] = [
     adapterOutput: "Generate Copilot or VS Code agent plugin package.",
   },
   {
+    id: "qwen",
+    displayName: "Qwen Code",
+    status: "native",
+    enabled: false,
+    nativeMarker: "qwen-extension.json",
+    installSurface: "qwen extensions install",
+    unsupportedReason:
+      "PromptHub currently discovers native Qwen extensions but leaves installation and updates to Qwen Code.",
+  },
+  {
     id: "opencode",
     displayName: "OpenCode",
     status: "runtime-only",

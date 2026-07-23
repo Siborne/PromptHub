@@ -17,6 +17,17 @@ export interface AgentAssetConfig {
 
 export interface BuiltinAgentOverrideConfig extends AgentAssetConfig {}
 
+export type AgentIdentityChoice = "codex" | "chatgpt";
+
+export interface AgentIdentityPreference {
+  name: AgentIdentityChoice;
+  icon: AgentIdentityChoice;
+}
+
+export type AgentIdentityPreferences = Partial<
+  Record<"codex", AgentIdentityPreference>
+>;
+
 export interface CustomAgentConfig {
   id: string;
   name: string;
@@ -56,6 +67,7 @@ export interface Settings {
   backgroundImageOpacity?: number;
   backgroundImageBlur?: number;
   builtinAgentOverrides?: Record<string, BuiltinAgentOverrideConfig>;
+  agentIdentityPreferences?: AgentIdentityPreferences;
   customPlatformRootPaths?: Record<string, string>;
   customAgents?: CustomAgentConfig[];
   customAgentRootPaths?: string[];

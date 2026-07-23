@@ -33,6 +33,7 @@ export const MCP_JSON_TARGETS: McpTargetKind[] = [
   "codebuddy",
   "kimi",
   "augment",
+  "qwen",
   "zcode",
   "custom-json",
 ];

@@ -50,6 +50,9 @@
 - 桌面端 Prompt AI 测试抽屉必须按 `promptType` 收敛可见模式：文本 Prompt 只提供单模型测试与多模型对比，image Prompt 才提供生图测试。
 - 文本 Prompt 在 AI 测试抽屉中附加的图片属于测试期临时附件，必须真正参与聊天消息构造，但不得写回 Prompt 持久化字段。
 - image Prompt 在 AI 测试抽屉中可以同时使用已保存参考图与当前测试会话上传的临时参考图作为生图输入。
+- Prompt 详情的大图预览必须按 `Prompt.images` 的既有顺序连续浏览：从被点击图片
+  开始，多图时显示有界的上一张/下一张控制、当前位置，并支持左右方向键；单图或
+  不属于已保存图片集合的临时 AI 图片不显示画廊控制。
 
 ### 7. Prompt Modal Information Hierarchy
 
@@ -58,6 +61,8 @@
 - 新建 Prompt 的描述、system prompt、参考媒体，以及文件夹、标签、来源、备注等扩展信息必须默认收纳在 `More Settings` 折叠区内，避免干扰主要创作流程。
 - 桌面端编辑 Prompt 弹窗必须保留更强的已有内容上下文：`Basic Info` 中继续展示描述、Prompt 类型，以及 image Prompt 的参考媒体。
 - 文本 Prompt 的参考媒体在编辑场景中仍应收纳在 `More Settings` 中，不挤占基础编辑区。
+- Prompt 参考媒体的原始字节必须由 runtime path helper 管理在 `userData/data/assets/images/` 与 `userData/data/assets/videos/`；SQLite `prompts.images` / `prompts.videos` 只保存托管文件名数组，renderer 通过本地媒体协议读取，不能把任意来源绝对路径持久化到 Prompt。
+- 桌面端参考媒体选择器必须绑定发起 IPC 的 PromptHub 窗口，避免原生对话框被其他窗口遮挡；用户取消选择保持静默，picker/bridge/托管复制失败必须显示本地化错误提示，不能只写控制台。
 
 ### 8. Quick Add Prompt Creation
 

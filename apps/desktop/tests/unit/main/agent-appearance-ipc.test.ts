@@ -1,0 +1,203 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const handleMock = vi.fn();
+const showOpenDialogMock = vi.fn();
+const getOverviewMock = vi.fn();
+const importThemeMock = vi.fn();
+const deleteThemeMock = vi.fn();
+const getThemePreviewMock = vi.fn();
+const exportThemeMock = vi.fn();
+const applyThemeMock = vi.fn();
+const restoreThemeMock = vi.fn();
+const importPetMock = vi.fn();
+const exportPetMock = vi.fn();
+const deletePetMock = vi.fn();
+const getPetPreviewMock = vi.fn();
+
+vi.mock("electron", () => ({
+  app: { once: vi.fn() },
+  dialog: { showOpenDialog: showOpenDialogMock },
+  ipcMain: { handle: handleMock },
+}));
+
+type Handler = (...args: unknown[]) => Promise<unknown>;
+
+async function setup() {
+  vi.resetModules();
+  handleMock.mockReset();
+  const service = {
+    getOverview: getOverviewMock,
+    importTheme: importThemeMock,
+    deleteTheme: deleteThemeMock,
+    getThemePreview: getThemePreviewMock,
+    exportTheme: exportThemeMock,
+    applyTheme: applyThemeMock,
+    restoreTheme: restoreThemeMock,
+    importPet: importPetMock,
+    exportPet: exportPetMock,
+    deletePet: deletePetMock,
+    getPetPreview: getPetPreviewMock,
+  };
+  const [{ registerAgentAppearanceIPC }, { IPC_CHANNELS }] = await Promise.all([
+    import("../../../src/main/ipc/agent-appearance.ipc"),
+    import("@prompthub/shared/constants/ipc-channels"),
+  ]);
+  registerAgentAppearanceIPC({ createService: () => service as never });
+  return {
+    IPC_CHANNELS,
+    handlers: Object.fromEntries(
+      handleMock.mock.calls.map(([channel, handler]) => [channel, handler]),
+    ) as Record<string, Handler>,
+  };
+}
+
+describe("Agent appearance IPC", () => {
+  beforeEach(() => {
+    showOpenDialogMock.mockReset();
+    getOverviewMock.mockReset();
+    importThemeMock.mockReset();
+    deleteThemeMock.mockReset();
+    getThemePreviewMock.mockReset();
+    exportThemeMock.mockReset();
+    applyThemeMock.mockReset();
+    restoreThemeMock.mockReset();
+    importPetMock.mockReset();
+    exportPetMock.mockReset();
+    deletePetMock.mockReset();
+    getPetPreviewMock.mockReset();
+  });
+
+  it("exposes Codex overview and validates theme actions", async () => {
+    getOverviewMock.mockResolvedValue({ agentId: "codex" });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_GET](null, "codex"),
+    ).resolves.toEqual({ agentId: "codex" });
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_APPLY_THEME](null, {
+        agentId: "codex",
+        themeId: "midnight@1.0.0",
+        restartExisting: true,
+      }),
+    ).resolves.toBeUndefined();
+    expect(applyThemeMock).toHaveBeenCalledWith("midnight@1.0.0", true);
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_APPLY_THEME](null, {
+        agentId: "claude-code",
+        themeId: "midnight@1.0.0",
+      }),
+    ).rejects.toThrow("only supported for Codex");
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_APPLY_THEME](null, {
+        agentId: "codex",
+        themeId: "",
+      }),
+    ).rejects.toThrow("themeId");
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_APPLY_THEME](null, {
+        agentId: "codex",
+        themeId: "midnight@1.0.0",
+        restartExisting: "yes",
+      }),
+    ).rejects.toThrow("restartExisting");
+  });
+
+  it("imports themes and Pets through bounded native pickers", async () => {
+    showOpenDialogMock
+      .mockResolvedValueOnce({
+        canceled: false,
+        filePaths: ["/tmp/dream-skin"],
+      })
+      .mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/pet"] });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_IMPORT_THEME](null, "codex");
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_IMPORT_PET](null, "codex");
+
+    expect(importThemeMock).toHaveBeenCalledWith("/tmp/dream-skin");
+    expect(importPetMock).toHaveBeenCalledWith("/tmp/pet");
+    expect(showOpenDialogMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ properties: ["openDirectory"] }),
+    );
+    expect(showOpenDialogMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ properties: ["openDirectory"] }),
+    );
+  });
+
+  it("returns null when import or export pickers are cancelled", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_IMPORT_THEME](null, "codex"),
+    ).resolves.toBeNull();
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_EXPORT_PET](
+        null,
+        "codex",
+        "orbit",
+      ),
+    ).resolves.toBeNull();
+    expect(importThemeMock).not.toHaveBeenCalled();
+    expect(exportPetMock).not.toHaveBeenCalled();
+  });
+
+  it("routes restore, delete, preview and Pet export with string validation", async () => {
+    showOpenDialogMock.mockResolvedValue({
+      canceled: false,
+      filePaths: ["/tmp/export"],
+    });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_RESTORE_THEME](null, "codex");
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_DELETE_THEME](
+      null,
+      "codex",
+      "midnight@1.0.0",
+    );
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_PET_PREVIEW](
+      null,
+      "codex",
+      "orbit",
+    );
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_THEME_PREVIEW](
+      null,
+      "codex",
+      "midnight@1.0.0",
+    );
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_EXPORT_PET](
+      null,
+      "codex",
+      "orbit",
+    );
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_EXPORT_THEME](
+      null,
+      "codex",
+      "midnight@1.0.0",
+    );
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_DELETE_PET](
+      null,
+      "codex",
+      "orbit",
+    );
+
+    expect(restoreThemeMock).toHaveBeenCalledOnce();
+    expect(deleteThemeMock).toHaveBeenCalledWith("midnight@1.0.0");
+    expect(getPetPreviewMock).toHaveBeenCalledWith("orbit");
+    expect(getThemePreviewMock).toHaveBeenCalledWith("midnight@1.0.0");
+    expect(exportPetMock).toHaveBeenCalledWith("orbit", "/tmp/export");
+    expect(exportThemeMock).toHaveBeenCalledWith(
+      "midnight@1.0.0",
+      "/tmp/export",
+    );
+    expect(deletePetMock).toHaveBeenCalledWith("orbit");
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_DELETE_PET](null, "codex", 42),
+    ).rejects.toThrow("Pet id");
+  });
+});

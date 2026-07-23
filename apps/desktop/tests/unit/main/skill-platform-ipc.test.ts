@@ -7,6 +7,8 @@ const scanPlatformSkillsMock = vi.fn().mockResolvedValue({
   scannedSkills: [],
 });
 const uninstallPlatformSkillMock = vi.fn().mockResolvedValue(undefined);
+const getSupportedPlatformsMock = vi.fn().mockReturnValue([]);
+const getPlatformRootDirMock = vi.fn();
 
 vi.mock("electron", () => ({
   ipcMain: {
@@ -17,10 +19,14 @@ vi.mock("electron", () => ({
 vi.mock("../../../src/main/services/skill-installer", () => ({
   SkillInstaller: {
     detectInstalledPlatforms: vi.fn().mockResolvedValue([]),
-    getSupportedPlatforms: vi.fn().mockReturnValue([]),
+    getSupportedPlatforms: getSupportedPlatformsMock,
     scanPlatformSkills: scanPlatformSkillsMock,
     uninstallPlatformSkill: uninstallPlatformSkillMock,
   },
+}));
+
+vi.mock("../../../src/main/services/skill-installer-utils", () => ({
+  getPlatformRootDir: getPlatformRootDirMock,
 }));
 
 vi.mock("../../../src/main/services/skill-safety-scan", () => ({
@@ -38,11 +44,14 @@ async function setupPlatformIpc() {
   handleMock.mockReset();
   scanPlatformSkillsMock.mockClear();
   uninstallPlatformSkillMock.mockClear();
+  getSupportedPlatformsMock.mockReset().mockReturnValue([]);
+  getPlatformRootDirMock.mockReset();
 
-  const [{ registerSkillPlatformHandlers }, { IPC_CHANNELS }] = await Promise.all([
-    import("../../../src/main/ipc/skill/platform-handlers"),
-    import("@prompthub/shared/constants/ipc-channels"),
-  ]);
+  const [{ registerSkillPlatformHandlers }, { IPC_CHANNELS }] =
+    await Promise.all([
+      import("../../../src/main/ipc/skill/platform-handlers"),
+      import("@prompthub/shared/constants/ipc-channels"),
+    ]);
 
   registerSkillPlatformHandlers({
     db: {
@@ -63,6 +72,31 @@ describe("skill platform IPC", () => {
     handleMock.mockReset();
     scanPlatformSkillsMock.mockClear();
     uninstallPlatformSkillMock.mockClear();
+    getSupportedPlatformsMock.mockReset().mockReturnValue([]);
+    getPlatformRootDirMock.mockReset();
+  });
+
+  it("projects the resolved native root for renderer Agent management", async () => {
+    const kimi = {
+      id: "kimi",
+      name: "Kimi Code",
+      rootDir: {
+        darwin: "~/.kimi-code",
+        win32: "%USERPROFILE%\\.kimi-code",
+        linux: "~/.kimi-code",
+      },
+      skillsRelativePath: "skills",
+    };
+    const { handlers, IPC_CHANNELS } = await setupPlatformIpc();
+    getSupportedPlatformsMock.mockReturnValue([kimi]);
+    getPlatformRootDirMock.mockReturnValue("/Users/test/.kimi-code");
+
+    await expect(
+      handlers[IPC_CHANNELS.SKILL_GET_SUPPORTED_PLATFORMS](),
+    ).resolves.toEqual([
+      { ...kimi, resolvedRootPath: "/Users/test/.kimi-code" },
+    ]);
+    expect(getPlatformRootDirMock).toHaveBeenCalledWith(kimi);
   });
 
   it("scans agent/platform skills through the unified platform scan handler", async () => {
@@ -86,11 +120,7 @@ describe("skill platform IPC", () => {
       handlers[IPC_CHANNELS.SKILL_SCAN_PLATFORM_SKILLS](null, ""),
     ).rejects.toThrow(/non-empty platformId/);
     await expect(
-      handlers[IPC_CHANNELS.SKILL_UNINSTALL_PLATFORM_SKILL](
-        null,
-        "claude",
-        "",
-      ),
+      handlers[IPC_CHANNELS.SKILL_UNINSTALL_PLATFORM_SKILL](null, "claude", ""),
     ).rejects.toThrow(/non-empty platformSkillPath/);
 
     expect(scanPlatformSkillsMock).not.toHaveBeenCalled();

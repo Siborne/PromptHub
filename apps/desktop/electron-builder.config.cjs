@@ -1,4 +1,5 @@
-const enableMacReleaseSigning = process.env.PROMPTHUB_MAC_RELEASE_SIGN === "true";
+const enableMacReleaseSigning =
+  process.env.PROMPTHUB_MAC_RELEASE_SIGN === "true";
 
 const macReleaseSigningConfig = enableMacReleaseSigning
   ? {
@@ -43,6 +44,10 @@ module.exports = {
     {
       from: "../../CHANGELOG.md",
       to: "CHANGELOG.md",
+    },
+    {
+      from: "resources/codex-dream-skin",
+      to: "codex-dream-skin",
     },
   ],
   asarUnpack: ["**/*.node", "**/node-sqlite3-wasm/**"],

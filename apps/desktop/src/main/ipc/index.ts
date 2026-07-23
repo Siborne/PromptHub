@@ -8,6 +8,7 @@ import { registerRulesIPC } from "./rules.ipc";
 import { registerSkillIPC } from "./skill.ipc";
 import { registerAIIPC } from "./ai.ipc";
 import { registerAgentIPC } from "./agent.ipc";
+import { registerAgentAppearanceIPC } from "./agent-appearance.ipc";
 import { PromptDB } from "../database/prompt";
 import { FolderDB } from "../database/folder";
 import { SkillDB } from "../database/skill";
@@ -125,6 +126,17 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.AGENT_CONFIG_FILES_LIST,
   IPC_CHANNELS.AGENT_CONFIG_FILE_READ,
   IPC_CHANNELS.AGENT_CONFIG_FILE_WRITE,
+  IPC_CHANNELS.AGENT_APPEARANCE_GET,
+  IPC_CHANNELS.AGENT_APPEARANCE_IMPORT_THEME,
+  IPC_CHANNELS.AGENT_APPEARANCE_APPLY_THEME,
+  IPC_CHANNELS.AGENT_APPEARANCE_RESTORE_THEME,
+  IPC_CHANNELS.AGENT_APPEARANCE_DELETE_THEME,
+  IPC_CHANNELS.AGENT_APPEARANCE_EXPORT_THEME,
+  IPC_CHANNELS.AGENT_APPEARANCE_THEME_PREVIEW,
+  IPC_CHANNELS.AGENT_APPEARANCE_IMPORT_PET,
+  IPC_CHANNELS.AGENT_APPEARANCE_EXPORT_PET,
+  IPC_CHANNELS.AGENT_APPEARANCE_DELETE_PET,
+  IPC_CHANNELS.AGENT_APPEARANCE_PET_PREVIEW,
   IPC_CHANNELS.SKILL_LIST_LOCAL_FILES,
   IPC_CHANNELS.SKILL_LIST_LOCAL_FILES_BY_PATH,
   IPC_CHANNELS.SKILL_READ_LOCAL_FILE,
@@ -245,6 +257,9 @@ export function registerAllIPC(
   registerIpcGroup("plugin", () => registerPluginIPC());
   registerIpcGroup("image", () => registerImageIPC());
   registerIpcGroup("ai", () => registerAIIPC());
-  registerIpcGroup("agent", () => registerAgentIPC());
+  registerIpcGroup("agent", () => {
+    registerAgentIPC();
+    registerAgentAppearanceIPC();
+  });
   registerIpcGroup("generation", () => registerGenerationIPC(db));
 }

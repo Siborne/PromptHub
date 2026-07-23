@@ -82,6 +82,7 @@ export function RulesSidebarPanel({
       return haystack.includes(normalizedQuery);
     };
 
+    // Order follows Agent management's skillPlatformOrder (shared source of truth).
     const globalItems = getOrderedGlobalRuleFiles(ruleFiles, skillPlatformOrder)
       .filter((file) => matchesRuleSearch(file))
       .map((file) => ({

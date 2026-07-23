@@ -1,4 +1,5 @@
 import * as childProcess from "child_process";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("child_process", async () => {
@@ -267,6 +268,76 @@ describe("skill-installer-utils", () => {
       expect(resolvedPath).toContain(".cline/skills");
     });
 
+    it("prefers current Kimi Code roots and falls back to legacy roots only when needed", () => {
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi
+          .fn()
+          .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+      } as unknown as ReturnType<typeof initDatabase>);
+      const platform = getPlatformById("kimi");
+      expect(platform).toBeDefined();
+
+      const fromCurrentEnvironment = getPlatformRootDir(platform!, undefined, {
+        environment: { KIMI_CODE_HOME: "/tmp/kimi-current" },
+        pathExists: () => false,
+      });
+      expect(fromCurrentEnvironment).toBe("/tmp/kimi-current");
+
+      const fromCurrentDefault = getPlatformRootDir(platform!, undefined, {
+        environment: { KIMI_SHARE_DIR: "/tmp/kimi-legacy-env" },
+        pathExists: (candidate) => candidate.endsWith(".kimi-code"),
+      });
+      expect(fromCurrentDefault).toContain(".kimi-code");
+
+      const fromLegacyEnvironment = getPlatformRootDir(platform!, undefined, {
+        environment: { KIMI_SHARE_DIR: "/tmp/kimi-legacy-env" },
+        pathExists: (candidate) => candidate === "/tmp/kimi-legacy-env",
+      });
+      expect(fromLegacyEnvironment).toBe("/tmp/kimi-legacy-env");
+
+      const freshTarget = getPlatformRootDir(platform!, undefined, {
+        environment: {
+          KIMI_CODE_HOME: "relative/current",
+          KIMI_SHARE_DIR: "relative/legacy",
+        },
+        pathExists: () => false,
+      });
+      expect(freshTarget).toContain(".kimi-code");
+    });
+
+    it("resolves Qwen Code from QWEN_HOME without treating QWEN_RUNTIME_DIR as its config root", () => {
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi
+          .fn()
+          .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+      } as unknown as ReturnType<typeof initDatabase>);
+      const platform = getPlatformById("qwen");
+      expect(platform).toBeDefined();
+
+      expect(
+        getPlatformRootDir(platform!, undefined, {
+          environment: {
+            QWEN_HOME: "/tmp/qwen-config",
+            QWEN_RUNTIME_DIR: "/tmp/qwen-runtime",
+          },
+          pathExists: () => false,
+        }),
+      ).toBe("/tmp/qwen-config");
+      expect(
+        getPlatformRootDir(platform!, undefined, {
+          environment: { QWEN_RUNTIME_DIR: "/tmp/qwen-runtime" },
+          pathExists: () => false,
+        }),
+      ).toContain(".qwen");
+      expect(
+        getPlatformRootDir(platform!, undefined, {
+          environment: { QWEN_HOME: "relative/qwen-config" },
+          pathExists: () => false,
+          cwd: "/workspace/project",
+        }),
+      ).toBe(path.join("/workspace/project", "relative/qwen-config"));
+    });
+
     it("resolves the built-in Cherry Studio macOS skills path under the production data directory", () => {
       const originalPlatform = process.platform;
       const originalHome = process.env.HOME;
@@ -359,7 +430,8 @@ describe("skill-installer-utils", () => {
       const resolvedPath = getPlatformSkillsDir(platform!);
 
       expect(resolvedPath).toContain(".gemini");
-      expect(resolvedPath).toContain("antigravity");
+      expect(resolvedPath).toContain("config");
+      expect(resolvedPath).not.toContain("antigravity/skills");
       expect(resolvedPath).toContain("skills");
     });
 
@@ -419,6 +491,23 @@ describe("skill-installer-utils", () => {
   });
 
   describe("getPlatformGlobalRulePath", () => {
+    it("resolves Antigravity's shared global rule outside the config asset root", () => {
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi
+          .fn()
+          .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+      } as unknown as ReturnType<typeof initDatabase>);
+      const platform = getPlatformById("antigravity");
+      expect(platform).toBeDefined();
+
+      const resolvedPath = getPlatformGlobalRulePath(platform!);
+
+      expect(resolvedPath).toContain(".gemini");
+      expect(resolvedPath).toMatch(/\.gemini[\\/]GEMINI\.md$/);
+      expect(resolvedPath).not.toContain("config/../");
+      expect(resolvedPath).not.toContain("config\\..\\");
+    });
+
     it("derives the Windsurf global rules file from the platform root", () => {
       const platform = getPlatformById("windsurf");
       expect(platform).toBeDefined();

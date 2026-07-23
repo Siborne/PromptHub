@@ -20,6 +20,19 @@ import { DESKTOP_HOME_MODULES, SUPPORTED_LANGUAGES } from "./settings-types";
 export const DEFAULT_TAGS_SECTION_HEIGHT = 140;
 export const SKILL_LIST_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 export const DEFAULT_SKILL_LIST_PAGE_SIZE = 10;
+const PREVIOUS_DESKTOP_HOME_MODULE_DEFAULT: readonly DesktopHomeModule[] = [
+  "prompt",
+  "skill",
+  "agents",
+  "mcp",
+  "plugin",
+  "rules",
+];
+const LEGACY_DESKTOP_HOME_MODULE_DEFAULT: readonly DesktopHomeModule[] = [
+  "prompt",
+  "skill",
+  "rules",
+];
 export const DEFAULT_SHORTCUT_MODES: Record<string, "global" | "local"> = {
   showApp: "global",
   newPrompt: "local",
@@ -202,7 +215,10 @@ export function migrateTraeCnPlatformState(
 
 export function normalizeDesktopHomeModules(
   value: unknown,
-  options: { includeNewDefaults?: boolean } = {},
+  options: {
+    includeNewDefaults?: boolean;
+    migratePreviousDefaultOrder?: boolean;
+  } = {},
 ): DesktopHomeModule[] {
   if (!Array.isArray(value)) return [...DESKTOP_HOME_MODULES];
   const modules = Array.from(
@@ -215,6 +231,21 @@ export function normalizeDesktopHomeModules(
     ),
   );
   if (modules.length === 0) return [...DESKTOP_HOME_MODULES];
+  const matchesDefault = (candidate: readonly DesktopHomeModule[]) =>
+    modules.length === candidate.length &&
+    modules.every((moduleId, index) => moduleId === candidate[index]);
+  if (
+    options.migratePreviousDefaultOrder &&
+    matchesDefault(PREVIOUS_DESKTOP_HOME_MODULE_DEFAULT)
+  ) {
+    return [...DESKTOP_HOME_MODULES];
+  }
+  if (
+    options.includeNewDefaults &&
+    matchesDefault(LEGACY_DESKTOP_HOME_MODULE_DEFAULT)
+  ) {
+    return [...DESKTOP_HOME_MODULES];
+  }
   if (
     !options.includeNewDefaults ||
     !modules.includes("prompt") ||
@@ -224,11 +255,11 @@ export function normalizeDesktopHomeModules(
     return modules;
   }
   if (!modules.includes("agents")) {
-    const index = modules.indexOf("skill");
+    const index = modules.indexOf("prompt");
     modules.splice(index === -1 ? modules.length : index + 1, 0, "agents");
   }
   if (!modules.includes("mcp")) {
-    const index = modules.indexOf("agents");
+    const index = modules.indexOf("skill");
     modules.splice(index === -1 ? modules.length : index + 1, 0, "mcp");
   }
   if (!modules.includes("plugin")) {

@@ -344,7 +344,7 @@ export function buildAgentRootAssetPreview(
     joinRootPath(normalizedRoot, agent.agentsRelativePath || "agents"),
   ];
   const configCandidates =
-    agent.configRelativePaths && agent.configRelativePaths.length > 0
+    agent.configRelativePaths !== undefined
       ? uniqPaths(
           agent.configRelativePaths.map((relativePath) =>
             joinRootPath(normalizedRoot, relativePath),

@@ -1,40 +1,11 @@
-import type { DesktopHomeModule } from "../stores/settings.store";
+import { normalizeDesktopHomeModules } from "../stores/settings/settings-normalizers";
+import type { DesktopHomeModule } from "../stores/settings/settings-types";
 
 const WEB_DESKTOP_HOME_MODULES: readonly DesktopHomeModule[] = [
   "prompt",
   "skill",
   "rules",
 ];
-
-function isLegacyDefault(modules: readonly DesktopHomeModule[]): boolean {
-  return (
-    modules.includes("prompt") &&
-    modules.includes("skill") &&
-    modules.includes("rules") &&
-    (!modules.includes("agents") ||
-      !modules.includes("mcp") ||
-      !modules.includes("plugin"))
-  );
-}
-
-function addLegacyModules(
-  modules: readonly DesktopHomeModule[],
-): DesktopHomeModule[] {
-  const next = [...modules];
-  if (!next.includes("agents")) {
-    const skillIndex = next.indexOf("skill");
-    next.splice(skillIndex === -1 ? next.length : skillIndex + 1, 0, "agents");
-  }
-  if (!next.includes("mcp")) {
-    const agentsIndex = next.indexOf("agents");
-    next.splice(agentsIndex === -1 ? next.length : agentsIndex + 1, 0, "mcp");
-  }
-  if (!next.includes("plugin")) {
-    const mcpIndex = next.indexOf("mcp");
-    next.splice(mcpIndex === -1 ? next.length : mcpIndex + 1, 0, "plugin");
-  }
-  return next;
-}
 
 export function resolveVisibleDesktopHomeModules(
   modules: readonly DesktopHomeModule[],
@@ -46,5 +17,5 @@ export function resolveVisibleDesktopHomeModules(
     );
   }
 
-  return isLegacyDefault(modules) ? addLegacyModules(modules) : [...modules];
+  return normalizeDesktopHomeModules(modules, { includeNewDefaults: true });
 }

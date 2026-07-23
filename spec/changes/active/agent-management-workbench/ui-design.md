@@ -152,14 +152,15 @@ Every Agent uses this stable order:
 
 1. Overview
 2. Provider & Model
-3. Skills
-4. MCP
-5. Rules
-6. Plugins
-7. Config Files
-8. Sessions
-9. Usage
-10. Maintenance
+3. Appearance
+4. Skills
+5. MCP
+6. Rules
+7. Plugins
+8. Config Files
+9. Sessions
+10. Usage
+11. Maintenance
 
 Tabs stay in the same position for every Agent. Capability state affects tab interaction:
 
@@ -171,6 +172,24 @@ Tabs stay in the same position for every Agent. Capability state affects tab int
 | `unsupported`    | Visible and disabled with concise platform-specific reason                |
 
 Disabled tabs do not invoke IPC and do not navigate to empty pages. Hover/focus exposes the reason through a tooltip; screen readers receive the same reason through accessible description.
+
+### Appearance Tab
+
+Appearance is one top-level page without secondary navigation. Supported
+sections are arranged directly in the page flow:
+
+- Native appearance: compact structured controls for adapter-owned appearance
+  settings and a restore action.
+- Desktop skins: installed theme grid with preview, compatibility state, source,
+  apply, restore, import, export, open-folder and delete actions.
+- Pets: local Pet grid with preview, validation state, import, export,
+  open-folder and delete actions.
+
+The page header exposes one refresh icon and one contextual import action. The
+last successfully applied skin uses a clear status treatment and keeps Restore
+visible without claiming that a later standalone Codex restart retained it.
+Compatibility warnings are operational messages, not decorative cards. Agents
+without an appearance adapter keep the stable tab disabled with its reason.
 
 ## Overview Tab
 
@@ -319,8 +338,8 @@ Unsupported CLI lifecycle actions remain disabled; manual installation guidance 
 ### Workspace
 
 - Registry loading: list skeleton with stable row heights; detail shell remains stable.
-- No search results: clear search/filter action; do not suggest adding an Agent when the registry is merely filtered.
-- No custom Agents: shown only inside the Custom filter/settings flow.
+- No search results: clear the search action; do not suggest adding an Agent when the enabled registry is merely searched.
+- No enabled Agents: link to Agent settings so the user can enable built-in or custom platforms.
 
 ### Detail
 
@@ -404,8 +423,12 @@ Pure logic belongs in `agent-ui-utils.ts`: ordering, capability presentation, st
 
 ## UI Acceptance Checklist
 
-- Every built-in and enabled custom Agent appears in All/search.
+- Every enabled built-in and enabled custom Agent appears in search; disabled Agents are absent from the list and count.
+- The sidebar keeps only search and refresh controls; it has no status filter or alternate sort selector.
 - Common/detected/configured/pinned ordering is deterministic.
+- The row pin action is vertically centered and aligned close to the card's right edge without competing with status or path content.
+- The selected Agent identity uses official high-resolution, theme-aware product artwork directly at a stable size; do not add a decorative border, background tile, or shadow around it.
+- Lifecycle and migration guidance is rendered as detail-page prose when needed; do not place compatibility badges beside Agent names in the list or detail title.
 - Every Agent opens the same detail shell.
 - Capability state changes enablement without changing tab order.
 - Unsupported actions are visible, disabled, explained and never invoke IPC.

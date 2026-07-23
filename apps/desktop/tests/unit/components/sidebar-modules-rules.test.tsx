@@ -325,7 +325,9 @@ describe("Sidebar", () => {
     ).toBeInTheDocument();
 
     const codexButton = screen.getByRole("button", { name: /Codex CLI/i });
-    expect(within(codexButton).getByAltText("codex icon")).toBeInTheDocument();
+    expect(
+      within(codexButton).getAllByAltText("codex icon").length,
+    ).toBeGreaterThan(0);
 
     const geminiButton = screen.getByRole("button", { name: /Gemini CLI/i });
     expect(

@@ -117,15 +117,31 @@ format. Destructive session operations are not part of the generic adapter
 contract: they require a typed native command or a separately tested move-to-
 trash capability.
 
-All built-in platforms participate in Agent discovery and display from the first delivery. Deep-management work is prioritized rather than scope-filtered:
+All user-enabled built-in platforms participate in Agent discovery and display from the first delivery. Disabled built-in and custom platforms are excluded at the managed-Agent projection boundary, and settings changes refresh an already-loaded workspace. Deep-management work is prioritized rather than scope-filtered:
 
 1. User-pinned Agents
 2. Detected or explicitly configured Agents
-3. Curated common Agents such as Claude Code, Codex CLI, Gemini CLI, OpenCode, Cursor, Windsurf, Cline and OpenClaw
-4. Remaining built-in platforms
+3. Curated common Agents such as Claude Code, Codex CLI, Google Antigravity, OpenCode, Cursor, Windsurf, Cline and OpenClaw
+4. Remaining enabled built-in platforms
 5. Enabled custom Agents, with detected/configured custom Agents promoted by the same rules
 
 Provider, session, config and CLI adapters may have different delivery order because each depends on format stability, security and fixture evidence. The capability matrix, not platform visibility, records implementation depth.
+
+### Kimi Code Generation Resolution
+
+Kimi keeps the existing stable platform id `kimi`, but root resolution is generation-aware:
+
+1. A PromptHub user override wins.
+2. A valid absolute `KIMI_CODE_HOME` selects current Kimi Code.
+3. The current default `~/.kimi-code` is selected when it exists.
+4. A valid absolute `KIMI_SHARE_DIR` or legacy default `~/.kimi` is used only when the current root is absent.
+5. A fresh target resolves to `~/.kimi-code`; PromptHub never creates new data under the legacy root.
+
+Current Kimi Code files are managed as separate capabilities: `config.toml` for non-secret model projection, `tui.toml` for raw allowlisted editing, `mcp.json`, `AGENTS.md`, `skills/`, `plugins/`, `session_index.jsonl`, and `sessions/`. `credentials/`, logs, update state, and arbitrary runtime files are never exposed through the config editor.
+
+Model inspection reads `default_model`, the selected `[models.*]` entry, and its `[providers.*]` non-secret fields. Literal `api_key`, custom authorization headers, and credential documents never enter renderer payloads. Writes preserve semantic TOML fields, create a backup, replace atomically, re-read, and use `kimi doctor config` when the executable is available.
+
+Session listing performs one bounded linear index pass, retains at most a bounded candidate window, and reads at most `O(page size)` state files with capped concurrency. Selected transcript reads are capped by bytes and line count. No recursive traversal of `sessions/` is used, so a 10,000-session inventory has `O(index bytes)` scan cost and bounded memory.
 
 ## `DES-AGENT-004`: Provider Profile Storage
 
@@ -321,18 +337,25 @@ Testing must not modify the active Agent configuration. The adapter builds an is
 
 ### Global Navigation
 
-Add `Agents` as a first-class left-rail module. Existing settings for Agent roots become advanced platform/path settings and link back to the corresponding Agent detail.
+Add `Agents` as a first-class left-rail module. Its default position is second,
+immediately after `Prompts` and before `Skills`. New settings use that canonical
+order. The settings v17 migration maps only recognized historical defaults to
+it; current-version hydration preserves complete user-defined orders, including
+an order that happens to equal the former default. Existing settings for Agent
+roots become advanced platform/path settings and link back to the corresponding
+Agent detail.
 
 ### Workspace Layout
 
-- Left/local list: All, Installed, Configured, Needs Attention, Not Detected, custom filters.
-- The All view contains the complete built-in registry plus enabled custom Agents. It is never reduced to platforms with provider/session adapters.
-- Default order is pinned, detected/configured, curated common priority, then stable name order. Search and filters operate over the complete set.
+- Left/local list: enabled Agents with one search field; status and sort filter controls are intentionally omitted.
+- The list contains enabled built-in and enabled custom Agents. It is never reduced to platforms with provider/session adapters, but user-disabled platforms are not displayed.
+- Default order is pinned, detected/configured, curated common priority, then stable name order. Search operates over the enabled set.
 - Agent row: icon, name, detection/version, current provider/model, health, asset/session summary.
 - Main detail header: Agent identity, status, current provider, diagnose, quick actions.
 - Tabs:
   - Overview
   - Provider & Model
+  - Appearance
   - Skills
   - MCP
   - Rules
@@ -343,6 +366,60 @@ Add `Agents` as a first-class left-rail module. Existing settings for Agent root
   - Maintenance
 
 Tabs are capability-aware. Overview and supported asset/path information remain available for every Agent. Unsupported deep capabilities show `partial`, `planned`, or `unsupported` with a reason instead of hiding the Agent or presenting a broken empty page.
+
+### Appearance Adapter
+
+Appearance is a first-class Agent capability with one shared page and optional
+adapter-owned sections. The initial Codex adapter exposes native appearance,
+desktop skins, and Pets. Other Agents retain the same tab position and declare
+`planned` or `unsupported` until an adapter is verified.
+
+Imported Codex Dream Skin directories are stored beneath PromptHub's resolved
+data directory at `agent-appearance/themes/codex/<theme-id>`. Each directory
+contains declaration-only `theme.json` metadata and one local PNG, JPEG, or
+WebP image. The directory is the source of truth; SQLite stores no duplicate CSS
+or image payload. PromptHub vendors the audited software-only runtime from
+`Fei-Away/Codex-Dream-Skin` version `1.2.0`, commit
+`3af1d6d62f3a0388cc640d2f497ac3100998938e`. The renderer receives only
+normalized metadata and action results, never an unrestricted CDP handle.
+
+Desktop skin execution belongs to the Electron main process and its managed
+Dream Skin host process. PromptHub stages the selected theme into the upstream
+platform runtime and invokes its start, verification, watch/reinject, and restore
+flows. The runtime binds only to loopback, validates that the listener belongs
+to the official Codex process, validates `app://` renderer landmarks, injects the
+vendored CSS/renderer payload, and removes the payload plus debugging session on
+restore. macOS reuses the signed Node runtime bundled with Codex. Windows follows
+the upstream Node 22 runtime requirement and reports a bounded actionable error
+when that prerequisite is absent.
+
+Theme imports reject traversal, symlinks, reparse points, non-local image paths,
+malformed JSON, unsupported image formats, empty images, files over 16 MB,
+dimensions over 16384px, and images over 50 megapixels. Theme staging publishes
+the image before `theme.json` by atomic rename so the watcher never observes a
+partial pair. The application bundle, `app.asar`, and signature are never
+patched. PromptHub packages the upstream MIT license, notice, pinned commit, and
+local modifications. Celebrity, character, sponsor, and other rights-unclear
+upstream presets are excluded; only software and the upstream abstract demo
+artwork may be redistributed.
+
+The sibling checkout under `Programs/public/Codex-Dream-Skin` is an audit and
+update source only. Production and development builds MUST use the pinned
+runtime snapshot inside PromptHub and MUST NOT execute mutable code from that
+sibling checkout or from imported theme directories.
+
+Codex Pets remain platform-owned at `<codex-root>/pets/<pet-id>`. A valid package
+contains `pet.json` and a local PNG or WebP spritesheet declared by the manifest.
+The main process resolves real paths, enforces containment, rejects symlinks and
+oversized files, normalizes the Codex sprite contract version, and exposes the
+spritesheet through a bounded data URL. The renderer treats the sheet as an
+8-column atlas and clips one `192x208`-ratio cell inside a stable preview
+viewport. It advances through the six standard idle frames using the Codex idle
+timing sequence; v1 uses nine rows and v2 uses eleven rows. The source atlas is
+never rendered as a whole-card `<img>`. `prefers-reduced-motion: reduce` pins the
+preview to idle frame zero. Import uses atomic staging and rename; delete is
+scoped to one validated child directory. Pet files remain outside PromptHub
+backup and sync unless a later change adds an explicit portable-asset contract.
 
 All Agents use the same detail shell and stable tab/action placement. Capability state changes control availability, not layout:
 
@@ -535,18 +612,350 @@ Expose an `agent` domain composed from smaller modules. Keep existing `window.ap
 - optional encrypted sensitive sync
 - separately approved OAuth capabilities
 
-## `DES-AGENT-017`: Traceability
+## `DES-AGENT-017`: Google Antigravity Product Boundary
 
-| Requirements                                                                                                          | Design                                      | Verification                                                                                                                                                     | Tasks                                                                                                                                 |
-| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `FR-AGENT-001`, `FR-AGENT-002`, `FR-AGENT-018`, `FR-AGENT-019`                                                        | `DES-AGENT-001` to `003`, `014`, `016`      | `TEST-AGENT-001`, `TEST-AGENT-002`, `TEST-AGENT-016`                                                                                                             | `T-AGENT-006`, `011`, `013`, `014`, `034`                                                                                             |
-| `FR-AGENT-003`, `FR-AGENT-004`, `FR-AGENT-005`, `FR-AGENT-006`, `FR-AGENT-007`                                        | `DES-AGENT-004` to `006`, `012`             | `TEST-AGENT-003`, `TEST-AGENT-004`, `TEST-AGENT-005`, `TEST-AGENT-006`, `TEST-AGENT-007`, `TEST-AGENT-015`                                                       | `T-AGENT-005`, `T-AGENT-007`, `T-AGENT-012`, `T-AGENT-015`, `T-AGENT-016`, `T-AGENT-017`, `T-AGENT-018`, `T-AGENT-019`, `T-AGENT-027` |
-| `FR-AGENT-008`                                                                                                        | `DES-AGENT-002`, `007`                      | `TEST-AGENT-008`, `017`                                                                                                                                          | `T-AGENT-013`, `021`                                                                                                                  |
-| `FR-AGENT-009`                                                                                                        | `DES-AGENT-006`, `010`, `015`               | `TEST-AGENT-006`, `009`                                                                                                                                          | `T-AGENT-015`, `021`, `021A`                                                                                                          |
-| `FR-AGENT-010`, `FR-AGENT-015`                                                                                        | `DES-AGENT-008`                             | `TEST-AGENT-010`, `011`                                                                                                                                          | `T-AGENT-016`, `022`, `028`, `030`                                                                                                    |
-| `FR-AGENT-011`                                                                                                        | `DES-AGENT-009`, `015`                      | `TEST-AGENT-012`                                                                                                                                                 | `T-AGENT-017`, `018`, `019`, `021`                                                                                                    |
-| `FR-AGENT-012`                                                                                                        | `DES-AGENT-011`                             | `TEST-AGENT-013`                                                                                                                                                 | `T-AGENT-024`                                                                                                                         |
-| `FR-AGENT-013`, `FR-AGENT-016`                                                                                        | `DES-AGENT-012`                             | `TEST-AGENT-014`, `015`                                                                                                                                          | `T-AGENT-023`, `031`                                                                                                                  |
-| `FR-AGENT-014`                                                                                                        | `DES-AGENT-003`, `010`, `014`               | `TEST-AGENT-016`                                                                                                                                                 | `T-AGENT-029`                                                                                                                         |
-| `FR-AGENT-017`                                                                                                        | `DES-AGENT-013`, `016`                      | separate change                                                                                                                                                  | `T-AGENT-032`, `033`                                                                                                                  |
-| `NFR-AGENT-001`, `NFR-AGENT-002`, `NFR-AGENT-003`, `NFR-AGENT-004`, `NFR-AGENT-005`, `NFR-AGENT-006`, `NFR-AGENT-007` | `DES-AGENT-005`, `008`, `009`, `014`, `015` | `TEST-AGENT-004`, `TEST-AGENT-007`, `TEST-AGENT-009`, `TEST-AGENT-011`, `TEST-AGENT-012`, `TEST-AGENT-015`, `TEST-AGENT-016`, `TEST-AGENT-017`, `TEST-AGENT-018` | `T-AGENT-005`, `T-AGENT-015`, `T-AGENT-016`, `T-AGENT-025`, `T-AGENT-035`                                                             |
+Google transitioned the consumer terminal experience from Gemini CLI to
+Antigravity CLI (`agy`). Since 2026-06-18, Free, Google AI Pro and Ultra users
+are served through Antigravity; Gemini CLI remains supported only for enterprise
+licenses, Google Cloud and paid Gemini API keys. PromptHub therefore:
+
+- prioritizes `antigravity` as the current Google Agent;
+- marks `gemini` as `enterprise-legacy` with `antigravity` as its replacement;
+- preserves the existing `gemini` id, root and adapters for compatibility rather than deleting or silently migrating user data.
+
+The `antigravity` platform represents the shared Antigravity customization surface:
+
+- managed root: `~/.gemini/config`
+- Skills: `skills/`
+- MCP: `mcp_config.json`
+- Plugins: `plugins/`
+- global Rules: `../GEMINI.md`
+- CLI preferences: `../antigravity-cli/settings.json`
+
+The desktop runtime root `~/.gemini/antigravity` and CLI runtime root
+`~/.gemini/antigravity-cli` contain product-owned conversations, artifacts,
+caches, credentials, and updater state. They remain discovery/session adapter
+inputs only and are not generic asset distribution targets.
+
+## `DES-AGENT-018`: Traceability
+
+| Requirements                                                                                                          | Design                                             | Verification                                                                                                                                                     | Tasks                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `FR-AGENT-001`, `FR-AGENT-002`, `FR-AGENT-018`, `FR-AGENT-019`                                                        | `DES-AGENT-001` to `003`, `010`, `014`, `016`      | `TEST-AGENT-001`, `TEST-AGENT-002`, `TEST-AGENT-016`, `TEST-AGENT-021`                                                                                           | `T-AGENT-006`, `011`, `013`, `014`, `021B`, `034`                                                                                     |
+| `FR-AGENT-003`, `FR-AGENT-004`, `FR-AGENT-005`, `FR-AGENT-006`, `FR-AGENT-007`                                        | `DES-AGENT-004` to `006`, `012`                    | `TEST-AGENT-003`, `TEST-AGENT-004`, `TEST-AGENT-005`, `TEST-AGENT-006`, `TEST-AGENT-007`, `TEST-AGENT-015`                                                       | `T-AGENT-005`, `T-AGENT-007`, `T-AGENT-012`, `T-AGENT-015`, `T-AGENT-016`, `T-AGENT-017`, `T-AGENT-018`, `T-AGENT-019`, `T-AGENT-027` |
+| `FR-AGENT-008`                                                                                                        | `DES-AGENT-002`, `007`                             | `TEST-AGENT-008`, `017`                                                                                                                                          | `T-AGENT-013`, `021`                                                                                                                  |
+| `FR-AGENT-009`                                                                                                        | `DES-AGENT-006`, `010`, `015`, `023`               | `TEST-AGENT-006`, `009`, `037`                                                                                                                                   | `T-AGENT-015`, `021`, `021A`, `065`                                                                                                   |
+| `FR-AGENT-010`, `FR-AGENT-015`                                                                                        | `DES-AGENT-008`                                    | `TEST-AGENT-010`, `011`                                                                                                                                          | `T-AGENT-016`, `022`, `028`, `030`                                                                                                    |
+| `FR-AGENT-011`                                                                                                        | `DES-AGENT-009`, `015`                             | `TEST-AGENT-012`                                                                                                                                                 | `T-AGENT-017`, `018`, `019`, `021`                                                                                                    |
+| `FR-AGENT-012`                                                                                                        | `DES-AGENT-011`                                    | `TEST-AGENT-013`                                                                                                                                                 | `T-AGENT-024`                                                                                                                         |
+| `FR-AGENT-013`, `FR-AGENT-016`                                                                                        | `DES-AGENT-012`                                    | `TEST-AGENT-014`, `015`                                                                                                                                          | `T-AGENT-023`, `031`                                                                                                                  |
+| `FR-AGENT-014`                                                                                                        | `DES-AGENT-003`, `010`, `014`                      | `TEST-AGENT-016`                                                                                                                                                 | `T-AGENT-029`                                                                                                                         |
+| `FR-AGENT-017`                                                                                                        | `DES-AGENT-013`, `016`                             | separate change                                                                                                                                                  | `T-AGENT-032`, `033`                                                                                                                  |
+| `FR-AGENT-020`                                                                                                        | `DES-AGENT-003`, `010`, `014`, `015`               | `TEST-AGENT-020`                                                                                                                                                 | `T-AGENT-026B`                                                                                                                        |
+| `FR-AGENT-021`                                                                                                        | `DES-AGENT-001`, `002`, `003`, `017`               | `TEST-AGENT-022`                                                                                                                                                 | `T-AGENT-026C`                                                                                                                        |
+| `FR-AGENT-022`, `FR-AGENT-023`                                                                                        | `DES-AGENT-019`                                    | `TEST-AGENT-023`, `TEST-AGENT-024`                                                                                                                               | `T-AGENT-040`, `T-AGENT-041`, `T-AGENT-042`, `T-AGENT-043`, `T-AGENT-044`                                                             |
+| `FR-AGENT-027` (quota)                                                                                                | `DES-AGENT-023`                                    | `TEST-AGENT-035`, `TEST-AGENT-037`, `TEST-AGENT-041`                                                                                                             | `T-AGENT-061`, `T-AGENT-065`, `T-AGENT-070`                                                                                           |
+| `FR-AGENT-029`                                                                                                        | `DES-AGENT-003`, `007`, `008`, `014`, `015`, `025` | `TEST-AGENT-036`                                                                                                                                                 | `T-AGENT-062`, `T-AGENT-063`, `T-AGENT-064`                                                                                           |
+| `FR-AGENT-030`                                                                                                        | `DES-AGENT-026`                                    | `TEST-AGENT-038`                                                                                                                                                 | `T-AGENT-067`                                                                                                                         |
+| `FR-AGENT-031`                                                                                                        | `DES-AGENT-027`                                    | `TEST-AGENT-039`                                                                                                                                                 | `T-AGENT-068`                                                                                                                         |
+| `FR-AGENT-032`                                                                                                        | `DES-AGENT-028`                                    | `TEST-AGENT-040`                                                                                                                                                 | `T-AGENT-069`                                                                                                                         |
+| `NFR-AGENT-001`, `NFR-AGENT-002`, `NFR-AGENT-003`, `NFR-AGENT-004`, `NFR-AGENT-005`, `NFR-AGENT-006`, `NFR-AGENT-007` | `DES-AGENT-005`, `008`, `009`, `014`, `015`        | `TEST-AGENT-004`, `TEST-AGENT-007`, `TEST-AGENT-009`, `TEST-AGENT-011`, `TEST-AGENT-012`, `TEST-AGENT-015`, `TEST-AGENT-016`, `TEST-AGENT-017`, `TEST-AGENT-018` | `T-AGENT-005`, `T-AGENT-015`, `T-AGENT-016`, `T-AGENT-025`, `T-AGENT-035`                                                             |
+
+## `DES-AGENT-019`: Overview Navigation Hub And Claude Quota Adapter
+
+Batch confirmed on 2026-07-20; implements `FR-AGENT-022` and `FR-AGENT-023`.
+
+### Overview data sources (no new owning state)
+
+- Skills/MCP/Rules/Plugins counts reuse the existing domain stores via `use-agent-asset-domain.ts` (skill scan cache, MCP target status, rules files, plugin target matrix).
+- Sessions total comes from `agent:sessions:list`; provider/model summary from `agent:modelConfig:get`; appearance state from `agent:appearance:get`; usage from the new `agent:usage:get`.
+- The Overview tab receives an `onNavigate(tab)` callback from `AgentsWorkspace`; there is no second navigation state store. Cells whose capability is `planned`/`unsupported` render disabled and never invoke IPC.
+- The flat paths panel is collapsed into a secondary region inside the Paths & capabilities card; raw paths remain visible in each tab header.
+
+### Quota adapter contract
+
+- Shared types in `packages/shared/types/agent.ts`: `AgentUsageWindow { utilization, resetsAt }`, `AgentUsageQuota { agentId, adapter, status, source: "provider", fiveHour, sevenDay, sevenDayOpus, plan, fetchedAt, errorCode? }`; status is one of `ok | no-credentials | expired | unavailable`.
+- IPC channel `agent:usage:get` in `packages/shared/constants/ipc-channels.ts`; preload exposes `agent.getUsage(agentId)`.
+- Credential resolution (main process only, via `native-command` runner and bounded file reads): macOS Keychain service `Claude Code-credentials`, then hashed variant `Claude Code-credentials-<sha256(expandedRoot).slice(0,8)>`, then `<root>/.credentials.json` honoring the configured root override; token is read from `claudeAiOauth.accessToken`; a present `expiresAt` short-circuits to `expired` before any network call.
+- Query: `GET https://api.anthropic.com/api/oauth/usage` with `Authorization: Bearer <token>` and `anthropic-beta: oauth-2025-04-20`, 10s timeout; response `five_hour` / `seven_day` / `seven_day_opus` (`utilization`, `resets_at`) mapped to the contract; 401 maps to `expired`; other failures map to `unavailable` with categorized `errorCode`.
+- In-memory result cache per agent for 60s; the cache never stores the token. Manual refresh bypasses the cache. No background polling in this phase.
+- Capability flip: `buildCapabilities` marks `usage` as `supported` for `claude` only; every other platform stays `planned`.
+
+### UI composition
+
+- New `AgentOverviewPanel.tsx` owns the overview content so `AgentsWorkspace.tsx` stays within file-size policy; styling uses neutral design tokens only (`bg-card`, `bg-muted`, `border-border`, `text-muted-foreground`, `border-primary` for selection).
+- New `AgentUsagePanel.tsx` renders the five-hour and seven-day windows with utilization bars, reset countdowns, a provider-reported label, a refresh action, and guided states for `no-credentials` / `expired` / `unavailable`. The overview usage cell summarizes both windows and navigates to the tab.
+- All copy goes through i18n across the seven locales.
+
+## `DES-AGENT-020`: Codex Third-Party Providers With Managed Keys
+
+Batch confirmed on 2026-07-20; implements `FR-AGENT-024`.
+
+### Source of truth and custody split
+
+- `config.toml` remains the platform-native source of truth for provider entries (`model_providers.*`) and profiles (`profiles.*`); PromptHub never forks it into a parallel store.
+- API keys have two homes by design: the PromptHub secret store (encrypted master, used for custody, rotation, and device-local recovery) and the platform-native projection (`experimental_bearer_token`, required because Codex only reads env vars or inline config at launch). Entries using `env_key` are fully supported and skip the secret store.
+- Provider metadata is derived by parsing `config.toml`; a provider counts as PromptHub-managed when a matching secret-store entry exists. No DB migration is introduced in this batch.
+
+### Secret store
+
+- New `agent-secret-store.ts` in main, generalizing the audited `cloud-auth-storage.ts` pattern: Electron `safeStorage` behind an injectable encryption interface, one JSON file under userData (`agent-secrets.json`, mode 0600, atomic tmp+rename), keyed by secret reference (`codex-provider:<providerId>`), main-process only. Unavailable encryption fails closed with a categorized error.
+
+### Provider service and write pipeline
+
+- New `agent-codex-provider-service.ts` in main reuses the `agent-model-config.ts` pipeline (backup to device-local `agent-config-backups`, concurrency digest, smol-toml parse/modify, atomic write with 0600, re-read semantic verify, rollback on failure). Provider ids must match a slug rule and must not be reserved (`openai`, `ollama`, `lmstudio`) or collide with an existing entry on add.
+- `base_url` is validated: https required except loopback hosts; userinfo/query/hash rejected; the SSRF guard shared with the image download path is applied before any test request.
+- Removal refuses the provider referenced by the active `model_provider`, strips referencing `profiles.*`, and clears the matching secret-store entry. `setCodexDefaultProvider` flips the top-level `model_provider` through the same pipeline; switching back to `openai` is always offered.
+- Connectivity test: `GET <base_url>/models` with the credential resolved in the main process (secret store or env var presence), 10s timeout, categorized redacted result (`ok` with model count and latency, `auth-error`, `network-error`, `timeout`, `http-error`); no key material in the result. SSRF rules block private/reserved ranges and non-http(s) schemes, with an explicit loopback exemption (127.0.0.0/8, `localhost`, `::1`, including DNS-resolved loopback) so user-configured local providers such as Ollama remain testable — the SSRF threat model does not apply to loopback URLs the user entered themselves.
+
+### Contract
+
+- Shared types in `packages/shared/types/agent.ts`: `AgentCodexProvider`, `AgentCodexProviderList`, `UpsertAgentCodexProviderInput`, `AgentCodexProviderTestResult`. Fields never include key material; `hasKey`/`keySource: "managed" | "env" | "none"` convey readiness.
+- IPC channels `agent:providers:list|upsert|remove|setDefault|test`; every handler guards `agentId === "codex"` (other platforms return `unsupported`), validates input shapes, and never throws raw errors to the renderer. Preload mirrors the methods under `agent.*`.
+- Renderer key input is write-only; the edit dialog pre-fills everything except the key, which shows a "keep existing key" placeholder.
+
+### UI
+
+- `AgentProviderModelPanel.tsx` gains a third-party provider section (Codex only): provider list with base URL, wire API, key readiness, and managed/external badge; add/edit dialog; delete with active-provider guard messaging; set-default and test actions. Neutral design tokens only; seven locales.
+
+## `DES-AGENT-021`: Desktop-Native Workspace Layout
+
+Batch confirmed on 2026-07-20; implements `FR-AGENT-025`.
+
+### Shell rules (all tabs)
+
+- `AgentWorkspacePanel` drops the page canvas (`px-6/py-7/sm:px-8` outer margins and `max-w-6xl` centering are removed); every tab root becomes `flex h-full min-h-0 flex-col` and touches the workspace dividers.
+- Each tab owns a compact toolbar row (`border-b border-border`, title + counts + primary actions) that never scrolls; the content region below it is the only scroll container (`flex-1 min-h-0 overflow-y-auto`).
+- Primary surfaces are flat panes separated by hairline borders; rounded shadow cards remain only for genuine summary groups inside the Overview dashboard.
+- Neutral design tokens only; semantic status colors unchanged.
+
+### Direct domain tabs
+
+- Tabs: Overview, Skills, MCP, Rules, Plugins, Provider & Model, Appearance, Config Files, Sessions. Metadata lives in `agent-workspace-tabs.ts`.
+- Skills, MCP, Rules, and Plugins are direct top-level destinations rendered by `AgentAssetsWorkspace.tsx`; no generic Assets tab, segmented control, or secondary navigation is present. Each domain remains capability/path gated.
+- Overview asset cells navigate directly to the owning domain tab. The header does not duplicate asset-domain actions.
+- Maintenance tab removed; refresh and open-settings actions move into the workspace header overflow (`...`) menu.
+
+### Per-tab composition
+
+- Provider & Model: master-detail. Left list = built-in OpenAI subscription entry + third-party providers + add action; right detail = selected provider's config, model selection, key state, test, set-default/restore, edit/delete for third-party entries. Other agents get the same shell with only the built-in entry.
+- Config Files: toolbar (file count + open folder) with the editor filling the remaining height edge-to-edge.
+- Appearance: toolbar (import theme/pet + refresh), native status compressed into a single row, theme/pet grids filling the width.
+- Usage: the 5h / 7d / Opus window cards render side by side in one row instead of stacking vertically.
+- Sessions: keeps its existing two-pane layout, re-based onto the edge-to-edge shell.
+- Overview: dashboard content keeps internal section padding (that is content spacing, not a page margin); status strip and grid touch the pane edges.
+
+## `DES-AGENT-022`: Codex Quota Adapter And Provider-Aware Overview
+
+Batch confirmed on 2026-07-21; implements `FR-AGENT-026`.
+
+### Codex quota path
+
+- `agent-usage-service.ts` gains a Codex adapter alongside the Claude one, selected by agent id through the same registry guard.
+- Credential: parse `<root>/auth.json` (`tokens.access_token`, `tokens.account_id`); missing file/tokens -> `no-credentials`; no keychain variant exists for Codex.
+- Query: `GET https://chatgpt.com/backend-api/wham/usage` with `Authorization: Bearer` and optional `ChatGPT-Account-Id`, 10s timeout; 401/403 -> `expired`; other failures categorized as before. Token isolation rules identical to the Claude adapter (main-process only, 60s result cache, no persistence/logs/refresh).
+- Window mapping: `rate_limit.primary_window` and `secondary_window` are classified by `limit_window_seconds` (<= 86400 -> `fiveHour`, otherwise -> `sevenDay`); `reset_at` (epoch seconds) -> `resetsAt` ms; `plan_type` -> `plan`; `sevenDayOpus` stays null for Codex.
+
+### Provider-aware behavior
+
+- Before querying, the adapter resolves the active `model_provider` from `config.toml`; anything other than `openai`/unset returns `status: "unavailable"` with `errorCode: "custom-provider-active"` without a network call.
+- Claude has the same short-circuit (added 2026-07-21): when `settings.json` sets `env.ANTHROPIC_BASE_URL` or a cloud-provider flag (`CLAUDE_CODE_USE_BEDROCK`/`VERTEX`/`FOUNDRY`), the official Anthropic quota endpoint is not queried and the adapter returns `custom-provider-active`; the Overview Provider & Model cell then shows the sanitized gateway endpoint and model instead of the official model summary.
+
+## `DES-AGENT-023`: Polymorphic Multi-Agent Quota
+
+Batch confirmed on 2026-07-21; implements `FR-AGENT-027`.
+
+### Contract
+
+- `AgentUsageQuota` replaces `fiveHour`/`sevenDay`/`sevenDayOpus` with `metrics: AgentUsageMetric[]`. A metric is `{ id, label, kind: "window" | "quota", utilization, resetsAt, usedAmount?, totalAmount?, unit? }`; amounts are present only for `quota` kind. All existing status/errorCode semantics stay.
+- Metric id registry for i18n: `fiveHour`, `sevenDay`, `sevenDayOpus` (Claude/Codex), `weekly`, `rolling` (Kimi), `premium`, `chat` (Copilot), and `promptCredits` (Antigravity); any other id (e.g. Antigravity/Gemini model quotas) renders its provider label.
+
+### Adapters
+
+- Claude/Codex adapters keep their query logic and re-map results into `metrics` (ids above).
+- Kimi: read `~/.kimi-code/credentials/kimi-code.json` (fallback `~/.kimi-code/oauth/kimi-code*`) for `access_token`/`expires_at`; `GET https://api.kimi.com/coding/v1/usages`. Map `usage` -> `weekly` (limit/used/resetTime), `limits[]` entries -> `rolling` with duration-derived label, `membership.level` -> plan. Verified live 2026-07-21.
+- Antigravity: first discover the running Antigravity `language_server` process with bounded `ps` output, require both an Antigravity process marker and a valid CSRF argument, enumerate only loopback listening ports, and use fixed allowlisted RPC paths with a 4s timeout and 1 MiB response limit. `GetUserStatus` supplies the plan and monthly prompt-credit total; `RetrieveUserQuotaSummary` supplies grouped weekly and five-hour buckets for Gemini models and third-party Claude/GPT models. Group buckets map to `window` metrics, while monthly credits remain the only total `quota` metric. The CSRF value never leaves main-process memory or enters logs/errors. If no trusted desktop process exists on macOS, PromptHub may start the native `language_server` only from the verified `/Applications/Antigravity.app` or `~/Applications/Antigravity.app` resource path, with fixed arguments, telemetry and the built-in Chrome DevTools MCP disabled, a reserved loopback port, a random in-memory CSRF token, bounded startup/output/request limits, and no shell. The helper's IDE version is read through bounded `plutil` access to the verified app's `Info.plist`, with a sanitized compatibility fallback; PromptHub binds and waits for the explicitly announced HTTP listener rather than sending JSON RPC to the HTTPS gRPC port. Startup-only connection, timeout, and HTTP readiness failures retry with a bounded delay and overall deadline. The helper is terminated after every success or failure and escalates from `SIGTERM` to `SIGKILL` when necessary. The quota-summary request runs first so grouped quota remains available even when the optional account-status request fails. macOS Keychain (`service=gemini`, `account=antigravity`), legacy Antigravity CLI token, and shared Gemini credential reads remain compatibility fallbacks when the helper is absent or unavailable. PromptHub does not copy Antigravity OAuth client credentials or refresh its tokens itself; `antigravity-not-running` remains only a recovery state when neither a running service nor the bounded helper can provide current quota.
+- Gemini CLI: read `~/.gemini/oauth_creds.json` (`expiry_date` ms); POST `loadCodeAssist` then `retrieveUserQuota`; buckets -> `quota` metrics by `modelId`, tier -> plan.
+- Copilot: resolve a GitHub OAuth token from `~/.config/gh/hosts.yml` then `~/.config/github-copilot/hosts.json`; `GET https://api.github.com/copilot_internal/user` with `Authorization: token`; map `quota_snapshots.premium_interactions`/`chat` (entitlement/remaining/percent_used) -> `premium`/`chat` quota metrics, `quota_reset_date` -> resetsAt, `copilot_plan` -> plan.
+- Cursor stays `planned` (no public quota API; documented exclusion).
+
+### UI
+
+- The banner iterates `metrics`: reset windows render as ring gauges; only quota metrics with numeric `usedAmount` and `totalAmount` render as progress bars. Antigravity group ids combine the provider group label with localized weekly/five-hour labels. The layout remains bounded to five visible metrics, which fits four Antigravity window rings plus its monthly credit total.
+
+### Native application launch
+
+- `SkillPlatform.launchPaths` owns an operating-system-specific allowlist of desktop application paths. Renderer state exposes only a `launchable` capability bit.
+- `agent:launch` accepts an Agent id, resolves its platform in main, checks only the declared candidates, and uses Electron `shell.openPath` so an existing app is focused instead of duplicated. Renderer-provided paths and shell command strings are never accepted.
+- `buildCapabilities` marks `usage` supported for `claude`, `codex`, `kimi`, `antigravity`, `gemini`, `copilot`.
+
+## `DES-AGENT-024`: Skill Asset Cards In The Agent Workspace
+
+Batch confirmed on 2026-07-21; implements `FR-AGENT-028`.
+
+### Composition (renderer-only, no new main-process surface)
+
+- The Skills domain of `AgentAssetsWorkspace` renders `AgentSkillAssetPanel`: toolbar (search, managed/unmanaged/symlink/copy filter chips, refresh, "Install My Skill") plus a responsive card grid; other domains keep compact rows.
+- Rows reuse `agentScanState[agent.id]` from the skill store and `getSkillScanStatus` for badge semantics — the same source of truth as `SkillAgentsView`; `AgentAssetItem` is not extended; the panel consumes `AgentScannedSkill` directly via a dedicated hook.
+- Actions map one-to-one to existing flows: open folder (`window.electron.openPath`), adopt (`useSkillStore.importScannedSkills` with the `handleImportAgentSkill` hydration pattern), open managed skill (jump to the Skills module my-skills view), install from library (`SkillLibraryImportModal` with the agent's skills dir as fixed target), uninstall (`skillApi.uninstallPlatformSkill` + `ConfirmDialog`, built-in blocked).
+- Card click opens `SkillFullDetailPage` with `overrideSkill` + `agentContext` + `agentActions` (the `buildProjectDetailSkill` adapter), replacing the right pane with a back action — the same drill-in contract as the Skills module, embedded in the workspace shell.
+- Usage UI renders a dedicated custom-provider state for that code. `buildCapabilities` marks `usage` supported for `codex` as well as `claude`.
+- Overview Provider & Model cell: built-in active -> current model + credential state; third-party active -> sanitized base URL + model from `listProviders`/`getModelConfig`.
+- Overview "Paths & capabilities": the capability grid is removed; the collapsible paths list remains and each row gets an open-folder action via `window.electron.openPath`.
+
+### Usage banner revision (2026-07-21)
+
+- The standalone Usage tab is removed (tab bar 7 -> 6); usage is not a functional page but dashboard data.
+- The Overview renders a usage banner above the navigation grid when the usage capability is supported/partial: SVG ring gauges per window (`fiveHour`/`sevenDay`/`sevenDayOpus` when present) with centered utilization percentage, window label, reset countdown, plan badge, provider-reported label, and a refresh action. Rings use neutral track with threshold-toned strokes (<70% primary, 70-90% amber, >=90% destructive); single-window responses render gracefully without empty placeholders.
+- Guided states reuse the existing mappings (no-credentials / expired / unavailable / `custom-provider-active`) in compact banner form.
+- `AgentUsagePanel.tsx` is repurposed into the overview banner component; the usage navigation cell is removed from the grid.
+
+## `DES-AGENT-023`: Codex / ChatGPT Presentation Identity
+
+Batch confirmed on 2026-07-21; implements `FR-AGENT-027`.
+
+- `codex` remains the stable platform id and `~/.codex` remains the native data root. Name and icon preferences are renderer presentation settings and do not alter platform detection, filesystem paths, IPC, provider ids, sessions, assets, or appearance adapters.
+- The default registry name becomes `Codex`. A normalized `agentIdentityPreferences.codex` setting independently stores an allowlisted name choice (`codex | chatgpt`) and icon choice (`codex | chatgpt`). Missing values default to Codex; malformed values are rejected field by field.
+- A pure identity projection resolves the display name and icon id before managed Agents are sorted, searched, or rendered. `ManagedAgentSummary` carries the resolved icon id so list and detail surfaces use the same identity source.
+- `PlatformIcon` owns both bundled icon choices. The ChatGPT choice packages the complete 1024 px Aqua and Dark Aqua Blossom assets extracted at development time from the locally installed ChatGPT app asset catalog; app-controlled theme classes select the matching file without a runtime dependency on `/Applications/ChatGPT.app`. Settings may select only bundled ids; arbitrary paths, data URLs, and remote URLs are not accepted.
+- `CodexIdentityFields` is embedded only in the built-in Codex row's existing edit panel, beside the root and asset-path fields. It is not a standalone settings section. Name and icon changes share the Agent editor's draft, Save, Cancel, and Reset lifecycle; Save refreshes the managed Agent projection without restarting the application.
+- Each name and icon choice is an `aria-pressed` segmented control. The active choice uses a solid primary surface, primary border, contrasting text, and an explicit check mark so selection does not depend on a subtle shadow or color nuance.
+- The preference is part of the persisted settings state and therefore follows the existing non-sensitive settings snapshot, backup, restore, and sync contract.
+
+## `DES-AGENT-025`: Qwen Code Platform Boundary
+
+This design implements `FR-AGENT-029`. Qwen Code uses stable platform id
+`qwen` and display name `Qwen Code`. It is not an alias for `qoder`; both
+entries may coexist because they identify different installed products and
+different local data contracts.
+
+### Root and scope resolution
+
+1. A PromptHub user override wins.
+2. A non-empty `QWEN_HOME` resolves the user configuration root. Relative values
+   are resolved using Qwen Code's documented current-working-directory rule;
+   PromptHub stores and returns the normalized absolute path.
+3. Otherwise the user root is `~/.qwen` on macOS/Linux and the equivalent home
+   expansion on Windows.
+4. `QWEN_RUNTIME_DIR` resolves conversations, logs, and todos only. It never
+   replaces the user configuration root or a project `.qwen/` directory.
+5. Project assets are resolved from the selected repository, never by joining
+   them under the user root.
+
+### Capability and ownership matrix
+
+| Domain         | User scope                                                                      | Project scope                                     | PromptHub policy                                                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Skills         | `<QWEN_HOME>/skills/<name>/` and compatibility discovery in `~/.agents/skills/` | `.qwen/skills/<name>/`                            | Manage the complete package, including `SKILL.md`, scripts, templates, and resources. Write to the native `.qwen/skills` target; treat `.agents/skills` as compatibility discovery unless the user selects it explicitly. |
+| SubAgents      | `<QWEN_HOME>/agents/*.md`                                                       | `.qwen/agents/*.md`                               | Model as Agent assets with YAML-frontmatter validation; do not confuse these definitions with the Qwen Code platform itself.                                                                                              |
+| MCP            | `<QWEN_HOME>/settings.json` `mcpServers`                                        | `.qwen/settings.json` `mcpServers`                | Prefer the native `qwen mcp` command when it can express the requested operation; otherwise perform a structured JSON merge that preserves unrelated settings and supports backup/verify/rollback.                        |
+| Rules          | `<QWEN_HOME>/QWEN.md`                                                           | repository `QWEN.md`; local `.qwen/QWEN.local.md` | Expose the three documented scopes and their precedence. Never fold auto-memory into Rules.                                                                                                                               |
+| Extensions     | `<QWEN_HOME>/extensions/<name>/qwen-extension.json`                             | `.qwen/extensions/<name>/qwen-extension.json`     | Use native extension lifecycle commands. Extension-provided Skills, SubAgents, MCP, and commands are derived/read-only children of the parent bundle.                                                                     |
+| Commands       | `<QWEN_HOME>/commands/*.md`                                                     | `.qwen/commands/*.md`                             | Discovery-first. A later Commands domain may manage them; they are not Skills or Plugins by inference.                                                                                                                    |
+| Provider/model | `<QWEN_HOME>/settings.json`                                                     | `.qwen/settings.json`                             | Inspect redacted model/provider identity. Secret-bearing provider or `env` fields remain main-process only until a Qwen-specific secret write contract passes.                                                            |
+| Sessions       | runtime root `projects/<sanitized-project>/chats/`                              | native CLI project selection                      | Prefer `qwen sessions list --json`; page and parse bounded native results rather than recursively scanning the runtime root.                                                                                              |
+
+Qwen Code applies settings in layers: defaults, system defaults, user, project,
+system overrides, environment variables, and CLI flags. PromptHub may edit only
+the explicit user/project layer chosen by the user and must not imply that a
+lower-precedence value is active when a higher-precedence layer overrides it.
+
+### Secret and runtime exclusions
+
+- Exclude `mcp-oauth-tokens.json`, `mcp-oauth-tokens-v2.json`, credentials,
+  provider API keys, expanded `env` values, MCP headers/environment values,
+  OAuth client secrets, and authentication caches from renderer payloads,
+  diagnostics, normal backup, export, and sync.
+- Exclude sessions, runtime sidecars, logs, todos, auto-memory under
+  `projects/<project>/memory/`, and `.qwen/team-memory/` from normal backup and
+  sync. Team memory is opt-in shared project state owned by Qwen Code, not a
+  PromptHub Rule or Skill.
+- A settings write is `read -> parse -> normalize requested subtree -> preview
+-> backup -> digest check -> atomic replace -> re-read -> semantic verify ->
+rollback on failure`. Complexity is linear in the settings file size and uses
+  one bounded read plus one staged write; no recursive asset scan is required.
+- Session listing delegates to the native CLI with a timeout and output byte
+  cap. PromptHub retains only the requested bounded metadata page and never
+  loads every transcript into memory.
+
+### Implementation gate
+
+Each Qwen capability may move from planned to supported only after its matching
+`TEST-AGENT-036` fixtures cover the relevant environment overrides, scope,
+package ownership, secret redaction, bounded failure paths, rollback, and
+backup/sync exclusions. The overall task remains incomplete until project
+SubAgent parsing, Commands discovery, and Electron E2E also pass; those missing
+surfaces do not roll back already verified registry, Skill, MCP, Rules, model,
+extension, or read-only session adapters.
+An official Qwen/Qwen Code mark with recorded provenance is required; a generic
+letter fallback may be used only as the runtime fallback, not as the bundled
+brand asset.
+
+## `DES-AGENT-026`: Common-Agent Session Adapter Breadth
+
+This design implements `FR-AGENT-030` without creating a second session store.
+Agent-owned files and native indexes remain the source of truth; PromptHub keeps
+no transcript copy and exposes only bounded list/read results over the existing
+`agent:sessions:*` IPC contract.
+
+- Codex: scan only `sessions/**/*.jsonl` and `archived_sessions/*.jsonl` below
+  the resolved Codex root, deduplicate by `session_meta.payload.id`, derive the
+  title from the first visible `event_msg.user_message`, and render only visible
+  user/assistant event messages. Resume is `codex resume <id>`.
+- Grok Build: scan only `<root>/sessions/<encoded-project>/<session-id>/`, read
+  bounded `summary.json` metadata and `chat_history.jsonl`, ignore lock/terminal/
+  artifact files, and resume with `grok --resume <id>` in the decoded project
+  directory when it is absolute.
+- OpenClaw: read the bounded legacy per-agent `sessions/sessions.json` index and
+  its referenced JSONL transcript only when both resolve beneath the configured
+  OpenClaw root. Newer native/SQLite stores remain a later native-CLI adapter;
+  the legacy reader is read-only and never runs cleanup/compact/delete.
+- Qwen Code: use bounded `qwen sessions list --json --limit N` output and accept
+  a transcript path only when its real path remains below `QWEN_RUNTIME_DIR`.
+
+All adapters cap discovered files, metadata bytes, transcript bytes, entry text,
+and native command output. Listing is `O(n log n)` for at most the configured
+scan cap; selected transcript reads are `O(min(fileSize, 2 MiB))`. No adapter
+follows directory symlinks, writes Agent state, or includes transcript bodies in
+backup, sync, export, logs, or default overview payloads.
+
+## `DES-AGENT-028`: Paged Session Metadata And Progressive Transcript Rendering
+
+The existing `agent:sessions:list` contract gains a validated `offset` while
+retaining a bounded `limit`. Renderer pages contain 50 metadata records. Native
+CLI adapters request at most `offset + limit` rows only when the upstream CLI
+does not provide a cursor, then slice locally; filesystem adapters scan only
+their allowlisted indexes and hydrate metadata for the requested window. The
+maximum offset remains capped by the existing 2,000-file discovery ceiling.
+
+The renderer appends pages by stable session id, exposes the native total and a
+Load More action, and applies `content-visibility: auto` to off-screen session
+rows. A selected transcript remains an on-demand read capped at 2 MiB and 64 KiB
+per entry. Only the first 80 entries are mounted initially; later batches are
+added explicitly, and the existing truncation notice remains visible when the
+source exceeded the byte cap. This keeps list memory `O(loaded metadata)` and
+mounted transcript work `O(visible batch)` rather than `O(all native history)`.
+
+OpenCode remains native-CLI owned: an empty successful `opencode session list
+--format json` response is an empty history, not an adapter failure. PromptHub
+does not query plugin sidecars as substitutes for missing session rows.
+
+## `DES-AGENT-027`: In-Workspace Agent Settings Dialog
+
+This design implements `FR-AGENT-031` without creating a second settings
+workflow. `AgentsWorkspace` owns only the modal open state. The dialog reads
+effective built-in configuration from the platform registry, existing
+`builtinAgentOverrides`, and the current managed Agent path; custom Agent drafts
+come from `customAgents`.
+
+`AgentSettingsDialog` reuses `BuiltinAgentEditor`, including the Codex/ChatGPT
+identity controls, and persists with `updateBuiltinAgentOverride`,
+`setCodexIdentityPreference`, or `updateCustomAgent`. Those existing actions
+remain responsible for normalization, validation, main-process synchronization,
+and managed-Agent refresh. The dialog therefore owns no durable state and does
+not duplicate filesystem or settings logic.
+
+Opening, editing, resetting, saving, validation failure, and closing are bounded
+UI operations over one Agent draft, with `O(f)` time and memory where `f` is the
+small fixed number of editable path fields. Changing the selected Agent closes
+the modal so a stale draft cannot be applied to a different target.

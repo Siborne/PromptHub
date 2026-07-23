@@ -651,8 +651,8 @@ describe("PluginManager", () => {
       "plugin-card-agent-targets-gmail",
     );
     expect(
-      within(distributedTargets).getByAltText("codex icon"),
-    ).toBeInTheDocument();
+      within(distributedTargets).getAllByAltText("codex icon").length,
+    ).toBeGreaterThan(0);
     expect(
       within(distributedTargets).getByAltText("claude icon"),
     ).toBeInTheDocument();

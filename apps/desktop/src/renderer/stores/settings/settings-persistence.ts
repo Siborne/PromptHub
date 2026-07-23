@@ -40,6 +40,7 @@ import {
 import { normalizeBuiltinAgentOverrides } from "../../services/agent-root-paths";
 import { normalizeSkillProjects } from "../../services/skill-project-settings";
 import type { SettingsState } from "./settings-types";
+import { normalizeAgentIdentityPreferences } from "../../services/agent-identity";
 
 type PersistedSettingsState = Omit<SettingsState, "githubToken">;
 
@@ -82,6 +83,9 @@ function normalizeSharedSettingsState(next: SettingsState): void {
   next.shortcutModes = normalizeShortcutModes(next.shortcutModes);
   next.skillListPageSize = normalizeSkillListPageSize(next.skillListPageSize);
   next.networkProxy = normalizeNetworkProxySettings(next.networkProxy);
+  next.agentIdentityPreferences = normalizeAgentIdentityPreferences(
+    next.agentIdentityPreferences,
+  );
 }
 
 function normalizeMergedAgentSettings(next: SettingsState): void {
@@ -98,7 +102,6 @@ function normalizeMergedPresentationSettings(
   normalizeSidebarTagSectionHeights(next);
   next.desktopHomeModules = normalizeDesktopHomeModules(
     next.desktopHomeModules,
-    { includeNewDefaults: true },
   );
   delete (next as unknown as Record<string, unknown>).desktopHomeLayout;
   next.backgroundImageFileName = normalizeBackgroundImageFileName(
@@ -282,15 +285,24 @@ function normalizeMigratedCoreState(
   next.skillProjects = normalizeSkillProjects(next.skillProjects);
   normalizeSkillTrustSettings(next);
   next.networkProxy = normalizeNetworkProxySettings(next.networkProxy);
+  next.agentIdentityPreferences = normalizeAgentIdentityPreferences(
+    next.agentIdentityPreferences,
+  );
 }
 
-function normalizeMigratedPresentationState(next: SettingsState): void {
+function normalizeMigratedPresentationState(
+  next: SettingsState,
+  version: number,
+): void {
   if (typeof next.backgroundImageEnabled !== "boolean") {
     next.backgroundImageEnabled = true;
   }
   next.desktopHomeModules = normalizeDesktopHomeModules(
     next.desktopHomeModules,
-    { includeNewDefaults: true },
+    {
+      includeNewDefaults: version < 17,
+      migratePreviousDefaultOrder: version < 17,
+    },
   );
   delete (next as unknown as Record<string, unknown>).desktopHomeLayout;
   if (typeof next.updateChannelExplicitlySet !== "boolean") {
@@ -357,7 +369,7 @@ export function migrateSettingsState(
   if (!state || typeof state !== "object") return state as SettingsState;
   const next = { ...(state as SettingsState) };
   normalizeMigratedCoreState(next, state, version);
-  normalizeMigratedPresentationState(next);
+  normalizeMigratedPresentationState(next, version);
   normalizeMigratedSyncProvider(next, version);
   normalizeLegacyAiProtocol(next, version);
   normalizeMigratedBackgroundImage(next, version);
@@ -385,6 +397,9 @@ export function rehydrateSettingsState(
   });
   const mainProcessSettings: Partial<Settings> = {
     builtinAgentOverrides: state?.builtinAgentOverrides || {},
+    agentIdentityPreferences: normalizeAgentIdentityPreferences(
+      state?.agentIdentityPreferences,
+    ),
     customAgents: state?.customAgents || [],
     customAgentRootPaths: state?.customAgentRootPaths || [],
     customPlatformRootPaths: state?.customPlatformRootPaths || {},

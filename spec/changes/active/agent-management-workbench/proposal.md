@@ -23,13 +23,19 @@ PromptHub 已经预置 Claude Code、Codex CLI、Gemini CLI、OpenCode、OpenCla
 
 本变更采用以下产品边界：
 
-1. **Managed Agent**：Claude Code、Codex CLI、Gemini CLI 等真实客户端或运行时，是本变更的一级产品对象。其稳定身份来自现有 built-in/custom platform registry。
+1. **Managed Agent**：Claude Code、Codex CLI、Google Antigravity 等真实客户端或运行时，是本变更的一级产品对象。其稳定身份来自现有 built-in/custom platform registry；Gemini CLI 仅作为企业/付费 API 兼容对象保留。
 2. **Agent Installation**：某个 Managed Agent 在当前设备上的安装、路径、版本、原生配置、会话和健康状态。
 3. **Provider Profile**：可投影到某个 Agent 的供应商、协议、端点、模型映射和非敏感参数集合。凭据通过安全引用关联，不复制到普通配置和导出。
 4. **Agent Asset State**：Skill、MCP、Rules、Plugin 在该 Agent 上的已安装、可用、漂移或不兼容状态；事实来源仍由原资产域拥有。
 5. **Agent Profile / Persona**：以后用于组合角色、指令和资产的一套可复用方案。它不是第一阶段主对象，也不为每个预置 Agent 自动创建一份重复记录。
 
 “覆盖 CC Switch 大部分功能”指覆盖用户能力和核心工作流，不要求复制其界面、数据库结构或高风险实现。PromptHub 应优先利用自己的多平台注册表、资产库、版本和同步能力形成差异化。
+
+Google 已把普通用户的终端入口从 Gemini CLI 迁移到 Antigravity CLI。
+自 2026-06-18 起，Gemini CLI 不再为 Free、Google AI Pro 和 Ultra 用户
+提供请求服务；企业许可证、Google Cloud 和付费 Gemini API Key 场景仍受
+支持。PromptHub 因此把 Antigravity 作为当前 Google Agent 入口，同时保留
+`gemini` 身份作为企业/旧版兼容目标，避免破坏既有配置和资产路径。
 
 ## Goals
 
@@ -187,7 +193,81 @@ PromptHub 已经预置 Claude Code、Codex CLI、Gemini CLI、OpenCode、OpenCla
 1. `[已确认]` 现有预置 Agent 是一级管理对象，不以 Agent Profile 取代或复制它们。
 2. `[已确认]` 产品方向是覆盖 CC Switch 大部分核心能力，同时复用 PromptHub 的资产管理优势。
 3. `[已确认]` 全部预置 Agent 均进入工作台；常用平台优先展示，深度 adapter 按优先级逐步补齐，暂不支持的配置能力不得导致整个平台消失。
-4. `[待确认]` Agent 原生凭据是否统一迁入系统安全存储，并在原生配置需要明文时按需投影。推荐：是，但需先验证各平台兼容性。
-5. `[待确认]` 外部会话是否默认只读、本地、按需读取正文且不进入同步。推荐：是。
-6. `[待确认]` 第一阶段是否只做基础模型测试，把本地代理、协议转换和故障转移拆成独立 change。推荐：是。
-7. `[待确认]` Agent Profile/Persona 是否延期为后续组合能力，不进入第一阶段数据模型。推荐：是。
+4. `[已确认]` Kimi 平台升级到当前独立 Kimi Code 契约：优先使用 `KIMI_CODE_HOME` / `~/.kimi-code`，仅在新根不存在时兼容 `KIMI_SHARE_DIR` / `~/.kimi`；两代会话和凭据不得混合。
+5. `[待确认]` Agent 原生凭据是否统一迁入系统安全存储，并在原生配置需要明文时按需投影。推荐：是，但需先验证各平台兼容性。
+6. `[待确认]` 外部会话是否默认只读、本地、按需读取正文且不进入同步。推荐：是。
+7. `[待确认]` 第一阶段是否只做基础模型测试，把本地代理、协议转换和故障转移拆成独立 change。推荐：是。
+8. `[待确认]` Agent Profile/Persona 是否延期为后续组合能力，不进入第一阶段数据模型。推荐：是。
+
+## Scope Addendum 2026-07-20: Overview Navigation And Claude Quota
+
+Confirmed with the maintainer on 2026-07-20:
+
+1. The Overview tab is rebuilt as a navigation hub: live per-domain counts (Skills/MCP/Rules/Plugins/Sessions/Provider/Appearance/Usage), click-to-jump into the owning tab, capability-aware disabled states. The flat "Paths & capabilities" panel is collapsed into a secondary region.
+2. Usage route A is confirmed: Claude Code official subscription quota (five-hour and seven-day windows) via the platform's own OAuth credential and the Anthropic usage endpoint. Session-log estimation is not built in this batch.
+3. Verified integration facts (third-party evidence: cclimits, CodexBar, openusage, anthropics/claude-code issues): credential lives in macOS Keychain service `Claude Code-credentials` (newer builds may suffix an 8-char config-dir hash) or `<root>/.credentials.json` under `claudeAiOauth.accessToken`; quota endpoint is `GET https://api.anthropic.com/api/oauth/usage` with `Authorization: Bearer` and `anthropic-beta: oauth-2025-04-20`, returning `five_hour` / `seven_day` / `seven_day_opus` utilization and `resets_at`.
+4. Security boundary: the OAuth token never leaves the main process, is never persisted by PromptHub, never crosses IPC, never appears in logs or error payloads. PromptHub does not refresh tokens in this phase; expired credentials produce a guided re-authentication state. PromptHub never writes to the platform credential store.
+
+## Scope Addendum 2026-07-20: Codex Third-Party Providers With Managed Keys
+
+Confirmed with the maintainer on 2026-07-20:
+
+1. Goal: add third-party models to Codex without touching the ChatGPT subscription (`auth.json` and the built-in `openai` provider stay byte-identical), while keeping one-command switching.
+2. Platform scope: Codex only in this batch. Claude Code's `ANTHROPIC_BASE_URL` variant is deferred.
+3. Credential strategy confirmed: PromptHub-managed keys. The master copy lives in a new main-process secret store that reuses the audited Electron `safeStorage` encrypted-file pattern (`cloud-auth-storage.ts`: userData file, 0600, atomic rename, injectable encryption, main-only access). Codex has no env-free secure field contract, so at write time the key is projected into the provider's native `experimental_bearer_token` in `config.toml` (the platform's own field, file kept 0600); `env_key` entries remain supported for users who prefer environment variables. Keys are write-only over IPC: the renderer never receives a key back, backups and exports stay device-local and are excluded from sync.
+4. opencodex-style local proxy, protocol translation, account pooling, and failover remain gated as a separate Phase 3 subsystem and are explicitly out of scope.
+5. Reserved provider ids (`openai`, `ollama`, `lmstudio`) are never written; `model_provider` default switches go through the same backup/atomic-write/verify/rollback pipeline as existing model writes.
+
+## Scope Addendum 2026-07-20: Desktop-Native Workspace Layout
+
+Confirmed with the maintainer on 2026-07-20:
+
+1. All Agent workspace tabs abandon the webpage canvas metaphor: no outer page margin, no centered max-width column, no floating rounded cards for primary surfaces. Tab content renders edge-to-edge against the workspace dividers, uses hairline separators, fixes a compact toolbar row at the top, and scrolls only inside content regions.
+2. Skills, MCP, Rules, and Plugins remain direct top-level tabs. Each domain owns its compact searchable surface without a generic Assets parent or secondary navigation.
+3. The Provider & Model tab becomes master-detail: left provider list (built-in OpenAI subscription plus third-party entries plus add action), right detail pane for the selection.
+4. The Maintenance tab is retired; its refresh and settings actions move into the workspace header overflow menu.
+5. Overview navigation cells for asset domains navigate directly into Skills, MCP, Rules, or Plugins.
+
+## Scope Addendum 2026-07-21: Codex Quota And Provider-Aware Overview
+
+Confirmed with the maintainer on 2026-07-21:
+
+1. The Overview "Paths & capabilities" capability grid is removed (no user value); the collapsed paths list stays and each row gains an open-folder action.
+2. The Overview Provider & Model cell becomes provider-aware: when the built-in `openai` provider is active it shows the current model and credential state; when a third-party `model_providers.*` entry is active it shows that provider's sanitized base URL and configured model.
+3. Codex quota uses the platform's own OAuth credential from `~/.codex/auth.json` (`tokens.access_token` + `tokens.account_id`) against `GET https://chatgpt.com/backend-api/wham/usage`, returning `plan_type` and `rate_limit.primary_window`/`secondary_window` (`used_percent`, `reset_at`, `limit_window_seconds`). Windows MUST be classified by `limit_window_seconds` (≤24h = session window, >24h = weekly window), never by slot position. Verified against CodexBar (`CodexOAuthUsageFetcher.swift`) and cclimits (quotio#356).
+4. Usage display is provider-aware for Codex: quota is only queried when the built-in `openai` provider is active; when a third-party provider is active, usage surfaces report "custom provider, no quota data" instead of querying. The usage capability flips to `supported` for `codex`.
+
+## Scope Addendum 2026-07-21: Polymorphic Multi-Agent Quota
+
+Confirmed with the maintainer on 2026-07-21:
+
+1. The usage contract becomes polymorphic: `AgentUsageQuota.metrics: AgentUsageMetric[]` replaces the hardcoded `fiveHour`/`sevenDay`/`sevenDayOpus` fields. A metric carries `kind: "window" | "quota"` — windows render as ring gauges, credit/balance quotas render as progress bars with amounts.
+2. New adapters, all evidence-backed: Kimi (`~/.kimi-code/credentials/kimi-code.json` OAuth token -> `api.kimi.com/coding/v1/usages`, verified live 2026-07-21: weekly `usage` + rolling `limits[]` + `membership.level`), Antigravity (`~/.gemini/antigravity-cli/antigravity-oauth-token` -> cloudcode-pa `loadCodeAssist` + `fetchAvailableModels`, per-model remainingFraction + tier), Gemini CLI (`~/.gemini/oauth_creds.json` -> `loadCodeAssist` + `retrieveUserQuota` buckets), Copilot (GitHub OAuth token -> `api.github.com/copilot_internal/user`, premium/chat quota snapshots; verified against CodexBar).
+3. Cursor has no public quota API; its usage capability stays `planned` and this is recorded as a deliberate exclusion.
+4. Usage capability flips to `supported` for `kimi`, `antigravity`, `gemini`, `copilot` alongside existing `claude`/`codex`. Token isolation rules from `FR-AGENT-023` apply to every new adapter; expired tokens produce guided states without refresh in this phase.
+
+## Scope Addendum 2026-07-21: Rich Skill Asset Management In The Agent Workspace
+
+Confirmed with the maintainer on 2026-07-21:
+
+1. The direct Skills tab is upgraded from plain rows to the same card paradigm used by the Skills module's Agent Skill view: badge semantics (In My Skills / symlink / copy / unmanaged / built-in), inline actions (open folder, adopt into My Skills, open managed skill, uninstall with confirmation), and click-through to the full skill detail page with the agent context action bar.
+2. "Install My Skill" into the current Agent directory reuses the existing library-import modal and install pipeline (copy/symlink).
+3. All behavior is a renderer-side composition of existing Skills-domain services and components; no new main-process surface. MCP/Rules/Plugins keep compact rows in this batch; their deep actions remain in their owning modules.
+
+## Scope Addendum 2026-07-21: Usage Moves Into The Overview Dashboard
+
+Confirmed with the maintainer on 2026-07-21:
+
+1. Usage is dashboard information, not a functional page. The standalone Usage tab is removed from the workspace tab bar (7 -> 6 tabs); the overview navigation grid loses its usage cell.
+2. The Overview tab gains a dedicated usage banner at the top, above the navigation grid: ring gauges for each quota window (session/weekly/Opus where present) with utilization, reset countdown, plan badge, provider-reported label, and a manual refresh action.
+3. The banner renders only when the usage capability is supported/partial, and carries the existing guided states (no-credentials / expired / unavailable / custom-provider-active) in the same compact form.
+
+## Scope Addendum 2026-07-22: Qwen Code As A Distinct Agent
+
+Confirmed with the maintainer on 2026-07-22:
+
+1. PromptHub adds **Qwen Code** as a separate built-in Agent with stable id `qwen`. It does not replace or alias Qoder: Qwen Code is the open-source terminal Agent maintained in `QwenLM/qwen-code`, while Qoder remains its own IDE/CLI product target.
+2. The default user root is `~/.qwen`, with `QWEN_HOME` taking precedence. `QWEN_RUNTIME_DIR` is a separate runtime-output override and must not be treated as the configuration or asset root.
+3. First delivery covers the platform registry plus documented global/project Skills, SubAgents, MCP, Rules, Extensions, config inventory, and native session discovery. Each capability is enabled independently only after its adapter and regression contract pass.
+4. PromptHub manages canonical user/project assets, not Qwen-owned runtime state. Sessions, logs, todos, auto-memory, team memory, OAuth token files, credentials, extension caches, and extension-owned child assets remain local and are excluded from ordinary backup/sync unless a later explicit policy says otherwise.
+5. Qwen Code settings may contain provider keys, `env` values, MCP headers, MCP environment variables, OAuth client secrets, or token references. Renderer payloads, logs, snapshots, exports, and sync results must therefore be structural and redacted; PromptHub must never expose or silently rewrite secret-bearing fields.

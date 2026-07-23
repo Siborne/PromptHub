@@ -29,7 +29,9 @@ export interface McpTargetPreset {
 export function getMcpTargetPresets(
   homeDir = os.homedir(),
   platform: NodeJS.Platform = process.platform,
+  environment: NodeJS.ProcessEnv = process.env,
 ): McpTargetPreset[] {
+  const qwenHome = resolveQwenHome(homeDir, environment.QWEN_HOME);
   const claudeDesktopPath =
     platform === "darwin"
       ? path.join(
@@ -75,7 +77,7 @@ export function getMcpTargetPresets(
       id: "codex",
       target: "codex",
       scope: "global",
-      label: "Codex CLI",
+      label: "Codex",
       path: path.join(homeDir, ".codex", "config.toml"),
       platformId: "codex",
     },
@@ -83,7 +85,7 @@ export function getMcpTargetPresets(
       id: "kimi",
       target: "kimi",
       scope: "global",
-      label: "Kimi Code CLI",
+      label: "Kimi Code",
       path: path.join(homeDir, ".kimi", "mcp.json"),
       platformId: "kimi",
     },
@@ -91,9 +93,17 @@ export function getMcpTargetPresets(
       id: "augment",
       target: "augment",
       scope: "global",
-      label: "Augment / Auggie",
+      label: "Augment",
       path: path.join(homeDir, ".augment", "settings.json"),
       platformId: "augment",
+    },
+    {
+      id: "qwen",
+      target: "qwen",
+      scope: "global",
+      label: "Qwen Code",
+      path: path.join(qwenHome, "settings.json"),
+      platformId: "qwen",
     },
     {
       id: "gemini",
@@ -198,4 +208,16 @@ export function getMcpTargetPresets(
       platformId: "codebuddy",
     },
   ];
+}
+
+function resolveQwenHome(
+  homeDir: string,
+  configured: string | undefined,
+): string {
+  const value = configured?.trim();
+  if (!value || value.includes("\0")) return path.join(homeDir, ".qwen");
+  const expanded = value.replace(/^~(?=$|[\\/])/, homeDir);
+  return path.isAbsolute(expanded)
+    ? path.normalize(expanded)
+    : path.resolve(expanded);
 }

@@ -84,6 +84,10 @@ function createSettingsState() {
     setAutoScanStoreSkillsBeforeInstall: vi.fn(),
     githubToken: "",
     setGithubToken: vi.fn(),
+    agentIdentityPreferences: {
+      codex: { name: "codex", icon: "codex" },
+    },
+    setCodexIdentityPreference: vi.fn(),
   };
 }
 
@@ -483,6 +487,125 @@ describe("SkillSettings", () => {
     );
   });
 
+  it("edits the Codex product name and icon inside the Codex agent config", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Use ChatGPT name" }),
+    ).not.toBeInTheDocument();
+
+    const configSection = screen
+      .getByText("Agent Configurations")
+      .closest("section, div");
+    const codexCard = within(configSection as HTMLElement)
+      .getAllByText("Codex")[0]
+      .closest("[data-platform-config-id]");
+    expect(codexCard).toBeTruthy();
+
+    fireEvent.click(
+      within(codexCard as HTMLElement).getByRole("button", { name: "Edit" }),
+    );
+    fireEvent.click(
+      within(codexCard as HTMLElement).getByRole("button", {
+        name: "Use ChatGPT name",
+      }),
+    );
+    fireEvent.click(
+      within(codexCard as HTMLElement).getByRole("button", {
+        name: "Use ChatGPT icon",
+      }),
+    );
+
+    const selectedName = within(codexCard as HTMLElement).getByRole("button", {
+      name: "Use ChatGPT name",
+    });
+    const selectedIcon = within(codexCard as HTMLElement).getByRole("button", {
+      name: "Use ChatGPT icon",
+    });
+    expect(selectedName).toHaveClass(
+      "border-primary",
+      "bg-primary",
+      "text-primary-foreground",
+    );
+    expect(selectedIcon).toHaveClass(
+      "border-primary",
+      "bg-primary",
+      "text-primary-foreground",
+    );
+    expect(selectedName).toHaveClass("h-12");
+    expect(selectedIcon).toHaveClass("h-12");
+    expect(selectedName.querySelector("svg")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(selectedIcon.querySelector("svg")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    expect(settingsState.setCodexIdentityPreference).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(codexCard as HTMLElement).getByRole("button", { name: "Save" }),
+    );
+    expect(settingsState.setCodexIdentityPreference).toHaveBeenCalledWith({
+      name: "chatgpt",
+      icon: "chatgpt",
+    });
+  });
+
+  it("cancels or resets Codex identity drafts with the Agent edit controls", async () => {
+    const settingsState = {
+      ...createSettingsState(),
+      agentIdentityPreferences: {
+        codex: { name: "chatgpt" as const, icon: "chatgpt" as const },
+      },
+    };
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const configSection = screen
+      .getByText("Agent Configurations")
+      .closest("section, div") as HTMLElement;
+    const codexCard = within(configSection)
+      .getAllByText("ChatGPT")[0]
+      .closest("[data-platform-config-id]") as HTMLElement;
+
+    fireEvent.click(within(codexCard).getByRole("button", { name: "Edit" }));
+    fireEvent.click(
+      within(codexCard).getByRole("button", { name: "Use Codex name" }),
+    );
+    fireEvent.click(within(codexCard).getByRole("button", { name: "Cancel" }));
+    expect(settingsState.setCodexIdentityPreference).not.toHaveBeenCalled();
+
+    fireEvent.click(within(codexCard).getByRole("button", { name: "Edit" }));
+    expect(
+      within(codexCard).getByRole("button", { name: "Use ChatGPT name" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(
+      within(codexCard).getByRole("button", { name: "Use Default" }),
+    );
+    expect(
+      within(codexCard).getByRole("button", { name: "Use Codex name" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(codexCard).getByRole("button", { name: "Use Codex icon" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(within(codexCard).getByRole("button", { name: "Save" }));
+    expect(settingsState.setCodexIdentityPreference).toHaveBeenCalledWith({
+      name: "codex",
+      icon: "codex",
+    });
+  });
+
   it("collapses built-in agent details by default and toggles them on demand", async () => {
     await act(async () => {
       await renderWithI18n(<SkillSettings />, { language: "en" });
@@ -553,12 +676,12 @@ describe("SkillSettings", () => {
     ).not.toBeInTheDocument();
 
     const codexCard = within(configSection as HTMLElement)
-      .getAllByText("Codex CLI")[0]
+      .getAllByText("Codex")[0]
       .closest("[data-platform-config-id]");
     expect(codexCard).toBeTruthy();
     fireEvent.click(
       within(codexCard as HTMLElement).getByRole("button", {
-        name: "Expand Codex CLI",
+        name: "Expand Codex",
       }),
     );
     expect(

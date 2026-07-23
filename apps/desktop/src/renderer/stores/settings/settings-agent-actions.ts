@@ -1,4 +1,7 @@
-import type { SkillProject } from "@prompthub/shared/types";
+import type {
+  AgentIdentityPreference,
+  SkillProject,
+} from "@prompthub/shared/types";
 import { normalizeNetworkProxySettings } from "@prompthub/shared/utils/network-proxy";
 import {
   normalizeAgentRootPath,
@@ -22,6 +25,7 @@ import {
   normalizeAgentRootPaths,
 } from "./settings-normalizers";
 import type { ProjectSkillImportPreferences } from "./settings-types";
+import { normalizeAgentIdentityPreferences } from "../../services/agent-identity";
 
 type AgentActionKey =
   | "setCustomAgents"
@@ -38,6 +42,7 @@ type AgentActionKey =
   | "removeSkillProject"
   | "updateBuiltinAgentOverride"
   | "resetBuiltinAgentOverride"
+  | "setCodexIdentityPreference"
   | "setCustomPlatformRootPath"
   | "resetCustomPlatformRootPath"
   | "setDisabledPlatformIds"
@@ -423,6 +428,31 @@ function createBuiltinOverrideActions(context: SettingsActionContext) {
   >;
 }
 
+function refreshManagedAgentIdentities(
+  preferences: ReturnType<typeof normalizeAgentIdentityPreferences>,
+): void {
+  void import("../agent.store").then(({ useAgentStore }) => {
+    useAgentStore.getState().applyIdentityPreferences(preferences);
+  });
+}
+
+function createAgentIdentityActions(context: SettingsActionContext) {
+  const { get, setTouched, syncSettingsToMain } = context;
+  return {
+    setCodexIdentityPreference: (updates: Partial<AgentIdentityPreference>) => {
+      const current = normalizeAgentIdentityPreferences(
+        get().agentIdentityPreferences,
+      ).codex!;
+      const agentIdentityPreferences = normalizeAgentIdentityPreferences({
+        codex: { ...current, ...updates },
+      });
+      setTouched({ agentIdentityPreferences });
+      void syncSettingsToMain({ agentIdentityPreferences });
+      refreshManagedAgentIdentities(agentIdentityPreferences);
+    },
+  } satisfies SettingsActionGroup<"setCodexIdentityPreference">;
+}
+
 function syncDisabledPlatforms(
   context: SettingsActionContext,
   disabledPlatformIds: string[],
@@ -491,6 +521,7 @@ function createPlatformOrderActions(context: SettingsActionContext) {
 
 function createPlatformActions(context: SettingsActionContext) {
   return {
+    ...createAgentIdentityActions(context),
     ...createBuiltinOverrideActions(context),
     ...createPlatformTrackingActions(context),
     ...createPlatformOrderActions(context),

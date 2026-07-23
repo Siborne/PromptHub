@@ -15,6 +15,7 @@ export const MCP_TARGET_KINDS = [
   "codebuddy",
   "kimi",
   "augment",
+  "qwen",
   "opencode",
   "zcode",
   "custom-json",

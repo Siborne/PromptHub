@@ -15,7 +15,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type {
-  AgentScannedSkill,
   GitHubRepoMetadata,
   GitHubTreeEntry,
   GitHubTreeResponse,
@@ -24,7 +23,6 @@ import type {
   ScannedSkill,
   ScanLocalResult,
   Skill,
-  SkillPlatformScanResult,
 } from "@prompthub/shared/types";
 import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
@@ -53,18 +51,11 @@ function computePackageDirectoryFingerprint(
   return computeSkillPackageFingerprintV1Sync(entries).fingerprint;
 }
 import {
-  getPlatformSkillsDir,
   gitClone,
   gitGetCurrentBranch,
   gitListRemoteBranches,
   resolvePlatformPath,
 } from "./skill-installer-utils";
-import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
-import {
-  getCherryStudioPlatformSkillMetadata,
-  isCherryStudioPlatform,
-  uninstallCherryStudioPlatformSkill,
-} from "./cherry-studio-skill-platform";
 
 function parseJson<T>(raw: string, fallback: T): T {
   try {
@@ -291,6 +282,10 @@ import {
   resolveSkillDirFromRepo,
 } from "./skill-installer-discovery";
 import {
+  scanAgentPlatformSkills,
+  uninstallAgentPlatformSkill,
+} from "./skill-installer-agent-discovery";
+import {
   detectInstalledPlatforms,
   getSkillMdInstallStatusForSkill,
   getSkillMdInstallStatusDetailsForSkill,
@@ -401,84 +396,18 @@ export class SkillInstaller {
   static installSkillMdSymlink = installSkillMdSymlink;
   static installSkillMdSymlinkForSkill = installSkillMdSymlinkForSkill;
 
-  static async scanPlatformSkills(
+  static scanPlatformSkills(
     platformId: string,
-  ): Promise<SkillPlatformScanResult> {
-    const platform = this.getSupportedPlatforms().find(
-      (entry) => entry.id === platformId,
+    options: { homeDir?: string } = {},
+  ) {
+    return scanAgentPlatformSkills(
+      platformId,
+      (paths) => this.scanLocalPreview(paths),
+      options,
     );
-    if (!platform) {
-      throw new Error(`Unknown platform: ${platformId}`);
-    }
-
-    const skillsDir = getPlatformSkillsDir(platform);
-    const scannedSkills = await this.scanLocalPreview([skillsDir]);
-    const isCherryStudio = isCherryStudioPlatform(platform.id);
-    const agentSkills = await Promise.all(
-      scannedSkills.map(async (skill): Promise<AgentScannedSkill> => {
-        const platformMetadata = isCherryStudio
-          ? await getCherryStudioPlatformSkillMetadata(
-              platform,
-              skill.localPath,
-            ).catch(() => ({ isBuiltin: false }))
-          : { isBuiltin: false };
-
-        return {
-          ...skill,
-          installMode: skill.installMode ?? "copy",
-          isPlatformBuiltin: platformMetadata.isBuiltin || undefined,
-          platformSkillPath: skill.localPath,
-          platforms: [platform.name],
-        };
-      }),
-    );
-
-    return {
-      platform,
-      skillsDir,
-      scannedSkills: agentSkills,
-    };
   }
 
-  static async uninstallPlatformSkill(
-    platformId: string,
-    platformSkillPath: string,
-  ): Promise<void> {
-    const platform = this.getSupportedPlatforms().find(
-      (entry) => entry.id === platformId,
-    );
-    if (!platform) {
-      throw new Error(`Unknown platform: ${platformId}`);
-    }
-    if (
-      typeof platformSkillPath !== "string" ||
-      platformSkillPath.trim().length === 0
-    ) {
-      throw new Error("Platform skill path is required");
-    }
-
-    const skillsDir = path.resolve(getPlatformSkillsDir(platform));
-    const targetPath = path.resolve(platformSkillPath);
-    const relativeTarget = path.relative(skillsDir, targetPath);
-    if (
-      !isPathWithin(skillsDir, targetPath) ||
-      relativeTarget === "" ||
-      relativeTarget === "."
-    ) {
-      throw new Error(
-        "Path traversal detected: skill path is outside platform",
-      );
-    }
-
-    if (isCherryStudioPlatform(platform.id)) {
-      await uninstallCherryStudioPlatformSkill(platform, targetPath);
-      return;
-    }
-
-    if (await fileExists(targetPath)) {
-      await fs.rm(targetPath, { recursive: true, force: true });
-    }
-  }
+  static uninstallPlatformSkill = uninstallAgentPlatformSkill;
 
   // ---- Export / import (delegated) ----
   static exportAsSkillMd = exportAsSkillMd;

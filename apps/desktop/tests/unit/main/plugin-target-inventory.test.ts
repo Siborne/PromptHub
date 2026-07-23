@@ -169,9 +169,9 @@ describe("Agent Plugin target inventory scan", () => {
     );
 
     try {
-      expect(
-        scanInstalledPluginsForTarget("claude-code", agentRoot),
-      ).toEqual([]);
+      expect(scanInstalledPluginsForTarget("claude-code", agentRoot)).toEqual(
+        [],
+      );
     } finally {
       fs.rmSync(externalRoot, { recursive: true, force: true });
     }
@@ -206,9 +206,9 @@ describe("Agent Plugin target inventory scan", () => {
       );
 
       try {
-        expect(
-          scanInstalledPluginsForTarget("claude-code", agentRoot),
-        ).toEqual([]);
+        expect(scanInstalledPluginsForTarget("claude-code", agentRoot)).toEqual(
+          [],
+        );
       } finally {
         fs.rmSync(externalRoot, { recursive: true, force: true });
       }
@@ -259,6 +259,28 @@ describe("Agent Plugin target inventory scan", () => {
       name: "shipper",
       displayName: "Shipper",
       inventory: { commands: 1, mcpServers: 1 },
+    });
+  });
+
+  it("discovers Qwen extensions as parent-owned bundles", () => {
+    const extension = path.join(agentRoot, "extensions", "review-kit");
+    writeJson(path.join(extension, "qwen-extension.json"), {
+      name: "review-kit",
+      version: "1.2.0",
+      contextFileName: "QWEN.md",
+      mcpServers: { review: { command: "node", args: ["server.js"] } },
+    });
+    touch(path.join(extension, "skills", "review", "SKILL.md"));
+    touch(path.join(extension, "agents", "reviewer.md"));
+    touch(path.join(extension, "commands", "review.toml"));
+
+    const plugins = scanInstalledPluginsForTarget("qwen", agentRoot);
+
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0]).toMatchObject({
+      name: "review-kit",
+      version: "1.2.0",
+      inventory: { skills: 1, agents: 1, commands: 1, mcpServers: 1 },
     });
   });
 

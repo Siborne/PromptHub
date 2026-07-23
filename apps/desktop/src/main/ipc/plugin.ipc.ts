@@ -186,6 +186,12 @@ const PLUGIN_TARGET_SCAN_CONFIGS: PluginTargetScanConfig[] = [
     ],
     recursiveRoots: ["platform-plugin-dir", "root-plugins"],
   },
+  {
+    targetId: "qwen",
+    platformId: "qwen",
+    markerPaths: ["qwen-extension.json"],
+    recursiveRoots: ["platform-plugin-dir"],
+  },
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -388,7 +394,10 @@ function getContainedDirectoryPath(
   dirName: string,
 ): string | null {
   try {
-    const dirPath = getContainedPath(packageDir, path.join(packageDir, dirName));
+    const dirPath = getContainedPath(
+      packageDir,
+      path.join(packageDir, dirName),
+    );
     return dirPath && fs.statSync(dirPath).isDirectory() ? dirPath : null;
   } catch {
     return null;
@@ -453,9 +462,7 @@ function looksLikeManualPluginPackage(
       (dirName) => getContainedDirectoryPath(packageDir, dirName) !== null,
     ),
   );
-  if (
-    getContainedFilePath(packageDir, path.join(packageDir, "package.json"))
-  ) {
+  if (getContainedFilePath(packageDir, path.join(packageDir, "package.json"))) {
     return hasRecognizedCapability;
   }
 

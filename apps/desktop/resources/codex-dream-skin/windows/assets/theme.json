@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "dream-portal",
+  "name": "Dream Portal",
+  "brandSubtitle": "PROMPTHUB DREAM SKIN",
+  "tagline": "Make something wonderful.",
+  "projectPrefix": "Project · ",
+  "projectLabel": "Choose project",
+  "statusText": "DREAM SKIN ONLINE",
+  "quote": "MAKE SOMETHING WONDERFUL",
+  "image": "dream-reference.jpg",
+  "appearance": "auto",
+  "art": {
+    "safeArea": "auto",
+    "taskMode": "auto"
+  }
+}

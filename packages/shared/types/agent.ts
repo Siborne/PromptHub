@@ -1,6 +1,7 @@
 export type AgentCapabilityKey =
   | "overview"
   | "provider"
+  | "appearance"
   | "assets"
   | "configFiles"
   | "sessions"
@@ -12,6 +13,8 @@ export type AgentCapabilityStatus =
   | "partial"
   | "planned"
   | "unsupported";
+
+export type AgentProductLifecycle = "current" | "enterprise-legacy";
 
 export interface ManagedAgentCapability {
   status: AgentCapabilityStatus;
@@ -32,13 +35,69 @@ export interface ManagedAgentSummary {
   id: string;
   name: string;
   icon: string;
+  displayIconId?: string;
   isCustom: boolean;
   isConfigured: boolean;
   isDetected: boolean;
   isPinned: boolean;
+  launchable?: boolean;
   status: "installed" | "configured" | "not-detected";
+  lifecycle?: AgentProductLifecycle;
+  replacementPlatformId?: string;
   paths: ManagedAgentPaths;
   capabilities: Record<AgentCapabilityKey, ManagedAgentCapability>;
+}
+
+export type AgentLaunchResult =
+  | { success: true }
+  | {
+      success: false;
+      errorCode: "unsupported" | "not-installed" | "launch-failed";
+    };
+
+export interface AgentDesktopThemeSummary {
+  id: string;
+  name: string;
+  version: string;
+  directoryPath: string;
+  compatibleTarget: boolean;
+  lintWarningCount: number;
+}
+
+export interface AgentPetSummary {
+  id: string;
+  name: string;
+  description: string;
+  directoryPath: string;
+  spriteVersionNumber: 1 | 2;
+  spritesheetName: string;
+  spritesheetBytes: number;
+}
+
+export interface AgentAppearanceOverview {
+  agentId: string;
+  supported: boolean;
+  engineVersion: string | null;
+  adapterLastVerifiedVersion: string | null;
+  activeThemeId: string | null;
+  themeDirectoryPath: string;
+  petDirectoryPath: string;
+  themes: AgentDesktopThemeSummary[];
+  pets: AgentPetSummary[];
+  invalidThemeCount: number;
+  invalidPetCount: number;
+}
+
+export interface ApplyAgentThemeInput {
+  agentId: string;
+  themeId: string;
+  restartExisting?: boolean;
+}
+
+export interface AgentAppearanceActionResult {
+  success: true;
+  activeThemeId: string | null;
+  message?: string;
 }
 
 export type ManagedAgentFilter =
@@ -130,4 +189,80 @@ export interface AgentSessionDetail {
   entries: AgentSessionEntry[];
   parseErrors: number;
   truncated: boolean;
+}
+
+export type AgentUsageQuotaStatus =
+  | "ok"
+  | "no-credentials"
+  | "expired"
+  | "unavailable";
+
+export type AgentCodexProviderKeySource = "managed" | "env" | "none";
+
+export interface AgentCodexProvider {
+  id: string;
+  name: string;
+  baseUrl: string;
+  wireApi: "chat" | "responses";
+  envKey: string | null;
+  keySource: AgentCodexProviderKeySource;
+  hasKey: boolean;
+  isActive: boolean;
+  profileModel: string | null;
+}
+
+export interface AgentCodexProviderList {
+  agentId: string;
+  activeProvider: string;
+  defaultModel: string | null;
+  providers: AgentCodexProvider[];
+}
+
+export interface UpsertAgentCodexProviderInput {
+  agentId: string;
+  providerId: string;
+  name: string;
+  baseUrl: string;
+  wireApi: "chat" | "responses";
+  apiKey?: string | null;
+  envKey?: string | null;
+  profileModel?: string | null;
+}
+
+export interface AgentCodexProviderTestResult {
+  status:
+    | "ok"
+    | "auth-error"
+    | "network-error"
+    | "timeout"
+    | "http-error"
+    | "invalid-url"
+    | "no-credentials";
+  latencyMs: number | null;
+  modelCount: number | null;
+  errorCode?: string;
+}
+
+export type AgentUsageMetricKind = "window" | "quota";
+
+export interface AgentUsageMetric {
+  id: string;
+  label: string;
+  kind: AgentUsageMetricKind;
+  utilization: number;
+  resetsAt: number | null;
+  usedAmount?: number;
+  totalAmount?: number;
+  unit?: string;
+}
+
+export interface AgentUsageQuota {
+  agentId: string;
+  adapter: string;
+  status: AgentUsageQuotaStatus;
+  source: "provider";
+  plan: string | null;
+  fetchedAt: number;
+  errorCode?: string;
+  metrics: AgentUsageMetric[];
 }

@@ -1,7 +1,14 @@
+import { DEFAULT_SKILL_PLATFORM_ORDER } from "@prompthub/shared/constants/platforms";
 import { RULE_PLATFORM_ORDER } from "@prompthub/shared/constants/rules";
+import { getAgentPlatformFamily } from "@prompthub/shared/constants/platforms";
 import { isRulePlatformId } from "@prompthub/shared/types";
 import type { RuleFileDescriptor } from "@prompthub/shared/types";
 
+/**
+ * Order global rule cards the same way Agent management / Skills do:
+ * user `skillPlatformOrder` first, then shared DEFAULT_SKILL_PLATFORM_ORDER,
+ * then rules-only whitelist, then any remaining discovered platforms.
+ */
 export function getOrderedGlobalRuleFiles(
   files: RuleFileDescriptor[],
   preferredOrder: string[] = [],
@@ -28,6 +35,11 @@ export function getOrderedGlobalRuleFiles(
     pushPlatform(platformId);
   }
 
+  // Align with Agent management / Skills default order (not Rules-only order).
+  for (const platformId of DEFAULT_SKILL_PLATFORM_ORDER) {
+    pushPlatform(platformId);
+  }
+
   for (const platformId of RULE_PLATFORM_ORDER) {
     pushPlatform(platformId);
   }
@@ -37,4 +49,24 @@ export function getOrderedGlobalRuleFiles(
   }
 
   return ordered;
+}
+
+export function partitionGlobalRuleFilesByFamily(
+  files: RuleFileDescriptor[],
+): {
+  codeWork: RuleFileDescriptor[];
+  claw: RuleFileDescriptor[];
+} {
+  const codeWork: RuleFileDescriptor[] = [];
+  const claw: RuleFileDescriptor[] = [];
+
+  for (const file of files) {
+    if (getAgentPlatformFamily(file.platformId) === "claw") {
+      claw.push(file);
+    } else {
+      codeWork.push(file);
+    }
+  }
+
+  return { codeWork, claw };
 }

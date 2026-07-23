@@ -10,10 +10,20 @@ import type {
   RuleFileId,
 } from "@prompthub/shared/types";
 
+function isOutOfSyncRule(file: RuleFileContent | null | undefined): boolean {
+  return (
+    file?.syncStatus === "out-of-sync" && typeof file.targetContent === "string"
+  );
+}
+
 interface RulesState {
   files: RuleFileDescriptor[];
   selectedRuleId: RuleFileId | null;
   currentFile: RuleFileContent | null;
+  /** Explicit conflict dialog target. Not derived from out-of-sync alone. */
+  conflictDialogRuleId: RuleFileId | null;
+  /** Rules the user closed without resolving; do not auto-prompt again this session. */
+  dismissedConflictRuleIds: RuleFileId[];
   searchQuery: string;
   draftContent: string;
   aiInstruction: string;
@@ -30,6 +40,7 @@ interface RulesState {
   setAiInstruction: (instruction: string) => void;
   saveCurrentRule: () => Promise<void>;
   resolveCurrentRuleConflict: (strategy: RuleConflictResolutionStrategy) => Promise<void>;
+  dismissConflictDialog: (ruleId?: RuleFileId | null) => void;
   rewriteCurrentRule: () => Promise<void>;
   deleteRuleVersion: (ruleId: RuleFileId, versionId: string) => Promise<void>;
   addProjectRule: (input: CreateRuleProjectInput) => Promise<void>;
@@ -97,6 +108,8 @@ export const useRulesStore = create<RulesState>((set, get) => ({
   files: [],
   selectedRuleId: null,
   currentFile: null,
+  conflictDialogRuleId: null,
+  dismissedConflictRuleIds: [],
   searchQuery: "",
   draftContent: "",
   aiInstruction: "",
@@ -131,11 +144,11 @@ export const useRulesStore = create<RulesState>((set, get) => ({
         // When force-scanning, clear currentFile so selectRule's early-return guard
         // doesn't skip re-reading the file from disk.
         if (options?.force) {
-          set({ currentFile: null });
+          set({ currentFile: null, conflictDialogRuleId: null });
         }
         await get().selectRule(selectedRuleId);
       } else {
-        set({ currentFile: null, draftContent: "" });
+        set({ currentFile: null, draftContent: "", conflictDialogRuleId: null });
       }
     } catch (error) {
       if (requestId === latestLoadFilesRequestId) {
@@ -151,16 +164,27 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     }
 
     const requestId = ++latestSelectRuleRequestId;
-    set({ selectedRuleId: ruleId, isLoading: true, error: null, aiSummary: null });
+    set({
+      selectedRuleId: ruleId,
+      isLoading: true,
+      error: null,
+      aiSummary: null,
+      // Close any previous rule's conflict dialog while loading the next rule.
+      conflictDialogRuleId: null,
+    });
     try {
       const file = await window.api.rules.read(ruleId);
       if (requestId !== latestSelectRuleRequestId || get().selectedRuleId !== ruleId) {
         return;
       }
+      const dismissed = get().dismissedConflictRuleIds;
+      const shouldPromptConflict =
+        isOutOfSyncRule(file) && !dismissed.includes(file.id);
       set({
         currentFile: file,
         draftContent: file.content,
         isLoading: false,
+        conflictDialogRuleId: shouldPromptConflict ? file.id : null,
       });
     } catch (error) {
       if (requestId === latestSelectRuleRequestId && get().selectedRuleId === ruleId) {
@@ -226,12 +250,32 @@ export const useRulesStore = create<RulesState>((set, get) => ({
         files: nextFiles,
         draftContent: updated.content,
         isSaving: false,
+        conflictDialogRuleId: null,
+        dismissedConflictRuleIds: get().dismissedConflictRuleIds.filter(
+          (id) => id !== updated.id,
+        ),
       });
       scheduleAllSaveSync("rules:resolve-conflict");
     } catch (error) {
       set({ isSaving: false, error: getErrorMessage(error) });
       throw error;
     }
+  },
+
+  dismissConflictDialog: (ruleId) => {
+    const targetId = ruleId ?? get().conflictDialogRuleId ?? get().currentFile?.id;
+    if (!targetId) {
+      set({ conflictDialogRuleId: null });
+      return;
+    }
+
+    const dismissed = get().dismissedConflictRuleIds;
+    set({
+      conflictDialogRuleId: null,
+      dismissedConflictRuleIds: dismissed.includes(targetId)
+        ? dismissed
+        : [...dismissed, targetId],
+    });
   },
 
   rewriteCurrentRule: async () => {

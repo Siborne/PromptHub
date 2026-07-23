@@ -147,6 +147,7 @@ describe("mcp-config", () => {
     expect(getMcpServersJsonKey("claude")).toBe("mcpServers");
     expect(getMcpServersJsonKey("kimi")).toBe("mcpServers");
     expect(getMcpServersJsonKey("augment")).toBe("mcpServers");
+    expect(getMcpServersJsonKey("qwen")).toBe("mcpServers");
     expect(getMcpServersJsonKey("gemini")).toBe("mcpServers");
     expect(getMcpServersJsonKey("windsurf")).toBe("mcpServers");
     expect(getMcpServersJsonKey("kiro")).toBe("mcpServers");
@@ -206,8 +207,8 @@ describe("mcp-config", () => {
     });
   });
 
-  it("projects Kimi and Augment MCP servers with the documented mcpServers shape", () => {
-    for (const target of ["kimi", "augment"] as const) {
+  it("projects Kimi, Augment and Qwen MCP servers with the documented mcpServers shape", () => {
+    for (const target of ["kimi", "augment", "qwen"] as const) {
       const merged = mergeMcpServersJson(
         { theme: "dark", mcpServers: { existing: { command: "node" } } },
         target,

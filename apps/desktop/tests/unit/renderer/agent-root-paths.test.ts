@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_SKILL_PLATFORM_ORDER,
   getPlatformById,
   SKILL_PLATFORMS,
 } from "@prompthub/shared/constants/platforms";
@@ -201,25 +202,85 @@ describe("agent root paths", () => {
     ).toBeUndefined();
   });
 
-  it("recognizes the current Kimi Code CLI user asset contract", () => {
+  it("recognizes the current Kimi Code user asset contract", () => {
     const platform = getPlatformById("kimi");
     expect(platform).toBeDefined();
 
     const config = getEffectiveBuiltinAgentConfig(
       platform!,
-      "~/.kimi",
+      "~/.kimi-code",
       undefined,
     );
 
     expect(config.skillsRelativePath).toBe("skills");
     expect(config.mcpRelativePath).toBe("mcp.json");
-    expect(config.configRelativePaths).toEqual(["config.toml", "mcp.json"]);
-    expect(config.rulesRelativePath).toBeUndefined();
+    expect(config.pluginsRelativePath).toBe("plugins");
+    expect(config.configRelativePaths).toEqual([
+      "config.toml",
+      "tui.toml",
+      "mcp.json",
+    ]);
+    expect(config.rulesRelativePath).toBe("AGENTS.md");
     expect(buildAgentRootAssetPreview(config)).toMatchObject({
-      skillScanPaths: ["~/.kimi/skills"],
-      mcpConfigPaths: ["~/.kimi/mcp.json"],
-      configCandidates: ["~/.kimi/config.toml", "~/.kimi/mcp.json"],
+      skillScanPaths: ["~/.kimi-code/skills"],
+      mcpConfigPaths: ["~/.kimi-code/mcp.json"],
+      pluginDirectories: ["~/.kimi-code/plugins"],
+      ruleCandidates: ["~/.kimi-code/AGENTS.md"],
+      configCandidates: [
+        "~/.kimi-code/config.toml",
+        "~/.kimi-code/tui.toml",
+        "~/.kimi-code/mcp.json",
+      ],
     });
+  });
+
+  it("keeps Gemini and Antigravity as distinct suffix-free Agent names", () => {
+    const gemini = getPlatformById("gemini");
+    const antigravity = getPlatformById("antigravity");
+
+    expect(gemini).toMatchObject({
+      id: "gemini",
+      name: "Gemini",
+      lifecycle: "enterprise-legacy",
+      replacementPlatformId: "antigravity",
+      rootDir: { darwin: "~/.gemini" },
+      skillsRelativePath: "skills",
+    });
+    expect(antigravity).toMatchObject({
+      id: "antigravity",
+      name: "Antigravity",
+      lifecycle: "current",
+      rootDir: {
+        darwin: "~/.gemini/config",
+        win32: "%USERPROFILE%\\.gemini\\config",
+        linux: "~/.gemini/config",
+      },
+      skillsRelativePath: "skills",
+      mcpRelativePath: "mcp_config.json",
+      pluginsRelativePath: "plugins",
+      globalRuleFile: "../GEMINI.md",
+    });
+
+    const config = getEffectiveBuiltinAgentConfig(
+      antigravity!,
+      "~/.gemini/config",
+      undefined,
+    );
+    expect(buildAgentRootAssetPreview(config)).toMatchObject({
+      skillScanPaths: ["~/.gemini/config/skills"],
+      mcpConfigPaths: ["~/.gemini/config/mcp_config.json"],
+      pluginDirectories: ["~/.gemini/config/plugins"],
+      ruleCandidates: ["~/.gemini/GEMINI.md"],
+    });
+    expect(SKILL_PLATFORMS.filter(({ id }) => id === "gemini")).toHaveLength(1);
+    expect(
+      SKILL_PLATFORMS.filter(({ id }) => id === "antigravity"),
+    ).toHaveLength(1);
+    expect(DEFAULT_SKILL_PLATFORM_ORDER.indexOf("antigravity")).toBeLessThan(
+      DEFAULT_SKILL_PLATFORM_ORDER.indexOf("gemini"),
+    );
+    expect(gemini?.name).not.toMatch(/\sCLI(?:\s|$)/i);
+    expect(antigravity?.name).not.toMatch(/\sCLI(?:\s|$)/i);
   });
 
   it("keeps Reasonix MCP and hook files discovery-only", () => {
@@ -254,6 +315,7 @@ describe("agent root paths", () => {
   it("models Auggie's directory-based skills and rules without a fake global rule file", () => {
     const platform = getPlatformById("augment");
     expect(platform).toBeDefined();
+    expect(platform?.name).toBe("Augment");
 
     const config = getEffectiveBuiltinAgentConfig(
       platform!,
@@ -272,9 +334,39 @@ describe("agent root paths", () => {
     });
   });
 
-  it("keeps Qoder as the Qwen coding-agent target instead of adding a duplicate qwen platform", () => {
+  it("models Qwen Code separately from Qoder with its documented user assets", () => {
+    const qwen = getPlatformById("qwen");
+
     expect(getPlatformById("qoder")?.name).toBe("Qoder");
-    expect(getPlatformById("qwen")).toBeUndefined();
+    expect(qwen).toMatchObject({
+      id: "qwen",
+      name: "Qwen Code",
+      rootEnvironmentVariable: "QWEN_HOME",
+      rootDir: {
+        darwin: "~/.qwen",
+        win32: "%USERPROFILE%\\.qwen",
+        linux: "~/.qwen",
+      },
+      skillsRelativePath: "skills",
+      mcpRelativePath: "settings.json",
+      pluginsRelativePath: "extensions",
+      globalRuleFile: "QWEN.md",
+    });
+
+    const config = getEffectiveBuiltinAgentConfig(qwen!, "~/.qwen", undefined);
+    expect(config).toMatchObject({
+      agentsRelativePath: "agents",
+      commandsRelativePath: "commands",
+      configRelativePaths: [],
+    });
+    expect(buildAgentRootAssetPreview(config)).toMatchObject({
+      skillScanPaths: ["~/.qwen/skills"],
+      mcpConfigPaths: ["~/.qwen/settings.json"],
+      pluginDirectories: ["~/.qwen/extensions"],
+      ruleCandidates: ["~/.qwen/QWEN.md"],
+      agentDirectories: ["~/.qwen/agents"],
+      configCandidates: [],
+    });
   });
 
   it("keeps the built-in platform registry free of duplicate ids", () => {
@@ -282,5 +374,6 @@ describe("agent root paths", () => {
 
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.filter((id) => id === "augment")).toHaveLength(1);
+    expect(ids.filter((id) => id === "qwen")).toHaveLength(1);
   });
 });

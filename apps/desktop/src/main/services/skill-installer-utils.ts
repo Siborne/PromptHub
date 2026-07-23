@@ -1,4 +1,5 @@
 import * as childProcess from "child_process";
+import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import {
@@ -685,6 +686,11 @@ export function getBuiltinAgentOverride(
 export function getPlatformRootDir(
   platform: SkillPlatform,
   overrides?: Record<string, string>,
+  options: {
+    environment?: NodeJS.ProcessEnv;
+    pathExists?: (candidate: string) => boolean;
+    cwd?: string;
+  } = {},
 ): string {
   const builtinOverride = getBuiltinAgentOverride(platform.id);
   const overridePath =
@@ -698,7 +704,44 @@ export function getPlatformRootDir(
 
   const osKey = process.platform as "darwin" | "win32" | "linux";
   const template = platform.rootDir[osKey] || platform.rootDir.linux;
-  return resolvePlatformPath(template);
+  const primaryRoot = resolvePlatformPath(template);
+  if (!platform.rootEnvironmentVariable && !platform.rootDirFallbacks) {
+    return primaryRoot;
+  }
+
+  const environment = options.environment ?? process.env;
+  const pathExists = options.pathExists ?? fs.existsSync;
+  const currentEnvironmentRoot = normalizeEnvironmentRoot(
+    environment[platform.rootEnvironmentVariable || ""],
+    platform.environmentRootRelativeToCwd,
+    options.cwd,
+  );
+  if (currentEnvironmentRoot) return currentEnvironmentRoot;
+  if (pathExists(primaryRoot)) return primaryRoot;
+
+  const legacyEnvironmentRoot = normalizeEnvironmentRoot(
+    environment[platform.legacyRootEnvironmentVariable || ""],
+    false,
+    options.cwd,
+  );
+  if (legacyEnvironmentRoot) return legacyEnvironmentRoot;
+
+  for (const fallback of platform.rootDirFallbacks?.[osKey] || []) {
+    const candidate = resolvePlatformPath(fallback);
+    if (pathExists(candidate)) return candidate;
+  }
+  return primaryRoot;
+}
+
+function normalizeEnvironmentRoot(
+  value: string | undefined,
+  allowRelative = false,
+  cwd = process.cwd(),
+): string | null {
+  if (!value?.trim() || value.includes("\0")) return null;
+  const resolved = resolvePlatformPath(value.trim());
+  if (path.isAbsolute(resolved)) return path.normalize(resolved);
+  return allowRelative ? path.resolve(cwd, resolved) : null;
 }
 
 export function getPlatformSkillsDir(

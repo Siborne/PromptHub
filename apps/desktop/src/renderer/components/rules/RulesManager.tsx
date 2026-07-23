@@ -25,7 +25,9 @@ import { useRulesStore } from "../../stores/rules.store";
 import { useToast } from "../ui/Toast";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { generateTextDiff } from "../skill/detail-utils";
+import { Button } from "../ui/Button";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { Modal } from "../ui/Modal";
 
 function getParentDirectory(filePath: string): string {
   const normalized = filePath.replace(/[\\/]+$/, "");
@@ -59,6 +61,8 @@ export function RulesManager() {
   const setAiInstruction = useRulesStore((state) => state.setAiInstruction);
   const saveCurrentRule = useRulesStore((state) => state.saveCurrentRule);
   const resolveCurrentRuleConflict = useRulesStore((state) => state.resolveCurrentRuleConflict);
+  const dismissConflictDialog = useRulesStore((state) => state.dismissConflictDialog);
+  const conflictDialogRuleId = useRulesStore((state) => state.conflictDialogRuleId);
   const rewriteCurrentRule = useRulesStore((state) => state.rewriteCurrentRule);
   const deleteRuleVersion = useRulesStore((state) => state.deleteRuleVersion);
 
@@ -66,9 +70,9 @@ export function RulesManager() {
   const VISIBLE_SNAPSHOTS_LIMIT = 5;
   const [deleteConfirm, setDeleteConfirm] = useState<{ ruleId: string; versionId: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [dismissedConflictRuleId, setDismissedConflictRuleId] = useState<RuleFileId | null>(null);
   const [isResolvingConflict, setIsResolvingConflict] = useState(false);
   const [pendingConflictStrategy, setPendingConflictStrategy] = useState<"use-managed" | "use-target" | null>(null);
+  const [conflictViewMode, setConflictViewMode] = useState<"diff" | "side-by-side">("diff");
 
   useEffect(() => {
     if (!hasLoadedFiles) {
@@ -79,15 +83,42 @@ export function RulesManager() {
   useEffect(() => {
     setSelectedVersionId(null);
     setShowAllVersions(false);
-    setDismissedConflictRuleId(null);
+    setConflictViewMode("diff");
   }, [currentFile?.id]);
 
+  // Dialog visibility is store-controlled (conflictDialogRuleId), not a pure
+  // derivation of out-of-sync. Closing only clears the store flag + dismiss list.
   const syncConflictFile =
-    currentFile?.syncStatus === "out-of-sync" &&
-    typeof currentFile.targetContent === "string" &&
-    dismissedConflictRuleId !== currentFile.id
+    currentFile &&
+    conflictDialogRuleId === currentFile.id &&
+    currentFile.syncStatus === "out-of-sync" &&
+    typeof currentFile.targetContent === "string"
       ? currentFile
       : null;
+
+  const handleDismissConflict = () => {
+    if (!syncConflictFile || isResolvingConflict) {
+      return;
+    }
+    dismissConflictDialog(syncConflictFile.id);
+    setPendingConflictStrategy(null);
+  };
+
+  const conflictDiff = useMemo(() => {
+    if (!syncConflictFile) return null;
+    return generateTextDiff(
+      syncConflictFile.content || "",
+      syncConflictFile.targetContent || "",
+    );
+  }, [syncConflictFile]);
+
+  const conflictDiffStats = useMemo(() => {
+    if (!conflictDiff) return { added: 0, removed: 0 };
+    return {
+      added: conflictDiff.filter((line) => line.type === "add").length,
+      removed: conflictDiff.filter((line) => line.type === "remove").length,
+    };
+  }, [conflictDiff]);
 
   useEffect(() => {
     if (
@@ -189,7 +220,7 @@ export function RulesManager() {
     setIsResolvingConflict(true);
     try {
       await resolveCurrentRuleConflict(strategy);
-      setDismissedConflictRuleId(currentFile?.id ?? null);
+      setPendingConflictStrategy(null);
       showToast(
         strategy === "use-managed"
           ? t("rules.conflictResolvedUseManaged", "Kept the PromptHub version and synced it to the external file")
@@ -714,81 +745,231 @@ export function RulesManager() {
       variant="destructive"
       isLoading={isDeleting}
     />
-    {syncConflictFile ? (
-      <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-        <button
-          type="button"
-          aria-label={t("rules.conflictDismiss", "Dismiss rule conflict")}
-          className="absolute inset-0 bg-background/60 backdrop-blur-sm"
-          onClick={() => setDismissedConflictRuleId(syncConflictFile.id)}
-          disabled={isResolvingConflict}
-        />
-        <div className="relative w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-base">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
-              <AlertCircleIcon aria-hidden="true" className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-base font-semibold text-foreground">
-                {t("rules.conflictTitle", "External rule file changed")}
-              </h3>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                {t(
-                  "rules.conflictMessage",
-                  "The external file no longer matches PromptHub's managed copy. Choose which version to keep as the source of truth. The other version will be overwritten after confirmation.",
-                )}
-              </p>
+    <Modal
+      isOpen={Boolean(syncConflictFile)}
+      onClose={handleDismissConflict}
+      title={t("rules.conflictTitle", "Rule conflict")}
+      subtitle={t(
+        "rules.conflictMessage",
+        "Choose which version to keep. The other will be overwritten.",
+      )}
+      size="full"
+      closeOnBackdrop={!isResolvingConflict}
+      closeOnEscape={!isResolvingConflict}
+      headerActions={
+        syncConflictFile ? (
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-foreground">
+              {syncConflictFile.platformId === "workspace" ? (
+                <FolderIcon aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
+              ) : (
+                <PlatformIcon
+                  platformId={syncConflictFile.platformId}
+                  size={14}
+                  className="h-3.5 w-3.5"
+                />
+              )}
+              {syncConflictFile.platformName}
+            </span>
+            <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+              {syncConflictFile.name}
+            </span>
+          </div>
+        ) : null
+      }
+    >
+      {syncConflictFile ? (
+        <div className="-mx-6 -mb-6 -mt-2 flex max-h-[calc(85vh-5.5rem)] flex-col">
+          <div className="shrink-0 space-y-3 px-6">
+            <p
+              className="truncate font-mono text-[11px] text-muted-foreground"
+              title={syncConflictFile.path || undefined}
+            >
+              {syncConflictFile.path || t("rules.pathUnknown", "Path unavailable")}
+            </p>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div
+                role="tablist"
+                aria-label={t("rules.conflictViewMode", "Compare mode")}
+                className="inline-flex rounded-lg border border-border bg-background p-0.5"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={conflictViewMode === "diff"}
+                  onClick={() => setConflictViewMode("diff")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    conflictViewMode === "diff"
+                      ? "bg-muted text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t("rules.conflictViewDiff", "Diff")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={conflictViewMode === "side-by-side"}
+                  onClick={() => setConflictViewMode("side-by-side")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    conflictViewMode === "side-by-side"
+                      ? "bg-muted text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t("rules.conflictViewSideBySide", "Side by side")}
+                </button>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  +{conflictDiffStats.added}
+                </span>
+                <span className="text-destructive">-{conflictDiffStats.removed}</span>
+              </div>
             </div>
           </div>
-          <div className="mt-4 grid gap-3 text-xs md:grid-cols-2">
-            <div className="min-h-0 rounded-lg border border-border bg-background p-3">
-              <div className="mb-2 font-medium text-foreground">
-                {t("rules.conflictPromptHubVersion", "PromptHub version")}
+
+          <div className="min-h-0 flex-1 overflow-hidden px-6 py-3">
+            {conflictViewMode === "diff" && conflictDiff ? (
+              <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background">
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
+                  <span>
+                    {t("rules.conflictDiffLegend", "− PromptHub · + External file")}
+                  </span>
+                  <span>
+                    {conflictDiffStats.added === 0 && conflictDiffStats.removed === 0
+                      ? t("rules.conflictNoDiff", "No line differences")
+                      : t("rules.conflictDiffCount", "{{added}} added · {{removed}} removed", {
+                          added: conflictDiffStats.added,
+                          removed: conflictDiffStats.removed,
+                        })}
+                  </span>
+                </div>
+                <div
+                  className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                  data-testid="rules-conflict-diff-scroll"
+                >
+                  <div className="font-mono text-xs leading-relaxed">
+                    {conflictDiff.map((line, idx) => (
+                      <div
+                        key={`${line.type}-${idx}-${line.oldLineNum ?? 0}-${line.newLineNum ?? 0}`}
+                        className={`flex items-start ${
+                          line.type === "add"
+                            ? "bg-emerald-500/10"
+                            : line.type === "remove"
+                              ? "bg-destructive/10"
+                              : "hover:bg-muted/30"
+                        }`}
+                      >
+                        <div className="flex shrink-0 select-none border-r border-border/40 text-muted-foreground/50">
+                          <span className="w-10 px-2 py-0.5 text-right">
+                            {line.type !== "add" ? (line.oldLineNum ?? "") : ""}
+                          </span>
+                          <span className="w-10 px-2 py-0.5 text-right">
+                            {line.type !== "remove" ? (line.newLineNum ?? "") : ""}
+                          </span>
+                        </div>
+                        <span
+                          className={`w-5 shrink-0 py-0.5 text-center font-bold select-none ${
+                            line.type === "add"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : line.type === "remove"
+                                ? "text-destructive"
+                                : "text-muted-foreground/30"
+                          }`}
+                        >
+                          {line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}
+                        </span>
+                        <span
+                          className={`min-w-0 flex-1 whitespace-pre-wrap break-all py-0.5 pr-3 ${
+                            line.type === "add"
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : line.type === "remove"
+                                ? "text-destructive"
+                                : "text-foreground/85"
+                          }`}
+                        >
+                          {line.content || " "}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-muted-foreground">
-                {syncConflictFile.content || t("rules.emptyHint", "Rule content will appear here.")}
-              </pre>
-            </div>
-            <div className="min-h-0 rounded-lg border border-border bg-background p-3">
-              <div className="mb-2 font-medium text-foreground">
-                {t("rules.conflictExternalVersion", "External file version")}
+            ) : (
+              <div className="grid h-full gap-3 overflow-hidden md:grid-cols-2">
+                <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+                  <div className="flex shrink-0 items-center justify-between border-b border-border/70 bg-muted/20 px-3 py-2">
+                    <span className="text-xs font-medium text-foreground">
+                      {t("rules.conflictPromptHubVersion", "PromptHub")}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {(syncConflictFile.content || "").split("\n").length}{" "}
+                      {t("rules.conflictLines", "lines")}
+                    </span>
+                  </div>
+                  <pre
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words p-3 font-mono text-xs leading-relaxed text-muted-foreground"
+                    data-testid="rules-conflict-managed-scroll"
+                  >
+                    {syncConflictFile.content ||
+                      t("rules.emptyHint", "Rule content will appear here.")}
+                  </pre>
+                </div>
+                <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+                  <div className="flex shrink-0 items-center justify-between border-b border-border/70 bg-muted/20 px-3 py-2">
+                    <span className="text-xs font-medium text-foreground">
+                      {t("rules.conflictExternalVersion", "External file")}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {(syncConflictFile.targetContent || "").split("\n").length}{" "}
+                      {t("rules.conflictLines", "lines")}
+                    </span>
+                  </div>
+                  <pre
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words p-3 font-mono text-xs leading-relaxed text-muted-foreground"
+                    data-testid="rules-conflict-external-scroll"
+                  >
+                    {syncConflictFile.targetContent ||
+                      t("rules.emptyHint", "Rule content will appear here.")}
+                  </pre>
+                </div>
               </div>
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-muted-foreground">
-                {syncConflictFile.targetContent || t("rules.emptyHint", "Rule content will appear here.")}
-              </pre>
-            </div>
+            )}
           </div>
-          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <button
+
+          <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border bg-card px-6 py-4 sm:flex-row sm:justify-end">
+            <Button
               type="button"
-              onClick={() => setDismissedConflictRuleId(syncConflictFile.id)}
+              variant="secondary"
               disabled={isResolvingConflict}
-              className="h-10 rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              onClick={handleDismissConflict}
             >
               {t("common.cancel")}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
+              disabled={isResolvingConflict}
               onClick={() => setPendingConflictStrategy("use-managed")}
-              disabled={isResolvingConflict}
-              className="h-10 rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
             >
-              {t("rules.conflictUseManaged", "Keep PromptHub version")}
-            </button>
-            <button
+              {t("rules.conflictUseManaged", "Keep PromptHub")}
+            </Button>
+            <Button
               type="button"
-              onClick={() => setPendingConflictStrategy("use-target")}
+              variant="primary"
               disabled={isResolvingConflict}
-              className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+              onClick={() => setPendingConflictStrategy("use-target")}
             >
               {isResolvingConflict
                 ? t("common.saving", "Saving...")
-                : t("rules.conflictUseTarget", "Keep external file version")}
-            </button>
+                : t("rules.conflictUseTarget", "Keep external")}
+            </Button>
           </div>
         </div>
-      </div>
-    ) : null}
+      ) : null}
+    </Modal>
     <ConfirmDialog
       isOpen={pendingConflictStrategy !== null}
       onClose={() => setPendingConflictStrategy(null)}
@@ -799,23 +980,29 @@ export function RulesManager() {
       title={
         pendingConflictStrategy === "use-managed"
           ? t("rules.conflictConfirmUseManagedTitle", "Keep PromptHub version?")
-          : t("rules.conflictConfirmUseTargetTitle", "Keep external file version?")
+          : t("rules.conflictConfirmUseTargetTitle", "Keep external version?")
       }
       message={
         pendingConflictStrategy === "use-managed"
           ? t(
               "rules.conflictConfirmUseManagedMessage",
-              "PromptHub's managed copy will become the source of truth and overwrite the external rule file.",
+              "Overwrite the external file with the PromptHub copy for {{platformName}}.",
+              {
+                platformName: syncConflictFile?.platformName ?? currentFile?.platformName ?? "",
+              },
             )
           : t(
               "rules.conflictConfirmUseTargetMessage",
-              "The external rule file will become the source of truth and overwrite PromptHub's managed copy.",
+              "Overwrite the PromptHub copy with the external file for {{platformName}}.",
+              {
+                platformName: syncConflictFile?.platformName ?? currentFile?.platformName ?? "",
+              },
             )
       }
       confirmText={
         pendingConflictStrategy === "use-managed"
-          ? t("rules.conflictConfirmUseManagedAction", "Keep PromptHub version")
-          : t("rules.conflictConfirmUseTargetAction", "Keep external version")
+          ? t("rules.conflictConfirmUseManagedAction", "Overwrite external")
+          : t("rules.conflictConfirmUseTargetAction", "Overwrite PromptHub")
       }
       cancelText={t("common.cancel")}
       isLoading={isResolvingConflict}

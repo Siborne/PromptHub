@@ -21,6 +21,7 @@ vi.mock("electron", () => ({
   app: {
     getPath: vi.fn(() => "/tmp/prompthub-ipc-test"),
     getVersion: vi.fn(() => "0.5.9-test"),
+    once: vi.fn(),
   },
   safeStorage: {
     isEncryptionAvailable: vi.fn(() => true),

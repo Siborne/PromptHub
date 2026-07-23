@@ -12,15 +12,26 @@ import {
   createNativeCommandRunner,
   type NativeCommandRunner,
 } from "./native-command";
+import { createKimiSessionAdapter } from "./agent-session-kimi";
+import { createCodexSessionAdapter } from "./agent-session-codex";
+import { createGrokSessionAdapter } from "./agent-session-grok";
+import { createOpenClawSessionAdapter } from "./agent-session-openclaw";
+import { createQwenSessionAdapter } from "./agent-session-qwen";
 
 interface AgentSessionServiceOptions {
   homeDir: string;
   commandRunner?: NativeCommandRunner;
   claudeConfigDir?: string;
+  codexRootDir?: string;
+  grokRootDir?: string;
+  kimiRootDir?: string;
+  openclawRootDir?: string;
+  qwenRuntimeDir?: string;
 }
 
 interface ListOptions {
   limit: number;
+  offset?: number;
 }
 
 interface SessionFile {
@@ -47,10 +58,24 @@ function assertLimit(limit: number): void {
   }
 }
 
+function assertOffset(offset: number, limit: number): void {
+  if (
+    !Number.isInteger(offset) ||
+    offset < 0 ||
+    offset + limit > MAX_SCAN_FILES
+  ) {
+    throw new Error("AGENT_SESSION_OFFSET_INVALID");
+  }
+}
+
 function assertSessionId(sessionId: string): void {
-  if (!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) {
+  if (!isSessionId(sessionId)) {
     throw new Error("AGENT_SESSION_ID_INVALID");
   }
+}
+
+function isSessionId(value: string): boolean {
+  return /^[A-Za-z0-9_-]{1,160}$/.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -396,6 +421,19 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
     "projects",
   );
   const geminiProjectsRoot = path.join(options.homeDir, ".gemini", "tmp");
+  const kimiRoot =
+    options.kimiRootDir || path.join(options.homeDir, ".kimi-code");
+  const codexRoot =
+    options.codexRootDir || path.join(options.homeDir, ".codex");
+  const grokRoot = options.grokRootDir || path.join(options.homeDir, ".grok");
+  const openclawRoot =
+    options.openclawRootDir || path.join(options.homeDir, ".openclaw");
+  const qwenRuntimeRoot = resolveQwenRuntimeRoot(options);
+  const kimiAdapter = createKimiSessionAdapter(kimiRoot);
+  const codexAdapter = createCodexSessionAdapter(codexRoot);
+  const grokAdapter = createGrokSessionAdapter(grokRoot);
+  const openclawAdapter = createOpenClawSessionAdapter(openclawRoot);
+  const qwenAdapter = createQwenSessionAdapter(qwenRuntimeRoot, commandRunner);
 
   return {
     async list(
@@ -403,9 +441,11 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
       input: ListOptions,
     ): Promise<AgentSessionListResult> {
       assertLimit(input.limit);
+      const offset = input.offset ?? 0;
+      assertOffset(offset, input.limit);
       if (agentId === "claude") {
         const files = await scanClaudeFiles(claudeProjectsRoot);
-        const selected = files.slice(0, input.limit);
+        const selected = files.slice(offset, offset + input.limit);
         const sessions = await Promise.all(
           selected.map(
             async (file): Promise<AgentSessionMetadata> => ({
@@ -430,7 +470,7 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
           adapter: "claude-jsonl-v1",
           sessions,
           total: files.length,
-          hasMore: files.length > input.limit,
+          hasMore: files.length > offset + input.limit,
         };
       }
 
@@ -445,15 +485,19 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
             "--format",
             "json",
             "--max-count",
-            String(input.limit + 1),
+            String(offset + input.limit + 1),
           ],
           COMMAND_OPTIONS,
         );
         let parsed: unknown;
-        try {
-          parsed = JSON.parse(result.stdout);
-        } catch {
-          throw new Error("AGENT_SESSION_LIST_INVALID");
+        if (!result.stdout.trim()) {
+          parsed = [];
+        } else {
+          try {
+            parsed = JSON.parse(result.stdout);
+          } catch {
+            throw new Error("AGENT_SESSION_LIST_INVALID");
+          }
         }
         const rows = Array.isArray(parsed)
           ? parsed
@@ -466,16 +510,16 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
         return {
           agentId,
           adapter: "opencode-cli-v1",
-          sessions: normalized.slice(0, input.limit),
+          sessions: normalized.slice(offset, offset + input.limit),
           total: normalized.length,
-          hasMore: normalized.length > input.limit,
+          hasMore: normalized.length > offset + input.limit,
         };
       }
 
       if (agentId === "gemini") {
         const files = await scanGeminiFiles(geminiProjectsRoot);
         const sessions: AgentSessionMetadata[] = [];
-        for (const file of files.slice(0, input.limit)) {
+        for (const file of files.slice(offset, offset + input.limit)) {
           const session = await geminiMetadata(file);
           if (session) sessions.push(session);
         }
@@ -484,8 +528,28 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
           adapter: "gemini-json-v1",
           sessions,
           total: files.length,
-          hasMore: files.length > input.limit,
+          hasMore: files.length > offset + input.limit,
         };
+      }
+
+      if (agentId === "kimi") {
+        return kimiAdapter.list(input.limit, offset);
+      }
+
+      if (agentId === "codex") {
+        return codexAdapter.list(input.limit, offset);
+      }
+
+      if (agentId === "grok") {
+        return grokAdapter.list(input.limit, offset);
+      }
+
+      if (agentId === "openclaw") {
+        return openclawAdapter.list(input.limit, offset);
+      }
+
+      if (agentId === "qwen") {
+        return qwenAdapter.list(input.limit, offset);
       }
 
       throw new Error("AGENT_SESSION_UNSUPPORTED");
@@ -558,7 +622,38 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
         throw new Error("AGENT_SESSION_NOT_FOUND");
       }
 
+      if (agentId === "kimi") {
+        return kimiAdapter.read(sessionId);
+      }
+
+      if (agentId === "codex") {
+        return codexAdapter.read(sessionId);
+      }
+
+      if (agentId === "grok") {
+        return grokAdapter.read(sessionId);
+      }
+
+      if (agentId === "openclaw") {
+        return openclawAdapter.read(sessionId);
+      }
+
+      if (agentId === "qwen") {
+        return qwenAdapter.read(sessionId);
+      }
+
       throw new Error("AGENT_SESSION_UNSUPPORTED");
     },
   };
+}
+
+function resolveQwenRuntimeRoot(options: AgentSessionServiceOptions): string {
+  const configured =
+    options.qwenRuntimeDir ||
+    process.env.QWEN_RUNTIME_DIR ||
+    process.env.QWEN_HOME ||
+    path.join(options.homeDir, ".qwen");
+  if (configured.includes("\0")) return path.join(options.homeDir, ".qwen");
+  const expanded = configured.replace(/^~(?=$|[\\/])/, options.homeDir);
+  return path.resolve(expanded);
 }

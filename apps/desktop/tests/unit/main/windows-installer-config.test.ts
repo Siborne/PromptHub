@@ -11,6 +11,7 @@ describe("windows installer config", () => {
 
     delete require.cache[require.resolve(configPath)];
     const config = require(configPath) as {
+      extraResources?: Array<{ from?: string; to?: string }>;
       mac?: {
         entitlements?: string;
         entitlementsInherit?: string;
@@ -55,7 +56,9 @@ describe("windows installer config", () => {
     expect(config.mac?.notarize).toBe(true);
     expect(config.mac?.identity).toBeUndefined();
     expect(config.mac?.entitlements).toBe("resources/entitlements.mac.plist");
-    expect(config.mac?.entitlementsInherit).toBe("resources/entitlements.mac.inherit.plist");
+    expect(config.mac?.entitlementsInherit).toBe(
+      "resources/entitlements.mac.inherit.plist",
+    );
   });
 
   it("ships the NSIS fallback include script", () => {
@@ -65,5 +68,32 @@ describe("windows installer config", () => {
     expect(contents).toContain("PROMPTHUB_INSTALL_STATE_KEY");
     expect(contents).toContain("customInit");
     expect(contents).toContain("customInstall");
+  });
+
+  it("ships the pinned Codex Dream Skin runtime outside the asar archive", () => {
+    const config = loadConfig(false);
+    const runtimeRoot = path.join(
+      process.cwd(),
+      "resources",
+      "codex-dream-skin",
+    );
+
+    expect(config.extraResources).toContainEqual({
+      from: "resources/codex-dream-skin",
+      to: "codex-dream-skin",
+    });
+    expect(
+      fs.readFileSync(path.join(runtimeRoot, "VERSION"), "utf8").trim(),
+    ).toBe("1.2.0");
+    expect(
+      fs.existsSync(
+        path.join(runtimeRoot, "macos", "scripts", "start-dream-skin-macos.sh"),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(runtimeRoot, "windows", "scripts", "start-dream-skin.ps1"),
+      ),
+    ).toBe(true);
   });
 });

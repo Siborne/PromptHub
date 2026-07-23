@@ -639,6 +639,8 @@ export interface AgentScannedSkill extends ScannedSkill {
   installMode: SkillInstallMode;
   /** True when this skill is built into the owning agent platform itself. */
   isPlatformBuiltin?: boolean;
+  /** True when the Agent only discovers this compatible shared location. */
+  isReadOnlyDiscovery?: boolean;
   /**
    * Absolute path to the concrete platform skill folder that should be removed
    * when uninstalling this agent-local skill.

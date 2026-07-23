@@ -348,7 +348,7 @@ describe("CoreMcpLibraryService", () => {
         id: "codex",
         target: "codex",
         scope: "global",
-        label: "Codex CLI",
+        label: "Codex",
         path: tomlPath,
       },
       {
@@ -397,7 +397,7 @@ describe("CoreMcpLibraryService", () => {
           expect.objectContaining({
             name: "filesystem",
             command: "npx",
-            source: { type: "import", id: "codex", label: "Codex CLI" },
+            source: { type: "import", id: "codex", label: "Codex" },
           }),
         ],
       },
@@ -440,6 +440,11 @@ describe("CoreMcpLibraryService", () => {
     expect(byId.reasonix).toBeUndefined();
     expect(byId.kimi.path).toBe("/Users/test/.kimi/mcp.json");
     expect(byId.augment.path).toBe("/Users/test/.augment/settings.json");
+    expect(byId.qwen).toMatchObject({
+      target: "qwen",
+      path: "/Users/test/.qwen/settings.json",
+      platformId: "qwen",
+    });
     expect(byId.claude.path).toBe("/Users/test/.claude.json");
     expect(byId.codex.path).toBe("/Users/test/.codex/config.toml");
     expect(byId.gemini.path).toBe("/Users/test/.gemini/settings.json");
@@ -474,5 +479,14 @@ describe("CoreMcpLibraryService", () => {
       winPresets.map((preset) => [preset.id, preset]),
     );
     expect(winById["claude-desktop"].path).toContain("AppData");
+  });
+
+  it("resolves Qwen MCP settings from QWEN_HOME without using its runtime directory", () => {
+    const preset = getMcpTargetPresets("/Users/test", "darwin", {
+      QWEN_HOME: "workspace-qwen",
+      QWEN_RUNTIME_DIR: "/private/qwen-runtime",
+    }).find((entry) => entry.id === "qwen");
+
+    expect(preset?.path).toBe(path.resolve("workspace-qwen", "settings.json"));
   });
 });

@@ -16,7 +16,7 @@ export interface AgentAssetItem {
   meta?: string;
 }
 
-interface AgentAssetInventory {
+export interface AgentAssetInventory {
   items: AgentAssetItem[];
   refresh: () => void;
 }
@@ -146,4 +146,15 @@ export function useAgentAssetDomain(
     plugins: usePluginInventory(agent, domain === "plugins"),
   };
   return inventory[domain];
+}
+
+export function useAgentAssetInventoryMap(
+  agent: ManagedAgentSummary,
+): Record<AgentAssetDomain, AgentAssetInventory> {
+  return {
+    skills: useSkillInventory(agent, true),
+    mcp: useMcpInventory(agent, true),
+    rules: useRulesInventory(agent, true),
+    plugins: usePluginInventory(agent, true),
+  };
 }

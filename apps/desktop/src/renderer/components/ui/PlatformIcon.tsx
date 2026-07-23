@@ -28,6 +28,7 @@ import traeIcon from "../../assets/platforms/trae.png";
 import workbuddyIcon from "../../assets/platforms/workbuddy.svg";
 import opencodeIcon from "../../assets/platforms/opencode.png";
 import codexIcon from "../../assets/platforms/codex.png";
+import codexDarkIcon from "../../assets/platforms/codex-dark.png";
 import grokLightIcon from "../../assets/platforms/grok-light.svg";
 import grokDarkIcon from "../../assets/platforms/grok-dark.svg";
 import kiloLightIcon from "../../assets/platforms/kilo-light.svg";
@@ -38,12 +39,15 @@ import qoderIcon from "../../assets/platforms/qoder.png";
 import qoderworkIcon from "../../assets/platforms/qoderwork.png";
 import codebuddyLightIcon from "../../assets/platforms/codebuddy-light.svg";
 import codebuddyDarkIcon from "../../assets/platforms/codebuddy-dark.svg";
-import hermesIcon from "../../assets/platforms/hermes.svg";
+import hermesIcon from "../../assets/platforms/hermes.png";
 import cherryStudioIcon from "../../assets/platforms/cherry-studio.png";
 import zcodeIcon from "../../assets/platforms/zcode.svg";
 import reasonixIcon from "../../assets/platforms/reasonix.svg";
 import augmentIcon from "../../assets/platforms/augment.svg";
 import kimiIcon from "../../assets/platforms/kimi.png";
+import qwenIcon from "../../assets/platforms/qwen.png";
+import chatgptLightIcon from "../../assets/platforms/chatgpt-light.png";
+import chatgptDarkIcon from "../../assets/platforms/chatgpt-dark.png";
 
 type PlatformIconSource = string | { light: string; dark: string };
 
@@ -64,7 +68,14 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   "trae-work-cn": traeIcon,
   workbuddy: workbuddyIcon,
   opencode: opencodeIcon,
-  codex: codexIcon,
+  codex: {
+    light: codexIcon,
+    dark: codexDarkIcon,
+  },
+  chatgpt: {
+    light: chatgptLightIcon,
+    dark: chatgptDarkIcon,
+  },
   zcode: zcodeIcon,
   grok: {
     light: grokLightIcon,
@@ -81,6 +92,7 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   reasonix: reasonixIcon,
   augment: augmentIcon,
   kimi: kimiIcon,
+  qwen: qwenIcon,
   "cherry-studio": cherryStudioIcon,
   codebuddy: {
     light: codebuddyLightIcon,
@@ -106,6 +118,7 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   opencode: <TerminalIcon />,
   cline: <TerminalIcon />,
   codex: <TerminalIcon />,
+  chatgpt: <BotIcon />,
   grok: <TerminalIcon />,
   kilo: <BotIcon />,
   amp: <ZapIcon />,
@@ -113,6 +126,7 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   qclaw: <BugIcon />,
   qoder: <BotIcon />,
   qoderwork: <BotIcon />,
+  qwen: <BotIcon />,
   kimi: <CommandIcon />,
   reasonix: <CodeIcon />,
   augment: <BracesIcon />,
@@ -186,7 +200,9 @@ export function PlatformIcon({
               ? "brightness-0 dark:brightness-0 dark:invert"
               : platformId === "augment"
                 ? "brightness-0 dark:invert"
-                : ""
+                : platformId === "hermes"
+                  ? "rounded-full bg-white"
+                  : ""
           }`}
           onError={() => setImageError(true)}
           loading="lazy"

@@ -839,7 +839,7 @@ describe("McpManager", () => {
     expect(
       screen.getAllByTestId("mcp-agent-platform-icon-shell")[0],
     ).toHaveAttribute("data-icon-variant", "platform");
-    expect(screen.getByAltText("codex icon")).toBeInTheDocument();
+    expect(screen.getAllByAltText("codex icon").length).toBeGreaterThan(0);
     expect(screen.queryByText(/shan-hai-odyssey/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Kilo Code \(JSONC\)/)).not.toBeInTheDocument();
 

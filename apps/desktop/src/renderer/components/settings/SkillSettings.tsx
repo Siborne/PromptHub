@@ -4,9 +4,6 @@ import {
   ArrowUpIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  EyeIcon,
-  EyeOffIcon,
-  ExternalLinkIcon,
   FolderOpenIcon,
   GripVerticalIcon,
   PencilIcon,
@@ -24,7 +21,9 @@ import type {
 } from "@prompthub/shared/types";
 import {
   SKILL_PLATFORMS,
+  getAgentPlatformFamily,
   getPlatformRootTemplate,
+  type AgentPlatformFamily,
   type SkillPlatform,
 } from "@prompthub/shared/constants/platforms";
 import { useSettingsStore } from "../../stores/settings.store";
@@ -35,11 +34,21 @@ import {
 } from "../../services/agent-root-paths";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
+import {
+  BuiltinAgentEditor,
+  type BuiltinAgentEditDraft,
+} from "./BuiltinAgentEditor";
 import { BuiltinAgentDetails } from "./BuiltinAgentDetails";
 import { SettingSection, ToggleSwitch } from "./shared";
 import { useToast } from "../ui/Toast";
 import { sortSkillPlatformsByPreference } from "../skill/use-skill-platform";
 import { getRendererPlatform } from "../../services/runtime-platform";
+import {
+  DEFAULT_CODEX_IDENTITY,
+  normalizeAgentIdentityPreferences,
+  resolveAgentIdentity,
+} from "../../services/agent-identity";
+import { GithubTokenSettings } from "./GithubTokenSettings";
 export { SkillSafetySettingsSection } from "./SkillSafetySettingsSection";
 
 interface ManagedAgentEntry {
@@ -78,6 +87,11 @@ function useManagedAgentEntries() {
   return useMemo<ManagedAgentEntry[]>(() => {
     const builtinEntries: ManagedAgentEntry[] = orderedPlatforms.map(
       (platform) => {
+        const identity = resolveAgentIdentity(
+          platform.id,
+          platform.name,
+          settings.agentIdentityPreferences,
+        );
         const effectiveConfig = getEffectiveBuiltinAgentConfig(
           platform,
           getPlatformRootTemplate(platform, currentPlatformKey),
@@ -86,10 +100,10 @@ function useManagedAgentEntries() {
 
         return {
           id: platform.id,
-          name: platform.name,
+          name: identity.name,
           rootPath: effectiveConfig.rootPath || "",
           kind: "builtin",
-          iconPlatformId: platform.id,
+          iconPlatformId: identity.iconId,
           platform,
           builtinOverride: settings.builtinAgentOverrides[platform.id],
           skillsRelativePath: effectiveConfig.skillsRelativePath,
@@ -131,6 +145,7 @@ function useManagedAgentEntries() {
     orderedPlatforms,
     settings.customAgents,
     settings.builtinAgentOverrides,
+    settings.agentIdentityPreferences,
     settings.skillPlatformOrder,
   ]);
 }
@@ -185,15 +200,17 @@ export function SkillSettings() {
   const [editingBuiltinAgentId, setEditingBuiltinAgentId] = useState<
     string | null
   >(null);
-  const [editingBuiltinRootPath, setEditingBuiltinRootPath] = useState("");
-  const [editingBuiltinSkillsPath, setEditingBuiltinSkillsPath] = useState("");
-  const [editingBuiltinMcpPath, setEditingBuiltinMcpPath] = useState("");
-  const [editingBuiltinPluginsPath, setEditingBuiltinPluginsPath] =
-    useState("");
-  const [editingBuiltinRulesPath, setEditingBuiltinRulesPath] = useState("");
-  const [editingBuiltinAgentsPath, setEditingBuiltinAgentsPath] = useState("");
-  const [editingBuiltinConfigPaths, setEditingBuiltinConfigPaths] =
-    useState("");
+  const [editingBuiltinDraft, setEditingBuiltinDraft] =
+    useState<BuiltinAgentEditDraft>({
+      rootPath: "",
+      skillsPath: "",
+      mcpPath: "",
+      pluginsPath: "",
+      rulesPath: "",
+      agentsPath: "",
+      configPaths: "",
+      identity: DEFAULT_CODEX_IDENTITY,
+    });
   const [expandedBuiltinAgentIds, setExpandedBuiltinAgentIds] = useState<
     Set<string>
   >(() => new Set());
@@ -204,7 +221,6 @@ export function SkillSettings() {
     platformId: string;
     position: "before" | "after";
   } | null>(null);
-  const [isGithubTokenVisible, setIsGithubTokenVisible] = useState(false);
   const [pendingDeleteAgent, setPendingDeleteAgent] =
     useState<CustomAgentConfig | null>(null);
 
@@ -326,13 +342,20 @@ export function SkillSettings() {
       return next;
     });
     setEditingBuiltinAgentId(platformId);
-    setEditingBuiltinRootPath(config.rootPath || "");
-    setEditingBuiltinSkillsPath(config.skillsRelativePath || "");
-    setEditingBuiltinMcpPath(config.mcpRelativePath || "");
-    setEditingBuiltinPluginsPath(config.pluginsRelativePath || "");
-    setEditingBuiltinRulesPath(config.rulesRelativePath || "");
-    setEditingBuiltinAgentsPath(config.agentsRelativePath || "");
-    setEditingBuiltinConfigPaths((config.configRelativePaths || []).join(", "));
+    setEditingBuiltinDraft({
+      rootPath: config.rootPath || "",
+      skillsPath: config.skillsRelativePath || "",
+      mcpPath: config.mcpRelativePath || "",
+      pluginsPath: config.pluginsRelativePath || "",
+      rulesPath: config.rulesRelativePath || "",
+      agentsPath: config.agentsRelativePath || "",
+      configPaths: (config.configRelativePaths || []).join(", "),
+      identity:
+        platformId === "codex"
+          ? normalizeAgentIdentityPreferences(settings.agentIdentityPreferences)
+              .codex!
+          : DEFAULT_CODEX_IDENTITY,
+    });
   };
 
   const cancelBuiltinEdit = () => {
@@ -345,13 +368,6 @@ export function SkillSettings() {
       });
     }
     setEditingBuiltinAgentId(null);
-    setEditingBuiltinRootPath("");
-    setEditingBuiltinSkillsPath("");
-    setEditingBuiltinMcpPath("");
-    setEditingBuiltinPluginsPath("");
-    setEditingBuiltinRulesPath("");
-    setEditingBuiltinAgentsPath("");
-    setEditingBuiltinConfigPaths("");
   };
 
   const toggleBuiltinAgentDetails = (platformId: string) => {
@@ -377,6 +393,12 @@ export function SkillSettings() {
       undefined,
     );
     startBuiltinEdit(platformId, defaultConfig);
+    if (platformId === "codex") {
+      setEditingBuiltinDraft((current) => ({
+        ...current,
+        identity: DEFAULT_CODEX_IDENTITY,
+      }));
+    }
   };
 
   const cancelCustomAgentEdit = () => {
@@ -394,97 +416,26 @@ export function SkillSettings() {
 
   const saveBuiltinEdit = (platformId: string) => {
     settings.updateBuiltinAgentOverride(platformId, {
-      rootPath: editingBuiltinRootPath,
-      skillsRelativePath: editingBuiltinSkillsPath,
-      mcpRelativePath: editingBuiltinMcpPath,
-      pluginsRelativePath: editingBuiltinPluginsPath,
-      rulesRelativePath: editingBuiltinRulesPath,
-      agentsRelativePath: editingBuiltinAgentsPath,
-      configRelativePaths: editingBuiltinConfigPaths
+      rootPath: editingBuiltinDraft.rootPath,
+      skillsRelativePath: editingBuiltinDraft.skillsPath,
+      mcpRelativePath: editingBuiltinDraft.mcpPath,
+      pluginsRelativePath: editingBuiltinDraft.pluginsPath,
+      rulesRelativePath: editingBuiltinDraft.rulesPath,
+      agentsRelativePath: editingBuiltinDraft.agentsPath,
+      configRelativePaths: editingBuiltinDraft.configPaths
         .split(",")
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0),
     });
+    if (platformId === "codex") {
+      settings.setCodexIdentityPreference(editingBuiltinDraft.identity);
+    }
     cancelBuiltinEdit();
   };
 
   return (
     <div className="space-y-6">
-      <SettingSection
-        title={t("settings.githubTokenTitle", "GitHub Access Token")}
-      >
-        <div className="p-4 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            {t(
-              "settings.githubTokenDesc",
-              "Optional. Attach a GitHub personal access token (classic or fine-grained) so Skill Store requests use your authenticated rate limit (5 000 req/h) instead of the anonymous 60 req/h limit. The token is only sent to api.github.com and raw.githubusercontent.com.",
-            )}
-          </p>
-          <div className="flex items-center gap-2">
-            <input
-              type={isGithubTokenVisible ? "text" : "password"}
-              autoComplete="off"
-              spellCheck={false}
-              value={settings.githubToken}
-              onChange={(e) => settings.setGithubToken(e.target.value)}
-              placeholder={t(
-                "settings.githubTokenPlaceholder",
-                "ghp_… or github_pat_…",
-              )}
-              className="flex-1 h-9 px-3 rounded-lg bg-muted border-0 text-sm font-mono placeholder:text-muted-foreground/50"
-              aria-label={t("settings.githubTokenTitle", "GitHub Access Token")}
-            />
-            <button
-              type="button"
-              onClick={() => setIsGithubTokenVisible((prev) => !prev)}
-              className="h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground transition-colors"
-              aria-label={
-                isGithubTokenVisible
-                  ? t("settings.githubTokenHide", "Hide token")
-                  : t("settings.githubTokenShow", "Show token")
-              }
-              title={
-                isGithubTokenVisible
-                  ? t("settings.githubTokenHide", "Hide token")
-                  : t("settings.githubTokenShow", "Show token")
-              }
-            >
-              {isGithubTokenVisible ? (
-                <EyeOffIcon aria-hidden="true" className="h-4 w-4" />
-              ) : (
-                <EyeIcon aria-hidden="true" className="h-4 w-4" />
-              )}
-            </button>
-            {settings.githubToken.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => settings.setGithubToken("")}
-                className="h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground transition-colors"
-              >
-                {t("common.clear", "Clear")}
-              </button>
-            ) : null}
-          </div>
-          <a
-            href="https://github.com/settings/tokens"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            <ExternalLinkIcon className="h-3 w-3" />
-            {t(
-              "settings.githubTokenLearnMore",
-              "Create a personal access token",
-            )}
-          </a>
-          <p className="text-[11px] text-muted-foreground/80">
-            {t(
-              "settings.githubTokenScopeHint",
-              "A read-only token without any scope (public repositories) is enough for the skill store.",
-            )}
-          </p>
-        </div>
-      </SettingSection>
+      <GithubTokenSettings />
 
       <SettingSection
         title={t("settings.skillInstallMethod", "Skill Install Method")}
@@ -567,110 +518,173 @@ export function SkillSettings() {
               "settings.platformDisplayOrder",
               "Platform Display Order",
             )}
-            className="space-y-2 rounded-xl border border-border/70 app-wallpaper-surface p-3"
+            className="space-y-4 rounded-xl border border-border/70 app-wallpaper-surface p-3"
           >
-            {managedAgentEntries.map((platform, index) => (
-              <div
-                key={platform.id}
-                role="listitem"
-                data-platform-id={platform.id}
-                data-drop-position={
-                  dropIndicator?.platformId === platform.id
-                    ? dropIndicator.position
-                    : undefined
-                }
-                draggable
-                onDragStart={handleDragStart(platform.id)}
-                onDragOver={handleDragOver(platform.id)}
-                onDrop={handleDrop(platform.id)}
-                onDragEnd={handleDragEnd}
-                className={`relative flex items-center justify-between gap-3 rounded-xl border px-3 py-2 app-wallpaper-surface-strong transition-colors cursor-grab active:cursor-grabbing ${
-                  draggingPlatformId === platform.id
-                    ? "border-primary/40 opacity-60"
-                    : dropIndicator?.platformId === platform.id
-                      ? "border-primary/60 ring-1 ring-primary/30"
-                      : "border-border/60"
-                }`}
-              >
-                {dropIndicator?.platformId === platform.id ? (
-                  <div
-                    className={`pointer-events-none absolute left-3 right-3 h-0.5 rounded-full bg-primary shadow-[0_0_0_3px_rgba(59,130,246,0.14)] ${
-                      dropIndicator.position === "before" ? "top-0" : "bottom-0"
-                    }`}
-                  />
-                ) : null}
-                <div className="flex min-w-0 items-center gap-3">
-                  <GripVerticalIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <PlatformIcon
-                    platformId={platform.iconPlatformId || "custom-agent"}
-                    size={20}
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium text-foreground">
-                        {platform.name}
-                      </div>
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                        {platform.kind === "custom"
-                          ? t("settings.customAgentBadge", "Custom")
-                          : t("settings.builtinAgentBadge", "Built-in")}
-                      </span>
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                        {(
-                          platform.kind === "custom"
-                            ? platform.customAgent?.enabled === false
-                            : settings.disabledPlatformIds.includes(platform.id)
-                        )
-                          ? t("settings.platformDisabled", "Disabled")
-                          : t("settings.platformEnabled", "Enabled")}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {platform.rootPath}
-                    </div>
+            {(
+              [
+                {
+                  family: "code-work" as AgentPlatformFamily,
+                  title: t("settings.agentFamilyCodeWork", "Code / Work"),
+                },
+                {
+                  family: "claw" as AgentPlatformFamily,
+                  title: t("settings.agentFamilyClaw", "Claw"),
+                },
+              ] as const
+            ).map((group) => {
+              const groupEntries = managedAgentEntries.filter(
+                (entry) => getAgentPlatformFamily(entry.id) === group.family,
+              );
+              if (groupEntries.length === 0) {
+                return null;
+              }
+
+              return (
+                <div key={group.family} className="space-y-2">
+                  <div className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    {group.title}
                   </div>
+                  {groupEntries.map((platform) => {
+                    const index = managedAgentEntries.findIndex(
+                      (entry) => entry.id === platform.id,
+                    );
+                    return (
+                      <div
+                        key={platform.id}
+                        role="listitem"
+                        data-platform-id={platform.id}
+                        data-drop-position={
+                          dropIndicator?.platformId === platform.id
+                            ? dropIndicator.position
+                            : undefined
+                        }
+                        draggable
+                        onDragStart={handleDragStart(platform.id)}
+                        onDragOver={handleDragOver(platform.id)}
+                        onDrop={handleDrop(platform.id)}
+                        onDragEnd={handleDragEnd}
+                        className={`relative flex items-center justify-between gap-3 rounded-xl border px-3 py-2 app-wallpaper-surface-strong transition-colors cursor-grab active:cursor-grabbing ${
+                          draggingPlatformId === platform.id
+                            ? "border-primary/40 opacity-60"
+                            : dropIndicator?.platformId === platform.id
+                              ? "border-primary/60 ring-1 ring-primary/30"
+                              : "border-border/60"
+                        }`}
+                      >
+                        {dropIndicator?.platformId === platform.id ? (
+                          <div
+                            className={`pointer-events-none absolute left-3 right-3 h-0.5 rounded-full bg-primary shadow-[0_0_0_3px_rgba(59,130,246,0.14)] ${
+                              dropIndicator.position === "before"
+                                ? "top-0"
+                                : "bottom-0"
+                            }`}
+                          />
+                        ) : null}
+                        <div className="flex min-w-0 items-center gap-3">
+                          <GripVerticalIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <PlatformIcon
+                            platformId={
+                              platform.iconPlatformId || "custom-agent"
+                            }
+                            size={20}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-medium text-foreground">
+                                {platform.name}
+                              </div>
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                                {platform.kind === "custom"
+                                  ? t("settings.customAgentBadge", "Custom")
+                                  : t("settings.builtinAgentBadge", "Built-in")}
+                              </span>
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                                {(
+                                  platform.kind === "custom"
+                                    ? platform.customAgent?.enabled === false
+                                    : settings.disabledPlatformIds.includes(
+                                        platform.id,
+                                      )
+                                )
+                                  ? t("settings.platformDisabled", "Disabled")
+                                  : t("settings.platformEnabled", "Enabled")}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {platform.rootPath}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <ToggleSwitch
+                            ariaLabel={platform.name}
+                            checked={
+                              platform.kind === "custom"
+                                ? platform.customAgent?.enabled !== false
+                                : !settings.disabledPlatformIds.includes(
+                                    platform.id,
+                                  )
+                            }
+                            onChange={(checked) => {
+                              if (
+                                platform.kind === "custom" &&
+                                platform.customAgent
+                              ) {
+                                settings.updateCustomAgent(
+                                  platform.customAgent.id,
+                                  {
+                                    enabled: checked,
+                                  },
+                                );
+                                return;
+                              }
+                              settings.setRulePlatformTracked(
+                                platform.id,
+                                checked,
+                              );
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => movePlatformOrder(platform.id, "up")}
+                            disabled={index <= 0}
+                            aria-label={t("settings.movePlatformUp", "Move Up")}
+                            className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                            title={t("settings.movePlatformUp", "Move Up")}
+                          >
+                            <ArrowUpIcon
+                              aria-hidden="true"
+                              className="h-3.5 w-3.5"
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              movePlatformOrder(platform.id, "down")
+                            }
+                            disabled={
+                              index < 0 ||
+                              index >= managedAgentEntries.length - 1
+                            }
+                            aria-label={t(
+                              "settings.movePlatformDown",
+                              "Move Down",
+                            )}
+                            className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                            title={t("settings.movePlatformDown", "Move Down")}
+                          >
+                            <ArrowDownIcon
+                              aria-hidden="true"
+                              className="h-3.5 w-3.5"
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex items-center gap-1">
-                  <ToggleSwitch
-                    ariaLabel={platform.name}
-                    checked={
-                      platform.kind === "custom"
-                        ? platform.customAgent?.enabled !== false
-                        : !settings.disabledPlatformIds.includes(platform.id)
-                    }
-                    onChange={(checked) => {
-                      if (platform.kind === "custom" && platform.customAgent) {
-                        settings.updateCustomAgent(platform.customAgent.id, {
-                          enabled: checked,
-                        });
-                        return;
-                      }
-                      settings.setRulePlatformTracked(platform.id, checked);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => movePlatformOrder(platform.id, "up")}
-                    disabled={index === 0}
-                    aria-label={t("settings.movePlatformUp", "Move Up")}
-                    className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                    title={t("settings.movePlatformUp", "Move Up")}
-                  >
-                    <ArrowUpIcon aria-hidden="true" className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => movePlatformOrder(platform.id, "down")}
-                    disabled={index === managedAgentEntries.length - 1}
-                    aria-label={t("settings.movePlatformDown", "Move Down")}
-                    className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                    title={t("settings.movePlatformDown", "Move Down")}
-                  >
-                    <ArrowDownIcon aria-hidden="true" className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </SettingSection>
@@ -691,6 +705,11 @@ export function SkillSettings() {
                 platform,
                 currentPlatformKey,
               );
+              const identity = resolveAgentIdentity(
+                platform.id,
+                platform.name,
+                settings.agentIdentityPreferences,
+              );
               const override =
                 settings.builtinAgentOverrides[platform.id] || {};
               const isEditingBuiltin = editingBuiltinAgentId === platform.id;
@@ -699,15 +718,15 @@ export function SkillSettings() {
                 Boolean(override.pluginsRelativePath);
               const activeOverride = isEditingBuiltin
                 ? {
-                    rootPath: editingBuiltinRootPath,
-                    skillsRelativePath: editingBuiltinSkillsPath,
-                    mcpRelativePath: editingBuiltinMcpPath,
+                    rootPath: editingBuiltinDraft.rootPath,
+                    skillsRelativePath: editingBuiltinDraft.skillsPath,
+                    mcpRelativePath: editingBuiltinDraft.mcpPath,
                     pluginsRelativePath: supportsPluginPackages
-                      ? editingBuiltinPluginsPath
+                      ? editingBuiltinDraft.pluginsPath
                       : undefined,
-                    rulesRelativePath: editingBuiltinRulesPath,
-                    agentsRelativePath: editingBuiltinAgentsPath,
-                    configRelativePaths: editingBuiltinConfigPaths
+                    rulesRelativePath: editingBuiltinDraft.rulesPath,
+                    agentsRelativePath: editingBuiltinDraft.agentsPath,
+                    configRelativePaths: editingBuiltinDraft.configPaths
                       .split(",")
                       .map((entry) => entry.trim())
                       .filter((entry) => entry.length > 0),
@@ -720,6 +739,9 @@ export function SkillSettings() {
               );
               const isExpanded =
                 expandedBuiltinAgentIds.has(platform.id) || isEditingBuiltin;
+              const hasIdentityOverride =
+                platform.id === "codex" &&
+                (identity.name !== "Codex" || identity.iconId !== "codex");
               const detailsId = `agent-config-details-${platform.id}`;
               const preview = buildAgentRootAssetPreview({
                 rootPath: effectiveConfig.rootPath || "",
@@ -745,11 +767,11 @@ export function SkillSettings() {
                       aria-label={`${t(
                         isExpanded ? "common.collapse" : "common.expand",
                         isExpanded ? "Collapse" : "Expand",
-                      )} ${platform.name}`}
+                      )} ${identity.name}`}
                       title={`${t(
                         isExpanded ? "common.collapse" : "common.expand",
                         isExpanded ? "Collapse" : "Expand",
-                      )} ${platform.name}`}
+                      )} ${identity.name}`}
                       onClick={() => toggleBuiltinAgentDetails(platform.id)}
                       className="group flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-muted/40"
                     >
@@ -765,12 +787,12 @@ export function SkillSettings() {
                         />
                       )}
                       <PlatformIcon
-                        platformId={platform.id}
+                        platformId={identity.iconId}
                         size={16}
                         aria-hidden="true"
                       />
                       <span className="text-sm font-medium text-foreground">
-                        {platform.name}
+                        {identity.name}
                       </span>
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                         {t("settings.builtinAgentBadge", "Built-in")}
@@ -807,7 +829,10 @@ export function SkillSettings() {
                                 defaultRootPath,
                               )
                             }
-                            disabled={Object.keys(override).length === 0}
+                            disabled={
+                              Object.keys(override).length === 0 &&
+                              !hasIdentityOverride
+                            }
                             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
                           >
                             <RotateCcwIcon
@@ -845,128 +870,12 @@ export function SkillSettings() {
                     />
                   ) : null}
                   {isEditingBuiltin ? (
-                    <div className="grid gap-3 rounded-xl border border-border/60 bg-muted/20 p-4">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={editingBuiltinRootPath}
-                          onChange={(e) =>
-                            setEditingBuiltinRootPath(e.target.value)
-                          }
-                          placeholder={t(
-                            "settings.platformRootPathPlaceholder",
-                            "Leave empty to use the default root, e.g. ~/.trae-cn",
-                          )}
-                          className="flex-1 h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-                        />
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="grid gap-1">
-                          <label className="text-xs font-medium text-muted-foreground">
-                            {t("settings.agentSkillsLabel", "Skills")}
-                          </label>
-                          <input
-                            type="text"
-                            value={editingBuiltinSkillsPath}
-                            onChange={(e) =>
-                              setEditingBuiltinSkillsPath(e.target.value)
-                            }
-                            placeholder={t(
-                              "settings.customAgentSkillsPathPlaceholder",
-                              "skills relative path (optional)",
-                            )}
-                            className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
-                          />
-                        </div>
-                        <div className="grid gap-1">
-                          <label className="text-xs font-medium text-muted-foreground">
-                            {t("settings.agentRulesLabel", "Rules")}
-                          </label>
-                          <input
-                            type="text"
-                            value={editingBuiltinRulesPath}
-                            onChange={(e) =>
-                              setEditingBuiltinRulesPath(e.target.value)
-                            }
-                            placeholder={t(
-                              "settings.customAgentRulesPathPlaceholder",
-                              "rules file path (optional)",
-                            )}
-                            className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
-                          />
-                        </div>
-                        <div className="grid gap-1">
-                          <label className="text-xs font-medium text-muted-foreground">
-                            {t("settings.agentMcpLabel", "MCP")}
-                          </label>
-                          <input
-                            type="text"
-                            value={editingBuiltinMcpPath}
-                            onChange={(e) =>
-                              setEditingBuiltinMcpPath(e.target.value)
-                            }
-                            placeholder={t(
-                              "settings.customAgentMcpPathPlaceholder",
-                              "MCP config relative path",
-                            )}
-                            className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
-                          />
-                        </div>
-                        {supportsPluginPackages ? (
-                          <div className="grid gap-1">
-                            <label className="text-xs font-medium text-muted-foreground">
-                              {t("settings.agentPluginsLabel", "Plugins")}
-                            </label>
-                            <input
-                              type="text"
-                              value={editingBuiltinPluginsPath}
-                              onChange={(e) =>
-                                setEditingBuiltinPluginsPath(e.target.value)
-                              }
-                              placeholder={t(
-                                "settings.customAgentPluginsPathPlaceholder",
-                                "Plugin directory relative path",
-                              )}
-                              className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
-                            />
-                          </div>
-                        ) : null}
-                        <div className="grid gap-1">
-                          <label className="text-xs font-medium text-muted-foreground">
-                            {t("settings.agentAgentsLabel", "Agents")}
-                          </label>
-                          <input
-                            type="text"
-                            value={editingBuiltinAgentsPath}
-                            onChange={(e) =>
-                              setEditingBuiltinAgentsPath(e.target.value)
-                            }
-                            placeholder={t(
-                              "settings.customAgentAgentsPathPlaceholder",
-                              "agents relative path",
-                            )}
-                            className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
-                          />
-                        </div>
-                      </div>
-                      <div className="grid gap-1">
-                        <label className="text-xs font-medium text-muted-foreground">
-                          {t("settings.agentConfigLabel", "Config")}
-                        </label>
-                        <input
-                          type="text"
-                          value={editingBuiltinConfigPaths}
-                          onChange={(e) =>
-                            setEditingBuiltinConfigPaths(e.target.value)
-                          }
-                          placeholder={t(
-                            "settings.customAgentConfigPathsPlaceholder",
-                            "config files, comma separated",
-                          )}
-                          className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
-                        />
-                      </div>
-                    </div>
+                    <BuiltinAgentEditor
+                      platformId={platform.id}
+                      supportsPluginPackages={supportsPluginPackages}
+                      value={editingBuiltinDraft}
+                      onChange={setEditingBuiltinDraft}
+                    />
                   ) : null}
                 </div>
               );

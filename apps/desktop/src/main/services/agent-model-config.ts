@@ -26,6 +26,7 @@ interface UpdateAgentModelContext extends AgentModelContext {
 
 interface UpdateOptions {
   backupRoot: string;
+  validateNativeConfig?: (agentId: string, targetPath: string) => Promise<void>;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -33,6 +34,7 @@ type JsonRecord = Record<string, unknown>;
 const JSON_ADAPTER_PATHS: Record<string, string[]> = {
   claude: ["settings.json"],
   gemini: ["settings.json"],
+  qwen: ["settings.json"],
   opencode: ["opencode.jsonc", "opencode.json"],
   openclaw: ["openclaw.json"],
 };
@@ -94,7 +96,7 @@ function providerFromModel(model: string | null): string | null {
   return model.split("/", 1)[0] || null;
 }
 
-function sanitizeEndpoint(value: string | null): string | null {
+export function sanitizeEndpoint(value: string | null): string | null {
   if (!value) return null;
   try {
     const parsed = new URL(value);
@@ -108,7 +110,7 @@ function sanitizeEndpoint(value: string | null): string | null {
   }
 }
 
-async function fileExists(filePath: string): Promise<boolean> {
+export async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;
@@ -117,7 +119,7 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-async function readTextConfig(filePath: string): Promise<string> {
+export async function readTextConfig(filePath: string): Promise<string> {
   const stat = await fs.stat(filePath);
   if (!stat.isFile() || stat.size > MAX_CONFIG_BYTES) {
     throw new Error("AGENT_MODEL_CONFIG_SIZE_INVALID");
@@ -226,6 +228,60 @@ function inspectGemini(
   });
 }
 
+function getQwenProviderEntries(
+  data: JsonRecord,
+  provider: string | null,
+): JsonRecord[] {
+  if (!provider) return [];
+  const entries = getRecord(data, "modelProviders")?.[provider];
+  return Array.isArray(entries) ? entries.filter(isRecord) : [];
+}
+
+function inspectQwen(
+  data: JsonRecord,
+  relativePath: string,
+): AgentModelConfiguration {
+  const model = getString(getRecord(data, "model"), "name");
+  const provider = getString(
+    getRecord(getRecord(data, "security"), "auth"),
+    "selectedType",
+  );
+  const providers = getRecord(data, "modelProviders") || {};
+  const availableModels = Array.from(
+    new Set(
+      Object.values(providers)
+        .flatMap((entries) => (Array.isArray(entries) ? entries : []))
+        .filter(isRecord)
+        .map((entry) => getString(entry, "id"))
+        .filter((entry): entry is string => Boolean(entry)),
+    ),
+  );
+  const selectedEntry = getQwenProviderEntries(data, provider).find(
+    (entry) => getString(entry, "id") === model,
+  );
+  const envKey = getString(selectedEntry, "envKey");
+  const environment = getRecord(data, "env");
+  const credentialStatus: AgentCredentialStatus =
+    envKey && getString(environment, envKey)
+      ? "configured"
+      : provider === "qwen-oauth"
+        ? "platform-managed"
+        : envKey
+          ? "platform-managed"
+          : "unknown";
+
+  return emptyResult("qwen", model ? "configured" : "not-configured", {
+    adapter: "qwen-settings-v1",
+    model,
+    provider,
+    endpoint: sanitizeEndpoint(getString(selectedEntry, "baseUrl")),
+    availableModels,
+    credentialStatus,
+    sourceRelativePath: relativePath,
+    canSetModel: true,
+  });
+}
+
 function inspectOpenCode(
   data: JsonRecord,
   relativePath: string,
@@ -281,8 +337,13 @@ function inspectJsonAdapter(
 ): AgentModelConfiguration {
   if (agentId === "claude") return inspectClaude(data, relativePath);
   if (agentId === "gemini") return inspectGemini(data, relativePath);
+  if (agentId === "qwen") return inspectQwen(data, relativePath);
   if (agentId === "opencode") return inspectOpenCode(data, relativePath);
   return inspectOpenClaw(data, relativePath);
+}
+
+function jsonAdapterId(agentId: string): string {
+  return agentId === "qwen" ? "qwen-settings-v1" : `${agentId}-config-v1`;
 }
 
 function inspectCodex(data: JsonRecord): AgentModelConfiguration {
@@ -316,26 +377,67 @@ function inspectCodex(data: JsonRecord): AgentModelConfiguration {
   });
 }
 
+function inspectKimi(data: JsonRecord): AgentModelConfiguration {
+  const model = getString(data, "default_model");
+  const models = getRecord(data, "models") || {};
+  const modelConfig = model ? getRecord(models, model) : undefined;
+  const provider = getString(modelConfig, "provider");
+  const providerConfig = provider
+    ? getRecord(getRecord(data, "providers"), provider)
+    : undefined;
+  const managedCredential =
+    provider?.startsWith("managed:") ||
+    getString(providerConfig, "type") === "kimi"
+      ? "platform-managed"
+      : "unknown";
+
+  return emptyResult("kimi", model ? "configured" : "not-configured", {
+    adapter: "kimi-code-toml-v1",
+    model,
+    provider,
+    endpoint: sanitizeEndpoint(getString(providerConfig, "base_url")),
+    availableModels: Object.keys(models),
+    credentialStatus: credentialStatusFromKeys(
+      providerConfig,
+      ["api_key"],
+      managedCredential,
+    ),
+    sourceRelativePath: "config.toml",
+    canSetModel: true,
+    formattingMayChange: true,
+  });
+}
+
+function inspectTomlAdapter(
+  agentId: "codex" | "kimi",
+  data: JsonRecord,
+): AgentModelConfiguration {
+  return agentId === "codex" ? inspectCodex(data) : inspectKimi(data);
+}
+
 export async function inspectAgentModelConfig(
   context: AgentModelContext,
 ): Promise<AgentModelConfiguration> {
-  if (context.agentId === "codex") {
+  if (context.agentId === "codex" || context.agentId === "kimi") {
+    const agentId = context.agentId;
+    const adapter = agentId === "codex" ? "codex-toml-v1" : "kimi-code-toml-v1";
     const configPath = path.join(context.rootPath, "config.toml");
     if (!(await fileExists(configPath))) {
-      return emptyResult("codex", "missing", {
-        adapter: "codex-toml-v1",
+      return emptyResult(agentId, "missing", {
+        adapter,
         sourceRelativePath: "config.toml",
         canSetModel: true,
         formattingMayChange: true,
       });
     }
     try {
-      return inspectCodex(
+      return inspectTomlAdapter(
+        agentId,
         parseToml(await readTextConfig(configPath)) as JsonRecord,
       );
     } catch {
-      return emptyResult("codex", "invalid", {
-        adapter: "codex-toml-v1",
+      return emptyResult(agentId, "invalid", {
+        adapter,
         sourceRelativePath: "config.toml",
         canSetModel: false,
         formattingMayChange: true,
@@ -351,7 +453,7 @@ export async function inspectAgentModelConfig(
   if (!resolved) return emptyResult(context.agentId, "unsupported");
   if (!(await fileExists(resolved.absolutePath))) {
     return emptyResult(context.agentId, "missing", {
-      adapter: `${context.agentId}-config-v1`,
+      adapter: jsonAdapterId(context.agentId),
       sourceRelativePath: resolved.relativePath,
       canSetModel: true,
     });
@@ -361,7 +463,7 @@ export async function inspectAgentModelConfig(
     return inspectJsonAdapter(context.agentId, data, resolved.relativePath);
   } catch {
     return emptyResult(context.agentId, "invalid", {
-      adapter: `${context.agentId}-config-v1`,
+      adapter: jsonAdapterId(context.agentId),
       sourceRelativePath: resolved.relativePath,
       canSetModel: false,
       errorCode: "AGENT_MODEL_CONFIG_INVALID",
@@ -369,7 +471,7 @@ export async function inspectAgentModelConfig(
   }
 }
 
-async function createBackup(
+export async function createBackup(
   sourcePath: string,
   backupRoot: string,
   agentId: string,
@@ -383,7 +485,10 @@ async function createBackup(
   return targetPath;
 }
 
-async function atomicWrite(targetPath: string, content: string): Promise<void> {
+export async function atomicWrite(
+  targetPath: string,
+  content: string,
+): Promise<void> {
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   const temporaryPath = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
   try {
@@ -397,7 +502,7 @@ async function atomicWrite(targetPath: string, content: string): Promise<void> {
   }
 }
 
-async function assertConfigUnchanged(
+export async function assertConfigUnchanged(
   targetPath: string,
   original: string | null,
 ): Promise<void> {
@@ -410,7 +515,7 @@ async function assertConfigUnchanged(
   }
 }
 
-async function restoreModelConfig(
+export async function restoreModelConfig(
   targetPath: string,
   original: string | null,
 ): Promise<void> {
@@ -440,7 +545,7 @@ function jsonModelEdits(
 ): string {
   const formatting = { insertSpaces: true, tabSize: 2, eol: "\n" };
   const modelPath =
-    agentId === "gemini"
+    agentId === "gemini" || agentId === "qwen"
       ? ["model", "name"]
       : agentId === "openclaw"
         ? ["agents", "defaults", "model", "primary"]
@@ -470,7 +575,7 @@ export async function updateAgentModelConfig(
       ? context.secondaryModel
       : normalizeModel(context.secondaryModel);
 
-  if (context.agentId === "codex") {
+  if (context.agentId === "codex" || context.agentId === "kimi") {
     const targetPath = path.join(context.rootPath, "config.toml");
     let data: JsonRecord = {};
     let original: string | null = null;
@@ -487,10 +592,12 @@ export async function updateAgentModelConfig(
       options.backupRoot,
       context.agentId,
     );
-    data.model = model;
+    if (context.agentId === "codex") data.model = model;
+    else data.default_model = model;
     await assertConfigUnchanged(targetPath, original);
     try {
       await atomicWrite(targetPath, `${stringifyToml(data)}\n`);
+      await options.validateNativeConfig?.(context.agentId, targetPath);
       return {
         ...(await verifyModelUpdate(context, model)),
         backupPath,

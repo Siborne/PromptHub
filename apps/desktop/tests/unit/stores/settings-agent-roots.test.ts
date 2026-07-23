@@ -15,7 +15,9 @@ async function importStore(settingsFromMain?: Record<string, unknown>) {
     ...(window.api ?? {}),
     settings: {
       ...(window.api?.settings ?? {}),
-      get: vi.fn().mockResolvedValue({ githubToken: "", ...(settingsFromMain ?? {}) }),
+      get: vi
+        .fn()
+        .mockResolvedValue({ githubToken: "", ...(settingsFromMain ?? {}) }),
       set: setSpy,
     },
   };
@@ -39,6 +41,67 @@ describe("settings store agent roots", () => {
     localStorage.clear();
   });
 
+  it("persists independent Codex name and icon preferences", async () => {
+    const { useSettingsStore } = await importStore();
+
+    expect(useSettingsStore.getState().agentIdentityPreferences).toEqual({
+      codex: { name: "codex", icon: "codex" },
+    });
+
+    useSettingsStore.getState().setCodexIdentityPreference({ name: "chatgpt" });
+    useSettingsStore.getState().setCodexIdentityPreference({ icon: "chatgpt" });
+
+    expect(useSettingsStore.getState().agentIdentityPreferences).toEqual({
+      codex: { name: "chatgpt", icon: "chatgpt" },
+    });
+    expect(
+      JSON.parse(localStorage.getItem("prompthub-settings") || "{}").state
+        .agentIdentityPreferences,
+    ).toEqual({ codex: { name: "chatgpt", icon: "chatgpt" } });
+  });
+
+  it("refreshes an already-loaded Agent workspace after visibility changes", async () => {
+    const { useSettingsStore } = await importStore();
+    const { useAgentStore } =
+      await import("../../../src/renderer/stores/agent.store");
+    useAgentStore.setState({ hasLoaded: true });
+    const refresh = vi
+      .spyOn(useAgentStore.getState(), "refresh")
+      .mockResolvedValue(undefined);
+
+    useSettingsStore.getState().setRulePlatformTracked("codex", false);
+
+    expect(useSettingsStore.getState().disabledPlatformIds).toContain("codex");
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it("normalizes unsupported Codex identity values field by field", async () => {
+    localStorage.setItem(
+      "prompthub-settings",
+      JSON.stringify({
+        state: {
+          agentIdentityPreferences: {
+            codex: { name: "remote-name", icon: "chatgpt" },
+          },
+        },
+        version: 17,
+      }),
+    );
+
+    const { useSettingsStore } = await importStore();
+
+    expect(useSettingsStore.getState().agentIdentityPreferences).toEqual({
+      codex: { name: "codex", icon: "chatgpt" },
+    });
+
+    useSettingsStore.getState().setCodexIdentityPreference({
+      icon: "https://example.com/icon.png" as "codex",
+    });
+    expect(useSettingsStore.getState().agentIdentityPreferences).toEqual({
+      codex: { name: "codex", icon: "codex" },
+    });
+  });
+
   it("migrates legacy custom skill scan paths into custom agent roots", async () => {
     localStorage.setItem(
       "prompthub-settings",
@@ -53,10 +116,17 @@ describe("settings store agent roots", () => {
     const { useSettingsStore } = await importStore();
 
     expect(useSettingsStore.getState().customAgents).toEqual([
-      expect.objectContaining({ name: "Custom Agent 1", rootPath: "~/.agents" }),
+      expect.objectContaining({
+        name: "Custom Agent 1",
+        rootPath: "~/.agents",
+      }),
     ]);
-    expect(useSettingsStore.getState().customAgentRootPaths).toEqual(["~/.agents"]);
-    expect(useSettingsStore.getState().customSkillScanPaths).toEqual(["~/.agents"]);
+    expect(useSettingsStore.getState().customAgentRootPaths).toEqual([
+      "~/.agents",
+    ]);
+    expect(useSettingsStore.getState().customSkillScanPaths).toEqual([
+      "~/.agents",
+    ]);
   });
 
   it("preserves custom agent capability fields when updating one property", async () => {
@@ -153,9 +223,9 @@ describe("settings store agent roots", () => {
     });
 
     expect(project.deployTargets).toEqual(["/tmp/workspace/.agents/skills"]);
-    expect(useSettingsStore.getState().skillProjects[0]?.deployTargets).toEqual([
-      "/tmp/workspace/.agents/skills",
-    ]);
+    expect(useSettingsStore.getState().skillProjects[0]?.deployTargets).toEqual(
+      ["/tmp/workspace/.agents/skills"],
+    );
   });
 
   it("normalizes same-version persisted skill projects during hydration", async () => {
@@ -222,7 +292,9 @@ describe("settings store agent roots", () => {
     expect(useSettingsStore.getState().customPlatformRootPaths).toEqual({
       "trae-cn": "~/.trae-cn",
     });
-    expect(useSettingsStore.getState().disabledPlatformIds).toEqual(["trae-cn"]);
+    expect(useSettingsStore.getState().disabledPlatformIds).toEqual([
+      "trae-cn",
+    ]);
     expect(useSettingsStore.getState().skillPlatformOrder).toEqual([
       "claude",
       "trae-cn",
@@ -264,11 +336,13 @@ describe("settings store agent roots", () => {
   });
 
   it("loads legacy custom agent root paths from main process when custom agents are absent", async () => {
-    const { useSettingsStore, loadSettingsFromMainProcess } = await importStore({
-      customAgents: [],
-      customAgentRootPaths: ["~/.legacy-agents"],
-      githubToken: "",
-    });
+    const { useSettingsStore, loadSettingsFromMainProcess } = await importStore(
+      {
+        customAgents: [],
+        customAgentRootPaths: ["~/.legacy-agents"],
+        githubToken: "",
+      },
+    );
 
     await loadSettingsFromMainProcess();
 
@@ -301,5 +375,4 @@ describe("settings store agent roots", () => {
       opencode: "~/.opencode-custom",
     });
   });
-
 });

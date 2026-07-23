@@ -9,10 +9,18 @@ const inspectAgentModelConfigMock = vi.fn();
 const updateAgentModelConfigMock = vi.fn();
 const listSessionsMock = vi.fn();
 const readSessionMock = vi.fn();
+const createSessionServiceMock = vi.fn(() => ({
+  list: listSessionsMock,
+  read: readSessionMock,
+}));
+const resolveNativeCommandMock = vi.fn();
+const runNativeCommandMock = vi.fn();
+const launchAgentPlatformMock = vi.fn();
 
 vi.mock("electron", () => ({
   app: { getPath: vi.fn(() => "/tmp/prompthub") },
   ipcMain: { handle: handleMock },
+  shell: { openPath: vi.fn() },
 }));
 
 vi.mock("../../../src/main/services/skill-installer", () => ({
@@ -29,6 +37,19 @@ vi.mock("../../../src/main/services/skill-installer", () => ({
         },
         skillsRelativePath: "skills",
         configFiles: ["config.toml"],
+        launchPaths: { darwin: ["/Applications/Codex.app"] },
+      },
+      {
+        id: "kimi",
+        name: "Kimi Code",
+        icon: "Sparkles",
+        rootDir: {
+          darwin: "~/.kimi-code",
+          win32: "%USERPROFILE%\\.kimi-code",
+          linux: "~/.kimi-code",
+        },
+        skillsRelativePath: "skills",
+        configFiles: ["config.toml", "tui.toml", "mcp.json"],
       },
     ]),
     readLocalRepoFileByPath: readFileMock,
@@ -47,10 +68,18 @@ vi.mock("../../../src/main/services/agent-model-config", () => ({
 }));
 
 vi.mock("../../../src/main/services/agent-session-service", () => ({
-  createAgentSessionService: vi.fn(() => ({
-    list: listSessionsMock,
-    read: readSessionMock,
+  createAgentSessionService: createSessionServiceMock,
+}));
+
+vi.mock("../../../src/main/services/native-command", () => ({
+  createNativeCommandRunner: vi.fn(() => ({
+    resolve: resolveNativeCommandMock,
+    run: runNativeCommandMock,
   })),
+}));
+
+vi.mock("../../../src/main/services/agent-launch-service", () => ({
+  launchAgentPlatform: launchAgentPlatformMock,
 }));
 
 type Handler = (...args: unknown[]) => Promise<unknown>;
@@ -81,7 +110,29 @@ describe("Agent config file IPC", () => {
     updateAgentModelConfigMock.mockReset();
     listSessionsMock.mockReset();
     readSessionMock.mockReset();
-    getPlatformRootDirMock.mockReturnValue("/Users/test/.codex");
+    createSessionServiceMock.mockClear();
+    resolveNativeCommandMock.mockReset();
+    runNativeCommandMock.mockReset();
+    launchAgentPlatformMock.mockReset();
+    getPlatformRootDirMock.mockImplementation((platform: { id: string }) =>
+      platform.id === "kimi" ? "/Users/test/.kimi-code" : "/Users/test/.codex",
+    );
+  });
+
+  it("launches only a known Agent through its platform allowlist", async () => {
+    launchAgentPlatformMock.mockResolvedValue({ success: true });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_LAUNCH](null, "codex"),
+    ).resolves.toEqual({ success: true });
+    expect(launchAgentPlatformMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "codex" }),
+      expect.objectContaining({ platform: process.platform }),
+    );
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_LAUNCH](null, "missing"),
+    ).resolves.toEqual({ success: false, errorCode: "unsupported" });
   });
 
   it("lists, reads and writes only declared native config files", async () => {
@@ -224,21 +275,69 @@ describe("Agent config file IPC", () => {
     expect(updateAgentModelConfigMock).not.toHaveBeenCalled();
   });
 
+  it("runs Kimi's native doctor against the written config when available", async () => {
+    resolveNativeCommandMock.mockResolvedValue("/usr/local/bin/kimi");
+    runNativeCommandMock.mockResolvedValue({ stdout: "", stderr: "" });
+    updateAgentModelConfigMock.mockImplementation(async (_context, options) => {
+      await options.validateNativeConfig(
+        "kimi",
+        "/Users/test/.kimi-code/config.toml",
+      );
+      return { agentId: "kimi", model: "kimi-code/kimi-for-coding" };
+    });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await handlers[IPC_CHANNELS.AGENT_MODEL_CONFIG_SET](null, {
+      agentId: "kimi",
+      model: "kimi-code/kimi-for-coding",
+    });
+
+    expect(runNativeCommandMock).toHaveBeenCalledWith(
+      "/usr/local/bin/kimi",
+      ["doctor", "config", "/Users/test/.kimi-code/config.toml"],
+      { timeout: 15_000, maxBuffer: 64 * 1024 },
+    );
+  });
+
   it("validates and delegates bounded session list and read requests", async () => {
     listSessionsMock.mockResolvedValue({ sessions: [] });
     readSessionMock.mockResolvedValue({ entries: [] });
     const { handlers, IPC_CHANNELS } = await setup();
 
-    await handlers[IPC_CHANNELS.AGENT_SESSIONS_LIST](null, "codex", 100);
+    await handlers[IPC_CHANNELS.AGENT_SESSIONS_LIST](null, "codex", 50, 100);
     await handlers[IPC_CHANNELS.AGENT_SESSION_READ](null, "codex", "session-1");
 
-    expect(listSessionsMock).toHaveBeenCalledWith("codex", { limit: 100 });
+    expect(createSessionServiceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        codexRootDir: "/Users/test/.codex",
+      }),
+    );
+    expect(listSessionsMock).toHaveBeenCalledWith("codex", {
+      limit: 50,
+      offset: 100,
+    });
     expect(readSessionMock).toHaveBeenCalledWith("codex", "session-1");
     await expect(
       handlers[IPC_CHANNELS.AGENT_SESSIONS_LIST](null, "codex", "100"),
     ).rejects.toThrow("numeric limit");
     await expect(
+      handlers[IPC_CHANNELS.AGENT_SESSIONS_LIST](null, "codex", 50, -1),
+    ).rejects.toThrow("numeric offset");
+    await expect(
       handlers[IPC_CHANNELS.AGENT_SESSION_READ](null, "codex", null),
     ).rejects.toThrow("sessionId strings");
+  });
+
+  it("binds Kimi session reads to its resolved generation root", async () => {
+    listSessionsMock.mockResolvedValue({ sessions: [] });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await handlers[IPC_CHANNELS.AGENT_SESSIONS_LIST](null, "kimi", 20);
+
+    expect(createSessionServiceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kimiRootDir: "/Users/test/.kimi-code",
+      }),
+    );
   });
 });

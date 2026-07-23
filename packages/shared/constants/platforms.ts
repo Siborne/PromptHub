@@ -6,6 +6,8 @@
  * 定义各种 AI 编程工具的 skills 目录路径
  */
 
+import type { AgentProductLifecycle } from "../types/agent";
+
 export interface SkillPlatform {
   id: string;
   name: string;
@@ -15,6 +17,12 @@ export interface SkillPlatform {
     win32: string;
     linux: string;
   };
+  rootEnvironmentVariable?: string;
+  environmentRootRelativeToCwd?: boolean;
+  legacyRootEnvironmentVariable?: string;
+  rootDirFallbacks?: Partial<Record<SkillPlatformOsKey, string[]>>;
+  launchPaths?: Partial<Record<SkillPlatformOsKey, string[]>>;
+  resolvedRootPath?: string;
   skillsRelativePath: string;
   mcpRelativePath?: string;
   pluginsRelativePath?: string;
@@ -22,6 +30,8 @@ export interface SkillPlatform {
   configFiles?: string[];
   isCustom?: boolean;
   isConfigured?: boolean;
+  lifecycle?: AgentProductLifecycle;
+  replacementPlatformId?: string;
 }
 
 export type SkillPlatformOsKey = "darwin" | "win32" | "linux";
@@ -131,11 +141,13 @@ export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "reasonix",
   "augment",
   "zcode",
+  "antigravity",
   "gemini",
   "opencode",
   "cline",
   "cursor",
   "grok",
+  "qwen",
   "cherry-studio",
   "windsurf",
   "kiro",
@@ -152,6 +164,35 @@ export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "codebuddy",
   "hermes",
 ] as const;
+
+/**
+ * Agent product family for UI grouping.
+ * - code-work: coding IDE / CLI workbenches (Claude Code, Codex, Cursor, …)
+ * - claw: Claw-family agent runtimes (OpenClaw, QClaw, …) — aka 龙虾系
+ */
+export type AgentPlatformFamily = "code-work" | "claw";
+
+export const CLAW_PLATFORM_IDS = ["openclaw", "qclaw"] as const;
+
+const CLAW_PLATFORM_ID_SET = new Set<string>(CLAW_PLATFORM_IDS);
+
+export function getAgentPlatformFamily(
+  platformId: string,
+): AgentPlatformFamily {
+  if (!platformId) {
+    return "code-work";
+  }
+
+  if (CLAW_PLATFORM_ID_SET.has(platformId) || /claw$/i.test(platformId)) {
+    return "claw";
+  }
+
+  return "code-work";
+}
+
+export function isClawPlatformId(platformId: string): boolean {
+  return getAgentPlatformFamily(platformId) === "claw";
+}
 
 /**
  * Supported skill platforms
@@ -172,6 +213,9 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     pluginsRelativePath: "plugins/cache/prompthub",
     globalRuleFile: "CLAUDE.md",
     configFiles: ["settings.json"],
+    launchPaths: {
+      darwin: ["/Applications/Claude.app", "~/Applications/Claude.app"],
+    },
   },
   {
     id: "copilot",
@@ -197,6 +241,9 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     skillsRelativePath: "skills",
     mcpRelativePath: "mcp.json",
     pluginsRelativePath: "plugins/cache/prompthub",
+    launchPaths: {
+      darwin: ["/Applications/Cursor.app", "~/Applications/Cursor.app"],
+    },
   },
   {
     id: "cherry-studio",
@@ -221,6 +268,9 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     skillsRelativePath: "skills",
     mcpRelativePath: "mcp_config.json",
     globalRuleFile: "memories/global_rules.md",
+    launchPaths: {
+      darwin: ["/Applications/Windsurf.app", "~/Applications/Windsurf.app"],
+    },
   },
   {
     id: "kiro",
@@ -237,8 +287,10 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
   },
   {
     id: "gemini",
-    name: "Gemini CLI",
+    name: "Gemini",
     icon: "Sparkles",
+    lifecycle: "enterprise-legacy",
+    replacementPlatformId: "antigravity",
     rootDir: {
       darwin: "~/.gemini",
       win32: "%USERPROFILE%\\.gemini",
@@ -254,12 +306,22 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     id: "antigravity",
     name: "Antigravity",
     icon: "Sparkles",
+    lifecycle: "current",
     rootDir: {
-      darwin: "~/.gemini/antigravity",
-      win32: "%USERPROFILE%\\.gemini\\antigravity",
-      linux: "~/.gemini/antigravity",
+      darwin: "~/.gemini/config",
+      win32: "%USERPROFILE%\\.gemini\\config",
+      linux: "~/.gemini/config",
     },
     skillsRelativePath: "skills",
+    mcpRelativePath: "mcp_config.json",
+    pluginsRelativePath: "plugins",
+    globalRuleFile: "../GEMINI.md",
+    launchPaths: {
+      darwin: [
+        "/Applications/Antigravity.app",
+        "~/Applications/Antigravity.app",
+      ],
+    },
   },
   {
     id: "trae",
@@ -337,7 +399,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
   },
   {
     id: "codex",
-    name: "Codex CLI",
+    name: "Codex",
     icon: "Terminal",
     rootDir: {
       darwin: "~/.codex",
@@ -349,19 +411,31 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     pluginsRelativePath: "plugins/cache/prompthub",
     globalRuleFile: "AGENTS.md",
     configFiles: ["config.toml"],
+    launchPaths: {
+      darwin: ["/Applications/Codex.app", "~/Applications/Codex.app"],
+    },
   },
   {
     id: "kimi",
-    name: "Kimi Code CLI",
+    name: "Kimi Code",
     icon: "Sparkles",
     rootDir: {
-      darwin: "~/.kimi",
-      win32: "%USERPROFILE%\\.kimi",
-      linux: "~/.kimi",
+      darwin: "~/.kimi-code",
+      win32: "%USERPROFILE%\\.kimi-code",
+      linux: "~/.kimi-code",
+    },
+    rootEnvironmentVariable: "KIMI_CODE_HOME",
+    legacyRootEnvironmentVariable: "KIMI_SHARE_DIR",
+    rootDirFallbacks: {
+      darwin: ["~/.kimi"],
+      win32: ["%USERPROFILE%\\.kimi"],
+      linux: ["~/.kimi"],
     },
     skillsRelativePath: "skills",
     mcpRelativePath: "mcp.json",
-    configFiles: ["config.toml", "mcp.json"],
+    pluginsRelativePath: "plugins",
+    globalRuleFile: "AGENTS.md",
+    configFiles: ["config.toml", "tui.toml", "mcp.json"],
   },
   {
     id: "reasonix",
@@ -380,7 +454,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
   },
   {
     id: "augment",
-    name: "Augment / Auggie",
+    name: "Augment",
     icon: "Sparkle",
     rootDir: {
       darwin: "~/.augment",
@@ -427,6 +501,22 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       "lsp.json",
       "sandbox.toml",
     ],
+  },
+  {
+    id: "qwen",
+    name: "Qwen Code",
+    icon: "Bot",
+    rootDir: {
+      darwin: "~/.qwen",
+      win32: "%USERPROFILE%\\.qwen",
+      linux: "~/.qwen",
+    },
+    rootEnvironmentVariable: "QWEN_HOME",
+    environmentRootRelativeToCwd: true,
+    skillsRelativePath: "skills",
+    mcpRelativePath: "settings.json",
+    pluginsRelativePath: "extensions",
+    globalRuleFile: "QWEN.md",
   },
   {
     id: "kilo",

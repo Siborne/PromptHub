@@ -52,6 +52,122 @@ test.describe("E2E: Agent workspace", () => {
       "utf8",
     );
 
+    const kimiDir = path.join(homeDir, ".kimi-code");
+    const kimiSessionId = "session_e2e_kimi_1";
+    const kimiSessionDir = path.join(
+      kimiDir,
+      "sessions",
+      "wd_isolated-project",
+      kimiSessionId,
+    );
+    fs.mkdirSync(path.join(kimiSessionDir, "agents", "main"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(kimiDir, "config.toml"),
+      [
+        'default_model = "kimi-code/kimi-for-coding"',
+        "",
+        '[models."kimi-code/kimi-for-coding"]',
+        'provider = "managed:kimi-code"',
+        'model = "kimi-for-coding"',
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(kimiDir, "session_index.jsonl"),
+      `${JSON.stringify({
+        sessionId: kimiSessionId,
+        sessionDir: kimiSessionDir,
+        workDir: path.join(homeDir, "isolated-project"),
+      })}\n`,
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(kimiSessionDir, "state.json"),
+      JSON.stringify({
+        title: "Review isolated Kimi session",
+        createdAt: "2026-07-17T08:00:00.000Z",
+        updatedAt: "2026-07-17T08:01:00.000Z",
+        workDir: path.join(homeDir, "isolated-project"),
+      }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(kimiSessionDir, "agents", "main", "wire.jsonl"),
+      [
+        JSON.stringify({
+          type: "metadata",
+          protocol_version: "1.1",
+          created_at: 1784275200000,
+        }),
+        JSON.stringify({
+          type: "turn.prompt",
+          input: [{ type: "text", text: "Inspect the Kimi session adapter" }],
+          origin: { kind: "user" },
+          time: 1784275201000,
+        }),
+        JSON.stringify({
+          type: "context.append_loop_event",
+          event: {
+            type: "content.part",
+            part: { type: "text", text: "The Kimi transcript is isolated." },
+          },
+          time: 1784275202000,
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    const codexPetDir = path.join(homeDir, ".codex", "pets", "orbit");
+    fs.mkdirSync(codexPetDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(codexPetDir, "pet.json"),
+      JSON.stringify({
+        id: "orbit",
+        displayName: "Orbit",
+        description: "A local Codex Pet managed from the shared Agent UI.",
+        spritesheetPath: "spritesheet.png",
+      }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(codexPetDir, "spritesheet.png"),
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
+    const themeDir = path.join(
+      userDataDir,
+      "data",
+      "agent-appearance",
+      "themes",
+      "codex",
+    );
+    fs.mkdirSync(themeDir, { recursive: true });
+    const midnightThemeDir = path.join(themeDir, "midnight");
+    fs.mkdirSync(midnightThemeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(midnightThemeDir, "theme.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "midnight",
+        name: "Midnight",
+        image: "background.png",
+        appearance: "dark",
+      }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(midnightThemeDir, "background.png"),
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
+
     const { app, page } = await launchPromptHub(null, {
       userDataDir,
       env: {
@@ -91,7 +207,7 @@ test.describe("E2E: Agent workspace", () => {
       await expect(
         page.getByRole("tab", { name: "Provider & Model" }),
       ).toBeEnabled();
-      await expect(page.getByRole("tab", { name: "Usage" })).toBeDisabled();
+      await expect(page.getByRole("tab", { name: "Usage" })).toHaveCount(0);
       await page.screenshot({
         path: testInfo.outputPath("agent-workspace-overview.png"),
         animations: "disabled",
@@ -100,15 +216,21 @@ test.describe("E2E: Agent workspace", () => {
       await page.getByRole("tab", { name: "Skills" }).click();
       await expect(
         page.getByRole("tabpanel", { name: "Skills" }),
-      ).toContainText("Skills installed");
+      ).toContainText(path.join(claudeDir, "skills"));
+      await expect(
+        page.getByRole("button", { name: "Install My Skill" }),
+      ).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath("agent-workspace-skills.png"),
         animations: "disabled",
       });
       await page.getByRole("tab", { name: "MCP" }).click();
       await expect(page.getByRole("tabpanel", { name: "MCP" })).toContainText(
-        "MCP servers",
+        path.join(homeDir, ".claude.json"),
       );
+      await expect(
+        page.getByRole("textbox", { name: "Search assets" }),
+      ).toBeVisible();
       await expect(page.getByRole("tab", { name: "Rules" })).toBeEnabled();
       await expect(page.getByRole("tab", { name: "Plugins" })).toBeEnabled();
       await page.getByRole("tab", { name: "Provider & Model" }).click();
@@ -138,6 +260,58 @@ test.describe("E2E: Agent workspace", () => {
         path: testInfo.outputPath("agent-workspace-sessions.png"),
         animations: "disabled",
       });
+
+      const codex = page.getByRole("button", {
+        name: "Codex",
+        exact: true,
+      });
+      await codex.scrollIntoViewIfNeeded();
+      await codex.click();
+      await expect(page.getByRole("tab", { name: "Appearance" })).toBeEnabled();
+      await page.getByRole("tab", { name: "Appearance" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Codex appearance" }),
+      ).toBeVisible();
+      await expect(page.getByText("Midnight")).toBeVisible();
+      await expect(page.getByText("Orbit")).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath("agent-workspace-appearance.png"),
+        animations: "disabled",
+      });
+      await page
+        .getByRole("heading", { name: "Pets" })
+        .scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: testInfo.outputPath("agent-workspace-appearance-pets.png"),
+        animations: "disabled",
+      });
+
+      const kimi = page.getByRole("button", {
+        name: "Kimi Code",
+        exact: true,
+      });
+      await kimi.scrollIntoViewIfNeeded();
+      await kimi.click();
+      await expect(
+        page.getByRole("heading", { name: "Kimi Code" }),
+      ).toBeVisible();
+      await page.getByRole("tab", { name: "Provider & Model" }).click();
+      await expect(page.getByLabel("Default model")).toHaveValue(
+        "kimi-code/kimi-for-coding",
+      );
+      await page.getByRole("tab", { name: "Sessions" }).click();
+      await expect(
+        page.getByText("Review isolated Kimi session").first(),
+      ).toBeVisible();
+      await expect(
+        page.getByText("The Kimi transcript is isolated."),
+      ).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath("agent-workspace-kimi.png"),
+        animations: "disabled",
+      });
+
+      await claude.click();
 
       await expect(
         page.getByRole("tab", { name: "Config Files" }),

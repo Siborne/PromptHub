@@ -615,6 +615,51 @@ describe("SkillInstaller.scanRemoteGithub", () => {
 });
 
 describe("SkillInstaller.scanPlatformSkills", () => {
+  it("scans Qwen native and shared compatibility skills without taking ownership of shared installs", async () => {
+    const qwenSkillsDir = path.join(tmpDir, ".qwen", "skills");
+    const sharedSkillsDir = path.join(tmpDir, ".agents", "skills");
+    const nativeSkillDir = path.join(qwenSkillsDir, "native-skill");
+    const sharedSkillDir = path.join(sharedSkillsDir, "shared-skill");
+
+    for (const [directory, name] of [
+      [nativeSkillDir, "native-skill"],
+      [sharedSkillDir, "shared-skill"],
+    ] as const) {
+      await fs.mkdir(path.join(directory, "scripts"), { recursive: true });
+      await fs.writeFile(
+        path.join(directory, "SKILL.md"),
+        `---\nname: ${name}\ndescription: Qwen skill\n---\n# ${name}`,
+      );
+      await fs.writeFile(path.join(directory, "scripts", "run.js"), "run();");
+    }
+
+    vi.spyOn(skillInstallerUtils, "getPlatformSkillsDir").mockReturnValue(
+      qwenSkillsDir,
+    );
+
+    const result = await SkillInstaller.scanPlatformSkills("qwen", {
+      homeDir: tmpDir,
+    });
+    const byName = new Map(
+      result.scannedSkills.map((skill) => [skill.name, skill]),
+    );
+
+    expect(result.skillsDir).toBe(qwenSkillsDir);
+    expect(byName.get("native-skill")).toMatchObject({
+      platforms: ["Qwen Code"],
+      platformSkillPath: nativeSkillDir,
+      isReadOnlyDiscovery: undefined,
+    });
+    expect(byName.get("shared-skill")).toMatchObject({
+      platforms: ["Qwen Code"],
+      platformSkillPath: sharedSkillDir,
+      isReadOnlyDiscovery: true,
+    });
+    expect(
+      await fs.readFile(path.join(sharedSkillDir, "scripts", "run.js"), "utf8"),
+    ).toBe("run();");
+  });
+
   it("scans real platform skill folders and distinguishes copy from symlink installs", async () => {
     const platformSkillsDir = path.join(tmpDir, "claude", "skills");
     const copiedSkillDir = path.join(platformSkillsDir, "copy-skill");

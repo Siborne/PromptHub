@@ -143,6 +143,9 @@ function createDefaultSkillValues() {
     projectSkillImportModePreference: "copy",
     projectSkillImportPreferencesByProjectId: {},
     builtinAgentOverrides: {},
+    agentIdentityPreferences: {
+      codex: { name: "codex", icon: "codex" },
+    },
     customPlatformRootPaths: {},
     disabledPlatformIds: [],
     customSkillPlatformPaths: {},

@@ -19,6 +19,20 @@ describe("settings desktop workspace actions", () => {
     localStorage.clear();
   });
 
+  it("places Agents second in the default desktop module order", async () => {
+    const { useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
+
+    expect(useSettingsStore.getState().desktopHomeModules).toEqual([
+      "prompt",
+      "agents",
+      "skill",
+      "mcp",
+      "plugin",
+      "rules",
+    ]);
+  });
+
   it("keeps at least one desktop module enabled", async () => {
     const { useSettingsStore } =
       await import("../../../src/renderer/stores/settings.store");
@@ -84,7 +98,7 @@ describe("settings desktop workspace actions", () => {
       "prompthub-settings",
       JSON.stringify({
         state: {
-          desktopHomeModules: ["skill", "prompt", "rules"],
+          desktopHomeModules: ["prompt", "skill", "rules"],
         },
         version: 16,
       }),
@@ -94,12 +108,105 @@ describe("settings desktop workspace actions", () => {
       await import("../../../src/renderer/stores/settings.store");
 
     expect(useSettingsStore.getState().desktopHomeModules).toEqual([
+      "prompt",
+      "agents",
+      "skill",
+      "mcp",
+      "plugin",
+      "rules",
+    ]);
+  });
+
+  it("moves Agents to second when hydrating the previous complete default order", async () => {
+    localStorage.setItem(
+      "prompthub-settings",
+      JSON.stringify({
+        state: {
+          desktopHomeModules: [
+            "prompt",
+            "skill",
+            "agents",
+            "mcp",
+            "plugin",
+            "rules",
+          ],
+        },
+        version: 16,
+      }),
+    );
+
+    const { useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
+
+    expect(useSettingsStore.getState().desktopHomeModules).toEqual([
+      "prompt",
+      "agents",
+      "skill",
+      "mcp",
+      "plugin",
+      "rules",
+    ]);
+  });
+
+  it("preserves the former default order when it is customized after migration", async () => {
+    localStorage.setItem(
+      "prompthub-settings",
+      JSON.stringify({
+        state: {
+          desktopHomeModules: [
+            "prompt",
+            "skill",
+            "agents",
+            "mcp",
+            "plugin",
+            "rules",
+          ],
+        },
+        version: 17,
+      }),
+    );
+
+    const { useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
+
+    expect(useSettingsStore.getState().desktopHomeModules).toEqual([
+      "prompt",
       "skill",
       "agents",
       "mcp",
       "plugin",
-      "prompt",
       "rules",
+    ]);
+  });
+
+  it("preserves a customized complete desktop module order", async () => {
+    localStorage.setItem(
+      "prompthub-settings",
+      JSON.stringify({
+        state: {
+          desktopHomeModules: [
+            "rules",
+            "plugin",
+            "mcp",
+            "skill",
+            "agents",
+            "prompt",
+          ],
+        },
+        version: 17,
+      }),
+    );
+
+    const { useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
+
+    expect(useSettingsStore.getState().desktopHomeModules).toEqual([
+      "rules",
+      "plugin",
+      "mcp",
+      "skill",
+      "agents",
+      "prompt",
     ]);
   });
 
@@ -155,7 +262,7 @@ describe("settings desktop workspace actions", () => {
         state: {
           desktopHomeModules: ["skill", "ghost", "skill", "prompt"],
         },
-        version: 16,
+        version: 17,
       }),
     );
 
@@ -177,7 +284,7 @@ describe("settings desktop workspace actions", () => {
           skillTagsSectionHeight: "invalid",
           resourceTagsSectionHeight: "invalid",
         },
-        version: 16,
+        version: 17,
       }),
     );
 
@@ -197,7 +304,7 @@ describe("settings desktop workspace actions", () => {
           skillTagsSectionHeight: 260,
           isSkillTagsSectionCollapsed: true,
         },
-        version: 16,
+        version: 17,
       }),
     );
 

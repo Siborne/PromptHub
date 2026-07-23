@@ -81,9 +81,17 @@ export function deriveProjectMcpTargetPresets(
         id: `project:${project.id}:augment`,
         target: "augment",
         scope: "workspace",
-        label: `${project.name} / Augment / Auggie`,
+        label: `${project.name} / Augment`,
         path: joinProjectPath(rootPath, ".augment/settings.json"),
         platformId: "augment",
+      },
+      {
+        id: `project:${project.id}:qwen`,
+        target: "qwen",
+        scope: "workspace",
+        label: `${project.name} / Qwen Code`,
+        path: joinProjectPath(rootPath, ".qwen/settings.json"),
+        platformId: "qwen",
       },
     ];
   });

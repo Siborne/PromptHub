@@ -1,5 +1,5 @@
 import type {
-  ManagedAgentFilter,
+  AgentIdentityPreferences,
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
 import type { SkillPlatformOsKey } from "@prompthub/shared/constants/platforms";
@@ -10,13 +10,13 @@ import {
   buildManagedAgents,
   sortManagedAgents,
 } from "../services/managed-agents";
+import { resolveAgentIdentity } from "../services/agent-identity";
 import { useSettingsStore } from "./settings.store";
 
 interface AgentState {
   agents: ManagedAgentSummary[];
   selectedAgentId: string | null;
   searchQuery: string;
-  filter: ManagedAgentFilter;
   pinnedAgentIds: string[];
   isLoading: boolean;
   hasLoaded: boolean;
@@ -25,8 +25,8 @@ interface AgentState {
   refresh: () => Promise<void>;
   selectAgent: (agentId: string) => void;
   setSearchQuery: (query: string) => void;
-  setFilter: (filter: ManagedAgentFilter) => void;
   togglePinned: (agentId: string) => void;
+  applyIdentityPreferences: (preferences: AgentIdentityPreferences) => void;
 }
 
 function getOsKey(): SkillPlatformOsKey {
@@ -42,7 +42,6 @@ export const useAgentStore = create<AgentState>()(
       agents: [],
       selectedAgentId: null,
       searchQuery: "",
-      filter: "all",
       pinnedAgentIds: [],
       isLoading: false,
       hasLoaded: false,
@@ -61,12 +60,14 @@ export const useAgentStore = create<AgentState>()(
             window.api.skill.getSupportedPlatforms(),
             window.api.skill.detectPlatforms(),
           ]);
+          const settings = useSettingsStore.getState();
           const agents = buildManagedAgents({
             platforms,
             detectedPlatformIds,
             pinnedPlatformIds: get().pinnedAgentIds,
-            builtinOverrides:
-              useSettingsStore.getState().builtinAgentOverrides || {},
+            disabledPlatformIds: settings.disabledPlatformIds,
+            builtinOverrides: settings.builtinAgentOverrides || {},
+            agentIdentityPreferences: settings.agentIdentityPreferences,
             osKey: getOsKey(),
           });
           const selectedAgentId = agents.some(
@@ -91,7 +92,23 @@ export const useAgentStore = create<AgentState>()(
       },
       selectAgent: (agentId) => set({ selectedAgentId: agentId }),
       setSearchQuery: (searchQuery) => set({ searchQuery }),
-      setFilter: (filter) => set({ filter }),
+      applyIdentityPreferences: (preferences) =>
+        set((state) => ({
+          agents: sortManagedAgents(
+            state.agents.map((agent) => {
+              const identity = resolveAgentIdentity(
+                agent.id,
+                agent.name,
+                preferences,
+              );
+              return {
+                ...agent,
+                name: identity.name,
+                displayIconId: identity.iconId,
+              };
+            }),
+          ),
+        })),
       togglePinned: (agentId) => {
         const pinnedAgentIds = get().pinnedAgentIds.includes(agentId)
           ? get().pinnedAgentIds.filter((id) => id !== agentId)

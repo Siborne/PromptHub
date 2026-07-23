@@ -13,6 +13,71 @@ const platformAssetsDir = join(
 );
 
 describe("PlatformIcon", () => {
+  it("renders the official Hermes Agent portrait mark", () => {
+    render(<PlatformIcon platformId="hermes" size={20} />);
+
+    const icon = screen.getByRole("img", { name: "hermes icon" });
+    expect(icon).toHaveAttribute("src", expect.stringContaining("hermes.png"));
+    expect(icon).toHaveClass("rounded-full", "bg-white");
+
+    const asset = readFileSync(join(platformAssetsDir, "hermes.png"));
+    expect(asset.subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
+    expect(asset.readUInt32BE(16)).toBe(504);
+    expect(asset.readUInt32BE(20)).toBe(512);
+  });
+
+  it("renders the bundled high-resolution Codex identity for both app themes", () => {
+    render(<PlatformIcon platformId="codex" size={52} />);
+
+    const icons = screen.getAllByRole("img", { name: "codex icon" });
+    expect(icons).toHaveLength(2);
+    expect(icons[0]).toHaveAttribute(
+      "src",
+      expect.stringContaining("codex.png"),
+    );
+    expect(icons[0]).toHaveClass("dark:hidden");
+    expect(icons[1]).toHaveAttribute(
+      "src",
+      expect.stringContaining("codex-dark.png"),
+    );
+    expect(icons[1]).toHaveClass("hidden", "dark:block");
+
+    const assets = ["codex.png", "codex-dark.png"].map((fileName) =>
+      readFileSync(join(platformAssetsDir, fileName)),
+    );
+    for (const asset of assets) {
+      expect(asset.readUInt32BE(16)).toBe(1024);
+      expect(asset.readUInt32BE(20)).toBe(1024);
+    }
+    expect(assets[0].equals(assets[1])).toBe(false);
+  });
+
+  it("renders the bundled ChatGPT app identity for both app themes", () => {
+    render(<PlatformIcon platformId="chatgpt" size={20} />);
+
+    const icons = screen.getAllByRole("img", { name: "chatgpt icon" });
+    expect(icons).toHaveLength(2);
+    expect(icons[0]).toHaveAttribute(
+      "src",
+      expect.stringContaining("chatgpt-light.png"),
+    );
+    expect(icons[0]).toHaveClass("dark:hidden");
+    expect(icons[1]).toHaveAttribute(
+      "src",
+      expect.stringContaining("chatgpt-dark.png"),
+    );
+    expect(icons[1]).toHaveClass("hidden", "dark:block");
+
+    const assets = ["chatgpt-light.png", "chatgpt-dark.png"].map((fileName) =>
+      readFileSync(join(platformAssetsDir, fileName)),
+    );
+    for (const asset of assets) {
+      expect(asset.readUInt32BE(16)).toBe(1024);
+      expect(asset.readUInt32BE(20)).toBe(1024);
+    }
+    expect(assets[0].equals(assets[1])).toBe(false);
+  });
+
   it("renders the real Cherry Studio icon instead of the generic fallback", () => {
     render(<PlatformIcon platformId="cherry-studio" size={20} />);
 
@@ -103,13 +168,26 @@ describe("PlatformIcon", () => {
     );
   });
 
-  it("renders the official Kimi Code CLI mark", () => {
+  it("renders the official Kimi Code mark", () => {
     render(<PlatformIcon platformId="kimi" size={20} />);
 
     expect(screen.getByRole("img", { name: "kimi icon" })).toHaveAttribute(
       "src",
       expect.stringContaining("kimi.png"),
     );
+  });
+
+  it("renders the official Qwen Code app icon", () => {
+    render(<PlatformIcon platformId="qwen" size={20} />);
+
+    expect(screen.getByRole("img", { name: "qwen icon" })).toHaveAttribute(
+      "src",
+      expect.stringContaining("qwen.png"),
+    );
+    const asset = readFileSync(join(platformAssetsDir, "qwen.png"));
+    expect(asset.subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
+    expect(asset.readUInt32BE(16)).toBe(512);
+    expect(asset.readUInt32BE(20)).toBe(512);
   });
 
   it("keeps the Auggie mark legible in app-controlled light and dark themes", () => {

@@ -73,9 +73,17 @@ describe("mcp target presets", () => {
         id: "project:project_docs:augment",
         target: "augment",
         scope: "workspace",
-        label: "Docs / Augment / Auggie",
+        label: "Docs / Augment",
         path: "/workspace/docs/.augment/settings.json",
         platformId: "augment",
+      },
+      {
+        id: "project:project_docs:qwen",
+        target: "qwen",
+        scope: "workspace",
+        label: "Docs / Qwen Code",
+        path: "/workspace/docs/.qwen/settings.json",
+        platformId: "qwen",
       },
     ]);
   });

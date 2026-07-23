@@ -3,16 +3,21 @@ import type {
   SkillPlatformOsKey,
 } from "@prompthub/shared/constants/platforms";
 import type {
+  AgentIdentityPreferences,
   BuiltinAgentOverrideConfig,
   ManagedAgentCapability,
   ManagedAgentFilter,
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
+import { resolveAgentIdentity } from "./agent-identity";
 
 const COMMON_AGENT_ORDER = [
   "claude",
   "codex",
+  "antigravity",
   "gemini",
+  "kimi",
+  "qwen",
   "opencode",
   "cursor",
   "copilot",
@@ -25,7 +30,9 @@ interface BuildManagedAgentsInput {
   platforms: SkillPlatform[];
   detectedPlatformIds: string[];
   pinnedPlatformIds: string[];
+  disabledPlatformIds?: string[];
   builtinOverrides: Record<string, BuiltinAgentOverrideConfig>;
+  agentIdentityPreferences?: AgentIdentityPreferences;
   osKey: SkillPlatformOsKey;
 }
 
@@ -65,11 +72,31 @@ const MODEL_CONFIG_AGENT_IDS = new Set([
   "claude",
   "codex",
   "gemini",
+  "kimi",
   "opencode",
   "openclaw",
+  "qwen",
 ]);
 
-const SESSION_AGENT_IDS = new Set(["claude", "gemini", "opencode"]);
+const SESSION_AGENT_IDS = new Set([
+  "claude",
+  "codex",
+  "gemini",
+  "grok",
+  "kimi",
+  "openclaw",
+  "opencode",
+  "qwen",
+]);
+
+const USAGE_AGENT_IDS = new Set([
+  "claude",
+  "codex",
+  "kimi",
+  "antigravity",
+  "gemini",
+  "copilot",
+]);
 
 function buildCapabilities(
   platformId: string,
@@ -80,6 +107,10 @@ function buildCapabilities(
     provider: MODEL_CONFIG_AGENT_IDS.has(platformId)
       ? capability("partial", "model-config-only")
       : capability("planned", "adapter-pending"),
+    appearance:
+      platformId === "codex"
+        ? capability("supported")
+        : capability("unsupported", "appearance-adapter-unavailable"),
     assets: capability("partial", "asset-paths-only"),
     configFiles:
       configFileCount > 0
@@ -88,7 +119,9 @@ function buildCapabilities(
     sessions: SESSION_AGENT_IDS.has(platformId)
       ? capability("supported")
       : capability("planned", "adapter-pending"),
-    usage: capability("planned", "adapter-pending"),
+    usage: USAGE_AGENT_IDS.has(platformId)
+      ? capability("supported")
+      : capability("planned", "adapter-pending"),
     maintenance: capability("partial", "refresh-and-settings"),
   };
 }
@@ -122,62 +155,81 @@ export function buildManagedAgents({
   platforms,
   detectedPlatformIds,
   pinnedPlatformIds,
+  disabledPlatformIds = [],
   builtinOverrides,
+  agentIdentityPreferences,
   osKey,
 }: BuildManagedAgentsInput): ManagedAgentSummary[] {
   const detected = new Set(detectedPlatformIds);
   const pinned = new Set(pinnedPlatformIds);
+  const disabled = new Set(disabledPlatformIds);
 
   return sortManagedAgents(
-    platforms.map((platform) => {
-      const override = builtinOverrides[platform.id] ?? {};
-      const root = override.rootPath?.trim() || platform.rootDir[osKey];
-      const isDetected = detected.has(platform.id);
-      const isConfigured = Boolean(platform.isConfigured || platform.isCustom);
-      const skillsRelativePath =
-        override.skillsRelativePath || platform.skillsRelativePath;
-      const configRelativePaths =
-        override.configRelativePaths || platform.configFiles || [];
-
-      return {
-        id: platform.id,
-        name: platform.name,
-        icon: platform.icon,
-        isCustom: Boolean(platform.isCustom),
-        isConfigured,
-        isDetected,
-        isPinned: pinned.has(platform.id),
-        status: isDetected
-          ? "installed"
-          : isConfigured
-            ? "configured"
-            : "not-detected",
-        paths: {
-          root,
-          skills: joinPath(root, skillsRelativePath) || root,
-          mcp: joinPath(
-            root,
-            override.mcpRelativePath || platform.mcpRelativePath,
-          ),
-          plugins: joinPath(
-            root,
-            override.pluginsRelativePath || platform.pluginsRelativePath,
-          ),
-          rules: joinPath(
-            root,
-            override.rulesRelativePath || platform.globalRuleFile,
-          ),
-          configFiles: configRelativePaths
-            .map((relativePath) => joinPath(root, relativePath))
-            .filter((path): path is string => Boolean(path)),
-          configFileRelativePaths: configRelativePaths,
-        },
-        capabilities: buildCapabilities(
+    platforms
+      .filter((platform) => !disabled.has(platform.id))
+      .map((platform) => {
+        const identity = resolveAgentIdentity(
           platform.id,
-          configRelativePaths.length,
-        ),
-      };
-    }),
+          platform.name,
+          agentIdentityPreferences,
+        );
+        const override = builtinOverrides[platform.id] ?? {};
+        const root =
+          override.rootPath?.trim() ||
+          platform.resolvedRootPath ||
+          platform.rootDir[osKey];
+        const isDetected = detected.has(platform.id);
+        const isConfigured = Boolean(
+          platform.isConfigured || platform.isCustom,
+        );
+        const skillsRelativePath =
+          override.skillsRelativePath || platform.skillsRelativePath;
+        const configRelativePaths =
+          override.configRelativePaths || platform.configFiles || [];
+
+        return {
+          id: platform.id,
+          name: identity.name,
+          icon: platform.icon,
+          displayIconId: identity.iconId,
+          isCustom: Boolean(platform.isCustom),
+          isConfigured,
+          isDetected,
+          isPinned: pinned.has(platform.id),
+          launchable: Boolean(platform.launchPaths?.[osKey]?.length),
+          lifecycle: platform.lifecycle,
+          replacementPlatformId: platform.replacementPlatformId,
+          status: isDetected
+            ? "installed"
+            : isConfigured
+              ? "configured"
+              : "not-detected",
+          paths: {
+            root,
+            skills: joinPath(root, skillsRelativePath) || root,
+            mcp: joinPath(
+              root,
+              override.mcpRelativePath || platform.mcpRelativePath,
+            ),
+            plugins: joinPath(
+              root,
+              override.pluginsRelativePath || platform.pluginsRelativePath,
+            ),
+            rules: joinPath(
+              root,
+              override.rulesRelativePath || platform.globalRuleFile,
+            ),
+            configFiles: configRelativePaths
+              .map((relativePath) => joinPath(root, relativePath))
+              .filter((path): path is string => Boolean(path)),
+            configFileRelativePaths: configRelativePaths,
+          },
+          capabilities: buildCapabilities(
+            platform.id,
+            configRelativePaths.length,
+          ),
+        };
+      }),
   );
 }
 
@@ -212,6 +264,8 @@ export function filterManagedAgents(
       agent.paths.mcp,
       agent.paths.plugins,
       agent.paths.rules,
+      agent.lifecycle,
+      agent.replacementPlatformId,
       ...agent.paths.configFiles,
       ...agent.paths.configFileRelativePaths,
     ]

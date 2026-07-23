@@ -1,4 +1,6 @@
 import type {
+  AgentIdentityPreference,
+  AgentIdentityPreferences,
   BuiltinAgentOverrideConfig,
   CustomAgentConfig,
   NetworkProxySettings,
@@ -22,8 +24,8 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 export const DESKTOP_HOME_MODULES = [
   "prompt",
-  "skill",
   "agents",
+  "skill",
   "mcp",
   "plugin",
   "rules",
@@ -213,6 +215,7 @@ export interface SettingsState {
     ProjectSkillImportPreferences
   >;
   builtinAgentOverrides: Record<string, BuiltinAgentOverrideConfig>;
+  agentIdentityPreferences: AgentIdentityPreferences;
   customPlatformRootPaths: Record<string, string>;
   disabledPlatformIds: string[];
   customSkillPlatformPaths: Record<string, string>;
@@ -374,6 +377,9 @@ export interface SettingsState {
     updates: BuiltinAgentOverrideConfig,
   ) => void;
   resetBuiltinAgentOverride: (platformId: string) => void;
+  setCodexIdentityPreference: (
+    updates: Partial<AgentIdentityPreference>,
+  ) => void;
   setCustomPlatformRootPath: (platformId: string, path: string) => void;
   resetCustomPlatformRootPath: (platformId: string) => void;
   setDisabledPlatformIds: (platformIds: string[]) => void;

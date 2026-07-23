@@ -15,6 +15,8 @@ describe("rules store", () => {
       files: [],
       selectedRuleId: null,
       currentFile: null,
+      conflictDialogRuleId: null,
+      dismissedConflictRuleIds: [],
       draftContent: "",
       aiInstruction: "",
       aiSummary: null,
@@ -488,5 +490,61 @@ describe("rules store", () => {
     expect(useRulesStore.getState().selectedRuleId).toBe("gemini-global");
     expect(useRulesStore.getState().currentFile?.id).toBe("gemini-global");
     expect(useRulesStore.getState().draftContent).toBe("# Gemini rules");
+  });
+
+  it("opens the conflict dialog once and keeps it closed after dismiss", async () => {
+    installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "codex-global",
+              platformId: "codex",
+              platformName: "Codex CLI",
+              platformIcon: "Bot",
+              platformDescription: "Codex rules",
+              name: "AGENTS.md",
+              description: "Codex rules",
+              path: "/Users/test/.codex/AGENTS.md",
+              exists: true,
+              group: "assistant",
+              syncStatus: "out-of-sync",
+            },
+          ]),
+          read: vi.fn().mockResolvedValue({
+            id: "codex-global",
+            platformId: "codex",
+            platformName: "Codex CLI",
+            platformIcon: "Bot",
+            platformDescription: "Codex rules",
+            name: "AGENTS.md",
+            description: "Codex rules",
+            path: "/Users/test/.codex/AGENTS.md",
+            exists: true,
+            group: "assistant",
+            syncStatus: "out-of-sync",
+            content: "# managed",
+            targetContent: "# external",
+            versions: [],
+          }),
+        },
+      },
+    });
+
+    await useRulesStore.getState().loadFiles();
+    expect(useRulesStore.getState().conflictDialogRuleId).toBe("codex-global");
+
+    useRulesStore.getState().dismissConflictDialog("codex-global");
+    expect(useRulesStore.getState().conflictDialogRuleId).toBeNull();
+    expect(useRulesStore.getState().dismissedConflictRuleIds).toContain("codex-global");
+
+    // Selecting the same rule again must not re-open after dismiss.
+    useRulesStore.setState({
+      selectedRuleId: null,
+      currentFile: null,
+    });
+    await useRulesStore.getState().selectRule("codex-global");
+    expect(useRulesStore.getState().conflictDialogRuleId).toBeNull();
+    expect(useRulesStore.getState().currentFile?.syncStatus).toBe("out-of-sync");
   });
 });

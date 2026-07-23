@@ -34,6 +34,8 @@ describe("RulesManager", () => {
       files: [],
       selectedRuleId: null,
       currentFile: null,
+      conflictDialogRuleId: null,
+      dismissedConflictRuleIds: [],
       draftContent: "",
       aiInstruction: "",
       aiSummary: null,
@@ -170,38 +172,125 @@ describe("RulesManager", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("External rule file changed")).toBeInTheDocument();
-      expect(screen.getAllByText("# PromptHub copy").length).toBeGreaterThan(0);
-      expect(screen.getByText("# External edit")).toBeInTheDocument();
+      expect(screen.getByText("Rule conflict")).toBeInTheDocument();
+      expect(
+        screen.getByText("Choose which version to keep. The other will be overwritten."),
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Docs Site").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("/tmp/docs-site/AGENTS.md").length).toBeGreaterThan(0);
+      expect(screen.getByRole("tab", { name: "Diff" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByText("− PromptHub · + External file")).toBeInTheDocument();
     });
 
-    const dismissConflictButton = screen.getByRole("button", {
-      name: "Dismiss rule conflict",
-    });
-    expect(dismissConflictButton).toHaveAttribute("type", "button");
-    expect(document.body.querySelector(".lucide-circle-alert")).toHaveAttribute(
-      "aria-hidden",
+    fireEvent.click(screen.getByRole("tab", { name: "Side by side" }));
+    expect(screen.getByRole("tab", { name: "Side by side" })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
+    expect(screen.getAllByText("# PromptHub copy").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("# External edit").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Keep external file version" }));
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Rule conflict")).not.toBeInTheDocument();
+    });
+
+    // Closing must not auto-reopen for the same out-of-sync rule in this session.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("Rule conflict")).not.toBeInTheDocument();
+
+    // Re-open path for resolve flow: select the same rule after clearing dismiss is not
+    // available; force a fresh read by resolving via re-render after reset is out of scope.
+    // Keep the resolve path covered by re-triggering through keep-external after re-select.
+  });
+
+  it("resolves an out-of-sync rule when the user keeps the external file", async () => {
+    const resolveConflict = vi.fn().mockResolvedValue({
+      id: "project:docs-site",
+      platformId: "workspace",
+      platformName: "Docs Site",
+      platformIcon: "FolderRoot",
+      platformDescription: "Project rules",
+      name: "AGENTS.md",
+      description: "Docs site rules",
+      path: "/tmp/docs-site/AGENTS.md",
+      exists: true,
+      group: "workspace",
+      syncStatus: "synced",
+      content: "# External edit",
+      versions: [],
+    });
+    const { api } = installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "project:docs-site",
+              platformId: "workspace",
+              platformName: "Docs Site",
+              platformIcon: "FolderRoot",
+              platformDescription: "Project rules",
+              name: "AGENTS.md",
+              description: "Docs site rules",
+              path: "/tmp/docs-site/AGENTS.md",
+              exists: true,
+              group: "workspace",
+              syncStatus: "out-of-sync",
+            },
+          ]),
+          read: vi.fn().mockResolvedValue({
+            id: "project:docs-site",
+            platformId: "workspace",
+            platformName: "Docs Site",
+            platformIcon: "FolderRoot",
+            platformDescription: "Project rules",
+            name: "AGENTS.md",
+            description: "Docs site rules",
+            path: "/tmp/docs-site/AGENTS.md",
+            exists: true,
+            group: "workspace",
+            syncStatus: "out-of-sync",
+            content: "# PromptHub copy",
+            targetContent: "# External edit",
+            versions: [],
+          }),
+          resolveConflict,
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<RulesManager />, { language: "en" });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Rule conflict")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep external" }));
 
     expect(api.rules.resolveConflict).not.toHaveBeenCalled();
-    expect(screen.getByText("Keep external file version?")).toBeInTheDocument();
+    expect(screen.getByText("Keep external version?")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "The external rule file will become the source of truth and overwrite PromptHub's managed copy.",
+        "Overwrite the PromptHub copy with the external file for Docs Site.",
       ),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Keep external version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overwrite PromptHub" }));
 
     await waitFor(() => {
       expect(api.rules.resolveConflict).toHaveBeenCalledWith(
         "project:docs-site",
         "use-target",
       );
-      expect(screen.queryByText("External rule file changed")).not.toBeInTheDocument();
+      expect(screen.queryByText("Rule conflict")).not.toBeInTheDocument();
     });
 
     expect(showToast).toHaveBeenCalledWith(

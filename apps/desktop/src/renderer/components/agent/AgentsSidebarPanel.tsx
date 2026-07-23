@@ -1,15 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
-  ArrowUpDownIcon,
   ChevronRightIcon,
   PinIcon,
   RefreshCwIcon,
   SearchIcon,
-  SlidersHorizontalIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { ManagedAgentFilter } from "@prompthub/shared/types";
 import { filterManagedAgents } from "../../services/managed-agents";
 import { useAgentStore } from "../../stores/agent.store";
 import { PlatformIcon } from "../ui/PlatformIcon";
@@ -22,46 +19,24 @@ function statusClass(status: "installed" | "configured" | "not-detected") {
 
 export function AgentsSidebarPanel() {
   const { t } = useTranslation();
-  const [sortMode, setSortMode] = useState<"recommended" | "name">(
-    "recommended",
-  );
   const agents = useAgentStore((state) => state.agents);
   const selectedAgentId = useAgentStore((state) => state.selectedAgentId);
   const searchQuery = useAgentStore((state) => state.searchQuery);
-  const filter = useAgentStore((state) => state.filter);
   const isLoading = useAgentStore((state) => state.isLoading);
   const ensureLoaded = useAgentStore((state) => state.ensureLoaded);
   const refresh = useAgentStore((state) => state.refresh);
   const selectAgent = useAgentStore((state) => state.selectAgent);
   const setSearchQuery = useAgentStore((state) => state.setSearchQuery);
-  const setFilter = useAgentStore((state) => state.setFilter);
   const togglePinned = useAgentStore((state) => state.togglePinned);
 
   useEffect(() => {
     void ensureLoaded();
   }, [ensureLoaded]);
 
-  const visibleAgents = useMemo(() => {
-    const filtered = filterManagedAgents(agents, searchQuery, filter);
-    return sortMode === "name"
-      ? [...filtered].sort((left, right) => left.name.localeCompare(right.name))
-      : filtered;
-  }, [agents, filter, searchQuery, sortMode]);
-
-  const filters: Array<{ value: ManagedAgentFilter; label: string }> = [
-    { value: "all", label: t("agents.filterAll", "All Agents") },
-    { value: "installed", label: t("agents.filterInstalled", "Installed") },
-    { value: "configured", label: t("agents.filterConfigured", "Configured") },
-    { value: "custom", label: t("agents.filterCustom", "Custom") },
-    {
-      value: "needs-attention",
-      label: t("agents.filterNeedsAttention", "Needs attention"),
-    },
-    {
-      value: "not-detected",
-      label: t("agents.filterNotDetected", "Not detected"),
-    },
-  ];
+  const visibleAgents = useMemo(
+    () => filterManagedAgents(agents, searchQuery, "all"),
+    [agents, searchQuery],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-sidebar-background/35">
@@ -104,48 +79,6 @@ export function AgentsSidebarPanel() {
             className="h-10 w-full rounded-md border border-border bg-background/70 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
           />
         </label>
-
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <label className="relative block">
-            <SlidersHorizontalIcon
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <select
-              value={filter}
-              onChange={(event) =>
-                setFilter(event.target.value as ManagedAgentFilter)
-              }
-              aria-label={t("agents.filterLabel", "Filter Agents")}
-              className="h-10 w-full appearance-none rounded-md border border-border bg-background/70 pl-9 pr-2 text-xs text-foreground outline-none focus:border-primary"
-            >
-              {filters.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="relative block">
-            <ArrowUpDownIcon
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <select
-              value={sortMode}
-              onChange={(event) =>
-                setSortMode(event.target.value as "recommended" | "name")
-              }
-              aria-label={t("agents.sortLabel", "Sort Agents")}
-              className="h-10 w-full appearance-none rounded-md border border-border bg-background/70 pl-9 pr-2 text-xs text-foreground outline-none focus:border-primary"
-            >
-              <option value="recommended">
-                {t("agents.sortRecommended", "Recommended")}
-              </option>
-              <option value="name">{t("agents.sortName", "Name")}</option>
-            </select>
-          </label>
-        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -173,10 +106,13 @@ export function AgentsSidebarPanel() {
                     className="flex min-h-[4.5rem] w-full items-center gap-3 px-3 py-2.5 pr-14 text-left"
                   >
                     <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/60">
-                      <PlatformIcon platformId={agent.id} size={34} />
+                      <PlatformIcon
+                        platformId={agent.displayIconId || agent.id}
+                        size={34}
+                      />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-foreground">
+                      <span className="block min-w-0 truncate text-sm font-semibold text-foreground">
                         {agent.name}
                       </span>
                       <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -206,7 +142,7 @@ export function AgentsSidebarPanel() {
                       event.stopPropagation();
                       togglePinned(agent.id);
                     }}
-                    className={`absolute right-7 top-1 inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-accent ${
+                    className={`absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md transition-colors hover:bg-accent ${
                       agent.isPinned
                         ? "text-primary"
                         : "text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100"
