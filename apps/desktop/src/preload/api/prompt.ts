@@ -11,6 +11,8 @@ import type {
   PromptRelation,
   PromptRelationQuery,
   PromptVersion,
+  RestorePromptGraphInput,
+  RestorePromptGraphResult,
   SearchQuery,
   UpdateOutputFormatItemDTO,
   UpdatePromptRelationDTO,
@@ -23,8 +25,10 @@ export const promptApi = {
   get: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_GET, id),
   getAll: () => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_GET_ALL),
   getAllTags: () => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_GET_ALL_TAGS),
-  renameTag: (oldTag: string, newTag: string) => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_RENAME_TAG, oldTag, newTag),
-  deleteTag: (tag: string) => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_DELETE_TAG, tag),
+  renameTag: (oldTag: string, newTag: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROMPT_RENAME_TAG, oldTag, newTag),
+  deleteTag: (tag: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PROMPT_DELETE_TAG, tag),
   update: (id: string, data: UpdatePromptDTO) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_UPDATE, id, data),
   delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_DELETE, id),
@@ -34,6 +38,11 @@ export const promptApi = {
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_COPY, id, variables),
   insertDirect: (prompt: Prompt) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_INSERT_DIRECT, prompt),
+  restoreGraph: (payload: RestorePromptGraphInput) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.PROMPT_RESTORE_GRAPH,
+      payload,
+    ) as Promise<RestorePromptGraphResult>,
   syncWorkspace: () => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_SYNC_WORKSPACE),
   /**
    * Atomically migrate legacy IndexedDB data into SQLite via a single
@@ -49,7 +58,12 @@ export const promptApi = {
     versions: PromptVersion[];
   }) => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_MIGRATE_IDB_BATCH, payload),
   move: (promptId: string, newParentId: string | null, newOrder: number) =>
-    ipcRenderer.invoke(IPC_CHANNELS.PROMPT_MOVE, promptId, newParentId, newOrder),
+    ipcRenderer.invoke(
+      IPC_CHANNELS.PROMPT_MOVE,
+      promptId,
+      newParentId,
+      newOrder,
+    ),
   createRelation: (data: CreatePromptRelationDTO) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_RELATION_CREATE, data),
   insertRelationDirect: (relation: PromptRelation) =>
@@ -70,6 +84,15 @@ export const promptApi = {
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_OUTPUT_FORMAT_UPDATE, id, data),
   deleteOutputFormat: (id: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_OUTPUT_FORMAT_DELETE, id),
-  reorderOutputFormat: (sourcePromptId: string, itemId: string, newSortOrder: number) =>
-    ipcRenderer.invoke(IPC_CHANNELS.PROMPT_OUTPUT_FORMAT_REORDER, sourcePromptId, itemId, newSortOrder),
+  reorderOutputFormat: (
+    sourcePromptId: string,
+    itemId: string,
+    newSortOrder: number,
+  ) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.PROMPT_OUTPUT_FORMAT_REORDER,
+      sourcePromptId,
+      itemId,
+      newSortOrder,
+    ),
 };

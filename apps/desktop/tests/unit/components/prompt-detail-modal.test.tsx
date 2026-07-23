@@ -67,6 +67,33 @@ describe("PromptDetailModal", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens the saved image gallery at the clicked reference image", async () => {
+    await renderWithI18n(
+      <ToastProvider>
+        <PromptDetailModal
+          isOpen
+          onClose={vi.fn()}
+          prompt={{
+            ...prompt,
+            images: ["first.png", "second.png", "third.png"],
+          }}
+        />
+      </ToastProvider>,
+      { language: "en" },
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview reference image 2" }),
+    );
+
+    expect(screen.getByText("Image 2 of 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next image" }));
+    expect(screen.getByRole("img", { name: "Preview" })).toHaveAttribute(
+      "src",
+      "local-image://third.png",
+    );
+  });
+
   it("opens prompt relationships from a quiet detail action", async () => {
     const onClose = vi.fn();
     const onSelectPrompt = vi.fn();

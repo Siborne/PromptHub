@@ -51,6 +51,12 @@
 - Per-batch mutations are serialized. Cancelling also terminalizes the running slot,
   rejects late provider output, and metadata-only favorite changes preserve the original
   completion timestamp.
+- The 2026-07-22 UI redesign replaces the horizontal composer with a dominant left
+  result canvas and a fixed right generation inspector. The inspector remains visible
+  across supported Desktop window widths instead of collapsing behind a settings button.
+  Batch history moved out of the persistent inspector into an on-demand drawer opened
+  from the running-batch status. White card surfaces replace the previous gray canvas
+  treatment.
 
 ## Verification
 
@@ -70,7 +76,7 @@
   - Core generation policy: 13 tests passed.
   - Desktop generation library: 16 tests passed.
   - Desktop generation runner: 6 tests passed.
-  - Desktop workbench component: 6 tests passed.
+  - Desktop workbench component: 9 tests passed.
   - Runtime paths, local media protocol, remote image policy, media URL, and AI transport:
     46 focused tests passed.
   - Combined focused Desktop verification: 74 tests passed across 8 files.
@@ -84,12 +90,31 @@
     is made.
   - Desktop production build: passed after the latest gallery interaction follow-up;
     existing chunk-size warnings remain.
+  - 2026-07-17 focused workbench ESLint and Desktop TypeScript check: passed.
+  - 2026-07-22 focused workbench component suite: 9 tests passed after the two-column
+    redesign; focused ESLint and Desktop TypeScript check passed.
+  - 2026-07-22 Desktop production build passed. The workbench chunk is 33.62 kB
+    (9.28 kB gzip); existing repository chunk-size warnings remain unchanged.
+  - 2026-07-17 file-size guard: failed on the unrelated existing
+    `apps/desktop/tests/unit/services/database-backup.test.ts` size of 1,511 lines versus
+    the script's preferred 1,500-line limit; the changed workbench files remain below
+    their configured limits.
 - Visual QA:
   - Reference review completed against `assets/workbench-ui-concept.png`.
   - Revised Electron implementation captured at the reference `1596x986` viewport.
   - Empty-state hierarchy passed visual review; runtime measurements found no document,
     configuration-row, or gallery-toolbar horizontal overflow. Populated-state capture
     remains pending before convergence.
+  - The 2026-07-17 post-refinement Electron capture remains blocked because the app did
+    not expose its first window before the 60-second Playwright timeout. Production build
+    and component verification passed, but they do not replace the pending visual capture.
+  - 2026-07-22 in-app browser capture passed at the accepted `1586x992` viewport.
+    The initial responsive implementation used a side sheet below `1280px`; user review
+    clarified that the right inspector must remain visible and that behavior was removed.
+  - 2026-07-22 fixed-inspector follow-up passed at the user's effective `1008x622` CSS
+    viewport: the 323 px inspector stayed visible, the obsolete settings trigger was
+    absent, toolbar children remained within the result canvas, and the page had no
+    horizontal overflow.
 
 ## Analyze
 
@@ -125,6 +150,32 @@
 ## Synced Docs
 
 - None yet. Stable documents remain the description of currently shipped behavior.
+
+## Desktop-Native Layout Batch (2026-07-22, `FR-IGW-016`, `DES-IGW-010`, `T-IGW-016`)
+
+- Three-pane layout replaces the drawer architecture: permanent left batch rail
+  (`ImageGenerationBatchRail.tsx`, thumbnails + progress + status + new-batch action),
+  center gallery, right composer that is collapsible (auto-collapses after a successful
+  submit, slim expand strip when collapsed). The modal queue drawer, backdrop,
+  `queueOpen` state, and `ImageGenerationBatchQueue.tsx` are removed.
+- Gallery header: `ImageGenerationBatchSwitcher.tsx` carries batch identity (status dot,
+  title, done/total) with a listbox dropdown for direct switching; a slim progress bar
+  renders below the header while the selected batch is queued/running.
+- `ImageGenerationLightbox.tsx`: dialog with backdrop close, keyboard left/right cycling
+  through visible outputs, Escape close, and an action bar (favorite/download/copy
+  execution prompt/attach to source Prompt) sharing the workbench handlers with the
+  bottom selection bar.
+- Selection semantics: multi-select mode toggle removed; tile checkbox (hover/selected
+  only) or Shift/Ctrl+click toggles selection, plain click opens the lightbox. The empty
+  Advanced toggle and its props are removed.
+- i18n: 9 new `generation.*` keys in all seven locales; 6 dead keys removed after
+  zero-reference grep. One pre-existing gap recorded: `generation.referenceUnsupported`
+  is missing in fr/de/es locales from earlier work.
+- Verification: rewritten `image-generation-workbench.test.tsx` (16 cases: rail
+  persistence and switching, composer collapse lifecycle, header switcher and progress,
+  lightbox keyboard/actions, selection semantics, no drawer/Advanced remnants);
+  components suite green (174 files / 1317 tests), i18n regression, ESLint, and
+  `tsc --noEmit` green; full desktop suite green (411 files / 3802 tests).
 
 ## Follow-Ups
 

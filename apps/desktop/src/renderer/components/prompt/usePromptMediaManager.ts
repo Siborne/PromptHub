@@ -130,6 +130,16 @@ export function usePromptMediaManager({
     [],
   );
 
+  const showMediaUploadError = useCallback(() => {
+    showToast(
+      translate(
+        "prompt.uploadFailed",
+        "Could not add media. Check the link or file and try again.",
+      ),
+      "error",
+    );
+  }, [showToast, translate]);
+
   const showImageUrlError = useCallback(
     (message?: string) => {
       const normalized = message?.toLowerCase() ?? "";
@@ -144,15 +154,9 @@ export function usePromptMediaManager({
         return;
       }
 
-      showToast(
-        translate(
-          "prompt.uploadFailed",
-          "Could not add media. Check the link or file and try again.",
-        ),
-        "error",
-      );
+      showMediaUploadError();
     },
-    [showToast, translate],
+    [showMediaUploadError, showToast, translate],
   );
 
   // Track previous initial values to avoid infinite re-render loops
@@ -185,23 +189,42 @@ export function usePromptMediaManager({
 
   const handleSelectImage = useCallback(async () => {
     try {
-      const filePaths = await window.electron?.selectImage?.();
+      const selectImage = window.electron?.selectImage;
+      if (!selectImage) {
+        throw new Error("Image picker is unavailable");
+      }
+
+      const filePaths = await selectImage();
       if (!canApplyAsyncResult()) {
         return;
       }
-      if (filePaths && filePaths.length > 0) {
-        const savedImages = await window.electron?.saveImage?.(filePaths);
-        if (savedImages && canApplyAsyncResult()) {
-          setImages((prev) => [...prev, ...savedImages]);
-        }
+      if (!filePaths || filePaths.length === 0) {
+        return;
       }
+
+      const saveImage = window.electron?.saveImage;
+      if (!saveImage) {
+        throw new Error("Image copy bridge is unavailable");
+      }
+
+      const savedImages = await saveImage(filePaths);
+      if (!canApplyAsyncResult()) {
+        return;
+      }
+      if (savedImages.length === 0) {
+        showMediaUploadError();
+        return;
+      }
+
+      setImages((prev) => [...prev, ...savedImages]);
     } catch (error) {
       if (!canApplyAsyncResult()) {
         return;
       }
       console.error("Failed to select images:", error);
+      showMediaUploadError();
     }
-  }, [canApplyAsyncResult]);
+  }, [canApplyAsyncResult, showMediaUploadError]);
 
   const handleRemoveImage = useCallback((index: number) => {
     setImages((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
@@ -231,43 +254,55 @@ export function usePromptMediaManager({
     setVideos((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   }, []);
 
-  const saveDroppedImage = useCallback(async (file: File): Promise<string | null> => {
-    const extension = getFileExtension(file);
-    const fileName = buildDroppedMediaFileName(file, extension);
-    const base64 = await readFileAsBase64(file);
-    if (!canApplyAsyncResult()) {
-      return null;
-    }
-    const saved = await window.electron?.saveImageBase64?.(fileName, base64);
-    return saved && canApplyAsyncResult() ? fileName : null;
-  }, [canApplyAsyncResult]);
+  const saveDroppedImage = useCallback(
+    async (file: File): Promise<string | null> => {
+      const extension = getFileExtension(file);
+      const fileName = buildDroppedMediaFileName(file, extension);
+      const base64 = await readFileAsBase64(file);
+      if (!canApplyAsyncResult()) {
+        return null;
+      }
+      const saved = await window.electron?.saveImageBase64?.(fileName, base64);
+      return saved && canApplyAsyncResult() ? fileName : null;
+    },
+    [canApplyAsyncResult],
+  );
 
-  const saveDroppedVideo = useCallback(async (file: File): Promise<string | null> => {
-    const extension = getFileExtension(file);
-    const fileName = buildDroppedMediaFileName(file, extension);
-    const base64 = await readFileAsBase64(file);
-    if (!canApplyAsyncResult()) {
-      return null;
-    }
-    const saved = await window.electron?.saveVideoBase64?.(fileName, base64);
-    return saved && canApplyAsyncResult() ? fileName : null;
-  }, [canApplyAsyncResult]);
+  const saveDroppedVideo = useCallback(
+    async (file: File): Promise<string | null> => {
+      const extension = getFileExtension(file);
+      const fileName = buildDroppedMediaFileName(file, extension);
+      const base64 = await readFileAsBase64(file);
+      if (!canApplyAsyncResult()) {
+        return null;
+      }
+      const saved = await window.electron?.saveVideoBase64?.(fileName, base64);
+      return saved && canApplyAsyncResult() ? fileName : null;
+    },
+    [canApplyAsyncResult],
+  );
 
-  const handleMediaDragOver = useCallback((event: ReactDragEvent<HTMLElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
-    setIsDraggingMedia(true);
-  }, []);
+  const handleMediaDragOver = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      setIsDraggingMedia(true);
+    },
+    [],
+  );
 
-  const handleMediaDragLeave = useCallback((event: ReactDragEvent<HTMLElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
-      return;
-    }
-    setIsDraggingMedia(false);
-  }, []);
+  const handleMediaDragLeave = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        return;
+      }
+      setIsDraggingMedia(false);
+    },
+    [],
+  );
 
   const handleMediaDrop = useCallback(
     async (event: ReactDragEvent<HTMLElement>) => {
@@ -339,7 +374,13 @@ export function usePromptMediaManager({
         );
       }
     },
-    [canApplyAsyncResult, saveDroppedImage, saveDroppedVideo, showToast, translate],
+    [
+      canApplyAsyncResult,
+      saveDroppedImage,
+      saveDroppedVideo,
+      showToast,
+      translate,
+    ],
   );
 
   const handleUrlUpload = useCallback(
@@ -391,7 +432,9 @@ export function usePromptMediaManager({
             "error",
           );
         } else {
-          showImageUrlError(error instanceof Error ? error.message : String(error));
+          showImageUrlError(
+            error instanceof Error ? error.message : String(error),
+          );
         }
       } finally {
         if (timeoutId !== null) {

@@ -43,13 +43,18 @@ function PromptVersionHistoryDialog({
 
 function PromptImagePreview({
   previewImage,
+  selectedPrompt,
   setPreviewImage,
-}: Pick<PromptWorkspaceDialogsProps, "previewImage" | "setPreviewImage">) {
+}: Pick<
+  PromptWorkspaceDialogsProps,
+  "previewImage" | "selectedPrompt" | "setPreviewImage"
+>) {
   return (
     <ImagePreviewModal
       isOpen={!!previewImage}
       onClose={() => setPreviewImage(null)}
       imageSrc={previewImage}
+      imageSources={selectedPrompt?.images}
     />
   );
 }

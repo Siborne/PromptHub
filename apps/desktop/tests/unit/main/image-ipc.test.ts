@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const handleMock = vi.fn();
 const showOpenDialogMock = vi.fn();
+const fromWebContentsMock = vi.fn();
 const openPathMock = vi.fn();
 const mkdirMock = vi.fn().mockResolvedValue(undefined);
 const copyFileMock = vi.fn().mockResolvedValue(undefined);
@@ -22,6 +23,9 @@ const httpRequestMock = vi.fn();
 const httpsRequestMock = vi.fn();
 
 vi.mock("electron", () => ({
+  BrowserWindow: {
+    fromWebContents: fromWebContentsMock,
+  },
   ipcMain: {
     handle: handleMock,
   },
@@ -75,7 +79,10 @@ vi.mock("../../../src/main/services/skill-installer-remote", () => ({
   isBlockedHostname: isBlockedHostnameMock,
 }));
 
-type RegisteredHandlers = Record<string, (...args: unknown[]) => Promise<unknown>>;
+type RegisteredHandlers = Record<
+  string,
+  (...args: unknown[]) => Promise<unknown>
+>;
 
 function createResponse(options: {
   statusCode: number;
@@ -111,29 +118,35 @@ function createResponse(options: {
 }
 
 function createRequestMock(response: ReturnType<typeof createResponse>) {
-  return vi.fn((_options, callback: (response: ReturnType<typeof createResponse>) => void) => {
-    const request = new EventEmitter() as EventEmitter & {
-      end: () => void;
-      destroy: (error?: Error) => void;
-    };
+  return vi.fn(
+    (
+      _options,
+      callback: (response: ReturnType<typeof createResponse>) => void,
+    ) => {
+      const request = new EventEmitter() as EventEmitter & {
+        end: () => void;
+        destroy: (error?: Error) => void;
+      };
 
-    request.end = () => {
-      callback(response);
-    };
-    request.destroy = (error?: Error) => {
-      if (error) {
-        request.emit("error", error);
-      }
-    };
+      request.end = () => {
+        callback(response);
+      };
+      request.destroy = (error?: Error) => {
+        if (error) {
+          request.emit("error", error);
+        }
+      };
 
-    return request;
-  });
+      return request;
+    },
+  );
 }
 
 async function setupImageIpc() {
   vi.resetModules();
   handleMock.mockReset();
   showOpenDialogMock.mockReset();
+  fromWebContentsMock.mockReset();
   openPathMock.mockReset();
   mkdirMock.mockClear();
   copyFileMock.mockClear();
@@ -169,6 +182,50 @@ describe("image IPC", () => {
     vi.clearAllMocks();
   });
 
+  it("owns image and video pickers with the invoking window", async () => {
+    const { handlers, IPC_CHANNELS } = await setupImageIpc();
+    const sender = { id: "renderer-web-contents" };
+    const owner = { id: "prompt-window" };
+    fromWebContentsMock.mockReturnValue(owner);
+    showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
+
+    await handlers[IPC_CHANNELS.DIALOG_SELECT_IMAGE]({ sender });
+    await handlers[IPC_CHANNELS.DIALOG_SELECT_VIDEO]({ sender });
+
+    expect(fromWebContentsMock).toHaveBeenNthCalledWith(1, sender);
+    expect(fromWebContentsMock).toHaveBeenNthCalledWith(2, sender);
+    expect(showOpenDialogMock).toHaveBeenNthCalledWith(
+      1,
+      owner,
+      expect.objectContaining({ properties: ["openFile", "multiSelections"] }),
+    );
+    expect(showOpenDialogMock).toHaveBeenNthCalledWith(
+      2,
+      owner,
+      expect.objectContaining({ properties: ["openFile", "multiSelections"] }),
+    );
+  });
+
+  it("falls back to a parentless image picker when the sender has no window", async () => {
+    const { handlers, IPC_CHANNELS } = await setupImageIpc();
+    const sender = { id: "detached-web-contents" };
+    fromWebContentsMock.mockReturnValue(null);
+    showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
+
+    await handlers[IPC_CHANNELS.DIALOG_SELECT_IMAGE]({ sender });
+
+    expect(showOpenDialogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [
+          {
+            name: "Images",
+            extensions: ["jpg", "png", "gif", "jpeg", "webp"],
+          },
+        ],
+      }),
+    );
+  });
+
   it("only saves image paths that came from the file picker", async () => {
     const { handlers, IPC_CHANNELS } = await setupImageIpc();
     showOpenDialogMock.mockResolvedValue({
@@ -182,7 +239,9 @@ describe("image IPC", () => {
     ).resolves.toEqual(["/Users/demo/Pictures/allowed.png"]);
 
     await expect(
-      handlers[IPC_CHANNELS.IMAGE_SAVE](null, ["/Users/demo/Pictures/other.png"]),
+      handlers[IPC_CHANNELS.IMAGE_SAVE](null, [
+        "/Users/demo/Pictures/other.png",
+      ]),
     ).resolves.toEqual([]);
     expect(copyFileMock).not.toHaveBeenCalled();
 
@@ -191,7 +250,9 @@ describe("image IPC", () => {
     ).resolves.toEqual(["/Users/demo/Pictures/allowed.png"]);
 
     await expect(
-      handlers[IPC_CHANNELS.IMAGE_SAVE](null, ["/Users/demo/Pictures/allowed.png"]),
+      handlers[IPC_CHANNELS.IMAGE_SAVE](null, [
+        "/Users/demo/Pictures/allowed.png",
+      ]),
     ).resolves.toEqual(["saved-image.png"]);
     expect(copyFileMock).toHaveBeenCalledWith(
       "/Users/demo/Pictures/allowed.png",
@@ -221,7 +282,9 @@ describe("image IPC", () => {
     ).resolves.toEqual(["/Users/demo/Movies/allowed.mp4"]);
 
     await expect(
-      handlers[IPC_CHANNELS.VIDEO_SAVE](null, ["/Users/demo/Movies/allowed.mp4"]),
+      handlers[IPC_CHANNELS.VIDEO_SAVE](null, [
+        "/Users/demo/Movies/allowed.mp4",
+      ]),
     ).resolves.toEqual(["saved-video.mp4"]);
     expect(copyFileMock).toHaveBeenCalledWith(
       "/Users/demo/Movies/allowed.mp4",
@@ -241,14 +304,18 @@ describe("image IPC", () => {
     ).resolves.toEqual(["/Users/demo/Movies/not-actually-video.txt"]);
 
     await expect(
-      handlers[IPC_CHANNELS.VIDEO_SAVE](null, ["/Users/demo/Movies/not-actually-video.txt"]),
+      handlers[IPC_CHANNELS.VIDEO_SAVE](null, [
+        "/Users/demo/Movies/not-actually-video.txt",
+      ]),
     ).resolves.toEqual([]);
     expect(copyFileMock).not.toHaveBeenCalled();
   });
 
   it("reports image open failures returned by the OS shell", async () => {
     const { handlers, IPC_CHANNELS } = await setupImageIpc();
-    openPathMock.mockResolvedValue("No application is associated with the file");
+    openPathMock.mockResolvedValue(
+      "No application is associated with the file",
+    );
 
     await expect(
       handlers[IPC_CHANNELS.IMAGE_OPEN](null, "saved-image.png"),
@@ -261,7 +328,9 @@ describe("image IPC", () => {
 
   it("reports video open failures returned by the OS shell", async () => {
     const { handlers, IPC_CHANNELS } = await setupImageIpc();
-    openPathMock.mockResolvedValue("No application is associated with the file");
+    openPathMock.mockResolvedValue(
+      "No application is associated with the file",
+    );
 
     await expect(
       handlers[IPC_CHANNELS.VIDEO_OPEN](null, "saved-video.mp4"),
@@ -330,10 +399,18 @@ describe("image IPC", () => {
     accessMock.mockRejectedValue(new Error("missing"));
 
     await expect(
-      handlers[IPC_CHANNELS.IMAGE_SAVE_BASE64](null, "image.png", "not-base64!"),
+      handlers[IPC_CHANNELS.IMAGE_SAVE_BASE64](
+        null,
+        "image.png",
+        "not-base64!",
+      ),
     ).resolves.toBe(false);
     await expect(
-      handlers[IPC_CHANNELS.VIDEO_SAVE_BASE64](null, "video.mp4", "A".repeat(27_962_028)),
+      handlers[IPC_CHANNELS.VIDEO_SAVE_BASE64](
+        null,
+        "video.mp4",
+        "A".repeat(27_962_028),
+      ),
     ).resolves.toBe(false);
 
     expect(writeFileMock).not.toHaveBeenCalled();
@@ -367,16 +444,19 @@ describe("image IPC", () => {
       ),
     ).resolves.toBeNull();
 
-    expect(resolvePublicAddressMock.mock.calls.map(([hostname]) => hostname)).toEqual(
-      ["example.com", "example.com", "blocked.test"],
-    );
+    expect(
+      resolvePublicAddressMock.mock.calls.map(([hostname]) => hostname),
+    ).toEqual(["example.com", "example.com", "blocked.test"]);
     expect(writeFileMock).not.toHaveBeenCalled();
   });
 
   it("rejects remote image downloads without an image extension or image content type", async () => {
     const { handlers, IPC_CHANNELS } = await setupImageIpc();
     uuidMock.mockReturnValue("downloaded-image");
-    resolvePublicAddressMock.mockResolvedValue({ address: "203.0.113.10", family: 4 });
+    resolvePublicAddressMock.mockResolvedValue({
+      address: "203.0.113.10",
+      family: 4,
+    });
 
     httpsRequestMock.mockImplementation(
       createRequestMock(
@@ -389,10 +469,7 @@ describe("image IPC", () => {
     );
 
     await expect(
-      handlers[IPC_CHANNELS.IMAGE_DOWNLOAD](
-        null,
-        "https://example.com/render",
-      ),
+      handlers[IPC_CHANNELS.IMAGE_DOWNLOAD](null, "https://example.com/render"),
     ).resolves.toBeNull();
 
     expect(writeFileMock).not.toHaveBeenCalled();

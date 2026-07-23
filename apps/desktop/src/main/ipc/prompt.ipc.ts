@@ -15,12 +15,14 @@ import type {
   PromptRelationQuery,
   PromptRelation,
   PromptVersion,
+  RestorePromptGraphInput,
+  RestorePromptGraphResult,
   SearchQuery,
   UpdateOutputFormatItemDTO,
   UpdatePromptRelationDTO,
   UpdatePromptDTO,
 } from '@prompthub/shared/types';
-import { syncPromptWorkspaceFromDatabase } from "../services/prompt-workspace";
+import { syncPromptWorkspaceFromDatabase } from '../services/prompt-workspace';
 
 /**
  * Register Prompt-related IPC handlers
@@ -62,18 +64,11 @@ export function registerPromptIPC(db: PromptDB, folderDb: FolderDB, rawDb: Datab
     return ordered;
   };
 
-  const assertPromptMoveInput = (
-    promptId: string,
-    newParentId: string | null,
-    newOrder: number,
-  ) => {
+  const assertPromptMoveInput = (promptId: string, newParentId: string | null, newOrder: number) => {
     if (typeof promptId !== 'string' || promptId.trim().length === 0) {
       throw new Error('Prompt id is required');
     }
-    if (
-      newParentId !== null &&
-      (typeof newParentId !== 'string' || newParentId.trim().length === 0)
-    ) {
+    if (newParentId !== null && (typeof newParentId !== 'string' || newParentId.trim().length === 0)) {
       throw new Error('Parent prompt id must be null or a non-empty string');
     }
     if (!Number.isFinite(newOrder) || newOrder < 0) {
@@ -143,30 +138,120 @@ export function registerPromptIPC(db: PromptDB, folderDb: FolderDB, rawDb: Datab
 
   // Copy Prompt (after variable replacement)
   // 复制 Prompt（替换变量后）
-  ipcMain.handle(
-    IPC_CHANNELS.PROMPT_COPY,
-    async (_, id: string, variables: Record<string, string>) => {
-      const prompt = db.getById(id);
-      if (!prompt) return null;
+  ipcMain.handle(IPC_CHANNELS.PROMPT_COPY, async (_, id: string, variables: Record<string, string>) => {
+    const prompt = db.getById(id);
+    if (!prompt) return null;
 
-      // Replace variables
-      // 替换变量
-      let content = prompt.userPrompt;
-      for (const [key, value] of Object.entries(variables)) {
-        content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
-      }
-
-      // Update usage count
-      // 更新使用次数
-      db.incrementUsage(id);
-
-      return content;
+    // Replace variables
+    // 替换变量
+    let content = prompt.userPrompt;
+    for (const [key, value] of Object.entries(variables)) {
+      content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
     }
-  );
+
+    // Update usage count
+    // 更新使用次数
+    db.incrementUsage(id);
+
+    return content;
+  });
 
   ipcMain.handle(IPC_CHANNELS.PROMPT_INSERT_DIRECT, async (_, prompt: Prompt) => {
     db.insertPromptDirect(prompt);
     return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROMPT_RESTORE_GRAPH, async (_, payload: RestorePromptGraphInput): Promise<RestorePromptGraphResult> => {
+    if (!payload || typeof payload !== 'object') {
+      throw new Error('Prompt graph restore payload is required');
+    }
+
+    const collections = [
+      payload.folders,
+      payload.prompts,
+      payload.versions,
+      payload.promptRelations ?? [],
+      payload.outputFormatItems ?? [],
+    ];
+    if (collections.some((collection) => !Array.isArray(collection))) {
+      throw new Error('Prompt graph restore collections must be arrays');
+    }
+
+    const assertUniqueIds = (label: string, values: Array<{ id: string }>) => {
+      const ids = new Set<string>();
+      for (const value of values) {
+        if (!value || typeof value.id !== 'string' || value.id.trim().length === 0) {
+          throw new Error(`${label} contains an invalid id`);
+        }
+        if (ids.has(value.id)) {
+          throw new Error(`${label} contains duplicate id: ${value.id}`);
+        }
+        ids.add(value.id);
+      }
+    };
+
+    const promptRelations = payload.promptRelations ?? [];
+    const outputFormatItems = payload.outputFormatItems ?? [];
+    assertUniqueIds('folders', payload.folders);
+    assertUniqueIds('prompts', payload.prompts);
+    assertUniqueIds('versions', payload.versions);
+    assertUniqueIds('prompt relations', promptRelations);
+    assertUniqueIds('output format items', outputFormatItems);
+
+    const promptIds = new Set(payload.prompts.map((prompt) => prompt.id));
+    for (const version of payload.versions) {
+      if (!promptIds.has(version.promptId)) {
+        throw new Error(`Prompt version references an unknown prompt: ${version.id}`);
+      }
+    }
+    for (const relation of promptRelations) {
+      if (
+        relation.sourcePromptId === relation.targetPromptId ||
+        !promptIds.has(relation.sourcePromptId) ||
+        !promptIds.has(relation.targetPromptId)
+      ) {
+        throw new Error(`Prompt relation has invalid endpoints: ${relation.id}`);
+      }
+    }
+    for (const item of outputFormatItems) {
+      if (!promptIds.has(item.sourcePromptId) || (item.targetPromptId !== null && !promptIds.has(item.targetPromptId))) {
+        throw new Error(`Output format item has invalid endpoints: ${item.id}`);
+      }
+    }
+
+    const restore = rawDb.transaction(() => {
+      rawDb.exec('DELETE FROM prompt_output_format_items');
+      rawDb.exec('DELETE FROM prompt_relations');
+      rawDb.exec('DELETE FROM prompt_versions');
+      rawDb.exec('DELETE FROM prompts');
+      rawDb.exec('DELETE FROM folders');
+
+      for (const folder of sortFoldersForInsert(payload.folders)) {
+        folderDb.insertFolderDirect(folder);
+      }
+      for (const prompt of payload.prompts) {
+        db.insertPromptDirect(prompt);
+      }
+      for (const version of payload.versions) {
+        db.insertVersionDirect(version);
+      }
+      for (const relation of promptRelations) {
+        relationDb.insertRelationDirect(relation);
+      }
+      for (const item of outputFormatItems) {
+        outputFormatDb.insertItemDirect(item);
+      }
+    });
+
+    restore();
+    syncWorkspace();
+    return {
+      promptCount: payload.prompts.length,
+      folderCount: payload.folders.length,
+      versionCount: payload.versions.length,
+      relationCount: promptRelations.length,
+      outputFormatItemCount: outputFormatItems.length,
+    };
   });
 
   /**
@@ -196,20 +281,35 @@ export function registerPromptIPC(db: PromptDB, folderDb: FolderDB, rawDb: Datab
       // Input guard: reject null/non-object payloads.
       // 输入保护：拒绝 null 或非对象入参。
       if (!payload || typeof payload !== 'object') {
-        return { imported: false, promptCount: 0, folderCount: 0, versionCount: 0 };
+        return {
+          imported: false,
+          promptCount: 0,
+          folderCount: 0,
+          versionCount: 0,
+        };
       }
 
       // Guard: if SQLite already has prompts, do not overwrite.
       // 保护：若 SQLite 已有 prompt，不覆盖。
       const existing = db.getAll();
       if (existing.length > 0) {
-        return { imported: false, promptCount: 0, folderCount: 0, versionCount: 0 };
+        return {
+          imported: false,
+          promptCount: 0,
+          folderCount: 0,
+          versionCount: 0,
+        };
       }
 
       const { folders = [], prompts = [], versions = [] } = payload;
 
       if (prompts.length === 0 && folders.length === 0) {
-        return { imported: false, promptCount: 0, folderCount: 0, versionCount: 0 };
+        return {
+          imported: false,
+          promptCount: 0,
+          folderCount: 0,
+          versionCount: 0,
+        };
       }
 
       // Wrap all inserts in a single transaction for atomicity.

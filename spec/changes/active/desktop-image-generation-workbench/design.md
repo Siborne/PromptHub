@@ -11,9 +11,10 @@
 
 ## Selected UI Concept
 
-The user accepted the following visual direction on 2026-07-15:
+The user replaced the original top-composer direction and accepted the following
+two-column visual direction on 2026-07-22:
 
-![PromptHub 生图工作台 UI concept](./assets/workbench-ui-concept.png)
+![PromptHub 生图工作台 UI concept v2](./assets/workbench-ui-concept-v2.png)
 
 The concept is normative for information architecture and interaction hierarchy, not
 pixel-perfect production copy. All shipped labels remain subject to the existing i18n
@@ -38,25 +39,26 @@ Detailed plan artifacts:
 - 顶部“全部 / 文本 / 绘图”继续表示 Prompt 类型筛选，不承担工作台导航职责。
 - 从 Prompt 详情进入时携带当前 Prompt 和版本快照；直接进入时恢复最近批次或展示
   可执行空态，不隐式创建 Prompt。
-- 工作台采用画布优先布局：顶部生成配置，中部渐进结果墙，右侧在批次队列与单图
-  溯源详情之间切换，底部显示多选批量操作。
+- 工作台采用画布优先的左右布局：左侧是占主导宽度的渐进结果墙，右侧是
+  固定生成配置面板。批次历史不长期占用右栏；顶部运行状态是按需批次抽屉入口。
+  不再使用横跨画布的顶部生成配置。
 
 ### Workspace Regions
 
 | Region               | Responsibility                                                               |
 | -------------------- | ---------------------------------------------------------------------------- |
 | Prompts 二级导航     | 进入工作台并保持用户对 Prompts 所属关系的认知。                              |
-| 顶部生成配置         | 选择源 Prompt/版本、模型、比例、质量、数量，检查解析文本与参考图并提交批次。 |
+| 右侧生成配置         | 选择源 Prompt/版本、模型、比例、质量、数量，检查解析文本与参考图并提交批次。 |
 | 结果过滤与密度工具栏 | 在当前批次、全部作品、收藏和失败之间切换，并控制排序、密度和多选。           |
 | 渐进结果墙           | 以稳定占位展示完成、生成中和失败输出；批次未结束时允许先筛选与处理成功结果。 |
-| 右侧批次/溯源面板    | 无选中输出时展示批次队列；选中单图时展示预览、来源快照和继续生成操作。       |
+| 按需批次抽屉         | 从顶部运行状态打开，用于切换批次、新建批次和查看来源快照；默认保持关闭。     |
 | 底部上下文操作栏     | 仅在选择输出时出现，集中收藏、设为参考、下载、导出所选和清除选择。           |
 
 ### Primary Interaction Flow
 
 1. 用户从 Prompts 二级导航直接进入，或从 image Prompt 详情携带预填草稿进入。
 2. 用户确认源 Prompt/版本、变量解析、参考图、模型能力和目标数量。
-3. 提交后批次进入右侧队列，结果墙立即建立稳定占位并渐进填充成功输出。
+3. 提交后结果墙立即建立稳定占位并渐进填充成功输出；顶部状态可按需打开批次抽屉。
 4. 用户不必等待整个批次结束即可收藏、筛选、设为参考或导出已完成输出。
 5. 用户选中单图时，右侧切换为 provenance 详情，并可调整后生成或回到所属批次。
 6. 离开页面不终止任务；再次进入时恢复批次准确状态、已完成输出和可执行失败动作。
@@ -185,6 +187,28 @@ Desktop 能力不能因为 renderer 复用到 Web 而默认宣称 Web 支持本�
 必须通过 capability flags 隐藏或拒绝未实现合同。
 
 ## Affected Areas
+
+## `DES-IGW-010`: Desktop-Native Workbench Layout (2026-07-22)
+
+Batch confirmed with the maintainer; implements `FR-IGW-016`.
+
+### Information architecture
+
+- The workbench becomes a three-pane desktop layout: a permanent left batch rail (reusing the `ImageGenerationBatchQueue` list: thumbnails, progress bars, status, plus a "New batch" action), a center gallery, and a right configuration panel that is collapsible. The modal queue drawer and its backdrop are removed entirely.
+- The gallery header shows the current batch identity (title + counts) with a dropdown to switch batches directly; a slim live progress bar renders under the header while the selected batch is running or queued.
+- The composer panel defaults to expanded for an empty/new draft and collapses after a successful submit; the user can toggle it at any time. Batch detail metadata (previously in the drawer) moves into the gallery header area or the right panel — no third overlay surface.
+
+### Lightbox
+
+- Clicking a completed output opens a lightbox (`role="dialog"`): large image, batch/prompt metadata, keyboard left/right navigation within the current gallery ordering, Escape to close, and the same action set as the selection bar (favorite, download, copy execution prompt, add to source Prompt). Tile click semantics become: click opens the lightbox; selection for batch actions uses the hover/selected checkbox affordance.
+
+### Selection and cleanup
+
+- Desktop selection semantics replace the multi-select mode toggle: single click on the checkbox toggles selection, Shift/Ctrl+click on a tile adds to the selection set; the checkbox affordance is visible on hover or when selected, not permanently.
+- The empty "Advanced" toggle is removed; the variable inputs and resolved-preview remain visible whenever a source prompt with variables is selected.
+- All surfaces follow the existing neutral design tokens; no new dependencies.
+
+## Affected Areas (original)
 
 - Data model: new filesystem generation manifests plus rebuildable SQLite indexes.
 - Shared contracts: batch, output, status, capability and IPC types in

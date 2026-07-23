@@ -1,4 +1,5 @@
-import { ipcMain, dialog, shell } from "electron";
+import { BrowserWindow, ipcMain, dialog, shell } from "electron";
+import type { IpcMainInvokeEvent, OpenDialogOptions } from "electron";
 import * as http from "http";
 import * as https from "https";
 import path from "path";
@@ -16,7 +17,8 @@ const IMAGE_DOWNLOAD_TIMEOUT_MS = 30_000;
 const IMAGE_DOWNLOAD_MAX_BYTES = 10 * 1024 * 1024;
 const IMAGE_DOWNLOAD_MAX_REDIRECTS = 5;
 const MEDIA_SAVE_MAX_BYTES = 20 * 1024 * 1024;
-const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
+const BASE64_PATTERN =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".avi", ".mkv"]);
 
@@ -91,7 +93,11 @@ async function downloadImageBuffer(
   }
 
   const parsedUrl = new URL(targetUrl);
-  if (!(["http:", "https:"] as const).includes(parsedUrl.protocol as "http:" | "https:")) {
+  if (
+    !(["http:", "https:"] as const).includes(
+      parsedUrl.protocol as "http:" | "https:",
+    )
+  ) {
     throw new Error("Invalid or blocked URL");
   }
 
@@ -144,7 +150,9 @@ async function downloadImageBuffer(
           return;
         }
 
-        const contentType = getSingleHeaderValue(response.headers["content-type"]);
+        const contentType = getSingleHeaderValue(
+          response.headers["content-type"],
+        );
         if (contentType && !contentType.toLowerCase().startsWith("image/")) {
           response.resume();
           reject(new Error("Remote resource is not an image"));
@@ -223,7 +231,11 @@ function validateFileName(fileName: string, baseDir: string): string {
   const fullPath = path.resolve(resolvedBase, fileName);
   const relative = path.relative(resolvedBase, fullPath);
 
-  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (
+    relative === "" ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative)
+  ) {
     throw new Error("Invalid filename: path traversal detected");
   }
 
@@ -331,10 +343,22 @@ async function openPathWithResult(filePath: string): Promise<boolean> {
   return !(typeof error === "string" && error.trim().length > 0);
 }
 
+function showSenderOwnedOpenDialog(
+  event: Pick<IpcMainInvokeEvent, "sender"> | null | undefined,
+  options: OpenDialogOptions,
+) {
+  const parent = event?.sender
+    ? BrowserWindow.fromWebContents(event.sender)
+    : null;
+  return parent
+    ? dialog.showOpenDialog(parent, options)
+    : dialog.showOpenDialog(options);
+}
+
 export function registerImageIPC(): void {
   // Select images
-  ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_IMAGE, async () => {
-    const result = await dialog.showOpenDialog({
+  ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_IMAGE, async (event) => {
+    const result = await showSenderOwnedOpenDialog(event, {
       properties: ["openFile", "multiSelections"],
       filters: [
         { name: "Images", extensions: ["jpg", "png", "gif", "jpeg", "webp"] },
@@ -365,7 +389,9 @@ export function registerImageIPC(): void {
         try {
           const resolvedFilePath = path.resolve(filePath);
           if (!isAllowedSelectedImagePath(resolvedFilePath)) {
-            throw new Error("Image path was not selected through the file picker");
+            throw new Error(
+              "Image path was not selected through the file picker",
+            );
           }
 
           const ext = path.extname(filePath);
@@ -555,8 +581,8 @@ export function registerImageIPC(): void {
   // ==================== Video Support ====================
 
   // Select videos
-  ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_VIDEO, async () => {
-    const result = await dialog.showOpenDialog({
+  ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_VIDEO, async (event) => {
+    const result = await showSenderOwnedOpenDialog(event, {
       properties: ["openFile", "multiSelections"],
       filters: [
         { name: "Videos", extensions: ["mp4", "webm", "mov", "avi", "mkv"] },
@@ -587,7 +613,9 @@ export function registerImageIPC(): void {
         try {
           const resolvedFilePath = path.resolve(filePath);
           if (!isAllowedSelectedVideoPath(resolvedFilePath)) {
-            throw new Error("Video path was not selected through the file picker");
+            throw new Error(
+              "Video path was not selected through the file picker",
+            );
           }
 
           const ext = path.extname(filePath);

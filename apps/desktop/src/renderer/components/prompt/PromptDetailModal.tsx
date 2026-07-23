@@ -719,6 +719,7 @@ export function PromptDetailModal({
         isOpen={!!previewImage}
         onClose={() => setPreviewImage(null)}
         imageSrc={previewImage}
+        imageSources={prompt.images}
       />
 
       <PromptQuickRewriteDialog

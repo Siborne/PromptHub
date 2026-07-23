@@ -3,7 +3,7 @@
 ## Selected Direction
 
 The accepted visual reference is
-[`assets/workbench-ui-concept.png`](./assets/workbench-ui-concept.png). It defines the
+[`assets/workbench-ui-concept-v2.png`](./assets/workbench-ui-concept-v2.png). It defines the
 information architecture and relative visual hierarchy; production implementation must
 reuse the current PromptHub tokens and components rather than rasterizing the mock.
 
@@ -27,10 +27,12 @@ At widths `>= 1440px`:
 
 - Existing global rail and Prompts secondary navigation retain their current widths.
 - The workbench replaces normal Prompt list/detail columns with one continuous surface.
-- Top composer spans the central region.
-- Result wall uses four or five stable columns according to available content width.
-- The right panel remains visible at approximately 300 px and switches between batch
-  queue and selected-output provenance.
+- Result wall occupies the dominant left region and uses four or five stable columns
+  according to available content width.
+- The right inspector remains visible at approximately 320-360 px. Generation controls
+  occupy the full region. Batch history and selected-output provenance open in an
+  on-demand drawer from the active-batch status control.
+- Generation controls must not span the top of the result canvas.
 - The bottom selection bar stays inside the result region and never covers the right
   panel.
 
@@ -38,13 +40,14 @@ At widths `>= 1440px`:
 
 The Desktop minimum remains `800x600`.
 
-| Width          | Required behavior                                                                    |
-| -------------- | ------------------------------------------------------------------------------------ |
-| `1100..1439px` | Three-column result wall; right panel becomes a closable side sheet when needed.     |
-| `800..1099px`  | Existing secondary nav may collapse; two-column wall; composer wraps by field group. |
-| Any supported  | No horizontal page scrolling; only result/content regions scroll.                    |
+| Width          | Required behavior                                                                  |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `1100..1439px` | Three-column result wall with the fixed right inspector always visible.            |
+| `800..1099px`  | Existing secondary nav may collapse; result wall narrows; inspector stays visible. |
+| Any supported  | No horizontal page scrolling; only result/content regions scroll.                  |
 
-At compact widths, model/ratio/quality/count controls keep stable hit targets. Secondary
+At compact widths, model/ratio/quality/count controls keep stable hit targets. The right
+inspector must not collapse behind a trigger or move into a modal sheet. Secondary
 actions move into an icon menu with accessible names; the primary generate action stays
 visible. Text does not scale with viewport width.
 
@@ -87,11 +90,12 @@ is supplementary; icons and text communicate every non-success state.
 - Clicking an image selects it for detail; checkbox/multi-select mode supports range and
   additive keyboard selection without changing grid geometry.
 - The selected tile uses border plus check state, not color alone.
-- No selection: right panel shows batch queue.
-- One selection: right panel shows large preview, source Prompt snapshot, resolved Prompt
-  excerpt, model, parameters, references, seed when available, batch and timestamp.
-- Multiple selection: right panel shows aggregate count and applicable bulk actions, not
-  misleading single-output provenance.
+- No selection: right panel remains dedicated to generation settings; no persistent queue
+  or empty queue placeholder is shown.
+- One selection: the batch drawer can show large preview, source Prompt snapshot, resolved
+  Prompt excerpt, model, parameters, references, seed when available, batch and timestamp.
+- Multiple selection: the contextual action bar shows aggregate count and applicable bulk
+  actions, not misleading single-output provenance.
 - Bottom contextual bar exposes favorite, set as reference, download, export selected
   and clear selection. Delete is visually separated and always confirms scope.
 - “调整后生成” creates a child draft/batch; it never mutates historical provenance.

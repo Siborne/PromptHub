@@ -222,4 +222,44 @@ describe("prompt IPC IDB migration", () => {
         .get(outputFormatItem.id),
     ).toEqual({ id: outputFormatItem.id });
   });
+
+  it("rolls back the complete prompt graph when atomic restore fails", async () => {
+    const handlers = Object.fromEntries(
+      handleMock.mock.calls.map(([channel, handler]) => [channel, handler]),
+    ) as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    const original = {
+      id: "original-prompt",
+      title: "Original",
+      userPrompt: "preserve me",
+      variables: [],
+      tags: [],
+      isFavorite: false,
+      isPinned: false,
+      version: 1,
+      currentVersion: 1,
+      usageCount: 0,
+      createdAt: "2026-04-21T00:00:00.000Z",
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    } satisfies Prompt;
+    promptDb.insertPromptDirect(original);
+    const replacement = {
+      ...original,
+      id: "replacement",
+      title: "Replacement",
+      folderId: "missing-folder",
+    };
+
+    await expect(
+      handlers[IPC_CHANNELS.PROMPT_RESTORE_GRAPH](null, {
+        folders: [],
+        prompts: [replacement],
+        versions: [],
+        promptRelations: [],
+        outputFormatItems: [],
+      }),
+    ).rejects.toThrow();
+
+    expect(promptDb.getById(original.id)?.userPrompt).toBe("preserve me");
+    expect(promptDb.getById(replacement.id)).toBeNull();
+  });
 });
