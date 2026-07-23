@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 39 |
-| Archived | 166 |
+| Active | 40 |
+| Archived | 168 |
 | Legacy | 1 |
 
 ## Active
@@ -20,6 +20,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `cli-feature-completeness` | active | `spec/changes/active/cli-feature-completeness/` |
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
+| `data-safety-hardening` | implemented | `spec/changes/active/data-safety-hardening/` |
 | `database-integrity-repair` | implemented | `spec/changes/active/database-integrity-repair/` |
 | `desktop-agent-asset-tray-actions` | implemented | `spec/changes/active/desktop-agent-asset-tray-actions/` |
 | `desktop-frontend-animation-system` | active | `spec/changes/active/desktop-frontend-animation-system/` |
@@ -225,6 +226,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-13-skill-install-update-lifecycle-contract` | archived | `spec/changes/archive/2026/07/2026-07-13-skill-install-update-lifecycle-contract/` |
 | `2026-07-16-cli-skill-automation-hardening` | archived | `spec/changes/archive/2026/07/2026-07-16-cli-skill-automation-hardening/` |
 | `2026-07-16-self-hosted-backup-only-automation` | archived | `spec/changes/archive/2026/07/2026-07-16-self-hosted-backup-only-automation/` |
+| `2026-07-21-prompt-image-preview-gallery` | archived | `spec/changes/archive/2026/07/2026-07-21-prompt-image-preview-gallery/` |
+| `2026-07-21-prompt-media-upload-reliability` | archived | `spec/changes/archive/2026/07/2026-07-21-prompt-media-upload-reliability/` |
 
 ## Legacy
 

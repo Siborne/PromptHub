@@ -43,7 +43,7 @@
 
 <br/>
 
-PromptHub 把你的 Prompt、SKILL.md 和项目级 AI 编程资产放进一个本地工作区。它能把同一份 Skill 一键安装到 Claude Code、Cursor、Codex、Windsurf、Gemini CLI、Cline 等十几个工具，给 Prompt 做版本管理与多模型测试，并通过 WebDAV 同步到其他设备，或把完整快照备份到自部署 Web。
+PromptHub 把你的 Prompt、SKILL.md 和项目级 AI 编程资产放进一个本地工作区。它能把同一份 Skill 一键安装到 Claude Code、Cursor、Codex、Windsurf、Antigravity、Cline 等十几个工具，给 Prompt 做版本管理与多模型测试，并通过 WebDAV 同步到其他设备，或把完整快照备份到自部署 Web。
 
 数据默认存在你自己的电脑上。
 
@@ -163,7 +163,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 ### 🧩 Skill 商店与一键分发
 
 - **技能商店**：内置 20+ 精选技能（来自 Anthropic、OpenAI 等），可叠加自定义商店源（GitHub / skills.sh / 本地目录）
-- **一键安装到平台**：Claude Code、Cursor、Windsurf、Codex、Kiro、Kilo Code、Gemini CLI、Cline、Qoder、QoderWork、CodeBuddy、Trae、Trae CN、OpenCode 等 15+ 平台
+- **一键安装到平台**：Claude Code、Cursor、Windsurf、Codex、Antigravity、Kiro、Kilo Code、Cline、Qoder、QoderWork、CodeBuddy、Trae、Trae CN、OpenCode 等 15+ 平台；Gemini 仅保留企业与付费 API 兼容目标
 - **本地扫描**：自动发现本地已有 SKILL.md，预览选择后导入，避免在多个工具目录间复制粘贴
 - **Symlink / Copy 双模式**：选 symlink 共享编辑，选 copy 各平台保留独立副本
 - **平台目标目录可覆写**：为每个平台单独配置 Skills 目录，扫描和分发保持一致

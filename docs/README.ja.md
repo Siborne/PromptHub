@@ -39,7 +39,7 @@
 
 <br/>
 
-PromptHub はあなたのプロンプト、SKILL.md、プロジェクトレベルの AI コーディング資産を 1 つのローカルワークスペースにまとめます。同じ Skill を Claude Code、Cursor、Codex、Windsurf、Gemini CLI など十数のツールへワンクリックでインストールでき、プロンプトのバージョン履歴とマルチモデルテスト、WebDAV による別端末への同期、セルフホスト Web への完全スナップショット保存を備えています。
+PromptHub はあなたのプロンプト、SKILL.md、プロジェクトレベルの AI コーディング資産を 1 つのローカルワークスペースにまとめます。同じ Skill を Claude Code、Cursor、Codex、Windsurf、Antigravity など十数のツールへワンクリックでインストールでき、プロンプトのバージョン履歴とマルチモデルテスト、WebDAV による別端末への同期、セルフホスト Web への完全スナップショット保存を備えています。
 
 データは既定であなたのマシンに置かれます。
 
@@ -159,7 +159,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 ### 🧩 Skill ストアとワンクリック配布
 
 - **Skill ストア**：Anthropic、OpenAI などからの 20+ 厳選スキルを内蔵、カスタムソース（GitHub / skills.sh / ローカルフォルダ）も追加可能
-- **ワンクリック配布**：Claude Code、Cursor、Windsurf、Codex、Kiro、Kilo Code、Gemini CLI、Qoder、QoderWork、CodeBuddy、Trae、OpenCode など 15+ プラットフォーム
+- **ワンクリック配布**：Claude Code、Cursor、Windsurf、Codex、Antigravity、Kiro、Kilo Code、Qoder、QoderWork、CodeBuddy、Trae、OpenCode など 15+ プラットフォーム。Gemini は Enterprise と有料 API の互換ターゲットとしてのみ保持されます
 - **ローカルスキャン**：既存の SKILL.md を自動検出し、複数のツールディレクトリ間でのコピペを不要に
 - **Symlink / Copy 両モード**：symlink で共有編集、copy で各プラットフォームに独立コピー
 - **プラットフォームごとの保存先上書き**：プラットフォームごとに Skills ディレクトリを設定でき、スキャンと配布が一致

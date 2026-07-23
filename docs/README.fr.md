@@ -39,7 +39,7 @@ Un espace de travail local-first pour les prompts, les skills et les assets de c
 
 <br/>
 
-PromptHub regroupe vos prompts, fichiers SKILL.md et assets de codage IA au niveau projet dans un espace de travail local. Il installe le même Skill dans Claude Code, Cursor, Codex, Windsurf, Gemini CLI et une douzaine d'autres outils, propose un historique de versions et des tests multi-modèles, synchronise via WebDAV et conserve des snapshots complets dans une instance Web auto-hébergée.
+PromptHub regroupe vos prompts, fichiers SKILL.md et assets de codage IA au niveau projet dans un espace de travail local. Il installe le même Skill dans Claude Code, Cursor, Codex, Windsurf, Antigravity et une douzaine d'autres outils, propose un historique de versions et des tests multi-modèles, synchronise via WebDAV et conserve des snapshots complets dans une instance Web auto-hébergée.
 
 Vos données restent sur votre machine.
 
@@ -159,7 +159,7 @@ Vous voulez tester la prochaine version d'aperçu ? Ouvrez _Paramètres → À p
 ### 🧩 Skill store et distribution en un clic
 
 - **Skill store** avec 20+ skills sélectionnés (Anthropic, OpenAI, etc.) et sources personnalisées cumulables (dépôt GitHub / skills.sh / dossier local)
-- **Installation en un clic** vers Claude Code, Cursor, Windsurf, Codex, Kiro, Kilo Code, Gemini CLI, Qoder, QoderWork, CodeBuddy, Trae, OpenCode et 15+ autres
+- **Installation en un clic** vers Claude Code, Cursor, Windsurf, Codex, Antigravity, Kiro, Kilo Code, Qoder, QoderWork, CodeBuddy, Trae, OpenCode et 15+ autres ; Gemini est conservé uniquement comme cible de compatibilité Enterprise et API payante
 - **Scan local** détecte les fichiers SKILL.md existants pour ne plus copier-coller entre répertoires d'outils
 - **Modes Symlink / Copy** — symlink pour partager les modifications, copy pour des copies indépendantes par plateforme
 - **Surcharge du dossier Skills par plateforme** pour garder scan et installation cohérents
