@@ -18,7 +18,7 @@ vi.mock("../../../src/renderer/services/database", () => ({
 function createTransactionMock() {
   const transaction = {
     error: null,
-    objectStore: () => ({ add: vi.fn(), getAll: vi.fn() }),
+    objectStore: () => ({ add: vi.fn(), clear: vi.fn(), getAll: vi.fn() }),
     oncomplete: null as (() => void) | null,
     onerror: null as (() => void) | null,
   };

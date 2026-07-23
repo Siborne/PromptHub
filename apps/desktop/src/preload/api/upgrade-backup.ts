@@ -12,6 +12,7 @@ export const upgradeBackupApi = {
   create: (options?: {
     fromVersion?: string;
     toVersion?: string;
+    allowEmpty?: boolean;
   }): Promise<UpgradeBackupCreateResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.UPGRADE_BACKUP_CREATE, options),
   restore: (backupId: string): Promise<UpgradeBackupRestoreResult> =>

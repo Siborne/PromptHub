@@ -43,7 +43,10 @@ vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
 
 function createAdapter(overrides?: {
   downloadText?: (path: string) => Promise<RemoteDownloadResult>;
-  uploadText?: (path: string, content: string) => Promise<{ success: boolean; error?: string }>;
+  uploadText?: (
+    path: string,
+    content: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   stat?: (path: string) => Promise<RemoteStatResult>;
   prepareLegacyUpload?: () => Promise<void>;
   prepareIncrementalUpload?: (includeMedia: boolean) => Promise<void>;
@@ -204,6 +207,81 @@ describe("sync-backup-core", () => {
       );
       expect(result.success).toBe(true);
       expect(result.localChanged).toBe(true);
+    });
+
+    it("creates a safety snapshot immediately before legacy restore", async () => {
+      const beforeRestore = vi.fn().mockResolvedValue(undefined);
+      const adapter = createAdapter({
+        stat: undefined,
+        downloadText: vi.fn(async (path: string) =>
+          path.includes("manifest")
+            ? { success: false, notFound: true }
+            : {
+                success: true,
+                data: createLegacyBackup("2026-01-05T00:00:00.000Z"),
+              },
+        ),
+      });
+
+      const result = await downloadSyncBackup(adapter, { beforeRestore });
+
+      expect(result.success).toBe(true);
+      expect(beforeRestore).toHaveBeenCalledTimes(1);
+      expect(beforeRestore.mock.invocationCallOrder[0]).toBeLessThan(
+        restoreFromBackupMock.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("rolls back the safety snapshot when restore fails after mutation starts", async () => {
+      const beforeRestore = vi.fn().mockResolvedValue(undefined);
+      const rollbackRestore = vi.fn().mockResolvedValue(undefined);
+      restoreFromBackupMock.mockRejectedValueOnce(new Error("disk full"));
+      const adapter = createAdapter({
+        stat: undefined,
+        downloadText: vi.fn(async (path: string) =>
+          path.includes("manifest")
+            ? { success: false, notFound: true }
+            : {
+                success: true,
+                data: createLegacyBackup("2026-01-05T00:00:00.000Z"),
+              },
+        ),
+      });
+
+      const result = await downloadSyncBackup(adapter, {
+        beforeRestore,
+        rollbackRestore,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.localChanged).toBe(false);
+      expect(rollbackRestore).toHaveBeenCalledTimes(1);
+      expect(result.message).toContain("disk full");
+    });
+
+    it("does not create a safety snapshot before payload validation succeeds", async () => {
+      const beforeRestore = vi.fn().mockResolvedValue(undefined);
+      const expectedData = createIncrementalData("2026-01-05T00:00:00.000Z");
+      const result = await downloadSyncBackup(
+        createAdapter({
+          stat: undefined,
+          downloadText: vi.fn(async (path: string) =>
+            path.includes("manifest")
+              ? {
+                  success: true,
+                  data: createManifest(
+                    "2026-01-05T00:00:00.000Z",
+                    await computeHash(`${expectedData}tampered`),
+                  ),
+                }
+              : { success: true, data: expectedData },
+          ),
+        }),
+        { beforeRestore },
+      );
+
+      expect(result.success).toBe(false);
+      expect(beforeRestore).not.toHaveBeenCalled();
     });
 
     it("reports a decryption failure when encrypted incremental data cannot be decoded", async () => {
@@ -660,10 +738,9 @@ describe("sync-backup-core", () => {
         lastModified: "2026-01-08T00:00:00.000Z",
       });
       const uploadText = vi.fn().mockResolvedValue({ success: true });
-      const result = await autoSyncBackup(
-        createAdapter({ stat, uploadText }),
-        { incrementalSync: false },
-      );
+      const result = await autoSyncBackup(createAdapter({ stat, uploadText }), {
+        incrementalSync: false,
+      });
 
       expect(uploadText).toHaveBeenCalledWith(
         "remote/legacy.json",

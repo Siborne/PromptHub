@@ -28,9 +28,8 @@
 ```
 <userData>/
 │
-├── prompthub.db                  # 索引/搜索缓存（非真相源）
-│
-├── data/                         # ★ 用户业务数据（唯一真相、唯一备份对象）
+├── data/                         # ★ 用户业务数据
+│   ├── prompthub.db              # 关系数据的持久化真相源
 │   ├── prompts/
 │   │   ├── 常用/
 │   │   │   ├── 代码审查.md
@@ -80,13 +79,14 @@
 
 ## 3. 核心设计原则
 
-### 3.1 文件系统是真相源
+### 3.1 真相源按数据所有权划分
 
 | 层级 | 角色 |
 | --- | --- |
-| **文件系统** (`data/`) | 用户内容的**唯一真相源**。用户可在 Finder / VSCode 直接编辑、移动、删除 |
-| **SQLite** (`prompthub.db`) | 索引、搜索缓存（FTS5）、排序优化。**DB 丢了可从 `data/` 重建** |
-| **`_folder.json`** | 文件夹元数据（排序、颜色、图标、描述），**可选**，缺失则退回字母排序 + 默认图标 |
+| **SQLite** (`data/prompthub.db`) | Prompt、Folder、Version、关系、Skill 元数据、Rule 与设置等关系记录的持久化真相源；不能仅靠 workspace 完整重建 |
+| **文件系统** (`data/`) | Skill 包、媒体、MCP/Plugin 包和 Agent 资产等文件内容的持久化真相源 |
+| **Prompt workspace** | SQLite Prompt/Folder 的可读投影与互操作入口，不是数据库的完整替代品 |
+| **`_folder.json`** | workspace 文件夹投影元数据；缺失不代表 SQLite 文件夹记录可安全删除 |
 
 ### 3.2 Prompt 文件格式
 
@@ -127,7 +127,7 @@ version: 3
 | `cache/` | ❌ 跳过 | ❌ 跳过 | ❌ |
 | `backups/` | 自管理 | ❌ 跳过 | ⚠️ 恢复界面 |
 | `logs/` | ❌ 跳过 | ❌ 跳过 | ⚠️ 诊断界面 |
-| `prompthub.db` | ✅ 作为索引加速 | ❌（接收端重建） | ❌ |
+| `data/prompthub.db` | ✅ 必须 | 通过结构化快照传输，不直接复制活跃库 | ❌ |
 
 ---
 
@@ -140,7 +140,7 @@ version: 3
 | **导出** | 所见即所得，zip 内布局 = `data/` 布局 | `data/` 的用户选择子集 | `.zip`（标准格式） |
 | **导入** | 永远 merge，绝不清空 | 合并进 `data/` | `.zip` / `.phub.gz` / legacy `.json` |
 | **压缩备份** | 完整快照，可整机还原 | `data/` + `config/` + `prompthub.db` | `.phub.gz`（PromptHub 专有） |
-| **同步** | 传输"备份对象"，两端各自落地到 `data/` | 内存对象，非文件 | 协议层不变 |
+| **同步** | 传输结构化快照，并分别恢复 SQLite 记录与文件资产 | 内存对象，非文件 | 协议层不变 |
 
 ### 4.1 导出 `.zip` 结构示例
 

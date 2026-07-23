@@ -13,7 +13,6 @@ import type {
   SkillVersion,
 } from "@prompthub/shared/types/skill";
 import {
-  clearDatabase,
   getAllFolders,
   getAllPrompts,
   getDatabase,
@@ -47,6 +46,7 @@ import {
   getSettingsStateSnapshot,
   restoreAiConfigSnapshot,
   restoreSettingsStateSnapshot,
+  SENSITIVE_SETTINGS_FIELDS,
 } from "./settings-snapshot";
 
 async function collectRuleData(): Promise<RuleBackupRecord[]> {
@@ -757,6 +757,17 @@ function sortFoldersForRestore(
 async function importDatabaseViaMainProcess(
   normalizedBackup: DatabaseBackup,
 ): Promise<boolean> {
+  if (window.api?.prompt?.restoreGraph) {
+    await window.api.prompt.restoreGraph({
+      folders: normalizedBackup.folders,
+      prompts: normalizedBackup.prompts,
+      versions: normalizedBackup.versions,
+      promptRelations: normalizedBackup.promptRelations,
+      outputFormatItems: normalizedBackup.outputFormatItems,
+    });
+    return true;
+  }
+
   if (
     !window.api?.prompt?.getAll ||
     !window.api?.prompt?.delete ||
@@ -881,8 +892,13 @@ export async function exportDatabase(options?: {
   ]);
 
   const settingsSnapshot = getSettingsStateSnapshot({
+    excludeFields: SENSITIVE_SETTINGS_FIELDS,
     updatedAt: new Date().toISOString(),
   });
+  const aiConfigSnapshot = getAiConfigSnapshot({ includeRootApiKey: false });
+  if (aiConfigSnapshot) {
+    delete aiConfigSnapshot.aiApiKey;
+  }
   const storeSources = collectStoreSourcesSnapshot();
 
   return {
@@ -896,7 +912,7 @@ export async function exportDatabase(options?: {
       outputFormatItems.length > 0 ? outputFormatItems : undefined,
     images,
     videos,
-    aiConfig: getAiConfigSnapshot({ includeRootApiKey: true }),
+    aiConfig: aiConfigSnapshot,
     settings: settingsSnapshot ? { state: settingsSnapshot.state } : undefined,
     settingsUpdatedAt: settingsSnapshot?.settingsUpdatedAt,
     rules: ruleData.length > 0 ? ruleData : undefined,
@@ -954,8 +970,6 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
   if (!restoredViaMainProcess) {
     const database = await getDatabase();
 
-    await clearDatabase();
-
     const transaction = database.transaction(
       ["prompts", "folders", VERSION_STORE],
       "readwrite",
@@ -964,6 +978,10 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
     const promptStore = transaction.objectStore("prompts");
     const folderStore = transaction.objectStore("folders");
     const versionStore = transaction.objectStore(VERSION_STORE);
+
+    promptStore.clear();
+    folderStore.clear();
+    versionStore.clear();
 
     for (const prompt of normalizedBackup.prompts) {
       promptStore.add(prompt);
@@ -1010,7 +1028,9 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
   }
 
   if (normalizedBackup.settings) {
-    restoreSettingsStateSnapshot(normalizedBackup.settings);
+    restoreSettingsStateSnapshot(normalizedBackup.settings, {
+      preserveLocalFields: SENSITIVE_SETTINGS_FIELDS,
+    });
   }
 
   restoreStoreSourcesSnapshot(normalizedBackup.storeSources);

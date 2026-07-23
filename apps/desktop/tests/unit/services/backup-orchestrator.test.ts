@@ -11,6 +11,7 @@ vi.mock("../../../src/renderer/services/backup-status", () => ({
 
 vi.mock("../../../src/renderer/services/upgrade-backup", () => ({
   createUpgradeBackup: vi.fn(),
+  restoreUpgradeBackup: vi.fn(),
 }));
 
 vi.mock("../../../src/renderer/services/webdav", () => ({
@@ -171,6 +172,13 @@ describe("backup-orchestrator", () => {
     });
 
     expect(autoSync).toHaveBeenCalledTimes(1);
+    expect(autoSync).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        beforeRestore: expect.any(Function),
+        rollbackRestore: expect.any(Function),
+      }),
+    );
     expect(result.success).toBe(true);
     expect(result.message).toBe("ok");
   });
@@ -196,6 +204,13 @@ describe("backup-orchestrator", () => {
     });
 
     expect(autoSyncS3).toHaveBeenCalledTimes(1);
+    expect(autoSyncS3).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        beforeRestore: expect.any(Function),
+        rollbackRestore: expect.any(Function),
+      }),
+    );
     expect(result.success).toBe(true);
     expect(result.message).toBe("ok");
   });
@@ -251,12 +266,24 @@ describe("backup-orchestrator", () => {
   });
 
   it("creates a local safety snapshot before restoring the latest remote backup", async () => {
-    vi.mocked(restoreLatestSelfHostedRemoteBackup).mockResolvedValue({
-      prompts: 1,
-      folders: 1,
-      rules: 1,
-      skills: 1,
+    const restoreMutation = vi.fn();
+    vi.mocked(createUpgradeBackup).mockResolvedValue({
+      created: true,
+      skipped: false,
+      backupId: "safety-1",
     });
+    vi.mocked(restoreLatestSelfHostedRemoteBackup).mockImplementation(
+      async (_config, safety) => {
+        await safety?.beforeRestore?.();
+        restoreMutation();
+        return {
+          prompts: 1,
+          folders: 1,
+          rules: 1,
+          skills: 1,
+        };
+      },
+    );
 
     await runSelfHostedPull({
       config: {
@@ -266,19 +293,22 @@ describe("backup-orchestrator", () => {
       },
     });
 
-    expect(createUpgradeBackup).toHaveBeenCalledWith(undefined);
+    expect(createUpgradeBackup).toHaveBeenCalledWith({ allowEmpty: true });
     expect(restoreLatestSelfHostedRemoteBackup).toHaveBeenCalledTimes(1);
     expect(
       vi.mocked(createUpgradeBackup).mock.invocationCallOrder[0],
-    ).toBeLessThan(
-      vi.mocked(restoreLatestSelfHostedRemoteBackup).mock
-        .invocationCallOrder[0],
-    );
+    ).toBeLessThan(restoreMutation.mock.invocationCallOrder[0]);
   });
 
   it("does not begin remote restore when the local safety snapshot fails", async () => {
     vi.mocked(createUpgradeBackup).mockRejectedValue(
       new Error("local snapshot failed"),
+    );
+    vi.mocked(restoreLatestSelfHostedRemoteBackup).mockImplementation(
+      async (_config, safety) => {
+        await safety?.beforeRestore?.();
+        throw new Error("restore should not start");
+      },
     );
 
     await expect(
@@ -290,7 +320,7 @@ describe("backup-orchestrator", () => {
         },
       }),
     ).rejects.toThrow("local snapshot failed");
-    expect(restoreLatestSelfHostedRemoteBackup).not.toHaveBeenCalled();
+    expect(restoreLatestSelfHostedRemoteBackup).toHaveBeenCalledTimes(1);
   });
 
   it("reports an exact-version mismatch as a skipped automatic backup", async () => {

@@ -28,6 +28,10 @@ export const SENSITIVE_SETTINGS_FIELDS = [
   "s3SecretAccessKey",
   "s3EncryptionPassword",
   "aiApiKey",
+  "aiProviders",
+  "aiModels",
+  "githubToken",
+  "networkProxy",
 ] as const;
 
 function readStoredSettings():
@@ -121,8 +125,18 @@ export function restoreAiConfigSnapshot(
     const data = stored?.data || { state: {} };
     if (!data.state) data.state = {};
 
-    if (aiConfig.aiProviders) data.state.aiProviders = aiConfig.aiProviders;
-    if (aiConfig.aiModels) data.state.aiModels = aiConfig.aiModels;
+    if (aiConfig.aiProviders) {
+      data.state.aiProviders = aiConfig.aiProviders.map((provider: any) => {
+        const { apiKey: _apiKey, ...safeProvider } = provider || {};
+        return safeProvider;
+      });
+    }
+    if (aiConfig.aiModels) {
+      data.state.aiModels = aiConfig.aiModels.map((model: any) => {
+        const { apiKey: _apiKey, ...safeModel } = model || {};
+        return safeModel;
+      });
+    }
     if (aiConfig.scenarioModelDefaults) {
       data.state.scenarioModelDefaults = aiConfig.scenarioModelDefaults;
     }
@@ -130,8 +144,8 @@ export function restoreAiConfigSnapshot(
       data.state.modelRouteDefaults = aiConfig.modelRouteDefaults;
     }
     if (aiConfig.aiProvider) data.state.aiProvider = aiConfig.aiProvider;
-    if (aiConfig.aiApiProtocol) data.state.aiApiProtocol = aiConfig.aiApiProtocol;
-    if (aiConfig.aiApiKey) data.state.aiApiKey = aiConfig.aiApiKey;
+    if (aiConfig.aiApiProtocol)
+      data.state.aiApiProtocol = aiConfig.aiApiProtocol;
     if (aiConfig.aiApiUrl) data.state.aiApiUrl = aiConfig.aiApiUrl;
     if (aiConfig.aiModel) data.state.aiModel = aiConfig.aiModel;
 

@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   PROMPT_SEARCH: "prompt:search",
   PROMPT_COPY: "prompt:copy",
   PROMPT_INSERT_DIRECT: "prompt:insertDirect",
+  PROMPT_RESTORE_GRAPH: "prompt:restoreGraph",
   PROMPT_SYNC_WORKSPACE: "prompt:syncWorkspace",
   /**
    * Atomic batch migration from legacy IndexedDB data.

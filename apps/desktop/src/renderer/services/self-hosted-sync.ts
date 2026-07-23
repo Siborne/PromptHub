@@ -1096,6 +1096,10 @@ export async function createSelfHostedRemoteBackup(
 
 export async function restoreLatestSelfHostedRemoteBackup(
   config: SelfHostedSyncConfig,
+  safety?: {
+    beforeRestore?: () => Promise<void>;
+    rollbackRestore?: () => Promise<void>;
+  },
 ): Promise<SelfHostedSyncSummary> {
   const { baseUrl, accessToken, clientVersion } =
     await openCompatibleBackupSession(config);
@@ -1122,7 +1126,27 @@ export async function restoreLatestSelfHostedRemoteBackup(
     envelope.snapshot.images,
     envelope.snapshot.videos,
   );
-  await restoreFromBackup(backup);
+  await safety?.beforeRestore?.();
+  try {
+    await restoreFromBackup(backup);
+  } catch (error) {
+    if (safety?.rollbackRestore) {
+      try {
+        await safety.rollbackRestore();
+      } catch (rollbackError) {
+        const restoreMessage =
+          error instanceof Error ? error.message : "unknown restore error";
+        const rollbackMessage =
+          rollbackError instanceof Error
+            ? rollbackError.message
+            : "unknown rollback error";
+        throw new Error(
+          `Self-hosted restore failed (${restoreMessage}) and rollback failed (${rollbackMessage})`,
+        );
+      }
+    }
+    throw error;
+  }
   return {
     prompts: envelope.summary.prompts,
     folders: envelope.summary.folders,

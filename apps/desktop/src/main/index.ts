@@ -1726,6 +1726,11 @@ app.whenReady().then(async () => {
         snapshotToVersion: backupStartup.snapshot?.manifest.toVersion ?? null,
         snapshotError: backupStartup.snapshotError,
       });
+      if (backupStartup.status === "snapshot-failed") {
+        throw new Error(
+          `Upgrade safety snapshot failed: ${backupStartup.snapshotError || "unknown error"}`,
+        );
+      }
 
       const layoutMigration = await migrateLegacyDataLayout(
         app.getPath("userData"),
@@ -1760,14 +1765,12 @@ app.whenReady().then(async () => {
         }
       }
     } catch (error) {
-      console.warn(
-        "[startup] upgrade backup bootstrap failed, continuing:",
-        error,
-      );
+      console.error("[startup] upgrade backup bootstrap failed:", error);
       logStartupEvent({
         event: "startup:upgrade_backup_failed_to_bootstrap",
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
 
     // Initialize database

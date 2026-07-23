@@ -131,12 +131,45 @@ describe("settings-snapshot", () => {
     });
   });
 
+  it("round-trips the non-sensitive Codex identity preference", () => {
+    localStorage.setItem(
+      PRIMARY_SETTINGS_KEY,
+      JSON.stringify({
+        state: {
+          language: "en",
+          agentIdentityPreferences: {
+            codex: { name: "chatgpt", icon: "codex" },
+          },
+        },
+      }),
+    );
+    const snapshot = getSettingsStateSnapshot();
+
+    localStorage.setItem(
+      PRIMARY_SETTINGS_KEY,
+      JSON.stringify({
+        state: {
+          language: "zh",
+          agentIdentityPreferences: {
+            codex: { name: "codex", icon: "chatgpt" },
+          },
+        },
+      }),
+    );
+    restoreSettingsStateSnapshot(snapshot);
+
+    expect(getSettingsStateSnapshot()?.state.agentIdentityPreferences).toEqual({
+      codex: { name: "chatgpt", icon: "codex" },
+    });
+  });
+
   it("restores AI config into existing settings state", () => {
     localStorage.setItem(
       PRIMARY_SETTINGS_KEY,
       JSON.stringify({
         state: {
           language: "zh-CN",
+          aiApiKey: "local-key",
         },
       }),
     );
@@ -159,7 +192,7 @@ describe("settings-snapshot", () => {
         language: "zh-CN",
         aiProvider: "anthropic",
         aiApiProtocol: "anthropic",
-        aiApiKey: "restored-key",
+        aiApiKey: "local-key",
         aiApiUrl: "https://restored.example.com",
         aiModel: "claude-test",
         aiModels: [

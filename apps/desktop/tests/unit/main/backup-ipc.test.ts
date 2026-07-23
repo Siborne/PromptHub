@@ -12,6 +12,7 @@ const getPathMock = vi.fn((name: string) => {
 });
 
 const listUpgradeBackupsMock = vi.fn();
+const createUpgradeDataSnapshotMock = vi.fn();
 const deleteUpgradeBackupMock = vi.fn();
 const restoreFromUpgradeBackupAsyncMock = vi.fn();
 const closeDatabaseMock = vi.fn();
@@ -21,6 +22,7 @@ const registerAllIpcMock = vi.fn();
 vi.mock("electron", () => ({
   app: {
     getPath: getPathMock,
+    getVersion: () => "0.5.9",
     relaunch: relaunchMock,
     quit: quitMock,
   },
@@ -31,6 +33,7 @@ vi.mock("electron", () => ({
 
 vi.mock("../../../src/main/services/upgrade-backup", () => ({
   listUpgradeBackups: listUpgradeBackupsMock,
+  createUpgradeDataSnapshot: createUpgradeDataSnapshotMock,
   deleteUpgradeBackup: deleteUpgradeBackupMock,
 }));
 
@@ -56,6 +59,7 @@ async function setupBackupIpc() {
   quitMock.mockReset();
   getPathMock.mockClear();
   listUpgradeBackupsMock.mockReset();
+  createUpgradeDataSnapshotMock.mockReset();
   deleteUpgradeBackupMock.mockReset();
   restoreFromUpgradeBackupAsyncMock.mockReset();
   closeDatabaseMock.mockReset();
@@ -92,6 +96,29 @@ describe("backup IPC", () => {
       handlers[IPC_CHANNELS.UPGRADE_BACKUP_LIST](null),
     ).resolves.toBe(backups);
     expect(listUpgradeBackupsMock).toHaveBeenCalledWith("/tmp/PromptHub");
+  });
+
+  it("forwards an explicit empty-baseline request to the snapshot service", async () => {
+    const { handlers, IPC_CHANNELS } = await setupBackupIpc();
+    createUpgradeDataSnapshotMock.mockResolvedValue({
+      backupId: "v0.5.9-empty",
+      backupPath: "/tmp/PromptHub/backups/v0.5.9-empty",
+    });
+
+    await expect(
+      handlers[IPC_CHANNELS.UPGRADE_BACKUP_CREATE](null, {
+        allowEmpty: true,
+      }),
+    ).resolves.toEqual({
+      created: true,
+      skipped: false,
+      backupId: "v0.5.9-empty",
+      backupPath: "/tmp/PromptHub/backups/v0.5.9-empty",
+    });
+    expect(createUpgradeDataSnapshotMock).toHaveBeenCalledWith(
+      "/tmp/PromptHub",
+      expect.objectContaining({ allowEmpty: true }),
+    );
   });
 
   it("deletes a backup by id", async () => {

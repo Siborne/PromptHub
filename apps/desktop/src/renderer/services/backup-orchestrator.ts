@@ -8,7 +8,7 @@ import {
   type WebDAVSyncOptions,
 } from "./webdav";
 import { type ManualBackupStatus, recordManualBackup } from "./backup-status";
-import { createUpgradeBackup } from "./upgrade-backup";
+import { createUpgradeBackup, restoreUpgradeBackup } from "./upgrade-backup";
 import {
   createSelfHostedRemoteBackup,
   restoreLatestSelfHostedRemoteBackup,
@@ -72,6 +72,32 @@ async function createSnapshotIfPossible(
   );
 }
 
+function createRestoreSafetyGuard(): {
+  beforeRestore: () => Promise<void>;
+  rollbackRestore: () => Promise<void>;
+} {
+  let backupId: string | undefined;
+
+  return {
+    beforeRestore: async () => {
+      const result = await createUpgradeBackup({ allowEmpty: true });
+      if (!result.created || !result.backupId) {
+        throw new Error("Unable to create a local safety snapshot");
+      }
+      backupId = result.backupId;
+    },
+    rollbackRestore: async () => {
+      if (!backupId) {
+        throw new Error("No local safety snapshot is available for rollback");
+      }
+      const result = await restoreUpgradeBackup(backupId);
+      if (!result.success) {
+        throw new Error(result.error || "Local safety snapshot restore failed");
+      }
+    },
+  };
+}
+
 async function downloadExportFile(): Promise<void> {
   await downloadSelectiveExport({
     prompts: true,
@@ -124,13 +150,19 @@ export async function runWebDAVUpload(
 export async function runWebDAVDownload(
   input: WebDAVManualSyncOptions,
 ): Promise<SyncResult> {
-  return downloadFromWebDAV(input.config, input.options);
+  return downloadFromWebDAV(input.config, {
+    ...input.options,
+    ...createRestoreSafetyGuard(),
+  });
 }
 
 export async function runWebDAVAutoSync(
   input: WebDAVManualSyncOptions,
 ): Promise<SyncResult> {
-  return autoSync(input.config, input.options);
+  return autoSync(input.config, {
+    ...input.options,
+    ...createRestoreSafetyGuard(),
+  });
 }
 
 export async function runSelfHostedConnectionCheck(
@@ -148,8 +180,10 @@ export async function runSelfHostedPush(
 export async function runSelfHostedPull(
   input: SelfHostedPullOptions,
 ): Promise<SelfHostedSyncSummary> {
-  await createSnapshotIfPossible();
-  return restoreLatestSelfHostedRemoteBackup(input.config);
+  return restoreLatestSelfHostedRemoteBackup(
+    input.config,
+    createRestoreSafetyGuard(),
+  );
 }
 
 export async function runSelfHostedAutoSync(
@@ -200,11 +234,17 @@ export async function runS3Upload(
 export async function runS3Download(
   input: S3ManualSyncOptions,
 ): Promise<SyncResult> {
-  return downloadFromS3(input.config, input.options);
+  return downloadFromS3(input.config, {
+    ...input.options,
+    ...createRestoreSafetyGuard(),
+  });
 }
 
 export async function runS3AutoSync(
   input: S3ManualSyncOptions,
 ): Promise<SyncResult> {
-  return autoSyncS3(input.config, input.options);
+  return autoSyncS3(input.config, {
+    ...input.options,
+    ...createRestoreSafetyGuard(),
+  });
 }

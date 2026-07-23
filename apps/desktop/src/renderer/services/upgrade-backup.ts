@@ -21,6 +21,7 @@ export async function deleteUpgradeBackup(backupId: string): Promise<void> {
 export async function createUpgradeBackup(options?: {
   fromVersion?: string;
   toVersion?: string;
+  allowEmpty?: boolean;
 }): Promise<UpgradeBackupCreateResult> {
   if (!window.api?.upgradeBackup?.create) {
     throw new Error("Upgrade backup API is unavailable");

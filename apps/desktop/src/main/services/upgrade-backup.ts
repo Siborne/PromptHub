@@ -107,6 +107,8 @@ export interface CreateUpgradeDataSnapshotOptions {
   toVersion?: string;
   /** Skip automatic retention pruning for flows that need explicit protection. */
   skipRetentionPrune?: boolean;
+  /** Persist an empty manifest so a failed restore can roll back to no data. */
+  allowEmpty?: boolean;
 }
 
 interface PruneUpgradeBackupOptions {
@@ -282,7 +284,7 @@ export async function createUpgradeDataSnapshot(
         !isTransientDatabaseEntry(entryName),
     );
 
-  if (copiedItems.length === 0) {
+  if (copiedItems.length === 0 && !options.allowEmpty) {
     throw new Error(
       `Cannot create upgrade backup because the user data path is empty: ${resolvedUserDataPath}`,
     );

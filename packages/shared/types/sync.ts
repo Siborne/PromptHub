@@ -134,6 +134,22 @@ export interface SyncSnapshot {
   videos?: Record<string, string>;
 }
 
+export interface RestorePromptGraphInput {
+  folders: Folder[];
+  prompts: Prompt[];
+  versions: PromptVersion[];
+  promptRelations?: PromptRelation[];
+  outputFormatItems?: OutputFormatItem[];
+}
+
+export interface RestorePromptGraphResult {
+  promptCount: number;
+  folderCount: number;
+  versionCount: number;
+  relationCount: number;
+  outputFormatItemCount: number;
+}
+
 export const SELF_HOSTED_BACKUP_PROTOCOL_VERSION = 1;
 
 export interface SelfHostedBackupCapabilities {

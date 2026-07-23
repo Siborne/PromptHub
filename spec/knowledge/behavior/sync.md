@@ -48,6 +48,18 @@
 - Incremental WebDAV/S3 downloads verify the serialized data hash and each
   manifest-listed media hash/size before local restore begins; missing or
   mismatched payloads fail without clearing local records.
+- WebDAV/S3 portable snapshots exclude sync credentials, API keys, access keys,
+  tokens, proxy credentials, and provider/model secrets even when transport
+  encryption is enabled. Restore merges portable settings while retaining the
+  destination device's local credentials.
+- WebDAV/S3 pull and download create a lazy local safety snapshot only after the
+  remote payload has passed validation and immediately before mutation. Any
+  subsequent restore failure triggers rollback; rollback failure is reported
+  separately and never presented as a successful sync. An empty local data
+  directory uses a manifest-only baseline instead of skipping rollback safety.
+- WebDAV/S3 whole-snapshot freshness remains last-writer-wins rather than a
+  per-record conflict-free merge. The UI and docs must not describe this as a
+  conflict-free multi-writer protocol.
 - Online-sync freshness includes timestamped Skills, Rules, prompt graph
   records, MCP/Plugin libraries, and settings in addition to Prompts and
   Folders. A failed freshness snapshot is an explicit sync failure.
@@ -62,7 +74,9 @@
 - 自动备份与手动创建备份前，桌面端必须读取本机安装版本和 Web `/health`、受保护 capabilities 返回的服务版本。三者必须完全一致，备份协议也必须匹配；否则在导出本地数据前停止。Web 创建路由必须再次校验客户端版本，且不得回退到旧同步接口。
 - Web 通过 `/api/backups/desktop` 为每个认证用户保存不可变、带 SHA-256 校验的快照，默认保留最近 10 份。快照写入成功且目录元数据持久化后才可清理旧快照；备份目录、用户目录或快照文件不得接受符号链接。
 - 自部署快照包含 Prompt、版本、文件夹、关系、输出格式、Rule、Skill 完整文件和版本、MCP/Plugin 库及包、商店源、Agent 资产文件、内联媒体和非秘密设置。未加密通道必须递归排除密码、token、API key、access key、代理凭据等已知凭据字段。
-- 恢复只能由用户显式触发。桌面端必须先成功创建本地安全快照，再读取服务端已校验的最新快照并执行替换恢复；安全快照失败时不得开始远程恢复。自动任务永远不得调用恢复。
+- 恢复只能由用户显式触发。桌面端先读取并校验服务端最新快照，紧接在本地写入前
+  创建安全快照；安全快照失败时不得开始本地恢复，恢复失败时必须回滚。自动任务
+  永远不得调用恢复。
 - 单次备份请求当前上限为 50 MiB；超过上限必须在解析和写盘前拒绝，避免无界 JSON/base64 内存占用。网络读取使用 15 秒超时和一次有限重试；创建快照等写操作不得自动重试，避免产生重复快照。
 - 旧 `/api/sync/data` 路由在兼容窗口内继续存在，但只服务旧客户端；当前桌面 UI 与调度器不再调用它。
 - 面向用户的自部署说明在 `docs/web-self-hosted.md`，内部同步与布局事实在 `spec/`。

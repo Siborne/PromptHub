@@ -266,6 +266,21 @@ describe("upgrade-backup", () => {
       ).rejects.toThrow(/user data path is empty/i);
     });
 
+    it("creates an explicit empty baseline snapshot for destructive restore guards", async () => {
+      const userDataPath = path.join(tmpBase, "PromptHub-empty-baseline");
+      fs.mkdirSync(userDataPath, { recursive: true });
+
+      const snapshot = await createUpgradeDataSnapshot(userDataPath, {
+        fromVersion: "restore-safety-baseline",
+        allowEmpty: true,
+      });
+
+      expect(snapshot.manifest.copiedItems).toEqual([]);
+      expect(
+        fs.existsSync(path.join(snapshot.backupPath, "backup-manifest.json")),
+      ).toBe(true);
+    });
+
     it("rejects a missing fromVersion", async () => {
       const userDataPath = path.join(tmpBase, "PromptHub");
       seedUserData(userDataPath);

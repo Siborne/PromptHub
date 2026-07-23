@@ -1,12 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import {
   downloadBackup,
   downloadCompressedBackup,
   downloadSelectiveExport,
   exportDatabase,
-  formatBackupImportError,
-  isPotentialSqliteBackupFileName,
   restoreFromBackup,
   restoreFromFile,
 } from "../../../src/renderer/services/database-backup";
@@ -44,33 +41,19 @@ vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
     restoreAiConfigSnapshotMock(...args),
   restoreSettingsStateSnapshot: (...args: unknown[]) =>
     restoreSettingsStateSnapshotMock(...args),
+  SENSITIVE_SETTINGS_FIELDS: [
+    "webdavPassword",
+    "s3SecretAccessKey",
+    "aiApiKey",
+  ],
 }));
-
-describe("SQLite backup filename detection", () => {
-  it.each([
-    "prompthub.db",
-    "prompthub.db.backup-2026-07-15T13-19-16-810Z",
-    "prompthub.db.backup-before-0.5.3.2026-07-15.db",
-    "prompthub.db.pre-recovery-2026-07-15T13-19-14-753Z",
-    "prompthub.db.integrity-backup-2026-07-15T13-19-14-753Z",
-    "prompthub.db.legacy-conflict-2026-07-15.db",
-  ])("accepts %s", (fileName) => {
-    expect(isPotentialSqliteBackupFileName(fileName)).toBe(true);
-  });
-
-  it.each(["notes.db", "prompthub-export.zip", "prompthub.db.txt"])(
-    "rejects %s",
-    (fileName) => {
-      expect(isPotentialSqliteBackupFileName(fileName)).toBe(false);
-    },
-  );
-});
 
 function createTransactionMock(getAllResult: unknown[] = []) {
   const transaction: {
     error: null;
     objectStore: (name: string) => {
       add: ReturnType<typeof vi.fn>;
+      clear: ReturnType<typeof vi.fn>;
       getAll: ReturnType<typeof vi.fn>;
     };
     oncomplete: (() => void) | null;
@@ -79,6 +62,7 @@ function createTransactionMock(getAllResult: unknown[] = []) {
     error: null,
     objectStore: () => ({
       add: vi.fn(),
+      clear: vi.fn(),
       getAll: vi.fn(() => {
         const request: {
           result?: unknown[];
@@ -998,10 +982,16 @@ describe("database-backup restore", () => {
     });
     expect(backup.aiConfig).toEqual({
       aiProvider: "openai",
-      aiApiKey: "root-key",
     });
     expect(backup.settings).toEqual({
       state: { language: "zh", theme: "dark" },
+    });
+    expect(getAiConfigSnapshotMock).toHaveBeenCalledWith({
+      includeRootApiKey: false,
+    });
+    expect(getSettingsStateSnapshotMock).toHaveBeenCalledWith({
+      excludeFields: ["webdavPassword", "s3SecretAccessKey", "aiApiKey"],
+      updatedAt: expect.any(String),
     });
 
     await restoreFromBackup(backup);
@@ -1028,11 +1018,19 @@ describe("database-backup restore", () => {
     );
     expect(restoreAiConfigSnapshotMock).toHaveBeenCalledWith({
       aiProvider: "openai",
-      aiApiKey: "root-key",
     });
-    expect(restoreSettingsStateSnapshotMock).toHaveBeenCalledWith({
-      state: { language: "zh", theme: "dark" },
-    });
+    expect(restoreSettingsStateSnapshotMock).toHaveBeenCalledWith(
+      {
+        state: { language: "zh", theme: "dark" },
+      },
+      {
+        preserveLocalFields: [
+          "webdavPassword",
+          "s3SecretAccessKey",
+          "aiApiKey",
+        ],
+      },
+    );
     expect(window.api.skill.deleteAll).toHaveBeenCalledTimes(1);
     expect(window.api.skill.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1200,7 +1198,7 @@ describe("database-backup restore", () => {
         versions: 0,
       }),
     );
-    expect(clearDatabaseMock).toHaveBeenCalledTimes(1);
+    expect(clearDatabaseMock).not.toHaveBeenCalled();
   });
 
   it("embeds a full re-importable snapshot into selective ZIP exports and includes video scope", async () => {
@@ -1440,15 +1438,6 @@ describe("database-backup restore", () => {
     expect(window.api.skill.deleteAll).not.toHaveBeenCalled();
   });
 
-  it.each([
-    "JSON Parse error: Unterminated string",
-    "Unexpected end of JSON input",
-  ])("formats truncated JSON import errors for users: %s", (message) => {
-    expect(formatBackupImportError(new Error(message))).toBe(
-      "备份文件不是完整 JSON，可能在导出、复制或上传过程中被截断。请重新从 PromptHub 导出完整的 JSON、PHUB 或 ZIP 文件后再导入。",
-    );
-  });
-
   it("rejects an empty backup payload before clearing existing data", async () => {
     const file = {
       name: "empty-backup.phub",
@@ -1506,6 +1495,6 @@ describe("database-backup restore", () => {
     const skipped = await restoreFromFile(file);
     expect(skipped.prompts).toBe(1);
     expect(skipped.folders).toBe(0);
-    expect(clearDatabaseMock).toHaveBeenCalledTimes(1);
+    expect(clearDatabaseMock).not.toHaveBeenCalled();
   });
 });

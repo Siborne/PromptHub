@@ -24,6 +24,7 @@ export function registerBackupIPC(setDbRef: SetDbRef, rebindAllIpc: RebindAllIpc
       options?: {
         fromVersion?: string;
         toVersion?: string;
+        allowEmpty?: boolean;
       },
     ) => {
       try {
@@ -37,6 +38,7 @@ export function registerBackupIPC(setDbRef: SetDbRef, rebindAllIpc: RebindAllIpc
             typeof options?.toVersion === "string" && options.toVersion.trim().length > 0
               ? options.toVersion
               : undefined,
+          allowEmpty: options?.allowEmpty === true,
         });
 
         return {

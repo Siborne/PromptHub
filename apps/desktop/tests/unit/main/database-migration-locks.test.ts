@@ -67,6 +67,33 @@ function createDatabaseWithFreelistMismatch(dbPath: string): void {
   fs.writeFileSync(dbPath, bytes);
 }
 
+function createDatabaseWithIndexMismatch(dbPath: string): void {
+  const database = new DatabaseAdapter(dbPath);
+  database.exec(
+    "CREATE TABLE keeper (id TEXT PRIMARY KEY, value TEXT); CREATE INDEX idx_keeper_value ON keeper(value);",
+  );
+  for (let index = 0; index < 20; index += 1) {
+    database.run(
+      "INSERT INTO keeper (id, value) VALUES (?, ?)",
+      `id${index}`,
+      `v${index}`,
+    );
+  }
+  const indexRow = database.get(
+    "SELECT rootpage FROM sqlite_master WHERE type = 'index' AND name = 'idx_keeper_value'",
+  ) as { rootpage: number };
+  database.close();
+
+  const bytes = fs.readFileSync(dbPath);
+  const pageSize = bytes.readUInt16BE(16) || 65_536;
+  const pageOffset = (indexRow.rootpage - 1) * pageSize;
+  expect(bytes[pageOffset]).toBe(10);
+  expect(bytes.readUInt16BE(pageOffset + 3)).toBe(20);
+  bytes.writeUInt16BE(19, pageOffset + 3);
+  bytes[pageOffset + 7] = 7;
+  fs.writeFileSync(dbPath, bytes);
+}
+
 describe("database migration locking regression", () => {
   const tempDirs: string[] = [];
 
@@ -175,6 +202,54 @@ describe("database migration locking regression", () => {
         .readdirSync(tempDir)
         .filter((entry) => entry.includes(".integrity-backup-")),
     ).toHaveLength(1);
+  });
+
+  it("repairs index-only entry mismatches before migrations without losing rows", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-index-repair-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    createDatabaseWithIndexMismatch(dbPath);
+
+    const db = initSharedDatabase(dbPath);
+
+    expect(db.pragma("quick_check")).toEqual([{ quick_check: "ok" }]);
+    expect(db.get("SELECT COUNT(*) AS count FROM keeper")).toEqual({
+      count: 20,
+    });
+    expect(
+      fs
+        .readdirSync(tempDir)
+        .filter((entry) => entry.includes(".integrity-backup-")),
+    ).toHaveLength(1);
+  });
+
+  it("stops before migration when the required backup cannot be created", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-backup-gate-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    const legacyDb = new DatabaseAdapter(dbPath);
+    legacyDb.exec("CREATE TABLE keeper (id INTEGER PRIMARY KEY, value TEXT)");
+    legacyDb.close();
+    const copySpy = vi.spyOn(fs, "copyFileSync").mockImplementation(() => {
+      throw new Error("disk full");
+    });
+
+    try {
+      expect(() => initSharedDatabase(dbPath)).toThrow("disk full");
+      const probe = new DatabaseAdapter(dbPath);
+      expect(
+        probe.get(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'prompts'",
+        ),
+      ).toBeNull();
+      probe.close();
+    } finally {
+      copySpy.mockRestore();
+    }
   });
 
   it("fails closed without rewriting databases that have unsupported corruption", () => {

@@ -57,6 +57,50 @@ export interface SyncBackupOptions {
   includeImages?: boolean;
   encryptionPassword?: string;
   incrementalSync?: boolean;
+  beforeRestore?: () => Promise<void>;
+  rollbackRestore?: () => Promise<void>;
+}
+
+class GuardedRestoreError extends Error {
+  constructor(
+    message: string,
+    readonly localChanged: boolean,
+  ) {
+    super(message);
+    this.name = "GuardedRestoreError";
+  }
+}
+
+async function runGuardedRestore<T>(
+  options: SyncBackupOptions | undefined,
+  restore: () => Promise<T>,
+): Promise<T> {
+  await options?.beforeRestore?.();
+
+  try {
+    return await restore();
+  } catch (error) {
+    const restoreMessage =
+      error instanceof Error ? error.message : "Unknown restore error";
+    if (!options?.rollbackRestore) {
+      throw new GuardedRestoreError(restoreMessage, true);
+    }
+
+    try {
+      await options.rollbackRestore();
+    } catch (rollbackError) {
+      const rollbackMessage =
+        rollbackError instanceof Error
+          ? rollbackError.message
+          : "Unknown rollback error";
+      throw new GuardedRestoreError(
+        `Restore failed (${restoreMessage}) and rollback failed (${rollbackMessage})`,
+        true,
+      );
+    }
+
+    throw new GuardedRestoreError(restoreMessage, false);
+  }
 }
 
 export interface RemoteUploadResult {
@@ -457,17 +501,11 @@ async function restoreImages(images: Record<string, string>): Promise<number> {
   let restoredCount = 0;
 
   for (const [fileName, base64] of Object.entries(images)) {
-    try {
-      const success = await window.electron?.saveImageBase64?.(
-        fileName,
-        base64,
-      );
-      if (success) {
-        restoredCount++;
-      }
-    } catch (error) {
-      console.warn(`Failed to restore image ${fileName}:`, error);
+    const success = await window.electron?.saveImageBase64?.(fileName, base64);
+    if (!success) {
+      throw new Error(`Failed to restore image ${fileName}`);
     }
+    restoredCount++;
   }
 
   return restoredCount;
@@ -517,13 +555,10 @@ async function restoreVerifiedMedia(
   let restoredCount = 0;
 
   for (const [fileName, base64] of Object.entries(entries)) {
-    try {
-      if (await restoreFile(fileName, base64)) {
-        restoredCount++;
-      }
-    } catch (error) {
-      console.warn(`Failed to restore ${label} ${fileName}:`, error);
+    if (!(await restoreFile(fileName, base64))) {
+      throw new Error(`Failed to restore ${label} ${fileName}`);
     }
+    restoredCount++;
   }
 
   return restoredCount;
@@ -659,32 +694,34 @@ async function downloadLegacySyncBackup(
       options,
     );
 
-    await restoreFromBackup({
-      version: toVersionNumber(data.version),
-      exportedAt: data.exportedAt,
-      prompts: data.prompts,
-      folders: data.folders,
-      versions: getBackupVersions(data),
-      promptRelations: data.promptRelations,
-      outputFormatItems: data.outputFormatItems,
-      videos: videos || {},
-      rules: data.rules,
-      skills: data.skills,
-      skillVersions: data.skillVersions,
-      skillFiles: data.skillFiles,
-      mcpLibrary: data.mcpLibrary,
-      pluginLibrary: data.pluginLibrary,
-      pluginPackages: data.pluginPackages,
-      storeSources: data.storeSources,
-      agentAssetFiles: data.agentAssetFiles,
+    const imagesRestored = await runGuardedRestore(options, async () => {
+      await restoreFromBackup({
+        version: toVersionNumber(data.version),
+        exportedAt: data.exportedAt,
+        prompts: data.prompts,
+        folders: data.folders,
+        versions: getBackupVersions(data),
+        promptRelations: data.promptRelations,
+        outputFormatItems: data.outputFormatItems,
+        videos: videos || {},
+        rules: data.rules,
+        skills: data.skills,
+        skillVersions: data.skillVersions,
+        skillFiles: data.skillFiles,
+        mcpLibrary: data.mcpLibrary,
+        pluginLibrary: data.pluginLibrary,
+        pluginPackages: data.pluginPackages,
+        storeSources: data.storeSources,
+        agentAssetFiles: data.agentAssetFiles,
+      });
+
+      const restored =
+        images && Object.keys(images).length > 0
+          ? await restoreImages(images)
+          : 0;
+      await restoreSharedSnapshots(data);
+      return restored;
     });
-
-    const imagesRestored =
-      images && Object.keys(images).length > 0
-        ? await restoreImages(images)
-        : 0;
-
-    await restoreSharedSnapshots(data);
 
     const videosDownloaded = Object.keys(videos || {}).length;
     return {
@@ -703,6 +740,8 @@ async function downloadLegacySyncBackup(
     return {
       success: false,
       message: `Download failed: ${error instanceof Error ? error.message : "Unknown error"} / 下载失败: ${error instanceof Error ? error.message : "未知错误"}`,
+      localChanged:
+        error instanceof GuardedRestoreError ? error.localChanged : false,
     };
   }
 }
@@ -1000,39 +1039,47 @@ export async function incrementalDownloadSyncBackup(
       "media video",
     );
 
-    await restoreFromBackup({
-      version: toVersionNumber(coreData.version),
-      exportedAt: coreData.exportedAt,
-      prompts: coreData.prompts,
-      folders: coreData.folders,
-      versions: getBackupVersions(coreData),
-      promptRelations: coreData.promptRelations,
-      outputFormatItems: coreData.outputFormatItems,
-      rules: coreData.rules,
-      skills: coreData.skills,
-      skillVersions: coreData.skillVersions,
-      skillFiles: coreData.skillFiles,
-      mcpLibrary: coreData.mcpLibrary,
-      pluginLibrary: coreData.pluginLibrary,
-      pluginPackages: coreData.pluginPackages,
-      storeSources: coreData.storeSources,
-      agentAssetFiles: coreData.agentAssetFiles,
-    });
+    const { imagesDownloaded, videosDownloaded } = await runGuardedRestore(
+      options,
+      async () => {
+        await restoreFromBackup({
+          version: toVersionNumber(coreData.version),
+          exportedAt: coreData.exportedAt,
+          prompts: coreData.prompts,
+          folders: coreData.folders,
+          versions: getBackupVersions(coreData),
+          promptRelations: coreData.promptRelations,
+          outputFormatItems: coreData.outputFormatItems,
+          rules: coreData.rules,
+          skills: coreData.skills,
+          skillVersions: coreData.skillVersions,
+          skillFiles: coreData.skillFiles,
+          mcpLibrary: coreData.mcpLibrary,
+          pluginLibrary: coreData.pluginLibrary,
+          pluginPackages: coreData.pluginPackages,
+          storeSources: coreData.storeSources,
+          agentAssetFiles: coreData.agentAssetFiles,
+        });
 
-    const imagesDownloaded = await restoreVerifiedMedia(
-      verifiedImages,
-      async (fileName, base64) =>
-        window.electron?.saveImageBase64?.(fileName, base64),
-      "image",
+        const restoredImages = await restoreVerifiedMedia(
+          verifiedImages,
+          async (fileName, base64) =>
+            window.electron?.saveImageBase64?.(fileName, base64),
+          "image",
+        );
+        const restoredVideos = await restoreVerifiedMedia(
+          verifiedVideos,
+          async (fileName, base64) =>
+            window.electron?.saveVideoBase64?.(fileName, base64),
+          "video",
+        );
+        await restoreSharedSnapshots(coreData);
+        return {
+          imagesDownloaded: restoredImages,
+          videosDownloaded: restoredVideos,
+        };
+      },
     );
-    const videosDownloaded = await restoreVerifiedMedia(
-      verifiedVideos,
-      async (fileName, base64) =>
-        window.electron?.saveVideoBase64?.(fileName, base64),
-      "video",
-    );
-
-    await restoreSharedSnapshots(coreData);
 
     return {
       success: true,
@@ -1050,6 +1097,8 @@ export async function incrementalDownloadSyncBackup(
     return {
       success: false,
       message: `Incremental download failed: ${error instanceof Error ? error.message : "Unknown error"} / 增量下载失败: ${error instanceof Error ? error.message : "未知错误"}`,
+      localChanged:
+        error instanceof GuardedRestoreError ? error.localChanged : false,
     };
   }
 }

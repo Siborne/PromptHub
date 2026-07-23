@@ -26,11 +26,20 @@ vi.mock("../../../src/renderer/services/database", () => ({
   listPromptRelations: async () => [],
   listOutputFormatItems: async () => [],
   getDatabase: async () => {
-    throw new Error("IndexedDB fallback should not be used in filesystem integration test");
+    throw new Error(
+      "IndexedDB fallback should not be used in filesystem integration test",
+    );
   },
 }));
 
 vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
+  SENSITIVE_SETTINGS_FIELDS: [
+    "aiApiKey",
+    "aiProviders",
+    "aiModels",
+    "githubToken",
+    "networkProxy",
+  ],
   getAiConfigSnapshot: () => ({
     aiProvider: "openai",
     aiApiKey: "integration-key",
@@ -43,7 +52,9 @@ vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
   restoreSettingsStateSnapshot: vi.fn(),
 }));
 
-async function listFilesRecursively(rootDir: string): Promise<Array<{ path: string; content: string }>> {
+async function listFilesRecursively(
+  rootDir: string,
+): Promise<Array<{ path: string; content: string }>> {
   const result: Array<{ path: string; content: string }> = [];
 
   async function walk(currentDir: string, relativePrefix = ""): Promise<void> {
@@ -213,7 +224,9 @@ describe("database-backup filesystem integration", () => {
         prompt: {
           getAll: vi.fn(async () => state.prompts),
           delete: vi.fn(async (promptId: string) => {
-            state.prompts = state.prompts.filter((prompt) => prompt.id !== promptId);
+            state.prompts = state.prompts.filter(
+              (prompt) => prompt.id !== promptId,
+            );
             state.promptVersions.delete(promptId);
             return true;
           }),
@@ -225,7 +238,9 @@ describe("database-backup filesystem integration", () => {
         folder: {
           getAll: vi.fn(async () => state.folders),
           delete: vi.fn(async (folderId: string) => {
-            state.folders = state.folders.filter((folder) => folder.id !== folderId);
+            state.folders = state.folders.filter(
+              (folder) => folder.id !== folderId,
+            );
             return true;
           }),
           insertDirect: vi.fn(async (folder: any) => {
@@ -233,7 +248,10 @@ describe("database-backup filesystem integration", () => {
           }),
         },
         version: {
-          getAll: vi.fn(async (promptId: string) => state.promptVersions.get(promptId) ?? []),
+          getAll: vi.fn(
+            async (promptId: string) =>
+              state.promptVersions.get(promptId) ?? [],
+          ),
           insertDirect: vi.fn(async (version: any) => {
             const versions = state.promptVersions.get(version.promptId) ?? [];
             versions.push(version);
@@ -242,7 +260,9 @@ describe("database-backup filesystem integration", () => {
         },
         skill: {
           getAll: vi.fn(async () => state.skills),
-          versionGetAll: vi.fn(async (skillId: string) => state.skillVersions.get(skillId) ?? []),
+          versionGetAll: vi.fn(
+            async (skillId: string) => state.skillVersions.get(skillId) ?? [],
+          ),
           readLocalFiles: vi.fn(async (skillId: string) => {
             const repoPath = state.skillRepoPaths.get(skillId);
             if (!repoPath) {
@@ -284,15 +304,17 @@ describe("database-backup filesystem integration", () => {
               skill.id === skillId ? { ...skill, ...patch } : skill,
             );
           }),
-          writeLocalFile: vi.fn(async (skillId: string, relativePath: string, content: string) => {
-            const repoPath = state.skillRepoPaths.get(skillId);
-            if (!repoPath) {
-              throw new Error(`Unknown skill repo path for ${skillId}`);
-            }
-            const filePath = path.join(repoPath, relativePath);
-            await fs.mkdir(path.dirname(filePath), { recursive: true });
-            await fs.writeFile(filePath, content, "utf8");
-          }),
+          writeLocalFile: vi.fn(
+            async (skillId: string, relativePath: string, content: string) => {
+              const repoPath = state.skillRepoPaths.get(skillId);
+              if (!repoPath) {
+                throw new Error(`Unknown skill repo path for ${skillId}`);
+              }
+              const filePath = path.join(repoPath, relativePath);
+              await fs.mkdir(path.dirname(filePath), { recursive: true });
+              await fs.writeFile(filePath, content, "utf8");
+            },
+          ),
         },
       },
       electron: {
@@ -305,7 +327,10 @@ describe("database-backup filesystem integration", () => {
           return buffer.toString("base64");
         }),
         saveImageBase64: vi.fn(async (fileName: string, base64: string) => {
-          await fs.writeFile(path.join(imagesDir, fileName), Buffer.from(base64, "base64"));
+          await fs.writeFile(
+            path.join(imagesDir, fileName),
+            Buffer.from(base64, "base64"),
+          );
           return true;
         }),
         getVideoSize: vi.fn(async (fileName: string) => {
@@ -317,7 +342,10 @@ describe("database-backup filesystem integration", () => {
           return buffer.toString("base64");
         }),
         saveVideoBase64: vi.fn(async (fileName: string, base64: string) => {
-          await fs.writeFile(path.join(videosDir, fileName), Buffer.from(base64, "base64"));
+          await fs.writeFile(
+            path.join(videosDir, fileName),
+            Buffer.from(base64, "base64"),
+          );
           return true;
         }),
       },
@@ -339,10 +367,14 @@ describe("database-backup filesystem integration", () => {
       }),
     ]);
     expect(backup.images).toEqual({
-      "integration-image.png": Buffer.from("integration-image-bytes").toString("base64"),
+      "integration-image.png": Buffer.from("integration-image-bytes").toString(
+        "base64",
+      ),
     });
     expect(backup.videos).toEqual({
-      "integration-video.mp4": Buffer.from("integration-video-bytes").toString("base64"),
+      "integration-video.mp4": Buffer.from("integration-video-bytes").toString(
+        "base64",
+      ),
     });
     expect(backup.skillFiles?.["skill-1"]).toEqual(
       expect.arrayContaining([
@@ -363,8 +395,16 @@ describe("database-backup filesystem integration", () => {
     state.skillVersions.clear();
     state.skillRepoPaths.clear();
 
-    await fs.writeFile(path.join(imagesDir, "integration-image.png"), "corrupted", "utf8");
-    await fs.writeFile(path.join(videosDir, "integration-video.mp4"), "corrupted", "utf8");
+    await fs.writeFile(
+      path.join(imagesDir, "integration-image.png"),
+      "corrupted",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(videosDir, "integration-video.mp4"),
+      "corrupted",
+      "utf8",
+    );
 
     await restoreFromBackup(backup);
 
@@ -381,7 +421,8 @@ describe("database-backup filesystem integration", () => {
     ]);
 
     const restoredPrompt = state.prompts[0];
-    const restoredPromptVersions = state.promptVersions.get(restoredPrompt.id) ?? [];
+    const restoredPromptVersions =
+      state.promptVersions.get(restoredPrompt.id) ?? [];
     expect(restoredPromptVersions).toEqual([
       expect.objectContaining({
         id: "prompt-version-1",
@@ -391,7 +432,8 @@ describe("database-backup filesystem integration", () => {
 
     expect(state.skills).toHaveLength(1);
     const restoredSkill = state.skills[0];
-    const restoredSkillVersions = state.skillVersions.get(restoredSkill.id) ?? [];
+    const restoredSkillVersions =
+      state.skillVersions.get(restoredSkill.id) ?? [];
     expect(restoredSkillVersions).toEqual([
       expect.objectContaining({
         id: "skill-version-1",

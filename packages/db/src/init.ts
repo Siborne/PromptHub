@@ -21,6 +21,7 @@ const QUICK_CHECK_OK = "ok";
 const DATABASE_BUSY_TIMEOUT_MS = 5_000;
 const QUICK_CHECK_DATABASE_HEADER = /^\*{3} in database .+ \*{3}$/;
 const FREELIST_MISMATCH = /^Freelist: size is \d+ but should be \d+$/;
+const INDEX_ENTRY_MISMATCH = /^wrong # of entries in index (.+)$/;
 
 function getQuickCheckDiagnostics(probe: Database.Database): string[] {
   const rows = probe.pragma("quick_check");
@@ -56,6 +57,30 @@ function isFreelistOnlyMismatch(diagnostics: string[]): boolean {
   );
 }
 
+function getIndexOnlyMismatchNames(diagnostics: string[]): string[] | null {
+  if (diagnostics.length === 0) return null;
+
+  const names = new Set<string>();
+  for (const diagnostic of diagnostics) {
+    const match = INDEX_ENTRY_MISMATCH.exec(diagnostic);
+    const indexName = match?.[1]?.trim();
+    if (!indexName) return null;
+    names.add(indexName);
+  }
+  return [...names];
+}
+
+function createIntegrityBackup(dbPath: string): string {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${dbPath}.integrity-backup-${timestamp}`;
+  fs.copyFileSync(dbPath, backupPath);
+  return backupPath;
+}
+
+function quoteSqliteIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
 function inspectDatabaseIntegrity(dbPath: string): string[] {
   const probe = new Database(dbPath);
   try {
@@ -73,9 +98,7 @@ function repairFreelistIntegrity(dbPath: string, diagnostics: string[]): void {
     );
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `${dbPath}.integrity-backup-${timestamp}`;
-  fs.copyFileSync(dbPath, backupPath);
+  const backupPath = createIntegrityBackup(dbPath);
 
   const repairDatabase = new Database(dbPath);
   try {
@@ -96,11 +119,68 @@ function repairFreelistIntegrity(dbPath: string, diagnostics: string[]): void {
   );
 }
 
+function repairIndexIntegrity(dbPath: string, diagnostics: string[]): void {
+  const indexNames = getIndexOnlyMismatchNames(diagnostics);
+  if (!indexNames) {
+    throw new Error(
+      `Database integrity check failed: ${diagnostics.join("; ").slice(0, 500)}`,
+    );
+  }
+
+  const backupPath = createIntegrityBackup(dbPath);
+  const repairDatabase = new Database(dbPath);
+  try {
+    repairDatabase.pragma(`busy_timeout = ${DATABASE_BUSY_TIMEOUT_MS}`);
+    const repair = repairDatabase.transaction(() => {
+      for (const indexName of indexNames) {
+        const existing = repairDatabase.get(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+          indexName,
+        );
+        if (!existing) {
+          throw new Error(`SQLite index does not exist: ${indexName}`);
+        }
+        repairDatabase.exec(`REINDEX ${quoteSqliteIdentifier(indexName)}`);
+      }
+
+      const transactionalDiagnostics = getQuickCheckDiagnostics(repairDatabase);
+      if (!isHealthyQuickCheck(transactionalDiagnostics)) {
+        throw new Error(
+          `Database integrity repair failed: ${transactionalDiagnostics.join("; ").slice(0, 500)}`,
+        );
+      }
+    });
+    repair();
+  } finally {
+    repairDatabase.close();
+  }
+
+  const repairedDiagnostics = inspectDatabaseIntegrity(dbPath);
+  if (!isHealthyQuickCheck(repairedDiagnostics)) {
+    throw new Error(
+      `Database integrity repair failed: ${repairedDiagnostics.join("; ").slice(0, 500)}`,
+    );
+  }
+  console.log(
+    `[DB] Rebuilt SQLite indexes (${indexNames.join(", ")}); backup=${path.basename(backupPath)}`,
+  );
+}
+
 function ensureDatabaseIntegrity(dbPath: string): void {
   if (!fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0) return;
   const diagnostics = inspectDatabaseIntegrity(dbPath);
   if (isHealthyQuickCheck(diagnostics)) return;
-  repairFreelistIntegrity(dbPath, diagnostics);
+  if (isFreelistOnlyMismatch(diagnostics)) {
+    repairFreelistIntegrity(dbPath, diagnostics);
+    return;
+  }
+  if (getIndexOnlyMismatchNames(diagnostics)) {
+    repairIndexIntegrity(dbPath, diagnostics);
+    return;
+  }
+  throw new Error(
+    `Database integrity check failed: ${diagnostics.join("; ").slice(0, 500)}`,
+  );
 }
 
 /**
@@ -301,22 +381,17 @@ function shouldBackupDatabaseBeforeMigration(dbPath: string): boolean {
 
 /**
  * Create a timestamped backup of the database file before running migrations.
- * Returns the backup path on success, or null if no backup was needed/possible.
+ * Returns the backup path on success, or null if no backup was needed.
  */
 function backupDatabaseBeforeMigration(dbPath: string): string | null {
-  try {
-    if (!shouldBackupDatabaseBeforeMigration(dbPath)) {
-      return null;
-    }
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupPath = `${dbPath}.backup-${timestamp}`;
-    fs.copyFileSync(dbPath, backupPath);
-    console.log(`[DB] Pre-migration backup created: ${backupPath}`);
-    return backupPath;
-  } catch (err) {
-    console.warn("[DB] Failed to create pre-migration backup:", err);
+  if (!shouldBackupDatabaseBeforeMigration(dbPath)) {
     return null;
   }
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${dbPath}.backup-${timestamp}`;
+  fs.copyFileSync(dbPath, backupPath);
+  console.log(`[DB] Pre-migration backup created: ${backupPath}`);
+  return backupPath;
 }
 
 /**

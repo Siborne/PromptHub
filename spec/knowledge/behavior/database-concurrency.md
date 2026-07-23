@@ -52,8 +52,10 @@
 
 - 既有数据库在取得进程租约后、执行迁移或业务写入前必须运行
   `PRAGMA quick_check`；新建或空数据库可直接进入初始化。
-- 只有诊断全部属于 SQLite freelist 计数不一致时，初始化器才可创建带时间戳的
-  原文件备份并通过 `VACUUM` 修复；修复后必须使用新连接再次得到 `ok`。
+- 只有诊断全部属于 SQLite freelist 计数不一致，或全部属于可验证的
+  `wrong # of entries in index <name>` 时，初始化器才可自动修复。freelist 使用
+  `VACUUM`；索引名必须在 `sqlite_master` 中存在，并在单事务内执行 `REINDEX`。
+  两类修复都必须先创建带时间戳的原文件备份，并使用新连接再次得到 `ok`。
 - 其它完整性错误不得被误判为锁冲突，也不得猜测性修复。初始化必须停止，并保留
   原数据库供备份恢复或人工诊断。
 
@@ -112,3 +114,12 @@ When startup quick-check reports only a freelist count mismatch:
 - SQLite rewrites the database through `VACUUM`
 - normal startup continues only after a fresh quick-check returns `ok`
 - broader corruption still fails closed without automatic salvage
+
+### Scenario: Existing database has index entry-count damage
+
+When startup quick-check reports only entry-count mismatches for existing indexes:
+
+- initialization preserves one timestamped byte-for-byte backup
+- every diagnostic index is validated and rebuilt inside one transaction
+- the transaction and a fresh connection must both report `ok`
+- an unknown index name or any additional diagnostic stops startup without repair

@@ -11,7 +11,10 @@ import {
   type ImportPreviewSummary,
 } from "../services/database-backup";
 import { hasAnySkipped } from "../services/database-backup-format";
-import { createUpgradeBackup } from "../services/upgrade-backup";
+import {
+  createUpgradeBackup,
+  restoreUpgradeBackup,
+} from "../services/upgrade-backup";
 import { isWebRuntime } from "../runtime";
 
 export interface BackupImportPreviewState {
@@ -34,7 +37,9 @@ export function formatImportSkippedDetails(
       : null,
     skipped.rules > 0 ? `rules: ${skipped.rules}` : null,
     skipped.skills > 0 ? `skills: ${skipped.skills}` : null,
-    skipped.skillVersions > 0 ? `skill versions: ${skipped.skillVersions}` : null,
+    skipped.skillVersions > 0
+      ? `skill versions: ${skipped.skillVersions}`
+      : null,
     skipped.skillFiles > 0 ? `skill files: ${skipped.skillFiles}` : null,
   ]
     .filter((part): part is string => part !== null)
@@ -55,7 +60,10 @@ export function useBackupImportController() {
         setImportPreview({ file, summary: preview.summary });
       } catch (error) {
         console.error("Import failed:", error);
-        showToast(`${t("toast.importFailed")}: ${formatBackupImportError(error)}`, "error");
+        showToast(
+          `${t("toast.importFailed")}: ${formatBackupImportError(error)}`,
+          "error",
+        );
       }
     },
     [showToast, t],
@@ -89,13 +97,19 @@ export function useBackupImportController() {
     }
 
     setConfirmingImport(true);
+    let safetyBackupId: string | undefined;
     try {
       if (!isWebRuntime()) {
         const currentVersion = await window.electron?.updater?.getVersion?.();
-        await createUpgradeBackup({
+        const safetyBackup = await createUpgradeBackup({
           fromVersion: currentVersion || undefined,
           toVersion: currentVersion || undefined,
         });
+        if (safetyBackup.created && safetyBackup.backupId) {
+          safetyBackupId = safetyBackup.backupId;
+        } else if (!safetyBackup.skipped) {
+          throw new Error("Unable to create a local safety snapshot");
+        }
       }
 
       const skipped = await restoreFromFile(importPreview.file);
@@ -114,7 +128,20 @@ export function useBackupImportController() {
       setTimeout(() => window.location.reload(), 1000);
     } catch (error) {
       console.error("Import failed:", error);
-      showToast(`${t("toast.importFailed")}: ${formatBackupImportError(error)}`, "error");
+      if (safetyBackupId) {
+        try {
+          const rollback = await restoreUpgradeBackup(safetyBackupId);
+          if (!rollback.success) {
+            console.error("Import rollback failed:", rollback.error);
+          }
+        } catch (rollbackError) {
+          console.error("Import rollback failed:", rollbackError);
+        }
+      }
+      showToast(
+        `${t("toast.importFailed")}: ${formatBackupImportError(error)}`,
+        "error",
+      );
     } finally {
       setConfirmingImport(false);
     }
