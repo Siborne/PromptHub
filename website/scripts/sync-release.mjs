@@ -2,17 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { findLatestStableRelease } from "./release-metadata.mjs";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const websiteRoot = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(websiteRoot, "..");
 
-const rootPackagePath = path.join(repoRoot, "package.json");
 const rootChangelogPath = path.join(repoRoot, "CHANGELOG.md");
-const generatedReleasePath = path.join(
-  websiteRoot,
-  "src/generated/release.ts",
-);
+const releaseIndexPath = path.join(repoRoot, "spec/releases/README.md");
+const generatedReleasePath = path.join(websiteRoot, "src/generated/release.ts");
 const websiteChangelogPath = path.join(
   websiteRoot,
   "src/content/docs/changelog.md",
@@ -23,16 +22,18 @@ const enIntroPath = path.join(
   "src/content/docs/en/introduction.md",
 );
 
-const rootPackage = JSON.parse(fs.readFileSync(rootPackagePath, "utf8"));
 const changelog = fs.readFileSync(rootChangelogPath, "utf8");
-const version = rootPackage.version;
+const releaseIndex = fs.readFileSync(releaseIndexPath, "utf8");
+const { version, date: releaseDate } = findLatestStableRelease(
+  changelog,
+  releaseIndex,
+);
 const releaseTag = `v${version}`;
-const isPrerelease = version.includes("-");
 
-// Stable releases publish a fixed-filename mirror to a CDN bucket so the
-// website download buttons can point at version-less URLs that never expire.
-// Prerelease tags stay on GitHub Releases — the CDN mirror is stable-only by
-// policy (see .github/workflows/release.yml `Sync stable artifacts to R2`).
+// Public website metadata follows the latest release explicitly marked as a
+// stable record, not the build version in the root manifest. Stable releases
+// publish a fixed-filename mirror to a CDN bucket so download buttons can point
+// at version-less URLs that never expire.
 //
 // The CDN mirror is opt-in because docs must not point at R2 until the
 // latest/ objects are confirmed present. Set PROMPTHUB_USE_CDN_MIRROR=1 only
@@ -41,36 +42,29 @@ const isPrerelease = version.includes("-");
 const USE_CDN_MIRROR = process.env.PROMPTHUB_USE_CDN_MIRROR === "1";
 const CDN_PUBLIC_BASE = "https://pub-fff1cbc0121241d480624bd3de5a2735.r2.dev";
 
-const githubReleaseDownloadBase = isPrerelease
-  ? `https://github.com/legeling/PromptHub/releases/download/${releaseTag}`
-  : "https://github.com/legeling/PromptHub/releases/latest/download";
+const githubReleaseDownloadBase =
+  "https://github.com/legeling/PromptHub/releases/latest/download";
 
-const downloadUrls =
-  !isPrerelease && USE_CDN_MIRROR
-    ? {
-        // Stable + CDN: hit the public mirror directly. The release CI uploads
-        // these version-less filenames into the latest/ prefix on every
-        // stable tag.
-        macArm64: `${CDN_PUBLIC_BASE}/latest/PromptHub-arm64.dmg`,
-        macX64: `${CDN_PUBLIC_BASE}/latest/PromptHub-x64.dmg`,
-        windowsX64: `${CDN_PUBLIC_BASE}/latest/PromptHub-Setup-x64.exe`,
-        windowsArm64: `${CDN_PUBLIC_BASE}/latest/PromptHub-Setup-arm64.exe`,
-        linuxAppImage: `${CDN_PUBLIC_BASE}/latest/PromptHub-x64.AppImage`,
-        linuxDeb: `${CDN_PUBLIC_BASE}/latest/PromptHub-amd64.deb`,
-      }
-    : {
-        macArm64: `${githubReleaseDownloadBase}/PromptHub-${version}-arm64.dmg`,
-        macX64: `${githubReleaseDownloadBase}/PromptHub-${version}-x64.dmg`,
-        windowsX64: `${githubReleaseDownloadBase}/PromptHub-Setup-${version}-x64.exe`,
-        windowsArm64: `${githubReleaseDownloadBase}/PromptHub-Setup-${version}-arm64.exe`,
-        linuxAppImage: `${githubReleaseDownloadBase}/PromptHub-${version}-x64.AppImage`,
-        linuxDeb: `${githubReleaseDownloadBase}/PromptHub-${version}-amd64.deb`,
-      };
-
-const latestHeaderMatch = changelog.match(
-  /^## \[(\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?)\] - (\d{4}-\d{2}-\d{2})/m,
-);
-const releaseDate = latestHeaderMatch?.[2] ?? "";
+const downloadUrls = USE_CDN_MIRROR
+  ? {
+      // Stable + CDN: hit the public mirror directly. The release CI uploads
+      // these version-less filenames into the latest/ prefix on every
+      // stable tag.
+      macArm64: `${CDN_PUBLIC_BASE}/latest/PromptHub-arm64.dmg`,
+      macX64: `${CDN_PUBLIC_BASE}/latest/PromptHub-x64.dmg`,
+      windowsX64: `${CDN_PUBLIC_BASE}/latest/PromptHub-Setup-x64.exe`,
+      windowsArm64: `${CDN_PUBLIC_BASE}/latest/PromptHub-Setup-arm64.exe`,
+      linuxAppImage: `${CDN_PUBLIC_BASE}/latest/PromptHub-x64.AppImage`,
+      linuxDeb: `${CDN_PUBLIC_BASE}/latest/PromptHub-amd64.deb`,
+    }
+  : {
+      macArm64: `${githubReleaseDownloadBase}/PromptHub-${version}-arm64.dmg`,
+      macX64: `${githubReleaseDownloadBase}/PromptHub-${version}-x64.dmg`,
+      windowsX64: `${githubReleaseDownloadBase}/PromptHub-Setup-${version}-x64.exe`,
+      windowsArm64: `${githubReleaseDownloadBase}/PromptHub-Setup-${version}-arm64.exe`,
+      linuxAppImage: `${githubReleaseDownloadBase}/PromptHub-${version}-x64.AppImage`,
+      linuxDeb: `${githubReleaseDownloadBase}/PromptHub-${version}-amd64.deb`,
+    };
 
 const generatedReleaseSource = `export const RELEASE_VERSION = "${version}";
 export const RELEASE_TAG = "${releaseTag}";

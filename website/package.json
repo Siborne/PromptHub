@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "sync:release": "node ./scripts/sync-release.mjs",
+    "test:release-sync": "node --test --experimental-test-coverage ./scripts/release-metadata.test.mjs",
     "predev": "pnpm sync:release",
     "dev": "astro dev",
     "start": "astro dev",

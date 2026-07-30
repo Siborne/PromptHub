@@ -8,7 +8,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | State | Count |
 | --- | ---: |
 | Active | 31 |
-| Archived | 181 |
+| Archived | 182 |
 | Legacy | 1 |
 
 ## Active
@@ -232,6 +232,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-28-skill-source-update-reconciliation` | archived | `spec/changes/archive/2026/07/2026-07-28-skill-source-update-reconciliation/` |
 | `2026-07-28-source-trust-and-mcp-market-updates` | archived | `spec/changes/archive/2026/07/2026-07-28-source-trust-and-mcp-market-updates/` |
 | `2026-07-28-unified-custom-store-sources` | archived | `spec/changes/archive/2026/07/2026-07-28-unified-custom-store-sources/` |
+| `2026-07-30-website-release-metadata-stable-boundary` | archived | `spec/changes/archive/2026/07/2026-07-30-website-release-metadata-stable-boundary/` |
 
 ## Legacy
 
