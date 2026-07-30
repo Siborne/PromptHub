@@ -41,6 +41,13 @@ import { normalizeBuiltinAgentOverrides } from "../../services/agent-root-paths"
 import { normalizeSkillProjects } from "../../services/skill-project-settings";
 import type { SettingsState } from "./settings-types";
 import { normalizeAgentIdentityPreferences } from "../../services/agent-identity";
+import {
+  isSkillSafetyChannel,
+  isSkillSafetyPolicyValue,
+  normalizeSkillSafetyStoreId,
+  type SkillSafetyChannel,
+  type SkillSafetyPolicyValue,
+} from "../../services/skill-safety-policy";
 
 type PersistedSettingsState = Omit<SettingsState, "githubToken">;
 
@@ -82,6 +89,7 @@ function normalizeSharedSettingsState(next: SettingsState): void {
   next.skillProjects = normalizeSkillProjects(next.skillProjects);
   next.shortcutModes = normalizeShortcutModes(next.shortcutModes);
   next.skillListPageSize = normalizeSkillListPageSize(next.skillListPageSize);
+  normalizeSkillTrustSettings(next);
   next.networkProxy = normalizeNetworkProxySettings(next.networkProxy);
   next.agentIdentityPreferences = normalizeAgentIdentityPreferences(
     next.agentIdentityPreferences,
@@ -245,6 +253,24 @@ function normalizeSkillTrustSettings(next: SettingsState): void {
   if (typeof next.autoScanStoreSkillsBeforeInstall !== "boolean") {
     next.autoScanStoreSkillsBeforeInstall = false;
   }
+  next.skillSafetyChannelPolicies = Object.fromEntries(
+    Object.entries(next.skillSafetyChannelPolicies ?? {}).filter(
+      (entry): entry is [SkillSafetyChannel, SkillSafetyPolicyValue] =>
+        isSkillSafetyChannel(entry[0]) && isSkillSafetyPolicyValue(entry[1]),
+    ),
+  );
+  next.skillSafetyStorePolicies = Object.fromEntries(
+    Object.entries(next.skillSafetyStorePolicies ?? {})
+      .map(([storeId, policy]) => [
+        normalizeSkillSafetyStoreId(storeId),
+        policy,
+      ])
+      .filter(
+        (entry): entry is [string, SkillSafetyPolicyValue] =>
+          Boolean(entry[0]) && isSkillSafetyPolicyValue(entry[1]),
+      )
+      .slice(0, 512),
+  );
   next.trustedSkillUpdateSourceKeys = Array.isArray(
     next.trustedSkillUpdateSourceKeys,
   )

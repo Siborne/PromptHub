@@ -60,11 +60,14 @@ function resetStores() {
     isLoading: false,
     error: null,
     registrySkills: [],
+    customStoreSources: [],
     remoteStoreEntries: {},
     pendingPluginChildDeploySkillIds: [],
   });
   useSettingsStore.setState({
     autoScanStoreSkillsBeforeInstall: false,
+    skillSafetyChannelPolicies: {},
+    skillSafetyStorePolicies: {},
     trustedSkillUpdateSourceKeys: [],
   });
 }
@@ -110,6 +113,7 @@ describe("registry Skill install safety review", () => {
       expect.objectContaining({
         operation: "install",
         registrySkill: GITEA_SKILL,
+        safetyScan: { mode: "disabled" },
         source: {
           kind: "remote-git",
           repoUrl: GITEA_SKILL.source_url,
@@ -159,9 +163,77 @@ describe("registry Skill install safety review", () => {
       content: GITEA_SKILL.content,
       markAsBuiltin: true,
       note: undefined,
+      safetyScan: { mode: "disabled" },
       approvedPackageFingerprint: REVIEW.packageFingerprint,
     });
     expect(getAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes an explicit enabled mode even when no AI model is configured", async () => {
+    useSettingsStore.setState({
+      autoScanStoreSkillsBeforeInstall: true,
+    });
+    const installed = createSkillFixture({
+      id: "scanned-private-writer",
+      name: "private-writer",
+      source_id: GITEA_SKILL.source_id,
+    });
+    const runPackageOperation = vi.fn().mockResolvedValue({
+      status: "completed",
+      operation: "install",
+      skill: installed,
+    });
+    (window as any).api.skill.runPackageOperation = runPackageOperation;
+    (window as any).api.skill.getAll = vi.fn().mockResolvedValue([installed]);
+
+    await useSkillStore.getState().installRegistrySkill(GITEA_SKILL);
+
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        safetyScan: { mode: "enabled" },
+      }),
+    );
+  });
+
+  it("recovers an exact custom-store override when callers omit the mode", async () => {
+    useSettingsStore.setState({
+      autoScanStoreSkillsBeforeInstall: true,
+      skillSafetyChannelPolicies: { "git-repo": "enabled" },
+      skillSafetyStorePolicies: { "team-gitea": "disabled" },
+    });
+    useSkillStore.setState({
+      customStoreSources: [
+        {
+          id: "team-gitea",
+          name: "Team Gitea",
+          type: "git-repo",
+          url: "https://gitea.example.com/team/skills",
+          branch: "main",
+          enabled: true,
+          createdAt: 1,
+        },
+      ],
+    });
+    const installed = createSkillFixture({
+      id: "policy-private-writer",
+      name: "private-writer",
+      source_id: GITEA_SKILL.source_id,
+    });
+    const runPackageOperation = vi.fn().mockResolvedValue({
+      status: "completed",
+      operation: "install",
+      skill: installed,
+    });
+    (window as any).api.skill.runPackageOperation = runPackageOperation;
+    (window as any).api.skill.getAll = vi.fn().mockResolvedValue([installed]);
+
+    await useSkillStore.getState().installRegistrySkill(GITEA_SKILL);
+
+    expect(runPackageOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        safetyScan: { mode: "disabled" },
+      }),
+    );
   });
 
   it("surfaces an incomplete main-process rollback without attempting renderer compensation", async () => {

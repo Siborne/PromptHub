@@ -13,6 +13,7 @@ import { getRegistrySkillSelectionId } from "./skill-store-identifiers";
 export interface PendingSkillInstallReview {
   skill: RegistrySkill;
   review: SkillUpdateSafetyReview;
+  options?: RegistrySkillInstallOptions;
 }
 
 function getReviewKey(review: PendingSkillInstallReview): string {
@@ -51,7 +52,7 @@ export function useSkillPackageInstall() {
         ? await installRegistrySkill(skill, options)
         : await installRegistrySkill(skill);
       if (result?.status === "safety-review-required") {
-        enqueueReview({ skill, review: result.review });
+        enqueueReview({ skill, review: result.review, options });
       }
       return result;
     },
@@ -69,11 +70,16 @@ export function useSkillPackageInstall() {
     setIsConfirmingReview(true);
     try {
       const result = await installRegistrySkill(pendingReview.skill, {
+        ...pendingReview.options,
         approvedPackageFingerprint: pendingReview.review.packageFingerprint,
       });
       if (result?.status === "safety-review-required") {
         setPendingReviews((current) => [
-          { skill: pendingReview.skill, review: result.review },
+          {
+            skill: pendingReview.skill,
+            review: result.review,
+            options: pendingReview.options,
+          },
           ...current.slice(1),
         ]);
         setTrustReviewedSource(false);
@@ -122,6 +128,9 @@ export function useSkillPackageInstall() {
 interface PendingSkillUpdateReview {
   skill: RegistrySkill;
   review: SkillUpdateSafetyReview;
+  options?: Parameters<
+    ReturnType<typeof useSkillStore.getState>["updateRegistrySkill"]
+  >[1];
 }
 
 /** Review queue used when batch Store updates require fingerprint approval. */
@@ -139,7 +148,11 @@ export function useRegistrySkillUpdateReview() {
   const pendingReview = pendingReviews[0] ?? null;
 
   const enqueueReview = useCallback(
-    (skill: RegistrySkill, review: SkillUpdateSafetyReview) => {
+    (
+      skill: RegistrySkill,
+      review: SkillUpdateSafetyReview,
+      options?: PendingSkillUpdateReview["options"],
+    ) => {
       setPendingReviews((current) => {
         const key = `${review.sourceKey}:${review.packageFingerprint}`;
         if (
@@ -151,7 +164,7 @@ export function useRegistrySkillUpdateReview() {
         ) {
           return current;
         }
-        return [...current, { skill, review }];
+        return [...current, { skill, review, options }];
       });
     },
     [],
@@ -171,12 +184,17 @@ export function useRegistrySkillUpdateReview() {
         const result = await updateRegistrySkill(
           getRegistrySkillSelectionId(pendingReview.skill),
           {
+            ...pendingReview.options,
             approvedPackageFingerprint: pendingReview.review.packageFingerprint,
           },
         );
         if (result?.status === "safety-review-required") {
           setPendingReviews((current) => [
-            { skill: pendingReview.skill, review: result.review },
+            {
+              skill: pendingReview.skill,
+              review: result.review,
+              options: pendingReview.options,
+            },
             ...current.slice(1),
           ]);
           setTrustReviewedSource(false);

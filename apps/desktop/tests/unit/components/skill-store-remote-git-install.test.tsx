@@ -14,6 +14,7 @@ import { renderWithI18n } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
 import { useSkillStore } from "../../../src/renderer/stores/skill.store";
 import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
+import { createSkillFixture } from "../../fixtures/skills";
 
 import {} from "./skill-store-remote.test-fixtures";
 
@@ -479,6 +480,127 @@ describe("SkillStore remote loading", () => {
     expect(screen.queryByText("v2")).not.toBeInTheDocument();
   });
 
+  it("opens install review without an automatic scan when the resolved policy is disabled", async () => {
+    const scanSafety = vi.fn();
+    installWindowMocks({
+      api: {
+        skill: {
+          scanSafety,
+        },
+      },
+    });
+    useSettingsStore.setState({
+      autoScanStoreSkillsBeforeInstall: false,
+      skillSafetyChannelPolicies: {},
+      skillSafetyStorePolicies: {},
+    } as never);
+    useSkillStore.setState({
+      getTranslationState: vi.fn().mockReturnValue({
+        value: null,
+        hasTranslation: false,
+        isStale: false,
+      }),
+    } as never);
+    const skill = {
+      slug: "private-writer",
+      name: "Private Writer",
+      source_id: "source-private-writer",
+      description: "Private Gitea writer",
+      category: "general",
+      tags: [],
+      version: "1.0.0",
+      content: "# Private Writer\n",
+      source_url: "https://gitea.example.com/team/skills",
+      author: "Team",
+    } as never;
+
+    await renderWithI18n(
+      <SkillStoreDetail
+        skill={skill}
+        isInstalled={false}
+        storeSourceId="team-gitea"
+        storeSourceType="git-repo"
+        onClose={vi.fn()}
+      />,
+      { language: "en" },
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import to My Skills" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", {
+        name: "Review Skill before adding",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Not run")).toBeInTheDocument();
+    expect(scanSafety).not.toHaveBeenCalled();
+  });
+
+  it("opens update review without an automatic scan when the resolved policy is disabled", async () => {
+    const scanSafety = vi.fn();
+    installWindowMocks({ api: { skill: { scanSafety } } });
+    useSettingsStore.setState({
+      autoScanStoreSkillsBeforeInstall: true,
+      skillSafetyChannelPolicies: { "git-repo": "enabled" },
+      skillSafetyStorePolicies: { "team-gitea": "disabled" },
+    } as never);
+    const installedSkill = createSkillFixture({
+      id: "private-writer",
+      name: "private-writer",
+      source_id: "source-private-writer",
+      source_url: "https://gitea.example.com/team/skills",
+      content: "# Private Writer\n\nLocal\n",
+      instructions: "# Private Writer\n\nLocal\n",
+    });
+    const registrySkill = {
+      slug: "private-writer",
+      name: "Private Writer",
+      source_id: "source-private-writer",
+      description: "Private Gitea writer",
+      category: "general",
+      tags: [],
+      version: "2.0.0",
+      content: "# Private Writer\n\nRemote\n",
+      source_url: "https://gitea.example.com/team/skills",
+      author: "Team",
+    } as never;
+    useSkillStore.setState({
+      skills: [installedSkill],
+      getTranslationState: vi.fn().mockReturnValue({
+        value: null,
+        hasTranslation: false,
+        isStale: false,
+      }),
+      getRegistrySkillUpdateStatus: vi.fn().mockResolvedValue({
+        status: "update-available",
+        installedSkill,
+        registrySkill,
+        localHash: "local",
+        remoteHash: "remote",
+        remoteContent: "# Private Writer\n\nRemote\n",
+      }),
+    } as never);
+
+    await renderWithI18n(
+      <SkillStoreDetail
+        skill={registrySkill}
+        isInstalled={true}
+        storeSourceId="team-gitea"
+        storeSourceType="git-repo"
+        onClose={vi.fn()}
+      />,
+      { language: "en" },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Check update" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Review Skill update" }),
+    ).toBeInTheDocument();
+    expect(scanSafety).not.toHaveBeenCalled();
+  });
+
   it("loads git-repo store sources through SSH scan when given git@github.com URLs", async () => {
     const fetchRemoteContent = vi.fn();
     const scanRemoteGithub = vi.fn().mockResolvedValue([
@@ -710,6 +832,7 @@ describe("SkillStore remote loading", () => {
 
     expect(installRegistrySkill).toHaveBeenCalledWith(
       expect.objectContaining({ source_id: "source-icelemon-gitea" }),
+      { safetyScanMode: "enabled" },
     );
     expect(container.querySelector(".animate-spin")).not.toBeNull();
     expect(screen.getByTitle("Installing...")).toBeDisabled();

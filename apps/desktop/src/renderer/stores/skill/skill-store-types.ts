@@ -13,6 +13,7 @@ import type {
   SkillPlatformScanResult,
   SkillProject,
   SkillSafetyLevel,
+  SkillSafetyScanMode,
   SkillSafetyReport,
   SkillStoreSource,
   SkillUpdateSafetyReview,
@@ -230,6 +231,7 @@ export interface SkillState {
     options?: {
       overwriteLocalChanges?: boolean;
       approvedPackageFingerprint?: string;
+      safetyScanMode?: SkillSafetyScanMode;
     },
   ) => Promise<RegistrySkillUpdateResult | null>;
   updateInstalledSkillFromSource: (
@@ -237,6 +239,7 @@ export interface SkillState {
     options?: {
       overwriteLocalChanges?: boolean;
       approvedPackageFingerprint?: string;
+      safetyScanMode?: SkillSafetyScanMode;
     },
   ) => Promise<RegistrySkillUpdateResult | null>;
   installRegistrySkill: (

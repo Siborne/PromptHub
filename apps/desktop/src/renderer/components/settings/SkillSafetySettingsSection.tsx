@@ -1,11 +1,19 @@
 import { useState } from "react";
+import type { TFunction } from "i18next";
 import { TrashIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { SkillStoreSource } from "@prompthub/shared/types";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
 import { getSafetyScanAIConfig } from "../skill/detail-utils";
 import { useToast } from "../ui/Toast";
 import { SettingSection } from "./shared";
+import {
+  BUILTIN_SKILL_SAFETY_STORES,
+  SKILL_SAFETY_CHANNELS,
+  type SkillSafetyChannel,
+  type SkillSafetyPolicySelection,
+} from "../../services/skill-safety-policy";
 
 interface TrustedSourceSkill {
   content_url?: string;
@@ -253,6 +261,161 @@ function BatchSafetyScan() {
   );
 }
 
+function SafetyPolicySelect({
+  id,
+  label,
+  value,
+  inheritLabel,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: SkillSafetyPolicySelection;
+  inheritLabel: string;
+  onChange: (value: SkillSafetyPolicySelection) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <label className="flex min-w-0 items-center gap-3 py-2" htmlFor={id}>
+      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+        {label}
+      </span>
+      <select
+        id={id}
+        aria-label={label}
+        value={value}
+        onChange={(event) =>
+          onChange(event.target.value as SkillSafetyPolicySelection)
+        }
+        className="h-9 min-w-36 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+      >
+        <option value="inherit">{inheritLabel}</option>
+        <option value="enabled">
+          {t("settings.skillSafetyPolicyEnabled", "Enabled")}
+        </option>
+        <option value="disabled">
+          {t("settings.skillSafetyPolicyDisabled", "Disabled")}
+        </option>
+      </select>
+    </label>
+  );
+}
+
+function getChannelLabel(channel: SkillSafetyChannel, t: TFunction): string {
+  const labels: Record<SkillSafetyChannel, [string, string]> = {
+    official: ["settings.skillSafetyChannelOfficial", "Official sources"],
+    community: ["settings.skillSafetyChannelCommunity", "Community stores"],
+    "git-repo": ["settings.skillSafetyChannelGitRepo", "Git repositories"],
+    "marketplace-json": [
+      "settings.skillSafetyChannelMarketplace",
+      "Marketplace JSON",
+    ],
+    "local-dir": [
+      "settings.skillSafetyChannelLocalDirectory",
+      "Local directories",
+    ],
+  };
+  return t(labels[channel][0], labels[channel][1]);
+}
+
+function ChannelSafetyPolicies() {
+  const { t } = useTranslation();
+  const channelPolicies = useSettingsStore(
+    (state) => state.skillSafetyChannelPolicies,
+  );
+  const setChannelPolicy = useSettingsStore(
+    (state) => state.setSkillSafetyChannelPolicy,
+  );
+  return (
+    <div className="divide-y divide-border/60 px-3">
+      {SKILL_SAFETY_CHANNELS.map((channel) => (
+        <SafetyPolicySelect
+          key={channel}
+          id={`skill-safety-channel-${channel}`}
+          label={getChannelLabel(channel, t)}
+          value={channelPolicies[channel] ?? "inherit"}
+          inheritLabel={t(
+            "settings.skillSafetyPolicyInheritGlobal",
+            "Inherit global",
+          )}
+          onChange={(policy) => setChannelPolicy(channel, policy)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function getStorePolicyRows(
+  customStores: readonly SkillStoreSource[],
+  t: TFunction,
+) {
+  return [
+    ...BUILTIN_SKILL_SAFETY_STORES.map((store) => ({
+      id: store.storeId,
+      label: t(store.labelKey, store.defaultLabel),
+    })),
+    ...customStores.map((store) => ({
+      id: store.id,
+      label: store.name,
+    })),
+  ];
+}
+
+function StoreSafetyPolicies() {
+  const { t } = useTranslation();
+  const storePolicies = useSettingsStore(
+    (state) => state.skillSafetyStorePolicies,
+  );
+  const setStorePolicy = useSettingsStore(
+    (state) => state.setSkillSafetyStorePolicy,
+  );
+  const customStores = useSkillStore((state) => state.customStoreSources);
+  const stores = getStorePolicyRows(customStores, t);
+  return (
+    <>
+      <div className="border-y border-border/70 px-3 py-2.5 text-sm font-semibold">
+        {t("settings.skillSafetyStorePolicies", "Store policies")}
+      </div>
+      <div className="max-h-64 divide-y divide-border/60 overflow-y-auto px-3">
+        {stores.map((store) => (
+          <SafetyPolicySelect
+            key={store.id}
+            id={`skill-safety-store-${store.id}`}
+            label={store.label}
+            value={storePolicies[store.id] ?? "inherit"}
+            inheritLabel={t(
+              "settings.skillSafetyPolicyInheritChannel",
+              "Inherit channel",
+            )}
+            onChange={(policy) => setStorePolicy(store.id, policy)}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function AutomaticScanPolicies() {
+  const { t } = useTranslation();
+  return (
+    <div className="border border-border/70">
+      <div className="border-b border-border/70 px-3 py-2.5">
+        <div className="text-sm font-semibold">
+          {t("settings.skillSafetyChannelPolicies", "Channel policies")}
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t(
+            "settings.skillSafetyPolicyPrecedence",
+            "An exact store policy overrides its channel, and a channel policy overrides the global setting.",
+          )}
+        </p>
+      </div>
+      <ChannelSafetyPolicies />
+      <StoreSafetyPolicies />
+    </div>
+  );
+}
+
 export function SkillSafetySettingsSection() {
   const { t } = useTranslation();
   const autoInstalled = useSettingsStore(
@@ -298,10 +461,17 @@ export function SkillSafetySettingsSection() {
           )}
           description={t(
             "settings.autoScanStoreSkillsBeforeInstallDesc",
-            "Optional AI review before adding a Skill. Package structure and blocked-pattern checks always remain active.",
+            "Run content preflight and optional AI review before installing or updating a Skill.",
           )}
           onToggle={() => setAutoStore(!autoStore)}
         />
+        <p className="border-l-2 border-amber-500/60 pl-3 text-xs leading-5 text-muted-foreground">
+          {t(
+            "settings.skillSafetyImmutableChecks",
+            "Disabling a scan skips content and AI review. Package path, archive, symlink, size, required-file, and fingerprint validation remain mandatory.",
+          )}
+        </p>
+        <AutomaticScanPolicies />
         <TrustedUpdateSources />
         <BatchSafetyScan />
       </div>

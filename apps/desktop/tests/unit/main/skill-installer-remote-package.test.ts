@@ -184,6 +184,22 @@ describe("remote Skill package adapter", () => {
     );
   });
 
+  it("keeps package validation active when content safety scanning is disabled", async () => {
+    mocks.assertStagedRemoteSkillPackageSafe.mockResolvedValueOnce(undefined);
+
+    await saveRemoteGitSkillPackage(createRemoteSkill(), {
+      repoUrl: "https://gitea.example.com/team/skills",
+      safetyScan: { mode: "disabled" },
+    });
+
+    expect(mocks.validateMaterializedSkillPackage).toHaveBeenCalledTimes(1);
+    expect(mocks.assertStagedRemoteSkillPackageSafe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        safetyScan: { mode: "disabled" },
+      }),
+    );
+  });
+
   it("uses an explicit or source fallback directory and target staging root", async () => {
     const onSafetyReport = vi.fn();
     const result = await saveRemoteGitSkillPackage(

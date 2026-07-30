@@ -164,7 +164,7 @@ Nächste Entwicklungs-Vorschau testen? _Einstellungen → Über_ öffnen und den
 - **Symlink- / Copy-Modi** — Symlink für gemeinsame Bearbeitung, Copy für unabhängige Plattformkopien
 - **Plattformbezogenes Skill-Verzeichnis-Override** hält Scan und Installation auf demselben Pfad
 - **KI-Übersetzung & Politur** auf vollem SKILL.md-Niveau mit Sidecar-Speicherung, Side-by-Side- und Volltextübersetzung
-- **Sicherheits-Scan** prüft Inhalte vor der Installation per KI-Pipeline; eingeschränkte Quellen werden direkt blockiert
+- **Sicherheitsrichtlinie** steuert Inhalts- und KI-Scans bei Installation/Aktualisierung global, je Kanal oder je Store; Pfad-, Archiv-, Symlink-, Größen-, Pflichtdatei- und Fingerprint-Prüfungen bleiben immer aktiv
 - **GitHub-Token** für Store- und Repo-Imports reduziert anonymes Rate-Limiting
 - **Tag-Filter** für installierte Skills und beim Browsen im Store
 

@@ -442,9 +442,12 @@ export interface SkillUpdateSafetyReview {
   sourceKey: string;
 }
 
+export type SkillSafetyScanMode = "enabled" | "disabled";
+
 /** Fingerprint-pinned authorization for a registry package installation. */
 export interface RegistrySkillInstallOptions {
   approvedPackageFingerprint?: string;
+  safetyScanMode?: SkillSafetyScanMode;
 }
 
 export type SkillPackageOperationKind = "install" | "update";
@@ -507,7 +510,10 @@ export interface SkillPackageOperationRequest {
   content: string;
   markAsBuiltin?: boolean;
   note?: string;
-  safetyScan?: { aiConfig?: SafetyScanAIConfig };
+  safetyScan?: {
+    mode?: SkillSafetyScanMode;
+    aiConfig?: SafetyScanAIConfig;
+  };
   approvedPackageFingerprint?: string;
 }
 

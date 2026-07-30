@@ -169,6 +169,15 @@ describe("Skill package operation policy", () => {
         installRequest({ safetyScan: { aiConfig: { apiKey: 42 } } as never }),
       ),
     ).toThrow(/safetyScan.aiConfig/);
+    expect(
+      validateSkillPackageOperationRequest(
+        installRequest({ safetyScan: { mode: "disabled" } }),
+      ).safetyScan,
+    ).toEqual({ mode: "disabled" });
+    expectInvalidRequest(
+      { safetyScan: { mode: "sometimes" } as never },
+      /safetyScan.mode/,
+    );
     expect(() =>
       validateSkillPackageOperationRequest(
         installRequest({

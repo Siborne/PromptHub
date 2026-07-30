@@ -153,6 +153,8 @@ function createDefaultSkillValues() {
     skillInstallMethod: "symlink",
     autoScanInstalledSkills: false,
     autoScanStoreSkillsBeforeInstall: false,
+    skillSafetyChannelPolicies: {},
+    skillSafetyStorePolicies: {},
     trustedSkillUpdateSourceKeys: [],
     githubToken: "",
     networkProxy: { ...DEFAULT_NETWORK_PROXY_SETTINGS },

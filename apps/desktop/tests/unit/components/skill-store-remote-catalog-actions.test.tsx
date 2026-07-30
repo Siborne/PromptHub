@@ -368,6 +368,7 @@ describe("SkillStore remote loading", () => {
 
     expect(installRegistrySkill).toHaveBeenCalledWith(
       expect.objectContaining({ slug: "pdf" }),
+      { safetyScanMode: "enabled" },
     );
   });
 
@@ -464,6 +465,7 @@ describe("SkillStore remote loading", () => {
     await waitFor(() => expect(installRegistrySkill).toHaveBeenCalledTimes(2));
     expect(installRegistrySkill).toHaveBeenLastCalledWith(skill, {
       approvedPackageFingerprint: review.packageFingerprint,
+      safetyScanMode: "enabled",
     });
     expect(trustSkillUpdateSource).toHaveBeenCalledWith(review.sourceKey);
     expect(showToast).toHaveBeenCalledWith(
@@ -623,6 +625,7 @@ describe("SkillStore remote loading", () => {
 
     expect(updateRegistrySkill).toHaveBeenCalledWith("source-update-ready", {
       overwriteLocalChanges: false,
+      safetyScanMode: "disabled",
     });
   });
 

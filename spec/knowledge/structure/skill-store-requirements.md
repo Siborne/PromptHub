@@ -274,11 +274,13 @@ Extends existing `SkillFullDetailPage` with:
 Browse store → Click skill → View detail → Click Install
                                              ↓
                                    1. Fetch the current package
-                                   2. Run the safety scan
-                                   3. Show package/content diff
-                                   4. Require explicit confirmation
-                                   5. Write local package and update list
-                                   6. Optional: install to platforms
+                                   2. Validate package integrity
+                                   3. Resolve store > channel > global scan policy
+                                   4. If enabled, run content/AI safety scan
+                                   5. Show package/content diff
+                                   6. Require explicit confirmation
+                                   7. Write local package and update list
+                                   8. Optional: install to platforms
 ```
 
 ### 6.2 Quick Install (+ button)
@@ -287,10 +289,12 @@ Browse store → Click skill → View detail → Click Install
 Click + → Open install preview
           ↓
    1. Fetch the current package
-   2. Run the safety scan and show the content diff
-   3. Require explicit confirmation
-   4. Store locally and report the result
-   5. Move from Recommended to Installed
+   2. Validate package integrity
+   3. Resolve store > channel > global scan policy
+   4. If enabled, run the safety scan
+   5. Show the content diff and require explicit confirmation
+   6. Store locally and report the result
+   7. Move from Recommended to Installed
 ```
 
 ### 6.3 Uninstall
@@ -302,8 +306,13 @@ Open installed skill → Click Uninstall → Confirm → Remove from DB → Retu
 ### 6.4 Update
 
 ```
-Refresh / Auto-check → Compare B/L/R package state → Show package/content diff and scan result → Confirm → Update package
+Refresh / Auto-check → Compare B/L/R package state → Validate package integrity → Resolve scan policy → Optionally scan → Show package/content diff → Confirm → Update package
 ```
+
+Automatic content and AI scanning can be configured globally and overridden by
+source channel or exact built-in/custom store. Disabling it never disables safe
+path, archive, symlink, size, required `SKILL.md`, or package-fingerprint
+validation. Manual safety assessment remains available.
 
 ---
 

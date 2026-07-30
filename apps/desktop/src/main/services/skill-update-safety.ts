@@ -3,11 +3,13 @@ import * as path from "path";
 import type {
   SafetyScanAIConfig,
   Skill,
+  SkillSafetyScanMode,
   SkillSafetyReport,
 } from "@prompthub/shared/types";
 import { scanSkillSafety, scanSkillSafetyPreflight } from "./skill-safety-scan";
 
 export interface RemoteSkillPackageSafetyScanOptions {
+  mode?: SkillSafetyScanMode;
   aiConfig?: SafetyScanAIConfig;
   scan?: typeof scanSkillSafety;
   preflightScan?: typeof scanSkillSafetyPreflight;
@@ -87,7 +89,8 @@ function combineSafetyReports(
 /** Enforce mandatory local checks and fingerprint-pinned review before apply. */
 export async function assertStagedRemoteSkillPackageSafe(
   input: StagedRemoteSkillPackageSafetyInput,
-): Promise<SkillSafetyReport> {
+): Promise<SkillSafetyReport | undefined> {
+  if (input.safetyScan?.mode === "disabled") return undefined;
   const content = await fs.readFile(
     path.join(input.skillDir, "SKILL.md"),
     "utf-8",

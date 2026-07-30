@@ -230,7 +230,7 @@ async function scanNonRemoteStage(
   repoPath: string,
   directoryFingerprint: string,
   stageSkill: Skill,
-): Promise<SkillSafetyReport> {
+): Promise<SkillSafetyReport | undefined> {
   return assertStagedRemoteSkillPackageSafe({
     skill: stageSkill,
     skillDir: repoPath,

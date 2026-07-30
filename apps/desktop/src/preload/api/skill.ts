@@ -155,7 +155,10 @@ export const skillApi = {
       repoUrl: string;
       branch?: string;
       directory?: string;
-      safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
+      safetyScan?: {
+        mode?: "enabled" | "disabled";
+        aiConfig?: SkillSafetyScanInput["aiConfig"];
+      };
       approvedPackageFingerprint?: string;
     },
   ): Promise<RemoteSkillPackageSaveResult> =>
@@ -168,7 +171,10 @@ export const skillApi = {
     skillId: string,
     options: {
       zipUrl: string;
-      safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
+      safetyScan?: {
+        mode?: "enabled" | "disabled";
+        aiConfig?: SkillSafetyScanInput["aiConfig"];
+      };
       approvedPackageFingerprint?: string;
     },
   ): Promise<RemoteSkillPackageSaveResult> =>

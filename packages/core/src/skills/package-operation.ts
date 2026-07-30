@@ -214,7 +214,15 @@ function validateSafetyScan(value: unknown): void {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("safetyScan must be an object");
   }
-  const aiConfig = (value as Record<string, unknown>).aiConfig;
+  const safetyScan = value as Record<string, unknown>;
+  if (
+    safetyScan.mode !== undefined &&
+    safetyScan.mode !== "enabled" &&
+    safetyScan.mode !== "disabled"
+  ) {
+    throw new Error("safetyScan.mode must be enabled or disabled");
+  }
+  const aiConfig = safetyScan.aiConfig;
   if (aiConfig === undefined) return;
   if (!aiConfig || typeof aiConfig !== "object" || Array.isArray(aiConfig)) {
     throw new Error("safetyScan.aiConfig must be an object");

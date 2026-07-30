@@ -22,6 +22,7 @@ import type {
   RegistrySkill,
   Skill,
   SkillSafetyReport,
+  SkillStoreSource,
   SkillUpdateSafetyReview,
 } from "@prompthub/shared/types";
 import {
@@ -75,11 +76,17 @@ import {
   getVisibleSkillCategoryLabel,
   SKILL_STORE_DETAIL_FOOTER_STYLES,
 } from "./skill-store-presentation";
+import {
+  getSkillSafetyChannelForStore,
+  resolveSkillSafetyScanMode,
+} from "../../services/skill-safety-policy";
 
 interface SkillStoreDetailProps {
   skill: RegistrySkill;
   isInstalled: boolean;
   storeLabel?: string;
+  storeSourceId?: string;
+  storeSourceType?: SkillStoreSource["type"];
   isInstalling?: boolean;
   onInstallPendingChange?: (skill: RegistrySkill, pending: boolean) => void;
   onClose: () => void;
@@ -93,6 +100,8 @@ export function SkillStoreDetail({
   skill,
   isInstalled,
   storeLabel,
+  storeSourceId,
+  storeSourceType,
   isInstalling: externalIsInstalling = false,
   onInstallPendingChange,
   onClose,
@@ -120,6 +129,15 @@ export function SkillStoreDetail({
   const clearTranslation = useSkillStore((state) => state.clearTranslation);
   const translationMode = useSettingsStore((state) => state.translationMode);
   const aiModels = useSettingsStore((state) => state.aiModels);
+  const autoScanStoreSkillsBeforeInstall = useSettingsStore(
+    (state) => state.autoScanStoreSkillsBeforeInstall,
+  );
+  const skillSafetyChannelPolicies = useSettingsStore(
+    (state) => state.skillSafetyChannelPolicies,
+  );
+  const skillSafetyStorePolicies = useSettingsStore(
+    (state) => state.skillSafetyStorePolicies,
+  );
   const trustSkillUpdateSource = useSettingsStore(
     (state) => state.trustSkillUpdateSource,
   );
@@ -180,6 +198,21 @@ export function SkillStoreDetail({
   const [translationSidecar, setTranslationSidecar] =
     useState<SkillTranslationSidecar | null>(null);
   const skillSourceKey = skill.source_id || skill.slug || skill.source_url;
+  const effectiveStoreSourceId = storeSourceId || skill.source_id || "official";
+  const safetyScanMode = resolveSkillSafetyScanMode(
+    {
+      autoScanStoreSkillsBeforeInstall,
+      skillSafetyChannelPolicies,
+      skillSafetyStorePolicies,
+    },
+    {
+      storeId: effectiveStoreSourceId,
+      channel: getSkillSafetyChannelForStore(
+        effectiveStoreSourceId,
+        storeSourceType,
+      ),
+    },
+  );
   const cloudSourceId = skill.source_id;
   const isCloudSkill = isCloudRegistrySkill(skill);
   const safeSourceUrl = resolveSkillExternalUrl(skill.source_url);
@@ -593,15 +626,18 @@ export function SkillStoreDetail({
       if (!content.trim()) {
         throw new Error("STORE_SKILL_CONTENT_EMPTY");
       }
-      const report = await window.api.skill.scanSafety({
-        name: skill.name,
-        content,
-        sourceUrl: isCloudSkill ? undefined : skill.source_url,
-        contentUrl: isCloudSkill ? undefined : skill.content_url,
-        securityAudits: skill.security_audits,
-        aiConfig: getSafetyScanAIConfig(aiModels),
-        fallbackToPreflight: true,
-      });
+      const report =
+        safetyScanMode === "enabled"
+          ? await window.api.skill.scanSafety({
+              name: skill.name,
+              content,
+              sourceUrl: isCloudSkill ? undefined : skill.source_url,
+              contentUrl: isCloudSkill ? undefined : skill.content_url,
+              securityAudits: skill.security_audits,
+              aiConfig: getSafetyScanAIConfig(aiModels),
+              fallbackToPreflight: true,
+            })
+          : null;
       setPendingInstallContent(content);
       setPendingInstallPackage(packageResponse);
       setPendingInstallSafetyReport(report);
@@ -645,15 +681,18 @@ export function SkillStoreDetail({
           latestPackage.release.id !== pendingInstallPackage.release.id,
         );
         if (releaseChanged || latestContent !== pendingInstallContent) {
-          const latestReport = await window.api.skill.scanSafety({
-            name: skill.name,
-            content: latestContent,
-            sourceUrl: isCloudSkill ? undefined : skill.source_url,
-            contentUrl: isCloudSkill ? undefined : skill.content_url,
-            securityAudits: skill.security_audits,
-            aiConfig: getSafetyScanAIConfig(aiModels),
-            fallbackToPreflight: true,
-          });
+          const latestReport =
+            safetyScanMode === "enabled"
+              ? await window.api.skill.scanSafety({
+                  name: skill.name,
+                  content: latestContent,
+                  sourceUrl: isCloudSkill ? undefined : skill.source_url,
+                  contentUrl: isCloudSkill ? undefined : skill.content_url,
+                  securityAudits: skill.security_audits,
+                  aiConfig: getSafetyScanAIConfig(aiModels),
+                  fallbackToPreflight: true,
+                })
+              : null;
           setPendingInstallContent(latestContent);
           setPendingInstallPackage(latestPackage);
           setPendingInstallSafetyReport(latestReport);
@@ -667,7 +706,9 @@ export function SkillStoreDetail({
           return;
         }
       }
-      const result = await installOperation.install(installableSkill);
+      const result = await installOperation.install(installableSkill, {
+        safetyScanMode,
+      });
       if (result?.status === "safety-review-required") {
         setShowInstallReview(false);
         return;
@@ -778,19 +819,21 @@ export function SkillStoreDetail({
             );
           }
         }
-        try {
-          const report = await window.api.skill.scanSafety({
-            name: skill.name,
-            content: check.remoteContent,
-            sourceUrl: isCloudSkill ? undefined : skill.source_url,
-            contentUrl: isCloudSkill ? undefined : skill.content_url,
-            securityAudits: skill.security_audits,
-            aiConfig: getSafetyScanAIConfig(aiModels),
-            fallbackToPreflight: true,
-          });
-          setPendingUpdateSafetyReport(report);
-        } catch (error) {
-          showToast(formatSkillSafetyScanError(error, t), "warning");
+        if (safetyScanMode === "enabled") {
+          try {
+            const report = await window.api.skill.scanSafety({
+              name: skill.name,
+              content: check.remoteContent,
+              sourceUrl: isCloudSkill ? undefined : skill.source_url,
+              contentUrl: isCloudSkill ? undefined : skill.content_url,
+              securityAudits: skill.security_audits,
+              aiConfig: getSafetyScanAIConfig(aiModels),
+              fallbackToPreflight: true,
+            });
+            setPendingUpdateSafetyReport(report);
+          } catch (error) {
+            showToast(formatSkillSafetyScanError(error, t), "warning");
+          }
         }
         setOverwritePendingUpdate(check.status !== "update-available");
         setShowUpdateReview(true);
@@ -826,6 +869,7 @@ export function SkillStoreDetail({
     try {
       const result = await updateRegistrySkill(skillSourceKey, {
         overwriteLocalChanges,
+        safetyScanMode,
         ...(approvedPackageFingerprint ? { approvedPackageFingerprint } : {}),
       });
       if (!result) {

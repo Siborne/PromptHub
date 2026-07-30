@@ -8,6 +8,11 @@ import type {
   SyncProviderKind,
   UpdateChannel,
 } from "@prompthub/shared/types";
+import type {
+  SkillSafetyChannel,
+  SkillSafetyPolicySelection,
+  SkillSafetyPolicyValue,
+} from "../../services/skill-safety-policy";
 import type { AIProtocol } from "@prompthub/shared/types";
 
 export const SUPPORTED_LANGUAGES = [
@@ -223,6 +228,10 @@ export interface SettingsState {
   skillInstallMethod: "symlink" | "copy";
   autoScanInstalledSkills: boolean;
   autoScanStoreSkillsBeforeInstall: boolean;
+  skillSafetyChannelPolicies: Partial<
+    Record<SkillSafetyChannel, SkillSafetyPolicyValue>
+  >;
+  skillSafetyStorePolicies: Record<string, SkillSafetyPolicyValue>;
   trustedSkillUpdateSourceKeys: string[];
   githubToken: string;
   networkProxy: NetworkProxySettings;
@@ -395,6 +404,14 @@ export interface SettingsState {
   setSkillInstallMethod: (method: "symlink" | "copy") => void;
   setAutoScanInstalledSkills: (enabled: boolean) => void;
   setAutoScanStoreSkillsBeforeInstall: (enabled: boolean) => void;
+  setSkillSafetyChannelPolicy: (
+    channel: SkillSafetyChannel,
+    policy: SkillSafetyPolicySelection,
+  ) => void;
+  setSkillSafetyStorePolicy: (
+    storeId: string,
+    policy: SkillSafetyPolicySelection,
+  ) => void;
   trustSkillUpdateSource: (sourceKey: string) => void;
   revokeSkillUpdateSourceTrust: (sourceKey: string) => void;
   setGithubToken: (token: string) => void;

@@ -310,7 +310,9 @@ describe("skill ui integration", () => {
 
     fireEvent.contextMenu(screen.getByText("中文菜单技能"));
 
-    expect(screen.getByRole("button", { name: "查看详情" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "查看详情" }),
+    ).toBeInTheDocument();
     expect(
       screen.getAllByRole("button", { name: "添加收藏" }).length,
     ).toBeGreaterThan(0);
@@ -655,6 +657,7 @@ describe("skill ui integration", () => {
 
     expect(installRegistrySkill).toHaveBeenCalledWith(
       expect.objectContaining({ slug: "local-writer" }),
+      { safetyScanMode: "disabled" },
     );
 
     cleanup();
@@ -693,6 +696,7 @@ describe("skill ui integration", () => {
 
     expect(updateRegistrySkill).toHaveBeenCalledWith("local-writer", {
       overwriteLocalChanges: false,
+      safetyScanMode: "disabled",
     });
   }, 15000);
 

@@ -140,7 +140,7 @@ export const useSettingsStore = create<SettingsState>()(
     },
     {
       name: "prompthub-settings",
-      version: 18,
+      version: 19,
       partialize: stripEphemeralSettings,
       merge: mergeSettingsState,
       migrate: migrateSettingsState,

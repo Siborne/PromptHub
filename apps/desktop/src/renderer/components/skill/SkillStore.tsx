@@ -64,6 +64,10 @@ import {
   normalizeSkillStoreSourceIdForRuntime,
 } from "../../services/cloud-store";
 import { formatStoreSourceHint } from "./skill-store-presentation";
+import {
+  getSkillSafetyChannelForStore,
+  resolveSkillSafetyScanMode,
+} from "../../services/skill-safety-policy";
 
 const STORE_SEARCH_DEBOUNCE_MS = 300;
 
@@ -165,6 +169,12 @@ export function SkillStore() {
   const autoScanBeforeInstall = useSettingsStore(
     (state) => state.autoScanStoreSkillsBeforeInstall,
   );
+  const skillSafetyChannelPolicies = useSettingsStore(
+    (state) => state.skillSafetyChannelPolicies,
+  );
+  const skillSafetyStorePolicies = useSettingsStore(
+    (state) => state.skillSafetyStorePolicies,
+  );
   const aiModels = useSettingsStore((state) => state.aiModels);
   const selectedCustomSource = useMemo(
     () =>
@@ -172,6 +182,21 @@ export function SkillStore() {
         (source) => source.id === selectedStoreSourceId,
       ) || null,
     [customStoreSources, selectedStoreSourceId],
+  );
+  const selectedSafetyChannel = getSkillSafetyChannelForStore(
+    selectedStoreSourceId,
+    selectedCustomSource?.type,
+  );
+  const selectedSafetyScanMode = resolveSkillSafetyScanMode(
+    {
+      autoScanStoreSkillsBeforeInstall: autoScanBeforeInstall,
+      skillSafetyChannelPolicies,
+      skillSafetyStorePolicies,
+    },
+    {
+      storeId: selectedStoreSourceId,
+      channel: selectedSafetyChannel,
+    },
   );
 
   const selectedRemoteEntry = remoteStoreEntries[selectedStoreSourceId];
@@ -519,7 +544,7 @@ export function SkillStore() {
 
   const scanStoreSkillBeforeInstall = useCallback(
     async (skill: RegistrySkill): Promise<boolean> => {
-      if (!autoScanBeforeInstall) {
+      if (selectedSafetyScanMode === "disabled") {
         return true;
       }
 
@@ -552,7 +577,7 @@ export function SkillStore() {
 
       return true;
     },
-    [aiModels, autoScanBeforeInstall, showToast, t],
+    [aiModels, selectedSafetyScanMode, showToast, t],
   );
 
   const handleQuickInstall = async (
@@ -570,10 +595,13 @@ export function SkillStore() {
       if (!canInstall) {
         return;
       }
-      const result = await installOperation.install({
-        ...skill,
-        source_label: selectedCustomSource?.name || skill.source_label,
-      });
+      const result = await installOperation.install(
+        {
+          ...skill,
+          source_label: selectedCustomSource?.name || skill.source_label,
+        },
+        { safetyScanMode: selectedSafetyScanMode },
+      );
       if (result?.status === "installed") {
         showToast(`${t("skill.addedToLibrary")}: ${skill.name}`, "success");
       }
@@ -764,10 +792,13 @@ export function SkillStore() {
               result.skipped += 1;
               continue;
             }
-            const installedSkill = await installOperation.install({
-              ...skill,
-              source_label: selectedCustomSource?.name || skill.source_label,
-            });
+            const installedSkill = await installOperation.install(
+              {
+                ...skill,
+                source_label: selectedCustomSource?.name || skill.source_label,
+              },
+              { safetyScanMode: selectedSafetyScanMode },
+            );
             if (installedSkill?.status === "installed") {
               result.succeeded += 1;
             } else if (installedSkill?.status === "safety-review-required") {
@@ -778,11 +809,14 @@ export function SkillStore() {
           } else if (operation === "update") {
             const updated = await updateRegistrySkill(
               getRegistrySkillSelectionId(skill),
+              { safetyScanMode: selectedSafetyScanMode },
             );
             if (updated?.status === "updated") {
               result.succeeded += 1;
             } else if (updated?.status === "safety-review-required") {
-              updateReview.enqueueReview(skill, updated.review);
+              updateReview.enqueueReview(skill, updated.review, {
+                safetyScanMode: selectedSafetyScanMode,
+              });
               result.reviewRequired += 1;
             } else if (updated) {
               result.skipped += 1;
@@ -817,6 +851,7 @@ export function SkillStore() {
       installOperation,
       scanStoreSkillBeforeInstall,
       selectedCustomSource?.name,
+      selectedSafetyScanMode,
       selectedInstallTargets,
       selectedRemoveTargets,
       selectedStoreSkills.length,
@@ -1484,6 +1519,8 @@ export function SkillStore() {
         }}
         selectedDetailSkill={selectedDetailSkill}
         detailStoreLabel={sourceMeta.title}
+        detailStoreSourceId={selectedStoreSourceId}
+        detailStoreSourceType={selectedCustomSource?.type}
         isDetailInstalled={Boolean(
           selectedDetailSkill && isSkillInstalled(selectedDetailSkill),
         )}

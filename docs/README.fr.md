@@ -164,7 +164,7 @@ Vous voulez tester la prochaine version d'aperçu ? Ouvrez _Paramètres → À p
 - **Modes Symlink / Copy** — symlink pour partager les modifications, copy pour des copies indépendantes par plateforme
 - **Surcharge du dossier Skills par plateforme** pour garder scan et installation cohérents
 - **Traduction et révision IA** au niveau du SKILL.md complet, stockage en sidecar, mode côte à côte ou traduction intégrale
-- **Scan de sécurité** : revue par pipeline IA avant installation, sources restreintes bloquées
+- **Politique de sécurité** : active ou désactive l’analyse du contenu et par IA pour l’installation/mise à jour, globalement, par canal ou par store précis ; les validations de chemin, archive, lien symbolique, taille, fichier requis et empreinte restent obligatoires
 - **Token GitHub** pour les imports store et dépôt afin de réduire les échecs liés au rate-limit anonyme
 - **Filtrage par tag** pour les skills installés et pour la navigation dans le store
 

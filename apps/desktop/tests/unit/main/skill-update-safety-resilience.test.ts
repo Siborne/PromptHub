@@ -103,4 +103,27 @@ describe("staged Skill package safety resilience", () => {
       assertStagedRemoteSkillPackageSafe(input),
     ).rejects.toBeInstanceOf(SkillSafetyReviewRequiredError);
   });
+
+  it("skips content scanners when the lifecycle explicitly disables automatic scanning", async () => {
+    const preflightScan = vi.fn().mockResolvedValue(safePreflight);
+    const scan = vi.fn().mockResolvedValue(safePreflight);
+
+    await expect(
+      assertStagedRemoteSkillPackageSafe({
+        skill: { name: "writer" },
+        skillDir: tempDir,
+        sourceUrl: "https://gitea.example.com/team/skills",
+        packageFingerprint: "a".repeat(64),
+        sourceKey: "team-gitea",
+        safetyScan: {
+          mode: "disabled",
+          preflightScan,
+          scan,
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(preflightScan).not.toHaveBeenCalled();
+    expect(scan).not.toHaveBeenCalled();
+  });
 });

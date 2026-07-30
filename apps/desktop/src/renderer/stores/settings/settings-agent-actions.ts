@@ -10,6 +10,11 @@ import {
   normalizeCustomAgents,
 } from "../../services/agent-root-paths";
 import {
+  isSkillSafetyChannel,
+  isSkillSafetyPolicyValue,
+  normalizeSkillSafetyStoreId,
+} from "../../services/skill-safety-policy";
+import {
   normalizeProjectDeployTargets,
   normalizeProjectRecordPath,
 } from "../../services/skill-project-settings";
@@ -55,6 +60,8 @@ type AgentActionKey =
   | "setSkillInstallMethod"
   | "setAutoScanInstalledSkills"
   | "setAutoScanStoreSkillsBeforeInstall"
+  | "setSkillSafetyChannelPolicy"
+  | "setSkillSafetyStorePolicy"
   | "trustSkillUpdateSource"
   | "revokeSkillUpdateSourceTrust"
   | "setGithubToken"
@@ -537,6 +544,32 @@ function createSkillUpdateSettingsActions(context: SettingsActionContext) {
       setTouched({ autoScanInstalledSkills }),
     setAutoScanStoreSkillsBeforeInstall: (autoScanStoreSkillsBeforeInstall) =>
       setTouched({ autoScanStoreSkillsBeforeInstall }),
+    setSkillSafetyChannelPolicy: (channel, policy) => {
+      if (!isSkillSafetyChannel(channel)) return;
+      set((state) => {
+        const next = { ...state.skillSafetyChannelPolicies };
+        if (isSkillSafetyPolicyValue(policy)) next[channel] = policy;
+        else delete next[channel];
+        return {
+          skillSafetyChannelPolicies: next,
+          settingsUpdatedAt: new Date().toISOString(),
+        };
+      });
+    },
+    setSkillSafetyStorePolicy: (storeId, policy) => {
+      const normalizedStoreId = normalizeSkillSafetyStoreId(storeId);
+      if (!normalizedStoreId) return;
+      set((state) => {
+        const next = { ...state.skillSafetyStorePolicies };
+        if (isSkillSafetyPolicyValue(policy)) next[normalizedStoreId] = policy;
+        else delete next[normalizedStoreId];
+        const boundedEntries = Object.entries(next).slice(-512);
+        return {
+          skillSafetyStorePolicies: Object.fromEntries(boundedEntries),
+          settingsUpdatedAt: new Date().toISOString(),
+        };
+      });
+    },
     trustSkillUpdateSource: (sourceKey) => {
       const normalized = sourceKey.trim().slice(0, 512);
       if (!normalized) return;
@@ -569,6 +602,8 @@ function createSkillUpdateSettingsActions(context: SettingsActionContext) {
     | "setSkillInstallMethod"
     | "setAutoScanInstalledSkills"
     | "setAutoScanStoreSkillsBeforeInstall"
+    | "setSkillSafetyChannelPolicy"
+    | "setSkillSafetyStorePolicy"
     | "trustSkillUpdateSource"
     | "revokeSkillUpdateSourceTrust"
     | "setGithubToken"

@@ -164,7 +164,7 @@ Want to try the next dev preview? Open _Settings → About_ and toggle the previ
 - **Symlink / Copy modes** — symlink for shared edits, copy for independent per-platform copies
 - **Per-platform skill directory override** keeps scan and install on the same path
 - **AI translate & polish** at the full SKILL.md level with sidecar storage, side-by-side and full-translation modes
-- **Safety scan** runs an AI review pipeline before install; restricted sources are blocked outright
+- **Safety policy** controls content and AI scans for install/update globally, by channel, or by exact store; package path, archive, symlink, size, required-file, and fingerprint validation always remain active
 - **GitHub token** for store and repo imports cuts down on anonymous rate-limit failures
 - **Tag filtering** for installed skills and store browsing
 

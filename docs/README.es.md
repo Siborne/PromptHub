@@ -164,7 +164,7 @@ Vuelve a abrir la app. Sustituye la ruta si la instalaste en otro sitio.
 - **Modos Symlink / Copy** — symlink para edición compartida, copy para copias independientes por plataforma
 - **Sobrescritura del directorio Skills por plataforma** mantiene escaneo e instalación en la misma ruta
 - **Traducción y revisión por IA** a nivel de SKILL.md completo con almacenamiento sidecar, modo lado a lado y traducción integral
-- **Escaneo de seguridad** con pipeline de revisión IA antes de instalar; las fuentes restringidas se bloquean
+- **Política de seguridad** controla el escaneo de contenido e IA al instalar/actualizar de forma global, por canal o por tienda; las validaciones de ruta, archivo, enlace simbólico, tamaño, fichero obligatorio y huella siguen siempre activas
 - **Token de GitHub** para imports del store y de repos, reduce los fallos por límite de tasa anónimo
 - **Filtrado por etiqueta** para skills instalados y para navegar el store
 

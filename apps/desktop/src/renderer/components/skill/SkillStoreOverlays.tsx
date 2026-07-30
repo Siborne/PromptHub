@@ -59,6 +59,8 @@ interface SkillStoreOverlaysProps {
   updateReview: SafetyReviewOverlay;
   selectedDetailSkill: RegistrySkill | null;
   detailStoreLabel: string;
+  detailStoreSourceId: string;
+  detailStoreSourceType?: SkillStoreSource["type"];
   isDetailInstalled: boolean;
   isDetailInstalling: boolean;
   onDetailInstallPendingChange: (
@@ -171,6 +173,8 @@ export function SkillStoreOverlays(props: SkillStoreOverlaysProps) {
           skill={props.selectedDetailSkill}
           isInstalled={props.isDetailInstalled}
           storeLabel={props.detailStoreLabel}
+          storeSourceId={props.detailStoreSourceId}
+          storeSourceType={props.detailStoreSourceType}
           isInstalling={props.isDetailInstalling}
           onInstallPendingChange={props.onDetailInstallPendingChange}
           onClose={props.onCloseDetail}

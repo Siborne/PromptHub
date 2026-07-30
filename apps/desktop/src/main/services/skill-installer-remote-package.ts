@@ -203,7 +203,7 @@ export async function saveRemoteGitSkillPackage(
         options.skillName,
       ),
     });
-    options.onSafetyReport?.(safetyReport);
+    if (safetyReport) options.onSafetyReport?.(safetyReport);
     return await persistStagedPackage(skill, skillDir, options.targetRootDir);
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
@@ -338,7 +338,7 @@ export async function saveRemoteZipSkillPackage(
         approvedPackageFingerprint: options.approvedPackageFingerprint,
         sourceKey: buildRemoteZipSourceKey(skill, zipUrl),
       });
-      options.onSafetyReport?.(safetyReport);
+      if (safetyReport) options.onSafetyReport?.(safetyReport);
       return await persistStagedPackage(skill, skillDir, options.targetRootDir);
     },
   );

@@ -144,7 +144,10 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         repoUrl?: string;
         branch?: string;
         directory?: string;
-        safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
+        safetyScan?: {
+          mode?: "enabled" | "disabled";
+          aiConfig?: SkillSafetyScanInput["aiConfig"];
+        };
         approvedPackageFingerprint?: string;
       },
     ) => {
@@ -213,7 +216,10 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
       skillId: string,
       options?: {
         zipUrl?: string;
-        safetyScan?: { aiConfig?: SkillSafetyScanInput["aiConfig"] };
+        safetyScan?: {
+          mode?: "enabled" | "disabled";
+          aiConfig?: SkillSafetyScanInput["aiConfig"];
+        };
         approvedPackageFingerprint?: string;
       },
     ) => {

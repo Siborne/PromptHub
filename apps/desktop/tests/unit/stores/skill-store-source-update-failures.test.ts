@@ -476,7 +476,10 @@ describe("skill store", () => {
     expect(runPackageOperation).toHaveBeenCalledWith(
       expect.objectContaining({
         content: remoteContent,
-        safetyScan: { aiConfig: expect.any(Object) },
+        safetyScan: expect.objectContaining({
+          mode: "enabled",
+          aiConfig: expect.any(Object),
+        }),
       }),
     );
     expect(scanSafety).not.toHaveBeenCalled();

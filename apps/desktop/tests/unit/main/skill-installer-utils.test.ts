@@ -690,11 +690,13 @@ describe("skill-installer-utils", () => {
       expect(getDefaultMcpRelativePath("trae-work")).toBeUndefined();
     });
 
-    it("returns shared Plugin package defaults only for supported targets", () => {
+    it("returns shared Plugin discovery paths declared by built-in targets", () => {
       expect(getDefaultPluginsRelativePath("claude")).toBe(
         "plugins/cache/prompthub",
       );
-      expect(getDefaultPluginsRelativePath("copilot")).toBe("plugins");
+      expect(getDefaultPluginsRelativePath("copilot")).toBe(
+        "installed-plugins",
+      );
       expect(getDefaultPluginsRelativePath("cline")).toBeUndefined();
     });
   });

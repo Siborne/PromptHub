@@ -27,12 +27,14 @@ vi.mock("../../../src/renderer/components/ui/Toast", () => ({
 
 const scanInstalledSkillSafetyMock = vi.fn();
 let installedSkillsMock: Array<Record<string, unknown>> = [];
+let customStoreSourcesMock: Array<Record<string, unknown>> = [];
 
 vi.mock("../../../src/renderer/stores/skill.store", () => ({
   useSkillStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       scanInstalledSkillSafety: scanInstalledSkillSafetyMock,
       skills: installedSkillsMock,
+      customStoreSources: customStoreSourcesMock,
     }),
 }));
 
@@ -78,10 +80,14 @@ function createSettingsState() {
     aiModels: [],
     autoScanInstalledSkills: false,
     autoScanStoreSkillsBeforeInstall: false,
+    skillSafetyChannelPolicies: {},
+    skillSafetyStorePolicies: {},
     trustedSkillUpdateSourceKeys: [],
     revokeSkillUpdateSourceTrust: vi.fn(),
     setAutoScanInstalledSkills: vi.fn(),
     setAutoScanStoreSkillsBeforeInstall: vi.fn(),
+    setSkillSafetyChannelPolicy: vi.fn(),
+    setSkillSafetyStorePolicy: vi.fn(),
     githubToken: "",
     setGithubToken: vi.fn(),
     agentIdentityPreferences: {
@@ -112,6 +118,7 @@ describe("SkillSettings", () => {
       warn: 0,
     });
     installedSkillsMock = [];
+    customStoreSourcesMock = [];
     useSettingsStoreMock.mockReturnValue(createSettingsState());
     window.electron = createWindowElectronMock();
   });
@@ -272,6 +279,44 @@ describe("SkillSettings", () => {
 
     expect(revokeSkillUpdateSourceTrust).toHaveBeenCalledWith(
       "github.com/example/skills",
+    );
+  });
+
+  it("edits channel and exact custom-store scan policies", async () => {
+    const settingsState = createSettingsState();
+    customStoreSourcesMock = [
+      {
+        id: "team-gitea",
+        name: "Team Gitea",
+        type: "git-repo",
+        url: "https://gitea.example.com/team/skills",
+        enabled: true,
+        createdAt: 1,
+      },
+    ];
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await act(async () => {
+      await renderWithI18n(<SkillSafetySettingsSection />, {
+        language: "en",
+      });
+    });
+
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Git repositories" }),
+      { target: { value: "disabled" } },
+    );
+    fireEvent.change(screen.getByRole("combobox", { name: "Team Gitea" }), {
+      target: { value: "enabled" },
+    });
+
+    expect(settingsState.setSkillSafetyChannelPolicy).toHaveBeenCalledWith(
+      "git-repo",
+      "disabled",
+    );
+    expect(settingsState.setSkillSafetyStorePolicy).toHaveBeenCalledWith(
+      "team-gitea",
+      "enabled",
     );
   });
 
