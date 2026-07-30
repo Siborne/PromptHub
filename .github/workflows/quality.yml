@@ -5,39 +5,116 @@ on:
   workflow_dispatch:
 
 jobs:
-  desktop-verify:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      shared: ${{ steps.surfaces.outputs.shared }}
+      desktop: ${{ steps.surfaces.outputs.desktop }}
+      cli: ${{ steps.surfaces.outputs.cli }}
+      mobile: ${{ steps.surfaces.outputs.mobile }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
+      - name: Detect affected surfaces
+        id: surfaces
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            node scripts/detect-ci-surfaces.mjs --all >> "$GITHUB_OUTPUT"
+          else
+            git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$GITHUB_SHA" \
+              | node scripts/detect-ci-surfaces.mjs >> "$GITHUB_OUTPUT"
+          fi
+
+  governance:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 9.15.0
-          run_install: false
+      - name: Verify CI configuration
+        run: pnpm test:ci-config
 
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Verify specification governance
+        run: pnpm spec:test
 
-      - name: Setup pnpm cache
-        uses: actions/cache@v5
-        with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+      - name: Verify file-size limits
+        run: pnpm lint:file-size
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+  shared-verify:
+    needs: changes
+    if: needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Verify shared package
+        run: |
+          pnpm --filter @prompthub/shared typecheck
+          pnpm --filter @prompthub/shared test
+
+      - name: Verify database and core packages
+        run: |
+          pnpm --filter @prompthub/db typecheck
+          pnpm --filter @prompthub/core typecheck
+          pnpm --filter @prompthub/core test
+
+  cli-verify:
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Verify CLI
+        run: |
+          pnpm --filter @prompthub/cli lint
+          pnpm --filter @prompthub/cli typecheck
+          pnpm --filter @prompthub/cli test
+          pnpm --filter @prompthub/cli build
+
+  mobile-verify:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Verify mobile
+        run: |
+          pnpm --filter @prompthub/mobile typecheck
+          pnpm --filter @prompthub/mobile test
+
+  desktop-verify:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
 
       - name: Lint
         run: pnpm lint

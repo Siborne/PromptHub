@@ -68,6 +68,9 @@ UI 可见变更不能只通过截图或代码审阅验收。验证记录必须�
 
 ## 当前稳定补充
 
+- Pull Request 的 `Quality Checks` 必须始终执行 spec 治理、CI 配置契约和文件大小门禁；Desktop、CLI、Mobile、shared/core/db 使用 `scripts/detect-ci-surfaces.mjs` 按变更路径及依赖关系选择验证，手动触发时验证全部 surface。
+- Self-Hosted Web workflow 负责 `apps/web` 与 Docker；独立的 Cloudflare Worker workflow 负责 `apps/web-cloudflare` 的 lint、typecheck 和 test，Worker-only 变更不触发无关 Docker 构建。
+- CLI 行为测试使用一次性初始化且已关闭的空 SQLite 模板复制独立 fixture，避免每个用例重复 schema/migration；新库路径、迁移和并发测试必须显式使用未预置数据库，不能被模板替代。完整 CLI suite 默认受 75 秒预算保护，本地诊断可通过 `PROMPTHUB_CLI_TEST_MAX_MS` 临时调整。
 - Cloudflare worker / self-hosted 分支型实现如果进入仓库长期维护范围，至少需要具备独立的 `typecheck`、`lint`、`test` 和构建验证，而不能只依赖主应用验证结果。
 - 若变更影响 monorepo 内的 package export / workspace 接入，还必须补根级构建验证，确保真实调用链不会因 `exports` 缺失或 lockfile 未更新而在构建阶段失败。
 - 发布候选应优先运行根级 `pnpm verify:release` harness；本地快速排查可先运行 `pnpm verify:release:quick`，但 quick profile 不能替代发布准入。

@@ -127,7 +127,7 @@ describe("standalone cli wiring", () => {
   }, 10_000);
 
   it("creates new CLI databases under the unified data directory", async () => {
-    const root = makeTempRoot(tempDirs);
+    const root = makeTempRoot(tempDirs, { seedDatabase: false });
     const userDataDir = path.join(root, "user-data");
 
     const createRes = await execCli([

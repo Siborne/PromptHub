@@ -1,5 +1,4 @@
 import fs from "fs";
-import os from "os";
 import path from "path";
 import { PassThrough } from "stream";
 
@@ -7,11 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { closeDatabase, runCli } from "@prompthub/core";
 
-function makeTempRoot(tempDirs: string[]): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-cli-ai-"));
-  tempDirs.push(dir);
-  return dir;
-}
+import { makeTempRoot } from "./helpers/cli-harness";
 
 function withDataDir(rootDir: string): string[] {
   return ["--data-dir", path.join(rootDir, "user-data")];

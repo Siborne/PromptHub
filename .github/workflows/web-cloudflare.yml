@@ -1,0 +1,29 @@
+name: Cloudflare Worker
+
+on:
+  pull_request:
+    paths:
+      - "apps/web-cloudflare/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/actions/setup-workspace/action.yml"
+      - ".github/workflows/web-cloudflare.yml"
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Verify Cloudflare Worker
+        run: |
+          pnpm --filter @prompthub/web-cloudflare lint
+          pnpm --filter @prompthub/web-cloudflare typecheck
+          pnpm --filter @prompthub/web-cloudflare test

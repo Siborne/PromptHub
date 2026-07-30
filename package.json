@@ -47,6 +47,7 @@
     "test:perf": "pnpm --filter @prompthub/desktop test:perf",
     "test:web": "pnpm --filter @prompthub/web test",
     "test:mobile": "pnpm --filter @prompthub/mobile test",
+    "test:ci-config": "node --test scripts/detect-ci-surfaces.test.mjs",
     "start:web": "pnpm --filter @prompthub/web start",
     "spec:index": "node scripts/generate-spec-change-index.mjs",
     "spec:index:check": "node scripts/generate-spec-change-index.mjs --check",

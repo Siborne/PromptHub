@@ -5,9 +5,23 @@ import { PassThrough } from "stream";
 
 import { createCliSkillService, runCli } from "@prompthub/core";
 
-export function makeTempRoot(tempDirs: string[]): string {
+export function makeTempRoot(
+  tempDirs: string[],
+  options: { seedDatabase?: boolean } = {},
+): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-cli-app-"));
   tempDirs.push(dir);
+
+  if (options.seedDatabase !== false) {
+    const templatePath = process.env.PROMPTHUB_CLI_TEST_DB_TEMPLATE;
+    if (!templatePath || !fs.existsSync(templatePath)) {
+      throw new Error("CLI test database template is unavailable");
+    }
+    const databasePath = path.join(dir, "user-data", "data", "prompthub.db");
+    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+    fs.copyFileSync(templatePath, databasePath);
+  }
+
   return dir;
 }
 

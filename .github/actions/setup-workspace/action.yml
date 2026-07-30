@@ -1,0 +1,33 @@
+name: Setup PromptHub workspace
+description: Install Node.js, pnpm, the shared dependency cache, and workspace dependencies.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: "24"
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v6
+      with:
+        version: 9.15.0
+        run_install: false
+
+    - name: Get pnpm store directory
+      id: pnpm-cache
+      shell: bash
+      run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Setup pnpm cache
+      uses: actions/cache@v5
+      with:
+        path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
