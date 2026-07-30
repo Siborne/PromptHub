@@ -145,6 +145,91 @@ describe("tray asset menu", () => {
     clickItem(enabled, labels.manageAgents);
     expect(onCommand).toHaveBeenLastCalledWith({ type: "agent:manage" });
   });
+
+  it("projects verified provider profiles and routes only alternate choices", () => {
+    const labels = getTrayMenuLabels("en");
+    const onCommand = vi.fn<(command: AppCommand) => void>();
+    const onAgentProviderProfile = vi.fn();
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: true,
+      agentProviderGroups: [
+        {
+          agentId: "claude",
+          name: "Claude Code",
+          currentProfileId: "profile-1",
+          profiles: [
+            {
+              id: "profile-1",
+              name: "Primary",
+              model: "claude-opus-4",
+              isCurrent: true,
+            },
+            {
+              id: "profile-2",
+              name: "Backup",
+              model: null,
+              isCurrent: false,
+            },
+          ],
+        },
+      ],
+      isWindowVisible: true,
+      labels,
+      onAgentProviderProfile,
+      onCommand,
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+    });
+
+    const agentsMenu = getSubmenu(template, labels.agents);
+    const claudeMenu = getSubmenu(agentsMenu, "Claude Code");
+    const current = claudeMenu.find(
+      (entry) => entry.label === "Primary · claude-opus-4",
+    );
+    expect(current).toMatchObject({
+      checked: true,
+      enabled: false,
+      type: "checkbox",
+    });
+
+    clickItem(claudeMenu, "Backup");
+    clickItem(claudeMenu, labels.openAgent);
+    clickItem(agentsMenu, labels.manageAgents);
+    expect(onAgentProviderProfile).toHaveBeenCalledWith("claude", "profile-2");
+    expect(onCommand).toHaveBeenCalledTimes(2);
+    expect(onCommand).toHaveBeenLastCalledWith({ type: "agent:manage" });
+  });
+
+  it("keeps an omitted provider callback safe for cached menu entries", () => {
+    const labels = getTrayMenuLabels("en");
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: true,
+      agentProviderGroups: [
+        {
+          agentId: "claude",
+          name: "Claude Code",
+          currentProfileId: null,
+          profiles: [
+            {
+              id: "profile-1",
+              name: "Primary",
+              model: null,
+              isCurrent: false,
+            },
+          ],
+        },
+      ],
+      isWindowVisible: true,
+      labels,
+      onCommand: vi.fn(),
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+    });
+
+    const agentsMenu = getSubmenu(template, labels.agents);
+    const claudeMenu = getSubmenu(agentsMenu, "Claude Code");
+    expect(() => clickItem(claudeMenu, "Primary")).not.toThrow();
+  });
 });
 
 describe("tray menu localization", () => {

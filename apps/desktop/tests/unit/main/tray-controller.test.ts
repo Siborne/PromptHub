@@ -11,6 +11,7 @@ function createHarness(
     platform?: NodeJS.Platform;
     preferredEmpty?: boolean;
     alternateEmpty?: boolean;
+    withoutProviderLoader?: boolean;
   } = {},
 ) {
   const handlers = new Map<string, () => void>();
@@ -54,11 +55,13 @@ function createHarness(
   const getLocale = vi.fn(() => "en-US");
   const getStoredLanguage = vi.fn<() => string | null>(() => null);
   const onCommand = vi.fn();
+  const onAgentProviderProfile = vi.fn();
   const onQuit = vi.fn();
   const onToggleWindow = vi.fn();
+  const loadAgentProviderGroups = vi.fn(async () => []);
 
   const controller = createTrayController({
-    agentManagementEnabled: false,
+    agentManagementEnabled: true,
     buildMenu: buildMenu as never,
     createFromPath: createFromPath as never,
     createTray: createTray as never,
@@ -68,6 +71,8 @@ function createHarness(
     getStoredLanguage,
     getWindowVisibility: () => true,
     isDev: overrides.isDev ?? true,
+    ...(overrides.withoutProviderLoader ? {} : { loadAgentProviderGroups }),
+    onAgentProviderProfile,
     onCommand,
     onQuit,
     onToggleWindow,
@@ -83,6 +88,8 @@ function createHarness(
     fallbackImage,
     getStoredLanguage,
     handlers,
+    loadAgentProviderGroups,
+    onAgentProviderProfile,
     onToggleWindow,
     preferredImage,
     tray,
@@ -202,5 +209,114 @@ describe("tray controller", () => {
     harness.controller.destroy();
     harness.controller.destroy();
     expect(harness.tray.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("loads provider profiles into the existing Agent menu and routes switches", async () => {
+    const harness = createHarness();
+    harness.loadAgentProviderGroups.mockResolvedValue([
+      {
+        agentId: "claude",
+        name: "Claude Code",
+        currentProfileId: "profile-1",
+        profiles: [
+          {
+            id: "profile-1",
+            name: "Primary",
+            model: "claude-opus-4",
+            isCurrent: true,
+          },
+          {
+            id: "profile-2",
+            name: "Backup",
+            model: null,
+            isCurrent: false,
+          },
+        ],
+      },
+    ]);
+
+    harness.controller.create();
+    await harness.controller.reloadAgentProviders();
+
+    const latestTemplate = harness.buildMenu.mock.calls.at(-1)?.[0];
+    const agentsItem = latestTemplate.find(
+      (item: { label?: string }) => item.label === "Agents",
+    );
+    const claudeItem = agentsItem.submenu.find(
+      (item: { label?: string }) => item.label === "Claude Code",
+    );
+    const backup = claudeItem.submenu.find(
+      (item: { label?: string }) => item.label === "Backup",
+    );
+    backup.click();
+    expect(harness.onAgentProviderProfile).toHaveBeenCalledWith(
+      "claude",
+      "profile-2",
+    );
+  });
+
+  it("ignores a late provider load after the tray is destroyed", async () => {
+    let resolveGroups:
+      | ((
+          groups: Array<{
+            agentId: string;
+            name: string;
+            currentProfileId: null;
+            profiles: [];
+          }>,
+        ) => void)
+      | undefined;
+    const harness = createHarness();
+    harness.loadAgentProviderGroups.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveGroups = resolve;
+        }),
+    );
+
+    harness.controller.create();
+    const pending = harness.controller.reloadAgentProviders();
+    harness.controller.destroy();
+    resolveGroups?.([
+      {
+        agentId: "claude",
+        name: "Claude Code",
+        currentProfileId: null,
+        profiles: [],
+      },
+    ]);
+    await pending;
+
+    expect(harness.tray.setContextMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the current menu when provider refresh fails", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const harness = createHarness();
+    harness.loadAgentProviderGroups.mockRejectedValue(
+      new Error("private failure"),
+    );
+
+    harness.controller.create();
+    await harness.controller.reloadAgentProviders();
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to refresh Agent provider tray state",
+    );
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
+      "private failure",
+    );
+  });
+
+  it("allows provider refresh to be omitted", async () => {
+    const harness = createHarness({ withoutProviderLoader: true });
+    harness.controller.create();
+
+    await expect(
+      harness.controller.reloadAgentProviders(),
+    ).resolves.toBeUndefined();
+    expect(harness.loadAgentProviderGroups).not.toHaveBeenCalled();
   });
 });
