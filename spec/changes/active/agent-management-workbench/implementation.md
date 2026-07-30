@@ -1594,6 +1594,23 @@
     test is 989 lines. The 278-line AI dialog and 382-line history dialog keep
     declarative layout local while model policy, file reveal and CodeMirror
     lifecycle stay in focused helpers with exhaustive branch coverage.
+- Cohesive Agent asset navigation and cards are implemented
+  (2026-07-30; `FR-AGENT-059`, `DES-AGENT-074`, `TEST-AGENT-092`,
+  `T-AGENT-129`):
+  - Skills, MCP and Plugins are adjacent top-level tabs before Rules.
+    Qwen Definitions follows Rules and no longer separates the three asset
+    domains.
+  - MCP and Plugin inventories now use the same bounded responsive two-column
+    card rhythm as Skills. Cards remain read-only, keep the existing 100-item
+    page bound and derive their state from the owning-domain aggregation
+    service.
+  - MCP uses the server icon and Plugins uses the Lucide plug icon in both
+    inventory cards and the Overview navigation cell. No store, IPC,
+    persistence, filesystem or network contract changed.
+  - Red-first regression reproduced the previous row-list and separated-tab
+    behavior. The focused Agent workspace suite passes 4 files / 61 tests.
+    Desktop typecheck, affected ESLint, changed-file formatting,
+    traceability validation and `git diff --check` also pass.
 
 ## Converge
 

@@ -1615,6 +1615,28 @@ shell failure MUST produce a visible error rather than silently doing nothing.
 - And the platform file manager reveals the file
 - And any failure is reported without changing the draft or filesystem
 
+### `FR-AGENT-059`: Cohesive Agent Asset Navigation And Cards
+
+Skills, MCP and Plugins MUST remain adjacent top-level tabs in that order.
+Rules and platform-specific Definitions MUST follow the three distributable
+asset domains rather than splitting them. MCP and Plugin inventories MUST use
+the same bounded responsive card-grid language as Skills instead of reverting
+to a dense table or row list. Domain identity MUST use the existing semantic
+icons: the server icon for MCP and the plug icon for Plugins.
+
+The card presentation MUST continue to read owning-domain state through the
+existing Agent asset aggregation boundary. It MUST NOT create another asset
+store, duplicate durable records or imply inline actions that the owning domain
+does not yet support.
+
+#### Scenario: Move between distributable Agent assets
+
+- Given an Agent exposes Skills, MCP, Plugins and Rules
+- When its detail workspace is shown
+- Then Skills, MCP and Plugins are adjacent tabs before Rules
+- And MCP and Plugin inventories render as bounded responsive cards
+- And Plugin identity uses a plug icon rather than a package or cube icon
+
 ## Non-Functional Requirements
 
 ### `NFR-AGENT-001`: Local-First And Privacy

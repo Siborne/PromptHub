@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCwIcon, SearchIcon } from "lucide-react";
+import { PlugIcon, RefreshCwIcon, SearchIcon, ServerIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -9,6 +10,7 @@ import type {
 import {
   useAgentAssetInventoryMap,
   type AgentAssetDomain,
+  type AgentAssetItem,
 } from "./use-agent-asset-domain";
 import {
   AgentSkillAssetPanel,
@@ -55,6 +57,55 @@ const DOMAIN_META: Record<
     emptyFallback: "No plugins were detected for this Agent.",
   },
 };
+
+const INVENTORY_CARD_META: Record<
+  "mcp" | "plugins",
+  { icon: LucideIcon; iconName: "plug" | "server" }
+> = {
+  mcp: { icon: ServerIcon, iconName: "server" },
+  plugins: { icon: PlugIcon, iconName: "plug" },
+};
+
+function AgentInventoryCard({
+  agentName,
+  domain,
+  item,
+}: {
+  agentName: string;
+  domain: "mcp" | "plugins";
+  item: AgentAssetItem;
+}) {
+  const Icon = INVENTORY_CARD_META[domain].icon;
+  return (
+    <li
+      data-testid="agent-asset-card"
+      className="group flex min-h-32 flex-col rounded-md border border-border/70 bg-card p-4 transition-colors hover:border-primary/40"
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          data-testid="agent-asset-domain-icon"
+          data-icon={INVENTORY_CARD_META[domain].iconName}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/40 text-muted-foreground"
+        >
+          <Icon aria-hidden="true" className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-semibold text-foreground">
+            {item.label}
+          </h3>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+            {agentName}
+          </p>
+        </div>
+      </div>
+      <div className="mt-auto flex items-center border-t border-border/60 pt-3">
+        <span className="rounded-full border border-border bg-background/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+          {item.meta || item.state}
+        </span>
+      </div>
+    </li>
+  );
+}
 
 export function AgentAssetsWorkspace({
   agent,
@@ -236,7 +287,7 @@ function AgentInventoryWorkspace({
                 <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
               {activeInventory.status === "failed" ? (
                 <div className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center">
                   <p className="max-w-md text-sm leading-6 text-destructive">
@@ -256,21 +307,18 @@ function AgentInventoryWorkspace({
                   </p>
                 </div>
               ) : (
-                <ul>
+                <ul
+                  data-testid="agent-asset-card-grid"
+                  data-domain={activeDomain}
+                  className="grid gap-3 sm:grid-cols-2"
+                >
                   {itemPage.items.map((item) => (
-                    <li
+                    <AgentInventoryCard
                       key={item.id}
-                      className="flex min-h-11 items-center justify-between gap-4 border-b border-border/60 px-5 py-2.5 transition-colors hover:bg-accent/45"
-                    >
-                      <span className="min-w-0 truncate text-sm font-medium text-foreground">
-                        {item.label}
-                      </span>
-                      {item.meta ? (
-                        <span className="shrink-0 rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                          {item.meta}
-                        </span>
-                      ) : null}
-                    </li>
+                      agentName={agent.name}
+                      domain={activeDomain}
+                      item={item}
+                    />
                   ))}
                 </ul>
               )}

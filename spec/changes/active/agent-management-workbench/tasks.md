@@ -207,6 +207,8 @@ UI screen structure, interaction states, responsive behavior and component bound
 - [x] `T-AGENT-127` 按 `FR-AGENT-057` / `DES-AGENT-072` 将历史弹窗改为 master-detail 对比并删除 RulesManager 的临时版本预览状态；不得建立第二历史事实源。
 - [x] `TEST-AGENT-091` 规则文件定位回归：覆盖 exact file path、bridge 缺失、Promise rejection 和 shell failure 均可观察，且不修改 draft。
 - [x] `T-AGENT-128` 按 `FR-AGENT-058` / `DES-AGENT-073` 通过已有 shell boundary 精确 reveal 当前规则文件并补齐错误反馈；不得增加 IPC。
+- [x] `TEST-AGENT-092` Agent 资产视觉与顺序回归：覆盖 Skills/MCP/Plugins 连续排列、Qwen Definitions 不拆散资产组、MCP/Plugin 共用有界双列卡片网格，以及 Plugin 使用 `PlugIcon`。
+- [x] `T-AGENT-129` 按 `FR-AGENT-059` / `DES-AGENT-074` 统一 MCP/Plugin 与 Skill 的卡片语言并调整 tab 顺序；继续复用 owning-domain inventory，不增加 store、IPC、持久化或伪动作。
 - [x] `T-AGENT-105` 按 `DES-AGENT-050` 将 Provider 工作台接入与托盘共用的 verified-current query；先完成 `TEST-AGENT-069` 红测，再补 shared/IPC/preload/store/UI 与 7 locales，不建立第二 active-provider 状态源。
 - [x] `T-AGENT-106` 按 `FR-AGENT-045` / `DES-AGENT-051` 将 Provider endpoint 固化为无凭据公共元数据；先完成 `TEST-AGENT-070` 红测，再接入 shared validator、SQLite create/update/read、Profile 表单和 7 locales；不静默迁移旧行，不引入第二 credential store。
 - [x] `T-AGENT-107` 按 `FR-AGENT-046` / `DES-AGENT-052` 将 Provider public JSON validator 接入 Profile config、model mapping、audit snapshot 的 SQLite write/read 与 baseline recovery；先完成 `TEST-AGENT-071` 红测，不迁移旧 unsafe row，不扩展凭据权限。

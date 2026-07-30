@@ -578,6 +578,29 @@ and reveals files with platform APIs. Renderer-side bridge absence, rejection
 and `{ success: false }` results all map to the existing localized error toast.
 No new preload or IPC contract is introduced.
 
+## `DES-AGENT-074`: Cohesive Distributable Asset Group
+
+The shared Agent tab metadata orders the distributable asset group as Skills,
+MCP and Plugins, followed by Rules and any platform-specific Definitions tab.
+This keeps the three installable/configurable asset inventories adjacent while
+preserving each domain as a direct top-level destination.
+
+MCP and Plugins reuse the Skills inventory's two-column card rhythm:
+
+- the existing fixed toolbar and internal scrolling remain unchanged;
+- the bounded page renders a responsive `sm:grid-cols-2` card grid;
+- every card uses the same compact border, background, padding, title and
+  status-badge hierarchy as a Skill card;
+- MCP uses `ServerIcon`; Plugins uses `PlugIcon` everywhere the Agent
+  workspace represents the domain, including the Overview navigation cell;
+- read-only inventory cards do not render fake install, edit or delete
+  controls.
+
+The renderer still derives all content from
+`useAgentAssetInventoryMap`. The change is `O(n)` rendering over the existing
+bounded page (at most 100 generic cards) with no new persistence, IPC, file
+I/O, network request or cache.
+
 ## Reuse And Migration
 
 - Reuse `PlatformIcon`, shared buttons, menus, tabs, tooltips, dialogs, virtualized lists, toast, titlebar and wallpaper tokens.

@@ -60,18 +60,18 @@ export const AGENT_WORKSPACE_TABS: AgentWorkspaceTab[] = [
     fallback: "Skills",
   },
   {
-    key: "definitions",
-    capability: "assets",
-    labelKey: "agents.definitions",
-    fallback: "Definitions",
-    platformIds: ["qwen"],
-  },
-  {
     key: "mcp",
     assetDomain: "mcp",
     capability: "assets",
     labelKey: "agents.mcp",
     fallback: "MCP",
+  },
+  {
+    key: "plugins",
+    assetDomain: "plugins",
+    capability: "assets",
+    labelKey: "agents.plugins",
+    fallback: "Plugins",
   },
   {
     key: "rules",
@@ -81,11 +81,11 @@ export const AGENT_WORKSPACE_TABS: AgentWorkspaceTab[] = [
     fallback: "Rules",
   },
   {
-    key: "plugins",
-    assetDomain: "plugins",
+    key: "definitions",
     capability: "assets",
-    labelKey: "agents.plugins",
-    fallback: "Plugins",
+    labelKey: "agents.definitions",
+    fallback: "Definitions",
+    platformIds: ["qwen"],
   },
   {
     key: "provider",

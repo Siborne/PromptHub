@@ -413,6 +413,37 @@ describe("AgentAssetsWorkspace", () => {
     listForTarget.mockRestore();
   });
 
+  it("uses the same responsive card grid for MCP and Plugin inventories", async () => {
+    const view = await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
+      { settleAsyncEffects: true },
+    );
+
+    expect(screen.getByTestId("agent-asset-card-grid")).toHaveAttribute(
+      "data-domain",
+      "mcp",
+    );
+    expect(screen.getAllByTestId("agent-asset-card")).toHaveLength(2);
+    expect(screen.getAllByTestId("agent-asset-domain-icon")[0]).toHaveAttribute(
+      "data-icon",
+      "server",
+    );
+
+    view.rerender(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
+    );
+
+    expect(screen.getByTestId("agent-asset-card-grid")).toHaveAttribute(
+      "data-domain",
+      "plugins",
+    );
+    expect(screen.getAllByTestId("agent-asset-card")).toHaveLength(1);
+    expect(screen.getByTestId("agent-asset-domain-icon")).toHaveAttribute(
+      "data-icon",
+      "plug",
+    );
+  });
+
   it("bounds 1,000-item MCP and Plugin inventories and keeps every page reachable", async () => {
     const validation = vi
       .spyOn(agentAssetAggregationService, "listForTarget")

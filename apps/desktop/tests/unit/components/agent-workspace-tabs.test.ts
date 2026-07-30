@@ -28,6 +28,34 @@ function agent(id: string): ManagedAgentSummary {
 }
 
 describe("Agent workspace tab availability", () => {
+  it("keeps Skills, MCP, and Plugins adjacent before Rules", () => {
+    expect(
+      getAgentWorkspaceTabs(agent("claude")).map((tab) => tab.key),
+    ).toEqual([
+      "overview",
+      "skills",
+      "mcp",
+      "plugins",
+      "rules",
+      "provider",
+      "appearance",
+      "configFiles",
+      "sessions",
+    ]);
+    expect(getAgentWorkspaceTabs(agent("qwen")).map((tab) => tab.key)).toEqual([
+      "overview",
+      "skills",
+      "mcp",
+      "plugins",
+      "rules",
+      "definitions",
+      "provider",
+      "appearance",
+      "configFiles",
+      "sessions",
+    ]);
+  });
+
   it("shows Definitions only for Qwen without creating a global capability", () => {
     expect(
       getAgentWorkspaceTabs(agent("qwen")).map((tab) => tab.key),

@@ -9,8 +9,8 @@ import {
   FileCogIcon,
   FolderOpenIcon,
   HistoryIcon,
-  PackageIcon,
   PaletteIcon,
+  PlugIcon,
   ServerIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -374,7 +374,7 @@ function OverviewNavGrid({
     { domain: "skills", icon: CuboidIcon, label: t("agents.skills") },
     { domain: "mcp", icon: ServerIcon, label: t("agents.mcp") },
     { domain: "rules", icon: BookOpenIcon, label: t("agents.rules") },
-    { domain: "plugins", icon: PackageIcon, label: t("agents.plugins") },
+    { domain: "plugins", icon: PlugIcon, label: t("agents.plugins") },
   ];
 
   const providerStatus = agent.capabilities.provider.status;
