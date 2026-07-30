@@ -67,6 +67,11 @@
   transported as snapshots. Native reapply ownership, delete tombstones,
   conflict resolution, and encryption policy remain follow-up work and are not
   implied by the prompt snapshot contract.
+- Skill safety provenance in portable snapshots uses `scanMethod: ai |
+preflight`. Legacy `static` values normalize to `preflight`; an unknown
+  string provenance drops only that auxiliary safety report, while malformed
+  report fields still reject the snapshot. Import must not rewrite a current
+  `preflight` report as an AI result.
 
 ### 2. Desktop And Web Relationship
 

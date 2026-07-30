@@ -8,6 +8,58 @@ import {
 } from "../../../src/renderer/services/database-backup-format";
 
 describe("database-backup-format", () => {
+  it("preserves current safety provenance and normalizes only legacy methods", () => {
+    const safetyReport = {
+      level: "safe",
+      summary: "Checked",
+      findings: [],
+      recommendedAction: "allow",
+      scannedAt: 1,
+      checkedFileCount: 1,
+    };
+    const backup = parsePromptHubBackupFileContent(
+      JSON.stringify({
+        exportedAt: "2026-07-30T00:00:00.000Z",
+        prompts: [],
+        folders: [],
+        versions: [],
+        skills: [
+          {
+            id: "preflight",
+            name: "preflight",
+            protocol_type: "skill",
+            is_favorite: false,
+            created_at: 1,
+            updated_at: 1,
+            safetyReport: { ...safetyReport, scanMethod: "preflight" },
+          },
+          {
+            id: "legacy",
+            name: "legacy",
+            protocol_type: "skill",
+            is_favorite: false,
+            created_at: 1,
+            updated_at: 1,
+            safetyReport: { ...safetyReport, scanMethod: "static" },
+          },
+          {
+            id: "unknown",
+            name: "unknown",
+            protocol_type: "skill",
+            is_favorite: false,
+            created_at: 1,
+            updated_at: 1,
+            safetyReport: { ...safetyReport, scanMethod: "future" },
+          },
+        ],
+      }),
+    );
+
+    expect(backup.skills?.[0]?.safetyReport?.scanMethod).toBe("preflight");
+    expect(backup.skills?.[1]?.safetyReport?.scanMethod).toBe("preflight");
+    expect(backup.skills?.[2]).not.toHaveProperty("safetyReport");
+  });
+
   it("parses a full backup envelope into a normalized backup payload", () => {
     const backup = parsePromptHubBackupFileContent(
       JSON.stringify({

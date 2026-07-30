@@ -23,6 +23,7 @@ import {
   isRuleFileId,
   isRulePlatformId,
 } from "@prompthub/shared";
+import { normalizeSnapshotSkills } from "@prompthub/shared/utils/skill-safety-report";
 import { importedSettingsSchema } from "./settings-validation.js";
 import { isHttpUrl, isSafeSkillIconUrl } from "./skill-url-validation.js";
 
@@ -68,9 +69,7 @@ const skillSafetyReportSchema = z.object({
   recommendedAction: z.enum(["allow", "review", "block"]),
   scannedAt: z.number().int().nonnegative(),
   checkedFileCount: z.number().int().nonnegative(),
-  scanMethod: z
-    .union([z.literal("ai"), z.literal("static")])
-    .transform(() => "ai" as const),
+  scanMethod: z.enum(["ai", "preflight"]),
   score: z.number().min(0).max(100).optional(),
 });
 
@@ -710,6 +709,8 @@ function normalizeImportedSnapshot(
 
   if (!Array.isArray(normalized.skills)) {
     normalized.skills = [];
+  } else {
+    normalized.skills = normalizeSnapshotSkills(normalized.skills);
   }
 
   if (!Array.isArray(normalized.skillVersions)) {

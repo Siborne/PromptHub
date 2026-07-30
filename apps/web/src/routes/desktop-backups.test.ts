@@ -107,6 +107,35 @@ describe("desktop remote backup routes", () => {
           }),
         );
         expect(wrongSnapshotVersionResponse.status).toBe(422);
+
+        const malformedSafetyResponse = await app.request(
+          new Request("http://local/api/backups/desktop", {
+            method: "POST",
+            headers: authHeaders(payload.data.accessToken),
+            body: JSON.stringify({
+              clientVersion: rootPackage.version,
+              payload: {
+                ...buildRemotePayload(),
+                version: "desktop-backup-v1",
+                skills: [
+                  {
+                    ...buildRemotePayload().skills[0],
+                    safetyReport: {
+                      level: "safe",
+                      summary: "Checked",
+                      findings: [],
+                      recommendedAction: "allow",
+                      scannedAt: 1,
+                      checkedFileCount: -1,
+                      scanMethod: "preflight",
+                    },
+                  },
+                ],
+              },
+            }),
+          }),
+        );
+        expect(malformedSafetyResponse.status).toBe(422);
         expect(fs.existsSync(path.join(dataDir, "backups", "desktop"))).toBe(
           false,
         );

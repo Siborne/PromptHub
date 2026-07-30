@@ -13,27 +13,12 @@ import type {
   RuleBackupRecord,
 } from "@prompthub/shared/types";
 import { parseAgentManagementBackup } from "@prompthub/shared/utils/agent-management-backup";
+import { normalizeSnapshotSkills } from "@prompthub/shared/utils/skill-safety-report";
 import type {
   Skill,
   SkillFileSnapshot,
   SkillVersion,
 } from "@prompthub/shared/types/skill";
-
-function normalizeSkillSafetyReport<T extends { safetyReport?: unknown }>(
-  value: T,
-): T {
-  if (!value.safetyReport || typeof value.safetyReport !== "object") {
-    return value;
-  }
-
-  return {
-    ...value,
-    safetyReport: {
-      ...(value.safetyReport as Record<string, unknown>),
-      scanMethod: "ai",
-    },
-  };
-}
 
 export const DB_BACKUP_VERSION = 1;
 
@@ -144,7 +129,7 @@ export function normalizeImportedBackup(
     settingsUpdatedAt: backup?.settingsUpdatedAt,
     rules: Array.isArray(backup?.rules) ? backup.rules : undefined,
     skills: Array.isArray(backup?.skills)
-      ? backup.skills.map((skill) => normalizeSkillSafetyReport(skill))
+      ? normalizeSnapshotSkills(backup.skills)
       : undefined,
     skillVersions: Array.isArray(backup?.skillVersions)
       ? backup.skillVersions
