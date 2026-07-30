@@ -454,6 +454,7 @@ describe("CorePluginLibraryService", () => {
       expect(restoredPlugin?.source.localPackagePath).toBe(
         restoredPlugin?.localPackagePath,
       );
+      expect(restoredPlugin?.nativeTargetIds).toEqual(["codex"]);
       expect(
         fs.readFileSync(
           path.join(restoredPlugin?.localPackagePath ?? "", "skill.json"),

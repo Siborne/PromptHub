@@ -357,6 +357,28 @@ export function getPluginTargetPlatformId(targetId: string): string {
   return iconIds[targetId] ?? targetId;
 }
 
+export function getPluginTargetMatrixForEntry(
+  targets: PluginTargetCompatibility[],
+  plugin: PluginLibraryEntry,
+): PluginTargetCompatibility[] {
+  const nativeTargetIds = new Set(plugin.nativeTargetIds ?? []);
+  const invalidNativeTargetIds = new Set(plugin.invalidNativeTargetIds ?? []);
+  return targets.map((target) => {
+    if (invalidNativeTargetIds.has(target.id)) {
+      return {
+        ...target,
+        enabled: false,
+        unsupportedReason: "invalid-native-manifest",
+      };
+    }
+    return target.enabled &&
+      target.status !== "native" &&
+      nativeTargetIds.has(target.id)
+      ? { ...target, status: "native" }
+      : target;
+  });
+}
+
 export function getPluginTargetDescription(
   target: PluginTargetCompatibility,
   t: ReturnType<typeof useTranslation>["t"],
@@ -367,6 +389,13 @@ export function getPluginTargetDescription(
   }).trim();
   if (localizedDescription) {
     return localizedDescription;
+  }
+  if (target.unsupportedReason === "invalid-native-manifest") {
+    return t("plugin.targetDescriptions.invalidNativeManifest", {
+      defaultValue:
+        "Invalid native manifest: {{marker}}. Fix or remove it before distribution.",
+      marker: target.nativeMarker ?? target.id,
+    });
   }
   if (!target.enabled) {
     return t("plugin.targetDescriptions.unsupportedBundle", {

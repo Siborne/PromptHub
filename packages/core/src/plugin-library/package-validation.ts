@@ -14,6 +14,8 @@ import {
   LOCAL_PLUGIN_MANIFEST_NESTED_PATH_FIELDS,
   LOCAL_PLUGIN_MANIFEST_PATH_FIELDS,
   LOCAL_PLUGIN_MARKER_PATHS,
+  MAX_LOCAL_PLUGIN_MANIFEST_BYTES,
+  TARGET_PLUGIN_MARKER_PATHS,
   type RawRecord,
   ensureInsideDirectory,
   getPluginLocalPackagePath,
@@ -38,13 +40,78 @@ function countLocalDirectoryEntries(dirPath: string): number {
 }
 
 export function findLocalPluginMarker(packagePath: string): string | null {
-  for (const markerPath of LOCAL_PLUGIN_MARKER_PATHS) {
+  return findLocalPluginMarkers(packagePath)[0] ?? null;
+}
+
+export function findLocalPluginMarkers(packagePath: string): string[] {
+  const markers: string[] = [];
+  for (const markerPath of new Set([
+    ...LOCAL_PLUGIN_MARKER_PATHS,
+    ...Object.values(TARGET_PLUGIN_MARKER_PATHS),
+  ])) {
     const candidatePath = path.join(packagePath, ...markerPath.split("/"));
     if (fs.existsSync(candidatePath)) {
-      return candidatePath;
+      markers.push(candidatePath);
     }
   }
-  return null;
+  return markers;
+}
+
+export function findLocalPluginMarkerForTarget(
+  packagePath: string,
+  targetId: string,
+): string | null {
+  const markerPath = TARGET_PLUGIN_MARKER_PATHS[targetId];
+  if (!markerPath) {
+    return null;
+  }
+  const candidatePath = path.join(packagePath, ...markerPath.split("/"));
+  return fs.existsSync(candidatePath) ? candidatePath : null;
+}
+
+export function getLocalPluginNativeTargetIds(packagePath: string): string[] {
+  return inspectLocalPluginNativeTargets(packagePath).nativeTargetIds;
+}
+
+export function inspectLocalPluginNativeTargets(packagePath: string): {
+  invalidNativeTargetIds: string[];
+  nativeTargetIds: string[];
+} {
+  const targetIds: string[] = [];
+  const invalidTargetIds: string[] = [];
+  let foundTargetMarker = false;
+  for (const targetId of Object.keys(TARGET_PLUGIN_MARKER_PATHS)) {
+    const markerPath = findLocalPluginMarkerForTarget(packagePath, targetId);
+    if (!markerPath) {
+      continue;
+    }
+    foundTargetMarker = true;
+    try {
+      const markerStat = fs.lstatSync(markerPath);
+      if (!markerStat.isFile()) {
+        throw new CorePluginError(
+          "INVALID_PATH",
+          `Plugin manifest must be a regular file: ${markerPath}`,
+        );
+      }
+      ensureInsideDirectory(
+        fs.realpathSync(packagePath),
+        fs.realpathSync(markerPath),
+      );
+      const { manifest } = readLocalPluginManifest(markerPath);
+      validateLocalPluginManifestPaths(packagePath, manifest);
+      targetIds.push(targetId);
+    } catch {
+      invalidTargetIds.push(targetId);
+    }
+  }
+  if (foundTargetMarker) {
+    validateLocalPluginSymlinkBoundaries(packagePath);
+  }
+  return {
+    invalidNativeTargetIds: invalidTargetIds,
+    nativeTargetIds: targetIds,
+  };
 }
 
 function parsePowerManifest(content: string): RawRecord {
@@ -65,6 +132,19 @@ export function readLocalPluginManifest(markerPath: string): {
   manifest: RawRecord;
   markerPath: string;
 } {
+  const stat = fs.lstatSync(markerPath);
+  if (!stat.isFile()) {
+    throw new CorePluginError(
+      "INVALID_PATH",
+      `Plugin manifest must be a regular file: ${markerPath}`,
+    );
+  }
+  if (stat.size > MAX_LOCAL_PLUGIN_MANIFEST_BYTES) {
+    throw new CorePluginError(
+      "PACKAGE_TOO_LARGE",
+      `Plugin manifest exceeds ${MAX_LOCAL_PLUGIN_MANIFEST_BYTES} bytes: ${markerPath}`,
+    );
+  }
   if (path.basename(markerPath) === "POWER.md") {
     return {
       markerPath,

@@ -115,6 +115,8 @@ export interface PluginLibraryEntry {
   safetyReport?: SkillSafetyReport;
   homepage?: string;
   repository?: string;
+  nativeTargetIds?: string[];
+  invalidNativeTargetIds?: string[];
   distributedTargetIds?: string[];
   managedPath?: string;
   localRepositoryPath?: string;

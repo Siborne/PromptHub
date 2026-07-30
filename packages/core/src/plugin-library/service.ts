@@ -81,7 +81,9 @@ import {
 import {
   checkInstalledPluginPackage,
   extractLocalPluginInventory,
-  findLocalPluginMarker,
+  findLocalPluginMarkers,
+  getLocalPluginNativeTargetIds,
+  inspectLocalPluginNativeTargets,
   readLocalPluginManifest,
   validateLocalPluginPackage,
 } from "./package-validation";
@@ -112,7 +114,9 @@ import {
 
 interface InstalledPluginOptions {
   id: string;
+  invalidNativeTargetIds?: string[];
   materialized?: MaterializedPluginPackage;
+  nativeTargetIds?: string[];
   preview: PluginMarketPreview;
   repository?: string;
   source: PluginPackageSource;
@@ -122,9 +126,35 @@ interface InstalledPluginOptions {
 interface ScannedLocalPlugin {
   classification: PluginSemanticClassification;
   inventory: PluginInventorySummary;
+  invalidNativeTargetIds: string[];
   manifest: RawRecord;
   name: string;
+  nativeTargetIds: string[];
   sourcePath: string;
+}
+
+function readCanonicalLocalPluginManifest(sourcePath: string): {
+  manifest: RawRecord;
+  markerPath: string;
+} {
+  const markerPaths = findLocalPluginMarkers(sourcePath);
+  if (markerPaths.length === 0) {
+    throw new CorePluginError(
+      "MISSING_MANIFEST",
+      `没有找到可识别的 Plugin manifest: ${sourcePath}`,
+    );
+  }
+  let lastManifestError: unknown;
+  for (const markerPath of markerPaths) {
+    try {
+      const { manifest } = readLocalPluginManifest(markerPath);
+      validateLocalPluginPackage(sourcePath, manifest);
+      return { manifest, markerPath };
+    } catch (error) {
+      lastManifestError = error;
+    }
+  }
+  throw lastManifestError;
 }
 
 function scanLocalPluginPackage(
@@ -132,15 +162,7 @@ function scanLocalPluginPackage(
 ): ScannedLocalPlugin {
   const sourcePath = path.resolve(request.sourcePath);
   assertReadableDirectory(sourcePath, "Agent Plugin package");
-  const markerPath = findLocalPluginMarker(sourcePath);
-  if (!markerPath) {
-    throw new CorePluginError(
-      "MISSING_MANIFEST",
-      `没有找到可识别的 Plugin manifest: ${sourcePath}`,
-    );
-  }
-  const { manifest } = readLocalPluginManifest(markerPath);
-  validateLocalPluginPackage(sourcePath, manifest);
+  const { manifest, markerPath } = readCanonicalLocalPluginManifest(sourcePath);
   const inventory = extractLocalPluginInventory(
     sourcePath,
     manifest,
@@ -149,7 +171,15 @@ function scanLocalPluginPackage(
   const classification = classifyPluginInventory(inventory);
   const name = safeString(manifest.name) ?? path.basename(sourcePath);
   assertBundlePlugin(classification, name);
-  return { classification, inventory, manifest, name, sourcePath };
+  const nativeTargets = inspectLocalPluginNativeTargets(sourcePath);
+  return {
+    classification,
+    inventory,
+    manifest,
+    name,
+    ...nativeTargets,
+    sourcePath,
+  };
 }
 
 function buildInstalledPlugin(
@@ -157,6 +187,15 @@ function buildInstalledPlugin(
 ): PluginLibraryEntry {
   const { materialized, preview } = options;
   const timestamp = nowMs();
+  const nativeTargets =
+    options.nativeTargetIds !== undefined
+      ? {
+          invalidNativeTargetIds: options.invalidNativeTargetIds ?? [],
+          nativeTargetIds: options.nativeTargetIds,
+        }
+      : materialized?.localPackagePath
+        ? inspectLocalPluginNativeTargets(materialized.localPackagePath)
+        : { invalidNativeTargetIds: [], nativeTargetIds: [] };
   return {
     id: options.id,
     name: preview.entry.name,
@@ -176,6 +215,7 @@ function buildInstalledPlugin(
     tags: preview.tags,
     homepage: preview.homepage,
     repository: options.repository ?? preview.repository,
+    ...nativeTargets,
     distributedTargetIds: [],
     managedPath: materialized?.managedPath,
     localRepositoryPath: materialized?.localRepositoryPath,
@@ -187,6 +227,28 @@ function buildInstalledPlugin(
     installedAt: timestamp,
     updatedAt: timestamp,
   };
+}
+
+function buildAndPersistInstalledPlugin(
+  library: PluginLibraryFile,
+  options: InstalledPluginOptions,
+  warnings: string[],
+): PluginInstallResult {
+  try {
+    return persistInstalledPlugin(
+      library,
+      buildInstalledPlugin(options),
+      warnings,
+    );
+  } catch (error) {
+    if (options.materialized?.managedPath) {
+      fs.rmSync(options.materialized.managedPath, {
+        recursive: true,
+        force: true,
+      });
+    }
+    throw error;
+  }
 }
 
 function persistInstalledPlugin(
@@ -476,14 +538,17 @@ export class CorePluginLibraryService {
       localRepositoryPath: materialized?.localRepositoryPath,
       localPackagePath: materialized?.localPackagePath,
     };
-    const plugin = buildInstalledPlugin({
-      id,
-      materialized,
-      preview,
-      source,
-      trustLevel: preview.entry.trustLevel,
-    });
-    return persistInstalledPlugin(library, plugin, preview.warnings);
+    return buildAndPersistInstalledPlugin(
+      library,
+      {
+        id,
+        materialized,
+        preview,
+        source,
+        trustLevel: preview.entry.trustLevel,
+      },
+      preview.warnings,
+    );
   }
 
   async importSourcePlugin(
@@ -508,6 +573,9 @@ export class CorePluginLibraryService {
             plugin.source.packagePath === sourceRequest.packagePath &&
             plugin.source.branch === sourceRequest.branch),
       );
+      const nativeTargets = inspectLocalPluginNativeTargets(
+        sourcePackage.sourcePath,
+      );
       const materialized = copyPluginPackageToManagedPath(
         sourcePackage.sourcePath,
         id,
@@ -517,15 +585,19 @@ export class CorePluginLibraryService {
         localPackagePath: materialized.localPackagePath,
         localRepositoryPath: materialized.localRepositoryPath,
       };
-      const plugin = buildInstalledPlugin({
-        id,
-        materialized,
-        preview,
-        repository: preview.repository || sourceRequest.url,
-        source,
-        trustLevel: "custom",
-      });
-      return persistInstalledPlugin(library, plugin, preview.warnings);
+      return buildAndPersistInstalledPlugin(
+        library,
+        {
+          id,
+          materialized,
+          ...nativeTargets,
+          preview,
+          repository: preview.repository || sourceRequest.url,
+          source,
+          trustLevel: "custom",
+        },
+        preview.warnings,
+      );
     } finally {
       if (sourcePackage.cleanupPath) {
         fs.rmSync(sourcePackage.cleanupPath, { recursive: true, force: true });
@@ -571,21 +643,26 @@ export class CorePluginLibraryService {
       request.sourceTargetName,
     );
     const materialized = copyPluginPackageToManagedPath(scanned.sourcePath, id);
-    const plugin = buildInstalledPlugin({
-      id,
-      materialized,
-      preview,
-      source: {
-        kind: "local",
-        sourceId: sourceTargetId,
-        label: request.sourceTargetName,
-        localPackagePath: materialized.localPackagePath,
-        localRepositoryPath: materialized.localRepositoryPath,
-        url: scanned.sourcePath,
+    return buildAndPersistInstalledPlugin(
+      library,
+      {
+        id,
+        invalidNativeTargetIds: scanned.invalidNativeTargetIds,
+        materialized,
+        nativeTargetIds: scanned.nativeTargetIds,
+        preview,
+        source: {
+          kind: "local",
+          sourceId: sourceTargetId,
+          label: request.sourceTargetName,
+          localPackagePath: materialized.localPackagePath,
+          localRepositoryPath: materialized.localRepositoryPath,
+          url: scanned.sourcePath,
+        },
+        trustLevel: "custom",
       },
-      trustLevel: "custom",
-    });
-    return persistInstalledPlugin(library, plugin, []);
+      [],
+    );
   }
 
   checkInstalledPluginPackage(pluginId: string): PluginPackageHealthCheck {
@@ -727,15 +804,8 @@ export class CorePluginLibraryService {
       sourcePath,
       `${plugin.displayName} 本地 Plugin 来源`,
     );
-    const markerPath = findLocalPluginMarker(sourcePath);
-    if (!markerPath) {
-      throw new CorePluginError(
-        "MISSING_MANIFEST",
-        `没有找到可识别的 Plugin manifest: ${sourcePath}`,
-      );
-    }
-    const { manifest } = readLocalPluginManifest(markerPath);
-    validateLocalPluginPackage(sourcePath, manifest);
+    const { manifest, markerPath } =
+      readCanonicalLocalPluginManifest(sourcePath);
     const inventory = extractLocalPluginInventory(
       sourcePath,
       manifest,
@@ -757,16 +827,9 @@ export class CorePluginLibraryService {
     sourcePackage: MaterializedPluginSourcePackage,
   ): PluginMarketPreview {
     assertReadableDirectory(sourcePackage.sourcePath, "Plugin source package");
-    const markerPath = findLocalPluginMarker(sourcePackage.sourcePath);
-    if (!markerPath) {
-      throw new CorePluginError(
-        "MISSING_MANIFEST",
-        `没有找到可识别的 Plugin manifest: ${sourceRequest.url}`,
-      );
-    }
-
-    const { manifest } = readLocalPluginManifest(markerPath);
-    validateLocalPluginPackage(sourcePackage.sourcePath, manifest);
+    const { manifest, markerPath } = readCanonicalLocalPluginManifest(
+      sourcePackage.sourcePath,
+    );
     const inventory = extractLocalPluginInventory(
       sourcePackage.sourcePath,
       manifest,
@@ -803,15 +866,9 @@ export class CorePluginLibraryService {
         sourcePackage.sourcePath,
         `${plugin.displayName} Plugin source package`,
       );
-      const markerPath = findLocalPluginMarker(sourcePackage.sourcePath);
-      if (!markerPath) {
-        throw new CorePluginError(
-          "MISSING_MANIFEST",
-          `没有找到可识别的 Plugin manifest: ${plugin.source.url}`,
-        );
-      }
-      const { manifest } = readLocalPluginManifest(markerPath);
-      validateLocalPluginPackage(sourcePackage.sourcePath, manifest);
+      const { manifest, markerPath } = readCanonicalLocalPluginManifest(
+        sourcePackage.sourcePath,
+      );
       const inventory = extractLocalPluginInventory(
         sourcePackage.sourcePath,
         manifest,
@@ -840,6 +897,7 @@ export class CorePluginLibraryService {
       if (!plugin.source.url) {
         throw new CorePluginError("MISSING_SOURCE", "本地 Plugin 来源路径为空");
       }
+      getLocalPluginNativeTargetIds(plugin.source.url);
       return copyPluginPackageToManagedPath(plugin.source.url, plugin.id);
     }
     if (isGitTransportSourceKind(plugin.source.kind)) {
@@ -855,6 +913,7 @@ export class CorePluginLibraryService {
         }),
       );
       try {
+        getLocalPluginNativeTargetIds(sourcePackage.sourcePath);
         return copyPluginPackageToManagedPath(
           sourcePackage.sourcePath,
           plugin.id,

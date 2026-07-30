@@ -22,6 +22,7 @@ export const LEGACY_PLUGIN_LIBRARY_FILE_NAME = "plugin-library.json";
 export const LEGACY_PLUGIN_MARKET_CACHE_FILE_NAME = "plugin-market-cache.json";
 export const PLUGIN_MARKETPLACE_FILE = ".agents/plugins/marketplace.json";
 export const CODEX_PLUGIN_MANIFEST_FILE = ".codex-plugin/plugin.json";
+export const MAX_LOCAL_PLUGIN_MANIFEST_BYTES = 1024 * 1024;
 export const MAX_PLUGIN_PACKAGE_SNAPSHOT_FILES = 2000;
 export const MAX_PLUGIN_PACKAGE_SNAPSHOT_FILE_BYTES = 5 * 1024 * 1024;
 export const PLUGIN_PACKAGE_SNAPSHOT_IGNORED_DIRS = new Set([

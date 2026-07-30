@@ -19,6 +19,7 @@ import { PlatformIcon } from "../ui/PlatformIcon";
 import { useToast } from "../ui/Toast";
 import {
   getPluginTargetDescription,
+  getPluginTargetMatrixForEntry,
   getPluginTargetPlatformId,
 } from "./plugin-detail-utils";
 
@@ -56,9 +57,13 @@ export function PluginPlatformPanel({
     () => new Set(plugin.distributedTargetIds ?? []),
     [plugin.distributedTargetIds],
   );
+  const effectiveTargetMatrix = useMemo(
+    () => getPluginTargetMatrixForEntry(targetMatrix, plugin),
+    [plugin, targetMatrix],
+  );
   const supportedTargets = useMemo(
-    () => targetMatrix.filter((target) => target.enabled),
-    [targetMatrix],
+    () => effectiveTargetMatrix.filter((target) => target.enabled),
+    [effectiveTargetMatrix],
   );
   const undistributedTargets = useMemo(
     () =>
@@ -248,7 +253,7 @@ export function PluginPlatformPanel({
           ) : null}
 
           <div className="space-y-2">
-            {targetMatrix.map((target) => {
+            {effectiveTargetMatrix.map((target) => {
               const isDistributed = distributedTargetIds.has(target.id);
               const selected =
                 !isDistributed && selectedTargetIds.has(target.id);
@@ -266,9 +271,16 @@ export function PluginPlatformPanel({
                       />
                     </div>
                     <div className="min-w-0">
-                      <h4 className="truncate text-sm font-medium text-foreground">
-                        {target.displayName}
-                      </h4>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h4 className="truncate text-sm font-medium text-foreground">
+                          {target.displayName}
+                        </h4>
+                        {target.status === "native" ? (
+                          <span className="shrink-0 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700 dark:text-emerald-300">
+                            {t("plugin.targetStatus.native", "Native")}
+                          </span>
+                        ) : null}
+                      </div>
                       <p className="line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
                         {isDistributed
                           ? t("plugin.installed", "Installed")

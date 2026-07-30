@@ -106,6 +106,15 @@ Official references:
 - My Plugins batch mode supports Skill-style favorite/unfavorite actions. If every selected Plugin is already favorited, the batch favorite action removes favorite state; otherwise it favorites every selected Plugin.
 - My Plugins batch mode includes a paper-plane distribute action. Selected Plugin packages share one Agent target picker; confirming the picker distributes each selected Plugin package to the chosen Agent Plugin targets through the same copy/symlink Plugin package distribution flow as single-Plugin distribution.
 - My Plugins distribution preserves Codex native package copy/symlink behavior for Codex targets, and generates target-native package markers for enabled adapter targets before recording `distributedTargetIds`.
+- A Plugin package may contain more than one target-native manifest. PromptHub
+  records native support per recognized target, preserves the exact manifest
+  for the selected native target during distribution, and inspects every
+  recognized secondary manifest independently.
+  Malformed, oversized, or traversal-bearing native manifests disable only
+  their own target with an actionable warning. They must fail before that
+  target is published, without hiding other valid native targets or
+  authorizing adapter overwrite. An escaping package symlink remains a
+  package-wide security failure.
 - Agent Plugin and the installed Plugin detail page both let users remove a distributed My Plugins package from one supported target without deleting the My Plugins record. The removal is confirmation-gated, deletes only the resolved target package path, and removes only that target ID from `distributedTargetIds`.
 - Uninstall removes My Plugins metadata and PromptHub-managed plugin package files. Distributed Agent Plugin package copies/symlinks are preserved by default, but single and batch delete confirmations may explicitly remove the resolved Agent Plugin package paths for recorded `distributedTargetIds`. Plugin uninstall never removes imported child Skills/MCP entries, App authorizations, user-owned external source packages, or unrelated Agent folders.
 - Single-skill packages and single runtime hook/module packages fail the Plugin semantic gate and are not installed as Plugin bundles.

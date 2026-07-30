@@ -407,6 +407,86 @@ describe("CorePluginLibraryService", () => {
     );
   });
 
+  it("preserves a target-specific native manifest in a multi-manifest package", () => {
+    const { plugin, packagePath } = createInstalledPluginLibrary(userDataPath);
+    const claudeManifest = {
+      name: "bundle",
+      description: "Native Claude package",
+      commands: ["./commands/native.md"],
+      vendorField: { preserve: true },
+    };
+    fs.mkdirSync(path.join(packagePath, ".claude-plugin"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(packagePath, ".claude-plugin", "plugin.json"),
+      JSON.stringify(claudeManifest),
+      "utf8",
+    );
+    const targetPath = path.join(
+      userDataPath,
+      "agent-targets",
+      "claude",
+      "bundle",
+    );
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+      resolvePluginTargetPath: (targetId) =>
+        targetId === "claude-code" ? targetPath : undefined,
+    });
+
+    const result = service.distributePlugin({
+      pluginId: plugin.id,
+      targetIds: ["claude-code"],
+      mode: "copy",
+    });
+
+    expect(
+      JSON.parse(
+        fs.readFileSync(
+          path.join(targetPath, ".claude-plugin", "plugin.json"),
+          "utf8",
+        ),
+      ),
+    ).toEqual(claudeManifest);
+    expect(result.targets).toEqual([
+      { targetId: "claude-code", path: targetPath, mode: "copy" },
+    ]);
+  });
+
+  it("rejects a malformed target-native manifest without replacing the target", () => {
+    const { plugin, packagePath } = createInstalledPluginLibrary(userDataPath);
+    fs.mkdirSync(path.join(packagePath, ".claude-plugin"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(packagePath, ".claude-plugin", "plugin.json"),
+      "{ malformed",
+      "utf8",
+    );
+    const targetPath = path.join(userDataPath, "agent-targets", "claude");
+    fs.mkdirSync(targetPath, { recursive: true });
+    fs.writeFileSync(path.join(targetPath, "keep.txt"), "keep", "utf8");
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+      resolvePluginTargetPath: () => targetPath,
+    });
+
+    expect(() =>
+      service.distributePlugin({
+        pluginId: plugin.id,
+        targetIds: ["claude-code"],
+        mode: "copy",
+      }),
+    ).toThrow(/manifest|json/i);
+    expect(fs.readFileSync(path.join(targetPath, "keep.txt"), "utf8")).toBe(
+      "keep",
+    );
+    expect(service.read().plugins[0].distributedTargetIds).toEqual([]);
+  });
+
   it("rejects direct Kiro distribution before resolving or writing a target", () => {
     const { plugin } = createInstalledPluginLibrary(userDataPath);
     const targetPath = path.join(
@@ -628,10 +708,23 @@ describe("CorePluginLibraryService", () => {
     fs.mkdirSync(path.join(agentPluginPath, ".claude-plugin"), {
       recursive: true,
     });
+    fs.mkdirSync(path.join(agentPluginPath, ".codex-plugin"), {
+      recursive: true,
+    });
     fs.mkdirSync(path.join(agentPluginPath, "commands"), { recursive: true });
     fs.mkdirSync(path.join(agentPluginPath, "workflows"), { recursive: true });
     fs.writeFileSync(
       path.join(agentPluginPath, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "review-kit",
+        version: "1.0.0",
+        description: "Review changes from Claude Code",
+        commands: ["./commands/review.md"],
+      }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(agentPluginPath, ".codex-plugin", "plugin.json"),
       JSON.stringify({
         name: "review-kit",
         version: "1.0.0",
@@ -669,6 +762,7 @@ describe("CorePluginLibraryService", () => {
       version: "1.0.0",
       trustLevel: "custom",
       classification: "bundle",
+      nativeTargetIds: ["codex", "claude-code"],
       inventory: { commands: 1, docs: 1 },
       source: {
         kind: "local",
@@ -694,6 +788,131 @@ describe("CorePluginLibraryService", () => {
         path.join(agentPluginPath, ".claude-plugin", "plugin.json"),
       ),
     ).toBe(true);
+  });
+
+  it("isolates a malformed secondary native manifest from valid targets", () => {
+    const agentPluginPath = writePluginSourcePackage({
+      name: "invalid-review-kit",
+      rootDir: path.join(userDataPath, "external-agents"),
+    });
+    fs.mkdirSync(path.join(agentPluginPath, ".claude-plugin"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(agentPluginPath, ".claude-plugin", "plugin.json"),
+      "{ malformed",
+      "utf8",
+    );
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+    });
+    const managedPluginsPath = path.join(userDataPath, "data", "plugins");
+
+    const result = service.importLocalPluginPackage({
+      sourcePath: agentPluginPath,
+      sourceTargetId: "codex",
+    });
+
+    expect(result.plugin.nativeTargetIds).toEqual(["codex"]);
+    expect(result.plugin.invalidNativeTargetIds).toEqual(["claude-code"]);
+    expect(fs.existsSync(managedPluginsPath)).toBe(true);
+  });
+
+  it("uses the first valid manifest when the highest-priority marker is malformed", () => {
+    const agentPluginPath = writePluginSourcePackage({
+      name: "fallback-review-kit",
+      rootDir: path.join(userDataPath, "external-agents"),
+    });
+    fs.writeFileSync(
+      path.join(agentPluginPath, ".codex-plugin", "plugin.json"),
+      "{ malformed",
+      "utf8",
+    );
+    fs.mkdirSync(path.join(agentPluginPath, ".claude-plugin"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(agentPluginPath, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "fallback-review-kit",
+        commands: ["./commands/review.md"],
+      }),
+      "utf8",
+    );
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+    });
+
+    const result = service.importLocalPluginPackage({
+      sourcePath: agentPluginPath,
+      sourceTargetId: "claude-code",
+    });
+
+    expect(result.plugin.name).toBe("fallback-review-kit");
+    expect(result.plugin.nativeTargetIds).toEqual(["claude-code"]);
+    expect(result.plugin.invalidNativeTargetIds).toEqual(["codex"]);
+  });
+
+  it("rejects traversal paths declared by a secondary native manifest", () => {
+    const agentPluginPath = writePluginSourcePackage({
+      name: "traversal-review-kit",
+      rootDir: path.join(userDataPath, "external-agents"),
+    });
+    fs.mkdirSync(path.join(agentPluginPath, ".claude-plugin"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(agentPluginPath, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "traversal-review-kit",
+        commands: ["../../outside.md"],
+      }),
+      "utf8",
+    );
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+    });
+
+    const result = service.importLocalPluginPackage({
+      sourcePath: agentPluginPath,
+      sourceTargetId: "codex",
+    });
+
+    expect(result.plugin.nativeTargetIds).toEqual(["codex"]);
+    expect(result.plugin.invalidNativeTargetIds).toEqual(["claude-code"]);
+  });
+
+  it("rejects oversized secondary native manifests before reading their content", () => {
+    const agentPluginPath = writePluginSourcePackage({
+      name: "oversized-review-kit",
+      rootDir: path.join(userDataPath, "external-agents"),
+    });
+    fs.mkdirSync(path.join(agentPluginPath, ".claude-plugin"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(agentPluginPath, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "oversized-review-kit",
+        description: "x".repeat(1024 * 1024),
+      }),
+      "utf8",
+    );
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+    });
+
+    const result = service.importLocalPluginPackage({
+      sourcePath: agentPluginPath,
+      sourceTargetId: "codex",
+    });
+
+    expect(result.plugin.nativeTargetIds).toEqual(["codex"]);
+    expect(result.plugin.invalidNativeTargetIds).toEqual(["claude-code"]);
   });
 
   it("imports HTTPS Git plugin sources with branch and package path metadata", async () => {

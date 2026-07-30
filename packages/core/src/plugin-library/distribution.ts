@@ -15,7 +15,6 @@ import type {
 
 import {
   ADAPTER_MANIFEST_CAPABILITY_FIELDS,
-  CODEX_PLUGIN_MANIFEST_FILE,
   CorePluginError,
   LOCAL_PLUGIN_MARKER_PATHS,
   type PluginTargetPathResolver,
@@ -35,7 +34,10 @@ import {
 } from "./shared";
 import {
   findLocalPluginMarker,
+  findLocalPluginMarkerForTarget,
+  inspectLocalPluginNativeTargets,
   readLocalPluginManifest,
+  validateLocalPluginPackage,
 } from "./package-validation";
 
 function isInsideManagedPluginsDir(candidatePath: string): boolean {
@@ -409,12 +411,13 @@ function canPassthroughNativePluginPackage(
   sourcePath: string,
   targetId: string,
 ): boolean {
-  if (targetId !== "codex") {
+  const markerPath = findLocalPluginMarkerForTarget(sourcePath, targetId);
+  if (!markerPath) {
     return false;
   }
-  return fs.existsSync(
-    path.join(sourcePath, ...CODEX_PLUGIN_MANIFEST_FILE.split("/")),
-  );
+  const { manifest } = readLocalPluginManifest(markerPath);
+  validateLocalPluginPackage(sourcePath, manifest);
+  return true;
 }
 
 export function writePluginPackageToAgentTarget(
@@ -695,6 +698,7 @@ export function distributePlugin(
   );
   const nextPlugin: PluginLibraryEntry = {
     ...plugin,
+    ...inspectLocalPluginNativeTargets(getPluginLocalPackagePath(plugin)),
     distributedTargetIds: normalizeDistributedTargetIds([
       ...(plugin.distributedTargetIds ?? []),
       ...targets.map((target) => target.targetId),

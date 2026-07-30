@@ -33,6 +33,10 @@ import {
   safePluginUserNotes,
   safePluginUserTags,
 } from "./shared";
+import {
+  getLocalPluginNativeTargetIds,
+  inspectLocalPluginNativeTargets,
+} from "./package-validation";
 import { normalizePluginSafetyReport } from "./normalization";
 
 export function copyPluginPackageToManagedPath(
@@ -351,6 +355,9 @@ export function buildUpdatedPluginFromPreview(
     safetyReport: normalizePluginSafetyReport(plugin.safetyReport),
     homepage: preview.homepage,
     repository: preview.repository,
+    ...(localPackagePath
+      ? inspectLocalPluginNativeTargets(localPackagePath)
+      : { invalidNativeTargetIds: [], nativeTargetIds: [] }),
     managedPath: materialized?.managedPath ?? plugin.managedPath,
     localRepositoryPath,
     localPackagePath,
@@ -420,6 +427,7 @@ export function remapRestoredPluginPackage(
 
   return {
     ...plugin,
+    ...inspectLocalPluginNativeTargets(restoredPackage.localPackagePath),
     managedPath: restoredPackage.managedPath,
     localRepositoryPath: restoredPackage.managedPath,
     localPackagePath: restoredPackage.localPackagePath,
@@ -681,6 +689,7 @@ function finalizeMarketGitPackage(
       `${entry.displayName} 下载后没有找到 Plugin manifest`,
     );
   }
+  getLocalPluginNativeTargetIds(localPackagePath);
   fs.rmSync(pluginRoot, { recursive: true, force: true });
   fs.renameSync(tempRoot, pluginRoot);
   return {

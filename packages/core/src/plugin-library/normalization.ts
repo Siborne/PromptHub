@@ -399,6 +399,8 @@ function normalizeLibraryEntry(plugin: PluginLibraryEntry): PluginLibraryEntry {
     safetyReport: normalizePluginSafetyReport(plugin.safetyReport),
     homepage: plugin.homepage,
     repository: plugin.repository,
+    nativeTargetIds: safeStringArray(plugin.nativeTargetIds),
+    invalidNativeTargetIds: safeStringArray(plugin.invalidNativeTargetIds),
     distributedTargetIds: safeStringArray(plugin.distributedTargetIds),
     managedPath: plugin.managedPath,
     localRepositoryPath: plugin.localRepositoryPath,
