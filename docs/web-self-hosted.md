@@ -251,4 +251,6 @@ Typical persisted paths include:
 - Treat this app as a user-managed deployment artifact, not as a shared hosted service.
 - If you expose it to the public internet, use HTTPS and a reverse proxy in front of it.
 - Only set `TRUST_PROXY_HEADERS=true` when that reverse proxy removes untrusted incoming forwarding headers; otherwise auth rate limits intentionally use a coarse fallback client bucket.
-- CI validates the web app with lint, typecheck, tests, production build, Docker image build, and compose validation.
+- CI selects the self-hosted Web checks from the root verification registry,
+  covering lint, typecheck, tests, production build, built-artifact smoke,
+  Docker image build, and compose validation.

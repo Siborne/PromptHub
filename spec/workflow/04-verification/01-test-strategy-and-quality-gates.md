@@ -27,5 +27,9 @@ coverage rules, and change-specific commands remain in
 - Persistence and filesystem changes include failure/rollback evidence.
 - Release candidates run `pnpm verify:release`; quick verification is a local
   diagnostic profile, not release approval.
+- Registry validation, affected-surface selection, timeout/process cleanup, and
+  bounded reporting are themselves executable harness tests.
+- CI selects the same registry check ids as local commands; workflow YAML must
+  not copy package command inventories.
 - Failures, skipped checks, warnings, and residual risks are recorded in the
   active change implementation.

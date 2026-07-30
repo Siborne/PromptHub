@@ -76,6 +76,12 @@ UI 流程背后的业务逻辑不能只靠端到端操作兜底。以下逻辑�
 - TDD 不能只写 happy path；每个非平凡变更至少覆盖黑盒行为、白盒分支、边界输入、失败/回滚路径。关键持久化和安全路径还必须覆盖 fuzz/adversarial 和压力场景。
 - 如果当前设计、稳定文档、active change 或用户需求之间存在冲突，必须暂停并向用户确认，不允许用最小代码改动自行拍板。
 - 发布准入必须走根级 release harness；不要把 desktop-only、web-only 或重复嵌套的聚合脚本当成完整发布验证。
+- 本地和 CI 的 package 命令清单必须来自
+  `scripts/verification/checks.mts`；workflow 只允许选择 profile、surface 和
+  risk layer，不得复制一份会漂移的 lint/typecheck/test/build 列表。
+- 正常路径数据库测试允许复制已关闭的当前 schema 模板提升速度；迁移、锁、
+  恢复、损坏和并发打开测试禁止使用模板，且模板与测试副本必须在 teardown
+  关闭并清理。
 - 用户报告的线上 bug 修复时，必须补一条能复现原失败条件的回归测试，并记录它属于哪个 harness 层。优先选择最低有效层，只有跨模块、跨进程或真实 UI 流程风险才升级到 integration / E2E。
 - Skill 系统 bugfix 必须先检查 `spec/knowledge/reference/skill-defect-taxonomy.md` 给 bug 定性，再检查 `spec/knowledge/reference/skill-regression-test-matrix.md` 选择代表性回归测试。先补失败测试，再修代码。
 - Skill 安装、删除、分发、扫描、商店状态测试不能只断言 mock 被调用；必须断言用户依赖的持久化结果、文件系统结果或 UI 可见状态。

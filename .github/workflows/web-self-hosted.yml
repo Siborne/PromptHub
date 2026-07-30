@@ -53,7 +53,7 @@ jobs:
       - name: Verify self-hosted web
         env:
           JWT_SECRET: test-secret-for-web-ci-verify-1234567890
-        run: pnpm verify:web
+        run: node --experimental-strip-types scripts/verify-release.mts --profile release --surface web-self-hosted --exclude-layer governance --exclude-layer e2e
 
       - name: Validate Docker Compose
         working-directory: apps/web

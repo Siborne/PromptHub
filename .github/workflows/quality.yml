@@ -40,14 +40,8 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
 
-      - name: Verify CI configuration
-        run: pnpm test:ci-config
-
-      - name: Verify specification governance
-        run: pnpm spec:test
-
-      - name: Verify file-size limits
-        run: pnpm lint:file-size
+      - name: Verify governance
+        run: node --experimental-strip-types scripts/verify-release.mts --profile quick --surface governance
 
   shared-verify:
     needs: changes
@@ -60,16 +54,8 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
 
-      - name: Verify shared package
-        run: |
-          pnpm --filter @prompthub/shared typecheck
-          pnpm --filter @prompthub/shared test
-
-      - name: Verify database and core packages
-        run: |
-          pnpm --filter @prompthub/db typecheck
-          pnpm --filter @prompthub/core typecheck
-          pnpm --filter @prompthub/core test
+      - name: Verify shared, database, and core packages
+        run: node --experimental-strip-types scripts/verify-release.mts --profile quick --surface shared --surface database --surface core --exclude-layer governance
 
   cli-verify:
     needs: changes
@@ -83,11 +69,7 @@ jobs:
         uses: ./.github/actions/setup-workspace
 
       - name: Verify CLI
-        run: |
-          pnpm --filter @prompthub/cli lint
-          pnpm --filter @prompthub/cli typecheck
-          pnpm --filter @prompthub/cli test
-          pnpm --filter @prompthub/cli build
+        run: node --experimental-strip-types scripts/verify-release.mts --profile release --surface cli --exclude-layer governance
 
   mobile-verify:
     needs: changes
@@ -101,9 +83,7 @@ jobs:
         uses: ./.github/actions/setup-workspace
 
       - name: Verify mobile
-        run: |
-          pnpm --filter @prompthub/mobile typecheck
-          pnpm --filter @prompthub/mobile test
+        run: node --experimental-strip-types scripts/verify-release.mts --profile quick --surface mobile --exclude-layer governance
 
   desktop-verify:
     needs: changes
@@ -116,23 +96,5 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
 
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Unit tests
-        run: pnpm test:unit
-
-      - name: Integration tests
-        run: pnpm test:integration
-
-      - name: Performance budget
-        run: pnpm test:perf
-
-      - name: Build
-        run: pnpm build
-
-      - name: Bundle budget
-        run: pnpm --filter @prompthub/desktop bundle:budget
+      - name: Verify desktop
+        run: node --experimental-strip-types scripts/verify-release.mts --profile release --surface desktop --exclude-layer governance --exclude-layer e2e

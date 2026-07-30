@@ -21,6 +21,12 @@
   the expected answer directly.
 - Persistence fixtures prove reopen/rescan/reload behavior and clean up their
   temporary resources.
+- Normal-path SQLite suites may copy a closed, current-schema template into an
+  isolated temporary directory. Migration, lock, corruption, recovery, and
+  concurrent-open tests must create their own precondition and bypass the
+  template.
+- Template lifetime is bounded to the suite/worker setup; teardown closes the
+  database before removing the template directory.
 - Security fixtures remain inert and must never execute imported package code.
 
 ## Promotion Rule

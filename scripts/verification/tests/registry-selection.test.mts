@@ -1,0 +1,184 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { VERIFICATION_CHECKS } from "../checks.mts";
+import {
+  ALL_PRODUCT_SURFACES,
+  selectAffectedSurfaces,
+} from "../surface-graph.mjs";
+import { selectChecks, validateRegistry } from "../select.mts";
+import type { VerificationCheck } from "../types.mts";
+
+function check(
+  id: string,
+  overrides: Partial<VerificationCheck> = {},
+): VerificationCheck {
+  return {
+    id,
+    label: id,
+    surfaces: ["shared"],
+    layers: ["unit"],
+    profiles: ["quick", "release"],
+    command: { executable: "node", args: ["-e", `console.log("${id}")`] },
+    timeoutMs: 1_000,
+    ...overrides,
+  };
+}
+
+test("the maintained registry is valid and includes previously omitted gates", () => {
+  assert.doesNotThrow(() =>
+    validateRegistry(VERIFICATION_CHECKS, { requireCompleteInventory: true }),
+  );
+
+  const ids = new Set(VERIFICATION_CHECKS.map((item) => item.id));
+  for (const required of [
+    "governance-spec",
+    "shared-test",
+    "core-test",
+    "mobile-test",
+    "web-smoke",
+    "web-cloudflare-build",
+    "cli-package",
+    "desktop-package",
+  ]) {
+    assert.equal(ids.has(required), true, `missing ${required}`);
+  }
+});
+
+test("complete registry validation rejects a missing required risk layer", () => {
+  assert.throws(
+    () =>
+      validateRegistry(
+        VERIFICATION_CHECKS.filter((item) => item.id !== "mobile-test"),
+        { requireCompleteInventory: true },
+      ),
+    /mobile.*unit/i,
+  );
+});
+
+test("registry validation rejects duplicate commands, unknown dependencies, and cycles", () => {
+  assert.throws(
+    () =>
+      validateRegistry([
+        check("a"),
+        check("b", {
+          command: {
+            executable: "node",
+            args: ["-e", 'console.log("a")'],
+          },
+        }),
+      ]),
+    /Duplicate verification command/,
+  );
+  assert.throws(
+    () => validateRegistry([check("a", { dependsOn: ["missing"] })]),
+    /Unknown verification dependency/,
+  );
+  assert.throws(
+    () =>
+      validateRegistry([
+        check("a", {
+          command: { executable: "node", args: ["-e", "1"] },
+          dependsOn: ["b"],
+        }),
+        check("b", {
+          command: { executable: "node", args: ["-e", "2"] },
+          dependsOn: ["a"],
+        }),
+      ]),
+    /cycle/i,
+  );
+  assert.throws(
+    () => validateRegistry([check("a", { timeoutMs: 0 })]),
+    /metadata/i,
+  );
+  assert.throws(
+    () =>
+      validateRegistry([
+        check("a", {
+          profiles: ["future" as never],
+        }),
+      ]),
+    /profile/i,
+  );
+  assert.throws(
+    () =>
+      validateRegistry([
+        check("a", {
+          resourceGroup: "../shared",
+        }),
+      ]),
+    /resource group/i,
+  );
+});
+
+test("surface selection stays bounded for a large changed inventory", () => {
+  const paths = Array.from(
+    { length: 10_000 },
+    (_, index) => `apps/desktop/src/generated-${index}.ts`,
+  );
+  const startedAt = performance.now();
+  const selection = selectAffectedSurfaces(paths);
+  const durationMs = performance.now() - startedAt;
+
+  assert.equal(selection.fallbackToAll, false);
+  assert.deepEqual([...selection.surfaces], ["desktop"]);
+  assert.ok(durationMs < 1_000, `selection took ${durationMs.toFixed(1)}ms`);
+});
+
+test("shared changes fan out to every product surface", () => {
+  const selection = selectAffectedSurfaces(["packages/shared/types/skill.ts"]);
+  assert.equal(selection.fallbackToAll, false);
+  assert.deepEqual(
+    [...selection.surfaces].sort(),
+    [...ALL_PRODUCT_SURFACES].sort(),
+  );
+});
+
+test("unknown and malformed paths fail safe to every surface", () => {
+  for (const changedPath of [
+    "future/product/file.ts",
+    "../outside.ts",
+    "bad\0path",
+  ]) {
+    const selection = selectAffectedSurfaces([changedPath]);
+    assert.equal(selection.fallbackToAll, true);
+    assert.deepEqual(
+      [...selection.surfaces].sort(),
+      [...ALL_PRODUCT_SURFACES].sort(),
+    );
+  }
+});
+
+test("quick omits build and E2E while release includes dependency closure", () => {
+  const checks = [
+    check("unit", { profiles: ["changed", "quick", "release"] }),
+    check("build", {
+      layers: ["build"],
+      profiles: ["release"],
+      command: { executable: "node", args: ["-e", "build"] },
+    }),
+    check("e2e", {
+      layers: ["e2e"],
+      profiles: ["release"],
+      dependsOn: ["build"],
+      command: { executable: "node", args: ["-e", "e2e"] },
+    }),
+  ];
+
+  assert.deepEqual(
+    selectChecks(checks, { profile: "quick" }).map((item) => item.id),
+    ["unit"],
+  );
+  assert.deepEqual(
+    selectChecks(checks, { profile: "release" }).map((item) => item.id),
+    ["unit", "build", "e2e"],
+  );
+  assert.deepEqual(
+    selectChecks(checks, {
+      profile: "release",
+      excludeLayers: new Set(["e2e"]),
+    }).map((item) => item.id),
+    ["unit", "build"],
+  );
+});

@@ -3,52 +3,26 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const ALL_SURFACES = ["shared", "desktop", "cli", "mobile"];
-const ROOT_FAN_OUT_PATHS = new Set([
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
-  ".github/workflows/quality.yml",
-  ".github/actions/setup-workspace/action.yml",
-  "scripts/detect-ci-surfaces.mjs",
-  "scripts/detect-ci-surfaces.test.mjs",
-]);
+import { selectAffectedSurfaces } from "./verification/surface-graph.mjs";
 
-function enable(result, ...surfaces) {
-  for (const surface of surfaces) {
-    result[surface] = true;
-  }
-}
+const ALL_SURFACES = ["shared", "desktop", "cli", "mobile"];
 
 export function detectCiSurfaces(files) {
   const result = Object.fromEntries(
     ALL_SURFACES.map((surface) => [surface, false]),
   );
-
-  for (const rawPath of files) {
-    const changedPath = rawPath.trim();
-    if (!changedPath) {
-      continue;
-    }
-
-    if (ROOT_FAN_OUT_PATHS.has(changedPath)) {
-      enable(result, ...ALL_SURFACES);
-    } else if (changedPath.startsWith("packages/shared/")) {
-      enable(result, ...ALL_SURFACES);
-    } else if (
-      changedPath.startsWith("packages/core/") ||
-      changedPath.startsWith("packages/db/")
-    ) {
-      enable(result, "shared", "desktop", "cli");
-    } else if (changedPath.startsWith("apps/desktop/")) {
-      enable(result, "desktop");
-    } else if (changedPath.startsWith("apps/cli/")) {
-      enable(result, "cli");
-    } else if (changedPath.startsWith("apps/mobile/")) {
-      enable(result, "mobile");
-    }
+  const changedPaths = files.map((file) => file.trim()).filter(Boolean);
+  if (changedPaths.length === 0) {
+    return result;
   }
 
+  const selection = selectAffectedSurfaces(changedPaths);
+  const selected = selection.surfaces;
+  result.shared =
+    selected.has("shared") || selected.has("database") || selected.has("core");
+  result.desktop = selected.has("desktop");
+  result.cli = selected.has("cli");
+  result.mobile = selected.has("mobile");
   return result;
 }
 

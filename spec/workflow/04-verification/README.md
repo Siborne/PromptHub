@@ -68,11 +68,26 @@ UI 可见变更不能只通过截图或代码审阅验收。验证记录必须�
 
 ## 当前稳定补充
 
-- Pull Request 的 `Quality Checks` 必须始终执行 spec 治理、CI 配置契约和文件大小门禁；Desktop、CLI、Mobile、shared/core/db 使用 `scripts/detect-ci-surfaces.mjs` 按变更路径及依赖关系选择验证，手动触发时验证全部 surface。
-- Self-Hosted Web workflow 负责 `apps/web` 与 Docker；独立的 Cloudflare Worker workflow 负责 `apps/web-cloudflare` 的 lint、typecheck 和 test，Worker-only 变更不触发无关 Docker 构建。
+- 根级验证清单的唯一可执行真相源是
+  `scripts/verification/checks.mts`；本地 runner 和 CI workflow 只选择
+  registry 中的 check，不再维护第二份命令列表。
+- `changed`、`quick`、`release`、`package` profile 分别服务受影响面反馈、
+  全仓快速诊断、发布候选准入和单平台非发布打包。默认并发上限为 2，
+  每个 check 必须有超时；失败依赖会阻塞下游，但不会取消独立 check。
+- Pull Request 的 `Quality Checks` 必须始终执行 spec 治理、CI 配置契约、
+  traceability 和文件大小门禁；`scripts/detect-ci-surfaces.mjs` 只作为
+  `scripts/verification/surface-graph.mjs` 的兼容输出层。
+- Self-Hosted Web workflow 负责 `apps/web` 与 Docker；独立的 Cloudflare
+  Worker workflow 通过同一 registry 验证 `apps/web-cloudflare`，Worker-only
+  变更不触发无关 Docker 构建。
 - CLI 行为测试使用一次性初始化且已关闭的空 SQLite 模板复制独立 fixture，避免每个用例重复 schema/migration；新库路径、迁移和并发测试必须显式使用未预置数据库，不能被模板替代。完整 CLI suite 默认受 75 秒预算保护，本地诊断可通过 `PROMPTHUB_CLI_TEST_MAX_MS` 临时调整。
+- Self-Hosted Web 正常路径测试由 Vitest global setup 创建一个已迁移且关闭的
+  SQLite 模板，每个测试数据目录只复制模板；迁移、损坏恢复和锁恢复测试仍需
+  显式使用新库或自己的 fixture，不得以模板替代被测前置状态。
 - Cloudflare worker / self-hosted 分支型实现如果进入仓库长期维护范围，至少需要具备独立的 `typecheck`、`lint`、`test` 和构建验证，而不能只依赖主应用验证结果。
 - 若变更影响 monorepo 内的 package export / workspace 接入，还必须补根级构建验证，确保真实调用链不会因 `exports` 缺失或 lockfile 未更新而在构建阶段失败。
-- 发布候选应优先运行根级 `pnpm verify:release` harness；本地快速排查可先运行 `pnpm verify:release:quick`，但 quick profile 不能替代发布准入。
+- 发布候选应优先运行根级 `pnpm verify:release` harness；本地快速排查可先运行
+  `pnpm verify:release:quick`，受影响面诊断可运行 `pnpm verify:changed`，
+  但 changed/quick profile 不能替代发布准入。
 - 新增或修复线上 bug 时，应先把失败归类到最低有效验证层：shared package typecheck、app lint/typecheck、unit、integration、performance、bundle、E2E smoke 或 packaging。避免通过多个聚合脚本重复运行同一层来制造“已验证”的错觉。
 - Skill 相关发布风险必须先对照 `spec/knowledge/reference/skill-defect-taxonomy.md` 给问题定性，再对照 `spec/knowledge/reference/skill-regression-test-matrix.md` 说明哪些测试项已覆盖、哪些尚未覆盖。

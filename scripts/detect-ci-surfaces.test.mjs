@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 
 import { detectCiSurfaces } from "./detect-ci-surfaces.mjs";
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const rootDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 
 test("maps direct app changes to their owning surface", () => {
   assert.deepEqual(detectCiSurfaces(["apps/cli/src/run.ts"]), {
@@ -47,6 +50,21 @@ test("fans root build changes out but leaves documentation to governance", () =>
   });
 });
 
+test("fails safe for unknown paths and uses the shared graph for web consumers", () => {
+  assert.deepEqual(detectCiSurfaces(["future/product/file.ts"]), {
+    shared: true,
+    desktop: true,
+    cli: true,
+    mobile: true,
+  });
+  assert.deepEqual(detectCiSurfaces(["apps/web/src/index.ts"]), {
+    shared: false,
+    desktop: false,
+    cli: false,
+    mobile: false,
+  });
+});
+
 test("quality workflow preserves unconditional governance and surface gates", () => {
   const workflow = fs.readFileSync(
     path.join(rootDir, ".github/workflows/quality.yml"),
@@ -55,16 +73,15 @@ test("quality workflow preserves unconditional governance and surface gates", ()
 
   assert.match(workflow, /scripts\/detect-ci-surfaces\.mjs/);
   assert.match(workflow, /governance:/);
-  assert.match(workflow, /pnpm spec:test/);
-  assert.match(workflow, /pnpm lint:file-size/);
+  assert.match(workflow, /--profile quick --surface governance/);
   assert.match(workflow, /shared-verify:/);
-  assert.match(workflow, /pnpm --filter @prompthub\/core test/);
+  assert.match(workflow, /--surface shared --surface database --surface core/);
   assert.match(workflow, /cli-verify:/);
-  assert.match(workflow, /pnpm --filter @prompthub\/cli test/);
+  assert.match(workflow, /--profile release --surface cli/);
   assert.match(workflow, /mobile-verify:/);
-  assert.match(workflow, /pnpm --filter @prompthub\/mobile test/);
+  assert.match(workflow, /--profile quick --surface mobile/);
   assert.match(workflow, /desktop-verify:/);
-  assert.match(workflow, /pnpm test:unit/);
+  assert.match(workflow, /--profile release --surface desktop/);
 });
 
 test("Cloudflare Worker workflow has an independent bounded gate", () => {
@@ -75,7 +92,8 @@ test("Cloudflare Worker workflow has an independent bounded gate", () => {
 
   assert.match(workflow, /apps\/web-cloudflare\/\*\*/);
   assert.doesNotMatch(workflow, /docker/);
-  assert.match(workflow, /@prompthub\/web-cloudflare lint/);
-  assert.match(workflow, /@prompthub\/web-cloudflare typecheck/);
-  assert.match(workflow, /@prompthub\/web-cloudflare test/);
+  assert.match(
+    workflow,
+    /--profile quick --surface web-cloudflare --exclude-layer governance/,
+  );
 });

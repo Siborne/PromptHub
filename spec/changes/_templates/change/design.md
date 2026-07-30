@@ -1,5 +1,7 @@
 # Design
 
+<!-- traceability: enforced -->
+
 ## `DES-<DOMAIN>-001`: Overview
 
 概述实现思路与主要模块。

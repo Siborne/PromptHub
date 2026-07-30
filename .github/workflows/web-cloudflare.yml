@@ -23,7 +23,4 @@ jobs:
         uses: ./.github/actions/setup-workspace
 
       - name: Verify Cloudflare Worker
-        run: |
-          pnpm --filter @prompthub/web-cloudflare lint
-          pnpm --filter @prompthub/web-cloudflare typecheck
-          pnpm --filter @prompthub/web-cloudflare test
+        run: node --experimental-strip-types scripts/verify-release.mts --profile quick --surface web-cloudflare --exclude-layer governance
