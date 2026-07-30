@@ -2,6 +2,10 @@ import { useSettingsStore } from "./settings.store";
 import { create } from "zustand";
 import { scheduleAllSaveSync } from "../services/webdav-save-sync";
 import { getOrderedGlobalRuleFiles } from "../services/rule-platform-order";
+import {
+  isCompleteRuleAIModel,
+  resolveRuleAIModel,
+} from "../services/rule-ai-models";
 import type {
   CreateRuleProjectInput,
   RuleConflictResolutionStrategy,
@@ -39,9 +43,11 @@ interface RulesState {
   setDraftContent: (content: string) => void;
   setAiInstruction: (instruction: string) => void;
   saveCurrentRule: () => Promise<void>;
-  resolveCurrentRuleConflict: (strategy: RuleConflictResolutionStrategy) => Promise<void>;
+  resolveCurrentRuleConflict: (
+    strategy: RuleConflictResolutionStrategy,
+  ) => Promise<void>;
   dismissConflictDialog: (ruleId?: RuleFileId | null) => void;
-  rewriteCurrentRule: () => Promise<void>;
+  rewriteCurrentRule: (modelId?: string) => Promise<void>;
   deleteRuleVersion: (ruleId: RuleFileId, versionId: string) => Promise<void>;
   addProjectRule: (input: CreateRuleProjectInput) => Promise<void>;
   removeProjectRule: (projectId: string) => Promise<void>;
@@ -278,24 +284,20 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     });
   },
 
-  rewriteCurrentRule: async () => {
+  rewriteCurrentRule: async (modelId) => {
     const currentFile = get().currentFile;
     const instruction = get().aiInstruction.trim();
     if (!currentFile || !instruction) {
       return;
     }
     const settings = useSettingsStore.getState();
-    const defaultModel = settings.aiModels?.find((m) => m.isDefault) || settings.aiModels?.[0] || {
-      apiKey: settings.aiApiKey,
-      apiUrl: settings.aiApiUrl,
-      model: settings.aiModel,
-      provider: settings.aiProvider,
-      apiProtocol: settings.aiApiProtocol,
-    };
-    
-    if (!defaultModel.apiKey) {
-      set({ error: "AI API key not configured. Please configure it in settings." });
-      return;
+    const selectedModel = resolveRuleAIModel(settings, modelId);
+
+    if (!selectedModel) {
+      throw new Error("RULE_AI_MODEL_UNAVAILABLE");
+    }
+    if (!isCompleteRuleAIModel(selectedModel)) {
+      throw new Error("RULE_AI_MODEL_INCOMPLETE");
     }
 
     set({ isRewriting: true, error: null, aiSummary: null });
@@ -306,11 +308,11 @@ export const useRulesStore = create<RulesState>((set, get) => ({
         fileName: currentFile.name,
         platformName: currentFile.platformName,
         aiConfig: {
-          apiKey: defaultModel.apiKey || "",
-          apiUrl: defaultModel.apiUrl || "",
-          model: defaultModel.model || "",
-          provider: defaultModel.provider || "openai",
-          apiProtocol: defaultModel.apiProtocol || "openai",
+          apiKey: selectedModel.apiKey,
+          apiUrl: selectedModel.apiUrl,
+          model: selectedModel.model,
+          provider: selectedModel.provider,
+          apiProtocol: selectedModel.apiProtocol,
         },
       });
       set({

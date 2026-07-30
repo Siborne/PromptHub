@@ -23,6 +23,7 @@ import {
   Annotation,
   Compartment,
   EditorState,
+  Prec,
   type Extension,
 } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
@@ -41,6 +42,10 @@ interface SkillCodeEditorProps {
   path: string;
   value: string;
   editable: boolean;
+  ariaLabel?: string;
+  className?: string;
+  testId?: string;
+  onReady?: (view: EditorView) => void;
   onChange: (value: string) => void;
 }
 
@@ -54,12 +59,29 @@ const skillHighlightStyle = HighlightStyle.define([
     tag: [tags.name, tags.variableName, tags.propertyName],
     color: "var(--skill-code-variable)",
   },
-  { tag: [tags.function(tags.variableName), tags.labelName], color: "var(--skill-code-function)" },
-  { tag: [tags.string, tags.special(tags.string)], color: "var(--skill-code-string)" },
-  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: "var(--skill-code-atom)" },
-  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "var(--skill-code-comment)", fontStyle: "italic" },
+  {
+    tag: [tags.function(tags.variableName), tags.labelName],
+    color: "var(--skill-code-function)",
+  },
+  {
+    tag: [tags.string, tags.special(tags.string)],
+    color: "var(--skill-code-string)",
+  },
+  {
+    tag: [tags.number, tags.bool, tags.null, tags.atom],
+    color: "var(--skill-code-atom)",
+  },
+  {
+    tag: [tags.comment, tags.lineComment, tags.blockComment],
+    color: "var(--skill-code-comment)",
+    fontStyle: "italic",
+  },
   { tag: tags.heading, color: "var(--skill-code-heading)", fontWeight: "700" },
-  { tag: [tags.link, tags.url], color: "var(--skill-code-link)", textDecoration: "underline" },
+  {
+    tag: [tags.link, tags.url],
+    color: "var(--skill-code-link)",
+    textDecoration: "underline",
+  },
   { tag: [tags.invalid, tags.deleted], color: "var(--skill-code-invalid)" },
   { tag: tags.inserted, color: "var(--skill-code-inserted)" },
 ]);
@@ -97,8 +119,9 @@ export async function loadSkillCodeEditorLanguage(
     }
     case "md":
     case "mdx": {
-      const { markdown } = await import("@codemirror/lang-markdown");
-      return markdown();
+      const { markdown, markdownKeymap } =
+        await import("@codemirror/lang-markdown");
+      return [markdown(), Prec.high(keymap.of(markdownKeymap))];
     }
     case "py": {
       const { python } = await import("@codemirror/lang-python");
@@ -188,6 +211,20 @@ function buildTheme() {
       color: "hsl(var(--muted-foreground))",
       borderRight: "1px solid hsl(var(--border))",
     },
+    ".cm-foldGutter .cm-gutterElement": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    ".cm-foldGutter span": {
+      display: "inline-flex",
+      width: "1rem",
+      height: "1rem",
+      alignItems: "center",
+      justifyContent: "center",
+      lineHeight: "1",
+      transform: "translateY(-1px)",
+    },
     ".cm-activeLine": {
       backgroundColor: "hsl(var(--primary) / 0.06)",
     },
@@ -204,7 +241,11 @@ function buildTheme() {
   });
 }
 
-function buildExtensions(editable: boolean, onChange: (value: string) => void): Extension[] {
+function buildExtensions(
+  editable: boolean,
+  ariaLabel: string,
+  onChange: (value: string) => void,
+): Extension[] {
   return [
     lineNumbers(),
     foldGutter(),
@@ -229,7 +270,7 @@ function buildExtensions(editable: boolean, onChange: (value: string) => void): 
       EditorState.readOnly.of(!editable),
     ]),
     EditorView.contentAttributes.of({
-      "aria-label": editable ? "Code editor" : "Code viewer",
+      "aria-label": ariaLabel,
       role: "textbox",
       spellcheck: "false",
     }),
@@ -255,6 +296,10 @@ export function SkillCodeEditor({
   path,
   value,
   editable,
+  ariaLabel = editable ? "Code editor" : "Code viewer",
+  className = "",
+  testId = "skill-code-editor",
+  onReady,
   onChange,
 }: SkillCodeEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -277,7 +322,7 @@ export function SkillCodeEditor({
       parent: hostRef.current,
       state: EditorState.create({
         doc: value,
-        extensions: buildExtensions(editable, (nextValue) =>
+        extensions: buildExtensions(editable, ariaLabel, (nextValue) =>
           onChangeRef.current(nextValue),
         ),
       }),
@@ -301,11 +346,8 @@ export function SkillCodeEditor({
         ]),
       ],
     });
-    view.contentDOM.setAttribute(
-      "aria-label",
-      editable ? "Code editor" : "Code viewer",
-    );
-  }, [editable]);
+    view.contentDOM.setAttribute("aria-label", ariaLabel);
+  }, [ariaLabel, editable]);
 
   useEffect(() => {
     let isActive = true;
@@ -317,6 +359,7 @@ export function SkillCodeEditor({
         view.dispatch({
           effects: languageCompartment.reconfigure(languageExtension),
         });
+        onReady?.(view);
       })
       .catch((error) => {
         console.error("Failed to load CodeMirror language extension:", error);
@@ -346,9 +389,9 @@ export function SkillCodeEditor({
   return (
     <div
       ref={hostRef}
-      data-testid="skill-code-editor"
+      data-testid={testId}
       data-language={languageName}
-      className="skill-code-editor"
+      className={`skill-code-editor h-full min-h-0 overflow-hidden ${className}`}
     />
   );
 }

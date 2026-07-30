@@ -19,6 +19,7 @@ import { SkillFullDetailPage } from "../skill/SkillFullDetailPage";
 import { SkillLibraryImportModal } from "../skill/SkillLibraryImportModal";
 import { buildProjectDetailSkill } from "../skill/project-detail-adapter";
 import { BoundedListPager, useBoundedPage } from "./BoundedListPager";
+import { AgentRulesWorkspace } from "./AgentRulesWorkspace";
 
 const DOMAIN_META: Record<
   AgentAssetDomain,
@@ -61,6 +62,24 @@ export function AgentAssetsWorkspace({
 }: {
   agent: ManagedAgentSummary;
   domain: AgentAssetDomain;
+}) {
+  if (domain === "rules") {
+    return (
+      <section className="flex h-full min-w-0 flex-1 flex-col">
+        <AgentRulesWorkspace agent={agent} />
+      </section>
+    );
+  }
+
+  return <AgentInventoryWorkspace agent={agent} domain={domain} />;
+}
+
+function AgentInventoryWorkspace({
+  agent,
+  domain,
+}: {
+  agent: ManagedAgentSummary;
+  domain: Exclude<AgentAssetDomain, "rules">;
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");

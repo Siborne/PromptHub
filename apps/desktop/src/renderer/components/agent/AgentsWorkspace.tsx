@@ -261,7 +261,7 @@ function AgentTabs({
     <div
       role="tablist"
       aria-label={t("agents.workspaceTabs", "Agent workspace")}
-      className="mt-1 flex gap-4 overflow-x-auto"
+      className="flex gap-4 overflow-x-auto"
     >
       {tabs.map((tab) => {
         const enabled = isAgentTabEnabled(agent, tab);
@@ -387,7 +387,7 @@ export function AgentsWorkspace() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <header className="border-b border-border bg-card px-6 pb-0 pt-6 shadow-sm app-wallpaper-panel-strong sm:px-8">
-        <div className="flex min-h-[5.5rem] flex-wrap items-start justify-between gap-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <AgentIdentity agent={agent} />
           <AgentHeaderActions
             agent={agent}

@@ -1482,6 +1482,118 @@
   unsupported install sources remain read-only diagnostics.
 - npm-managed Qwen Code updates use the same lifecycle with their own canonical
   package identity; exact evidence is recorded in `verification-evidence.md`.
+- Agent-scoped Rules editing is complete
+  (2026-07-30; `FR-AGENT-051`, `DES-AGENT-066`, `TEST-AGENT-084`,
+  `T-AGENT-121`):
+  - The Agent Rules tab now resolves the selected Agent's global rule by
+    normalized path first, then uses the built-in or custom platform identity
+    as a fallback. Agent switches with a pending read never render the previous
+    Agent's rule.
+  - The tab reuses `RulesManager` and `useRulesStore`, including drafts,
+    save-and-overwrite, snapshots and external-change conflict handling. It
+    adds no second rule store, IPC surface, editor implementation or durable
+    state.
+  - Initial inventory loading and a missing-descriptor refresh are bounded to
+    one automatic attempt each per Agent/path key. Missing and failed reads
+    remain explicitly retryable.
+  - The shared rule registry now covers QClaw's PromptHub compatibility
+    `workspace/SOUL.md` and CodeBuddy's `CODEBUDDY.md`; Antigravity continues to
+    share Gemini's exact rule path rather than creating a duplicate descriptor.
+  - Verification passes 6 focused files / 68 tests, including 23 real
+    SQLite/filesystem rule-workspace tests. The new adapter has 100% statement,
+    branch, function and line coverage. Desktop and shared typechecks, affected
+    desktop ESLint, the production build, `spec:test`, formatting and
+    `git diff --check` pass.
+- Compact Rules editor actions are complete
+  (2026-07-30; `FR-AGENT-052`, `DES-AGENT-067`, `TEST-AGENT-085`,
+  `T-AGENT-122`):
+  - The persistent gray AI/history column was removed. The shared Rules editor
+    now uses one full-width draft canvas with compact header actions and the
+    existing card/background design tokens.
+  - AI rewrite instructions and version snapshots now open in focused shared
+    dialogs. AI failure keeps its dialog open; version history keeps snapshot
+    selection and the complete line diff in the same master-detail dialog.
+  - Snapshot empty state, source labels, bounded expansion, deletion,
+    selection and restore continue through the existing Rules store. No IPC,
+    preload, filesystem, database or durable-state contract changed.
+  - Focused Rules/Agent workspace regression passes 3 files / 36 tests; the
+    wider Rules stack passes 9 files / 76 tests, including 23 real
+    SQLite/filesystem workspace cases. The new AI and history dialog modules
+    measure 100% statement, branch, function and line coverage.
+  - Desktop/shared typechecks, affected desktop ESLint, changed-file Prettier,
+    desktop production build, `spec:test` and `git diff --check` pass. The
+    repository file-size gate remains blocked only by the pre-existing
+    1,536-line `SkillStore.tsx` and `SkillStoreDetail.tsx`; this Rules batch
+    does not expand either file.
+- Agent workspace density follow-up is complete
+  (2026-07-30; `FR-AGENT-053`, `FR-AGENT-054`, `DES-AGENT-068`,
+  `DES-AGENT-069`, `TEST-AGENT-086`, `TEST-AGENT-087`, `T-AGENT-123`,
+  `T-AGENT-124`):
+  - The Agent identity/action row no longer reserves a fixed 5.5rem minimum
+    height. It uses natural content height, vertically centered children and
+    the existing bounded flex-wrap behavior; the tab strip follows without an
+    extra top spacer.
+  - The shared Rules draft and snapshot diff now fill the content region
+    edge-to-edge. The duplicated 1.5rem inset, rounded wrapper border, zoom and
+    shadow were removed while the status divider, internal scrolling, alert
+    inset and editable draft behavior remain unchanged.
+  - The focused workspace regression passes 3 files / 47 tests. A red-first
+    layout assertion reproduced each fixed spacer and nested-card edge before
+    the renderer changes.
+  - Affected desktop ESLint, desktop typecheck, changed-file Prettier, desktop
+    production build, `spec:test` and `git diff --check` pass. The repository
+    file-size gate remains blocked only by the pre-existing 1,536-line
+    `SkillStore.tsx` and `SkillStoreDetail.tsx`; neither file is part of this
+    renderer-only follow-up.
+- Rules editing workflow completion is implemented
+  (2026-07-30; `FR-AGENT-055` through `FR-AGENT-058`,
+  `DES-AGENT-070` through `DES-AGENT-073`, `TEST-AGENT-088` through
+  `TEST-AGENT-091`, `T-AGENT-125` through `T-AGENT-128`):
+  - Rules now reuses the existing CodeMirror editor with Markdown syntax,
+    line numbers, undo/redo, search, indentation and the Markdown keymap.
+    List markers continue on Enter, parent-value synchronization remains
+    annotated, and the Rules store is still the only draft owner.
+  - The same draft now supports Edit, Preview and Split views. The mode
+    selector sits at the toolbar's far right after the document statistics,
+    uses pencil/book/columns icons, and keeps document preview free
+    of the ambiguous eye icon. Sanitized internal
+    Markdown anchors stay inside the preview, semantic source-line anchors
+    synchronize Split panes in both directions, fold controls are vertically
+    centered, and long previews expose a reduced-motion-aware return-to-top
+    control. Anchor construction is `O(b)` per rendered draft and scroll
+    mapping is `O(log b)` with no new storage, IPC, I/O or network work.
+  - The AI rewrite dialog uses the existing provider/model settings as its
+    source of truth, filters out image-only models, defaults to the configured
+    chat model, and sends the explicitly selected endpoint only for the
+    current rewrite. Provider-owned protocol, URL and credential fields
+    override stale model copies without changing global defaults.
+  - Version history opens directly on the newest non-current snapshot and
+    keeps the bounded list, line-numbered diff, no-difference state, delete and
+    restore actions in one dialog. Comparison never replaces the draft editor;
+    restore changes only the draft until Save. A visual-density follow-up
+    replaced the 1,200-pixel full modal with the existing 1,000-pixel `2xl`
+    bound, reduced the snapshot rail from 320 to 280 pixels and shortened the
+    maximum comparison height without changing history behavior. Live Electron
+    verification confirmed the compact modal keeps both snapshot metadata and
+    the complete diff visible without spanning the workspace.
+    Snapshot source metadata now uses neutral Lucide icons; only the current
+    state retains semantic success color.
+  - Open Location sends the exact rule file path through the existing shell
+    boundary. Missing bridge results, rejected calls, malformed responses and
+    shell failures produce a visible error; the main process reveals the file
+    instead of merely opening its parent directory.
+  - The new Rules dialog/helper/service modules have 100% statement, branch,
+    function and line coverage. The focused Rules, store and shell suite passes
+    9 files / 54 tests; the i18n suite passes 5 files / 36 tests. Desktop
+    typecheck, affected ESLint, production build, changed-file formatting and
+    `git diff --check` pass.
+  - Live Electron verification confirmed the enlarged provider/model dialog,
+    immediate master-detail history diff, and macOS Finder revealing and
+    selecting the exact `AGENTS.md` file. No file was saved or rewritten.
+  - Relevant production files remain below 1,000 lines; the largest touched
+    test is 989 lines. The 278-line AI dialog and 382-line history dialog keep
+    declarative layout local while model policy, file reveal and CodeMirror
+    lifecycle stay in focused helpers with exhaustive branch coverage.
 
 ## Converge
 

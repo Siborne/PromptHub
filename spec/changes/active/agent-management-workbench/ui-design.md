@@ -414,9 +414,175 @@ Behavior hooks remain separate from sections:
 
 Pure logic belongs in `agent-ui-utils.ts`: ordering, capability presentation, status derivation, filter matching, and view-model formatting.
 
+## `DES-AGENT-066`: Agent-Scoped Rules Workspace Reuse
+
+`AgentRulesWorkspace` is a thin selection adapter around the existing
+`RulesManager`; it does not duplicate the rule editor, history, AI rewrite,
+conflict resolution, save flow or durable state.
+
+- The adapter reads the selected Agent's resolved `paths.rules` and the
+  descriptors already owned by `useRulesStore`.
+- Matching is linear in the bounded descriptor list. It first compares
+  normalized paths, then falls back to the built-in platform id or
+  `custom:<agent-id>` only when path matching is unavailable.
+- The editor is mounted only after `currentFile.id` matches the selected
+  descriptor. This prevents stale content from the previously selected Agent
+  from flashing during an asynchronous read.
+- An empty cache uses the ordinary Rules list load. A loaded cache with no
+  match performs at most one forced scan for the current Agent/path key.
+  Further failure remains visible with a manual retry.
+- The generic Agent asset inventory remains responsible for MCP and Plugin
+  lists. The Agent Rules tab targets one global rule file and therefore does
+  not paginate or present unrelated project/global rule descriptors.
+- File reads, writes, snapshots, conflicts and recovery continue through the
+  existing Rules IPC and store. No database, filesystem layout, preload or IPC
+  contract changes are introduced.
+
+## `DES-AGENT-067`: Compact Rules Editor Actions
+
+`RulesManager` keeps one full-width editing canvas and a compact action header.
+It no longer reserves a persistent muted side column for secondary workflows.
+
+- `RuleAiRewriteDialog` owns instruction entry and progress/error interaction.
+  Success updates the existing store draft and closes the dialog; failure keeps
+  it open. The dialog never writes the source file directly.
+- `RuleHistoryDialog` receives the current bounded snapshot array and owns only
+  presentation state such as show-more/show-less. Snapshot selection, deletion,
+  diff preview and restore remain owned by `RulesManager` and `useRulesStore`.
+- AI, history, open-location and save actions share the file header. Snapshot
+  preview replaces edit/save actions with back/restore while retaining access
+  to version history.
+- Header, toolbar, editor and dialogs use `bg-card`, `bg-background`,
+  `border-border` and semantic primary/status accents. Large `bg-muted` bands
+  are not used as the dominant editor surface.
+- The dialogs reuse the shared `Modal`, `Button`, toast and confirmation
+  components. No new IPC, persistence, filesystem path or durable UI state is
+  introduced.
+
+## `DES-AGENT-068`: Content-Sized Agent Detail Header
+
+The Agent identity/action row uses natural content height and vertically
+centers its children. The tab strip is the next flow item with no synthetic top
+margin or minimum-height spacer between the two rows.
+
+- The existing 64px identity artwork remains stable; removing the outer
+  `min-height` does not resize product artwork.
+- Actions continue to wrap through the existing flex layout when horizontal
+  space is constrained.
+- Lifecycle guidance remains part of the identity block and expands the header
+  only when that guidance is actually rendered.
+- The change affects renderer layout only. It adds no state, persistence,
+  contract, IPC, filesystem or network behavior.
+
+## `DES-AGENT-069`: Edge-To-Edge Rules Canvas
+
+The Rules content region treats the draft editor and snapshot diff as the
+workspace surface rather than as cards inside another workspace surface.
+
+- Remove the editor-region outer padding and the draft/diff wrappers' rounded
+  border and shadow.
+- Keep the compact status toolbar and its bottom divider so metadata remains
+  distinct from editable or diff content.
+- Retain bounded internal scrolling and the existing background/card tokens.
+- Error notices may remain inset because they are temporary alerts rather than
+  the primary work surface.
+- The standalone Rules module and Agent Rules tab continue to share the exact
+  same component and behavior.
+
+## `DES-AGENT-070`: Shared Markdown Editor Surface
+
+The Rules draft reuses the existing CodeMirror editor implementation already
+used by Skill files, configured for Markdown and an explicit Rules aria label.
+The shared editor adds the CodeMirror Markdown keymap so list and quote markers
+continue naturally while retaining syntax highlighting, line numbers,
+undo/redo, search, selection matching, indentation and bounded internal
+scrolling.
+
+- The Rules store remains the only draft owner; CodeMirror parent-value
+  synchronization is annotated so it does not emit a second user change.
+- Read-only AI progress uses the existing editable compartment rather than
+  replacing the editor.
+- No new editor dependency, persistent state, IPC or filesystem workflow is
+  introduced.
+- The shared editor component remains the sole CodeMirror lifecycle owner.
+  Rules supplies only path, draft value, editable state and accessible labels;
+  this keeps the longer declarative React surfaces free of parsing,
+  persistence and editor-command business logic.
+- `RuleMarkdownWorkspace` adds ephemeral Edit, Preview and Split presentation
+  state around that editor. The compact selector is grouped on the toolbar's
+  far right after the line and character counts, uses pencil, book and columns
+  icons, and keeps the draft-status copy alone on the left.
+  Document preview does not use an eye icon.
+- Preview uses the existing sanitized `SkillMarkdown` renderer. Local heading
+  links receive deterministic in-document ids and scroll within the preview;
+  external links retain the existing external-browser behavior.
+- Split synchronization annotates rendered Markdown blocks with source lines,
+  builds an `O(b)` bounded anchor index for `b` rendered blocks, and maps each
+  scroll event with `O(log b)` binary search. This avoids proportional scroll
+  drift when rendered headings, lists and code blocks have different heights.
+  A frame-scoped loop guard prevents the paired programmatic scroll from
+  bouncing back.
+- The floating return-to-top control appears only after meaningful preview
+  scrolling and honors reduced-motion preference. These presentation states
+  add no persistence, IPC, filesystem I/O or network work.
+
+## `DES-AGENT-071`: AI Rewrite Endpoint Selection
+
+`RuleAiRewriteDialog` reads configured providers and chat models from the
+existing settings store and presents two shared `Select` controls above a
+larger instruction field.
+
+- Provider options are derived from configured providers plus model-owned
+  legacy endpoints; model options are filtered to the selected provider and
+  chat type.
+- Initial selection prefers the configured default chat model, then the first
+  available chat model, then the complete legacy single-model configuration.
+- The selected model id is passed to `rewriteCurrentRule`; the store resolves
+  that exact immutable settings record into the existing `aiConfig` request.
+- The dialog does not persist a route preference or expose credential values.
+  Missing configuration throws an actionable renderer error and leaves the
+  dialog open.
+
+## `DES-AGENT-072`: Version History Master-Detail Dialog
+
+`RuleHistoryDialog` owns only ephemeral selection and expansion state and
+renders a bounded snapshot list beside the existing line diff presentation.
+It receives current draft content from `RulesManager`; it does not copy that
+content into durable state.
+
+- Selecting a version updates the dialog preview without closing it or
+  replacing the primary editor canvas.
+- Opening history preselects the newest non-current snapshot, falling back to
+  the current snapshot, so the dialog immediately contains a meaningful diff
+  or an explicit no-difference state.
+- The diff keeps old/new line numbers, additions/removals and a no-difference
+  state.
+- On desktop the dialog uses the existing `2xl` modal bound (1,000 CSS pixels)
+  instead of the full-width preset. The snapshot rail is fixed at 280 pixels,
+  preserving a readable diff measure without letting navigation dominate the
+  comparison.
+- Restore returns the selected immutable snapshot to `RulesManager`, which
+  writes it only into the existing draft store. Delete remains confirmation
+  gated and uses the existing store action.
+- Snapshot source and lifecycle metadata use neutral text with Lucide icons.
+  Only the current snapshot retains semantic success styling; manual, AI and
+  initial-creation origins do not compete through unrelated accent colors.
+- The file header no longer carries transient Back/Restore controls or version
+  preview state.
+
+## `DES-AGENT-073`: Exact File Reveal
+
+The renderer submits the active rule's exact absolute path to
+`window.electron.openPath`. The existing main-process shell handler resolves
+and reveals files with platform APIs. Renderer-side bridge absence, rejection
+and `{ success: false }` results all map to the existing localized error toast.
+No new preload or IPC contract is introduced.
+
 ## Reuse And Migration
 
 - Reuse `PlatformIcon`, shared buttons, menus, tabs, tooltips, dialogs, virtualized lists, toast, titlebar and wallpaper tokens.
+- Reuse `RulesManager` for Agent global-rule editing; Agent code may select the
+  matching descriptor but must not copy its editor or persistence behavior.
 - Reuse successful left-platform/right-detail interaction patterns from `SkillAgentsView` and `McpAgentsView`, but do not import their domain stores into Agent sections.
 - Existing Agent path settings remain available during migration and become advanced configuration links.
 - `PlatformWorkbenchPrototype` remains a prototype reference only; production Agents UI must use real stores, typed contracts and the shared application shell.

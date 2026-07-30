@@ -191,6 +191,22 @@ UI screen structure, interaction states, responsive behavior and component bound
 - [x] `T-AGENT-119` 按 `DES-AGENT-064` 为 Qwen live session adapter 增加有界进程内 metadata continuity；不得扩大 transcript 所有权、跳过 runtime realpath 校验或建立第二 session store。
 - [x] `TEST-AGENT-083` Qwen npm 更新回归：canonical registry、npm/Node version-manager 来源允许列表、standalone/Homebrew/source/system/unknown 拒绝、npm 缺失、不可变计划、固定参数、同 executable/version 前置条件、精确版本回滚、部分失败和脱敏。
 - [x] `T-AGENT-120` 按 `DES-AGENT-065` 为 npm-managed Qwen Code 接入 review/confirm/apply/verify/rollback；不得宣称 standalone、Homebrew、source build 或安装流程已受支持。
+- [x] `TEST-AGENT-084` Agent Rules 快速编辑回归：按解析路径优先选择 built-in/custom/shared-root 规则，Agent 切换不闪现旧内容，缓存缺失最多强制扫描一次，缺失/失败可重试，并通过复用的 Rules 编辑器完成草稿、保存、快照和冲突工作流。
+- [x] `T-AGENT-121` 按 `FR-AGENT-051` / `DES-AGENT-066` 将 Agent Rules 页从通用只读资产清单切换为现有 Rules 工作台的薄选择适配；不得创建第二 rule store、IPC、持久化或复制编辑器实现。
+- [x] `TEST-AGENT-085` Rules 紧凑编辑回归：AI 改写和版本快照通过弹窗进入，成功/失败、空历史、来源标签、展开收起、选择预览、恢复和删除路径均可观察；新增弹窗组件达到 100% statement/branch/function/line coverage。
+- [x] `T-AGENT-122` 按 `FR-AGENT-052` / `DES-AGENT-067` 将 Rules 编辑器收敛为单画布和紧凑头部动作，复用共享 Modal/Button/ConfirmDialog/Toast；不得增加第二编辑器、持久化、IPC 或独立历史状态源。
+- [x] `TEST-AGENT-086` Agent 详情头部密度回归：身份/动作行不得包含固定最小高度，内容垂直居中，tab strip 不得再添加独立顶部空隙。
+- [x] `T-AGENT-123` 按 `FR-AGENT-053` / `DES-AGENT-068` 移除 Agent 详情头部的固定空白带，同时保留动作换行、生命周期提示自然增高和现有 tab 可访问性。
+- [x] `TEST-AGENT-087` Rules 编辑画布密度回归：主编辑面不得使用外层 `p-6` inset，draft wrapper 不得带圆角或阴影，现有可编辑 textarea 和状态行保持可用。
+- [x] `T-AGENT-124` 按 `FR-AGENT-054` / `DES-AGENT-069` 将 draft 和版本 diff 改为内容区直铺表面，移除重复卡片边缘而不改变 Rules 状态、持久化或交互合同。
+- [x] `TEST-AGENT-088` Rules Markdown 编辑回归：复用 CodeMirror Markdown 语言和 keymap，覆盖语法表面、列表续行、父值同步不重复发射、只读切换、编辑/预览/分栏、源行语义双向滚动、应用内目录跳转、回到顶部、折叠箭头居中、book 预览图标与七语言可访问标签。
+- [x] `T-AGENT-125` 按 `FR-AGENT-055` / `DES-AGENT-070` 用已有共享 CodeMirror 能力替换 Rules textarea，并以同一 draft 在工具栏最右侧、统计信息之后增加编辑/预览/分栏选择器；不得使用 eye 预览图标、增加编辑器依赖、第二 draft 状态或独立持久化。
+- [x] `TEST-AGENT-089` AI 优化选择回归：覆盖多供应商 chat 模型过滤、默认模型、切换后的精确请求配置、legacy fallback、缺失凭据/空模型与失败不关闭弹窗。
+- [x] `T-AGENT-126` 按 `FR-AGENT-056` / `DES-AGENT-071` 扩展 AI 优化弹窗并把选定模型传给现有 rewrite store/IPC 请求；不得修改全局默认或显示凭据。
+- [x] `TEST-AGENT-090` 版本历史对比回归：覆盖空历史、有界展开、弹窗内切换快照、完整行 diff/无差异、中性图标来源元数据、恢复到 draft、删除确认和 editor 不被预览替换。
+- [x] `T-AGENT-127` 按 `FR-AGENT-057` / `DES-AGENT-072` 将历史弹窗改为 master-detail 对比并删除 RulesManager 的临时版本预览状态；不得建立第二历史事实源。
+- [x] `TEST-AGENT-091` 规则文件定位回归：覆盖 exact file path、bridge 缺失、Promise rejection 和 shell failure 均可观察，且不修改 draft。
+- [x] `T-AGENT-128` 按 `FR-AGENT-058` / `DES-AGENT-073` 通过已有 shell boundary 精确 reveal 当前规则文件并补齐错误反馈；不得增加 IPC。
 - [x] `T-AGENT-105` 按 `DES-AGENT-050` 将 Provider 工作台接入与托盘共用的 verified-current query；先完成 `TEST-AGENT-069` 红测，再补 shared/IPC/preload/store/UI 与 7 locales，不建立第二 active-provider 状态源。
 - [x] `T-AGENT-106` 按 `FR-AGENT-045` / `DES-AGENT-051` 将 Provider endpoint 固化为无凭据公共元数据；先完成 `TEST-AGENT-070` 红测，再接入 shared validator、SQLite create/update/read、Profile 表单和 7 locales；不静默迁移旧行，不引入第二 credential store。
 - [x] `T-AGENT-107` 按 `FR-AGENT-046` / `DES-AGENT-052` 将 Provider public JSON validator 接入 Profile config、model mapping、audit snapshot 的 SQLite write/read 与 baseline recovery；先完成 `TEST-AGENT-071` 红测，不迁移旧 unsafe row，不扩展凭据权限。

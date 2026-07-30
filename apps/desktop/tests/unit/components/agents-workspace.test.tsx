@@ -239,6 +239,20 @@ describe("Agent workspace shell", () => {
     expect(identityIcon.className).not.toContain("shadow");
   });
 
+  it("keeps the identity actions and tabs in one compact header", async () => {
+    await renderWorkspaceAndSettleOverview();
+
+    const identityIcon = screen.getByTestId("agent-identity-icon");
+    const identityActionsRow = identityIcon.parentElement?.parentElement;
+    const tablist = screen.getByRole("tablist", {
+      name: /agent workspace/i,
+    });
+
+    expect(identityActionsRow?.className).not.toContain("min-h-");
+    expect(identityActionsRow?.className).toContain("items-center");
+    expect(tablist.className).not.toContain("mt-");
+  });
+
   it("does not repeat Gemini lifecycle guidance as compatibility badges", async () => {
     const gemini = {
       ...agents[0],
@@ -343,9 +357,7 @@ describe("Agent workspace shell", () => {
   it("opens read-only CLI diagnostics from the overflow menu", async () => {
     await renderWorkspaceAndSettleOverview();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /more actions/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
     fireEvent.click(screen.getByRole("button", { name: /cli diagnostics/i }));
 
     expect(
@@ -361,9 +373,7 @@ describe("Agent workspace shell", () => {
     useAgentStore.setState({ selectedAgentId: "cline" });
     await renderWorkspaceAndSettleOverview();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /more actions/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
 
     expect(
       screen.queryByRole("button", { name: /cli diagnostics/i }),

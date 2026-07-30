@@ -1,4 +1,10 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RulesManager } from "../../../src/renderer/components/rules/RulesManager";
@@ -25,6 +31,30 @@ function hasHiddenSvgAncestor(element: Element): boolean {
 
 vi.mock("../../../src/renderer/components/ui/Toast", () => ({
   useToast: () => ({ showToast }),
+}));
+
+vi.mock("../../../src/renderer/components/skill/SkillCodeEditor", () => ({
+  SkillCodeEditor: ({
+    ariaLabel,
+    editable,
+    onChange,
+    testId,
+    value,
+  }: {
+    ariaLabel: string;
+    editable: boolean;
+    onChange: (value: string) => void;
+    testId: string;
+    value: string;
+  }) => (
+    <textarea
+      aria-label={ariaLabel}
+      data-testid={testId}
+      readOnly={!editable}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
 }));
 
 describe("RulesManager", () => {
@@ -78,20 +108,20 @@ describe("RulesManager", () => {
             },
           ]),
           read: vi.fn().mockResolvedValue({
-              id: "project:docs-site",
-              platformId: "workspace",
-              platformName: "Docs Site",
-              platformIcon: "FolderRoot",
-              platformDescription: "Project rules",
-              name: "AGENTS.md",
-              description: "Docs site rules",
-              path: "/tmp/docs-site/AGENTS.md",
-              exists: true,
-              group: "workspace",
-              content: "# Docs site rules",
-              versions: [],
-            }),
-          },
+            id: "project:docs-site",
+            platformId: "workspace",
+            platformName: "Docs Site",
+            platformIcon: "FolderRoot",
+            platformDescription: "Project rules",
+            name: "AGENTS.md",
+            description: "Docs site rules",
+            path: "/tmp/docs-site/AGENTS.md",
+            exists: true,
+            group: "workspace",
+            content: "# Docs site rules",
+            versions: [],
+          }),
+        },
       },
     });
 
@@ -109,7 +139,7 @@ describe("RulesManager", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open Location" }));
 
-    expect(electron.openPath).toHaveBeenCalledWith("/tmp/docs-site");
+    expect(electron.openPath).toHaveBeenCalledWith("/tmp/docs-site/AGENTS.md");
   });
 
   it("prompts for a sync direction when the external rule file changed", async () => {
@@ -174,12 +204,21 @@ describe("RulesManager", () => {
     await waitFor(() => {
       expect(screen.getByText("Rule conflict")).toBeInTheDocument();
       expect(
-        screen.getByText("Choose which version to keep. The other will be overwritten."),
+        screen.getByText(
+          "Choose which version to keep. The other will be overwritten.",
+        ),
       ).toBeInTheDocument();
       expect(screen.getAllByText("Docs Site").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("/tmp/docs-site/AGENTS.md").length).toBeGreaterThan(0);
-      expect(screen.getByRole("tab", { name: "Diff" })).toHaveAttribute("aria-selected", "true");
-      expect(screen.getByText("− PromptHub · + External file")).toBeInTheDocument();
+      expect(
+        screen.getAllByText("/tmp/docs-site/AGENTS.md").length,
+      ).toBeGreaterThan(0);
+      expect(screen.getByRole("tab", { name: "Diff" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(
+        screen.getByText("− PromptHub · + External file"),
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("tab", { name: "Side by side" }));
@@ -283,7 +322,9 @@ describe("RulesManager", () => {
       ),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite PromptHub" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Overwrite PromptHub" }),
+    );
 
     await waitFor(() => {
       expect(api.rules.resolveConflict).toHaveBeenCalledWith(
@@ -364,9 +405,19 @@ describe("RulesManager", () => {
       await renderWithI18n(<RulesManager />, { language: "en" });
     });
 
-    const instruction = await screen.findByRole("textbox", {
+    await screen.findByRole("textbox", { name: "Rule Content" });
+    expect(
+      screen.queryByRole("textbox", { name: /Ask AI to improve/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Improve with AI" }));
+
+    const instruction = screen.getByRole("textbox", {
       name: /Ask AI to improve/i,
     });
+    expect(
+      screen.getByRole("dialog", { name: /Ask AI to improve/i }),
+    ).toBeVisible();
     expect(instruction).toHaveAttribute(
       "placeholder",
       expect.stringMatching(/add testing requirements, reorganize sections/i),
@@ -375,7 +426,11 @@ describe("RulesManager", () => {
     fireEvent.change(instruction, {
       target: { value: "Add a new policy section" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Improve with AI" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: /Ask AI to improve/i }),
+      ).getByRole("button", { name: "Improve with AI" }),
+    );
 
     await waitFor(() => {
       expect(api.rules.rewrite).toHaveBeenCalledWith(
@@ -388,11 +443,19 @@ describe("RulesManager", () => {
     });
 
     expect(screen.getAllByAltText("claude icon").length).toBeGreaterThan(0);
-    expect(
-      screen.getByText("AI has generated a new draft. Review it and save when ready."),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: /Ask AI to improve/i }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Rule Content" })).toHaveValue(
+        "# Claude rules\n\n## New policy",
+      );
+    });
+    expect(showToast).toHaveBeenCalledWith("AI draft ready", "success");
 
-    fireEvent.click(screen.getByRole("button", { name: "Save and overwrite file" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and overwrite file" }),
+    );
 
     await waitFor(() => {
       expect(api.rules.save).toHaveBeenCalledWith(
@@ -404,7 +467,80 @@ describe("RulesManager", () => {
     expect(showToast).toHaveBeenCalledWith("Saved successfully", "success");
   });
 
-  it("previews a version snapshot and restores it to the draft", async () => {
+  it("keeps the AI dialog open when rewriting fails", async () => {
+    const rewrite = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Provider unavailable"))
+      .mockRejectedValueOnce("Provider unavailable");
+
+    installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "claude-global",
+              platformId: "claude",
+              platformName: "Claude Code",
+              platformIcon: "Bot",
+              platformDescription: "Claude rules",
+              name: "CLAUDE.md",
+              description: "Claude rules",
+              path: "/Users/test/.claude/CLAUDE.md",
+              exists: true,
+              group: "assistant",
+            },
+          ]),
+          read: vi.fn().mockResolvedValue({
+            id: "claude-global",
+            platformId: "claude",
+            platformName: "Claude Code",
+            platformIcon: "Bot",
+            platformDescription: "Claude rules",
+            name: "CLAUDE.md",
+            description: "Claude rules",
+            path: "/Users/test/.claude/CLAUDE.md",
+            exists: true,
+            group: "assistant",
+            content: "# Claude rules",
+            versions: [],
+          }),
+          rewrite,
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<RulesManager />, { language: "en" });
+    });
+    await screen.findByRole("textbox", { name: "Rule Content" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Improve with AI" }));
+    const dialog = screen.getByRole("dialog", {
+      name: /Ask AI to improve/i,
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: /Ask AI to improve/i }),
+      { target: { value: "Strengthen the policy" } },
+    );
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Improve with AI" }),
+    );
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith("Provider unavailable", "error");
+    });
+    expect(dialog).toBeVisible();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Improve with AI" }),
+    );
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith("AI improvement failed", "error");
+    });
+    expect(dialog).toBeVisible();
+  });
+
+  it("compares a version snapshot in the dialog and restores it to the draft", async () => {
     installWindowMocks({
       api: {
         rules: {
@@ -455,30 +591,201 @@ describe("RulesManager", () => {
       expect(screen.getByDisplayValue("# Current draft")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /saved/i }));
+    expect(screen.queryByText("No snapshots yet.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Version Snapshots/i }));
+    expect(
+      screen.getByRole("dialog", { name: /Version Snapshots/i }),
+    ).toBeVisible();
+    const historyDialog = screen.getByRole("dialog", {
+      name: /Version Snapshots/i,
+    });
+    fireEvent.click(
+      within(historyDialog).getByRole("button", {
+        name: /Historical snapshot/i,
+      }),
+    );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Back to Draft" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Restore to Draft" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("dialog", { name: /Version Snapshots/i }),
+      ).toBeVisible();
+      expect(
+        within(historyDialog).getByRole("button", {
+          name: "Restore to Draft",
+        }),
+      ).toBeInTheDocument();
     });
 
     expect(
-      screen.getByText("Snapshot vs Current Draft"),
+      within(historyDialog).getByText("Snapshot vs Current Draft"),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/Historical snapshot/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Historical snapshot/).length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Back to Draft" }),
+    ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Restore to Draft" }));
+    fireEvent.click(
+      within(historyDialog).getByRole("button", {
+        name: "Restore to Draft",
+      }),
+    );
 
     await waitFor(() => {
       const restoredEditor = screen.getAllByRole("textbox").find((node) => {
-        return (node as HTMLTextAreaElement).value.includes("Historical snapshot");
+        return (node as HTMLTextAreaElement).value.includes(
+          "Historical snapshot",
+        );
       }) as HTMLTextAreaElement | undefined;
 
       expect(restoredEditor).toBeDefined();
       expect(restoredEditor).not.toHaveAttribute("readonly");
     });
 
-    expect(showToast).toHaveBeenCalledWith("Snapshot restored to draft", "success");
+    expect(showToast).toHaveBeenCalledWith(
+      "Snapshot restored to draft",
+      "success",
+    );
+  });
+
+  it("shows an empty state when a rule has no version snapshots", async () => {
+    installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "claude-global",
+              platformId: "claude",
+              platformName: "Claude Code",
+              platformIcon: "Bot",
+              platformDescription: "Claude rules",
+              name: "CLAUDE.md",
+              description: "Claude rules",
+              path: "/Users/test/.claude/CLAUDE.md",
+              exists: true,
+              group: "assistant",
+            },
+          ]),
+          read: vi.fn().mockResolvedValue({
+            id: "claude-global",
+            platformId: "claude",
+            platformName: "Claude Code",
+            platformIcon: "Bot",
+            platformDescription: "Claude rules",
+            name: "CLAUDE.md",
+            description: "Claude rules",
+            path: "/Users/test/.claude/CLAUDE.md",
+            exists: true,
+            group: "assistant",
+            content: "# Claude rules",
+            versions: [],
+          }),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<RulesManager />, { language: "en" });
+    });
+    await screen.findByRole("textbox", { name: "Rule Content" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Version Snapshots/i }));
+
+    expect(screen.getByText(/No snapshots yet/i)).toBeVisible();
+  });
+
+  it("labels and deletes AI-created and initial version snapshots", async () => {
+    const versions = [
+      {
+        id: "current",
+        savedAt: "2026-05-08T12:00:00.000Z",
+        content: "# Current rules",
+        source: "manual-save" as const,
+      },
+      {
+        id: "ai-draft",
+        savedAt: "2026-05-08T11:00:00.000Z",
+        content: "",
+        source: "ai-rewrite" as const,
+      },
+      {
+        id: "created",
+        savedAt: "2026-05-08T10:00:00.000Z",
+        content: "# Initial rules",
+        source: "create" as const,
+      },
+    ];
+    const { api } = installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "claude-global",
+              platformId: "claude",
+              platformName: "Claude Code",
+              platformIcon: "Bot",
+              platformDescription: "Claude rules",
+              name: "CLAUDE.md",
+              description: "Claude rules",
+              path: "/Users/test/.claude/CLAUDE.md",
+              exists: true,
+              group: "assistant",
+            },
+          ]),
+          read: vi.fn().mockResolvedValue({
+            id: "claude-global",
+            platformId: "claude",
+            platformName: "Claude Code",
+            platformIcon: "Bot",
+            platformDescription: "Claude rules",
+            name: "CLAUDE.md",
+            description: "Claude rules",
+            path: "/Users/test/.claude/CLAUDE.md",
+            exists: true,
+            group: "assistant",
+            content: "# Current rules",
+            versions,
+          }),
+          deleteVersion: vi.fn().mockResolvedValue([versions[0], versions[2]]),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<RulesManager />, { language: "en" });
+    });
+    await screen.findByRole("textbox", { name: "Rule Content" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Version Snapshots/i }));
+    const historyDialog = screen.getByRole("dialog", {
+      name: /Version Snapshots/i,
+    });
+    expect(within(historyDialog).getByText("AI Draft")).toBeVisible();
+    expect(within(historyDialog).getByText("Created")).toBeVisible();
+    expect(
+      within(historyDialog).getByText("Rule content will appear here."),
+    ).toBeVisible();
+
+    fireEvent.click(
+      within(historyDialog).getAllByRole("button", {
+        name: "Delete snapshot",
+      })[0],
+    );
+    const confirmDialog = screen.getByRole("alertdialog", {
+      name: "Delete snapshot",
+    });
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "Delete" }),
+    );
+
+    await waitFor(() => {
+      expect(api.rules.deleteVersion).toHaveBeenCalledWith(
+        "claude-global",
+        "ai-draft",
+      );
+    });
+    expect(showToast).toHaveBeenCalledWith("Snapshot deleted", "success");
   });
 
   it("keeps rules manager actions non-submit with decorative button icons", async () => {
@@ -487,9 +794,7 @@ describe("RulesManager", () => {
       id: `v${index + 1}`,
       savedAt: `2026-05-08T12:0${index}:00.000Z`,
       content:
-        index === 0
-          ? "# Current rules"
-          : `# Historical snapshot ${index + 1}`,
+        index === 0 ? "# Current rules" : `# Historical snapshot ${index + 1}`,
       source: "manual-save" as const,
     }));
 
@@ -549,17 +854,23 @@ describe("RulesManager", () => {
       expect(screen.getByDisplayValue("# Current rules")).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: /Version Snapshots/i }));
     const showMoreButton = screen.getByRole("button", { name: /Show/i });
     expect(showMoreButton).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(showMoreButton);
     expect(showMoreButton).toHaveAttribute("aria-expanded", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: /snapshot 2/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Back to Draft" })).toBeInTheDocument();
+    const historyDialog = screen.getByRole("dialog", {
+      name: /Version Snapshots/i,
     });
+    fireEvent.click(
+      within(historyDialog).getByRole("button", { name: /snapshot 2/i }),
+    );
+    expect(historyDialog).toBeVisible();
+    expect(
+      within(historyDialog).getByText("Snapshot vs Current Draft"),
+    ).toBeVisible();
 
     const buttons = Array.from(document.body.querySelectorAll("button"));
     const implicitButtonMarkup = buttons
@@ -575,131 +886,12 @@ describe("RulesManager", () => {
     );
     expect(exposedIconMarkup, exposedIconMarkup.join("\n")).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Back to Draft" }));
+    fireEvent.click(
+      within(historyDialog).getByRole("button", { name: "Close" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Open Location" }));
 
     expect(handleSubmit).not.toHaveBeenCalled();
-  });
-
-  it("returns to the draft view when clicking the current saved snapshot card", async () => {
-    installWindowMocks({
-      api: {
-        rules: {
-          list: vi.fn().mockResolvedValue([
-            {
-              id: "gemini-global",
-              platformId: "gemini",
-              platformName: "Gemini CLI",
-              platformIcon: "gemini",
-              platformDescription: "Gemini rules",
-              name: "GEMINI.md",
-              description: "Gemini global rule file",
-              path: "/Users/test/.gemini/GEMINI.md",
-              exists: true,
-              group: "assistant",
-            },
-          ]),
-          read: vi.fn().mockResolvedValue({
-            id: "gemini-global",
-            platformId: "gemini",
-            platformName: "Gemini CLI",
-            platformIcon: "gemini",
-            platformDescription: "Gemini rules",
-            name: "GEMINI.md",
-            description: "Gemini global rule file",
-            path: "/Users/test/.gemini/GEMINI.md",
-            exists: true,
-            group: "assistant",
-            content: "adwd1",
-            versions: [
-              {
-                id: "current-saved",
-                savedAt: "2026-05-15T08:27:24.000Z",
-                content: "adwd1",
-                source: "manual-save",
-              },
-              {
-                id: "older",
-                savedAt: "2026-05-15T07:12:56.000Z",
-                content: "old snapshot",
-                source: "manual-save",
-              },
-            ],
-          }),
-        },
-      },
-    });
-
-    await act(async () => {
-      await renderWithI18n(<RulesManager />, { language: "en" });
-    });
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("adwd1")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getAllByText(/old snapshot/i)[0]);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Back to Draft" })).toBeInTheDocument();
-    });
-
-    fireEvent.click(
-      screen.getByText((_, node) => node?.textContent?.trim() === "✓ Current"),
-    );
-
-    await waitFor(() => {
-      expect(screen.queryByRole("button", { name: "Back to Draft" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Save and overwrite file" })).toBeInTheDocument();
-    });
-  });
-
-  it("renders a single editable rule textarea for the current draft", async () => {
-    installWindowMocks({
-      api: {
-        rules: {
-          list: vi.fn().mockResolvedValue([
-            {
-              id: "gemini-global",
-              platformId: "gemini",
-              platformName: "Gemini CLI",
-              platformIcon: "gemini",
-              platformDescription: "Gemini rules",
-              name: "GEMINI.md",
-              description: "Gemini global rule file",
-              path: "/Users/test/.gemini/GEMINI.md",
-              exists: true,
-              group: "assistant",
-            },
-          ]),
-          read: vi.fn().mockResolvedValue({
-            id: "gemini-global",
-            platformId: "gemini",
-            platformName: "Gemini CLI",
-            platformIcon: "gemini",
-            platformDescription: "Gemini rules",
-            name: "GEMINI.md",
-            description: "Gemini global rule file",
-            path: "/Users/test/.gemini/GEMINI.md",
-            exists: true,
-            group: "assistant",
-            content: "# Gemini rules",
-            versions: [],
-          }),
-        },
-      },
-    });
-
-    await act(async () => {
-      await renderWithI18n(<RulesManager />, { language: "en" });
-    });
-
-    const editor = await screen.findByRole("textbox", {
-      name: "Rule Content",
-    });
-
-    expect(editor).toHaveValue("# Gemini rules");
-    expect(editor).not.toHaveAttribute("readonly");
   });
 
   it("keeps the selected rules item stable after saving the current draft", async () => {
@@ -777,14 +969,21 @@ describe("RulesManager", () => {
     fireEvent.change(screen.getByDisplayValue("# Gemini rules"), {
       target: { value: "# Gemini rules updated" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save and overwrite file" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and overwrite file" }),
+    );
 
     await waitFor(() => {
-      expect(saveMock).toHaveBeenCalledWith("gemini-global", "# Gemini rules updated");
+      expect(saveMock).toHaveBeenCalledWith(
+        "gemini-global",
+        "# Gemini rules updated",
+      );
     });
 
     expect(useRulesStore.getState().selectedRuleId).toBe("gemini-global");
     expect(screen.getByText("Gemini CLI")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("# Gemini rules updated")).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue("# Gemini rules updated"),
+    ).toBeInTheDocument();
   });
 });

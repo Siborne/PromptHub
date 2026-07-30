@@ -1429,6 +1429,192 @@ bodies; details continue to be read from the external source on demand.
 - And search remains literal and Unicode-safe
 - And no transcript body column or ordinary backup payload is introduced
 
+### `FR-AGENT-051`: Agent-Scoped Rule Editing
+
+When an Agent exposes one resolved global rule-file path, its `Rules` tab MUST
+open that exact file in the existing Rules workspace editor rather than a
+read-only generic asset list. The Agent surface and the standalone Rules
+surface MUST share the same descriptor, draft, save, conflict and version
+state; the Agent tab MUST NOT introduce a second rule store or a second file
+write path.
+
+Selection MUST prefer the normalized resolved file path over platform identity
+so root overrides, shared platform roots and custom Agents select the intended
+file. Entering or switching the Agent MUST NOT briefly expose another Agent's
+rule content. A missing cached descriptor MAY trigger one bounded rescan, after
+which the UI MUST show a scoped retry or unavailable state rather than scanning
+indefinitely.
+
+Directory-based, project-scoped and multi-file rule systems remain outside this
+single global-file editor unless they are separately registered in the Rules
+workspace.
+
+#### Scenario: An Agent rule is edited from the Agent workspace
+
+- Given Claude Code resolves to one tracked `CLAUDE.md` descriptor
+- When the user opens its `Rules` tab, changes the draft and saves
+- Then the existing Rules workspace save operation writes that descriptor
+- And the same draft, snapshot and conflict state is visible from the
+  standalone Rules module
+- And no Agent-specific persistence record is created
+
+#### Scenario: The selected Agent changes while another rule is loaded
+
+- Given the Rules store currently contains a different Agent's file
+- When the user selects an Agent with another resolved global rule path
+- Then the previous file content is not rendered in the new Agent tab
+- And the matching descriptor is loaded by path before its editor is shown
+- And at most one forced rescan is attempted if the descriptor was not cached
+
+### `FR-AGENT-052`: Compact Rule Editing Actions
+
+The shared Rules editor MUST keep the editable draft as its primary workspace.
+AI rewriting and version history MUST open from compact header actions in
+focused dialogs rather than occupying a permanent auxiliary column. The editor
+MUST use the established card/background tokens instead of broad muted-gray
+panels, and the same interaction MUST be available from both the standalone
+Rules module and the Agent Rules tab.
+
+#### Scenario: The user requests an AI rewrite
+
+- Given a rule draft is open
+- When the user selects `Improve with AI`
+- Then a focused dialog collects the rewrite instruction
+- And a successful rewrite closes the dialog and updates only the draft
+- And a failed rewrite leaves the dialog open with an error
+- And no source file is written until the existing save action is confirmed
+
+#### Scenario: The user reviews version history
+
+- Given a rule file has zero or more snapshots
+- When the user selects `Version Snapshots`
+- Then a dialog shows the empty state or the bounded snapshot list
+- And selecting a snapshot keeps the dialog open and shows its line-level
+  comparison with the current draft inside the same dialog
+- And the user can switch snapshots without losing the current draft
+- And restore/delete continue through the existing Rules store workflows
+
+### `FR-AGENT-053`: Compact Agent Detail Header
+
+The Agent detail header MUST derive its height from the visible identity,
+actions and tab strip. It MUST NOT reserve a fixed empty band between the
+identity row and the tabs. Header actions MAY wrap at narrow desktop widths
+without overlapping the identity or making tabs inaccessible.
+
+#### Scenario: A standard Agent detail opens
+
+- Given the selected Agent has no lifecycle guidance below its identity
+- When the detail workspace renders
+- Then the identity and actions occupy only their natural content height
+- And the tab strip follows immediately without a fixed-height spacer
+- And all existing header actions and tabs remain available
+
+### `FR-AGENT-054`: Edge-To-Edge Rule Editing Canvas
+
+The shared Rules editor MUST use the available workspace below its file toolbar
+without nesting the draft or snapshot diff inside a floating card with
+decorative outer margins, rounded corners or a shadow. The draft status row
+MUST remain visually separated from editable content.
+
+#### Scenario: A rule draft is open
+
+- Given a rule file has been loaded in the standalone or Agent Rules workspace
+- When the editable draft is shown
+- Then its status row and content fill the remaining workspace
+- And no decorative inset exposes unused edges around the editor
+- And editing, focus, scrolling, AI rewrite and version preview behavior remain
+  unchanged
+
+### `FR-AGENT-055`: Markdown-Aware Rule Editing
+
+The shared Rules editor MUST provide a Markdown-aware editing surface rather
+than a plain textarea. It MUST preserve the current draft as the only editable
+state while adding syntax highlighting, line numbers, undo/redo, search,
+bracket handling, indentation and Markdown list/quote continuation. Parent
+draft refreshes MUST NOT create a second user edit or corrupt the undo history.
+The same surface MUST offer Edit, Preview and Split modes without changing the
+draft owner. Preview navigation MUST stay inside the application, Split mode
+MUST keep source and rendered content aligned by Markdown source position, and
+long previews MUST provide a reduced-motion-aware return-to-top action. The
+compact mode selector MUST sit at the toolbar's far right after the line and
+character counts, use familiar editor, book and split-layout
+icons, and MUST NOT use an eye icon for document preview.
+
+#### Scenario: Continue a Markdown list
+
+- Given a rule draft contains a Markdown list item
+- When the user presses Enter at the end of that item
+- Then the editor continues the appropriate Markdown marker
+- And the Rules store receives the resulting draft once
+- And the source file remains unchanged until Save is selected
+
+#### Scenario: Review a long rule without leaving the application
+
+- Given a long Markdown rule is open with an unsaved draft
+- When the user switches between Edit, Preview and Split
+- Then the same draft is rendered without persistence or a second draft state
+- And scrolling either Split pane aligns the other pane by source section
+- And an internal table-of-contents link scrolls the preview instead of opening
+  a browser
+- And the preview offers a return-to-top action after meaningful scrolling
+
+### `FR-AGENT-056`: Explicit AI Rewrite Model Selection
+
+The AI rewrite dialog MUST let the user select a configured provider and one of
+that provider's chat models before generating a draft. The current default chat
+model SHOULD be selected initially. Image-only models MUST NOT be offered.
+Legacy single-model settings MAY appear as one compatible fallback choice.
+Changing this selection MUST affect only the current rewrite request and MUST
+NOT mutate global model defaults.
+
+#### Scenario: Rewrite with a non-default configured model
+
+- Given two configured providers each expose a chat model
+- When the user selects the second provider and model and starts a rewrite
+- Then the existing Rules rewrite request uses exactly that model's endpoint,
+  protocol and credential configuration
+- And no provider or model default is changed
+- And a missing credential or unavailable model keeps the dialog open with an
+  actionable error
+
+### `FR-AGENT-057`: In-Dialog Rule Version Comparison
+
+Version history MUST use one focused dialog that combines the bounded snapshot
+list and the existing line-level diff presentation. Selecting a snapshot MUST
+not replace the editor canvas or add temporary actions to the file header.
+Opening the dialog MUST immediately select the newest non-current snapshot
+when one exists, otherwise the current snapshot, so comparison never opens as
+an unexplained blank panel.
+Restore MUST copy the selected snapshot into the current draft only; delete
+MUST continue through the existing confirmation and Rules store workflow.
+Snapshot origins MUST use neutral text with a familiar icon; only the current
+snapshot may use the semantic success color.
+
+#### Scenario: Compare and restore a snapshot
+
+- Given a rule draft differs from a historical snapshot
+- When the user selects that snapshot in Version History
+- Then the dialog shows additions, removals, line numbers and snapshot metadata
+- And the editor draft remains unchanged while comparison is open
+- When the user selects Restore to Draft
+- Then the snapshot content becomes the draft and the dialog closes
+- And the real rule file is still unchanged until Save is selected
+
+### `FR-AGENT-058`: Reveal The Active Rule File
+
+The open-location action MUST ask the existing main-process shell boundary to
+reveal the exact active rule file. It MUST NOT derive and submit a less specific
+parent path in the renderer. A missing preload bridge, rejected invocation or
+shell failure MUST produce a visible error rather than silently doing nothing.
+
+#### Scenario: Reveal a tracked rule
+
+- Given an active rule has an absolute file path
+- When the user selects Open Location
+- Then the renderer passes that exact file path to the existing shell boundary
+- And the platform file manager reveals the file
+- And any failure is reported without changing the draft or filesystem
+
 ## Non-Functional Requirements
 
 ### `NFR-AGENT-001`: Local-First And Privacy

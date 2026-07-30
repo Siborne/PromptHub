@@ -188,6 +188,7 @@ function seedStores() {
   });
   useRulesStore.setState({
     hasLoadedFiles: true,
+    selectedRuleId: "claude-global",
     files: [
       {
         id: "claude-global",
@@ -202,6 +203,23 @@ function seedStores() {
         group: "assistant",
       },
     ],
+    currentFile: {
+      id: "claude-global",
+      platformId: "claude",
+      platformName: "Claude Code",
+      platformIcon: "Sparkles",
+      platformDescription: "Global Claude rules",
+      name: "CLAUDE.md",
+      description: "Global Claude rules",
+      path: "~/.claude/CLAUDE.md",
+      exists: true,
+      group: "assistant",
+      content: "# Claude rules",
+      versions: [],
+    },
+    draftContent: "# Claude rules",
+    isLoading: false,
+    error: null,
   });
   usePluginStore.setState({
     library: {
@@ -294,6 +312,12 @@ describe("AgentAssetsWorkspace", () => {
 
     view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="rules" />);
     expect(screen.getByText("CLAUDE.md")).toBeVisible();
+    expect(
+      screen.getByRole("textbox", { name: "Rule Content" }),
+    ).toHaveTextContent("# Claude rules");
+    expect(
+      screen.queryByRole("textbox", { name: /search assets/i }),
+    ).not.toBeInTheDocument();
 
     view.rerender(
       <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
@@ -389,7 +413,7 @@ describe("AgentAssetsWorkspace", () => {
     listForTarget.mockRestore();
   });
 
-  it("bounds a 1,000-item MCP inventory and keeps every page reachable", async () => {
+  it("bounds 1,000-item MCP and Plugin inventories and keeps every page reachable", async () => {
     const validation = vi
       .spyOn(agentAssetAggregationService, "listForTarget")
       .mockResolvedValue({
@@ -414,24 +438,6 @@ describe("AgentAssetsWorkspace", () => {
           serverNames,
         },
       ],
-    });
-    useRulesStore.setState({
-      hasLoadedFiles: true,
-      files: Array.from({ length: 1_000 }, (_, index) => {
-        const suffix = String(index).padStart(4, "0");
-        return {
-          id: `rule-${suffix}`,
-          platformId: "claude",
-          platformName: "Claude Code",
-          platformIcon: "Sparkles",
-          platformDescription: "Global Claude rules",
-          name: `rule-${suffix}.md`,
-          description: `Rule ${suffix}`,
-          path: `~/.claude/rules/rule-${suffix}.md`,
-          exists: true,
-          group: "assistant" as const,
-        };
-      }),
     });
     usePluginStore.setState({
       targetMatrix: [
@@ -490,11 +496,6 @@ describe("AgentAssetsWorkspace", () => {
       target: { value: "" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="rules" />);
-    expect(screen.getAllByRole("listitem")).toHaveLength(100);
-    expect(screen.getByText("rule-0000.md")).toBeVisible();
-    expect(screen.queryByText("rule-0100.md")).not.toBeInTheDocument();
-
     view.rerender(
       <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
     );
