@@ -18,6 +18,7 @@ export interface PromptWorkspaceDialogsProps {
   copyPrompt: Prompt | null;
   copyPromptQueue: Prompt[];
   copyPromptQueueIndex: number;
+  copyPromptSourceId: string | null;
   deleteConfirm: { isOpen: boolean; prompt: Prompt | null };
   detailPrompt: Prompt | null;
   editingPrompt: Prompt | null;

@@ -101,6 +101,7 @@ function getDetailActionProps(
 ): Pick<
   PromptWorkspaceDetailPaneProps,
   | "handleAiTest"
+  | "handleCopyPrompt"
   | "handleDeletePrompt"
   | "handleDetailRemoveTag"
   | "handleDetailTagDragLeave"
@@ -116,6 +117,7 @@ function getDetailActionProps(
   const { actions } = controller;
   return {
     handleAiTest: actions.handleAiTestFromTable,
+    handleCopyPrompt: actions.handleCopyPrompt,
     handleDeletePrompt: actions.handleDeletePrompt,
     handleDetailRemoveTag: actions.handleDetailRemoveTag,
     handleDetailTagDragLeave: actions.handleDetailTagDragLeave,

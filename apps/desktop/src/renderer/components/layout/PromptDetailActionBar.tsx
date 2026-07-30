@@ -9,38 +9,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { usePromptStore } from "../../stores/prompt.store";
-import { useSettingsStore } from "../../stores/settings.store";
-import {
-  copyTextToClipboard,
-  hasUserDefinedPromptVariables,
-} from "../prompt/prompt-copy-utils";
-import { useToast } from "../ui/Toast";
 import { usePromptWorkspaceDetailContext } from "./PromptWorkspaceDetailContext";
-
-function useCopyPromptAction() {
-  const { t } = useTranslation();
-  const { showToast } = useToast();
-  const incrementUsageCount = usePromptStore(
-    (state) => state.incrementUsageCount,
-  );
-  const showCopyNotification = useSettingsStore(
-    (state) => state.showCopyNotification,
-  );
-  const detail = usePromptWorkspaceDetailContext();
-  return async () => {
-    const prompt = detail.selectedPrompt!;
-    const content = detail.showEnglish
-      ? prompt.userPromptEn || prompt.userPrompt
-      : prompt.userPrompt;
-    if (hasUserDefinedPromptVariables(undefined, content))
-      return detail.setIsVariableModalOpen(true);
-    await copyTextToClipboard(content);
-    await incrementUsageCount(prompt.id);
-    detail.triggerCopied();
-    showToast(t("toast.copied"), "success", showCopyNotification);
-  };
-}
 
 function PromptDetailEditActions() {
   const { t } = useTranslation();
@@ -80,13 +49,12 @@ function PromptDetailEditActions() {
 function PromptDetailDefaultActions() {
   const { t } = useTranslation();
   const detail = usePromptWorkspaceDetailContext();
-  const copy = useCopyPromptAction();
   const prompt = detail.selectedPrompt!;
   return (
     <>
       <button
         type="button"
-        onClick={() => void copy()}
+        onClick={() => void detail.handleCopyPrompt(prompt)}
         className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
       >
         {detail.copied ? (

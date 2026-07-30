@@ -31,6 +31,16 @@
 - 工作区导入必须在同一事务中按父节点优先恢复层级；缺失父节点或循环引用
   不得留下部分导入的数据。
 
+### 2.3 Copy Action Contract
+
+- Every UI action labeled "Copy Prompt" uses the same output-format pipeline.
+  When a source Prompt has configured output targets, both menu and detail
+  actions copy those resolved targets in stable order rather than bypassing the
+  mapping.
+- Variable prompts, language selection, copied feedback, and usage attribution
+  follow the same flow. Usage remains attributed to the source Prompt even
+  when the copied body comes from one or more mapped target Prompts.
+
 ### 3. Stable Internal Sources
 
 - Prompt 协议设计见 `spec/knowledge/structure/prompt-protocols-zh.md`。

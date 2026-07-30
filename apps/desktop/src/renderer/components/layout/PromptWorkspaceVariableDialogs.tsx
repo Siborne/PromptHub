@@ -181,6 +181,7 @@ type QueueCopyDialogProps = Pick<
   | "copyPrompt"
   | "copyPromptQueue"
   | "copyPromptQueueIndex"
+  | "copyPromptSourceId"
   | "isCopyVariableModalOpen"
   | "setCopyPrompt"
   | "setCopyPromptQueue"
@@ -219,13 +220,15 @@ function PromptQueueCopyDialog(props: QueueCopyDialogProps) {
         onCopy={(text) =>
           handleQueueCopy(
             text,
-            props.copyPrompt.id,
+            props.copyPromptSourceId ?? props.copyPrompt.id,
             props.copyPromptQueue,
             props.copyPromptQueueIndex,
             {
               setCopyPrompt: props.setCopyPrompt,
+              setCopyPromptQueue: props.setCopyPromptQueue,
               setCopyPromptQueueIndex: props.setCopyPromptQueueIndex,
               setCopyPromptResults: props.setCopyPromptResults,
+              setCopyPromptSourceId: props.setCopyPromptSourceId,
               setIsCopyVariableModalOpen: props.setIsCopyVariableModalOpen,
             },
             utils,
@@ -264,8 +267,10 @@ async function handleQueueCopy(
   setters: Pick<
     PromptWorkspaceDialogsProps,
     | "setCopyPrompt"
+    | "setCopyPromptQueue"
     | "setCopyPromptQueueIndex"
     | "setCopyPromptResults"
+    | "setCopyPromptSourceId"
     | "setIsCopyVariableModalOpen"
   >,
   utils: ReturnType<typeof useVariableDialogUtilities>,
@@ -280,17 +285,20 @@ async function handleQueueCopy(
     setters.setCopyPromptQueueIndex((index) => index + 1);
     return;
   }
-  await copySelectedPrompt(
-    text,
-    promptId,
-    utils.incrementUsageCount,
-    triggerCopied,
-    utils.showToast,
-    utils.t,
-    utils.showCopyNotification,
-    setters.setIsCopyVariableModalOpen,
-  );
-  setters.setCopyPrompt(null);
+  try {
+    await copySelectedPrompt(
+      text,
+      promptId,
+      utils.incrementUsageCount,
+      triggerCopied,
+      utils.showToast,
+      utils.t,
+      utils.showCopyNotification,
+      setters.setIsCopyVariableModalOpen,
+    );
+  } finally {
+    closeQueueCopy(setters);
+  }
 }
 
 function replaceQueueResult(results: string[], index: number, value: string) {

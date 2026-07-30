@@ -37,6 +37,7 @@ export interface PromptWorkspaceDetailPaneProps {
     prompt: Prompt,
     initialMode?: "single" | "compare" | "image",
   ) => void;
+  handleCopyPrompt: (prompt: Prompt) => Promise<void>;
   handleDeletePrompt: (prompt: Prompt) => void;
   handleDetailInlineEditKeyDown: (
     event: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,

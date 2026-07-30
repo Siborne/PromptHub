@@ -38,11 +38,11 @@ interface PromptCopyFlowParams {
   triggerCopied: () => void;
 }
 
-function getOutputFormatPromptQueue(
+export function getPromptCopyPlan(
   prompt: Prompt,
   items: OutputFormatItem[],
   promptById: Map<string, Prompt>,
-) {
+): { sourcePromptId: string; prompts: Prompt[] } {
   const configured = items
     .filter((item) => item.sourcePromptId === prompt.id)
     .sort(
@@ -50,7 +50,9 @@ function getOutputFormatPromptQueue(
         left.sortOrder - right.sortOrder ||
         left.createdAt.localeCompare(right.createdAt),
     );
-  if (configured.length === 0) return [prompt];
+  if (configured.length === 0) {
+    return { sourcePromptId: prompt.id, prompts: [prompt] };
+  }
   const queue = configured
     .map((item) =>
       item.targetPromptId
@@ -58,20 +60,24 @@ function getOutputFormatPromptQueue(
         : prompt,
     )
     .filter((item): item is Prompt => item !== null);
-  return queue.length > 0 ? queue : [prompt];
+  return {
+    sourcePromptId: prompt.id,
+    prompts: queue.length > 0 ? queue : [prompt],
+  };
 }
 
 function usePromptCopyHandler(params: PromptCopyFlowParams) {
   return useCallback(
     async (prompt: Prompt) => {
-      const queue = getOutputFormatPromptQueue(
+      const plan = getPromptCopyPlan(
         prompt,
         params.outputFormatItems,
         params.promptById,
       );
-      if (queue.length > 1)
-        return startCopyQueue(queue, prompt.id, params.copy);
-      await copySinglePrompt(queue[0], params);
+      if (plan.prompts.length > 1) {
+        return startCopyQueue(plan.prompts, plan.sourcePromptId, params.copy);
+      }
+      await copySinglePrompt(plan.prompts[0], plan.sourcePromptId, params);
     },
     [params],
   );
@@ -84,18 +90,24 @@ function startCopyQueue(queue: Prompt[], sourceId: string, state: CopyState) {
   state.setCopyPromptSourceId(sourceId);
 }
 
-async function copySinglePrompt(prompt: Prompt, params: PromptCopyFlowParams) {
+async function copySinglePrompt(
+  prompt: Prompt,
+  sourcePromptId: string,
+  params: PromptCopyFlowParams,
+) {
   const resolvedPrompt = resolvePromptContentByLanguage(
     prompt,
     params.showEnglish,
   );
   if (hasUserDefinedPromptVariables(undefined, resolvedPrompt.userPrompt)) {
     params.copy.setCopyPrompt(prompt);
+    params.copy.setCopyPromptSourceId(sourcePromptId);
     params.copy.setIsCopyVariableModalOpen(true);
     return;
   }
   await copyTextToClipboard(buildPromptCopyText(resolvedPrompt));
-  await params.incrementUsageCount(prompt.id);
+  await params.incrementUsageCount(sourcePromptId);
+  params.triggerCopied();
   params.showToast(
     params.t("toast.copied"),
     "success",

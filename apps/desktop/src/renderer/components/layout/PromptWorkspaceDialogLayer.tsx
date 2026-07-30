@@ -78,6 +78,7 @@ function getDialogCopyProps(
   | "copyPrompt"
   | "copyPromptQueue"
   | "copyPromptQueueIndex"
+  | "copyPromptSourceId"
   | "isCopyVariableModalOpen"
   | "isVariableModalOpen"
   | "setCopyPrompt"
@@ -95,6 +96,7 @@ function getDialogCopyProps(
     copyPrompt: state.copy.copyPrompt,
     copyPromptQueue: state.copy.copyPromptQueue,
     copyPromptQueueIndex: state.copy.copyPromptQueueIndex,
+    copyPromptSourceId: state.copy.copyPromptSourceId,
     isCopyVariableModalOpen: state.copy.isCopyVariableModalOpen,
     isVariableModalOpen: state.copy.isVariableModalOpen,
     setCopyPrompt: state.copy.setCopyPrompt,
