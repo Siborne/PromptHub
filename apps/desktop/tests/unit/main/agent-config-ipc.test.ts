@@ -7,12 +7,6 @@ const getBuiltinAgentOverrideMock = vi.fn();
 const getPlatformRootDirMock = vi.fn();
 const inspectAgentModelConfigMock = vi.fn();
 const updateAgentModelConfigMock = vi.fn();
-const listSessionsMock = vi.fn();
-const readSessionMock = vi.fn();
-const createSessionServiceMock = vi.fn(() => ({
-  list: listSessionsMock,
-  read: readSessionMock,
-}));
 const resolveNativeCommandMock = vi.fn();
 const runNativeCommandMock = vi.fn();
 const launchAgentPlatformMock = vi.fn();
@@ -67,10 +61,6 @@ vi.mock("../../../src/main/services/agent-model-config", () => ({
   updateAgentModelConfig: updateAgentModelConfigMock,
 }));
 
-vi.mock("../../../src/main/services/agent-session-service", () => ({
-  createAgentSessionService: createSessionServiceMock,
-}));
-
 vi.mock("../../../src/main/services/native-command", () => ({
   createNativeCommandRunner: vi.fn(() => ({
     resolve: resolveNativeCommandMock,
@@ -108,9 +98,6 @@ describe("Agent config file IPC", () => {
     getPlatformRootDirMock.mockReset();
     inspectAgentModelConfigMock.mockReset();
     updateAgentModelConfigMock.mockReset();
-    listSessionsMock.mockReset();
-    readSessionMock.mockReset();
-    createSessionServiceMock.mockClear();
     resolveNativeCommandMock.mockReset();
     runNativeCommandMock.mockReset();
     launchAgentPlatformMock.mockReset();
@@ -296,48 +283,6 @@ describe("Agent config file IPC", () => {
       "/usr/local/bin/kimi",
       ["doctor", "config", "/Users/test/.kimi-code/config.toml"],
       { timeout: 15_000, maxBuffer: 64 * 1024 },
-    );
-  });
-
-  it("validates and delegates bounded session list and read requests", async () => {
-    listSessionsMock.mockResolvedValue({ sessions: [] });
-    readSessionMock.mockResolvedValue({ entries: [] });
-    const { handlers, IPC_CHANNELS } = await setup();
-
-    await handlers[IPC_CHANNELS.AGENT_SESSIONS_LIST](null, "codex", 50, 100);
-    await handlers[IPC_CHANNELS.AGENT_SESSION_READ](null, "codex", "session-1");
-
-    expect(createSessionServiceMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        codexRootDir: "/Users/test/.codex",
-      }),
-    );
-    expect(listSessionsMock).toHaveBeenCalledWith("codex", {
-      limit: 50,
-      offset: 100,
-    });
-    expect(readSessionMock).toHaveBeenCalledWith("codex", "session-1");
-    await expect(
-      handlers[IPC_CHANNELS.AGENT_SESSIONS_LIST](null, "codex", "100"),
-    ).rejects.toThrow("numeric limit");
-    await expect(
-      handlers[IPC_CHANNELS.AGENT_SESSIONS_LIST](null, "codex", 50, -1),
-    ).rejects.toThrow("numeric offset");
-    await expect(
-      handlers[IPC_CHANNELS.AGENT_SESSION_READ](null, "codex", null),
-    ).rejects.toThrow("sessionId strings");
-  });
-
-  it("binds Kimi session reads to its resolved generation root", async () => {
-    listSessionsMock.mockResolvedValue({ sessions: [] });
-    const { handlers, IPC_CHANNELS } = await setup();
-
-    await handlers[IPC_CHANNELS.AGENT_SESSIONS_LIST](null, "kimi", 20);
-
-    expect(createSessionServiceMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kimiRootDir: "/Users/test/.kimi-code",
-      }),
     );
   });
 });

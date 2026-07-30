@@ -602,6 +602,20 @@ describe("CorePluginLibraryService", () => {
       status: "adapter",
       enabled: true,
     });
+    expect(matrix.find((target) => target.id === "cursor")).toMatchObject({
+      status: "adapter",
+      enabled: false,
+      unsupportedReason: expect.stringMatching(
+        /cursor marketplace|verified local-plugin/i,
+      ),
+    });
+    expect(
+      matrix.find((target) => target.id === "github-copilot"),
+    ).toMatchObject({
+      status: "adapter",
+      enabled: false,
+      unsupportedReason: expect.stringMatching(/copilot plugin install/i),
+    });
     expect(matrix.find((target) => target.id === "opencode")).toMatchObject({
       status: "runtime-only",
       enabled: false,
@@ -609,6 +623,13 @@ describe("CorePluginLibraryService", () => {
     expect(matrix.find((target) => target.id === "windsurf")).toMatchObject({
       status: "composite",
       enabled: false,
+    });
+    expect(
+      matrix.find((target) => target.id === "cherry-studio"),
+    ).toMatchObject({
+      status: "composite",
+      enabled: false,
+      unsupportedReason: expect.stringMatching(/no confirmed single plugin/i),
     });
   });
 });

@@ -13,3 +13,4 @@ export * from "./image-generation-workbench";
 export * from "./rules-rewrite";
 export * from "./mcp-library";
 export * from "./plugin-library";
+export * from "./agent-management";

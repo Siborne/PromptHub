@@ -258,6 +258,84 @@ CREATE TABLE IF NOT EXISTS generation_outputs (
   deleted_at TEXT,
   UNIQUE(batch_id, slot_index)
 );
+
+CREATE TABLE IF NOT EXISTS agent_provider_profiles (
+  id TEXT PRIMARY KEY,
+  platform_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  provider_kind TEXT NOT NULL,
+  protocol TEXT NOT NULL,
+  endpoint TEXT,
+  config_json TEXT NOT NULL DEFAULT '{}',
+  secret_ref TEXT,
+  source TEXT NOT NULL CHECK(source IN ('manual', 'native-import', 'universal', 'import')),
+  archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1)),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_provider_model_mappings (
+  id TEXT PRIMARY KEY,
+  provider_profile_id TEXT NOT NULL REFERENCES agent_provider_profiles(id) ON DELETE CASCADE,
+  route_key TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  parameters_json TEXT NOT NULL DEFAULT '{}',
+  UNIQUE(provider_profile_id, route_key)
+);
+
+CREATE TABLE IF NOT EXISTS agent_provider_snapshots (
+  id TEXT PRIMARY KEY,
+  platform_id TEXT NOT NULL,
+  provider_profile_id TEXT REFERENCES agent_provider_profiles(id) ON DELETE SET NULL,
+  native_digest TEXT NOT NULL,
+  redacted_snapshot TEXT NOT NULL,
+  backup_ref TEXT,
+  operation TEXT NOT NULL CHECK(operation IN ('import', 'activate', 'backfill', 'restore')),
+  result TEXT NOT NULL CHECK(result IN ('planned', 'applied', 'verified', 'rolled-back', 'failed')),
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_session_sources (
+  id TEXT PRIMARY KEY,
+  platform_id TEXT NOT NULL,
+  root_path TEXT NOT NULL,
+  adapter_id TEXT NOT NULL,
+  adapter_version TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+  scan_cursor TEXT,
+  last_status TEXT NOT NULL DEFAULT 'idle'
+    CHECK(last_status IN ('idle', 'ok', 'partial', 'error')),
+  last_scanned_at INTEGER,
+  last_error_code TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(platform_id, root_path, adapter_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_session_index (
+  id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL REFERENCES agent_session_sources(id) ON DELETE CASCADE,
+  external_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  project_path TEXT,
+  created_at INTEGER,
+  updated_at INTEGER,
+  model TEXT,
+  message_count INTEGER CHECK(message_count IS NULL OR message_count >= 0),
+  redacted_preview TEXT,
+  source_path TEXT NOT NULL,
+  source_mtime_ms INTEGER,
+  source_size_bytes INTEGER
+    CHECK(source_size_bytes IS NULL OR source_size_bytes >= 0),
+  source_digest TEXT,
+  source_status TEXT NOT NULL
+    CHECK(source_status IN ('present', 'missing', 'parse-error')),
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  note TEXT,
+  indexed_at INTEGER NOT NULL,
+  annotation_updated_at INTEGER,
+  UNIQUE(source_id, external_id)
+);
 `;
 
 /**
@@ -302,6 +380,27 @@ CREATE INDEX IF NOT EXISTS idx_generation_batches_status ON generation_batches(s
 CREATE INDEX IF NOT EXISTS idx_generation_batches_source ON generation_batches(source_prompt_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_generation_outputs_batch ON generation_outputs(batch_id, slot_index);
 CREATE INDEX IF NOT EXISTS idx_generation_outputs_favorite ON generation_outputs(favorite, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_provider_profiles_platform
+  ON agent_provider_profiles(platform_id, archived, updated_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_provider_profiles_active_name
+  ON agent_provider_profiles(platform_id, LOWER(name))
+  WHERE archived = 0;
+CREATE INDEX IF NOT EXISTS idx_agent_provider_model_mappings_profile
+  ON agent_provider_model_mappings(provider_profile_id, route_key);
+CREATE INDEX IF NOT EXISTS idx_agent_provider_snapshots_platform_created
+  ON agent_provider_snapshots(platform_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_provider_snapshots_profile_created
+  ON agent_provider_snapshots(provider_profile_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_session_sources_platform
+  ON agent_session_sources(platform_id, enabled, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_session_index_source_updated
+  ON agent_session_index(
+    source_id,
+    COALESCE(updated_at, created_at, 0) DESC,
+    external_id
+  );
+CREATE INDEX IF NOT EXISTS idx_agent_session_index_source_status
+  ON agent_session_index(source_id, source_status, indexed_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_prompts_pinned ON prompts(is_pinned);
 CREATE INDEX IF NOT EXISTS idx_prompts_created ON prompts(created_at DESC);

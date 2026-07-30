@@ -9,6 +9,7 @@ function requirePlatform(platformId: string) {
 }
 
 const claudePlatform = requirePlatform("claude");
+const copilotPlatform = requirePlatform("copilot");
 const codexPlatform = requirePlatform("codex");
 const zcodePlatform = requirePlatform("zcode");
 const grokPlatform = requirePlatform("grok");
@@ -16,6 +17,7 @@ const qwenPlatform = requirePlatform("qwen");
 const kimiPlatform = requirePlatform("kimi");
 const geminiPlatform = requirePlatform("gemini");
 const opencodePlatform = requirePlatform("opencode");
+const ohMyPiPlatform = requirePlatform("oh-my-pi");
 const windsurfPlatform = requirePlatform("windsurf");
 const openclawPlatform = requirePlatform("openclaw");
 const hermesPlatform = requirePlatform("hermes");
@@ -26,6 +28,7 @@ export const RULE_FILE_GROUPS = ["workspace", "assistant", "tooling"] as const;
 
 export const RULE_PLATFORM_ORDER = [
   "claude",
+  "copilot",
   "codex",
   "zcode",
   "grok",
@@ -33,6 +36,7 @@ export const RULE_PLATFORM_ORDER = [
   "kimi",
   "gemini",
   "opencode",
+  "oh-my-pi",
   "windsurf",
   "openclaw",
   "hermes",
@@ -51,6 +55,18 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     name: "CLAUDE.md",
     description:
       "Global Claude rules loaded from the local Claude configuration.",
+    group: "assistant",
+  },
+  "copilot-global": {
+    id: "copilot-global",
+    platformId: "copilot",
+    platformName: copilotPlatform.name,
+    platformIcon: copilotPlatform.icon,
+    platformDescription:
+      "Personal GitHub Copilot CLI instructions stored in the Copilot configuration directory.",
+    name: "copilot-instructions.md",
+    description:
+      "Personal GitHub Copilot CLI instructions loaded for every session.",
     group: "assistant",
   },
   "codex-global": {
@@ -134,6 +150,17 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     description:
       "Global OpenCode rules loaded from the local OpenCode configuration.",
     group: "tooling",
+  },
+  "oh-my-pi-global": {
+    id: "oh-my-pi-global",
+    platformId: "oh-my-pi",
+    platformName: ohMyPiPlatform.name,
+    platformIcon: ohMyPiPlatform.icon,
+    platformDescription:
+      "Global Oh My Pi rules stored in the local Oh My Pi agent directory.",
+    name: "RULES.md",
+    description: "Global Oh My Pi rules loaded for every project.",
+    group: "assistant",
   },
   "windsurf-global": {
     id: "windsurf-global",

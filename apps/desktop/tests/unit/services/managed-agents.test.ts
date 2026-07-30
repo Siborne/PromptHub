@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
+import {
+  SKILL_PLATFORMS,
+  type SkillPlatform,
+} from "@prompthub/shared/constants/platforms";
 
 import {
   buildManagedAgents,
@@ -148,6 +151,11 @@ describe("managed Agent projection", () => {
           pluginsRelativePath: "plugins",
           globalRuleFile: "CLAUDE.md",
           configFiles: ["settings.json"],
+          cli: {
+            executableCandidates: ["claude"],
+            versionArgs: ["--version"],
+            evidence: "official-claude-cli",
+          },
         }),
       ],
       detectedPlatformIds: ["claude"],
@@ -172,14 +180,31 @@ describe("managed Agent projection", () => {
     });
     expect(agent.capabilities.overview.status).toBe("supported");
     expect(agent.capabilities.assets.status).toBe("partial");
-    expect(agent.capabilities.maintenance.status).toBe("partial");
-    expect(agent.capabilities.provider).toEqual({
+    expect(agent.capabilities.maintenance).toEqual({
       status: "partial",
-      reason: "model-config-only",
+      reason: "cli-diagnostics-read-only",
     });
+    expect(agent.capabilities.provider).toEqual({ status: "supported" });
     expect(agent.capabilities.configFiles.status).toBe("partial");
     expect(agent.capabilities.sessions.status).toBe("supported");
     expect(agent.capabilities.usage.status).toBe("supported");
+  });
+
+  it("does not advertise CLI maintenance for platforms without a verified descriptor", () => {
+    const [agent] = buildManagedAgents({
+      platforms: [
+        platform("cursor", "Cursor"),
+      ],
+      detectedPlatformIds: ["cursor"],
+      pinnedPlatformIds: [],
+      builtinOverrides: {},
+      osKey: "darwin",
+    });
+
+    expect(agent.capabilities.maintenance).toEqual({
+      status: "planned",
+      reason: "lifecycle-adapter-pending",
+    });
   });
 
   it("marks the usage adapter supported for quota-capable agents and planned elsewhere", () => {
@@ -339,7 +364,7 @@ describe("managed Agent projection", () => {
     expect(
       agents.find((agent) => agent.id === "kimi")?.capabilities,
     ).toMatchObject({
-      provider: { status: "partial", reason: "model-config-only" },
+      provider: { status: "supported" },
       sessions: { status: "supported" },
     });
     expect(
@@ -374,10 +399,232 @@ describe("managed Agent projection", () => {
       rules: "/Users/test/.qwen-custom/QWEN.md",
     });
     expect(agent.capabilities).toMatchObject({
+      provider: { status: "supported" },
+      sessions: { status: "supported" },
+      usage: { status: "planned", reason: "adapter-pending" },
+    });
+  });
+
+  it("projects only verified Cursor user asset paths", () => {
+    const cursor = SKILL_PLATFORMS.find(
+      (platformEntry) => platformEntry.id === "cursor",
+    );
+    expect(cursor).toMatchObject({
+      rootDir: {
+        darwin: "~/.cursor",
+        linux: "~/.cursor",
+        win32: "%USERPROFILE%\\.cursor",
+      },
+      skillsRelativePath: "skills",
+      agentsRelativePath: "agents",
+      mcpRelativePath: "mcp.json",
+      pluginsRelativePath: "plugins",
+    });
+    expect(cursor).not.toHaveProperty("globalRuleFile");
+    expect(cursor).not.toHaveProperty("configFiles");
+
+    const [agent] = buildManagedAgents({
+      platforms: [cursor!],
+      detectedPlatformIds: ["cursor"],
+      pinnedPlatformIds: [],
+      builtinOverrides: {},
+      osKey: "darwin",
+    });
+
+    expect(agent.paths).toMatchObject({
+      root: "~/.cursor",
+      skills: "~/.cursor/skills",
+      mcp: "~/.cursor/mcp.json",
+      plugins: "~/.cursor/plugins",
+      configFiles: [],
+      configFileRelativePaths: [],
+    });
+    expect(agent.paths.rules).toBeUndefined();
+    expect(agent.capabilities).toMatchObject({
+      provider: { status: "planned", reason: "adapter-pending" },
+      sessions: { status: "planned", reason: "adapter-pending" },
+      usage: { status: "planned", reason: "adapter-pending" },
+    });
+  });
+
+  it("projects only the current Cherry Studio Skill and launch surfaces", () => {
+    const cherryStudio = SKILL_PLATFORMS.find(
+      (platformEntry) => platformEntry.id === "cherry-studio",
+    );
+    expect(cherryStudio).toMatchObject({
+      rootDir: {
+        darwin: "~/Library/Application Support/CherryStudio",
+        linux: "~/.config/CherryStudio",
+        win32: "%APPDATA%\\CherryStudio",
+      },
+      skillsRelativePath: "Data/Skills",
+      launchPaths: {
+        darwin: [
+          "/Applications/Cherry Studio.app",
+          "~/Applications/Cherry Studio.app",
+        ],
+      },
+    });
+    expect(cherryStudio).not.toHaveProperty("agentsRelativePath");
+    expect(cherryStudio).not.toHaveProperty("mcpRelativePath");
+    expect(cherryStudio).not.toHaveProperty("pluginsRelativePath");
+    expect(cherryStudio).not.toHaveProperty("globalRuleFile");
+    expect(cherryStudio).not.toHaveProperty("configFiles");
+
+    const [agent] = buildManagedAgents({
+      platforms: [cherryStudio!],
+      detectedPlatformIds: ["cherry-studio"],
+      pinnedPlatformIds: [],
+      builtinOverrides: {},
+      osKey: "darwin",
+    });
+
+    expect(agent.paths).toMatchObject({
+      root: "~/Library/Application Support/CherryStudio",
+      skills: "~/Library/Application Support/CherryStudio/Data/Skills",
+      configFiles: [],
+      configFileRelativePaths: [],
+    });
+    expect(agent.paths.mcp).toBeUndefined();
+    expect(agent.paths.plugins).toBeUndefined();
+    expect(agent.paths.rules).toBeUndefined();
+    expect(agent.launchable).toBe(true);
+  });
+
+  it("projects only verified Windsurf global assets and partial transcript history", () => {
+    const windsurf = SKILL_PLATFORMS.find(
+      (platformEntry) => platformEntry.id === "windsurf",
+    );
+    expect(windsurf).toMatchObject({
+      rootDir: {
+        darwin: "~/.codeium/windsurf",
+        linux: "~/.codeium/windsurf",
+        win32: "%USERPROFILE%\\.codeium\\windsurf",
+      },
+      skillsRelativePath: "skills",
+      mcpRelativePath: "mcp_config.json",
+      globalRuleFile: "memories/global_rules.md",
+      launchPaths: {
+        darwin: ["/Applications/Windsurf.app", "~/Applications/Windsurf.app"],
+      },
+    });
+    expect(windsurf).not.toHaveProperty("agentsRelativePath");
+    expect(windsurf).not.toHaveProperty("pluginsRelativePath");
+    expect(windsurf).not.toHaveProperty("configFiles");
+
+    const [agent] = buildManagedAgents({
+      platforms: [windsurf!],
+      detectedPlatformIds: ["windsurf"],
+      pinnedPlatformIds: [],
+      builtinOverrides: {},
+      osKey: "darwin",
+    });
+
+    expect(agent.paths).toMatchObject({
+      root: "~/.codeium/windsurf",
+      skills: "~/.codeium/windsurf/skills",
+      mcp: "~/.codeium/windsurf/mcp_config.json",
+      rules: "~/.codeium/windsurf/memories/global_rules.md",
+      configFiles: [],
+      configFileRelativePaths: [],
+    });
+    expect(agent.paths.plugins).toBeUndefined();
+    expect(agent.capabilities).toMatchObject({
+      provider: { status: "planned", reason: "adapter-pending" },
+      sessions: { status: "partial", reason: "adapter-pending" },
+      usage: { status: "planned", reason: "adapter-pending" },
+      configFiles: {
+        status: "unsupported",
+        reason: "no-verified-config-path",
+      },
+    });
+    expect(agent.launchable).toBe(true);
+  });
+
+  it("projects Oh My Pi paths with model routing and read-only session support", () => {
+    const [agent] = buildManagedAgents({
+      platforms: [
+        platform("oh-my-pi", "Oh My Pi", {
+          rootEnvironmentVariable: "PI_CODING_AGENT_DIR",
+          mcpRelativePath: "mcp.json",
+          pluginsRelativePath: "../plugins",
+          globalRuleFile: "RULES.md",
+          configFiles: [
+            "config.yml",
+            "config.yaml",
+            "settings.json",
+            "mcp.json",
+            "RULES.md",
+          ],
+          resolvedRootPath: "/Users/test/.omp/agent",
+        }),
+      ],
+      detectedPlatformIds: ["oh-my-pi"],
+      pinnedPlatformIds: [],
+      builtinOverrides: {},
+      osKey: "darwin",
+    });
+
+    expect(agent.paths).toMatchObject({
+      root: "/Users/test/.omp/agent",
+      skills: "/Users/test/.omp/agent/skills",
+      mcp: "/Users/test/.omp/agent/mcp.json",
+      plugins: "/Users/test/.omp/plugins",
+      rules: "/Users/test/.omp/agent/RULES.md",
+      configFileRelativePaths: [
+        "config.yml",
+        "config.yaml",
+        "settings.json",
+        "mcp.json",
+        "RULES.md",
+      ],
+    });
+    expect(agent.capabilities).toMatchObject({
       provider: { status: "partial", reason: "model-config-only" },
       sessions: { status: "supported" },
       usage: { status: "planned", reason: "adapter-pending" },
     });
+  });
+
+  it("projects Kiro current assets with model-only and read-only session support", () => {
+    const kiro = SKILL_PLATFORMS.find(
+      (platformEntry) => platformEntry.id === "kiro",
+    );
+    expect(kiro).toMatchObject({
+      rootEnvironmentVariable: "KIRO_HOME",
+      skillsRelativePath: "skills",
+      agentsRelativePath: "agents",
+      mcpRelativePath: "settings/mcp.json",
+      pluginsRelativePath: "powers",
+      configFiles: ["settings/cli.json"],
+      launchPaths: {
+        darwin: ["/Applications/Kiro.app", "~/Applications/Kiro.app"],
+      },
+    });
+    expect(kiro).not.toHaveProperty("globalRuleFile");
+
+    const [agent] = buildManagedAgents({
+      platforms: [kiro!],
+      detectedPlatformIds: ["kiro"],
+      pinnedPlatformIds: [],
+      builtinOverrides: {},
+      osKey: "darwin",
+    });
+    expect(agent.paths).toMatchObject({
+      root: "~/.kiro",
+      skills: "~/.kiro/skills",
+      mcp: "~/.kiro/settings/mcp.json",
+      plugins: "~/.kiro/powers",
+      configFileRelativePaths: ["settings/cli.json"],
+    });
+    expect(agent.paths.rules).toBeUndefined();
+    expect(agent.capabilities).toMatchObject({
+      provider: { status: "partial", reason: "model-config-only" },
+      sessions: { status: "partial", reason: "adapter-pending" },
+      usage: { status: "planned", reason: "adapter-pending" },
+      configFiles: { status: "partial" },
+    });
+    expect(agent.launchable).toBe(true);
   });
 
   it("normalizes parent segments in displayed Agent asset paths", () => {

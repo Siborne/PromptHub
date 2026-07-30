@@ -116,6 +116,7 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   "trae-cn": <ZapIcon />,
   "trae-work-cn": <ZapIcon />,
   opencode: <TerminalIcon />,
+  "oh-my-pi": <TerminalIcon />,
   cline: <TerminalIcon />,
   codex: <TerminalIcon />,
   chatgpt: <BotIcon />,

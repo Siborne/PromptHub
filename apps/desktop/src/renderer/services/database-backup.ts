@@ -491,6 +491,16 @@ async function collectAgentAssetFilesSnapshot(): Promise<
   return Object.keys(snapshot).length > 0 ? snapshot : undefined;
 }
 
+async function collectAgentManagementBackup(): Promise<
+  DatabaseBackup["agentManagement"]
+> {
+  const exportManagementBackup = window.api?.agent?.exportManagementBackup;
+  if (!exportManagementBackup) {
+    throw new Error("Agent management backup API is unavailable");
+  }
+  return exportManagementBackup();
+}
+
 function restoreCustomStoreSourceSnapshot(
   key: string,
   selectedKey: string,
@@ -847,6 +857,7 @@ async function importDatabaseViaMainProcess(
 export async function exportDatabase(options?: {
   skipVideoContent?: boolean;
   limitMedia?: boolean;
+  skipAgentManagement?: boolean;
 }): Promise<DatabaseBackup> {
   const [prompts, folders, versions] = await Promise.all([
     getAllPrompts(),
@@ -875,6 +886,7 @@ export async function exportDatabase(options?: {
     mcpLibrary,
     pluginSnapshot,
     agentAssetFiles,
+    agentManagement,
     promptRelations,
     outputFormatItems,
   ] = await Promise.all([
@@ -887,6 +899,9 @@ export async function exportDatabase(options?: {
     collectMcpLibrary(),
     collectPluginSnapshot(),
     collectAgentAssetFilesSnapshot(),
+    options?.skipAgentManagement
+      ? Promise.resolve(undefined)
+      : collectAgentManagementBackup(),
     listPromptRelations(),
     listOutputFormatItems(),
   ]);
@@ -928,6 +943,7 @@ export async function exportDatabase(options?: {
     pluginPackages: pluginSnapshot.pluginPackages,
     storeSources,
     agentAssetFiles,
+    agentManagement,
   };
 }
 
@@ -1034,6 +1050,20 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
   }
 
   restoreStoreSourcesSnapshot(normalizedBackup.storeSources);
+
+  if (normalizedBackup.agentManagement) {
+    try {
+      const restoreManagementBackup =
+        window.api?.agent?.restoreManagementBackup;
+      if (!restoreManagementBackup) {
+        throw new Error("Agent management restore API is unavailable");
+      }
+      await restoreManagementBackup(normalizedBackup.agentManagement);
+    } catch (error) {
+      restoreFailures.push("Agent management restore");
+      console.warn("Failed to restore Agent management data:", error);
+    }
+  }
 
   if (normalizedBackup.rules && normalizedBackup.rules.length > 0) {
     try {
@@ -1272,10 +1302,12 @@ export async function downloadSelectiveExport(
     skills: !!scope.skills,
     mcp: !!scope.mcp,
     plugins: !!scope.plugins,
+    agents: !!scope.agents,
   };
 
   const fullBackup = await exportDatabase({
     skipVideoContent: !normalized.videos,
+    skipAgentManagement: !normalized.agents,
   });
 
   const payload: Partial<DatabaseBackup> = {
@@ -1304,6 +1336,7 @@ export async function downloadSelectiveExport(
     mcpLibrary: normalized.mcp ? fullBackup.mcpLibrary : undefined,
     pluginLibrary: normalized.plugins ? fullBackup.pluginLibrary : undefined,
     pluginPackages: normalized.plugins ? fullBackup.pluginPackages : undefined,
+    agentManagement: normalized.agents ? fullBackup.agentManagement : undefined,
     storeSources:
       normalized.skills || normalized.mcp || normalized.plugins
         ? {

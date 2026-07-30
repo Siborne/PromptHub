@@ -1,10 +1,11 @@
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppCommand } from "@prompthub/shared/types";
 import { DesktopAppCommandBridge } from "../../../src/renderer/components/app/DesktopAppCommandBridge";
 import { APP_ASSET_WORKFLOW_READY_EVENT } from "../../../src/renderer/components/app/app-command-events";
+import { useAgentStore } from "../../../src/renderer/stores/agent.store";
 import { useUIStore } from "../../../src/renderer/stores/ui.store";
 import { installWindowMocks } from "../../helpers/window";
 
@@ -41,6 +42,7 @@ describe("DesktopAppCommandBridge", () => {
       },
     });
     useUIStore.setState({ appModule: "prompt", viewMode: "prompt" });
+    useAgentStore.setState({ selectedAgentId: null });
   });
 
   it.each([
@@ -151,5 +153,72 @@ describe("DesktopAppCommandBridge", () => {
 
     view.unmount();
     expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("opens a sanitized Provider import preview on its declared Agent", async () => {
+    const view = render(<Harness initialPage="settings" />);
+
+    act(() =>
+      deliverCommand({
+        type: "agent:import-provider",
+        preview: {
+          version: 1,
+          profile: {
+            platformId: "codex",
+            name: "Imported",
+            providerKind: "openai-compatible",
+            protocol: "openai-responses",
+            endpoint: null,
+            config: {},
+            source: "import",
+          },
+          modelMappings: [],
+          requiresSecret: true,
+        },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(view.getByTestId("page")).toHaveTextContent("home");
+      expect(useUIStore.getState().appModule).toBe("agents");
+      expect(useAgentStore.getState().selectedAgentId).toBe("codex");
+      expect(view.getByRole("dialog")).toHaveTextContent("Imported");
+    });
+
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(view.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("opens a stable deep-link error in the Agent workspace", async () => {
+    const view = render(<Harness initialPage="settings" />);
+
+    act(() =>
+      deliverCommand({
+        type: "agent:import-error",
+        errorCode: "AGENT_DEEP_LINK_INVALID",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(view.getByTestId("page")).toHaveTextContent("home");
+      expect(useUIStore.getState().appModule).toBe("agents");
+      expect(view.getByRole("alert")).toBeInTheDocument();
+    });
+  });
+
+  it("unmounts safely when the preload subscription returns no disposer", () => {
+    installWindowMocks({
+      electron: {
+        onAppCommand: vi.fn((callback: (command: AppCommand) => void) => {
+          deliverCommand = callback;
+          return undefined;
+        }),
+      },
+    });
+
+    const view = render(<Harness />);
+    expect(() => view.unmount()).not.toThrow();
   });
 });

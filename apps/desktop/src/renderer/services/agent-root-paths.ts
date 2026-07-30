@@ -161,7 +161,7 @@ export function getEffectiveBuiltinAgentConfig(
       undefined,
     agentsRelativePath:
       normalizedOverride.agentsRelativePath ||
-      normalizeRelativePath("agents") ||
+      normalizeRelativePath(platform.agentsRelativePath || "agents") ||
       undefined,
     commandsRelativePath:
       normalizedOverride.commandsRelativePath ||

@@ -1,12 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 
 import type {
   AgentSessionDetail,
   AgentSessionEntry,
+  AgentSessionIndexRecord,
   AgentSessionListResult,
   AgentSessionMetadata,
+  AgentSessionScanRecordInput,
 } from "@prompthub/shared/types";
 import {
   createNativeCommandRunner,
@@ -17,6 +20,9 @@ import { createCodexSessionAdapter } from "./agent-session-codex";
 import { createGrokSessionAdapter } from "./agent-session-grok";
 import { createOpenClawSessionAdapter } from "./agent-session-openclaw";
 import { createQwenSessionAdapter } from "./agent-session-qwen";
+import { createOhMyPiSessionAdapter } from "./agent-session-oh-my-pi";
+import { createWindsurfSessionAdapter } from "./agent-session-windsurf";
+import { createKiroSessionAdapter } from "./agent-session-kiro";
 
 interface AgentSessionServiceOptions {
   homeDir: string;
@@ -27,11 +33,38 @@ interface AgentSessionServiceOptions {
   kimiRootDir?: string;
   openclawRootDir?: string;
   qwenRuntimeDir?: string;
+  ohMyPiRootDir?: string;
+  kiroRootDir?: string;
 }
 
 interface ListOptions {
   limit: number;
   offset?: number;
+}
+
+export interface AgentSessionIndexSourceDescriptor {
+  platformId: string;
+  rootPath: string;
+  adapterId: string;
+  adapterVersion: string;
+}
+
+export interface AgentSessionIndexScanProgress {
+  processed: number;
+  total: number;
+}
+
+export interface AgentSessionIndexScanOptions {
+  previous: AgentSessionIndexRecord[];
+  adapterVersionChanged: boolean;
+  signal?: AbortSignal;
+  onProgress?: (progress: AgentSessionIndexScanProgress) => void;
+}
+
+export interface AgentSessionIndexScanResult {
+  records: AgentSessionScanRecordInput[];
+  scanCursor: string;
+  status: "ok" | "partial";
 }
 
 interface SessionFile {
@@ -44,6 +77,7 @@ interface SessionFile {
 
 const MAX_LIST_LIMIT = 200;
 const MAX_SCAN_FILES = 2_000;
+const MAX_INDEX_SCAN_FILES = 10_000;
 const MAX_DETAIL_BYTES = 2 * 1024 * 1024;
 const MAX_METADATA_BYTES = 256 * 1024;
 const MAX_ENTRY_TEXT = 64 * 1024;
@@ -139,6 +173,7 @@ async function readPrefix(
 ): Promise<{
   raw: string;
   truncated: boolean;
+  digest: string;
 }> {
   const handle = await fs.open(filePath, "r");
   try {
@@ -149,14 +184,20 @@ async function readPrefix(
     return {
       raw: buffer.toString("utf8"),
       truncated: stat.size > maxBytes,
+      digest: `sha256:${createHash("sha256").update(buffer).digest("hex")}`,
     };
   } finally {
     await handle.close();
   }
 }
 
-async function scanClaudeFiles(root: string): Promise<SessionFile[]> {
+async function scanClaudeFiles(
+  root: string,
+  maxFiles = MAX_SCAN_FILES,
+  signal?: AbortSignal,
+): Promise<SessionFile[]> {
   const files: SessionFile[] = [];
+  throwIfAborted(signal);
   const projectEntries = await fs
     .readdir(root, { withFileTypes: true })
     .catch((error: unknown) => {
@@ -166,13 +207,15 @@ async function scanClaudeFiles(root: string): Promise<SessionFile[]> {
   if (!projectEntries) return [];
 
   for (const projectEntry of projectEntries) {
+    throwIfAborted(signal);
     if (!projectEntry.isDirectory() || projectEntry.isSymbolicLink()) continue;
     const projectPath = path.join(root, projectEntry.name);
     const entries = await fs
       .readdir(projectPath, { withFileTypes: true })
       .catch(() => []);
     for (const entry of entries) {
-      if (files.length >= MAX_SCAN_FILES) return files;
+      throwIfAborted(signal);
+      if (files.length >= maxFiles) return files;
       if (
         !entry.isFile() ||
         entry.isSymbolicLink() ||
@@ -188,15 +231,20 @@ async function scanClaudeFiles(root: string): Promise<SessionFile[]> {
         path: filePath,
         projectLabel: projectEntry.name,
         size: stat.size,
-        updatedAt: stat.mtimeMs,
+        updatedAt: Math.trunc(stat.mtimeMs),
       });
     }
   }
   return files.sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
-async function scanGeminiFiles(root: string): Promise<SessionFile[]> {
+async function scanGeminiFiles(
+  root: string,
+  maxFiles = MAX_SCAN_FILES,
+  signal?: AbortSignal,
+): Promise<SessionFile[]> {
   const files: SessionFile[] = [];
+  throwIfAborted(signal);
   const projectEntries = await fs
     .readdir(root, { withFileTypes: true })
     .catch((error: unknown) => {
@@ -206,13 +254,15 @@ async function scanGeminiFiles(root: string): Promise<SessionFile[]> {
   if (!projectEntries) return [];
 
   for (const projectEntry of projectEntries) {
+    throwIfAborted(signal);
     if (!projectEntry.isDirectory() || projectEntry.isSymbolicLink()) continue;
     const chatsPath = path.join(root, projectEntry.name, "chats");
     const entries = await fs
       .readdir(chatsPath, { withFileTypes: true })
       .catch(() => []);
     for (const entry of entries) {
-      if (files.length >= MAX_SCAN_FILES) return files;
+      throwIfAborted(signal);
+      if (files.length >= maxFiles) return files;
       if (
         !entry.isFile() ||
         entry.isSymbolicLink() ||
@@ -228,7 +278,7 @@ async function scanGeminiFiles(root: string): Promise<SessionFile[]> {
         path: filePath,
         projectLabel: projectEntry.name,
         size: stat.size,
-        updatedAt: stat.mtimeMs,
+        updatedAt: Math.trunc(stat.mtimeMs),
       });
     }
   }
@@ -414,6 +464,180 @@ function isMissing(error: unknown): boolean {
   );
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  const error = new Error("AGENT_SESSION_SCAN_CANCELLED");
+  error.name = "AbortError";
+  throw error;
+}
+
+function redactMetadataText(value: string): string {
+  return value
+    .replace(/\bsk-[A-Za-z0-9_-]{6,}\b/gi, "[REDACTED]")
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}\b/gi, "$1[REDACTED]")
+    .replace(
+      /\b(api[_ -]?key|token|secret|password)\s*[:=]\s*\S+/gi,
+      "$1=[REDACTED]",
+    );
+}
+
+function reusableRecord(
+  file: SessionFile,
+  previous: AgentSessionIndexRecord | undefined,
+  adapterVersionChanged: boolean,
+): AgentSessionScanRecordInput | null {
+  if (
+    adapterVersionChanged ||
+    !previous ||
+    previous.sourceMtimeMs !== file.updatedAt ||
+    previous.sourceSizeBytes !== file.size
+  ) {
+    return null;
+  }
+  return {
+    externalId: previous.externalId,
+    title: previous.title,
+    projectPath: previous.projectPath,
+    createdAt: previous.createdAt,
+    updatedAt: previous.updatedAt,
+    model: previous.model,
+    messageCount: previous.messageCount,
+    redactedPreview: null,
+    sourcePath: previous.sourcePath,
+    sourceMtimeMs: previous.sourceMtimeMs,
+    sourceSizeBytes: previous.sourceSizeBytes,
+    sourceDigest: previous.sourceDigest,
+    sourceStatus: previous.sourceStatus,
+  };
+}
+
+function previousByPath(
+  previous: AgentSessionIndexRecord[],
+): Map<string, AgentSessionIndexRecord> {
+  return new Map(previous.map((record) => [record.sourcePath, record]));
+}
+
+async function claudeScanRecord(
+  file: SessionFile,
+  previous: AgentSessionIndexRecord | undefined,
+  adapterVersionChanged: boolean,
+): Promise<AgentSessionScanRecordInput> {
+  const reused = reusableRecord(file, previous, adapterVersionChanged);
+  if (reused) return reused;
+  const { raw, digest } = await readPrefix(file.path, MAX_METADATA_BYTES);
+  let title: string | null = null;
+  let validEntries = 0;
+  for (const [index, line] of raw.split(/\r?\n/).entries()) {
+    if (!line.trim()) continue;
+    const entry = parseClaudeLine(line, index);
+    if (!entry) continue;
+    validEntries += 1;
+    if (!title && entry.role === "user") {
+      title = entry.text.split("\n", 1)[0].slice(0, 160);
+    }
+  }
+  return {
+    externalId: file.id,
+    title: redactMetadataText(title || file.id),
+    projectPath: null,
+    createdAt: null,
+    updatedAt: file.updatedAt,
+    model: null,
+    messageCount: null,
+    redactedPreview: null,
+    sourcePath: file.path,
+    sourceMtimeMs: file.updatedAt,
+    sourceSizeBytes: file.size,
+    sourceDigest: digest,
+    sourceStatus: validEntries > 0 ? "present" : "parse-error",
+  };
+}
+
+async function geminiScanRecord(
+  file: SessionFile,
+  previous: AgentSessionIndexRecord | undefined,
+  adapterVersionChanged: boolean,
+): Promise<AgentSessionScanRecordInput> {
+  const reused = reusableRecord(file, previous, adapterVersionChanged);
+  if (reused) return reused;
+  const { raw, digest } = await readPrefix(file.path, MAX_METADATA_BYTES);
+  const { data, parseErrorCount } = parseGeminiDocument(raw);
+  if (!data) {
+    return {
+      externalId: file.id,
+      title: file.id,
+      projectPath: null,
+      updatedAt: file.updatedAt,
+      redactedPreview: null,
+      sourcePath: file.path,
+      sourceMtimeMs: file.updatedAt,
+      sourceSizeBytes: file.size,
+      sourceDigest: digest,
+      sourceStatus: "parse-error",
+    };
+  }
+  const id = stringValue(data.sessionId);
+  const { entries, rejected } = geminiEntries(data);
+  const firstUser = entries.find((entry) => entry.role === "user");
+  const validId = id && isSessionId(id) ? id : file.id;
+  return {
+    externalId: validId,
+    title: redactMetadataText(
+      firstUser?.text.split("\n", 1)[0].slice(0, 160) || validId,
+    ),
+    projectPath: null,
+    createdAt: normalizeTimestamp(data.startTime),
+    updatedAt: normalizeTimestamp(data.lastUpdated) || file.updatedAt,
+    model: null,
+    messageCount: Array.isArray(data.messages) ? data.messages.length : null,
+    redactedPreview: null,
+    sourcePath: file.path,
+    sourceMtimeMs: file.updatedAt,
+    sourceSizeBytes: file.size,
+    sourceDigest: digest,
+    sourceStatus:
+      id && isSessionId(id) && parseErrorCount + rejected === 0
+        ? "present"
+        : "parse-error",
+  };
+}
+
+async function buildIndexScan(
+  files: SessionFile[],
+  options: AgentSessionIndexScanOptions,
+  buildRecord: (
+    file: SessionFile,
+    previous: AgentSessionIndexRecord | undefined,
+    adapterVersionChanged: boolean,
+  ) => Promise<AgentSessionScanRecordInput>,
+): Promise<AgentSessionIndexScanResult> {
+  const prior = previousByPath(options.previous);
+  const records: AgentSessionScanRecordInput[] = [];
+  let partial = false;
+  for (const file of files) {
+    throwIfAborted(options.signal);
+    const record = await buildRecord(
+      file,
+      prior.get(file.path),
+      options.adapterVersionChanged,
+    );
+    records.push(record);
+    partial ||= record.sourceStatus === "parse-error";
+    options.onProgress?.({ processed: records.length, total: files.length });
+  }
+  throwIfAborted(options.signal);
+  const newest = files[0];
+  return {
+    records,
+    scanCursor: JSON.stringify({
+      count: files.length,
+      newestPath: newest?.path || null,
+      newestMtimeMs: newest?.updatedAt || null,
+    }),
+    status: partial ? "partial" : "ok",
+  };
+}
+
 export function createAgentSessionService(options: AgentSessionServiceOptions) {
   const commandRunner = options.commandRunner || createNativeCommandRunner();
   const claudeProjectsRoot = path.join(
@@ -429,13 +653,66 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
   const openclawRoot =
     options.openclawRootDir || path.join(options.homeDir, ".openclaw");
   const qwenRuntimeRoot = resolveQwenRuntimeRoot(options);
+  const ohMyPiRoot =
+    options.ohMyPiRootDir || path.join(options.homeDir, ".omp", "agent");
+  const kiroRoot =
+    options.kiroRootDir ||
+    resolveEnvironmentRoot(process.env.KIRO_HOME, options.homeDir, ".kiro");
   const kimiAdapter = createKimiSessionAdapter(kimiRoot);
   const codexAdapter = createCodexSessionAdapter(codexRoot);
   const grokAdapter = createGrokSessionAdapter(grokRoot);
   const openclawAdapter = createOpenClawSessionAdapter(openclawRoot);
   const qwenAdapter = createQwenSessionAdapter(qwenRuntimeRoot, commandRunner);
+  const ohMyPiAdapter = createOhMyPiSessionAdapter(ohMyPiRoot);
+  const windsurfAdapter = createWindsurfSessionAdapter(
+    path.join(options.homeDir, ".windsurf", "transcripts"),
+  );
+  const kiroAdapter = createKiroSessionAdapter(kiroRoot);
 
   return {
+    getIndexSource(agentId: string): AgentSessionIndexSourceDescriptor | null {
+      if (agentId === "claude") {
+        return {
+          platformId: agentId,
+          rootPath: claudeProjectsRoot,
+          adapterId: "claude-jsonl-v1",
+          adapterVersion: "1",
+        };
+      }
+      if (agentId === "gemini") {
+        return {
+          platformId: agentId,
+          rootPath: geminiProjectsRoot,
+          adapterId: "gemini-json-v1",
+          adapterVersion: "1",
+        };
+      }
+      return null;
+    },
+
+    async scanIndex(
+      agentId: string,
+      input: AgentSessionIndexScanOptions,
+    ): Promise<AgentSessionIndexScanResult> {
+      if (agentId === "claude") {
+        const files = await scanClaudeFiles(
+          claudeProjectsRoot,
+          MAX_INDEX_SCAN_FILES,
+          input.signal,
+        );
+        return buildIndexScan(files, input, claudeScanRecord);
+      }
+      if (agentId === "gemini") {
+        const files = await scanGeminiFiles(
+          geminiProjectsRoot,
+          MAX_INDEX_SCAN_FILES,
+          input.signal,
+        );
+        return buildIndexScan(files, input, geminiScanRecord);
+      }
+      throw new Error("AGENT_SESSION_INDEX_UNSUPPORTED");
+    },
+
     async list(
       agentId: string,
       input: ListOptions,
@@ -552,6 +829,18 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
         return qwenAdapter.list(input.limit, offset);
       }
 
+      if (agentId === "oh-my-pi") {
+        return ohMyPiAdapter.list(input.limit, offset);
+      }
+
+      if (agentId === "windsurf") {
+        return windsurfAdapter.list(input.limit, offset);
+      }
+
+      if (agentId === "kiro") {
+        return kiroAdapter.list(input.limit, offset);
+      }
+
       throw new Error("AGENT_SESSION_UNSUPPORTED");
     },
 
@@ -642,9 +931,35 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
         return qwenAdapter.read(sessionId);
       }
 
+      if (agentId === "oh-my-pi") {
+        return ohMyPiAdapter.read(sessionId);
+      }
+
+      if (agentId === "windsurf") {
+        return windsurfAdapter.read(sessionId);
+      }
+
+      if (agentId === "kiro") {
+        return kiroAdapter.read(sessionId);
+      }
+
       throw new Error("AGENT_SESSION_UNSUPPORTED");
     },
   };
+}
+
+function resolveEnvironmentRoot(
+  configured: string | undefined,
+  homeDir: string,
+  fallback: string,
+): string {
+  if (!configured?.trim() || configured.includes("\0")) {
+    return path.join(homeDir, fallback);
+  }
+  const expanded = configured.trim().replace(/^~(?=$|[\\/])/, homeDir);
+  return path.isAbsolute(expanded)
+    ? path.normalize(expanded)
+    : path.join(homeDir, fallback);
 }
 
 function resolveQwenRuntimeRoot(options: AgentSessionServiceOptions): string {

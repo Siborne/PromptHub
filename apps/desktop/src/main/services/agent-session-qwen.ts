@@ -23,9 +23,25 @@ const ADAPTER = "qwen-cli-jsonl-v1";
 const MAX_LIST_BYTES = 2 * 1024 * 1024;
 const COMMAND_OPTIONS = { timeout: 30_000, maxBuffer: MAX_LIST_BYTES };
 const MAX_NATIVE_LIST = 200;
+const MAX_CACHED_SESSIONS = 256;
 
-interface QwenSession extends AgentSessionMetadata {
-  sourcePath: string;
+interface QwenSession extends Omit<AgentSessionMetadata, "sourcePath"> {
+  declaredPath: string;
+}
+
+function publicSession(session: QwenSession): AgentSessionMetadata {
+  return {
+    id: session.id,
+    title: session.title,
+    projectLabel: session.projectLabel,
+    projectPath: session.projectPath,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    model: session.model,
+    messageCount: session.messageCount,
+    sourcePath: null,
+    resume: session.resume,
+  };
 }
 
 function parseQwenEntry(
@@ -81,7 +97,7 @@ async function parseNativeRows(
       updatedAt: sessionTimestamp(value.mtime),
       model: null,
       messageCount: null,
-      sourcePath,
+      declaredPath,
       resume: {
         executable,
         args: ["--resume", id],
@@ -96,6 +112,19 @@ export function createQwenSessionAdapter(
   runtimeRoot: string,
   commandRunner: NativeCommandRunner,
 ) {
+  const sessionWindow = new Map<string, QwenSession>();
+
+  function rememberSessions(sessions: QwenSession[]): void {
+    for (const session of sessions) {
+      sessionWindow.delete(session.id);
+      sessionWindow.set(session.id, session);
+      while (sessionWindow.size > MAX_CACHED_SESSIONS) {
+        const oldestId = sessionWindow.keys().next().value as string;
+        sessionWindow.delete(oldestId);
+      }
+    }
+  }
+
   async function nativeList(limit: number): Promise<QwenSession[]> {
     const executable = await commandRunner.resolve("qwen");
     if (!executable) throw new Error("AGENT_SESSION_COMMAND_NOT_FOUND");
@@ -104,7 +133,13 @@ export function createQwenSessionAdapter(
       ["sessions", "list", "--json", "--limit", String(limit)],
       COMMAND_OPTIONS,
     );
-    return parseNativeRows(result.stdout, executable, runtimeRoot);
+    const sessions = await parseNativeRows(
+      result.stdout,
+      executable,
+      runtimeRoot,
+    );
+    rememberSessions(sessions);
+    return sessions;
   }
 
   return {
@@ -113,17 +148,27 @@ export function createQwenSessionAdapter(
       return {
         agentId: "qwen",
         adapter: ADAPTER,
-        sessions: sessions.slice(offset, offset + limit),
+        sessions: sessions
+          .slice(offset, offset + limit)
+          .map((session) => publicSession(session)),
         total: sessions.length,
         hasMore: sessions.length > offset + limit,
       };
     },
     async read(sessionId: string): Promise<AgentSessionDetail> {
-      const sessions = await nativeList(MAX_NATIVE_LIST);
-      const session = sessions.find((item) => item.id === sessionId);
+      let session = sessionWindow.get(sessionId);
+      if (!session) {
+        const sessions = await nativeList(MAX_NATIVE_LIST);
+        session = sessions.find((item) => item.id === sessionId);
+      }
       if (!session) throw new Error("AGENT_SESSION_NOT_FOUND");
+      const sourcePath = await safeSessionFile(
+        runtimeRoot,
+        session.declaredPath,
+      );
+      if (!sourcePath) throw new Error("AGENT_SESSION_NOT_FOUND");
       const { raw, truncated } = await readSessionPrefix(
-        session.sourcePath,
+        sourcePath,
         MAX_SESSION_DETAIL_BYTES,
       );
       const parsed = parseVisibleJsonLines(raw, parseQwenEntry);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DB_BACKUP_VERSION,
+  hasMeaningfulBackupContent,
   parsePromptHubBackupFile,
   parsePromptHubBackupFileContent,
 } from "../../../src/renderer/services/database-backup-format";
@@ -26,6 +27,36 @@ describe("database-backup-format", () => {
     expect(backup.folders).toEqual([]);
     expect(backup.versions).toEqual([]);
     expect(backup.version).toBe(1);
+  });
+
+  it("treats a session preference-only Agent section as meaningful backup content", () => {
+    const backup = parsePromptHubBackupFileContent(
+      JSON.stringify({
+        exportedAt: "2026-07-29T00:00:00.000Z",
+        kind: "prompthub-backup",
+        payload: {
+          exportedAt: "2026-07-29T00:00:00.000Z",
+          folders: [],
+          prompts: [],
+          version: 1,
+          versions: [],
+          agentManagement: {
+            version: 1,
+            providerProfiles: [],
+            snapshots: [],
+            sessionSourcePreferences: [
+              {
+                platformId: "claude",
+                adapterId: "claude-jsonl-v1",
+                enabled: true,
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(hasMeaningfulBackupContent(backup)).toBe(true);
   });
 
   it("parses a selective export envelope into an importable normalized backup payload", () => {

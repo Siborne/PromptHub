@@ -96,6 +96,7 @@ describe("backup-orchestrator", () => {
       skills: true,
       mcp: true,
       plugins: true,
+      agents: true,
     });
     expect(downloadBackup).not.toHaveBeenCalled();
     expect(recordManualBackup).toHaveBeenCalledWith("0.5.5");
@@ -147,6 +148,7 @@ describe("backup-orchestrator", () => {
       skills: true,
       mcp: true,
       plugins: true,
+      agents: true,
     });
     expect(downloadBackup).not.toHaveBeenCalled();
     expect(recordManualBackup).toHaveBeenCalledWith("0.5.5");

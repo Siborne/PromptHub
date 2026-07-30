@@ -478,10 +478,12 @@ const PLUGIN_TARGET_MATRIX: PluginTargetCompatibility[] = [
     id: "cursor",
     displayName: "Cursor",
     status: "adapter",
-    enabled: true,
+    enabled: false,
     nativeMarker: ".cursor-plugin/plugin.json",
-    installSurface: ".cursor-plugin/marketplace.json",
+    installSurface: "Cursor Marketplace / ~/.cursor/plugins/local",
     adapterOutput: "Generate Cursor plugin package from inventory.",
+    unsupportedReason:
+      "Native Cursor Marketplace installation or verified local-plugin loading is required; direct filesystem distribution is disabled.",
   },
   {
     id: "gemini-cli",
@@ -496,19 +498,23 @@ const PLUGIN_TARGET_MATRIX: PluginTargetCompatibility[] = [
     id: "kiro",
     displayName: "Kiro",
     status: "adapter",
-    enabled: true,
+    enabled: false,
     nativeMarker: "POWER.md",
-    installSurface: "Kiro power package",
-    adapterOutput: "Generate Kiro power package with bundled assets.",
+    installSurface: "Native Kiro Power import",
+    adapterOutput: "Read existing Kiro Power package structures only.",
+    unsupportedReason:
+      "Native Kiro Power import and registration is required; direct filesystem distribution is disabled.",
   },
   {
     id: "github-copilot",
     displayName: "GitHub Copilot / VS Code",
     status: "adapter",
-    enabled: true,
+    enabled: false,
     nativeMarker: "plugin.json",
     installSurface: "copilot plugin / VS Code Agent Plugins",
     adapterOutput: "Generate Copilot or VS Code agent plugin package.",
+    unsupportedReason:
+      "Native registration through `copilot plugin install` is required; direct filesystem distribution is disabled.",
   },
   {
     id: "qwen",

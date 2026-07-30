@@ -32,6 +32,10 @@ export function getMcpTargetPresets(
   environment: NodeJS.ProcessEnv = process.env,
 ): McpTargetPreset[] {
   const qwenHome = resolveQwenHome(homeDir, environment.QWEN_HOME);
+  const ohMyPiHome = resolveOhMyPiHome(
+    homeDir,
+    environment.PI_CODING_AGENT_DIR,
+  );
   const claudeDesktopPath =
     platform === "darwin"
       ? path.join(
@@ -98,12 +102,28 @@ export function getMcpTargetPresets(
       platformId: "augment",
     },
     {
+      id: "amp",
+      target: "amp",
+      scope: "global",
+      label: "Amp",
+      path: path.join(homeDir, ".config", "amp", "settings.json"),
+      platformId: "amp",
+    },
+    {
       id: "qwen",
       target: "qwen",
       scope: "global",
       label: "Qwen Code",
       path: path.join(qwenHome, "settings.json"),
       platformId: "qwen",
+    },
+    {
+      id: "oh-my-pi",
+      target: "oh-my-pi",
+      scope: "global",
+      label: "Oh My Pi",
+      path: path.join(ohMyPiHome, "mcp.json"),
+      platformId: "oh-my-pi",
     },
     {
       id: "gemini",
@@ -216,6 +236,20 @@ function resolveQwenHome(
 ): string {
   const value = configured?.trim();
   if (!value || value.includes("\0")) return path.join(homeDir, ".qwen");
+  const expanded = value.replace(/^~(?=$|[\\/])/, homeDir);
+  return path.isAbsolute(expanded)
+    ? path.normalize(expanded)
+    : path.resolve(expanded);
+}
+
+function resolveOhMyPiHome(
+  homeDir: string,
+  configured: string | undefined,
+): string {
+  const value = configured?.trim();
+  if (!value || value.includes("\0")) {
+    return path.join(homeDir, ".omp", "agent");
+  }
   const expanded = value.replace(/^~(?=$|[\\/])/, homeDir);
   return path.isAbsolute(expanded)
     ? path.normalize(expanded)

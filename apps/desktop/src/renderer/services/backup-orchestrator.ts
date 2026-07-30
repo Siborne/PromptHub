@@ -111,6 +111,7 @@ async function downloadExportFile(): Promise<void> {
     skills: true,
     mcp: true,
     plugins: true,
+    agents: true,
   });
 }
 

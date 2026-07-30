@@ -9,6 +9,7 @@ import type { AppCommand } from "@prompthub/shared/types";
 
 import { loadMacTrayTemplateIcon, resolveMacTrayIconPaths } from "./tray-icon";
 import { buildTrayMenuTemplate, getTrayMenuLabels } from "./tray-menu";
+import type { AgentProviderTrayGroup } from "./services/agent-provider-tray-service";
 
 interface TrayControllerOptions {
   agentManagementEnabled: boolean;
@@ -21,6 +22,8 @@ interface TrayControllerOptions {
   getStoredLanguage: () => string | null;
   getWindowVisibility: () => boolean;
   isDev: boolean;
+  loadAgentProviderGroups?: () => Promise<AgentProviderTrayGroup[]>;
+  onAgentProviderProfile?: (agentId: string, profileId: string) => void;
   onCommand: (command: AppCommand) => void;
   onQuit: () => void;
   onToggleWindow: () => void;
@@ -31,6 +34,7 @@ export interface TrayController {
   create: () => void;
   destroy: () => void;
   refresh: () => void;
+  reloadAgentProviders: () => Promise<void>;
 }
 
 function loadPlatformTrayIcon(options: TrayControllerOptions): NativeImage {
@@ -75,19 +79,36 @@ export function createTrayController(
   options: TrayControllerOptions,
 ): TrayController {
   let tray: Tray | null = null;
+  let agentProviderGroups: AgentProviderTrayGroup[] = [];
+  let providerLoadGeneration = 0;
 
   const refresh = () => {
     if (!tray) return;
     const locale = options.getStoredLanguage() ?? options.getLocale();
     const template = buildTrayMenuTemplate({
       agentManagementEnabled: options.agentManagementEnabled,
+      agentProviderGroups,
       isWindowVisible: options.getWindowVisibility(),
       labels: getTrayMenuLabels(locale),
+      onAgentProviderProfile: options.onAgentProviderProfile,
       onCommand: options.onCommand,
       onQuit: options.onQuit,
       onToggleWindow: options.onToggleWindow,
     });
     tray.setContextMenu(options.buildMenu(template));
+  };
+
+  const reloadAgentProviders = async () => {
+    if (!tray || !options.loadAgentProviderGroups) return;
+    const generation = ++providerLoadGeneration;
+    try {
+      const groups = await options.loadAgentProviderGroups();
+      if (!tray || generation !== providerLoadGeneration) return;
+      agentProviderGroups = groups;
+      refresh();
+    } catch {
+      console.error("Failed to refresh Agent provider tray state");
+    }
   };
 
   const create = () => {
@@ -103,17 +124,22 @@ export function createTrayController(
     tray = options.createTray(icon);
     tray.setToolTip("PromptHub");
     refresh();
+    void reloadAgentProviders();
     if (options.platform === "darwin") {
-      tray.on("mouse-down", refresh);
+      tray.on("mouse-down", () => {
+        refresh();
+        void reloadAgentProviders();
+      });
     } else {
       tray.on("click", options.onToggleWindow);
     }
   };
 
   const destroy = () => {
+    providerLoadGeneration += 1;
     tray?.destroy();
     tray = null;
   };
 
-  return { create, destroy, refresh };
+  return { create, destroy, refresh, reloadAgentProviders };
 }

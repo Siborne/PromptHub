@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -7,8 +8,12 @@ import type {
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
 import { AgentUsageBanner } from "../../../src/renderer/components/agent/AgentUsageBanner";
-import { renderWithI18n } from "../../helpers/i18n";
+import { renderWithI18n as renderWithI18nBase } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
+
+function renderWithI18n(ui: ReactElement) {
+  return renderWithI18nBase(ui, { settleAsyncEffects: true });
+}
 
 const agent: ManagedAgentSummary = {
   id: "claude",
@@ -685,11 +690,11 @@ describe("AgentUsageBanner", () => {
     await renderWithI18n(<AgentUsageBanner agent={agent} />);
 
     expect(
-      screen.getByRole("img", { name: "5-hour window: 0%" }),
-    ).toBeVisible();
-    expect(
       await screen.findByRole("img", { name: "5-hour window: 58% remaining" }),
     ).toBeVisible();
+    expect(
+      screen.queryByRole("img", { name: "5-hour window: 0%" }),
+    ).not.toBeInTheDocument();
   });
 
   it.each(["planned", "unsupported"] as const)(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
@@ -6,6 +6,7 @@ import {
   MoreHorizontalIcon,
   RefreshCwIcon,
   Settings2Icon,
+  StethoscopeIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -16,12 +17,17 @@ import { PlatformIcon } from "../ui/PlatformIcon";
 import { AgentAppearancePanel } from "./AgentAppearancePanel";
 import { AgentAssetsWorkspace } from "./AgentAssetsWorkspace";
 import { AgentConfigFilesPanel } from "./AgentConfigFilesPanel";
+import { AgentDefinitionsPanel } from "./AgentDefinitionsPanel";
+import { AgentCliDiagnosticDialog } from "./AgentCliDiagnosticDialog";
 import { AgentOverviewPanel } from "./AgentOverviewPanel";
-import { AgentProviderModelPanel } from "./AgentProviderModelPanel";
+import { AgentProviderProfileWorkbench } from "./AgentProviderProfileWorkbench";
 import { AgentSessionsPanel } from "./AgentSessionsPanel";
 import { AgentSettingsDialog } from "./AgentSettingsDialog";
 import {
   AGENT_WORKSPACE_TABS,
+  getAgentWorkspaceTabs,
+  getAgentCapabilityGuidance,
+  getAgentTabStatus,
   isAgentAssetDomain,
   isAgentTabEnabled,
   type AgentWorkspaceNavigate,
@@ -51,7 +57,7 @@ function AgentIdentity({ agent }: { agent: ManagedAgentSummary }) {
   const isEnterpriseLegacy = agent.lifecycle === "enterprise-legacy";
 
   return (
-    <div className="flex min-w-0 items-center gap-4">
+    <div className="flex min-w-0 max-w-full flex-1 basis-[20rem] items-center gap-4">
       <span
         data-testid="agent-identity-icon"
         className="inline-flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md"
@@ -87,9 +93,13 @@ function AgentIdentity({ agent }: { agent: ManagedAgentSummary }) {
 }
 
 function AgentOverflowMenu({
+  diagnosticsEnabled,
+  onDiagnostics,
   onRefresh,
   onEdit,
 }: {
+  diagnosticsEnabled: boolean;
+  onDiagnostics: () => void;
   onRefresh: () => void;
   onEdit: () => void;
 }) {
@@ -121,6 +131,15 @@ function AgentOverflowMenu({
           y={position.y}
           onClose={() => setPosition(null)}
           items={[
+            ...(diagnosticsEnabled
+              ? [
+                  {
+                    label: t("agents.cliDiagnostics.title", "CLI diagnostics"),
+                    icon: <StethoscopeIcon className="h-4 w-4" />,
+                    onClick: onDiagnostics,
+                  },
+                ]
+              : []),
             {
               label: t("agents.refresh", "Refresh"),
               icon: <RefreshCwIcon className="h-4 w-4" />,
@@ -141,26 +160,28 @@ function AgentOverflowMenu({
 function AgentHeaderActions({
   agent,
   onLaunch,
+  onDiagnostics,
   onRefresh,
   onEdit,
 }: {
   agent: ManagedAgentSummary;
   onLaunch: () => void;
+  onDiagnostics: () => void;
   onRefresh: () => void;
   onEdit: () => void;
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-2">
+    <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
       {agent.launchable ? (
         <button
           type="button"
           onClick={onLaunch}
           aria-label={t("agents.openAgent", { agent: agent.name })}
-          className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-accent"
+          className="inline-flex h-10 max-w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-accent"
         >
           <ExternalLinkIcon aria-hidden="true" className="h-4 w-4" />
-          {t("agents.openAgent", { agent: agent.name })}
+          {t("common.open", "Open")}
         </button>
       ) : null}
       <button
@@ -172,7 +193,15 @@ function AgentHeaderActions({
       >
         <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
       </button>
-      <AgentOverflowMenu onRefresh={onRefresh} onEdit={onEdit} />
+      <AgentOverflowMenu
+        diagnosticsEnabled={
+          agent.capabilities.maintenance.status === "partial" ||
+          agent.capabilities.maintenance.status === "supported"
+        }
+        onDiagnostics={onDiagnostics}
+        onRefresh={onRefresh}
+        onEdit={onEdit}
+      />
     </div>
   );
 }
@@ -187,28 +216,76 @@ function AgentTabs({
   onSelect: (tab: AgentWorkspaceTabKey) => void;
 }) {
   const { t } = useTranslation();
+  const tabRefs = useRef(new Map<AgentWorkspaceTabKey, HTMLButtonElement>());
+  const tabs = getAgentWorkspaceTabs(agent);
+  const enabledTabs = tabs.filter((tab) => isAgentTabEnabled(agent, tab));
+
+  useEffect(() => {
+    const focusedElement = document.activeElement;
+    const focusWasInTablist = [...tabRefs.current.values()].some(
+      (element) => element === focusedElement,
+    );
+    if (focusWasInTablist) tabRefs.current.get(activeTab)?.focus();
+  }, [activeTab, agent.id]);
+
+  function selectAndFocus(tab: AgentWorkspaceTabKey) {
+    onSelect(tab);
+    tabRefs.current.get(tab)?.focus();
+  }
+
+  function handleTabKeyDown(
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    tab: AgentWorkspaceTabKey,
+  ) {
+    const currentIndex = enabledTabs.findIndex((item) => item.key === tab);
+    if (currentIndex < 0) return;
+
+    let targetIndex: number | null = null;
+    if (event.key === "ArrowRight") {
+      targetIndex = (currentIndex + 1) % enabledTabs.length;
+    } else if (event.key === "ArrowLeft") {
+      targetIndex =
+        (currentIndex - 1 + enabledTabs.length) % enabledTabs.length;
+    } else if (event.key === "Home") {
+      targetIndex = 0;
+    } else if (event.key === "End") {
+      targetIndex = enabledTabs.length - 1;
+    }
+
+    if (targetIndex === null) return;
+    event.preventDefault();
+    selectAndFocus(enabledTabs[targetIndex].key);
+  }
+
   return (
     <div
       role="tablist"
       aria-label={t("agents.workspaceTabs", "Agent workspace")}
       className="mt-1 flex gap-4 overflow-x-auto"
     >
-      {AGENT_WORKSPACE_TABS.map((tab) => {
+      {tabs.map((tab) => {
         const enabled = isAgentTabEnabled(agent, tab);
         const selected = activeTab === tab.key;
+        const guidance = getAgentCapabilityGuidance(
+          getAgentTabStatus(agent, tab),
+        );
         return (
           <button
             key={tab.key}
+            ref={(element) => {
+              if (element) tabRefs.current.set(tab.key, element);
+              else tabRefs.current.delete(tab.key);
+            }}
+            id={`agent-tab-${tab.key}`}
             type="button"
             role="tab"
             aria-selected={selected}
+            aria-controls="agent-workspace-panel"
             disabled={!enabled}
-            title={
-              enabled
-                ? undefined
-                : t("agents.adapterPending", "Adapter planned")
-            }
+            tabIndex={selected ? 0 : -1}
+            title={guidance ? t(guidance.key, guidance.fallback) : undefined}
             onClick={() => onSelect(tab.key)}
+            onKeyDown={(event) => handleTabKeyDown(event, tab.key)}
             className={`shrink-0 border-b-2 px-0.5 py-3.5 text-sm font-medium transition-colors ${selected ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"} disabled:cursor-not-allowed disabled:opacity-35`}
           >
             {t(tab.labelKey, tab.fallback)}
@@ -235,8 +312,9 @@ function AgentWorkspacePanel({
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <div
+        id="agent-workspace-panel"
         role="tabpanel"
-        aria-label={t(meta.labelKey, meta.fallback)}
+        aria-labelledby={`agent-tab-${meta.key}`}
         className="flex h-full min-h-0 flex-col"
       >
         {target.tab === "overview" ? (
@@ -245,8 +323,11 @@ function AgentWorkspacePanel({
         {isAgentAssetDomain(target.tab) ? (
           <AgentAssetsWorkspace agent={agent} domain={target.tab} />
         ) : null}
+        {target.tab === "definitions" ? (
+          <AgentDefinitionsPanel key={agent.id} agent={agent} />
+        ) : null}
         {target.tab === "provider" ? (
-          <AgentProviderModelPanel key={agent.id} agent={agent} />
+          <AgentProviderProfileWorkbench key={agent.id} agent={agent} />
         ) : null}
         {target.tab === "appearance" ? (
           <AgentAppearancePanel key={agent.id} agent={agent} />
@@ -272,6 +353,7 @@ export function AgentsWorkspace() {
     tab: "overview",
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const agent = useMemo(
     () => agents.find((item) => item.id === selectedAgentId) || agents[0],
     [agents, selectedAgentId],
@@ -287,7 +369,10 @@ export function AgentsWorkspace() {
       setTarget({ tab: "overview" });
   }, [target.tab, agent]);
 
-  useEffect(() => setIsSettingsOpen(false), [agent?.id]);
+  useEffect(() => {
+    setIsSettingsOpen(false);
+    setIsDiagnosticsOpen(false);
+  }, [agent?.id]);
 
   if (!agent) {
     return (
@@ -307,6 +392,7 @@ export function AgentsWorkspace() {
           <AgentHeaderActions
             agent={agent}
             onLaunch={() => void window.api.agent.launch(agent.id)}
+            onDiagnostics={() => setIsDiagnosticsOpen(true)}
             onRefresh={() => void refresh()}
             onEdit={() => setIsSettingsOpen(true)}
           />
@@ -326,6 +412,11 @@ export function AgentsWorkspace() {
         agent={agent}
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+      <AgentCliDiagnosticDialog
+        agent={agent}
+        isOpen={isDiagnosticsOpen}
+        onClose={() => setIsDiagnosticsOpen(false)}
       />
     </div>
   );

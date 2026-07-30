@@ -1,0 +1,163 @@
+import path from "node:path";
+
+import {
+  AgentAdapterRegistry,
+  AgentProviderActivationService,
+} from "@prompthub/core";
+import { AgentProviderProfileDB, AgentSessionIndexDB } from "@prompthub/db";
+import { getPlatformById } from "@prompthub/shared/constants/platforms";
+import Database from "../database/sqlite";
+import { createAgentClaudeProviderAdapter } from "./agent-claude-provider-adapter";
+import {
+  createAgentManagementBackupService,
+  type AgentManagementBackupService,
+} from "./agent-management-backup-service";
+import { createAgentCodexProviderAdapter } from "./agent-codex-provider-adapter";
+import { createAgentCodexProviderService } from "./agent-codex-provider-service";
+import { createAgentGeminiProviderAdapter } from "./agent-gemini-provider-adapter";
+import { createAgentGrokProviderAdapter } from "./agent-grok-provider-adapter";
+import { validateKimiConfigFile } from "./agent-kimi-config-validator";
+import { createAgentKimiProviderAdapter } from "./agent-kimi-provider-adapter";
+import {
+  AGENT_MODEL_PROVIDER_PLATFORM_IDS,
+  createAgentModelProviderAdapter,
+} from "./agent-model-provider-adapter";
+import { createAgentOpenCodeProviderAdapter } from "./agent-opencode-provider-adapter";
+import { resolveAgentProviderContext } from "./agent-platform-context";
+import { createAgentProviderActivationRepository } from "./agent-provider-activation-repository";
+import { AgentProviderProfileService } from "./agent-provider-profile-service";
+import { createAgentQwenProviderAdapter } from "./agent-qwen-provider-adapter";
+import { resolveAgentSessionIndexSource } from "./agent-session-index-operations";
+import {
+  createAgentSecretStore,
+  type AgentSecretStore,
+  type AgentSecretStoreEncryption,
+} from "./agent-secret-store";
+import {
+  createAgentProviderTrayService,
+  type AgentProviderTrayService,
+} from "./agent-provider-tray-service";
+
+interface CreateAgentProviderRuntimeOptions {
+  database: Database.Database;
+  encryption: AgentSecretStoreEncryption;
+  userDataPath: string;
+}
+
+export interface AgentProviderRuntime {
+  activationService: AgentProviderActivationService;
+  backupService: AgentManagementBackupService;
+  legacyProviderService: ReturnType<typeof createAgentCodexProviderService>;
+  profileDb: AgentProviderProfileDB;
+  sessionIndexDb: AgentSessionIndexDB;
+  profileService: AgentProviderProfileService;
+  secretStore: AgentSecretStore;
+  trayService: AgentProviderTrayService;
+}
+
+export function createAgentProviderRuntime({
+  database,
+  encryption,
+  userDataPath,
+}: CreateAgentProviderRuntimeOptions): AgentProviderRuntime {
+  const backupRoot = path.join(userDataPath, "agent-config-backups");
+  const profileDb = new AgentProviderProfileDB(database);
+  const sessionIndexDb = new AgentSessionIndexDB(database);
+  const secretStore = createAgentSecretStore({
+    userDataPath,
+    encryption,
+  });
+  const profileService = new AgentProviderProfileService(
+    profileDb,
+    secretStore,
+  );
+  const backupService = createAgentManagementBackupService({
+    profiles: profileDb,
+    secrets: secretStore,
+    sessions: sessionIndexDb,
+    resolveSessionSource: resolveAgentSessionIndexSource,
+    transaction: (operation) => database.transaction(operation)(),
+  });
+  const legacyProviderService = createAgentCodexProviderService({
+    backupRoot,
+    secretStore,
+  });
+  const registry = new AgentAdapterRegistry();
+
+  for (const platformId of AGENT_MODEL_PROVIDER_PLATFORM_IDS) {
+    registry.register(platformId, {
+      provider:
+        platformId === "codex"
+          ? createAgentCodexProviderAdapter({
+              backupRoot,
+              backupEncryption: encryption,
+              secretStore,
+            })
+          : platformId === "claude"
+            ? createAgentClaudeProviderAdapter({
+                backupRoot,
+                backupEncryption: encryption,
+                secretStore,
+              })
+            : platformId === "gemini"
+              ? createAgentGeminiProviderAdapter({
+                  backupRoot,
+                  backupEncryption: encryption,
+                  secretStore,
+                })
+              : platformId === "grok"
+                ? createAgentGrokProviderAdapter({
+                    backupRoot,
+                    backupEncryption: encryption,
+                  })
+                : platformId === "kimi"
+                  ? createAgentKimiProviderAdapter({
+                      backupRoot,
+                      backupEncryption: encryption,
+                      secretStore,
+                      validateNativeConfig: validateKimiConfigFile,
+                    })
+                  : platformId === "qwen"
+                    ? createAgentQwenProviderAdapter({
+                        backupRoot,
+                        backupEncryption: encryption,
+                        secretStore,
+                      })
+                    : platformId === "opencode"
+                      ? createAgentOpenCodeProviderAdapter({
+                          backupRoot,
+                          backupEncryption: encryption,
+                          secretStore,
+                        })
+                      : createAgentModelProviderAdapter(platformId, {
+                          backupRoot,
+                        }),
+    });
+  }
+
+  const activationService = new AgentProviderActivationService(
+    registry,
+    createAgentProviderActivationRepository(profileDb),
+  );
+  const trayService = createAgentProviderTrayService({
+    activate: activationService.activate.bind(activationService),
+    getLatestVerifiedSnapshot: (platformId) =>
+      profileDb.getLatestVerifiedSnapshot(platformId),
+    listProfiles: () => profileService.list(),
+    preview: activationService.preview.bind(activationService),
+    resolveContext: resolveAgentProviderContext,
+    resolvePlatformName: (platformId) => getPlatformById(platformId)!.name,
+    supportedPlatformIds: AGENT_MODEL_PROVIDER_PLATFORM_IDS,
+  });
+
+  return {
+    activationService,
+    backupService,
+    legacyProviderService,
+    profileDb,
+    sessionIndexDb,
+    profileService,
+    secretStore,
+    trayService,
+  };
+}

@@ -1,4 +1,11 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentsSidebarPanel } from "../../../src/renderer/components/agent/AgentsSidebarPanel";
@@ -105,7 +112,10 @@ const agents = [
       },
       sessions: { status: "planned" as const, reason: "Coming later" },
       usage: { status: "planned" as const, reason: "Coming later" },
-      maintenance: { status: "partial" as const, reason: "Basic tools" },
+      maintenance: {
+        status: "planned" as const,
+        reason: "lifecycle-adapter-pending",
+      },
     },
   },
 ];
@@ -115,6 +125,12 @@ const settingsActions = {
     useSettingsStore.getState().updateBuiltinAgentOverride,
   updateCustomAgent: useSettingsStore.getState().updateCustomAgent,
 };
+
+async function renderWorkspaceAndSettleOverview(
+  ui: ReactElement = <AgentsWorkspace />,
+) {
+  return renderWithI18n(ui, { settleAsyncEffects: true });
+}
 
 describe("Agent workspace shell", () => {
   beforeEach(() => {
@@ -170,6 +186,25 @@ describe("Agent workspace shell", () => {
     });
   });
 
+  it("settles Overview async cells without React act warnings", async () => {
+    const errors: unknown[][] = [];
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation((...args: unknown[]) => {
+        errors.push(args);
+      });
+
+    try {
+      await renderWorkspaceAndSettleOverview();
+
+      expect(
+        errors.filter((args) => String(args[0]).includes("not wrapped in act")),
+      ).toEqual([]);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("keeps the Agent list search-only and rows clickable", async () => {
     await renderWithI18n(<AgentsSidebarPanel />);
 
@@ -196,7 +231,7 @@ describe("Agent workspace shell", () => {
   });
 
   it("renders the detail identity icon without a decorative frame", async () => {
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     const identityIcon = screen.getByTestId("agent-identity-icon");
     expect(identityIcon.className).not.toContain("border");
@@ -214,7 +249,7 @@ describe("Agent workspace shell", () => {
     };
     useAgentStore.setState({ agents: [gemini], selectedAgentId: "gemini" });
 
-    await renderWithI18n(
+    await renderWorkspaceAndSettleOverview(
       <>
         <AgentsSidebarPanel />
         <AgentsWorkspace />
@@ -270,7 +305,7 @@ describe("Agent workspace shell", () => {
   });
 
   it("renders direct asset tabs without maintenance, usage, or an assets submenu", async () => {
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs).toHaveLength(9);
@@ -305,8 +340,98 @@ describe("Agent workspace shell", () => {
     expect(screen.getByRole("tab", { name: /appearance/i })).toBeDisabled();
   });
 
+  it("opens read-only CLI diagnostics from the overflow menu", async () => {
+    await renderWorkspaceAndSettleOverview();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /more actions/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /cli diagnostics/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: /cli diagnostics/i }),
+    ).toBeVisible();
+    expect(window.api.agent.diagnoseCli).toHaveBeenCalledWith("claude");
+    expect(
+      screen.queryByRole("tab", { name: /maintenance/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer CLI diagnostics when no verified descriptor exists", async () => {
+    useAgentStore.setState({ selectedAgentId: "cline" });
+    await renderWorkspaceAndSettleOverview();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /more actions/i }),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /cli diagnostics/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("explains unavailable adapters without calling their IPC surfaces", async () => {
+    useAgentStore.setState({ selectedAgentId: "cline" });
+
+    await renderWorkspaceAndSettleOverview();
+
+    const providerTab = screen.getByRole("tab", {
+      name: /provider & model/i,
+    });
+    expect(providerTab).toBeDisabled();
+    expect(providerTab).toHaveAttribute(
+      "title",
+      "This adapter is planned and is not available yet.",
+    );
+    expect(
+      screen.getAllByText(
+        "This adapter is planned and is not available yet.",
+      )[0],
+    ).toBeVisible();
+    expect(window.api.agent.getModelConfig).not.toHaveBeenCalled();
+    expect(window.api.agent.listProviderProfiles).not.toHaveBeenCalled();
+  });
+
+  it("uses roving focus and arrow keys across enabled workspace tabs", async () => {
+    await renderWorkspaceAndSettleOverview();
+
+    const overview = screen.getByRole("tab", { name: /overview/i });
+    const skills = screen.getByRole("tab", { name: /^skills$/i });
+    const sessions = screen.getByRole("tab", { name: /sessions/i });
+
+    expect(overview).toHaveAttribute("tabindex", "0");
+    expect(skills).toHaveAttribute("tabindex", "-1");
+
+    overview.focus();
+    fireEvent.keyDown(overview, { key: "ArrowRight" });
+    expect(skills).toHaveFocus();
+    expect(skills).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: /^skills$/i })).toBeVisible();
+
+    fireEvent.keyDown(skills, { key: "End" });
+    expect(sessions).toHaveFocus();
+    expect(sessions).toHaveAttribute("aria-selected", "true");
+
+    await act(async () => {
+      fireEvent.keyDown(sessions, { key: "ArrowRight" });
+      await Promise.resolve();
+    });
+    expect(overview).toHaveFocus();
+    expect(overview).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(overview, { key: "ArrowLeft" });
+    expect(sessions).toHaveFocus();
+    await act(async () => {
+      fireEvent.keyDown(sessions, { key: "Home" });
+      await Promise.resolve();
+    });
+    expect(overview).toHaveFocus();
+    fireEvent.keyDown(overview, { key: "Escape" });
+    expect(overview).toHaveFocus();
+  });
+
   it("keeps the tab panel flush with the workspace without a page canvas", async () => {
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     const panel = screen.getByRole("tabpanel", { name: /overview/i });
     expect(panel.className).toContain("flex");
@@ -319,7 +444,7 @@ describe("Agent workspace shell", () => {
   });
 
   it("renders each asset domain directly from its top-level tab", async () => {
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     fireEvent.click(screen.getByRole("tab", { name: /^skills$/i }));
     expect(screen.getByRole("tabpanel", { name: /^skills$/i })).toBeVisible();
@@ -337,7 +462,7 @@ describe("Agent workspace shell", () => {
   });
 
   it("does not duplicate Skills management in the header actions", async () => {
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     expect(
       screen.queryByRole("button", { name: /manage skills/i }),
@@ -347,7 +472,7 @@ describe("Agent workspace shell", () => {
   it("launches the selected desktop Agent from the header action", async () => {
     window.api.agent.launch = vi.fn().mockResolvedValue({ success: true });
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
     fireEvent.click(screen.getByRole("button", { name: "Open Claude Code" }));
 
     await waitFor(() =>
@@ -365,7 +490,7 @@ describe("Agent workspace shell", () => {
       .spyOn(useAgentStore.getState(), "refresh")
       .mockResolvedValue(undefined);
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
     fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
 
     const editItem = screen.getByRole("button", {
@@ -441,7 +566,7 @@ describe("Agent workspace shell", () => {
       updateCustomAgent,
     });
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
     fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
     fireEvent.click(screen.getByRole("button", { name: /edit agent/i }));
 
@@ -534,7 +659,7 @@ describe("Agent workspace shell", () => {
       },
     });
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
     const appearanceTab = screen.getByRole("tab", { name: /appearance/i });
     expect(appearanceTab).toBeEnabled();
     fireEvent.click(appearanceTab);
@@ -550,23 +675,8 @@ describe("Agent workspace shell", () => {
     expect(screen.getByText("Orbit")).toBeVisible();
   });
 
-  it("loads and updates the Agent native model without exposing credentials", async () => {
-    const setModelConfig = vi.fn().mockResolvedValue({
-      agentId: "claude",
-      adapter: "claude-settings-v1",
-      status: "configured",
-      model: "claude-sonnet-4-5",
-      secondaryModel: null,
-      fallbackModels: [],
-      provider: "anthropic",
-      endpoint: null,
-      availableModels: ["claude-sonnet-4-5"],
-      credentialStatus: "platform-managed",
-      sourceRelativePath: "settings.json",
-      canSetModel: true,
-      formattingMayChange: false,
-      backupPath: "/tmp/backup/settings.json",
-    });
+  it("routes non-Codex Provider management through public Profile data", async () => {
+    const setModelConfig = vi.fn();
     installWindowMocks({
       api: {
         agent: {
@@ -586,34 +696,114 @@ describe("Agent workspace shell", () => {
             formattingMayChange: false,
           }),
           setModelConfig,
+          listProviderProfiles: vi.fn().mockResolvedValue([
+            {
+              id: "profile-claude",
+              platformId: "claude",
+              name: "Claude production",
+              providerKind: "anthropic",
+              protocol: "platform-native",
+              endpoint: null,
+              config: {},
+              source: "manual",
+              archived: false,
+              createdAt: 1,
+              updatedAt: 2,
+              secretState: "available",
+              modelMappings: [
+                {
+                  id: "mapping-claude",
+                  providerProfileId: "profile-claude",
+                  routeKey: "primary",
+                  modelId: "claude-sonnet-4-5",
+                  parameters: {},
+                },
+              ],
+            },
+          ]),
         },
       },
     });
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
     fireEvent.click(screen.getByRole("tab", { name: /provider & model/i }));
 
-    const modelInput = await screen.findByLabelText(/default model/i);
-    expect(modelInput).toHaveValue("claude-opus-4-1");
-    // The credential status appears both in the master list entry and in the
-    // built-in detail pane; every rendered occurrence must be visible.
-    const credentialStatuses = screen.getAllByText(/managed by agent/i);
-    expect(credentialStatuses.length).toBeGreaterThan(0);
-    for (const status of credentialStatuses) {
-      expect(status).toBeVisible();
-    }
+    expect(
+      await screen.findByRole("button", { name: /Claude production/ }),
+    ).toHaveAttribute("aria-current", "true");
+    expect(screen.getAllByText("claude-sonnet-4-5").length).toBeGreaterThan(0);
+    expect(screen.getByText("Credential available")).toBeVisible();
     expect(screen.queryByText(/api[_ -]?key/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/agent-provider:/i)).not.toBeInTheDocument();
+    expect(setModelConfig).not.toHaveBeenCalled();
+  });
 
-    fireEvent.change(modelInput, { target: { value: "claude-sonnet-4-5" } });
-    fireEvent.click(screen.getByRole("button", { name: /save model/i }));
+  it("routes Codex through the same Profile source instead of legacy provider state", async () => {
+    const codexAgent = {
+      ...agents[0],
+      id: "codex",
+      name: "Codex CLI",
+      paths: {
+        ...agents[0].paths,
+        root: "~/.codex",
+        skills: "~/.codex/skills",
+        configFiles: ["~/.codex/config.toml"],
+        configFileRelativePaths: ["config.toml"],
+      },
+      capabilities: {
+        ...agents[0].capabilities,
+        provider: { status: "supported" as const },
+      },
+    };
+    useAgentStore.setState({ agents: [codexAgent], selectedAgentId: "codex" });
+    const listProviderProfiles = vi.fn().mockResolvedValue([
+      {
+        id: "profile-codex",
+        platformId: "codex",
+        name: "Codex work gateway",
+        providerKind: "openai-compatible",
+        protocol: "openai-responses",
+        endpoint: "https://gateway.example.com/v1",
+        config: { providerId: "work-gateway" },
+        source: "manual",
+        archived: false,
+        createdAt: 1,
+        updatedAt: 2,
+        secretState: "available",
+        modelMappings: [
+          {
+            id: "mapping-codex",
+            providerProfileId: "profile-codex",
+            routeKey: "primary",
+            modelId: "gpt-5.4",
+            parameters: {},
+          },
+        ],
+      },
+    ]);
+    installWindowMocks({
+      api: {
+        agent: {
+          listProviderProfiles,
+          previewProviderMigration: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            nativeDigest: "current",
+            candidates: [],
+          }),
+        },
+      },
+    });
 
-    await waitFor(() =>
-      expect(setModelConfig).toHaveBeenCalledWith({
-        agentId: "claude",
-        model: "claude-sonnet-4-5",
-      }),
-    );
-    expect(await screen.findByText(/^saved$/i)).toBeVisible();
+    await renderWorkspaceAndSettleOverview();
+    fireEvent.click(screen.getByRole("tab", { name: /provider & model/i }));
+
+    expect(
+      await screen.findByRole("button", { name: /Codex work gateway/ }),
+    ).toHaveAttribute("aria-current", "true");
+    expect(listProviderProfiles).toHaveBeenCalledWith({
+      platformId: "codex",
+    });
+    expect(screen.getByText("work-gateway")).toBeVisible();
   });
 
   it("lists Agent sessions and lazily reads the selected transcript", async () => {
@@ -663,7 +853,7 @@ describe("Agent workspace shell", () => {
       },
     });
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
     fireEvent.click(screen.getByRole("tab", { name: /sessions/i }));
 
     expect(
@@ -715,7 +905,7 @@ describe("Agent workspace shell", () => {
       },
     });
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     expect(
       screen.queryByRole("tab", { name: /usage/i }),
@@ -735,7 +925,7 @@ describe("Agent workspace shell", () => {
   });
 
   it("does not render the usage banner or fetch usage when the capability is planned", async () => {
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     await screen.findByRole("tabpanel", { name: /overview/i });
     expect(
@@ -747,7 +937,7 @@ describe("Agent workspace shell", () => {
   it("enables only direct asset tabs backed by a configured path", async () => {
     useAgentStore.setState({ selectedAgentId: "cline" });
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     const skillsTab = screen.getByRole("tab", { name: /^skills$/i });
     expect(skillsTab).toBeEnabled();
@@ -760,7 +950,7 @@ describe("Agent workspace shell", () => {
   });
 
   it("opens the allowlisted native config editor and the Agent root folder", async () => {
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     const configTab = screen.getByRole("tab", { name: /config files/i });
     expect(configTab).toBeEnabled();
@@ -779,7 +969,7 @@ describe("Agent workspace shell", () => {
   it("keeps Config Files disabled when no native path is verified", async () => {
     useAgentStore.setState({ selectedAgentId: "cline" });
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
 
     expect(screen.getByRole("tab", { name: /config files/i })).toBeDisabled();
   });
@@ -789,7 +979,7 @@ describe("Agent workspace shell", () => {
       .spyOn(useAgentStore.getState(), "refresh")
       .mockResolvedValue(undefined);
 
-    await renderWithI18n(<AgentsWorkspace />);
+    await renderWorkspaceAndSettleOverview();
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
 
     expect(refresh).toHaveBeenCalledTimes(1);

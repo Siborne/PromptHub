@@ -234,6 +234,8 @@ const REQUIRED_MIGRATION_NAMES = [
   "drop_skill_name_unique_v2",
   "fix_prompt_current_version_v1",
   "backfill_skill_legacy_fingerprint_algorithm_v1",
+  "agent_provider_profiles_v1",
+  "agent_session_index_v1",
 ] as const;
 
 const REQUIRED_TABLES = [
@@ -245,6 +247,11 @@ const REQUIRED_TABLES = [
   "skill_versions",
   "rules",
   "rule_versions",
+  "agent_provider_profiles",
+  "agent_provider_model_mappings",
+  "agent_provider_snapshots",
+  "agent_session_sources",
+  "agent_session_index",
 ] as const;
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -449,6 +456,29 @@ export function initDatabase(
         Date.now(),
       );
     };
+
+    if (!hasMigration("agent_provider_profiles_v1")) {
+      const requiredProviderTables = [
+        "agent_provider_profiles",
+        "agent_provider_model_mappings",
+        "agent_provider_snapshots",
+      ];
+      if (requiredProviderTables.some((table) => !tableExists(db!, table))) {
+        throw new Error("Agent provider profile tables were not created");
+      }
+      markMigration("agent_provider_profiles_v1");
+    }
+
+    if (!hasMigration("agent_session_index_v1")) {
+      const requiredSessionTables = [
+        "agent_session_sources",
+        "agent_session_index",
+      ];
+      if (requiredSessionTables.some((table) => !tableExists(db!, table))) {
+        throw new Error("Agent session index tables were not created");
+      }
+      markMigration("agent_session_index_v1");
+    }
 
     // Migrations: prompts table (query column list once)
     const promptCols = (

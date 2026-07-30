@@ -1,7 +1,10 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import fs from "fs";
+import { createServer } from "http";
 import os from "os";
 import path from "path";
+import { once } from "events";
+import { parse as parseJsonc } from "jsonc-parser";
 
 import {
   closePromptHub,
@@ -10,8 +13,49 @@ import {
   setAppLanguage,
 } from "./helpers/electron";
 
+async function selectAgent(page: Page, name: string): Promise<void> {
+  const search = page.getByPlaceholder("Search Agents");
+  await search.fill(name);
+  const agent = page.getByRole("button", { name, exact: true });
+  await expect(agent).toBeVisible();
+  await agent.click();
+  await search.fill("");
+}
+
 test.describe("E2E: Agent workspace", () => {
   test("shows the complete Agent registry in one capability-aware shell", async ({}, testInfo) => {
+    let receivedProviderAuthorization = "";
+    let receivedProviderModelBody = "";
+    const providerServer = createServer((request, response) => {
+      receivedProviderAuthorization = String(
+        request.headers.authorization ?? "",
+      );
+      if (request.method === "POST" && request.url === "/v1/responses") {
+        request.setEncoding("utf8");
+        request.on("data", (chunk) => {
+          receivedProviderModelBody += chunk;
+        });
+        request.on("end", () => {
+          response.writeHead(200, { "content-type": "text/event-stream" });
+          response.write(
+            'data: {"type":"response.output_text.delta","delta":"OK"}\n\n',
+          );
+          response.end(
+            'data: {"type":"response.completed","response":{"usage":{"input_tokens":8,"output_tokens":1}}}\n\ndata: [DONE]\n\n',
+          );
+        });
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ data: [{ id: "gpt-5.4" }] }));
+    });
+    providerServer.listen(0, "127.0.0.1");
+    await once(providerServer, "listening");
+    const providerAddress = providerServer.address();
+    if (!providerAddress || typeof providerAddress === "string") {
+      throw new Error("Expected a TCP provider test server");
+    }
+    const providerEndpoint = `http://127.0.0.1:${providerAddress.port}/v1`;
     const userDataDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "prompthub-agent-e2e-"),
     );
@@ -120,6 +164,78 @@ test.describe("E2E: Agent workspace", () => {
       "utf8",
     );
 
+    const qwenDir = path.join(homeDir, ".qwen");
+    const qwenSettingsPath = path.join(qwenDir, "settings.json");
+    const qwenEnvPath = path.join(qwenDir, ".env");
+    fs.mkdirSync(qwenDir, { recursive: true });
+    fs.writeFileSync(
+      qwenSettingsPath,
+      JSON.stringify({ $version: 4, language: "en" }, null, 2),
+      "utf8",
+    );
+    fs.writeFileSync(qwenEnvPath, "UNRELATED_QWEN_SETTING=preserved\n", "utf8");
+    fs.mkdirSync(path.join(qwenDir, "agents"), { recursive: true });
+    fs.mkdirSync(path.join(qwenDir, "commands", "review"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(qwenDir, "agents", "reviewer.md"),
+      [
+        "---",
+        "name: reviewer",
+        "description: Reviews isolated changes",
+        "model: qwen3-coder",
+        "---",
+        "PRIVATE_QWEN_DEFINITION_BODY",
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(qwenDir, "commands", "review", "frontend.md"),
+      [
+        "---",
+        "description: Review the frontend",
+        "---",
+        "PRIVATE_QWEN_COMMAND_BODY",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const openCodeDir = path.join(homeDir, ".config", "opencode");
+    const openCodeConfigPath = path.join(openCodeDir, "opencode.jsonc");
+    const xdgDataHome = path.join(homeDir, ".local", "share");
+    const openCodeAuthPath = path.join(xdgDataHome, "opencode", "auth.json");
+    fs.mkdirSync(openCodeDir, { recursive: true });
+    fs.mkdirSync(path.dirname(openCodeAuthPath), { recursive: true });
+    fs.writeFileSync(
+      openCodeConfigPath,
+      `{
+        // preserve native OpenCode settings
+        "share": "disabled",
+        "model": "native/original",
+        "provider": {
+          "native": { "npm": "@ai-sdk/native" }
+        }
+      }\n`,
+      "utf8",
+    );
+    fs.writeFileSync(
+      openCodeAuthPath,
+      JSON.stringify(
+        {
+          native: {
+            type: "oauth",
+            refresh: "native-refresh-preserved",
+            access: "native-access-preserved",
+            expires: 9_999_999_999,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
     const codexPetDir = path.join(homeDir, ".codex", "pets", "orbit");
     fs.mkdirSync(codexPetDir, { recursive: true });
     fs.writeFileSync(
@@ -139,6 +255,23 @@ test.describe("E2E: Agent workspace", () => {
         "base64",
       ),
     );
+    const codexConfigPath = path.join(homeDir, ".codex", "config.toml");
+    const initialCodexConfig = [
+      'model_provider = "legacy_gateway"',
+      'model = "gpt-5.3-codex"',
+      "",
+      "[model_providers.legacy_gateway]",
+      'name = "Legacy Gateway"',
+      'base_url = "https://legacy.example.com/v1"',
+      'wire_api = "responses"',
+      'experimental_bearer_token = "legacy-e2e-secret"',
+      "",
+      "[profiles.legacy_gateway]",
+      'model = "gpt-5.3-codex"',
+      'model_provider = "legacy_gateway"',
+      "",
+    ].join("\n");
+    fs.writeFileSync(codexConfigPath, initialCodexConfig, "utf8");
     const themeDir = path.join(
       userDataDir,
       "data",
@@ -173,6 +306,7 @@ test.describe("E2E: Agent workspace", () => {
       env: {
         HOME: homeDir,
         USERPROFILE: homeDir,
+        XDG_DATA_HOME: xdgDataHome,
       },
     });
 
@@ -189,17 +323,10 @@ test.describe("E2E: Agent workspace", () => {
         page.getByText(`${supportedPlatforms.length} available`),
       ).toBeVisible();
 
-      const cline = page.getByRole("button", { name: "Cline", exact: true });
-      await cline.scrollIntoViewIfNeeded();
-      await cline.click();
+      await selectAgent(page, "Cline");
       await expect(page.getByRole("heading", { name: "Cline" })).toBeVisible();
 
-      const claude = page.getByRole("button", {
-        name: "Claude Code",
-        exact: true,
-      });
-      await claude.scrollIntoViewIfNeeded();
-      await claude.click();
+      await selectAgent(page, "Claude Code");
       await expect(
         page.getByRole("heading", { name: "Claude Code" }),
       ).toBeVisible();
@@ -234,16 +361,20 @@ test.describe("E2E: Agent workspace", () => {
       await expect(page.getByRole("tab", { name: "Rules" })).toBeEnabled();
       await expect(page.getByRole("tab", { name: "Plugins" })).toBeEnabled();
       await page.getByRole("tab", { name: "Provider & Model" }).click();
-      const modelInput = page.getByLabel("Default model");
-      await expect(modelInput).toHaveValue("claude-sonnet");
-      await modelInput.fill("claude-opus");
-      await page.getByRole("button", { name: "Save model" }).click();
-      await expect(page.getByText("Saved", { exact: true })).toBeVisible();
-      await expect
-        .poll(() =>
-          fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8"),
-        )
-        .toContain('"model": "claude-opus"');
+      await expect(
+        page.getByRole("navigation", { name: "Provider profiles" }),
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: "Import current configuration" })
+        .click();
+      const claudeImport = page.getByRole("dialog", {
+        name: "Import current configuration",
+      });
+      await expect(claudeImport).toContainText("claude-sonnet");
+      await claudeImport
+        .getByRole("button", { name: "Create profile" })
+        .click();
+      await expect(page.getByLabel("Default model")).toHaveCount(0);
       await page.screenshot({
         path: testInfo.outputPath("agent-workspace-provider.png"),
         animations: "disabled",
@@ -261,12 +392,7 @@ test.describe("E2E: Agent workspace", () => {
         animations: "disabled",
       });
 
-      const codex = page.getByRole("button", {
-        name: "Codex",
-        exact: true,
-      });
-      await codex.scrollIntoViewIfNeeded();
-      await codex.click();
+      await selectAgent(page, "Codex");
       await expect(page.getByRole("tab", { name: "Appearance" })).toBeEnabled();
       await page.getByRole("tab", { name: "Appearance" }).click();
       await expect(
@@ -286,19 +412,102 @@ test.describe("E2E: Agent workspace", () => {
         animations: "disabled",
       });
 
-      const kimi = page.getByRole("button", {
-        name: "Kimi Code",
-        exact: true,
+      await page.getByRole("tab", { name: "Provider & Model" }).click();
+      await expect(page.getByText("1 providers can be migrated")).toBeVisible();
+      await page.getByRole("button", { name: "Review migration" }).click();
+      const migration = page.getByRole("dialog", {
+        name: "Migrate provider credentials",
       });
-      await kimi.scrollIntoViewIfNeeded();
-      await kimi.click();
+      await expect(
+        migration.getByRole("button", { name: "Migrate selected (0)" }),
+      ).toBeDisabled();
+      await migration.getByRole("checkbox", { name: /Legacy Gateway/ }).check();
+      await migration
+        .getByRole("button", { name: "Migrate selected (1)" })
+        .click();
+      await expect(migration).toHaveCount(0);
+      expect(fs.readFileSync(codexConfigPath, "utf8")).toBe(initialCodexConfig);
+      await expect(page.getByText("legacy-e2e-secret")).toHaveCount(0);
+      await expect(page.getByText("Credential available")).toBeVisible();
+
+      await page.getByRole("button", { name: "Add profile" }).click();
+      const codexProfile = page.getByRole("dialog", {
+        name: "Add provider profile",
+      });
+      await codexProfile
+        .getByRole("textbox", { name: "Name" })
+        .fill("E2E gateway");
+      await codexProfile
+        .getByRole("textbox", { name: "Provider kind" })
+        .fill("openai-compatible");
+      await codexProfile
+        .getByRole("textbox", { name: "Provider ID" })
+        .fill("e2e-gateway");
+      await codexProfile
+        .getByRole("textbox", { name: "Endpoint (optional)" })
+        .fill(providerEndpoint);
+      await codexProfile
+        .getByRole("textbox", { name: "Primary model" })
+        .fill("gpt-5.4");
+      await codexProfile
+        .getByLabel("Credential (write-only)")
+        .fill("e2e-secret-token");
+      await codexProfile.getByRole("button", { name: "Save profile" }).click();
+      await expect(page.getByText("Credential available")).toBeVisible();
+      await expect(page.getByText("e2e-secret-token")).toHaveCount(0);
+      await page.getByRole("button", { name: "Test connection" }).click();
+      await expect(page.getByText("Connection successful")).toBeVisible();
+      expect(receivedProviderAuthorization).toBe("Bearer e2e-secret-token");
+      await expect(page.locator("body")).not.toContainText("e2e-secret-token");
+      await page.getByRole("button", { name: "Test model" }).click();
+      const modelTestConfirmation = page.getByRole("alertdialog", {
+        name: "Run model test?",
+      });
+      await expect(modelTestConfirmation).toContainText(
+        "may consume provider quota",
+      );
+      await modelTestConfirmation
+        .getByRole("button", { name: "Run test" })
+        .click();
+      await expect(page.getByText("Model responded")).toBeVisible();
+      await expect(page.getByText("Response preview")).toBeVisible();
+      expect(JSON.parse(receivedProviderModelBody)).toMatchObject({
+        model: "gpt-5.4",
+        stream: true,
+      });
+      await expect(page.locator("body")).not.toContainText("e2e-secret-token");
+      await page.getByRole("button", { name: "Activate" }).click();
+      const activation = page.getByRole("dialog", {
+        name: "Review provider activation",
+      });
+      const useProfileChoices = activation.getByRole("radio", {
+        name: "Use profile value",
+      });
+      for (let index = 0; index < (await useProfileChoices.count()); index++) {
+        await useProfileChoices.nth(index).check();
+      }
+      await activation
+        .getByRole("button", { name: "Activate profile" })
+        .click();
+      await expect(activation.getByText("Activation verified")).toBeVisible();
+      await expect
+        .poll(() => fs.readFileSync(codexConfigPath, "utf8"))
+        .toContain('model_provider = "e2e-gateway"');
+      await expect(page.locator("body")).not.toContainText("e2e-secret-token");
+      await activation
+        .getByRole("button", { name: "Close", exact: true })
+        .last()
+        .click();
+
+      await selectAgent(page, "Kimi Code");
       await expect(
         page.getByRole("heading", { name: "Kimi Code" }),
       ).toBeVisible();
       await page.getByRole("tab", { name: "Provider & Model" }).click();
-      await expect(page.getByLabel("Default model")).toHaveValue(
-        "kimi-code/kimi-for-coding",
-      );
+      await expect(
+        page.getByRole("navigation", { name: "Provider profiles" }),
+      ).toBeVisible();
+      await expect(page.getByLabel("Default model")).toHaveCount(0);
       await page.getByRole("tab", { name: "Sessions" }).click();
       await expect(
         page.getByText("Review isolated Kimi session").first(),
@@ -311,7 +520,188 @@ test.describe("E2E: Agent workspace", () => {
         animations: "disabled",
       });
 
-      await claude.click();
+      await selectAgent(page, "Qwen Code");
+      await expect(
+        page.getByRole("heading", { name: "Qwen Code" }),
+      ).toBeVisible();
+      await page.getByRole("tab", { name: "Definitions" }).click();
+      await expect(page.getByText("reviewer").first()).toBeVisible();
+      await expect(page.locator("body")).not.toContainText(
+        "PRIVATE_QWEN_DEFINITION_BODY",
+      );
+      await page.getByRole("button", { name: "Commands" }).click();
+      await expect(page.getByText("review:frontend").first()).toBeVisible();
+      await expect(page.locator("body")).not.toContainText(
+        "PRIVATE_QWEN_COMMAND_BODY",
+      );
+      await page.getByRole("tab", { name: "Provider & Model" }).click();
+      await expect(
+        page.getByRole("navigation", { name: "Provider profiles" }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Add profile" }).click();
+      const qwenProfile = page.getByRole("dialog", {
+        name: "Add provider profile",
+      });
+      await qwenProfile
+        .getByRole("textbox", { name: "Name" })
+        .fill("Qwen E2E gateway");
+      await qwenProfile
+        .getByRole("textbox", { name: "Provider ID" })
+        .fill("team-e2e");
+      await qwenProfile
+        .getByRole("textbox", { name: "Environment variable" })
+        .fill("QWEN_E2E_API_KEY");
+      await qwenProfile
+        .getByRole("textbox", { name: "Primary model" })
+        .fill("qwen-e2e");
+      await qwenProfile
+        .getByRole("textbox", { name: "Endpoint" })
+        .fill(providerEndpoint);
+      await qwenProfile
+        .getByLabel("Credential (write-only)")
+        .fill("qwen-e2e-secret");
+      await qwenProfile.getByRole("button", { name: "Save profile" }).click();
+      await expect(page.getByText("Credential available")).toBeVisible();
+      await expect(page.locator("body")).not.toContainText("qwen-e2e-secret");
+      await page.getByRole("button", { name: "Activate" }).click();
+      const qwenActivation = page.getByRole("dialog", {
+        name: "Review provider activation",
+      });
+      const qwenProfileChoices = qwenActivation.getByRole("radio", {
+        name: "Use profile value",
+      });
+      await expect(qwenProfileChoices.first()).toBeVisible();
+      for (let index = 0; index < (await qwenProfileChoices.count()); index++) {
+        await qwenProfileChoices.nth(index).check();
+      }
+      await qwenActivation
+        .getByRole("button", { name: "Activate profile" })
+        .click();
+      await expect(
+        qwenActivation.getByText("Activation verified"),
+      ).toBeVisible();
+      await expect
+        .poll(() => JSON.parse(fs.readFileSync(qwenSettingsPath, "utf8")))
+        .toMatchObject({
+          $version: 4,
+          language: "en",
+          security: { auth: { selectedType: "team-e2e" } },
+          model: { name: "qwen-e2e" },
+          providerProtocol: { "team-e2e": "openai" },
+          modelProviders: {
+            "team-e2e": [
+              {
+                id: "qwen-e2e",
+                baseUrl: providerEndpoint,
+                envKey: "QWEN_E2E_API_KEY",
+              },
+            ],
+          },
+        });
+      await expect
+        .poll(() => fs.readFileSync(qwenEnvPath, "utf8"))
+        .toContain('QWEN_E2E_API_KEY="qwen-e2e-secret"');
+      expect(fs.readFileSync(qwenEnvPath, "utf8")).toContain(
+        "UNRELATED_QWEN_SETTING=preserved",
+      );
+      await expect(page.locator("body")).not.toContainText("qwen-e2e-secret");
+      await qwenActivation
+        .getByRole("button", { name: "Close", exact: true })
+        .last()
+        .click();
+
+      await selectAgent(page, "OpenCode");
+      await expect(
+        page.getByRole("heading", { name: "OpenCode" }),
+      ).toBeVisible();
+      await page.getByRole("tab", { name: "Provider & Model" }).click();
+      await page.getByRole("button", { name: "Add profile" }).click();
+      const openCodeProfile = page.getByRole("dialog", {
+        name: "Add provider profile",
+      });
+      await openCodeProfile
+        .getByRole("textbox", { name: "Name" })
+        .fill("OpenCode E2E gateway");
+      await openCodeProfile.getByLabel("Provider ID").fill("team-opencode");
+      await openCodeProfile.getByLabel("Endpoint").fill(providerEndpoint);
+      await openCodeProfile.getByLabel("Primary model").fill("gpt-5.4");
+      await openCodeProfile
+        .getByLabel("Secondary model (optional)")
+        .fill("gpt-5.4-mini");
+      await openCodeProfile
+        .getByLabel("Credential (write-only)")
+        .fill("opencode-e2e-secret");
+      await openCodeProfile
+        .getByRole("button", { name: "Save profile" })
+        .click();
+      await expect(page.getByText("Credential available")).toBeVisible();
+      await expect(page.locator("body")).not.toContainText(
+        "opencode-e2e-secret",
+      );
+      await page.getByRole("button", { name: "Activate" }).click();
+      const openCodeActivation = page.getByRole("dialog", {
+        name: "Review provider activation",
+      });
+      const openCodeProfileChoices = openCodeActivation.getByRole("radio", {
+        name: "Use profile value",
+      });
+      await expect(openCodeProfileChoices.first()).toBeVisible();
+      for (
+        let index = 0;
+        index < (await openCodeProfileChoices.count());
+        index++
+      ) {
+        await openCodeProfileChoices.nth(index).check();
+      }
+      await openCodeActivation
+        .getByRole("button", { name: "Activate profile" })
+        .click();
+      await expect(
+        openCodeActivation.getByText("Activation verified"),
+      ).toBeVisible();
+      await expect
+        .poll(() => parseJsonc(fs.readFileSync(openCodeConfigPath, "utf8")))
+        .toMatchObject({
+          share: "disabled",
+          model: "team-opencode/gpt-5.4",
+          small_model: "team-opencode/gpt-5.4-mini",
+          provider: {
+            native: { npm: "@ai-sdk/native" },
+            "team-opencode": {
+              npm: "@ai-sdk/openai-compatible",
+              options: { baseURL: providerEndpoint },
+              models: {
+                "gpt-5.4": { name: "gpt-5.4" },
+                "gpt-5.4-mini": { name: "gpt-5.4-mini" },
+              },
+            },
+          },
+        });
+      await expect
+        .poll(() => JSON.parse(fs.readFileSync(openCodeAuthPath, "utf8")))
+        .toMatchObject({
+          native: {
+            type: "oauth",
+            refresh: "native-refresh-preserved",
+            access: "native-access-preserved",
+          },
+          "team-opencode": {
+            type: "api",
+            key: "opencode-e2e-secret",
+          },
+        });
+      await expect(page.locator("body")).not.toContainText(
+        "native-refresh-preserved",
+      );
+      await expect(page.locator("body")).not.toContainText(
+        "opencode-e2e-secret",
+      );
+      await openCodeActivation
+        .getByRole("button", { name: "Close", exact: true })
+        .last()
+        .click();
+
+      await selectAgent(page, "Claude Code");
 
       await expect(
         page.getByRole("tab", { name: "Config Files" }),
@@ -364,6 +754,9 @@ test.describe("E2E: Agent workspace", () => {
       });
     } finally {
       await closePromptHub(app, userDataDir);
+      await new Promise<void>((resolve) =>
+        providerServer.close(() => resolve()),
+      );
     }
   });
 });

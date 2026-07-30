@@ -7,6 +7,7 @@ import {
   type ParseError,
 } from "jsonc-parser";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
+import { parseDocument } from "yaml";
 
 import type {
   AgentCredentialStatus,
@@ -33,11 +34,16 @@ type JsonRecord = Record<string, unknown>;
 
 const JSON_ADAPTER_PATHS: Record<string, string[]> = {
   claude: ["settings.json"],
+  copilot: ["settings.json"],
   gemini: ["settings.json"],
   qwen: ["settings.json"],
   opencode: ["opencode.jsonc", "opencode.json"],
   openclaw: ["openclaw.json"],
+  kiro: ["settings/cli.json"],
 };
+const OH_MY_PI_MODEL_ADAPTER = "oh-my-pi-yaml-v1";
+const OH_MY_PI_CONFIG_PATHS = ["config.yml", "config.yaml"] as const;
+const OH_MY_PI_MODELS_PATH = "models.yml";
 const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
 const MAX_MODEL_LENGTH = 512;
 
@@ -120,7 +126,10 @@ export async function fileExists(filePath: string): Promise<boolean> {
 }
 
 export async function readTextConfig(filePath: string): Promise<string> {
-  const stat = await fs.stat(filePath);
+  const stat = await fs.lstat(filePath);
+  if (stat.isSymbolicLink()) {
+    throw new Error("AGENT_MODEL_CONFIG_SYMLINK_INVALID");
+  }
   if (!stat.isFile() || stat.size > MAX_CONFIG_BYTES) {
     throw new Error("AGENT_MODEL_CONFIG_SIZE_INVALID");
   }
@@ -163,6 +172,132 @@ function parseJsonRecord(raw: string): JsonRecord {
     throw new Error("AGENT_MODEL_CONFIG_INVALID");
   }
   return parsed;
+}
+
+function parseYamlDocument(raw: string) {
+  const document = parseDocument(raw, {
+    schema: "core",
+    strict: true,
+    uniqueKeys: true,
+  });
+  if (document.errors.length > 0 || document.warnings.length > 0) {
+    throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  }
+  if (!isRecord(document.toJS({ maxAliasCount: 50 }))) {
+    throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  }
+  return document;
+}
+
+function parseYamlRecord(raw: string): JsonRecord {
+  return parseYamlDocument(raw).toJS({ maxAliasCount: 50 }) as JsonRecord;
+}
+
+function serializeYamlDocument(
+  document: ReturnType<typeof parseYamlDocument>,
+): string {
+  return String(document);
+}
+
+async function resolveOhMyPiConfigPath(
+  rootPath: string,
+): Promise<{ absolutePath: string; relativePath: string }> {
+  for (const relativePath of OH_MY_PI_CONFIG_PATHS) {
+    const absolutePath = path.join(rootPath, relativePath);
+    if (await fileExists(absolutePath)) return { absolutePath, relativePath };
+  }
+  const relativePath = OH_MY_PI_CONFIG_PATHS[0];
+  return { absolutePath: path.join(rootPath, relativePath), relativePath };
+}
+
+function observedModel(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    return normalizeModel(value);
+  } catch {
+    throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  }
+}
+
+function ohMyPiModelRoles(config: JsonRecord): JsonRecord | undefined {
+  if (!("modelRoles" in config)) return undefined;
+  const roles = config.modelRoles;
+  if (!isRecord(roles)) throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  return roles;
+}
+
+function ohMyPiDefaultModel(config: JsonRecord): string | null {
+  const roles = ohMyPiModelRoles(config);
+  if (roles && "default" in roles && typeof roles.default !== "string") {
+    throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  }
+  return observedModel(getString(roles, "default"));
+}
+
+function ohMyPiAvailableModels(
+  data: JsonRecord | undefined,
+  selectedModel: string | null,
+): string[] {
+  const providers = getRecord(data, "providers");
+  const models = Object.entries(providers || {}).flatMap(
+    ([providerId, providerValue]) => {
+      const provider = isRecord(providerValue) ? providerValue : undefined;
+      const entries = provider?.models;
+      if (!Array.isArray(entries)) return [];
+      let normalizedProvider: string;
+      try {
+        normalizedProvider = normalizeModel(providerId);
+      } catch {
+        return [];
+      }
+      return entries.flatMap((entry) => {
+        const modelId = getString(entry, "id");
+        if (!modelId) return [];
+        try {
+          return [`${normalizedProvider}/${normalizeModel(modelId)}`];
+        } catch {
+          return [];
+        }
+      });
+    },
+  );
+  if (selectedModel) models.push(selectedModel);
+  return Array.from(new Set(models));
+}
+
+function ohMyPiCredentialStatus(
+  provider: JsonRecord | undefined,
+): AgentCredentialStatus {
+  const auth = getString(provider, "auth");
+  if (auth === "none" || auth === "oauth") return "platform-managed";
+  if (typeof provider?.apiKey === "string") {
+    return provider.apiKey.trim() ? "configured" : "missing";
+  }
+  if (auth === "apiKey") return "missing";
+  return "unknown";
+}
+
+function inspectOhMyPi(
+  config: JsonRecord,
+  models: JsonRecord | undefined,
+  relativePath: string,
+): AgentModelConfiguration {
+  const model = ohMyPiDefaultModel(config);
+  const providerId = providerFromModel(model);
+  const provider = providerId
+    ? getRecord(getRecord(models, "providers"), providerId)
+    : undefined;
+  return emptyResult("oh-my-pi", model ? "configured" : "not-configured", {
+    adapter: OH_MY_PI_MODEL_ADAPTER,
+    model,
+    provider: providerId,
+    endpoint: sanitizeEndpoint(getString(provider, "baseUrl")),
+    availableModels: ohMyPiAvailableModels(models, model),
+    credentialStatus: ohMyPiCredentialStatus(provider),
+    sourceRelativePath: relativePath,
+    canSetModel: true,
+    formattingMayChange: true,
+  });
 }
 
 function credentialStatusFromKeys(
@@ -223,6 +358,22 @@ function inspectGemini(
     model,
     provider: "google",
     credentialStatus: selectedType ? "platform-managed" : "unknown",
+    sourceRelativePath: relativePath,
+    canSetModel: true,
+  });
+}
+
+function inspectCopilot(
+  data: JsonRecord,
+  relativePath: string,
+): AgentModelConfiguration {
+  const model = getString(data, "model");
+  return emptyResult("copilot", model ? "configured" : "not-configured", {
+    adapter: "copilot-settings-v1",
+    model,
+    provider: "github-copilot",
+    availableModels: model ? [model] : [],
+    credentialStatus: "platform-managed",
     sourceRelativePath: relativePath,
     canSetModel: true,
   });
@@ -330,19 +481,38 @@ function inspectOpenClaw(
   });
 }
 
+function inspectKiro(
+  data: JsonRecord,
+  relativePath: string,
+): AgentModelConfiguration {
+  const model = getString(getRecord(data, "chat"), "defaultModel");
+  return emptyResult("kiro", model ? "configured" : "not-configured", {
+    adapter: "kiro-cli-settings-v1",
+    model,
+    provider: "kiro",
+    credentialStatus: "platform-managed",
+    sourceRelativePath: relativePath,
+    canSetModel: true,
+  });
+}
+
 function inspectJsonAdapter(
   agentId: string,
   data: JsonRecord,
   relativePath: string,
 ): AgentModelConfiguration {
   if (agentId === "claude") return inspectClaude(data, relativePath);
+  if (agentId === "copilot") return inspectCopilot(data, relativePath);
   if (agentId === "gemini") return inspectGemini(data, relativePath);
   if (agentId === "qwen") return inspectQwen(data, relativePath);
   if (agentId === "opencode") return inspectOpenCode(data, relativePath);
+  if (agentId === "kiro") return inspectKiro(data, relativePath);
   return inspectOpenClaw(data, relativePath);
 }
 
 function jsonAdapterId(agentId: string): string {
+  if (agentId === "copilot") return "copilot-settings-v1";
+  if (agentId === "kiro") return "kiro-cli-settings-v1";
   return agentId === "qwen" ? "qwen-settings-v1" : `${agentId}-config-v1`;
 }
 
@@ -439,6 +609,36 @@ export async function inspectAgentModelConfig(
       return emptyResult(agentId, "invalid", {
         adapter,
         sourceRelativePath: "config.toml",
+        canSetModel: false,
+        formattingMayChange: true,
+        errorCode: "AGENT_MODEL_CONFIG_INVALID",
+      });
+    }
+  }
+
+  if (context.agentId === "oh-my-pi") {
+    const resolved = await resolveOhMyPiConfigPath(context.rootPath);
+    if (!(await fileExists(resolved.absolutePath))) {
+      return emptyResult(context.agentId, "missing", {
+        adapter: OH_MY_PI_MODEL_ADAPTER,
+        sourceRelativePath: resolved.relativePath,
+        canSetModel: true,
+        formattingMayChange: true,
+      });
+    }
+    try {
+      const config = parseYamlRecord(
+        await readTextConfig(resolved.absolutePath),
+      );
+      const modelsPath = path.join(context.rootPath, OH_MY_PI_MODELS_PATH);
+      const models = (await fileExists(modelsPath))
+        ? parseYamlRecord(await readTextConfig(modelsPath))
+        : undefined;
+      return inspectOhMyPi(config, models, resolved.relativePath);
+    } catch {
+      return emptyResult(context.agentId, "invalid", {
+        adapter: OH_MY_PI_MODEL_ADAPTER,
+        sourceRelativePath: resolved.relativePath,
         canSetModel: false,
         formattingMayChange: true,
         errorCode: "AGENT_MODEL_CONFIG_INVALID",
@@ -547,9 +747,11 @@ function jsonModelEdits(
   const modelPath =
     agentId === "gemini" || agentId === "qwen"
       ? ["model", "name"]
-      : agentId === "openclaw"
-        ? ["agents", "defaults", "model", "primary"]
-        : ["model"];
+      : agentId === "kiro"
+        ? ["chat", "defaultModel"]
+        : agentId === "openclaw"
+          ? ["agents", "defaults", "model", "primary"]
+          : ["model"];
   let next = applyEdits(
     raw,
     modify(raw, modelPath, model, { formattingOptions: formatting }),
@@ -574,6 +776,38 @@ export async function updateAgentModelConfig(
     context.secondaryModel === null || context.secondaryModel === undefined
       ? context.secondaryModel
       : normalizeModel(context.secondaryModel);
+
+  if (context.agentId === "oh-my-pi") {
+    const resolved = await resolveOhMyPiConfigPath(context.rootPath);
+    let raw = "{}\n";
+    let original: string | null = null;
+    if (await fileExists(resolved.absolutePath)) {
+      raw = await readTextConfig(resolved.absolutePath);
+      original = raw;
+      ohMyPiDefaultModel(parseYamlRecord(raw));
+    }
+    const backupPath = await createBackup(
+      resolved.absolutePath,
+      options.backupRoot,
+      context.agentId,
+    );
+    const document = parseYamlDocument(raw);
+    document.setIn(["modelRoles", "default"], model);
+    const next = serializeYamlDocument(document);
+    await assertConfigUnchanged(resolved.absolutePath, original);
+    try {
+      await atomicWrite(resolved.absolutePath, next);
+      return {
+        ...(await verifyModelUpdate(context, model)),
+        backupPath,
+      };
+    } catch {
+      await restoreModelConfig(resolved.absolutePath, original).catch(
+        () => undefined,
+      );
+      throw new Error("AGENT_MODEL_CONFIG_UPDATE_FAILED");
+    }
+  }
 
   if (context.agentId === "codex" || context.agentId === "kimi") {
     const targetPath = path.join(context.rootPath, "config.toml");

@@ -6,7 +6,28 @@
  * 定义各种 AI 编程工具的 skills 目录路径
  */
 
-import type { AgentProductLifecycle } from "../types/agent";
+import type {
+  AgentCliInstallSource,
+  AgentProductLifecycle,
+} from "@prompthub/shared/types/agent";
+
+export interface AgentCliDescriptor {
+  executableCandidates: string[];
+  versionArgs: string[];
+  evidence: string;
+  update?: AgentCliUpdateDescriptor;
+}
+
+export interface AgentCliUpdateDescriptor {
+  args: string[];
+  command?: {
+    executableCandidates: string[];
+    supportedInstallSources: AgentCliInstallSource[];
+  };
+  rollbackArgsPrefix?: string[];
+  rollbackTargetPrefix: string;
+  evidence: string;
+}
 
 export interface SkillPlatform {
   id: string;
@@ -26,8 +47,10 @@ export interface SkillPlatform {
   skillsRelativePath: string;
   mcpRelativePath?: string;
   pluginsRelativePath?: string;
+  agentsRelativePath?: string;
   globalRuleFile?: string;
   configFiles?: string[];
+  cli?: AgentCliDescriptor;
   isCustom?: boolean;
   isConfigured?: boolean;
   lifecycle?: AgentProductLifecycle;
@@ -144,6 +167,7 @@ export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "antigravity",
   "gemini",
   "opencode",
+  "oh-my-pi",
   "cline",
   "cursor",
   "grok",
@@ -216,6 +240,11 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     launchPaths: {
       darwin: ["/Applications/Claude.app", "~/Applications/Claude.app"],
     },
+    cli: {
+      executableCandidates: ["claude"],
+      versionArgs: ["--version"],
+      evidence: "official-claude-cli",
+    },
   },
   {
     id: "copilot",
@@ -226,8 +255,13 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       win32: "%USERPROFILE%\\.copilot",
       linux: "~/.copilot",
     },
+    rootEnvironmentVariable: "COPILOT_HOME",
     skillsRelativePath: "skills",
-    pluginsRelativePath: "plugins",
+    mcpRelativePath: "mcp-config.json",
+    pluginsRelativePath: "installed-plugins",
+    globalRuleFile: "copilot-instructions.md",
+    agentsRelativePath: "agents",
+    configFiles: ["settings.json"],
   },
   {
     id: "cursor",
@@ -239,8 +273,9 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.cursor",
     },
     skillsRelativePath: "skills",
+    agentsRelativePath: "agents",
     mcpRelativePath: "mcp.json",
-    pluginsRelativePath: "plugins/cache/prompthub",
+    pluginsRelativePath: "plugins",
     launchPaths: {
       darwin: ["/Applications/Cursor.app", "~/Applications/Cursor.app"],
     },
@@ -254,7 +289,13 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       win32: "%APPDATA%\\CherryStudio",
       linux: "~/.config/CherryStudio",
     },
-    skillsRelativePath: "Data\\Skills",
+    skillsRelativePath: "Data/Skills",
+    launchPaths: {
+      darwin: [
+        "/Applications/Cherry Studio.app",
+        "~/Applications/Cherry Studio.app",
+      ],
+    },
   },
   {
     id: "windsurf",
@@ -276,14 +317,20 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     id: "kiro",
     name: "Kiro",
     icon: "Sparkle",
+    rootEnvironmentVariable: "KIRO_HOME",
     rootDir: {
       darwin: "~/.kiro",
       win32: "%USERPROFILE%\\.kiro",
       linux: "~/.kiro",
     },
     skillsRelativePath: "skills",
+    agentsRelativePath: "agents",
     mcpRelativePath: "settings/mcp.json",
     pluginsRelativePath: "powers",
+    configFiles: ["settings/cli.json"],
+    launchPaths: {
+      darwin: ["/Applications/Kiro.app", "~/Applications/Kiro.app"],
+    },
   },
   {
     id: "gemini",
@@ -379,7 +426,46 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     skillsRelativePath: "skills",
     mcpRelativePath: "opencode.json",
     globalRuleFile: "AGENTS.md",
-    configFiles: ["opencode.json"],
+    configFiles: ["opencode.jsonc", "opencode.json", "config.json"],
+    cli: {
+      executableCandidates: ["opencode"],
+      versionArgs: ["--version"],
+      evidence: "official-opencode-cli",
+      update: {
+        args: ["upgrade"],
+        rollbackTargetPrefix: "v",
+        evidence: "official-opencode-cli-upgrade",
+      },
+    },
+  },
+  {
+    id: "oh-my-pi",
+    name: "Oh My Pi",
+    icon: "Terminal",
+    rootDir: {
+      darwin: "~/.omp/agent",
+      win32: "%USERPROFILE%\\.omp\\agent",
+      linux: "~/.omp/agent",
+    },
+    rootEnvironmentVariable: "PI_CODING_AGENT_DIR",
+    skillsRelativePath: "skills",
+    mcpRelativePath: "mcp.json",
+    // Oh My Pi installs plugin packages in the sibling user-level plugin root.
+    pluginsRelativePath: "../plugins",
+    globalRuleFile: "RULES.md",
+    configFiles: [
+      "config.yml",
+      "config.yaml",
+      "settings.json",
+      "mcp.json",
+      ".mcp.json",
+      "RULES.md",
+    ],
+    cli: {
+      executableCandidates: ["omp"],
+      versionArgs: ["--version"],
+      evidence: "official-oh-my-pi-cli",
+    },
   },
   {
     id: "cline",
@@ -414,6 +500,21 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     launchPaths: {
       darwin: ["/Applications/Codex.app", "~/Applications/Codex.app"],
     },
+    cli: {
+      executableCandidates: ["codex"],
+      versionArgs: ["--version"],
+      evidence: "official-codex-cli",
+      update: {
+        args: ["install", "-g", "@openai/codex@latest"],
+        command: {
+          executableCandidates: ["npm"],
+          supportedInstallSources: ["npm", "node-version-manager"],
+        },
+        rollbackArgsPrefix: ["install", "-g"],
+        rollbackTargetPrefix: "@openai/codex@",
+        evidence: "official-codex-npm-install",
+      },
+    },
   },
   {
     id: "kimi",
@@ -436,6 +537,11 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     pluginsRelativePath: "plugins",
     globalRuleFile: "AGENTS.md",
     configFiles: ["config.toml", "tui.toml", "mcp.json"],
+    cli: {
+      executableCandidates: ["kimi"],
+      versionArgs: ["--version"],
+      evidence: "official-kimi-code-cli",
+    },
   },
   {
     id: "reasonix",
@@ -490,6 +596,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       win32: "%USERPROFILE%\\.grok",
       linux: "~/.grok",
     },
+    rootEnvironmentVariable: "GROK_HOME",
     skillsRelativePath: "skills",
     mcpRelativePath: "config.toml",
     pluginsRelativePath: "plugins",
@@ -517,6 +624,21 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     mcpRelativePath: "settings.json",
     pluginsRelativePath: "extensions",
     globalRuleFile: "QWEN.md",
+    cli: {
+      executableCandidates: ["qwen"],
+      versionArgs: ["--version"],
+      evidence: "official-qwen-code-cli",
+      update: {
+        args: ["install", "-g", "@qwen-code/qwen-code@latest"],
+        command: {
+          executableCandidates: ["npm"],
+          supportedInstallSources: ["npm", "node-version-manager"],
+        },
+        rollbackArgsPrefix: ["install", "-g"],
+        rollbackTargetPrefix: "@qwen-code/qwen-code@",
+        evidence: "official-qwen-code-npm-install",
+      },
+    },
   },
   {
     id: "kilo",
@@ -537,10 +659,14 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     icon: "Zap",
     rootDir: {
       darwin: "~/.config/amp",
-      win32: "%APPDATA%\\amp",
+      win32: "%USERPROFILE%\\.config\\amp",
       linux: "~/.config/amp",
     },
+    rootDirFallbacks: {
+      win32: ["%APPDATA%\\amp"],
+    },
     skillsRelativePath: "skills",
+    mcpRelativePath: "settings.json",
     globalRuleFile: "AGENTS.md",
   },
   {
@@ -555,6 +681,11 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     skillsRelativePath: "skills",
     globalRuleFile: "workspace/SOUL.md",
     configFiles: ["openclaw.json"],
+    cli: {
+      executableCandidates: ["openclaw"],
+      versionArgs: ["--version"],
+      evidence: "official-openclaw-cli",
+    },
   },
   {
     id: "qclaw",

@@ -16,6 +16,7 @@ import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import path from "path";
 import fs from "fs";
 import type {
+  AppCommand,
   RecoveryCandidate,
   RecoveryScanOptions,
 } from "@prompthub/shared/types";
@@ -101,16 +102,17 @@ import { applyNetworkProxySettings } from "./services/network-proxy";
 import { createTrayController } from "./tray-controller";
 import { dispatchTrayAppCommand } from "./tray-command-dispatcher";
 import { handleLegacyDesktopCliInvocation } from "./legacy-cli-invocation";
-
-// Disable GPU acceleration (optional; may be needed on some systems)
-// 禁用 GPU 加速（可选，某些系统上可能需要）
-// app.disableHardwareAcceleration();
+import { getTrayMenuLabels } from "./tray-menu";
+import type { AgentProviderRuntime } from "./services/agent-provider-runtime";
+import { handleAgentProviderTraySelection } from "./services/agent-provider-tray-handler";
+import { startAgentDeepLinkRouting } from "./agent-deep-link-router";
 
 let mainWindow: BrowserWindow | null = null;
 let minimizeToTray = false;
 // Database instance (module-level for access in createWindow)
 // 数据库实例（模块级变量，供 createWindow 访问）
 let appDb: Database.Database | null = null;
+let agentProviderRuntime: AgentProviderRuntime | null = null;
 let isQuitting = false;
 // Close action: 'ask' = ask every time, 'minimize' = minimize to tray, 'exit' = exit directly
 // 关闭行为: 'ask' = 每次询问, 'minimize' = 最小化到托盘, 'exit' = 直接退出
@@ -236,8 +238,17 @@ configureCoreRuntimePaths({
 });
 const isDev = shouldUseDevServer(app.isPackaged);
 
+const dispatchFromTray = (command: AppCommand) =>
+  void dispatchTrayAppCommand({
+    command,
+    createWindow,
+    getWindow: () => mainWindow,
+    onWindowShown: () => emitWindowVisibility(true),
+    sendCommand: (pendingCommand) =>
+      sendToMainWindow(IPC_CHANNELS.APP_COMMAND, pendingCommand),
+  });
 const trayController = createTrayController({
-  agentManagementEnabled: false,
+  agentManagementEnabled: true,
   buildMenu: (template) => Menu.buildFromTemplate(template),
   createFromPath: (filePath) => nativeImage.createFromPath(filePath),
   createTray: (icon) => new Tray(icon),
@@ -247,15 +258,26 @@ const trayController = createTrayController({
   getStoredLanguage: () => (appDb ? readLanguageSetting(appDb) : null),
   getWindowVisibility: () => mainWindow?.isVisible() ?? false,
   isDev,
-  onCommand: (command) =>
-    void dispatchTrayAppCommand({
-      command,
-      createWindow,
-      getWindow: () => mainWindow,
-      onWindowShown: () => emitWindowVisibility(true),
-      sendCommand: (pendingCommand) =>
-        sendToMainWindow(IPC_CHANNELS.APP_COMMAND, pendingCommand),
-    }),
+  loadAgentProviderGroups: () =>
+    agentProviderRuntime?.trayService.listGroups() ?? Promise.resolve([]),
+  onAgentProviderProfile: (agentId, profileId) => {
+    const runtime = agentProviderRuntime;
+    if (!runtime) return;
+    const locale =
+      (appDb ? readLanguageSetting(appDb) : null) ?? app.getLocale();
+    void handleAgentProviderTraySelection({
+      input: { agentId, profileId },
+      labels: getTrayMenuLabels(locale),
+      openAgents: () => dispatchFromTray({ type: "agent:manage" }),
+      reloadAgentProviders: () => trayController.reloadAgentProviders(),
+      service: runtime.trayService,
+      showMessageBox: (options) =>
+        mainWindow && !mainWindow.isDestroyed()
+          ? dialog.showMessageBox(mainWindow, options)
+          : dialog.showMessageBox(options),
+    });
+  },
+  onCommand: dispatchFromTray,
   onQuit: () => {
     isQuitting = true;
     app.quit();
@@ -270,19 +292,19 @@ const trayController = createTrayController({
   platform: process.platform,
 });
 
-// Single instance lock (prevent multiple instances)
-// 单实例锁定（防止多开）
 const gotTheLock =
   isE2E || isLegacyCliInvocation ? true : app.requestSingleInstanceLock();
+const agentDeepLinkRouter = startAgentDeepLinkRouting(
+  app,
+  gotTheLock && !isLegacyCliInvocation,
+  isE2E,
+);
 
 if (!gotTheLock) {
-  // Quit immediately if we fail to acquire the lock (another instance is running)
-  // 如果获取不到锁，说明已有实例在运行，直接退出
   app.quit();
 } else {
-  // When a second instance launches, focus existing window (or recreate if missing)
-  // 当第二个实例启动时，聚焦到已有窗口（若窗口已销毁则重建）
-  app.on("second-instance", async () => {
+  app.on("second-instance", async (_event, argv) => {
+    agentDeepLinkRouter.acceptArgv(argv);
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) {
         mainWindow.restore();
@@ -1873,9 +1895,16 @@ app.whenReady().then(async () => {
       });
     }
     appDb = db; // Save to module-level variable for createWindow access
-    registerAllIPC(db, (nextDb) => {
-      appDb = nextDb;
-    });
+    registerAllIPC(
+      db,
+      (nextDb) => {
+        appDb = nextDb;
+      },
+      (runtime) => {
+        agentProviderRuntime = runtime;
+        void trayController.reloadAgentProviders();
+      },
+    );
 
     // Create application menu
     // 创建菜单
@@ -1895,9 +1924,9 @@ app.whenReady().then(async () => {
     // 注册快捷键 IPC
     registerShortcutsIPC();
 
-    // Create main window
-    // 创建窗口
     await createWindow();
+    agentDeepLinkRouter.connect(dispatchFromTray);
+    agentDeepLinkRouter.acceptArgv(process.argv);
 
     // Init updater (production only)
     // 初始化更新器（仅在生产环境）

@@ -43,6 +43,7 @@ export interface CherryStudioPlatformSkillMetadata {
 
 const CHERRY_STUDIO_PLATFORM_ID = "cherry-studio";
 const CHERRY_STUDIO_DB_CANDIDATES = [
+  path.join("Data", "cherrystudio.sqlite"),
   path.join("Data", "agent.db"),
   path.join("Data", "agents.db"),
   "cherrystudio.sqlite",

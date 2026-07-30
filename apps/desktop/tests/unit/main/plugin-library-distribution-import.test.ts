@@ -351,10 +351,7 @@ describe("CorePluginLibraryService", () => {
     const targetRoot = path.join(userDataPath, "agent-targets");
     const targetPaths = {
       "claude-code": path.join(targetRoot, "claude", "bundle"),
-      cursor: path.join(targetRoot, "cursor", "bundle"),
       "gemini-cli": path.join(targetRoot, "gemini", "bundle"),
-      kiro: path.join(targetRoot, "kiro", "bundle"),
-      "github-copilot": path.join(targetRoot, "copilot", "bundle"),
     };
     const service = new CorePluginLibraryService({
       fetchFn: createFetchMock({}),
@@ -388,18 +385,6 @@ describe("CorePluginLibraryService", () => {
     expect(
       JSON.parse(
         fs.readFileSync(
-          path.join(targetPaths.cursor, ".cursor-plugin", "plugin.json"),
-          "utf8",
-        ),
-      ),
-    ).toMatchObject({
-      name: "bundle",
-      displayName: "Bundle Plugin",
-      skills: "./skills",
-    });
-    expect(
-      JSON.parse(
-        fs.readFileSync(
           path.join(targetPaths["gemini-cli"], "gemini-extension.json"),
           "utf8",
         ),
@@ -409,21 +394,6 @@ describe("CorePluginLibraryService", () => {
       displayName: "Bundle Plugin",
       skills: "./skills",
     });
-    expect(
-      JSON.parse(
-        fs.readFileSync(
-          path.join(targetPaths["github-copilot"], "plugin.json"),
-          "utf8",
-        ),
-      ),
-    ).toMatchObject({
-      name: "bundle",
-      displayName: "Bundle Plugin",
-      skills: "./skills",
-    });
-    expect(
-      fs.readFileSync(path.join(targetPaths.kiro, "POWER.md"), "utf8"),
-    ).toContain('name: "bundle"');
     for (const targetPath of Object.values(targetPaths)) {
       expect(
         fs.existsSync(path.join(targetPath, "skills", "review", "SKILL.md")),
@@ -435,6 +405,114 @@ describe("CorePluginLibraryService", () => {
     expect(result.plugin.distributedTargetIds?.sort()).toEqual(
       Object.keys(targetPaths).sort(),
     );
+  });
+
+  it("rejects direct Kiro distribution before resolving or writing a target", () => {
+    const { plugin } = createInstalledPluginLibrary(userDataPath);
+    const targetPath = path.join(
+      userDataPath,
+      "agent-targets",
+      "kiro",
+      "bundle",
+    );
+    const resolvePluginTargetPath = vi.fn(() => targetPath);
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+      resolvePluginTargetPath,
+    });
+
+    expect(() =>
+      service.distributePlugin({
+        pluginId: plugin.id,
+        targetIds: ["kiro"],
+        mode: "copy",
+      }),
+    ).toThrow(/native.*kiro.*import|原生.*kiro.*导入/i);
+    expect(resolvePluginTargetPath).not.toHaveBeenCalled();
+    expect(fs.existsSync(targetPath)).toBe(false);
+    expect(service.read().plugins[0]?.distributedTargetIds).toEqual([]);
+  });
+
+  it("rejects direct Copilot distribution before resolving or writing a target", () => {
+    const { plugin } = createInstalledPluginLibrary(userDataPath);
+    const targetPath = path.join(
+      userDataPath,
+      "agent-targets",
+      "copilot",
+      "bundle",
+    );
+    const resolvePluginTargetPath = vi.fn(() => targetPath);
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+      resolvePluginTargetPath,
+    });
+
+    expect(() =>
+      service.distributePlugin({
+        pluginId: plugin.id,
+        targetIds: ["github-copilot"],
+        mode: "copy",
+      }),
+    ).toThrow(/native.*copilot plugin install|原生.*copilot plugin install/i);
+    expect(resolvePluginTargetPath).not.toHaveBeenCalled();
+    expect(fs.existsSync(targetPath)).toBe(false);
+    expect(service.read().plugins[0]?.distributedTargetIds).toEqual([]);
+  });
+
+  it("rejects direct Cursor distribution before resolving or writing a target", () => {
+    const { plugin } = createInstalledPluginLibrary(userDataPath);
+    const targetPath = path.join(
+      userDataPath,
+      "agent-targets",
+      "cursor",
+      "bundle",
+    );
+    const resolvePluginTargetPath = vi.fn(() => targetPath);
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+      resolvePluginTargetPath,
+    });
+
+    expect(() =>
+      service.distributePlugin({
+        pluginId: plugin.id,
+        targetIds: ["cursor"],
+        mode: "copy",
+      }),
+    ).toThrow(/native.*cursor marketplace|verified local-plugin/i);
+    expect(resolvePluginTargetPath).not.toHaveBeenCalled();
+    expect(fs.existsSync(targetPath)).toBe(false);
+    expect(service.read().plugins[0]?.distributedTargetIds).toEqual([]);
+  });
+
+  it("rejects composite Windsurf distribution before resolving or writing a target", () => {
+    const { plugin } = createInstalledPluginLibrary(userDataPath);
+    const targetPath = path.join(
+      userDataPath,
+      "agent-targets",
+      "windsurf",
+      "bundle",
+    );
+    const resolvePluginTargetPath = vi.fn(() => targetPath);
+    const service = new CorePluginLibraryService({
+      fetchFn: createFetchMock({}),
+      marketSources: [marketSource],
+      resolvePluginTargetPath,
+    });
+
+    expect(() =>
+      service.distributePlugin({
+        pluginId: plugin.id,
+        targetIds: ["windsurf"],
+        mode: "copy",
+      }),
+    ).toThrow(/composite adapter|single native bundle/i);
+    expect(resolvePluginTargetPath).not.toHaveBeenCalled();
+    expect(fs.existsSync(targetPath)).toBe(false);
+    expect(service.read().plugins[0]?.distributedTargetIds).toEqual([]);
   });
 
   it("materializes adapter targets as generated copies even when symlink mode is requested", () => {

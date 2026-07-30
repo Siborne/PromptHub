@@ -18,6 +18,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { SkillFullDetailPage } from "../skill/SkillFullDetailPage";
 import { SkillLibraryImportModal } from "../skill/SkillLibraryImportModal";
 import { buildProjectDetailSkill } from "../skill/project-detail-adapter";
+import { BoundedListPager, useBoundedPage } from "./BoundedListPager";
 
 const DOMAIN_META: Record<
   AgentAssetDomain,
@@ -90,6 +91,7 @@ export function AgentAssetsWorkspace({
         .some((value) => value?.toLocaleLowerCase().includes(normalized)),
     );
   }, [activeInventory?.items, query]);
+  const itemPage = useBoundedPage(filteredItems, 100, filteredItems);
 
   const selectedSkillRow = useMemo(
     () =>
@@ -216,7 +218,16 @@ export function AgentAssetsWorkspace({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {filteredItems.length === 0 ? (
+              {activeInventory.status === "failed" ? (
+                <div className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center">
+                  <p className="max-w-md text-sm leading-6 text-destructive">
+                    {t(
+                      "agents.assetLoadFailed",
+                      "Asset inventory could not be loaded.",
+                    )}
+                  </p>
+                </div>
+              ) : filteredItems.length === 0 ? (
                 <div className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center">
                   <p className="max-w-md text-sm leading-6 text-muted-foreground">
                     {t(
@@ -227,7 +238,7 @@ export function AgentAssetsWorkspace({
                 </div>
               ) : (
                 <ul>
-                  {filteredItems.map((item) => (
+                  {itemPage.items.map((item) => (
                     <li
                       key={item.id}
                       className="flex min-h-11 items-center justify-between gap-4 border-b border-border/60 px-5 py-2.5 transition-colors hover:bg-accent/45"
@@ -245,6 +256,7 @@ export function AgentAssetsWorkspace({
                 </ul>
               )}
             </div>
+            <BoundedListPager page={itemPage} />
           </>
         )}
       </section>

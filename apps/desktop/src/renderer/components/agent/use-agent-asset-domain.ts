@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import type {
+  AgentAssetAggregate,
+  AgentAssetDomainResult,
+  AgentAssetTargetState,
+} from "@prompthub/core/agent-management/asset-aggregation";
 import type { ManagedAgentSummary } from "@prompthub/shared/types";
-import { getSkillScanStatus } from "../../services/skill-scan-status";
+import {
+  agentAssetAggregationService,
+  readAgentAssetAggregate,
+} from "../../services/agent-asset-domain-adapters";
 import { useMcpStore } from "../../stores/mcp.store";
 import { usePluginStore } from "../../stores/plugin.store";
 import { useRulesStore } from "../../stores/rules.store";
@@ -14,147 +22,238 @@ export interface AgentAssetItem {
   id: string;
   label: string;
   meta?: string;
+  state: string;
 }
 
 export interface AgentAssetInventory {
   items: AgentAssetItem[];
+  isLoading: boolean;
+  status: AgentAssetDomainResult["status"];
+  errorCode?: AgentAssetDomainResult["errorCode"];
   refresh: () => void;
 }
 
-function useSkillInventory(
+const DOMAIN_KIND = {
+  skills: "skill",
+  mcp: "mcp",
+  rules: "rule",
+  plugins: "plugin",
+} as const;
+
+function emptyAggregate(platformId: string): AgentAssetAggregate {
+  return {
+    platformId,
+    total: 0,
+    domains: Object.values(DOMAIN_KIND).map((kind) => ({
+      kind,
+      status: "available",
+      items: [],
+    })),
+  };
+}
+
+function failedAggregate(platformId: string): AgentAssetAggregate {
+  const aggregate = emptyAggregate(platformId);
+  return {
+    ...aggregate,
+    domains: aggregate.domains.map((domain) => ({
+      ...domain,
+      errorCode: "asset-domain-list-failed",
+      status: "failed",
+    })),
+  };
+}
+
+function itemMeta(
+  item: AgentAssetTargetState,
+  t: ReturnType<typeof useTranslation>["t"],
+): string | undefined {
+  if (item.kind === "skill") {
+    return item.state === "managed"
+      ? t("agents.managed", "Managed")
+      : t("agents.external", "External");
+  }
+  if (item.kind === "mcp") {
+    return t("agents.configured", "Configured");
+  }
+  if (item.kind === "rule") {
+    return item.state === "detected"
+      ? t("agents.detected", "Detected")
+      : t(`rules.syncStatus.${item.state}`, item.state);
+  }
+  const version = item.metadata?.version;
+  return typeof version === "string" && version.trim() ? version : undefined;
+}
+
+function mapItems(
+  domain: AgentAssetDomainResult | undefined,
+  t: ReturnType<typeof useTranslation>["t"],
+): AgentAssetItem[] {
+  return (domain?.items ?? []).map((item) => ({
+    id: item.id,
+    label: item.label,
+    meta: itemMeta(item, t),
+    state: item.state,
+  }));
+}
+
+export function useAgentAssetInventoryMap(
   agent: ManagedAgentSummary,
-  enabled: boolean,
-): AgentAssetInventory {
+): Record<AgentAssetDomain, AgentAssetInventory> {
   const { t } = useTranslation();
-  const skills = useSkillStore((state) => state.skills);
-  const scan = useSkillStore((state) => state.agentScanState[agent.id]);
+  const skillLibrary = useSkillStore((state) => state.skills);
+  const skillScan = useSkillStore((state) => state.agentScanState[agent.id]);
   const scanSkills = useSkillStore((state) => state.scanAgentPlatformSkills);
+  const mcpLibrary = useMcpStore((state) => state.library);
+  const mcpPresets = useMcpStore((state) => state.targetPresets);
+  const mcpStatus = useMcpStore((state) => state.targetStatus);
+  const loadMcp = useMcpStore((state) => state.load);
+  const ruleFiles = useRulesStore((state) => state.files);
+  const rulesLoaded = useRulesStore((state) => state.hasLoadedFiles);
+  const loadRules = useRulesStore((state) => state.loadFiles);
+  const pluginLibrary = usePluginStore((state) => state.library);
+  const pluginTargets = usePluginStore((state) => state.targetMatrix);
+  const loadPlugins = usePluginStore((state) => state.load);
+  const [validation, setValidation] = useState<AgentAssetAggregate | null>(
+    null,
+  );
+
   useEffect(() => {
-    if (enabled && agent.isDetected && !scan?.result && !scan?.isScanning) {
+    if (
+      agent.paths.skills &&
+      agent.isDetected &&
+      !skillScan?.result &&
+      !skillScan?.isScanning
+    ) {
       void scanSkills(agent.id).catch(() => undefined);
     }
-  }, [agent.id, agent.isDetected, enabled, scan, scanSkills]);
-  const items = useMemo(
-    () =>
-      (scan?.result?.scannedSkills ?? []).map((skill) => ({
-        id: skill.platformSkillPath,
-        label: skill.name,
-        meta: getSkillScanStatus(skill, skills).managedSkill
-          ? t("agents.managed", "Managed")
-          : t("agents.external", "External"),
-      })),
-    [scan?.result?.scannedSkills, skills, t],
+  }, [
+    agent.id,
+    agent.isDetected,
+    agent.paths.skills,
+    scanSkills,
+    skillScan?.isScanning,
+    skillScan?.result,
+  ]);
+  useEffect(() => {
+    if (agent.paths.mcp && !mcpLibrary) void loadMcp();
+  }, [agent.paths.mcp, loadMcp, mcpLibrary]);
+  useEffect(() => {
+    if (agent.paths.rules && !rulesLoaded) void loadRules();
+  }, [agent.paths.rules, loadRules, rulesLoaded]);
+  useEffect(() => {
+    if (agent.paths.plugins && !pluginLibrary) void loadPlugins();
+  }, [agent.paths.plugins, loadPlugins, pluginLibrary]);
+
+  const aggregate = useMemo(
+    () => readAgentAssetAggregate(agent.id),
+    [
+      agent.id,
+      mcpPresets,
+      mcpStatus,
+      pluginTargets,
+      ruleFiles,
+      skillLibrary,
+      skillScan?.result,
+    ],
   );
-  const refresh = useCallback(() => {
+
+  useEffect(() => {
+    let active = true;
+    void agentAssetAggregationService
+      .listForTarget(agent.id)
+      .then((next) => {
+        if (!active) return;
+        const hasFailure = next.domains.some(
+          (domain) => domain.status !== "available",
+        );
+        setValidation((current) =>
+          hasFailure ? next : current?.platformId === agent.id ? null : current,
+        );
+      })
+      .catch(() => {
+        if (active) setValidation(failedAggregate(agent.id));
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    agent.id,
+    mcpPresets,
+    mcpStatus,
+    pluginTargets,
+    ruleFiles,
+    skillLibrary,
+    skillScan?.result,
+  ]);
+
+  const refreshSkills = useCallback(() => {
     if (agent.isDetected) void scanSkills(agent.id);
   }, [agent.id, agent.isDetected, scanSkills]);
-  return { items, refresh };
-}
-
-function useMcpInventory(
-  agent: ManagedAgentSummary,
-  enabled: boolean,
-): AgentAssetInventory {
-  const { t } = useTranslation();
-  const library = useMcpStore((state) => state.library);
-  const presets = useMcpStore((state) => state.targetPresets);
-  const status = useMcpStore((state) => state.targetStatus);
-  const load = useMcpStore((state) => state.load);
-  useEffect(() => {
-    if (enabled && !library) void load();
-  }, [enabled, library, load]);
-  const items = useMemo(() => {
-    const presetIds = new Set(
-      presets
-        .filter((item) => item.platformId === agent.id)
-        .map((item) => item.id),
-    );
-    return Array.from(
-      new Set(
-        status
-          .filter((item) => presetIds.has(item.presetId))
-          .flatMap((item) => item.serverNames),
-      ),
-    ).map((name) => ({
-      id: name,
-      label: name,
-      meta: t("agents.configured", "Configured"),
-    }));
-  }, [agent.id, presets, status, t]);
-  const refresh = useCallback(() => void load(), [load]);
-  return { items, refresh };
-}
-
-function useRulesInventory(
-  agent: ManagedAgentSummary,
-  enabled: boolean,
-): AgentAssetInventory {
-  const { t } = useTranslation();
-  const files = useRulesStore((state) => state.files);
-  const hasLoaded = useRulesStore((state) => state.hasLoadedFiles);
-  const load = useRulesStore((state) => state.loadFiles);
-  useEffect(() => {
-    if (enabled && !hasLoaded) void load();
-  }, [enabled, hasLoaded, load]);
-  const items = useMemo(
-    () =>
-      files
-        .filter((file) => file.platformId === agent.id)
-        .map((file) => ({
-          id: file.id,
-          label: file.name,
-          meta: file.syncStatus
-            ? t(`rules.syncStatus.${file.syncStatus}`, file.syncStatus)
-            : t("agents.detected", "Detected"),
-        })),
-    [agent.id, files, t],
+  const refreshMcp = useCallback(() => void loadMcp(), [loadMcp]);
+  const refreshRules = useCallback(
+    () => void loadRules({ force: true }),
+    [loadRules],
   );
-  const refresh = useCallback(() => void load({ force: true }), [load]);
-  return { items, refresh };
-}
+  const refreshPlugins = useCallback(
+    () => void loadPlugins({ force: true }),
+    [loadPlugins],
+  );
 
-function usePluginInventory(
-  agent: ManagedAgentSummary,
-  enabled: boolean,
-): AgentAssetInventory {
-  const library = usePluginStore((state) => state.library);
-  const targets = usePluginStore((state) => state.targetMatrix);
-  const load = usePluginStore((state) => state.load);
-  useEffect(() => {
-    if (enabled && !library) void load();
-  }, [enabled, library, load]);
-  const items = useMemo(() => {
-    const target = targets.find((item) => item.id === agent.id);
-    return (target?.installedPlugins ?? []).map((plugin) => ({
-      id: plugin.id,
-      label: plugin.displayName || plugin.name,
-      meta: plugin.version,
-    }));
-  }, [agent.id, targets]);
-  const refresh = useCallback(() => void load({ force: true }), [load]);
-  return { items, refresh };
+  return useMemo(() => {
+    const current = aggregate;
+    const byKind = new Map(
+      current.domains.map((domain) => [domain.kind, domain]),
+    );
+    const validationByKind =
+      validation?.platformId === agent.id
+        ? new Map(validation.domains.map((domain) => [domain.kind, domain]))
+        : null;
+    const build = (
+      domain: AgentAssetDomain,
+      isLoading: boolean,
+      refresh: () => void,
+    ): AgentAssetInventory => {
+      const result = byKind.get(DOMAIN_KIND[domain]);
+      const validated = validationByKind?.get(DOMAIN_KIND[domain]);
+      return {
+        items: mapItems(result, t),
+        isLoading,
+        status: validated?.status ?? result?.status ?? "failed",
+        errorCode: validated?.errorCode ?? result?.errorCode,
+        refresh,
+      };
+    };
+    return {
+      skills: build(
+        "skills",
+        Boolean(agent.isDetected && !skillScan?.result),
+        refreshSkills,
+      ),
+      mcp: build("mcp", !mcpLibrary, refreshMcp),
+      rules: build("rules", !rulesLoaded, refreshRules),
+      plugins: build("plugins", !pluginLibrary, refreshPlugins),
+    };
+  }, [
+    agent.id,
+    agent.isDetected,
+    aggregate,
+    mcpLibrary,
+    pluginLibrary,
+    refreshMcp,
+    refreshPlugins,
+    refreshRules,
+    refreshSkills,
+    rulesLoaded,
+    skillScan?.result,
+    t,
+    validation,
+  ]);
 }
 
 export function useAgentAssetDomain(
   agent: ManagedAgentSummary,
   domain: AgentAssetDomain,
 ): AgentAssetInventory {
-  const inventory = {
-    skills: useSkillInventory(agent, domain === "skills"),
-    mcp: useMcpInventory(agent, domain === "mcp"),
-    rules: useRulesInventory(agent, domain === "rules"),
-    plugins: usePluginInventory(agent, domain === "plugins"),
-  };
-  return inventory[domain];
-}
-
-export function useAgentAssetInventoryMap(
-  agent: ManagedAgentSummary,
-): Record<AgentAssetDomain, AgentAssetInventory> {
-  return {
-    skills: useSkillInventory(agent, true),
-    mcp: useMcpInventory(agent, true),
-    rules: useRulesInventory(agent, true),
-    plugins: usePluginInventory(agent, true),
-  };
+  return useAgentAssetInventoryMap(agent)[domain];
 }

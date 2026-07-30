@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -14,8 +15,12 @@ import {
   createScannedSkillFixture,
   createSkillFixture,
 } from "../../fixtures/skills";
-import { renderWithI18n } from "../../helpers/i18n";
+import { renderWithI18n as renderWithI18nBase } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
+
+function renderWithI18n(ui: ReactElement) {
+  return renderWithI18nBase(ui, { settleAsyncEffects: true });
+}
 
 const claudeAgent: ManagedAgentSummary = {
   id: "claude",
@@ -355,8 +360,6 @@ describe("AgentOverviewPanel", () => {
     ).toBeVisible();
     expect(within(usageBanner).getByText("claude-pro")).toBeVisible();
     expect(screen.queryByRole("button", { name: /^usage/i })).toBeNull();
-
-    expect(window.api.agent.listProviders).not.toHaveBeenCalled();
   });
 
   it("navigates to the owning tab when a navigation cell is clicked", async () => {
@@ -410,8 +413,11 @@ describe("AgentOverviewPanel", () => {
       expect(cell, `${label} cell should be disabled`).not.toBeNull();
     }
     expect(
-      screen.getAllByText("Adapter planned").length,
-    ).toBeGreaterThanOrEqual(7);
+      screen.getAllByText("This adapter is planned and is not available yet."),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByText("No verified adapter is available for this Agent."),
+    ).toHaveLength(5);
 
     expect(
       screen.queryByRole("region", { name: "Usage" }),
@@ -458,36 +464,17 @@ describe("AgentOverviewPanel", () => {
       agentId: "codex",
       adapter: "codex-toml-v1",
       status: "configured",
-      model: "gpt-5",
+      model: "acme-fast",
       secondaryModel: null,
       fallbackModels: [],
       provider: "acme",
       endpoint: "https://acme.example.com/v1",
-      availableModels: ["gpt-5"],
+      availableModels: ["acme-fast"],
       credentialStatus: "platform-managed",
       sourceRelativePath: "config.toml",
       canSetModel: true,
       formattingMayChange: false,
     });
-    window.api.agent.listProviders = vi.fn().mockResolvedValue({
-      agentId: "codex",
-      activeProvider: "acme",
-      defaultModel: "gpt-5",
-      providers: [
-        {
-          id: "acme",
-          name: "Acme",
-          baseUrl: "https://acme.example.com/v1",
-          wireApi: "responses",
-          envKey: null,
-          keySource: "managed",
-          hasKey: true,
-          isActive: true,
-          profileModel: "acme-fast",
-        },
-      ],
-    });
-
     await renderWithI18n(
       <AgentOverviewPanel agent={codexAgent} onNavigate={vi.fn()} />,
     );
@@ -499,8 +486,6 @@ describe("AgentOverviewPanel", () => {
       await within(providerCell).findByText("https://acme.example.com/v1"),
     ).toBeVisible();
     expect(within(providerCell).getByText("acme-fast")).toBeVisible();
-    expect(within(providerCell).queryByText("gpt-5")).toBeNull();
-    expect(window.api.agent.listProviders).toHaveBeenCalledWith("codex");
   });
 
   it("keeps the model and credential summary when OpenAI is the active Codex provider", async () => {
@@ -519,13 +504,6 @@ describe("AgentOverviewPanel", () => {
       canSetModel: true,
       formattingMayChange: false,
     });
-    window.api.agent.listProviders = vi.fn().mockResolvedValue({
-      agentId: "codex",
-      activeProvider: "openai",
-      defaultModel: "gpt-5",
-      providers: [],
-    });
-
     await renderWithI18n(
       <AgentOverviewPanel agent={codexAgent} onNavigate={vi.fn()} />,
     );
@@ -535,7 +513,6 @@ describe("AgentOverviewPanel", () => {
     });
     expect(await within(providerCell).findByText("gpt-5")).toBeVisible();
     expect(within(providerCell).getByText(/managed by agent/i)).toBeVisible();
-    expect(window.api.agent.listProviders).toHaveBeenCalledWith("codex");
   });
 
   it("shows the custom gateway endpoint and model on the Claude provider cell", async () => {

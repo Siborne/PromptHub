@@ -20,15 +20,15 @@ import type {
   AgentCapabilityStatus,
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
-import { useMcpStore } from "../../stores/mcp.store";
-import { usePluginStore } from "../../stores/plugin.store";
-import { useRulesStore } from "../../stores/rules.store";
-import { useSkillStore } from "../../stores/skill.store";
 import { AgentUsageBanner } from "./AgentUsageBanner";
-import { type AgentWorkspaceNavigate } from "./agent-workspace-tabs";
 import {
-  useAgentAssetDomain,
+  getAgentCapabilityGuidance,
+  type AgentWorkspaceNavigate,
+} from "./agent-workspace-tabs";
+import {
+  useAgentAssetInventoryMap,
   type AgentAssetDomain,
+  type AgentAssetInventory,
 } from "./use-agent-asset-domain";
 
 function isEnabled(status: AgentCapabilityStatus): boolean {
@@ -98,12 +98,17 @@ function NavCellShell({
 function DisabledNavCell({
   icon: Icon,
   label,
+  status,
 }: {
   icon: LucideIcon;
   label: string;
+  status: AgentCapabilityStatus;
 }) {
   const { t } = useTranslation();
-  const reason = t("agents.adapterPending", "Adapter planned");
+  const guidance = getAgentCapabilityGuidance(status);
+  const reason = guidance
+    ? t(guidance.key, guidance.fallback)
+    : t("agents.adapterPending", "Adapter planned");
   return (
     <div
       aria-disabled="true"
@@ -133,36 +138,39 @@ function AssetNavCell({
   agent,
   domain,
   icon,
-  isLoading,
+  inventory,
   label,
   onSelect,
 }: {
   agent: ManagedAgentSummary;
   domain: AgentAssetDomain;
   icon: LucideIcon;
-  isLoading: boolean;
+  inventory: AgentAssetInventory;
   label: string;
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
-  const { items } = useAgentAssetDomain(agent, domain);
+  const { isLoading, items } = inventory;
   const managedCount =
     domain === "skills"
-      ? items.filter((item) => item.meta === t("agents.managed", "Managed"))
-          .length
+      ? items.filter((item) => item.state === "managed").length
       : 0;
   const secondary =
-    domain === "skills"
-      ? t("agents.overviewNav.managedExternal", {
-          managed: managedCount,
-          external: items.length - managedCount,
-        })
-      : t(`agents.capabilityStatus.${assetDomainStatus(agent, domain)}`);
+    inventory.status === "failed"
+      ? t("agents.assetLoadFailed", "Asset inventory could not be loaded.")
+      : domain === "skills"
+        ? t("agents.overviewNav.managedExternal", {
+            managed: managedCount,
+            external: items.length - managedCount,
+          })
+        : t(`agents.capabilityStatus.${assetDomainStatus(agent, domain)}`);
   return (
     <NavCellShell
       icon={icon}
       label={label}
-      primary={isLoading ? "—" : String(items.length)}
+      primary={
+        isLoading || inventory.status === "failed" ? "—" : String(items.length)
+      }
       secondary={secondary}
       onSelect={onSelect}
     />
@@ -249,7 +257,6 @@ function ProviderNavCell({
         // A custom gateway (e.g. Claude's ANTHROPIC_BASE_URL) makes the
         // endpoint the meaningful identity of the active provider.
         if (
-          agent.id !== "codex" &&
           config.provider &&
           config.provider !== "anthropic" &&
           config.endpoint
@@ -263,26 +270,6 @@ function ProviderNavCell({
       .catch(() => {
         if (active) setFailed(true);
       });
-    if (agent.id === "codex") {
-      window.api.agent
-        .listProviders(agent.id)
-        .then((list) => {
-          if (!active || list.activeProvider === "openai") return;
-          const activeProvider =
-            list.providers.find(
-              (provider) => provider.id === list.activeProvider,
-            ) ?? null;
-          if (!activeProvider?.baseUrl) return;
-          setCustomProvider({
-            baseUrl: activeProvider.baseUrl,
-            model: activeProvider.profileModel || list.defaultModel,
-          });
-        })
-        .catch(() => {
-          // The provider list only enriches the Codex cell; the model-config
-          // summary above remains the fallback when it cannot be loaded.
-        });
-    }
     return () => {
       active = false;
     };
@@ -378,17 +365,7 @@ function OverviewNavGrid({
   onNavigate: AgentWorkspaceNavigate;
 }) {
   const { t } = useTranslation();
-  const skillScan = useSkillStore((state) => state.agentScanState[agent.id]);
-  const mcpLibrary = useMcpStore((state) => state.library);
-  const rulesLoaded = useRulesStore((state) => state.hasLoadedFiles);
-  const pluginLibrary = usePluginStore((state) => state.library);
-
-  const assetLoading: Record<AgentAssetDomain, boolean> = {
-    skills: agent.isDetected && !skillScan?.result,
-    mcp: !mcpLibrary,
-    rules: !rulesLoaded,
-    plugins: !pluginLibrary,
-  };
+  const inventories = useAgentAssetInventoryMap(agent);
   const assetMeta: Array<{
     domain: AgentAssetDomain;
     icon: LucideIcon;
@@ -418,12 +395,17 @@ function OverviewNavGrid({
               agent={agent}
               domain={domain}
               icon={icon}
-              isLoading={assetLoading[domain]}
+              inventory={inventories[domain]}
               label={label}
               onSelect={() => onNavigate(domain)}
             />
           ) : (
-            <DisabledNavCell key={domain} icon={icon} label={label} />
+            <DisabledNavCell
+              key={domain}
+              icon={icon}
+              label={label}
+              status={assetDomainStatus(agent, domain)}
+            />
           ),
         )}
         {isEnabled(sessionsStatus) ? (
@@ -432,7 +414,11 @@ function OverviewNavGrid({
             onSelect={() => onNavigate("sessions")}
           />
         ) : (
-          <DisabledNavCell icon={HistoryIcon} label={t("agents.sessions")} />
+          <DisabledNavCell
+            icon={HistoryIcon}
+            label={t("agents.sessions")}
+            status={sessionsStatus}
+          />
         )}
         {isEnabled(providerStatus) ? (
           <ProviderNavCell
@@ -443,6 +429,7 @@ function OverviewNavGrid({
           <DisabledNavCell
             icon={CpuIcon}
             label={t("agents.providerAndModel")}
+            status={providerStatus}
           />
         )}
         {isEnabled(appearanceStatus) ? (
@@ -454,6 +441,7 @@ function OverviewNavGrid({
           <DisabledNavCell
             icon={PaletteIcon}
             label={t("agents.appearanceTab")}
+            status={appearanceStatus}
           />
         )}
         {isEnabled(configFilesStatus) ? (
@@ -465,7 +453,11 @@ function OverviewNavGrid({
             onSelect={() => onNavigate("configFiles")}
           />
         ) : (
-          <DisabledNavCell icon={FileCogIcon} label={t("agents.configFiles")} />
+          <DisabledNavCell
+            icon={FileCogIcon}
+            label={t("agents.configFiles")}
+            status={configFilesStatus}
+          />
         )}
       </div>
     </section>

@@ -216,30 +216,47 @@ describe("Agent Plugin target inventory scan", () => {
   );
 
   it("reads Cursor plugin packages from plugin roots", () => {
-    const cursorPlugin = path.join(
+    const marketplacePlugin = path.join(
       agentRoot,
       "plugins",
       "cache",
-      "prompthub",
+      "cursor-public",
       "review-kit",
+      "1.2.0",
     );
-    writeJson(path.join(cursorPlugin, ".cursor-plugin", "plugin.json"), {
+    writeJson(path.join(marketplacePlugin, ".cursor-plugin", "plugin.json"), {
       name: "review-kit",
       displayName: "Review Kit",
       rules: ["./rules/review.mdc"],
       mcpServers: { lint: "./mcp/lint.js" },
     });
-    touch(path.join(cursorPlugin, "rules", "review.mdc"));
-    touch(path.join(cursorPlugin, "mcp", "lint.js"));
+    touch(path.join(marketplacePlugin, "rules", "review.mdc"));
+    touch(path.join(marketplacePlugin, "mcp", "lint.js"));
+    const localPlugin = path.join(agentRoot, "plugins", "local", "draft-kit");
+    writeJson(path.join(localPlugin, ".cursor-plugin", "plugin.json"), {
+      name: "draft-kit",
+      displayName: "Draft Kit",
+      skills: ["./skills/draft"],
+    });
+    touch(path.join(localPlugin, "skills", "draft", "SKILL.md"));
 
     const plugins = scanInstalledPluginsForTarget("cursor", agentRoot);
 
-    expect(plugins).toHaveLength(1);
-    expect(plugins[0]).toMatchObject({
-      name: "review-kit",
-      displayName: "Review Kit",
-      inventory: { mcpServers: 1 },
-    });
+    expect(plugins).toHaveLength(2);
+    expect(plugins).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "review-kit",
+          displayName: "Review Kit",
+          inventory: expect.objectContaining({ mcpServers: 1 }),
+        }),
+        expect.objectContaining({
+          name: "draft-kit",
+          displayName: "Draft Kit",
+          inventory: expect.objectContaining({ skills: 1 }),
+        }),
+      ]),
+    );
   });
 
   it("reads Gemini CLI extension packages", () => {
@@ -312,7 +329,12 @@ describe("Agent Plugin target inventory scan", () => {
   });
 
   it("reads GitHub Copilot plugin packages", () => {
-    const copilotPlugin = path.join(agentRoot, "plugins", "octo-review");
+    const copilotPlugin = path.join(
+      agentRoot,
+      "installed-plugins",
+      "octo-review",
+      "1.0.0",
+    );
     writeJson(path.join(copilotPlugin, "plugin.json"), {
       name: "octo-review",
       displayName: "Octo Review",

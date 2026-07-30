@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import net from "node:net";
 import path from "node:path";
@@ -22,6 +23,10 @@ import {
 } from "./agent-model-config";
 import type { AgentSecretStore } from "./agent-secret-store";
 import { AgentCodexProviderError } from "./agent-codex-provider-error";
+import type {
+  AgentCodexProviderMigrationInspection,
+  AgentCodexProviderMigrationSource,
+} from "./agent-codex-provider-migration-service";
 import {
   removeTable,
   setTopLevelString,
@@ -58,6 +63,9 @@ export interface AgentCodexProviderServiceOptions {
 
 export interface AgentCodexProviderService {
   listProviders(agentId: string): Promise<AgentCodexProviderList>;
+  inspectMigrationSources(
+    agentId: string,
+  ): Promise<AgentCodexProviderMigrationInspection>;
   upsertProvider(
     input: UpsertAgentCodexProviderInput,
   ): Promise<AgentCodexProviderList>;
@@ -234,8 +242,7 @@ export function createAgentCodexProviderService(
   const env = options.env ?? process.env;
   const lookupHost =
     options.lookupHost ??
-    ((hostname: string) =>
-      dnsLookup(hostname, { all: true, verbatim: true }));
+    ((hostname: string) => dnsLookup(hostname, { all: true, verbatim: true }));
 
   function resolveCodexRoot(agentId: string): string {
     if (typeof agentId !== "string" || !agentId.trim()) {
@@ -303,9 +310,8 @@ export function createAgentCodexProviderService(
         id,
         name: getString(entry, "name") ?? id,
         baseUrl: sanitizeEndpoint(getString(entry, "base_url")) ?? "",
-        wireApi: getString(entry, "wire_api") === "responses"
-          ? "responses"
-          : "chat",
+        wireApi:
+          getString(entry, "wire_api") === "responses" ? "responses" : "chat",
         envKey,
         keySource: managed ? "managed" : envKey ? "env" : "none",
         hasKey: managed || Boolean(envKey) || hasInlineToken,
@@ -317,10 +323,65 @@ export function createAgentCodexProviderService(
     return { agentId, activeProvider, defaultModel, providers };
   }
 
-  async function listProviders(agentId: string): Promise<AgentCodexProviderList> {
+  async function listProviders(
+    agentId: string,
+  ): Promise<AgentCodexProviderList> {
     const root = resolveCodexRoot(agentId);
     const { data } = await readConfig(path.join(root, CONFIG_FILE_NAME));
     return buildProviderList(agentId, data);
+  }
+
+  async function inspectMigrationSources(
+    agentId: string,
+  ): Promise<AgentCodexProviderMigrationInspection> {
+    const root = resolveCodexRoot(agentId);
+    const { original, data } = await readConfig(
+      path.join(root, CONFIG_FILE_NAME),
+    );
+    const activeProvider = getString(data, "model_provider") || "openai";
+    const defaultModel = getString(data, "model");
+    const providers = getRecord(data, "model_providers") ?? {};
+    const profiles = getRecord(data, "profiles") ?? {};
+    const sources: AgentCodexProviderMigrationSource[] = [];
+    for (const [providerId, value] of Object.entries(providers)) {
+      const entry = isRecord(value) ? value : {};
+      const envKey = getString(entry, "env_key");
+      const managedCredential = await secretCall(() =>
+        options.secretStore.read(secretRefForProvider(providerId)),
+      );
+      const inlineCredential = getString(entry, "experimental_bearer_token");
+      const credentialSource = managedCredential
+        ? ("legacy-managed" as const)
+        : envKey
+          ? ("environment" as const)
+          : inlineCredential
+            ? ("native-inline" as const)
+            : ("none" as const);
+      sources.push({
+        providerId,
+        name: getString(entry, "name") ?? providerId,
+        baseUrl: sanitizeEndpoint(getString(entry, "base_url")) ?? "",
+        wireApi:
+          getString(entry, "wire_api") === "responses" ? "responses" : "chat",
+        envKey,
+        credentialSource,
+        credential: managedCredential ?? inlineCredential,
+        isActive: providerId === activeProvider,
+        profileModel: getString(getRecord(profiles, providerId), "model"),
+      });
+    }
+    const publicSourceState = sources.map(({ credential, ...item }) => ({
+      ...item,
+      credentialReady:
+        item.credentialSource === "environment"
+          ? Boolean(item.envKey)
+          : Boolean(credential),
+    }));
+    const nativeDigest = createHash("sha256")
+      .update(original ?? "")
+      .update(JSON.stringify(publicSourceState))
+      .digest("hex");
+    return { nativeDigest, defaultModel, sources };
   }
 
   async function runWritePipeline(context: {
@@ -364,8 +425,7 @@ export function createAgentCodexProviderService(
     const wireApi = normalizeWireApi(input.wireApi);
     const profileModel = normalizeProfileModel(input.profileModel);
 
-    const apiKey =
-      typeof input.apiKey === "string" ? input.apiKey : null;
+    const apiKey = typeof input.apiKey === "string" ? input.apiKey : null;
     const envKey =
       typeof input.envKey === "string" && input.envKey.trim()
         ? input.envKey.trim()
@@ -537,10 +597,7 @@ export function createAgentCodexProviderService(
       options.secretStore.read(secretRef),
     );
 
-    let nextText = removeTable(original ?? "", [
-      "model_providers",
-      providerId,
-    ]);
+    let nextText = removeTable(original ?? "", ["model_providers", providerId]);
     for (const profileId of referencingProfiles) {
       nextText = removeTable(nextText, ["profiles", profileId]);
     }
@@ -760,6 +817,7 @@ export function createAgentCodexProviderService(
 
   return {
     listProviders,
+    inspectMigrationSources,
     upsertProvider,
     removeProvider,
     setDefaultProvider,

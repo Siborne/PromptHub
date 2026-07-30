@@ -3,25 +3,61 @@ import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import type {
   AgentAppearanceActionResult,
   AgentLaunchResult,
+  AgentManagementBackup,
+  AgentManagementBackupRestoreResult,
+  AgentCliDiagnostic,
+  AgentCliLifecyclePlan,
+  AgentCliLifecycleResult,
   AgentAppearanceOverview,
   AgentDesktopThemeSummary,
+  AgentDefinitionListRequest,
+  AgentDefinitionListResult,
+  AgentDefinitionOpenRequest,
+  AgentDefinitionOpenResult,
   AgentPetSummary,
+  AgentProviderProfileExport,
+  AgentProviderProfilePublic,
+  AgentProviderMigrationPreview,
+  AgentProviderMigrationRequest,
+  AgentProviderMigrationResult,
+  AgentProviderActivateRequest,
+  AgentProviderActivationExecutionResult,
+  AgentProviderActivationPlan,
+  AgentProviderConnectionTestRequest,
+  AgentProviderConnectionTestResult,
+  AgentProviderCurrentState,
+  AgentProviderImportCurrentRequest,
+  AgentProviderImportPreview,
+  AgentProviderModelTestCancelRequest,
+  AgentProviderModelTestRequest,
+  AgentProviderModelTestResult,
+  AgentProviderPreviewRequest,
   AgentModelConfiguration,
   AgentSessionDetail,
+  AgentSessionIndexCancelRequest,
+  AgentSessionIndexProgress,
+  AgentSessionIndexPublicState,
+  AgentSessionIndexRefreshRequest,
+  AgentSessionIndexSetEnabledRequest,
   AgentSessionListResult,
   AgentUsageQuota,
-  AgentCodexProviderList,
-  AgentCodexProviderTestResult,
-  UpsertAgentCodexProviderInput,
   SkillLocalFileEntry,
   SkillLocalFileTreeEntry,
   UpdateAgentModelInput,
   UpdateAgentModelResult,
+  CreateAgentProviderProfileRequest,
+  UpdateAgentProviderProfileRequest,
 } from "@prompthub/shared/types";
 
 export const agentApi = {
   launch: (agentId: string): Promise<AgentLaunchResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_LAUNCH, agentId),
+  diagnoseCli: (agentId: string): Promise<AgentCliDiagnostic> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CLI_DIAGNOSE, agentId),
+  planCliUpdate: (agentId: string): Promise<AgentCliLifecyclePlan> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CLI_UPDATE_PLAN, agentId),
+  applyCliUpdate: (planId: string): Promise<AgentCliLifecycleResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CLI_UPDATE_APPLY, planId),
   listConfigFiles: (agentId: string): Promise<SkillLocalFileTreeEntry[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONFIG_FILES_LIST, agentId),
   readConfigFile: (
@@ -44,6 +80,14 @@ export const agentApi = {
       relativePath,
       content,
     ),
+  listDefinitions: (
+    request: AgentDefinitionListRequest,
+  ): Promise<AgentDefinitionListResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_DEFINITIONS_LIST, request),
+  openDefinition: (
+    request: AgentDefinitionOpenRequest,
+  ): Promise<AgentDefinitionOpenResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_DEFINITION_OPEN, request),
   getModelConfig: (agentId: string): Promise<AgentModelConfiguration> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_MODEL_CONFIG_GET, agentId),
   setModelConfig: (
@@ -54,49 +98,127 @@ export const agentApi = {
     agentId: string,
     limit = 50,
     offset = 0,
+    search?: string,
   ): Promise<AgentSessionListResult> =>
     ipcRenderer.invoke(
       IPC_CHANNELS.AGENT_SESSIONS_LIST,
       agentId,
       limit,
       offset,
+      search,
     ),
   readSession: (
     agentId: string,
     sessionId: string,
   ): Promise<AgentSessionDetail> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_SESSION_READ, agentId, sessionId),
+  getSessionIndexState: (
+    agentId: string,
+  ): Promise<AgentSessionIndexPublicState> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_SESSION_INDEX_GET_STATE, agentId),
+  setSessionIndexEnabled: (
+    request: AgentSessionIndexSetEnabledRequest,
+  ): Promise<AgentSessionIndexPublicState> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_SESSION_INDEX_SET_ENABLED, request),
+  refreshSessionIndex: (
+    request: AgentSessionIndexRefreshRequest,
+  ): Promise<AgentSessionIndexPublicState> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_SESSION_INDEX_REFRESH, request),
+  cancelSessionIndex: (
+    request: AgentSessionIndexCancelRequest,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_SESSION_INDEX_CANCEL, request),
+  onSessionIndexProgress: (
+    listener: (progress: AgentSessionIndexProgress) => void,
+  ): (() => void) => {
+    const handler = (_event: unknown, progress: AgentSessionIndexProgress) =>
+      listener(progress);
+    ipcRenderer.on(IPC_CHANNELS.AGENT_SESSION_INDEX_PROGRESS, handler);
+    return () =>
+      ipcRenderer.removeListener(
+        IPC_CHANNELS.AGENT_SESSION_INDEX_PROGRESS,
+        handler,
+      );
+  },
   getUsage: (agentId: string): Promise<AgentUsageQuota> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_USAGE_GET, agentId),
-  listProviders: (agentId: string): Promise<AgentCodexProviderList> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDERS_LIST, agentId),
-  upsertProvider: (
-    input: UpsertAgentCodexProviderInput,
-  ): Promise<AgentCodexProviderList> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDERS_UPSERT, input),
-  removeProvider: (
+  listProviderProfiles: (options?: {
+    platformId?: string;
+    includeArchived?: boolean;
+  }): Promise<AgentProviderProfilePublic[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_PROFILES_LIST, options),
+  getProviderCurrentState: (
     agentId: string,
-    providerId: string,
-  ): Promise<AgentCodexProviderList> =>
+  ): Promise<AgentProviderCurrentState> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_CURRENT_STATE, agentId),
+  createProviderProfile: (
+    request: CreateAgentProviderProfileRequest,
+  ): Promise<AgentProviderProfilePublic> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_PROFILES_CREATE, request),
+  updateProviderProfile: (
+    request: UpdateAgentProviderProfileRequest,
+  ): Promise<AgentProviderProfilePublic> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_PROFILES_UPDATE, request),
+  archiveProviderProfile: (
+    id: string,
+    expectedUpdatedAt: number,
+  ): Promise<AgentProviderProfilePublic> =>
     ipcRenderer.invoke(
-      IPC_CHANNELS.AGENT_PROVIDERS_REMOVE,
-      agentId,
-      providerId,
+      IPC_CHANNELS.AGENT_PROVIDER_PROFILES_ARCHIVE,
+      id,
+      expectedUpdatedAt,
     ),
-  setDefaultProvider: (
-    agentId: string,
-    providerId: string,
-  ): Promise<AgentCodexProviderList> =>
+  duplicateProviderProfile: (
+    id: string,
+    name: string,
+  ): Promise<AgentProviderProfilePublic> =>
     ipcRenderer.invoke(
-      IPC_CHANNELS.AGENT_PROVIDERS_SET_DEFAULT,
-      agentId,
-      providerId,
+      IPC_CHANNELS.AGENT_PROVIDER_PROFILES_DUPLICATE,
+      id,
+      name,
     ),
-  testProvider: (
+  exportProviderProfile: (id: string): Promise<AgentProviderProfileExport> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_PROFILES_EXPORT, id),
+  deleteProviderProfile: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_PROFILES_DELETE, id),
+  exportManagementBackup: (): Promise<AgentManagementBackup> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_MANAGEMENT_BACKUP_EXPORT),
+  restoreManagementBackup: (
+    backup: AgentManagementBackup,
+  ): Promise<AgentManagementBackupRestoreResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_MANAGEMENT_BACKUP_RESTORE, backup),
+  previewProviderMigration: (
     agentId: string,
-    providerId: string,
-  ): Promise<AgentCodexProviderTestResult> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDERS_TEST, agentId, providerId),
+  ): Promise<AgentProviderMigrationPreview> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_MIGRATION_PREVIEW, agentId),
+  migrateProviderProfiles: (
+    request: AgentProviderMigrationRequest,
+  ): Promise<AgentProviderMigrationResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_MIGRATION_APPLY, request),
+  importCurrentProvider: (
+    request: AgentProviderImportCurrentRequest,
+  ): Promise<AgentProviderImportPreview> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_IMPORT_CURRENT, request),
+  testProviderConnection: (
+    request: AgentProviderConnectionTestRequest,
+  ): Promise<AgentProviderConnectionTestResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_TEST_CONNECTION, request),
+  testProviderModel: (
+    request: AgentProviderModelTestRequest,
+  ): Promise<AgentProviderModelTestResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_TEST_MODEL, request),
+  cancelProviderModelTest: (
+    request: AgentProviderModelTestCancelRequest,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_CANCEL_MODEL_TEST, request),
+  previewProviderActivation: (
+    request: AgentProviderPreviewRequest,
+  ): Promise<AgentProviderActivationPlan> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_PREVIEW, request),
+  activateProvider: (
+    request: AgentProviderActivateRequest,
+  ): Promise<AgentProviderActivationExecutionResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_ACTIVATE, request),
   getAppearance: (agentId: string): Promise<AgentAppearanceOverview> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_APPEARANCE_GET, agentId),
   importAppearanceTheme: (

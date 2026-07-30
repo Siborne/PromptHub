@@ -13,4 +13,5 @@ export * from "./plugin";
 export * from "./cloud";
 export * from "./app-command";
 export * from "./agent";
+export * from "./agent-definition";
 export * from "./image-generation";

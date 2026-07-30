@@ -1,9 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 const AGENT_SECRETS_FILE = "agent-secrets.json";
 const MAX_SECRET_REF_LENGTH = 128;
 const MAX_SECRET_VALUE_BYTES = 64 * 1024;
+const mutationTails = new Map<string, Promise<void>>();
 
 /**
  * Encryption boundary for the agent secret store. Matches the Electron
@@ -21,6 +23,7 @@ export interface AgentSecretStore {
   write(ref: string, value: string): Promise<void>;
   clear(ref: string): Promise<void>;
   has(ref: string): Promise<boolean>;
+  hasMany(refs: string[]): Promise<Set<string>>;
 }
 
 interface PersistedAgentSecrets {
@@ -51,7 +54,7 @@ export function createAgentSecretStore(options: {
   async function persist(secrets: Record<string, string>): Promise<void> {
     const persisted: PersistedAgentSecrets = { version: 1, secrets };
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await fs.writeFile(temporaryPath, JSON.stringify(persisted), {
         encoding: "utf8",
@@ -73,6 +76,7 @@ export function createAgentSecretStore(options: {
   return {
     async read(ref) {
       const secretRef = normalizeSecretRef(ref);
+      await waitForFileMutations(filePath);
       const persisted = await loadPersisted();
       const encrypted = persisted?.secrets[secretRef];
       if (!encrypted) return null;
@@ -93,31 +97,70 @@ export function createAgentSecretStore(options: {
       ) {
         throw new Error("AGENT_SECRET_STORE_VALUE_INVALID");
       }
-      requireEncryption();
-      const persisted = (await loadPersisted()) ?? {
-        version: 1 as const,
-        secrets: {},
-      };
-      persisted.secrets[secretRef] = options.encryption
-        .encryptString(value)
-        .toString("base64");
-      await persist(persisted.secrets);
+      await enqueueFileMutation(filePath, async () => {
+        requireEncryption();
+        const persisted = (await loadPersisted()) ?? {
+          version: 1 as const,
+          secrets: {},
+        };
+        persisted.secrets[secretRef] = options.encryption
+          .encryptString(value)
+          .toString("base64");
+        await persist(persisted.secrets);
+      });
     },
 
     async clear(ref) {
       const secretRef = normalizeSecretRef(ref);
-      const persisted = await loadPersisted();
-      if (!persisted || !(secretRef in persisted.secrets)) return;
-      delete persisted.secrets[secretRef];
-      await persist(persisted.secrets);
+      await enqueueFileMutation(filePath, async () => {
+        const persisted = await loadPersisted();
+        if (!persisted || !(secretRef in persisted.secrets)) return;
+        delete persisted.secrets[secretRef];
+        await persist(persisted.secrets);
+      });
     },
 
     async has(ref) {
       const secretRef = normalizeSecretRef(ref);
+      await waitForFileMutations(filePath);
       const persisted = await loadPersisted();
       return Boolean(persisted && secretRef in persisted.secrets);
     },
+
+    async hasMany(refs) {
+      const normalizedRefs = Array.from(
+        new Set(refs.map((ref) => normalizeSecretRef(ref))),
+      );
+      if (normalizedRefs.length === 0) return new Set();
+      await waitForFileMutations(filePath);
+      const persisted = await loadPersisted();
+      if (!persisted) return new Set();
+      return new Set(normalizedRefs.filter((ref) => ref in persisted.secrets));
+    },
   };
+}
+
+async function enqueueFileMutation<T>(
+  filePath: string,
+  mutation: () => Promise<T>,
+): Promise<T> {
+  const previous = mutationTails.get(filePath) ?? Promise.resolve();
+  const result = previous.then(mutation);
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  mutationTails.set(filePath, tail);
+  void tail.finally(() => {
+    if (mutationTails.get(filePath) === tail) {
+      mutationTails.delete(filePath);
+    }
+  });
+  return result;
+}
+
+async function waitForFileMutations(filePath: string): Promise<void> {
+  await mutationTails.get(filePath);
 }
 
 function requireUserDataPath(userDataPath: string | undefined): string {

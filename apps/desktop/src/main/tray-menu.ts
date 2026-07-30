@@ -1,5 +1,6 @@
 import type { MenuItemConstructorOptions } from "electron";
 import type { AppCommand, Language } from "@prompthub/shared/types";
+import type { AgentProviderTrayGroup } from "./services/agent-provider-tray-service";
 
 export const SUPPORTED_TRAY_MENU_LANGUAGES = [
   "en",
@@ -21,7 +22,15 @@ export interface TrayMenuLabels {
   quickAddPrompt: string;
   analyzePrompt: string;
   generatePrompt: string;
+  agents: string;
+  openAgent: string;
   manageAgents: string;
+  confirmProviderSwitch: string;
+  useProviderProfile: string;
+  cancel: string;
+  providerReviewRequired: string;
+  providerSwitchFailed: string;
+  openAgents: string;
   showPromptHub: string;
   hidePromptHub: string;
   checkUpdates: string;
@@ -40,7 +49,15 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     quickAddPrompt: "Quick Add Prompt",
     analyzePrompt: "Analyze Existing Content…",
     generatePrompt: "Generate with AI…",
+    agents: "Agents",
+    openAgent: "Open Agent Workspace…",
     manageAgents: "Manage Agents…",
+    confirmProviderSwitch: "Switch provider profile?",
+    useProviderProfile: "Switch",
+    cancel: "Cancel",
+    providerReviewRequired: "Review this change in the Agent workspace.",
+    providerSwitchFailed: "Provider switch failed and no state was assumed.",
+    openAgents: "Open Agents",
     showPromptHub: "Show PromptHub",
     hidePromptHub: "Hide PromptHub",
     checkUpdates: "Check for Updates…",
@@ -57,7 +74,15 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     quickAddPrompt: "快速添加 Prompt",
     analyzePrompt: "分析已有内容…",
     generatePrompt: "使用 AI 生成…",
+    agents: "Agents",
+    openAgent: "打开 Agent 工作区…",
     manageAgents: "Agent 管理…",
+    confirmProviderSwitch: "切换 Provider Profile？",
+    useProviderProfile: "切换",
+    cancel: "取消",
+    providerReviewRequired: "请在 Agent 工作区审查这次变更。",
+    providerSwitchFailed: "Provider 切换失败，未假定任何状态。",
+    openAgents: "打开 Agents",
     showPromptHub: "显示 PromptHub",
     hidePromptHub: "隐藏 PromptHub",
     checkUpdates: "检查更新…",
@@ -74,7 +99,15 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     quickAddPrompt: "快速新增 Prompt",
     analyzePrompt: "分析現有內容…",
     generatePrompt: "使用 AI 產生…",
+    agents: "Agents",
+    openAgent: "開啟 Agent 工作區…",
     manageAgents: "Agent 管理…",
+    confirmProviderSwitch: "切換 Provider Profile？",
+    useProviderProfile: "切換",
+    cancel: "取消",
+    providerReviewRequired: "請在 Agent 工作區審查這次變更。",
+    providerSwitchFailed: "Provider 切換失敗，未假定任何狀態。",
+    openAgents: "開啟 Agents",
     showPromptHub: "顯示 PromptHub",
     hidePromptHub: "隱藏 PromptHub",
     checkUpdates: "檢查更新…",
@@ -91,7 +124,15 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     quickAddPrompt: "Prompt をクイック追加",
     analyzePrompt: "既存の内容を分析…",
     generatePrompt: "AI で生成…",
+    agents: "Agents",
+    openAgent: "Agent ワークスペースを開く…",
     manageAgents: "Agent を管理…",
+    confirmProviderSwitch: "Provider Profile を切り替えますか？",
+    useProviderProfile: "切り替え",
+    cancel: "キャンセル",
+    providerReviewRequired: "Agent ワークスペースで変更を確認してください。",
+    providerSwitchFailed: "Provider の切り替えに失敗しました。",
+    openAgents: "Agents を開く",
     showPromptHub: "PromptHub を表示",
     hidePromptHub: "PromptHub を隠す",
     checkUpdates: "アップデートを確認…",
@@ -108,7 +149,15 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     quickAddPrompt: "Ajout rapide de Prompt",
     analyzePrompt: "Analyser un contenu existant…",
     generatePrompt: "Générer avec l’IA…",
+    agents: "Agents",
+    openAgent: "Ouvrir l’espace Agent…",
     manageAgents: "Gérer les Agents…",
+    confirmProviderSwitch: "Changer de profil Provider ?",
+    useProviderProfile: "Changer",
+    cancel: "Annuler",
+    providerReviewRequired: "Vérifiez ce changement dans l’espace Agent.",
+    providerSwitchFailed: "Le changement de Provider a échoué.",
+    openAgents: "Ouvrir Agents",
     showPromptHub: "Afficher PromptHub",
     hidePromptHub: "Masquer PromptHub",
     checkUpdates: "Rechercher des mises à jour…",
@@ -125,7 +174,15 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     quickAddPrompt: "Prompt schnell hinzufügen",
     analyzePrompt: "Vorhandenen Inhalt analysieren…",
     generatePrompt: "Mit KI erstellen…",
+    agents: "Agents",
+    openAgent: "Agent-Arbeitsbereich öffnen…",
     manageAgents: "Agents verwalten…",
+    confirmProviderSwitch: "Provider-Profil wechseln?",
+    useProviderProfile: "Wechseln",
+    cancel: "Abbrechen",
+    providerReviewRequired: "Prüfen Sie diese Änderung im Agent-Bereich.",
+    providerSwitchFailed: "Der Provider-Wechsel ist fehlgeschlagen.",
+    openAgents: "Agents öffnen",
     showPromptHub: "PromptHub anzeigen",
     hidePromptHub: "PromptHub ausblenden",
     checkUpdates: "Nach Updates suchen…",
@@ -142,7 +199,15 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     quickAddPrompt: "Añadir Prompt rápidamente",
     analyzePrompt: "Analizar contenido existente…",
     generatePrompt: "Generar con IA…",
+    agents: "Agents",
+    openAgent: "Abrir espacio de Agent…",
     manageAgents: "Gestionar Agents…",
+    confirmProviderSwitch: "¿Cambiar el perfil de Provider?",
+    useProviderProfile: "Cambiar",
+    cancel: "Cancelar",
+    providerReviewRequired: "Revisa este cambio en el espacio de Agent.",
+    providerSwitchFailed: "No se pudo cambiar el Provider.",
+    openAgents: "Abrir Agents",
     showPromptHub: "Mostrar PromptHub",
     hidePromptHub: "Ocultar PromptHub",
     checkUpdates: "Buscar actualizaciones…",
@@ -174,8 +239,10 @@ export function getTrayMenuLabels(locale: string): TrayMenuLabels {
 
 interface BuildTrayMenuTemplateOptions {
   agentManagementEnabled: boolean;
+  agentProviderGroups?: AgentProviderTrayGroup[];
   isWindowVisible: boolean;
   labels: TrayMenuLabels;
+  onAgentProviderProfile?: (agentId: string, profileId: string) => void;
   onCommand: (command: AppCommand) => void;
   onQuit: () => void;
   onToggleWindow: () => void;
@@ -183,8 +250,10 @@ interface BuildTrayMenuTemplateOptions {
 
 export function buildTrayMenuTemplate({
   agentManagementEnabled,
+  agentProviderGroups = [],
   isWindowVisible,
   labels,
+  onAgentProviderProfile = () => undefined,
   onCommand,
   onQuit,
   onToggleWindow,
@@ -233,10 +302,46 @@ export function buildTrayMenuTemplate({
   ];
 
   if (agentManagementEnabled) {
-    template.push({
-      label: labels.manageAgents,
-      click: () => onCommand({ type: "agent:manage" }),
-    });
+    if (agentProviderGroups.length > 0) {
+      template.push({
+        label: labels.agents,
+        submenu: [
+          ...agentProviderGroups.map((group) => ({
+            label: group.name,
+            submenu: [
+              ...group.profiles.map((profile) => ({
+                label: profile.model
+                  ? `${profile.name} · ${profile.model}`
+                  : profile.name,
+                type: profile.isCurrent
+                  ? ("checkbox" as const)
+                  : ("normal" as const),
+                checked: profile.isCurrent,
+                enabled: !profile.isCurrent,
+                click: profile.isCurrent
+                  ? undefined
+                  : () => onAgentProviderProfile(group.agentId, profile.id),
+              })),
+              { type: "separator" as const },
+              {
+                label: labels.openAgent,
+                click: () => onCommand({ type: "agent:manage" }),
+              },
+            ],
+          })),
+          { type: "separator" },
+          {
+            label: labels.manageAgents,
+            click: () => onCommand({ type: "agent:manage" }),
+          },
+        ],
+      });
+    } else {
+      template.push({
+        label: labels.manageAgents,
+        click: () => onCommand({ type: "agent:manage" }),
+      });
+    }
   }
 
   template.push(

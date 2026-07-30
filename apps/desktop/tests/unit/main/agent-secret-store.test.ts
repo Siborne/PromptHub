@@ -94,6 +94,9 @@ describe("agent secret store", () => {
 
     await expect(store.read("codex-provider:none")).resolves.toBeNull();
     await expect(store.has("codex-provider:none")).resolves.toBe(false);
+    await expect(store.hasMany(["codex-provider:none"])).resolves.toEqual(
+      new Set(),
+    );
     await expect(store.clear("codex-provider:none")).resolves.toBeUndefined();
     expect(
       await fs
@@ -200,6 +203,132 @@ describe("agent secret store", () => {
     await expect(store.read("codex-provider:b")).resolves.toBe("value-b");
   });
 
+  it("serializes concurrent mutations without dropping unrelated secrets", async () => {
+    const root = await createRoot();
+    const store = createAgentSecretStore({
+      userDataPath: root,
+      encryption: createFakeEncryption().encryption,
+    });
+    const entries = Array.from({ length: 32 }, (_, index) => ({
+      ref: `agent-provider:concurrent-${index}`,
+      value: `value-${index}`,
+    }));
+
+    await Promise.all(entries.map(({ ref, value }) => store.write(ref, value)));
+
+    await expect(store.hasMany(entries.map(({ ref }) => ref))).resolves.toEqual(
+      new Set(entries.map(({ ref }) => ref)),
+    );
+    await Promise.all(
+      entries.map(({ ref, value }) =>
+        expect(store.read(ref)).resolves.toBe(value),
+      ),
+    );
+  });
+
+  it("applies concurrent writes and clears in invocation order", async () => {
+    const root = await createRoot();
+    const store = createAgentSecretStore({
+      userDataPath: root,
+      encryption: createFakeEncryption().encryption,
+    });
+
+    await Promise.all([
+      store.write("agent-provider:a", "value-a"),
+      store.clear("agent-provider:a"),
+      store.write("agent-provider:b", "value-b"),
+    ]);
+
+    await expect(store.read("agent-provider:a")).resolves.toBeNull();
+    await expect(store.read("agent-provider:b")).resolves.toBe("value-b");
+  });
+
+  it("makes reads wait for mutations invoked before them", async () => {
+    const root = await createRoot();
+    const store = createAgentSecretStore({
+      userDataPath: root,
+      encryption: createFakeEncryption().encryption,
+    });
+
+    const write = store.write("agent-provider:pending", "pending-value");
+
+    await expect(store.has("agent-provider:pending")).resolves.toBe(true);
+    await expect(store.read("agent-provider:pending")).resolves.toBe(
+      "pending-value",
+    );
+    await write;
+  });
+
+  it("serializes mutations from multiple store instances for one file", async () => {
+    const root = await createRoot();
+    const filePath = path.join(root, "shared-agent-secrets.json");
+    const encryption = createFakeEncryption().encryption;
+    const first = createAgentSecretStore({ filePath, encryption });
+    const second = createAgentSecretStore({ filePath, encryption });
+
+    await Promise.all([
+      first.write("agent-provider:first", "first-value"),
+      second.write("agent-provider:second", "second-value"),
+    ]);
+
+    await expect(
+      first.hasMany(["agent-provider:first", "agent-provider:second"]),
+    ).resolves.toEqual(
+      new Set(["agent-provider:first", "agent-provider:second"]),
+    );
+  });
+
+  it("continues queued mutations after an earlier mutation fails", async () => {
+    const root = await createRoot();
+    const baseEncryption = createFakeEncryption().encryption;
+    let failNextEncryption = true;
+    const store = createAgentSecretStore({
+      userDataPath: root,
+      encryption: {
+        ...baseEncryption,
+        encryptString(value) {
+          if (failNextEncryption) {
+            failNextEncryption = false;
+            throw new Error("injected encryption failure");
+          }
+          return baseEncryption.encryptString(value);
+        },
+      },
+    });
+
+    const first = store.write("agent-provider:first", "first-value");
+    const second = store.write("agent-provider:second", "second-value");
+
+    await expect(first).rejects.toThrow("injected encryption failure");
+    await expect(second).resolves.toBeUndefined();
+    await expect(store.read("agent-provider:second")).resolves.toBe(
+      "second-value",
+    );
+  });
+
+  it("checks multiple refs from one bounded snapshot", async () => {
+    const root = await createRoot();
+    const store = createAgentSecretStore({
+      userDataPath: root,
+      encryption: createFakeEncryption().encryption,
+    });
+    await store.write("agent-provider:a", "value-a");
+    await store.write("agent-provider:b", "value-b");
+
+    await expect(
+      store.hasMany([
+        "agent-provider:a",
+        "agent-provider:missing",
+        "agent-provider:b",
+        "agent-provider:a",
+      ]),
+    ).resolves.toEqual(new Set(["agent-provider:a", "agent-provider:b"]));
+    await expect(store.hasMany([])).resolves.toEqual(new Set());
+    await expect(store.hasMany(["invalid ref"])).rejects.toThrow(
+      "AGENT_SECRET_STORE_REF_INVALID",
+    );
+  });
+
   it("rejects invalid refs and empty values", async () => {
     const root = await createRoot();
     const store = createAgentSecretStore({
@@ -213,9 +342,9 @@ describe("agent secret store", () => {
     await expect(store.write("has space", SECRET_VALUE)).rejects.toThrow(
       "AGENT_SECRET_STORE_REF_INVALID",
     );
-    await expect(
-      store.write("codex-provider:x", ""),
-    ).rejects.toThrow("AGENT_SECRET_STORE_VALUE_INVALID");
+    await expect(store.write("codex-provider:x", "")).rejects.toThrow(
+      "AGENT_SECRET_STORE_VALUE_INVALID",
+    );
   });
 
   it("never includes secret values in error messages", async () => {

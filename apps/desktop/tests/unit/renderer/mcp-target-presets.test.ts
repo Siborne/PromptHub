@@ -78,12 +78,28 @@ describe("mcp target presets", () => {
         platformId: "augment",
       },
       {
+        id: "project:project_docs:amp",
+        target: "amp",
+        scope: "workspace",
+        label: "Docs / Amp",
+        path: "/workspace/docs/.amp/settings.json",
+        platformId: "amp",
+      },
+      {
         id: "project:project_docs:qwen",
         target: "qwen",
         scope: "workspace",
         label: "Docs / Qwen Code",
         path: "/workspace/docs/.qwen/settings.json",
         platformId: "qwen",
+      },
+      {
+        id: "project:project_docs:oh-my-pi",
+        target: "oh-my-pi",
+        scope: "workspace",
+        label: "Docs / Oh My Pi",
+        path: "/workspace/docs/.omp/mcp.json",
+        platformId: "oh-my-pi",
       },
     ]);
   });

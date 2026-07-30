@@ -1,4 +1,5 @@
 import type {
+  AgentManagementBackup,
   AgentAssetFilesSnapshot,
   AgentAssetStoreSourcesSnapshot,
   Folder,
@@ -11,6 +12,7 @@ import type {
   PromptVersion,
   RuleBackupRecord,
 } from "@prompthub/shared/types";
+import { parseAgentManagementBackup } from "@prompthub/shared/utils/agent-management-backup";
 import type {
   Skill,
   SkillFileSnapshot,
@@ -69,6 +71,7 @@ export interface DatabaseBackup {
   pluginPackages?: PluginPackageSnapshot[];
   storeSources?: AgentAssetStoreSourcesSnapshot;
   agentAssetFiles?: AgentAssetFilesSnapshot;
+  agentManagement?: AgentManagementBackup;
 }
 
 export type ExportScope = {
@@ -83,6 +86,7 @@ export type ExportScope = {
   skills?: boolean;
   mcp?: boolean;
   plugins?: boolean;
+  agents?: boolean;
 };
 
 export type PromptHubFile =
@@ -168,6 +172,10 @@ export function normalizeImportedBackup(
       backup?.agentAssetFiles && typeof backup.agentAssetFiles === "object"
         ? backup.agentAssetFiles
         : undefined,
+    agentManagement:
+      backup?.agentManagement === undefined
+        ? undefined
+        : parseAgentManagementBackup(backup.agentManagement),
   };
 }
 
@@ -457,6 +465,9 @@ export function hasMeaningfulBackupContent(backup: DatabaseBackup): boolean {
     !!backup.storeSources ||
     (backup.agentAssetFiles?.mcp?.length ?? 0) > 0 ||
     (backup.agentAssetFiles?.plugins?.length ?? 0) > 0 ||
+    (backup.agentManagement?.providerProfiles.length ?? 0) > 0 ||
+    (backup.agentManagement?.snapshots.length ?? 0) > 0 ||
+    (backup.agentManagement?.sessionSourcePreferences?.length ?? 0) > 0 ||
     Object.keys(backup.images ?? {}).length > 0 ||
     Object.keys(backup.videos ?? {}).length > 0 ||
     !!backup.aiConfig ||
@@ -597,6 +608,10 @@ function validateImportedBackupShape(backup: DatabaseBackup): void {
     throw new Error(
       "Invalid PromptHub backup: agent asset files payload is malformed.",
     );
+  }
+
+  if (backup.agentManagement) {
+    parseAgentManagementBackup(backup.agentManagement);
   }
 }
 
@@ -829,7 +844,8 @@ function parseEnvelope(text: string): DatabaseBackup {
     "pluginLibrary" in parsed ||
     "pluginPackages" in parsed ||
     "storeSources" in parsed ||
-    "agentAssetFiles" in parsed;
+    "agentAssetFiles" in parsed ||
+    "agentManagement" in parsed;
 
   if (!hasKnownRootFields) {
     throw new Error(

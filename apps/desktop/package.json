@@ -81,7 +81,8 @@
     "react-force-graph-2d": "^1.29.1",
     "smol-toml": "^1.7.0",
     "socks-proxy-agent": "^7.0.0",
-    "undici": "^7.24.8"
+    "undici": "^7.24.8",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@dnd-kit/core": "^6.3.1",

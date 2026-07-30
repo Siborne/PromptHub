@@ -249,6 +249,83 @@ describe("agent codex provider service", () => {
       expect(serialized).not.toContain("query-secret");
       expect(serialized).not.toContain("password");
     });
+
+    it("keeps migration credentials main-only while classifying every legacy source", async () => {
+      const root = await createRoot();
+      const harness = createHarness(root);
+      await fs.writeFile(
+        harness.configPath,
+        [
+          'model = "gpt-5.4"',
+          'model_provider = "managed"',
+          "",
+          "[model_providers.managed]",
+          'name = "Managed"',
+          'base_url = "https://managed.example.com/v1"',
+          'wire_api = "responses"',
+          "",
+          "[model_providers.environment]",
+          'name = "Environment"',
+          'base_url = "https://env.example.com/v1"',
+          'env_key = "OPENAI_API_KEY"',
+          "",
+          "[model_providers.inline]",
+          'name = "Inline"',
+          'base_url = "https://inline.example.com/v1"',
+          `experimental_bearer_token = "${INLINE_KEY}"`,
+          "",
+          "[model_providers.empty]",
+          'name = "Empty"',
+          'base_url = "https://empty.example.com/v1"',
+          "",
+          "[profiles.managed]",
+          'model = "gpt-5.4-work"',
+          'model_provider = "managed"',
+          "",
+        ].join("\n"),
+      );
+      await harness.secretStore.write(
+        "codex-provider:managed",
+        MANAGED_KEY,
+      );
+
+      const inspection =
+        await harness.service.inspectMigrationSources("codex");
+
+      expect(inspection.defaultModel).toBe("gpt-5.4");
+      expect(inspection.nativeDigest).toMatch(/^[a-f0-9]{64}$/);
+      expect(inspection.sources).toEqual([
+        expect.objectContaining({
+          providerId: "managed",
+          credentialSource: "legacy-managed",
+          credential: MANAGED_KEY,
+          isActive: true,
+          profileModel: "gpt-5.4-work",
+        }),
+        expect.objectContaining({
+          providerId: "environment",
+          credentialSource: "environment",
+          credential: null,
+          envKey: "OPENAI_API_KEY",
+        }),
+        expect.objectContaining({
+          providerId: "inline",
+          credentialSource: "native-inline",
+          credential: INLINE_KEY,
+        }),
+        expect.objectContaining({
+          providerId: "empty",
+          credentialSource: "none",
+          credential: null,
+        }),
+      ]);
+
+      const originalDigest = inspection.nativeDigest;
+      await fs.appendFile(harness.configPath, "# external change\n");
+      expect(
+        (await harness.service.inspectMigrationSources("codex")).nativeDigest,
+      ).not.toBe(originalDigest);
+    });
   });
 
   describe("upsertProvider", () => {

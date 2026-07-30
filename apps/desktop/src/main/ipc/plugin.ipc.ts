@@ -162,7 +162,7 @@ const PLUGIN_TARGET_SCAN_CONFIGS: PluginTargetScanConfig[] = [
     targetId: "cursor",
     platformId: "cursor",
     markerPaths: [".cursor-plugin/plugin.json"],
-    recursiveRoots: ["platform-plugin-dir", "root-plugins"],
+    recursiveRoots: ["platform-plugin-dir"],
   },
   {
     targetId: "gemini-cli",

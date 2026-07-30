@@ -1,4 +1,10 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -8,6 +14,7 @@ import type {
   Skill,
 } from "@prompthub/shared/types";
 import { AgentAssetsWorkspace } from "../../../src/renderer/components/agent/AgentAssetsWorkspace";
+import { agentAssetAggregationService } from "../../../src/renderer/services/agent-asset-domain-adapters";
 import { useMcpStore } from "../../../src/renderer/stores/mcp.store";
 import { usePluginStore } from "../../../src/renderer/stores/plugin.store";
 import { useRulesStore } from "../../../src/renderer/stores/rules.store";
@@ -298,7 +305,11 @@ describe("AgentAssetsWorkspace", () => {
   it("filters only the active domain through the toolbar search", async () => {
     await renderWithI18n(
       <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
+      { settleAsyncEffects: true },
     );
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     fireEvent.change(screen.getByRole("textbox", { name: /search assets/i }), {
       target: { value: "web" },
@@ -334,7 +345,18 @@ describe("AgentAssetsWorkspace", () => {
   });
 
   it("refreshes the active domain through its owning store loader", async () => {
-    const load = vi.fn().mockResolvedValue(undefined);
+    const load = vi.fn().mockImplementation(async () => {
+      useMcpStore.setState({
+        targetStatus: [
+          {
+            presetId: "preset-claude",
+            path: "~/.claude.json",
+            exists: true,
+            serverNames: ["fresh-server"],
+          },
+        ],
+      });
+    });
     useMcpStore.setState({ load });
 
     await renderWithI18n(
@@ -347,9 +369,185 @@ describe("AgentAssetsWorkspace", () => {
     );
 
     expect(load).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("fresh-server")).toBeVisible();
+    expect(screen.queryByText("fs")).not.toBeInTheDocument();
+  });
+
+  it("shows a sanitized domain failure instead of a false empty state", async () => {
+    const listForTarget = vi
+      .spyOn(agentAssetAggregationService, "listForTarget")
+      .mockRejectedValueOnce(new Error("Bearer secret-token"));
+
+    await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
+    );
+
+    expect(
+      await screen.findByText("Asset inventory could not be loaded."),
+    ).toBeVisible();
+    expect(screen.queryByText(/secret-token/i)).not.toBeInTheDocument();
+    listForTarget.mockRestore();
+  });
+
+  it("bounds a 1,000-item MCP inventory and keeps every page reachable", async () => {
+    const validation = vi
+      .spyOn(agentAssetAggregationService, "listForTarget")
+      .mockResolvedValue({
+        platformId: "claude",
+        total: 0,
+        domains: ["skill", "mcp", "rule", "plugin"].map((kind) => ({
+          kind: kind as "skill" | "mcp" | "rule" | "plugin",
+          status: "available" as const,
+          items: [],
+        })),
+      });
+    const serverNames = Array.from(
+      { length: 1_000 },
+      (_, index) => `server-${String(index).padStart(4, "0")}`,
+    );
+    useMcpStore.setState({
+      targetStatus: [
+        {
+          presetId: "preset-claude",
+          path: "~/.claude.json",
+          exists: true,
+          serverNames,
+        },
+      ],
+    });
+    useRulesStore.setState({
+      hasLoadedFiles: true,
+      files: Array.from({ length: 1_000 }, (_, index) => {
+        const suffix = String(index).padStart(4, "0");
+        return {
+          id: `rule-${suffix}`,
+          platformId: "claude",
+          platformName: "Claude Code",
+          platformIcon: "Sparkles",
+          platformDescription: "Global Claude rules",
+          name: `rule-${suffix}.md`,
+          description: `Rule ${suffix}`,
+          path: `~/.claude/rules/rule-${suffix}.md`,
+          exists: true,
+          group: "assistant" as const,
+        };
+      }),
+    });
+    usePluginStore.setState({
+      targetMatrix: [
+        {
+          id: "claude",
+          displayName: "Claude Code",
+          status: "native",
+          enabled: true,
+          installedPlugins: Array.from({ length: 1_000 }, (_, index) => {
+            const suffix = String(index).padStart(4, "0");
+            return {
+              id: `plugin-${suffix}`,
+              name: `plugin-${suffix}`,
+              displayName: `Plugin ${suffix}`,
+              version: "1.0.0",
+              inventory: {
+                skills: 0,
+                mcpServers: 0,
+                apps: 0,
+                commands: 0,
+                hooks: 0,
+                agents: 0,
+                assets: 0,
+                docs: 0,
+                lspServers: 0,
+                scripts: 0,
+              },
+            };
+          }),
+        },
+      ],
+    });
+
+    const view = await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
+      { settleAsyncEffects: true },
+    );
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(100);
+    expect(screen.getByText("server-0000")).toBeVisible();
+    expect(screen.queryByText("server-0100")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.queryByText("server-0000")).not.toBeInTheDocument();
+    expect(screen.getByText("server-0100")).toBeVisible();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /search assets/i }), {
+      target: { value: "server-0000" },
+    });
+    expect(screen.getByText("server-0000")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Next" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /search assets/i }), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="rules" />);
+    expect(screen.getAllByRole("listitem")).toHaveLength(100);
+    expect(screen.getByText("rule-0000.md")).toBeVisible();
+    expect(screen.queryByText("rule-0100.md")).not.toBeInTheDocument();
+
+    view.rerender(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
+    );
+    expect(screen.getAllByRole("listitem")).toHaveLength(100);
+    expect(screen.getByText("Plugin 0000")).toBeVisible();
+    expect(screen.queryByText("Plugin 0100")).not.toBeInTheDocument();
+    validation.mockRestore();
   });
 
   describe("skills domain cards", () => {
+    it("bounds 1,000 Skill cards while preserving responsive card actions", async () => {
+      seedSkillScan(
+        Array.from({ length: 1_000 }, (_, index) => {
+          const suffix = String(index).padStart(4, "0");
+          return createAgentSkill({
+            name: `skill-${suffix}`,
+            localPath: `~/.claude/skills/skill-${suffix}`,
+            installMode: index === 999 ? "symlink" : "copy",
+            isPromptHubManagedLink: index === 999,
+          });
+        }),
+        [],
+      );
+
+      await renderWithI18n(
+        <AgentAssetsWorkspace agent={claudeAgent} domain="skills" />,
+        { settleAsyncEffects: true },
+      );
+
+      expect(screen.getAllByTestId("agent-skill-asset-card")).toHaveLength(60);
+      expect(screen.getByText("skill-0000")).toBeVisible();
+      expect(screen.queryByText("skill-0060")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      expect(screen.queryByText("skill-0000")).not.toBeInTheDocument();
+      expect(screen.getByText("skill-0060")).toBeVisible();
+
+      fireEvent.click(
+        within(cardFor("skill-0060")).getByRole("button", {
+          name: /open folder/i,
+        }),
+      );
+      expect(window.electron.openPath).toHaveBeenCalledWith(
+        "~/.claude/skills/skill-0060",
+      );
+
+      fireEvent.click(screen.getByTestId("agent-skill-asset-filter-symlink"));
+      expect(screen.getByText("skill-0999")).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Next" }),
+      ).not.toBeInTheDocument();
+    });
+
     it("renders badges for managed, external, symlink, copy and built-in cards", async () => {
       seedSkillScan([
         createAgentSkill({

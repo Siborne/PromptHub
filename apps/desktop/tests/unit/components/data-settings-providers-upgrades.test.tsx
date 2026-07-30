@@ -495,6 +495,7 @@ describe("DataSettings", { timeout: 60_000 }, () => {
     await waitFor(() => {
       expect(downloadSelectiveExport).toHaveBeenCalledWith(
         expect.objectContaining({
+          agents: true,
           rules: true,
           skills: true,
         }),
@@ -516,10 +517,12 @@ describe("DataSettings", { timeout: 60_000 }, () => {
 
     const promptsScope = screen.getByRole("button", { name: "Prompts" });
     const mediaScope = screen.getByRole("button", { name: "Media" });
+    const agentsScope = screen.getByRole("button", { name: "Agents" });
 
     expect(promptsScope).toHaveAttribute("type", "button");
     expect(promptsScope).toHaveAttribute("aria-pressed", "true");
     expect(mediaScope).toHaveAttribute("aria-pressed", "true");
+    expect(agentsScope).toHaveAttribute("aria-pressed", "true");
 
     promptsScope.focus();
     await user.keyboard("{Enter}");

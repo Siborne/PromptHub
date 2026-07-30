@@ -34,3 +34,5 @@ export { PromptOutputFormatDB } from "./prompt-output-format";
 export { FolderDB } from "./folder";
 export { SkillDB } from "./skill";
 export { RuleDB } from "./rule";
+export { AgentProviderProfileDB } from "./agent-provider-profile";
+export { AgentSessionIndexDB } from "./agent-session-index";

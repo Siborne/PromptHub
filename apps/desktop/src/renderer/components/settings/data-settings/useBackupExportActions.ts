@@ -20,6 +20,7 @@ const DEFAULT_EXPORT_SCOPE: ExportScope = {
   skills: true,
   mcp: true,
   plugins: true,
+  agents: true,
 };
 
 function createExportScopeItems(
@@ -36,6 +37,7 @@ function createExportScopeItems(
     ["skills", "settings.exportSkills", "Skills"],
     ["mcp", "settings.exportMcp", "MCP"],
     ["plugins", "settings.exportPlugins", "Plugins"],
+    ["agents", "settings.exportAgents", "Agents"],
   ].map(([key, translationKey, fallback]) => ({
     key: key as ExportScopeKey,
     label: translate(translationKey, fallback),

@@ -27,6 +27,33 @@ afterEach(async () => {
 });
 
 describe("Agent model configuration adapters", () => {
+  it.runIf(process.platform !== "win32")(
+    "rejects symbolic-link model configuration files",
+    async () => {
+      const root = await createRoot();
+      const outside = path.join(await createRoot(), "outside-settings.json");
+      await fs.writeFile(outside, JSON.stringify({ model: "outside-model" }));
+      await fs.symlink(outside, path.join(root, "settings.json"));
+
+      await expect(
+        inspectAgentModelConfig({ agentId: "claude", rootPath: root }),
+      ).resolves.toMatchObject({
+        status: "invalid",
+        canSetModel: false,
+        errorCode: "AGENT_MODEL_CONFIG_INVALID",
+      });
+      await expect(
+        updateAgentModelConfig(
+          { agentId: "claude", rootPath: root, model: "new-model" },
+          { backupRoot: path.join(root, "backups") },
+        ),
+      ).rejects.toThrow("AGENT_MODEL_CONFIG_SYMLINK_INVALID");
+      await expect(fs.readFile(outside, "utf8")).resolves.toContain(
+        "outside-model",
+      );
+    },
+  );
+
   it("reports Qwen's verified adapter even before settings.json exists", async () => {
     const root = await createRoot();
 
@@ -338,6 +365,353 @@ describe("Agent model configuration adapters", () => {
     expect(saved).toContain('default_model = "anthropic/claude-sonnet"');
     expect(saved).toContain('default_permission_mode = "manual"');
     expect(saved).toContain('api_key = "kimi-secret"');
+  });
+
+  it("inspects and updates Oh My Pi YAML model routing without exposing provider data", async () => {
+    const root = await createRoot();
+    const backupRoot = path.join(root, "backups");
+    const configPath = path.join(root, "config.yml");
+    const modelsPath = path.join(root, "models.yml");
+    await fs.writeFile(
+      configPath,
+      [
+        "# Keep this global setting and comment.",
+        "modelRoles:",
+        "  default: anthropic/claude-sonnet-4-6",
+        "  smol: openai/gpt-5-mini",
+        "enabledModels:",
+        "  - anthropic/claude-sonnet-4-6",
+        "",
+      ].join("\n"),
+    );
+    await fs.writeFile(
+      modelsPath,
+      [
+        "providers:",
+        "  anthropic:",
+        "    baseUrl: https://user:password@gateway.example/v1?token=query-secret",
+        "    api: anthropic-messages",
+        "    apiKey: ANTHROPIC_PROXY_KEY",
+        "    headers:",
+        "      X-Internal-Token: header-secret",
+        "    models:",
+        "      - id: claude-sonnet-4-6",
+        "        name: Sonnet",
+        "  local:",
+        "    baseUrl: http://127.0.0.1:8000/v1",
+        "    api: openai-completions",
+        "    auth: none",
+        "    models:",
+        "      - id: local-coder",
+        "",
+      ].join("\n"),
+    );
+
+    const before = await inspectAgentModelConfig({
+      agentId: "oh-my-pi",
+      rootPath: root,
+    });
+    expect(before).toMatchObject({
+      adapter: "oh-my-pi-yaml-v1",
+      status: "configured",
+      model: "anthropic/claude-sonnet-4-6",
+      provider: "anthropic",
+      endpoint: "https://gateway.example/v1",
+      availableModels: ["anthropic/claude-sonnet-4-6", "local/local-coder"],
+      credentialStatus: "configured",
+      sourceRelativePath: "config.yml",
+      canSetModel: true,
+      formattingMayChange: true,
+    });
+    expect(JSON.stringify(before)).not.toMatch(
+      /password|query-secret|header-secret|ANTHROPIC_PROXY_KEY/,
+    );
+
+    const original = await fs.readFile(configPath, "utf8");
+    const result = await updateAgentModelConfig(
+      { agentId: "oh-my-pi", rootPath: root, model: "local/local-coder" },
+      { backupRoot },
+    );
+    const saved = await fs.readFile(configPath, "utf8");
+    expect(result).toMatchObject({
+      adapter: "oh-my-pi-yaml-v1",
+      model: "local/local-coder",
+      provider: "local",
+      endpoint: "http://127.0.0.1:8000/v1",
+      credentialStatus: "platform-managed",
+      backupPath: expect.stringMatching(/config\.yml$/),
+    });
+    expect(saved).toContain("# Keep this global setting and comment.");
+    expect(saved).toContain("smol: openai/gpt-5-mini");
+    expect(saved).toContain("- anthropic/claude-sonnet-4-6");
+    expect(saved).toContain("default: local/local-coder");
+    expect(await fs.readFile(result.backupPath as string, "utf8")).toBe(
+      original,
+    );
+  });
+
+  it("uses config.yaml fallback and rejects malformed or oversized Oh My Pi YAML", async () => {
+    const fallbackRoot = await createRoot();
+    await fs.writeFile(
+      path.join(fallbackRoot, "config.yaml"),
+      "modelRoles:\n  default: openai/gpt-5\n",
+    );
+    await expect(
+      inspectAgentModelConfig({ agentId: "oh-my-pi", rootPath: fallbackRoot }),
+    ).resolves.toMatchObject({
+      status: "configured",
+      model: "openai/gpt-5",
+      sourceRelativePath: "config.yaml",
+    });
+
+    const malformedRoot = await createRoot();
+    await fs.writeFile(
+      path.join(malformedRoot, "config.yml"),
+      "modelRoles: [broken\n",
+    );
+    await expect(
+      inspectAgentModelConfig({ agentId: "oh-my-pi", rootPath: malformedRoot }),
+    ).resolves.toMatchObject({
+      status: "invalid",
+      canSetModel: false,
+      errorCode: "AGENT_MODEL_CONFIG_INVALID",
+    });
+    await expect(
+      updateAgentModelConfig(
+        { agentId: "oh-my-pi", rootPath: malformedRoot, model: "openai/gpt-5" },
+        { backupRoot: path.join(malformedRoot, "backups") },
+      ),
+    ).rejects.toThrow("AGENT_MODEL_CONFIG_INVALID");
+
+    const oversizedRoot = await createRoot();
+    await fs.writeFile(
+      path.join(oversizedRoot, "config.yml"),
+      `modelRoles:\n  default: openai/gpt-5\n# ${"x".repeat(2 * 1024 * 1024)}\n`,
+    );
+    await expect(
+      inspectAgentModelConfig({ agentId: "oh-my-pi", rootPath: oversizedRoot }),
+    ).resolves.toMatchObject({ status: "invalid", canSetModel: false });
+
+    const invalidShapeRoot = await createRoot();
+    await fs.writeFile(
+      path.join(invalidShapeRoot, "config.yml"),
+      "modelRoles: []\n",
+    );
+    await expect(
+      inspectAgentModelConfig({
+        agentId: "oh-my-pi",
+        rootPath: invalidShapeRoot,
+      }),
+    ).resolves.toMatchObject({ status: "invalid", canSetModel: false });
+    await expect(
+      updateAgentModelConfig(
+        {
+          agentId: "oh-my-pi",
+          rootPath: invalidShapeRoot,
+          model: "openai/gpt-5",
+        },
+        { backupRoot: path.join(invalidShapeRoot, "backups") },
+      ),
+    ).rejects.toThrow("AGENT_MODEL_CONFIG_INVALID");
+
+    const scalarRoot = await createRoot();
+    await fs.writeFile(path.join(scalarRoot, "config.yml"), "[]\n");
+    await expect(
+      inspectAgentModelConfig({ agentId: "oh-my-pi", rootPath: scalarRoot }),
+    ).resolves.toMatchObject({ status: "invalid", canSetModel: false });
+
+    const invalidDefaultRoot = await createRoot();
+    await fs.writeFile(
+      path.join(invalidDefaultRoot, "config.yml"),
+      "modelRoles:\n  default: 123\n",
+    );
+    await expect(
+      inspectAgentModelConfig({
+        agentId: "oh-my-pi",
+        rootPath: invalidDefaultRoot,
+      }),
+    ).resolves.toMatchObject({ status: "invalid", canSetModel: false });
+
+    const missingRolesRoot = await createRoot();
+    await fs.writeFile(path.join(missingRolesRoot, "config.yml"), "{}\n");
+    await expect(
+      inspectAgentModelConfig({
+        agentId: "oh-my-pi",
+        rootPath: missingRolesRoot,
+      }),
+    ).resolves.toMatchObject({
+      status: "not-configured",
+      model: null,
+      canSetModel: true,
+    });
+
+    const oversizedDefaultRoot = await createRoot();
+    await fs.writeFile(
+      path.join(oversizedDefaultRoot, "config.yml"),
+      `modelRoles:\n  default: "${"x".repeat(513)}"\n`,
+    );
+    await expect(
+      inspectAgentModelConfig({
+        agentId: "oh-my-pi",
+        rootPath: oversizedDefaultRoot,
+      }),
+    ).resolves.toMatchObject({ status: "invalid", canSetModel: false });
+  });
+
+  it("reports Oh My Pi OAuth and missing-key readiness without returning auth metadata", async () => {
+    const oauthRoot = await createRoot();
+    await fs.writeFile(
+      path.join(oauthRoot, "config.yml"),
+      "modelRoles:\n  default: google/gemini-3-pro\n",
+    );
+    await fs.writeFile(
+      path.join(oauthRoot, "models.yml"),
+      [
+        "providers:",
+        "  google:",
+        "    auth: oauth",
+        "    oauth:",
+        "      accessToken: oauth-secret",
+        "    models:",
+        "      - id: gemini-3-pro",
+        "",
+      ].join("\n"),
+    );
+    const oauth = await inspectAgentModelConfig({
+      agentId: "oh-my-pi",
+      rootPath: oauthRoot,
+    });
+    expect(oauth).toMatchObject({
+      model: "google/gemini-3-pro",
+      credentialStatus: "platform-managed",
+    });
+    expect(JSON.stringify(oauth)).not.toContain("oauth-secret");
+
+    const missingKeyRoot = await createRoot();
+    await fs.writeFile(
+      path.join(missingKeyRoot, "config.yml"),
+      "modelRoles:\n  default: custom/private-model\n",
+    );
+    await fs.writeFile(
+      path.join(missingKeyRoot, "models.yml"),
+      [
+        "providers:",
+        "  custom:",
+        "    auth: apiKey",
+        "    models:",
+        "      - id: private-model",
+        "",
+      ].join("\n"),
+    );
+    await expect(
+      inspectAgentModelConfig({
+        agentId: "oh-my-pi",
+        rootPath: missingKeyRoot,
+      }),
+    ).resolves.toMatchObject({ credentialStatus: "missing" });
+
+    const emptyKeyRoot = await createRoot();
+    await fs.writeFile(
+      path.join(emptyKeyRoot, "config.yml"),
+      "modelRoles:\n  default: custom/private-model\n",
+    );
+    await fs.writeFile(
+      path.join(emptyKeyRoot, "models.yml"),
+      [
+        "providers:",
+        "  custom:",
+        '    apiKey: ""',
+        "    models:",
+        "      - id: private-model",
+        "",
+      ].join("\n"),
+    );
+    await expect(
+      inspectAgentModelConfig({
+        agentId: "oh-my-pi",
+        rootPath: emptyKeyRoot,
+      }),
+    ).resolves.toMatchObject({ credentialStatus: "missing" });
+  });
+
+  it("bounds and filters malformed Oh My Pi catalog entries", async () => {
+    const root = await createRoot();
+    const oversizedId = "x".repeat(513);
+    await fs.writeFile(path.join(root, "config.yml"), "modelRoles: {}\n");
+    await fs.writeFile(
+      path.join(root, "models.yml"),
+      [
+        "providers:",
+        "  scalar: invalid",
+        "  no-model-list:",
+        "    auth: none",
+        `  "${oversizedId}":`,
+        "    models:",
+        "      - id: ignored",
+        "  valid:",
+        "    models:",
+        "      - name: missing-id",
+        `      - id: "${oversizedId}"`,
+        "      - id: usable",
+        "",
+      ].join("\n"),
+    );
+
+    await expect(
+      inspectAgentModelConfig({ agentId: "oh-my-pi", rootPath: root }),
+    ).resolves.toMatchObject({
+      status: "not-configured",
+      model: null,
+      provider: null,
+      availableModels: ["valid/usable"],
+      credentialStatus: "unknown",
+    });
+  });
+
+  it("creates a missing Oh My Pi config without inventing provider credentials", async () => {
+    const root = await createRoot();
+    const backupRoot = path.join(root, "backups");
+
+    await expect(
+      inspectAgentModelConfig({ agentId: "oh-my-pi", rootPath: root }),
+    ).resolves.toMatchObject({
+      adapter: "oh-my-pi-yaml-v1",
+      status: "missing",
+      sourceRelativePath: "config.yml",
+      canSetModel: true,
+      credentialStatus: "unknown",
+    });
+
+    const result = await updateAgentModelConfig(
+      { agentId: "oh-my-pi", rootPath: root, model: "openai/gpt-5" },
+      { backupRoot },
+    );
+    expect(result).toMatchObject({
+      status: "configured",
+      model: "openai/gpt-5",
+      provider: "openai",
+      availableModels: ["openai/gpt-5"],
+      backupPath: null,
+    });
+    expect(await fs.readFile(path.join(root, "config.yml"), "utf8")).toContain(
+      "default: openai/gpt-5",
+    );
+  });
+
+  it("rolls back Oh My Pi model writes when the optional provider catalog is invalid", async () => {
+    const root = await createRoot();
+    const configPath = path.join(root, "config.yml");
+    const original = "modelRoles:\n  default: anthropic/claude-sonnet-4-6\n";
+    await fs.writeFile(configPath, original);
+    await fs.writeFile(path.join(root, "models.yml"), "providers: [broken\n");
+
+    await expect(
+      updateAgentModelConfig(
+        { agentId: "oh-my-pi", rootPath: root, model: "openai/gpt-5" },
+        { backupRoot: path.join(root, "backups") },
+      ),
+    ).rejects.toThrow("AGENT_MODEL_CONFIG_UPDATE_FAILED");
+    expect(await fs.readFile(configPath, "utf8")).toBe(original);
   });
 
   it("restores Kimi Code TOML when native validation fails", async () => {

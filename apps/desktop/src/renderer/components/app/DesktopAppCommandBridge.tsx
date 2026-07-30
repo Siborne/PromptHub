@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AgentAssetCommand, AppCommand } from "@prompthub/shared/types";
 
+import { AgentDeepLinkImportDialog } from "../agent/AgentDeepLinkImportDialog";
+import { useAgentStore } from "../../stores/agent.store";
 import { useUIStore, type AppModule } from "../../stores/ui.store";
 import {
   APP_ASSET_WORKFLOW_READY_EVENT,
@@ -41,6 +43,10 @@ export function DesktopAppCommandBridge({
   const setAppModule = useUIStore((state) => state.setAppModule);
   const [pendingWorkflow, setPendingWorkflow] =
     useState<WorkflowCommand | null>(null);
+  const [pendingAgentDeepLink, setPendingAgentDeepLink] = useState<Extract<
+    AppCommand,
+    { type: "agent:import-provider" | "agent:import-error" }
+  > | null>(null);
   const [readyWorkflows, setReadyWorkflows] = useState<Set<"mcp" | "plugin">>(
     () => new Set(),
   );
@@ -57,6 +63,19 @@ export function DesktopAppCommandBridge({
         case "agent:manage":
           onNavigate("home");
           setAppModule("agents");
+          return;
+        case "agent:import-provider":
+          onNavigate("home");
+          setAppModule("agents");
+          useAgentStore
+            .getState()
+            .selectAgent(command.preview.profile.platformId);
+          setPendingAgentDeepLink(command);
+          return;
+        case "agent:import-error":
+          onNavigate("home");
+          setAppModule("agents");
+          setPendingAgentDeepLink(command);
           return;
         case "asset:create":
         case "asset:manage":
@@ -122,5 +141,10 @@ export function DesktopAppCommandBridge({
     setPendingWorkflow(null);
   }, [appModule, currentPage, pendingWorkflow, readyWorkflows]);
 
-  return null;
+  return (
+    <AgentDeepLinkImportDialog
+      command={pendingAgentDeepLink}
+      onClose={() => setPendingAgentDeepLink(null)}
+    />
+  );
 }

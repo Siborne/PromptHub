@@ -4,7 +4,183 @@
 
 - Phase: implement
 - Status: in-progress
-- Code changes: registry, shared workspace shell, allowlisted native config, non-secret model configuration, bounded read-only session adapters, current Kimi Code and Qwen Code compatibility, and the Codex Appearance adapter implemented
+- Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
+
+## Provider Profile deep-link batch (2026-07-29)
+
+- Added `DES-AGENT-061` in `deep-link-designs.md` to define the first
+  versioned `prompthub://import` slice.
+- The design adapts CC Switch's preview-and-confirm workflow but keeps parsing,
+  persistence, secure credential custody and activation inside PromptHub's
+  existing shared/Electron/Provider boundaries.
+- The first allowed object type is `provider-profile`. Existing Skill, MCP,
+  Rule and Plugin domains remain rejected until their owning contracts expose
+  an equivalent portable preview.
+- Literal credentials are rejected rather than accepted through an OS-visible
+  URL. The deep link may declare `requiresSecret`; the user adds that secret
+  through PromptHub's existing secure form after import.
+- No database, backup, native Agent configuration or credential contract
+  changes in this batch. Implementation and `TEST-AGENT-079` are pending.
+
+## CC Switch reuse clarification (2026-07-29)
+
+- Reconfirmed the external research checkout at
+  `/Users/lingxiaotian/Programs/public/cc-switch` is the MIT `v3.18.0`
+  baseline (`606e7bbe75db7f8285f7a3be006fac22b5d22796`); the remote tag inventory
+  contained no later stable tag at verification time.
+- CC Switch remains an approved Provider and credential workflow reference.
+  Selective source-level reuse is allowed for a bounded component when its
+  provenance, license, ownership boundary and PromptHub tests are recorded.
+  Whole-repository copying and bundling the checkout into an application
+  `public/` directory remain prohibited.
+- No CC Switch runtime source, dependency or asset was incorporated in this
+  documentation batch. Existing PromptHub Profile, `safeStorage`, DB, IPC and
+  activation services remain the implementation source of truth.
+
+## Provider endpoint credential exclusion (2026-07-29)
+
+- Completed `FR-AGENT-045`, `DES-AGENT-051`, `TEST-AGENT-070` and
+  `T-AGENT-106`. Provider endpoint and credential inputs remain distinct:
+  endpoint metadata now accepts only bounded HTTP(S) URLs without embedded
+  userinfo, fragments or control characters.
+- The shared validator protects SQLite create, update and row projection.
+  The Profile form uses the same boundary before IPC and shows localized
+  feedback in all seven locales. Validation flags are computed independently
+  from the post-submit display state, so the first Save click cannot bypass
+  endpoint, provider-id, environment-key or platform-specific model guards.
+- A legacy unsafe row fails closed with a stable
+  `AGENT_PROVIDER_ENDPOINT_INVALID` error whose text contains no endpoint or
+  credential. No automatic legacy-row rewrite was added because choosing
+  between discard, secure-store extraction and manual repair is a separate
+  credential migration decision.
+- Test-first verification began with the missing shared export and a real
+  SQLite assertion that accepted URL credentials. The completed shared suite
+  has 100% line, branch and function coverage for the public config/endpoint
+  validator; the focused DB/Profile service/IPC suite passes 38 tests, the
+  Profile form suite passes 3 tests, and the seven-locale regression passes 7
+  tests. No CC Switch runtime code or asset was incorporated.
+
+## Provider public JSON persistence boundary (2026-07-29)
+
+- Completed `FR-AGENT-046`, `DES-AGENT-052`, `TEST-AGENT-071` and
+  `T-AGENT-107`. Profile config, model mapping parameters and Provider audit
+  snapshots now use the same bounded public-JSON validator on SQLite writes
+  and reads.
+- Expanded the sensitive-key policy to cover API/auth tokens, private keys,
+  authorization headers and secure-store references without rejecting public
+  readiness fields such as `credentialStatus` and `secretRequired`.
+- Provider baseline recovery now reuses the shared policy instead of a weaker
+  local regex. Direct writes and legacy/external rows containing credentials
+  fail closed with stable errors; failed snapshot writes leave no row and no
+  error includes the rejected credential.
+- Test-first verification reproduced both the accepted unsafe snapshot and the
+  accepted `apiToken` baseline before implementation. The shared suite passes
+  with 100% line, branch and function coverage; the focused DB and activation
+  repository suites pass 17 tests. No schema, migration, credential copy,
+  runtime dependency or CC Switch source was added.
+
+## Provider Profile portable full backup (2026-07-29)
+
+- Completed `FR-AGENT-048`, `DES-AGENT-054`, `TEST-AGENT-073` and
+  `T-AGENT-109`. Full desktop backups may now carry one optional version-one
+  Agent section containing Provider Profile public metadata, model mappings
+  and bounded redacted activation snapshots.
+- The shared parser allows at most 1,000 Profiles, 100 mappings per Profile
+  and 5,000 snapshots. It rejects extra fields, credential-bearing public JSON,
+  secure-store/native-backup references, duplicate durable identities and
+  broken snapshot references before mutation.
+- Export is main-owned and excludes secret values, secret references, local
+  encrypted-config backup references, Agent roots, session indexes and
+  transcript bodies. Restore replaces Agent rows in one SQLite transaction,
+  preserves Profile/snapshot ids, clears local backup refs and reports
+  same-device available versus missing credentials through Profile ids only.
+  Legacy backups without the optional section leave existing Agent data
+  untouched.
+- Test-first verification initially failed because the shared parser,
+  main-process service, IPC/preload methods and desktop backup section did not
+  exist. The completed shared gate passes 10 tests with 100% line, branch and
+  function coverage for both backup and public-config validators. The
+  main-service/IPC/preload/renderer gate passes 4 files / 16 tests with 100%
+  line, branch, function and statement coverage for the new service and IPC;
+  the broader backup regression passes 5 files / 62 tests.
+- Shared, database and desktop typechecks, affected desktop ESLint, Prettier,
+  `pnpm spec:test` and `git diff --check` pass. New and touched batch files
+  remain below 1,500 lines. The repository file-size gate still reports three
+  pre-existing unrelated preferred-limit violations:
+  `SkillStore.tsx` (1,536), `SkillStoreDetail.tsx` (1,536) and
+  `agent-provider-profile-workbench.test.tsx` (1,512); none was expanded by
+  this batch.
+- `T-AGENT-023` remains open for Agent selective export, session-source
+  preferences and cross-device path repair; this batch does not claim those
+  capabilities.
+
+## Agent-aware selective and Full Backup ZIP export (2026-07-29)
+
+- Completed `FR-AGENT-049`, `DES-AGENT-055`, `TEST-AGENT-074` and
+  `T-AGENT-110`. Data Settings now exposes a default-enabled, independently
+  selectable Agents scope in all seven locales. It controls only the portable
+  Provider Profile section and does not absorb Settings or owning-domain
+  Skills/MCP/Rules/Plugins data.
+- Fixed a verified implementation discrepancy: direct JSON export included
+  `agentManagement`, but Full Backup and pre-upgrade ZIP export reused a
+  selective scope that had no Agent bit and therefore dropped the section.
+  Both complete flows now pass `agents: true`.
+- Disabling Agents omits the section and skips the main-process export call,
+  avoiding unnecessary DB/secure-boundary work and preventing an excluded
+  domain from blocking an otherwise valid selective export. Older envelopes
+  without the scope bit remain importable because restore keys off the optional
+  payload section.
+- Test-first verification failed five assertions across Full Backup,
+  pre-upgrade backup, selective payload and the settings selector. A second
+  red test showed the disabled scope still queried Agent management. The
+  completed focused gate passes 3 files / 34 tests. The broader backup,
+  settings and seven-locale regression gate passes 8 files / 96 tests.
+  Desktop typecheck, affected desktop ESLint, Prettier, `pnpm spec:test` and
+  `git diff --check` pass. The repository file-size gate remains red only for
+  the same three unrelated preferred-limit violations:
+  `SkillStore.tsx` (1,536), `SkillStoreDetail.tsx` (1,536) and
+  `agent-provider-profile-workbench.test.tsx` (1,512); none was expanded by
+  this batch. This export-scope batch left session-source preferences and
+  cross-device path repair to the following portability batch.
+
+## Portable session preference rebinding (2026-07-29)
+
+- Completed `FR-AGENT-050`, `DES-AGENT-056`, `TEST-AGENT-075`,
+  `T-AGENT-111` and the remaining `T-AGENT-023` / `TEST-AGENT-014`
+  compatibility boundary. The optional Agent backup section now carries only
+  bounded `platformId`, `adapterId` and `enabled` session preferences.
+- Export queries at most 129 newest-first device-local source rows to enforce
+  the 128-row bound, keeps the newest preference per platform and serializes it
+  only when the current main-process registry resolves a persistent session
+  descriptor. Roots, adapter versions, cursors, scan state, annotations,
+  indexed metadata and transcript content remain excluded.
+- Restore resolves each preference against the current device descriptor and
+  registers the current root and adapter version. Unsupported preferences are
+  reported as bounded keys without creating placeholder paths. A legacy Agent
+  section without preferences leaves current session settings unchanged.
+- Provider replacement and all resolved session preference writes share one
+  outer SQLite transaction. An injected session write failure proves Provider,
+  mapping, snapshot and session state roll back together.
+- Test-first failures covered missing optional-format support, absent export and
+  restore wiring, preference-only Agent sections, unsupported sources and
+  cross-domain rollback. The completed shared suite passes 12 tests with 100%
+  line, branch and function coverage. The broader desktop gate passes 10 files
+  / 89 tests; dedicated service and descriptor coverage passes 2 files / 20
+  tests with 100% statement, line, branch and function coverage.
+- Shared, database and desktop typechecks, affected desktop ESLint, Prettier,
+  `pnpm spec:test` and `git diff --check` pass. All batch source and test files
+  remain below 1,000 lines. The repository file-size gate remains red only for
+  the same three unrelated preferred-limit violations:
+  `SkillStore.tsx` (1,536), `SkillStoreDetail.tsx` (1,536) and
+  `agent-provider-profile-workbench.test.tsx` (1,512).
+- A regression run exposed that the first descriptor resolver path initialized
+  the configured PromptHub database through an unrelated platform-context
+  dependency. The resolver now constructs the verified Claude/Gemini session
+  descriptor directly from the current home and an absolute Claude override,
+  performs no PromptHub database access and returns `null` for unsupported
+  persistent indexes. Both the live database and the automatically created
+  pre-migration recovery copy passed SQLite integrity checks; the recovery copy
+  was preserved rather than deleted or used to overwrite current user data.
 
 ## Completed Documentation
 
@@ -18,6 +194,7 @@
 - 完成统一 Agent list/detail shell、十个稳定一级 tabs、capability 置灰规则、各页面状态、响应式布局和 renderer 组件拆分设计。
 - 生成并纳入 `assets/agent-workbench-overview.png` 作为第一版获批视觉基线，同时在 `ui-design.md` 区分规范性结构与示例数据。
 - 建立 `FR -> DES -> TEST -> T` 追踪关系和 test-first 实施顺序。
+- 完成 31 个内置平台的 machine-readable capability inventory：深度 adapter 逐平台显式声明，路径与 launch 能力从 canonical registry 派生，custom Agent 不继承相似目录的深度协议；renderer 的 provider/session/usage 状态不再维护第二份平台 allowlist。
 - 新增 Managed Agent projection，从启用 built-in/custom 平台、检测结果、路径覆盖与用户置顶派生统一列表；用户禁用的平台在 projection 边界排除。
 - 新增一级 Agents 导航、仅搜索列表和统一详情 Shell；移除低价值的状态筛选与备用排序控件，默认排序保持置顶、检测/配置、常用优先级和名称稳定顺序。
 - 桌面首页默认顺序调整为 `Prompts -> Agents -> Skills -> MCP -> Plugins -> Rules`；新用户直接使用新顺序，settings v17 一次性迁移旧的完整默认顺序和更早的三模块默认顺序，迁移后的完整自定义顺序保持不变。
@@ -57,10 +234,12 @@
 - 将 `antigravity` 标记为 current 并排在 `gemini` 前；内置显示名统一为 `Antigravity` 与 `Gemini`，不携带 `CLI` 后缀；`gemini` 标记为 enterprise-legacy 并指向 Antigravity，在详情中显示 7 locales 的迁移提示，但不在列表或标题旁重复显示兼容标签；同时保留原 id、路径和 adapter，避免破坏企业用户与既有资产。
 - 将 Antigravity 管理根从桌面运行态 `~/.gemini/antigravity` 修正为官方共享定制根 `~/.gemini/config`，声明 `skills/`、`mcp_config.json`、`plugins/` 和共享 `~/.gemini/GEMINI.md`；CLI/桌面会话、缓存、凭据、更新器和 artifact 继续由产品运行时拥有。
 - 完成 Qwen Code 第一批实现：以独立 built-in id `qwen` 接入平台 registry 和官方图标；按 `PromptHub override -> QWEN_HOME -> ~/.qwen` 解析配置根，并保持 `QWEN_RUNTIME_DIR` 仅用于会话运行态。Skills 同时发现原生 `<root>/skills` 与只读兼容 `~/.agents/skills`，MCP 支持用户/项目 `settings.json` 的 `mcpServers`，Rules 支持全局 `QWEN.md`，Extensions 按父 bundle 发现，Provider/Model 只投影脱敏字段，Sessions 使用有界原生 CLI 列表和受控 JSONL 读取。原始 `settings.json` 不进入 Config Files 编辑器，Usage 保持 planned；项目 SubAgent/Commands 专用工作区和完整 Electron E2E 仍属于 `TEST-AGENT-036` 后续门禁。
+- 完成 Oh My Pi (#187) 第一批实现：以独立 built-in id `oh-my-pi` 接入平台 registry，默认根为 `~/.omp/agent`，并支持 `PI_CODING_AGENT_DIR`；声明 `skills/`、`RULES.md`、`mcp.json`、项目 `.omp/mcp.json`、兄弟 `../plugins` 和 allowlisted config files。MCP 使用原生 `mcpServers` JSON key。新增有界只读 JSONL session adapter：只扫描 `<root>/sessions` 下一层的项目 transcript，读取标题、cwd、模型和可见 user/assistant/tool 记录，统计畸形行，拒绝嵌套 subagent、软链接和不安全 id，并提供 `omp --resume <id>` 元数据。Provider/Usage、凭据、插件安装和 profile/XDG 扩展保持 planned，不写入或同步 Oh My Pi transcript。
 - Agent 详情头部 ⋯ 菜单的“打开 Agent 设置”改为工作台内“编辑 Agent”弹窗，不再切换到应用设置页。弹窗复用 `BuiltinAgentEditor` 与现有 settings actions：内置 Agent 编辑 root/Skills/MCP/Rules/Agents/Config/可用 Plugin 路径及 Codex 身份，自定义 Agent 同时编辑名称和启用状态；Reset 只重置草稿，Save 后沿原同步链路刷新 managed Agent projection。
 - 移除 Agent 详情头部重复的“管理 Skills”主按钮；右上角仅保留启动 Agent、刷新和更多操作，Skills 统一从 Overview 卡片或顶部 Skills 页签进入。
 - 补齐常用 Agent 的只读历史会话：`codex` 同时索引 active/archived rollout JSONL 并按 session id 去重，ChatGPT 展示身份继续复用同一稳定 id 和 `~/.codex`；Grok Build 读取限定的 summary/chat history；OpenClaw 从每个 Agent 的 `sessions.json` 定位受控 transcript；Qwen Code 使用原生有界 JSON 列表后只读取 runtime root 内的 realpath。四个 adapter 均限制扫描数、metadata/detail bytes 和单条文本长度，隔离畸形记录，不编辑或同步平台 transcript。
-- Sessions capability 现在对 Claude、Codex、Gemini、Grok Build、Kimi Code、OpenClaw、OpenCode、Qwen Code 启用；Antigravity、Cursor、Windsurf 等格式未确认的平台继续保持 planned/disabled。OpenCode 原生命令在当前工作区没有会话并返回空 stdout 时按空列表处理，不再误报解析失败。
+- Sessions capability 现在对 Claude、Codex、Gemini、Grok Build、Kimi Code、OpenClaw、OpenCode、Qwen Code、Oh My Pi 启用；Windsurf 对 opt-in public transcript export 提供 partial、只读浏览；Antigravity、Cursor 等格式未确认的平台继续保持 planned/disabled。OpenCode 原生命令在当前工作区没有会话并返回空 stdout 时按空列表处理，不再误报解析失败。
+- Sessions capability 现在也对 Oh My Pi 启用；其 JSONL adapter 使用固定上限和直接项目目录扫描，nested subagent transcripts 保持排除。Oh My Pi 不会因为具备 Sessions 而自动获得 provider、usage 或 plugin installation 能力。
 
 ## Native Config Evidence
 
@@ -69,6 +248,7 @@
 - Gemini CLI: user `~/.gemini/settings.json` and workspace `.gemini/settings.json` — <https://geminicli.com/docs/cli/settings/>
 - Google Antigravity: shared customizations `~/.gemini/config`, CLI runtime `~/.gemini/antigravity-cli`, desktop runtime `~/.gemini/antigravity` — <https://antigravity.google/docs/skills>, <https://antigravity.google/docs/mcp>, <https://antigravity.google/docs/plugins>, and <https://antigravity.google/docs/cli-using>
 - OpenCode: user `~/.config/opencode/opencode.json` and project `opencode.json` — <https://opencode.ai/docs/config/>
+- Oh My Pi: user `~/.omp/agent/mcp.json`, project `.omp/mcp.json`, Skills and sessions — <https://github.com/can1357/oh-my-pi/blob/main/docs/skills.md> and <https://github.com/can1357/oh-my-pi/blob/main/docs/session-switching-and-recent-listing.md>
 - Cline: user settings under `~/.cline/data/settings/`; credential-bearing `providers.json` is excluded from the raw editor — <https://docs.cline.bot/getting-started/config>
 - Additional built-in declarations follow the verified platform inventory in `spec/knowledge/reference/agent-platforms.md`; evidence-limited platforms keep Config Files disabled.
 - Claude Code model/session behavior — <https://code.claude.com/docs/en/model-config> and <https://code.claude.com/docs/en/sessions>
@@ -100,6 +280,17 @@
   - Provider/session: structured model inspection and updates preserve unrelated JSON while excluding raw secret-bearing settings from renderer file editing; session listing uses `qwen sessions list --json --limit`, bounds output, isolates malformed rows, validates transcript realpaths, and emits the native `qwen --resume <id>` command.
   - Persistence: Qwen runtime sessions, transcripts, logs, memory, todos, tokens, and auth caches remain platform-owned and are not added to PromptHub database backup/sync payloads.
   - Verification so far: affected Qwen registry/path/model/session/Skill/MCP/Rules/Plugin/icon/UI/backup suites passed (15 files / 258 tests); desktop, shared, and core typechecks passed; seven-locale regression passed (5 files / 36 tests); scoped ESLint, Spec governance/index checks, changed-file formatting, and the desktop production build passed. The build retains only existing chunk-size and mixed static/dynamic import warnings. The file-size gate now reports only the unchanged vendored Dream Skin `injector.mjs` at 1,822 lines; `skill-installer.ts` is 1,431 lines and the database-backup test was reduced to exactly 1,500 lines. Full `TEST-AGENT-036` Electron E2E and the full desktop suite remain pending and are not claimed as complete.
+
+- Oh My Pi first-class Agent batch (2026-07-25, issue #187, `FR-AGENT-033`, `DES-AGENT-029`, `TEST-AGENT-042`, `T-AGENT-071`):
+  - Registry and asset boundary: `oh-my-pi` uses `~/.omp/agent` or `PI_CODING_AGENT_DIR`, native `skills/`, `RULES.md`, `mcp.json`, project `.omp/mcp.json`, and a derived sibling plugin path. Generic Terminal icon fallback is used because no bundled official bitmap was added in this batch.
+  - Session boundary: the adapter scans only direct project JSONL files below `sessions/`, caps header/metadata/detail reads, deduplicates safe session ids, isolates malformed rows, filters non-visible records, rejects symlinks/path escapes, and returns `omp --resume` metadata without executing or mutating the runtime.
+  - Verification: focused Oh My Pi platform/MCP/session tests passed (5 files / 23 tests); the related Agent/MCP/Rules/renderer regression passed (12 files / 122 tests); desktop, core, and shared typechecks, scoped ESLint, Prettier, spec governance/index checks, file-size limits, `git diff --check`, and the desktop production build passed. Focused adapter coverage measured 100% statements, 100% functions, and 78.66% branches; remaining defensive branch variants are documented for follow-up before the active change can converge. Provider, Usage, credentials and plugin package installation remain planned.
+
+- Oh My Pi non-secret model batch (2026-07-27, `FR-AGENT-034`, `DES-AGENT-030`, `TEST-AGENT-043`, `T-AGENT-072`):
+  - Model projection reads the preferred `config.yml` or `config.yaml` fallback and the optional `models.yml` catalog from the resolved `~/.omp/agent` root. It returns only the selected `provider/model`, allowlisted model selectors, sanitized `baseUrl`, and presence-only credential readiness; API keys, headers, OAuth data, model metadata, and unknown fields never cross the IPC contract.
+  - Updating a model changes only `modelRoles.default`, preserves unrelated YAML/comments as supported by the YAML document writer, creates the existing per-Agent backup, uses atomic replacement, re-reads and verifies, and restores the exact original bytes if verification fails. Secret-bearing `models.yml` remains excluded from the raw Config Files editor; credentials, provider activation, usage/quota, and plugin package installation remain out of scope.
+  - Verification: focused model/platform/managed-Agent regression passed (3 files / 31 tests), including missing/config.yaml fallback, malformed and oversized YAML, secret redaction, endpoint sanitization, backup, unknown-field/comment preservation, missing-file creation, invalid selector bounds, credential readiness, and rollback when the provider catalog is invalid. The full desktop unit suite passed (407 files / 3,778 tests); desktop, core, and shared typechecks, scoped desktop ESLint, spec governance, file-size checks, `git diff --check`, and the desktop production build passed. Focused whole-module V8 coverage reached 94.68% statements, 85.29% branches, 100% functions, and 94.68% lines; every added Oh My Pi decision branch is exercised, while untouched legacy Codex/Kimi/JSON recovery branches keep the whole legacy module below the repository-wide 100% branch target. The build retains only the existing chunk-size and mixed static/dynamic import warnings.
+  - Evidence re-audit (2026-07-28): upstream revision `cc00ab161b2721e50d8a96a0dc9552abfd258b8b` confirms that native stored API keys/OAuth accounts and broker snapshots are owned by Oh My Pi through `<root>/agent.db`, with additional runtime/environment resolution. The capability therefore remains accurately `partial`: PromptHub supports verified non-secret model selection, but does not read or mutate `agent.db`, migrate native credentials, or claim full Profile endpoint/credential activation. Public contracts were reused as evidence; no upstream source was copied or vendored.
 
 - Skill asset cards batch (2026-07-22, `FR-AGENT-028`, `DES-AGENT-024`, `TEST-AGENT-034`, `T-AGENT-060`):
   - Renderer-only change: the direct Skills tab renders `AgentSkillAssetPanel` through `AgentAssetsWorkspace` — a toolbar (domain title, search, all/managed/unmanaged/copy/symlink filter chips, refresh, and an "Install My Skill" primary action) above a responsive card grid; direct MCP, Rules, and Plugins tabs keep the compact row inventory.
@@ -224,17 +415,1073 @@
 
 ## Analyze
 
+- Governance and capability-inventory batch (2026-07-28, `FR-AGENT-002`, `DES-AGENT-032`, `TEST-AGENT-045`, `T-AGENT-006`, `T-AGENT-009`, `T-AGENT-010`, `T-AGENT-073`):
+  - Unified the active change at `implement`, resolved the credential/session/high-risk/persona decisions, and kept proxy, protocol conversion, failover, request interception, and OAuth account pools outside this change.
+  - Removed duplicate trace ids by retaining quota as `FR-AGENT-027` / `DES-AGENT-023`, retaining Provider UI as `TEST-AGENT-027`, and moving Codex presentation identity to `FR-AGENT-035` / `DES-AGENT-031` / `TEST-AGENT-044`.
+  - Rebuilt the traceability table with explicit full ids. A definition/trace audit reported zero duplicate definitions and zero unreferenced FR/NFR, DES, TEST, or T ids.
+  - Added a shared 31-platform capability inventory and renderer projection. The focused red test failed before the module existed; after implementation, 2 files / 19 tests passed.
+  - `@prompthub/shared` and desktop typechecks passed. Desktop affected lint passed; shared affected lint passed with the desktop flat config explicitly selected. `pnpm spec:test`, `pnpm spec:index:check`, and the file-size gate passed.
+  - Full desktop, integration, E2E, and release-quick suites were not run for this documentation/contract batch; they remain required at the later delivery and convergence gates.
+
+- Provider Profile persistence foundation (2026-07-28, `FR-AGENT-003` to `FR-AGENT-006`, `DES-AGENT-004`, `TEST-AGENT-003`, `T-AGENT-074`; partial `T-AGENT-012`):
+  - Added shared typed records and inputs for Provider Profiles, model mappings, and redacted activation snapshots. Contracts contain `secretRef` only and no secret-value field.
+  - Added `agent_provider_profiles`, `agent_provider_model_mappings`, and `agent_provider_snapshots` to fresh schema and existing-user initialization. Migration `agent_provider_profiles_v1` is idempotent, participates in the pre-migration backup gate, and does not import or mutate native Agent configuration.
+  - Added platform/archive/update and snapshot-history indexes plus a case-insensitive unique active profile name per platform. Profile deletion cascades mappings and preserves audit snapshots with `provider_profile_id = NULL`.
+  - Added `AgentProviderProfileDB` CRUD, archive, monotonic optimistic timestamp checks, mapping upsert, bounded snapshot history, and transactional profile-with-mappings creation.
+  - The failing regression initially reported six failures because the DB class/tables/migration did not exist. The completed focused suite passed 8 tests; the migration/locking/source-update regression passed 3 files / 19 tests. DB, shared, and desktop typechecks, affected lint, and the file-size gate passed.
+  - Session source/index schema remains open under `T-AGENT-012`. Provider activation, secure secret resolution, renderer IPC, backup payload integration, and native config reconciliation are not claimed by this persistence batch.
+
+- Provider adapter registry and three-way reconciliation foundation (2026-07-28, `FR-AGENT-003` to `FR-AGENT-007`, `DES-AGENT-005`, `DES-AGENT-006`, `TEST-AGENT-006`, `T-AGENT-075`; partial `T-AGENT-011` and `T-AGENT-013`):
+  - Added shared serializable provider comparable-state, desired-state, field-decision, activation-plan, adapter-context, import-preview, apply-receipt, verification, and rollback-result contracts. Secret values are not part of these contracts.
+  - Added a capability-oriented core registry whose provider adapter is optional. It rejects duplicate platform registrations, platform-id mismatches, and blank adapter versions while retaining explicit empty registrations without inventing support.
+  - Added pure field-level three-way reconciliation across baseline, native current state, and desired PromptHub state. It distinguishes preserve, apply, backfill, external modification, conflict, unsupported fields, and blocked prerequisites; decisions are stable-sorted and input objects remain unchanged.
+  - The failing regression initially reported six failures because the registry and reconciliation modules did not exist. The completed focused suite passed 7 tests, and focused V8 coverage reached 100% statements, branches, functions, and lines for `packages/core/src/agent-management`.
+  - The full core suite passed 11 files / 76 tests; the full desktop suite passed 416 files / 3,830 tests. Core, shared, and desktop typechecks, affected lint, Spec governance/index checks, formatting, `git diff --check`, and the file-size gate passed.
+  - Native filesystem apply/verify/rollback implementations, Provider Profile IPC, unified Agent query, asset aggregation, and concrete platform adapter registration are not claimed by this batch. Existing expected failure-injection logs and React `act(...)` warnings remain visible in the desktop suite but did not fail it.
+
+- Core Agent query and asset aggregation foundation (2026-07-28, `FR-AGENT-001`, `FR-AGENT-002`, `FR-AGENT-008`, `DES-AGENT-002`, `DES-AGENT-007`, `T-AGENT-076`; partial `T-AGENT-013` and `TEST-AGENT-008`):
+  - Moved Managed Agent identity projection, path derivation, capability projection, ordering, and filtering from the desktop renderer into `packages/core`. Renderer service modules now provide compatibility exports, so the existing Zustand store and UI use the same core query without a second platform list.
+  - Added a stateless `AgentAssetAggregationService` for Skill, MCP, Rule, and Plugin domains. Every list refresh calls the registered owning-domain adapter, preserves a fixed four-domain result shape, isolates unsupported and failed domains, returns only generic error codes, and holds no canonical asset content.
+  - Asset action planning/application delegates only to the matching owning adapter. Duplicate adapters, malformed inventories, invalid identifiers/options, unsupported domains, non-ready plans, adapter failures, and cross-domain plan/result substitutions are rejected without exposing adapter error text.
+  - The focused red suite initially failed all 6 tests because neither core query nor aggregation service existed. The completed suite passes 11 tests with 100% statements, branches, functions, and lines for both new modules; the existing desktop Managed Agent projection suite passes 15 tests unchanged.
+  - The full core suite passed 12 files / 87 tests and the full desktop suite passed 416 files / 3,830 tests. Core, shared, and desktop typechecks, affected lint, Spec governance/index checks, formatting, `git diff --check`, and the file-size gate passed. Expected failure-injection logs and existing React `act(...)` warnings remained non-failing.
+  - Concrete renderer/main Skill, MCP, Rule, and Plugin adapters are not yet connected to this orchestrator, so `TEST-AGENT-008` remains open and no asset action behavior is claimed by this batch.
+
+- Agent asset owning-domain integration (2026-07-28, `FR-AGENT-008`, `DES-AGENT-007`, `TEST-AGENT-008`, `T-AGENT-013`):
+  - Added concrete renderer application adapters for Skill, MCP, Rules, and Plugin. Every read calls the corresponding owning Zustand store; the Agent domain does not persist a second asset list, count, assignment, or status.
+  - The overview and direct asset tabs now consume the same aggregate selector. Refresh invokes the owning domain loader, subsequent store changes are reflected without stale cached inventory, and a validation failure becomes a localized generic failure state instead of a false empty result or leaked adapter error.
+  - Existing Skill import, uninstall, detail, and library-install actions continue to call the Skill domain. The aggregate action contract rejects changed nested options and cross-domain results; domains without an Agent-inline action return `unsupported` and never claim a successful mutation.
+  - The initial red tests failed because the renderer adapters did not exist and because action plans could replace nested option values. The completed focused suites pass 3 files / 36 tests. Focused V8 coverage is 100% statements, branches, functions, and lines for both `asset-aggregation.ts` and `agent-asset-domain-adapters.ts`.
+  - The full core suite passed 12 files / 88 tests and the full desktop suite passed 417 files / 3,837 tests. Core, shared, and desktop typechecks, affected lint, formatting, and the desktop production build passed. Existing failure-injection output and React `act(...)` warnings remain non-failing test debt outside this batch.
+
+- Provider Profile main-only safety and CRUD boundary (2026-07-28, `FR-AGENT-003`, `FR-AGENT-006`, `DES-AGENT-004`, partial `TEST-AGENT-004`, `T-AGENT-077`; partial `T-AGENT-011`, `T-AGENT-015`, and `T-AGENT-020`):
+  - Added a bounded public-configuration validator for Profile config and model-mapping parameters. It accepts JSON-compatible values only and rejects cycles, non-finite numbers, non-plain objects, oversized depth/node/key/string input, and credential-bearing keys before SQLite serialization.
+  - Added `AgentProviderProfileService` as the main-only write boundary. Renderer requests never control `secretRef`; new references use `agent-provider:<profile-id>`, secrets are write-only, list responses expose only `none` / `available` / `missing`, and duplicate/export never copy or serialize credentials.
+  - Profile plus mapping updates now use one SQLite transaction with optimistic concurrency. Secret replacement, clearing, deletion, and profile creation use compensating restoration when either the encrypted secret file or SQLite mutation fails, with dedicated rollback-failure codes rather than raw path/database errors.
+  - Added batched secret-presence and model-mapping lookups to avoid per-profile secret-file reads and unbounded SQLite parameter lists.
+  - Added seven Provider Profile CRUD/duplicate/export IPC channels, preload methods, database-rebind registration, and a generic error boundary that emits only stable `AGENT_PROVIDER_*` codes.
+  - Focused verification passed: shared public-config tests at 100% line/branch/function coverage; Provider Profile service 23 tests and 100% line/branch/function coverage; IPC 2 tests with changed branches covered; secret store, DB, and IPC-index integration brought the focused batch to 46 passing tests. Shared, DB, core, and desktop typechecks passed. Affected ESLint passed; full desktop/E2E/release gates remain required after renderer activation and platform adapters are connected.
+
+- Provider import, reconciliation and verified activation application boundary (2026-07-28, `FR-AGENT-003` to `FR-AGENT-006`, `DES-AGENT-005`, `DES-AGENT-006`, partial `TEST-AGENT-004` to `TEST-AGENT-007`, `T-AGENT-078`; completes `T-AGENT-020`, advances `T-AGENT-011` and `T-AGENT-015`):
+  - Added renderer-safe import/preview/activate request contracts and explicit per-field resolutions. Backfill, external modification and conflict decisions require `preserve-current` or `use-profile`; stale native digests, incomplete decisions, unsupported fields and no-op activation fail closed.
+  - Native import previews are bounded and validated before crossing core. Profile config, comparable state and model-mapping parameters reject secret/token keys, unsafe prototypes, cycles and oversized values. Adapter failures become stable codes without path or credential text.
+  - Added main-owned platform-context resolution so the renderer submits only Agent/profile ids, expected digest and field decisions. Three new IPC channels compose the core activation service with the SQLite repository and eight evidence-backed model-only adapters: Claude, Codex, Gemini, Kimi, OpenCode, OpenClaw, Qwen and Oh My Pi. Antigravity and other platforms remain unsupported until a stable writer is evidenced.
+  - Model-only adapters reject endpoint, secret-reference and non-native protocol profiles instead of reporting partial writes as success. Successful activation retains the existing backup, atomic write, concurrent digest check, re-read verification, audit snapshot and rollback path.
+  - Added the non-persistent renderer `agent-provider.store.ts` as the single Provider Profile query/action projection. It supports bounded platform loads with stale-response isolation, CRUD, explicit native import adoption, activation preview and verified result handling; it stores no root path or credential and redacts non-stable errors.
+  - Focused verification passed: core activation service 19 tests at 100% statement/branch/function/line coverage; model adapter, activation IPC, platform-context service, renderer store, Profile IPC and public-config validator each reached 100% focused coverage. The combined desktop boundary suite passed 11 files / 85 tests; core reconciliation/activation passed 2 files / 26 tests. Shared, core, DB and desktop typechecks plus affected ESLint passed. Full desktop, integration, Electron E2E and release-quick gates remain open until the Provider Profile UI and priority full adapters are complete.
+
+- Provider Profile renderer workbench batch (2026-07-28, `FR-AGENT-003` to `FR-AGENT-006`, `DES-AGENT-004` to `DES-AGENT-006`, `TEST-AGENT-046`, `T-AGENT-080`; advances `T-AGENT-079`):
+  - Added a non-Codex Provider & Model split view backed only by the existing Provider Profile IPC/store boundary. The renderer lists public Profile records, exposes `none` / `available` / `missing` credential readiness, and supports create, edit, duplicate, archive, delete and credential-free export without storing a second durable copy.
+  - Profile editing supports platform protocol, endpoint, primary/secondary model routes and write-only credential replace/preserve/clear actions. Editing now preserves adapter-owned validated `config` rather than replacing imported extension data with an empty object; existing secret values and `secretRef` never return to the form.
+  - Native import remains an explicit preview/confirm flow. Activation renders current versus desired values, requires a decision for each backfill/external/conflict field, blocks incomplete or unsupported plans, and keeps verified, restored or rollback-unverified diagnostics visible. Renderer failures are collapsed to stable public messages.
+  - Seven locales share the complete `agents.providerProfiles` key tree. The new component test harness gates async Profile loading inside React `act`, so this batch adds no new asynchronous state warnings; existing warnings in the legacy Codex provider panel remain migration debt.
+  - Focused verification passed: Profile workbench/store 2 files / 22 tests with 100% statements and lines, 98.62% branches and 98.41% functions across the three new UI modules plus the store; the store and activation/import dialogs reached 100% statement/branch/function/line coverage. The combined new/legacy provider UI regression passed 3 files / 47 tests. Desktop typecheck and scoped ESLint passed. Remaining uncovered branches are defensive no-selection/null-result guards; full desktop, Electron E2E and release-quick remain open.
+  - At this intermediate checkpoint, Codex still rendered the legacy `AgentProviderModelPanel` to avoid removing then-shipped third-party endpoint/key management before its native TOML projection was migrated. The later Codex convergence batch below completed `T-AGENT-079`, moved Codex to the Profile DB and stable `agent-provider:<id>` secret ownership, and removed that renderer fact source.
+
+- Capability guidance and workspace tab accessibility batch (2026-07-28, `NFR-AGENT-006`, `TEST-AGENT-047`, `T-AGENT-082`; advances `TEST-AGENT-017` and `T-AGENT-079`):
+  - Planned and unsupported capabilities now expose distinct, localized guidance in disabled workspace tabs and Overview navigation cells. Disabled capabilities remain non-interactive and do not invoke Provider/model IPC.
+  - The Agent workspace tablist now uses one focusable active tab and roving focus across enabled tabs. ArrowLeft/ArrowRight wrap, Home/End select the boundary tab, and each active tab identifies the shared tabpanel through `aria-controls`/`aria-labelledby`.
+  - Seven locales include the planned and unsupported explanations. The focused workspace test reproduces a Cline planned Provider tab, verifies no Profile/model IPC call, and covers the keyboard navigation contract.
+  - Verification passed: the workspace suite passed 23 tests; the combined workspace, unified Profile workbench and legacy Provider panel regression passed 3 files / 62 tests. Focused coverage for the three touched workspace modules was 95.89% statements/lines, 87% branches and 83.72% functions; the capability-status helper reached 100%, and every new keyboard/guidance decision has a direct assertion while uncovered lines belong to existing workspace branches. Desktop typecheck and affected ESLint passed. Electron E2E and release-quick remain open.
+  - This batch deliberately does not migrate Codex. The existing `codex-provider:*` credential ownership and native TOML projection conflict with the unified Profile DB/`agent-provider:<profileId>` boundary; changing that source of truth requires an explicit migration and user confirmation before implementation.
+
+- Agent renderer async test-harness batch (2026-07-28, `NFR-AGENT-006`, `TEST-AGENT-048`, `T-AGENT-083`; advances `TEST-AGENT-017`):
+  - Added an explicit, default-off `settleAsyncEffects` option to the shared i18n renderer test helper. Tests opt in only when mounted Agent components intentionally resolve initial IPC promises into React state; existing callers keep the previous behavior.
+  - The workspace harness now settles Overview session/provider cells before assertions and after keyboard navigation re-enters Overview. A regression captures `console.error` and rejects any unwrapped `act(...)` warning.
+  - The legacy Codex Provider panel uses the same opt-in settlement boundary, removing its prior asynchronous state warnings without changing production Provider behavior or credential ownership.
+  - Verification passed: workspace 24 tests and legacy Provider panel 25 tests completed without React state-update warnings; the combined workspace, unified Profile workbench and legacy Provider panel regression passed 3 files / 63 tests. Desktop typecheck and affected ESLint passed. This batch is test-only and does not reduce the remaining Codex migration or Electron E2E scope.
+
+- CC Switch Provider/credential reference audit (2026-07-28; prepares
+  `TEST-AGENT-049`, `T-AGENT-084` and `T-AGENT-079`):
+  - Updated the existing sibling source checkout
+    `/Users/lingxiaotian/Programs/public/cc-switch` to stable tag `v3.18.0`,
+    commit `606e7bbe75db7f8285f7a3be006fac22b5d22796`; the checkout is clean and
+    intentionally remains outside PromptHub build-facing `public/`
+    directories.
+  - Audited the MIT license plus Provider SQLite schema, explicit import
+    commands, Provider service/live projection and Codex atomic-write/restore
+    paths. PromptHub will reuse the consent/import/switch/rollback workflow
+    while retaining safeStorage-based main-only credential custody; CC
+    Switch's credential-bearing SQLite `settings_config` is not adopted.
+  - Recorded the user-confirmed source-of-truth migration: unified Profile DB
+    is the PromptHub management owner, native config is the runtime projection,
+    and legacy `codex-provider:*` custody is migrated only after a redacted
+    review and explicit consent with batch compensation.
+  - The audit itself changed no production code or user data. The subsequent
+    consent-gated migration batch below implements only credential ownership
+    transfer; full Codex activation and renderer convergence remain open under
+    `T-AGENT-084`.
+
+- Codex legacy Provider credential migration batch (2026-07-28;
+  `FR-AGENT-024`, `DES-AGENT-020`, partial `TEST-AGENT-049` and
+  `T-AGENT-084`):
+  - Added a main-only source inspection service for legacy PromptHub-managed,
+    environment-variable and native-inline Codex credentials. The renderer
+    receives a redacted preview with readiness state and native-file digest,
+    never credential values or secret references.
+  - Added explicit selection and consent UI in the legacy Codex Provider panel.
+    No source is selected by default; choosing **Later** performs no write.
+    Confirmation creates unified Provider Profiles and transfers eligible
+    credentials to `agent-provider:<profileId>` custody without rewriting
+    `config.toml`.
+  - Migration rejects stale native digests, duplicate or malformed provider
+    ids, unsupported Agents and concurrent runs. Existing unified profiles are
+    reused idempotently. Batch failure restores cleared legacy credentials and
+    deletes created profiles and their new secret references.
+  - Added two typed IPC channels and preload methods with bounded input
+    validation and stable public errors. All seven locales include the review,
+    consent, source and rollback-safe failure copy.
+  - Focused verification passed at this intermediate checkpoint: migration/service regression 2 files / 90
+    tests; migration IPC and renderer integration 3 files / 33 tests; shared
+    and desktop typechecks passed. The migration service reached 100%
+    statements, lines and functions with 99.08% branches; the IPC boundary
+    reached 100% across all metrics; the consent UI reached 100% statements
+    and lines with 97.22% branches and 90% functions. Full Codex activation,
+    removal of the legacy renderer and Electron consent-flow E2E remain open,
+    so `TEST-AGENT-049` and `T-AGENT-084` were not marked complete in this
+    intermediate batch. The subsequent Codex convergence batch completed both.
+
+- Codex unified Provider activation and renderer convergence (2026-07-28;
+  `FR-AGENT-024`, `DES-AGENT-020`, `TEST-AGENT-025`,
+  `TEST-AGENT-049`, `T-AGENT-079`, `T-AGENT-084`; advances
+  `T-AGENT-015` and `T-AGENT-018`):
+  - Added the full Codex Provider Profile adapter for
+    `inspect/import/plan/apply/verify/rollback`. The Profile DB and model
+    mappings are the management source; `config.toml` is a reviewed runtime
+    projection. Provider id, endpoint, protocol, model mapping, stale digest
+    and secret readiness all fail closed before a write.
+  - Codex activation resolves write-only credentials in main, creates a
+    safeStorage-encrypted device-local backup, preserves unrelated TOML and
+    `auth.json`, writes atomically with mode `0600`, re-reads the native state,
+    and restores the prior content after write or semantic verification
+    failure. The renderer receives readiness and stable result codes only.
+  - Routed Codex through the same `AgentProviderProfileWorkbench` as other
+    supported Agents and removed the legacy Provider form/panel plus its
+    renderer IPC/preload mutation surface. The remaining legacy main service is
+    migration inspection only, so no second Provider management source remains.
+  - Corrected two production-only regressions found by the Electron gate:
+    Agent renderer value imports now target pure `packages/core` submodules
+    instead of evaluating the Node/database barrel, and Plugin targets whose
+    optional installed inventory is absent now project an empty list instead of
+    crashing the selected Agent workspace.
+  - Verification passed: focused Codex adapter/encrypted-backup coverage is
+    17 tests with 100% statements, branches, functions and lines; the combined
+    migration, adapter, workbench, workspace, overview and asset regression is
+    9 files / 114 tests. Shared, core and desktop typechecks, affected ESLint,
+    desktop production build, renderer runtime-boundary scan and
+    `git diff --check` passed. The spec index and governance suites also passed.
+  - The isolated Electron E2E passed after exercising the real consent flow for
+    a native-inline legacy credential, confirming migration leaves
+    `config.toml` byte-identical, importing a Claude native model into a
+    Profile, creating a write-only Codex Profile, resolving activation fields,
+    writing the selected Provider to temporary native TOML and confirming no
+    secret text appears in the renderer.
+
+- Codex unified Provider connection inventory check (2026-07-28;
+  `FR-AGENT-011`, `DES-AGENT-009`, `TEST-AGENT-012`,
+  `TEST-AGENT-026`, `T-AGENT-018`; leaves the explicit streaming subset under
+  `T-AGENT-085`):
+  - Added an optional adapter `testConnection` contract and a unified
+    activation-service orchestration path. It resolves the stored Profile and
+    model mapping without inspecting or mutating native Agent configuration.
+  - The Codex adapter resolves managed or environment credentials only in
+    main, then delegates to a bounded OpenAI-compatible `/models` probe. Public
+    endpoints require HTTPS; explicit loopback HTTP is allowed; other
+    private/internal targets, redirects and malformed endpoints fail closed.
+    DNS is validated and pinned for direct requests. The request has zero
+    retries, an 8-second total timeout and a 1 MiB streamed response limit.
+  - Added a typed IPC/preload method and a Codex-only connection section in the
+    unified Provider Profile detail. Results expose only status, endpoint
+    origin, model inventory/presence and elapsed time. Credentials, response
+    bodies, query values and native paths do not cross IPC.
+  - Verification passed: core activation 22 tests; desktop connectivity,
+    Codex adapter, IPC, store and workbench 52 tests; locale regression 7
+    tests; shared/core/desktop typechecks; affected desktop ESLint; production
+    build; and the real Electron Agent workspace E2E with a temporary local
+    OpenAI-compatible server. The connectivity helper and changed core
+    activation service each reached 100% statements, branches, functions and
+    lines. All temporary servers and Electron processes were closed.
+  - The check proves endpoint/auth/model inventory only. It does not perform a
+    billable inference or claim first-token latency; that explicit streaming
+    workflow remains open under `T-AGENT-085`.
+
+- Codex explicit streaming Provider model test (2026-07-28;
+  `FR-AGENT-011`, `DES-AGENT-009`, `TEST-AGENT-012`, `T-AGENT-085`):
+  - Added the optional adapter/core model-test contract and typed
+    IPC/preload/store boundary. The main process resolves the stored Profile,
+    primary mapping and managed or environment credential without reading or
+    mutating the active native Agent configuration.
+  - Added bounded OpenAI Responses and Chat Completions SSE probes using one
+    fixed minimal prompt and an 8-token output cap. The request reuses the
+    connection check's HTTPS/loopback, DNS pinning and SSRF policy, follows no
+    redirects, applies 5-second connect, 8-second first-token and 20-second
+    total deadlines, retries at most once, and limits responses to 256 KiB.
+  - Results record model, status, total latency, first-token latency, retry
+    count and reported token usage. Only a control-character-free,
+    credential-redacted 256-character preview crosses IPC. Authentication,
+    quota, rate limit, missing model, HTTP, protocol, network, timeout,
+    cancellation and size failures remain structured stable categories.
+  - The unified Profile workbench keeps connection inventory and model
+    inference as separate actions. Model inference requires explicit quota
+    confirmation, offers cancellation, and displays only the redacted result.
+    Selecting another Profile, clearing the workflow or destroying the
+    renderer aborts the main-owned request and removes its scoped controller.
+  - Verification passed: the focused desktop regression passed 8 files / 77
+    tests and core activation passed 24 tests; locale regression covered all 7
+    locales. Shared, core and desktop typechecks, affected ESLint, Prettier and
+    the desktop production build passed. The model-test helper reached 100%
+    statements, branches, functions and lines. The isolated Electron Agent
+    workspace E2E used a temporary local OpenAI-compatible SSE server to
+    create a write-only Profile, confirm quota use, run the real streaming
+    request, render the result and verify the credential never appeared in the
+    renderer. All temporary servers and Electron processes were closed.
+
 - Scalable session browsing batch (2026-07-22, `FR-AGENT-032`, `DES-AGENT-028`):
   - Main/preload contract: `agent:sessions:list` now accepts a validated non-negative `offset`; all supported filesystem and native adapters return the requested bounded window. Native CLIs without cursors receive only `offset + limit + 1` as the discovery bound.
   - Renderer: History loads 50 metadata records initially, advances source offsets independently of filtered/invalid rows, deduplicates appended pages by stable session id, and isolates off-screen list/transcript layout with `content-visibility: auto`. Transcript reads remain lazy and capped at 2 MiB / 64 KiB per entry; only 80 entries are mounted initially and later batches require explicit expansion.
   - Empty state: a successful empty native source is explained separately from adapter errors and unsupported Agents. OpenCode remains owned by `opencode session list`; plugin caches and sidecars are not treated as conversations.
   - Verification: `TEST-AGENT-040` passed with offset validation, OpenCode native pagination, 50-of-120 metadata paging, deduplicated append, stale-page isolation during Agent changes, 80-of-120 progressive transcript mounting, truncation notice, off-screen rendering isolation, and localized native-empty guidance. The focused service/IPC/component suite passed 23 tests; the major-adapter/overview/workspace regression passed 35 tests. A read-only current-machine probe over 294 Codex sessions loaded 50 metadata rows in 170.5 ms and the second 50-row page in 252 ms. Focused coverage across the session service/adapters/panel reached 93.71% statements, 93.02% functions, and 67.84% branches; new paging/empty/stale-result conditions have direct tests, while remaining gaps are legacy parser and injected filesystem-error variants. Desktop typecheck, targeted lint, formatting, `git diff --check`, and the desktop production build passed. Live Electron inspection confirmed the current OpenCode native source displays `0 / 0` with the explicit empty explanation rather than a parser error.
 
+- Claude Code unified Provider activation and native Anthropic tests
+  (2026-07-28; `FR-AGENT-003` to `FR-AGENT-007`,
+  `FR-AGENT-011`, `DES-AGENT-004` to `DES-AGENT-006`,
+  `DES-AGENT-009`, `T-AGENT-017`):
+  - Added the complete Claude `settings.json` adapter for
+    inspect/import/plan/apply/verify/rollback. It preserves unrelated JSONC,
+    rejects symlinks, oversized or malformed input, detects concurrent native
+    edits, stores encrypted device-local backups, writes atomically, re-reads
+    semantic state and restores the exact prior file after failure.
+  - Unified Profiles support direct Anthropic and Anthropic-compatible
+    gateways with an explicit `ANTHROPIC_API_KEY` or
+    `ANTHROPIC_AUTH_TOKEN` credential kind. The secret is resolved only in
+    main. Platform-native Claude authentication removes PromptHub-managed
+    direct-provider env keys and never reads or rewrites Claude-owned
+    `.credentials.json`. Bedrock, Vertex and Foundry imports remain read-only.
+  - Added bounded native Anthropic `/v1/models` and `/v1/messages` SSE probes
+    with HTTPS/explicit-loopback policy, DNS validation/pinning, no redirects,
+    8-second connection inventory timeout, 5-second connect, 8-second
+    first-token and 20-second total model deadlines, one bounded retry,
+    cancellation, response caps and credential-redacted previews. IP TLS
+    endpoints omit invalid SNI server names.
+  - The Provider form defaults Claude to Anthropic Messages, exposes the two
+    credential kinds in all seven locales and clears a managed credential when
+    the user switches to platform-native auth.
+  - Verification passed: the focused adapter and Anthropic probe suites passed
+    23 tests and both production modules reached 100% statement, branch,
+    function and line coverage. The combined Provider/activation/UI/locale
+    regression passed 8 files / 85 tests. Desktop typecheck, affected ESLint,
+    Prettier, file-size checks, production build and `git diff --check` passed.
+    The isolated Agent workspace Electron E2E passed (1 test) and closed its
+    temporary app/server resources. No process, server or temporary directory
+    remains. The full desktop suite and release-quick remain open for the
+    larger active change.
+
+- Gemini CLI enterprise/paid Provider activation
+  (2026-07-28; `FR-AGENT-011`, `DES-AGENT-009`,
+  `TEST-AGENT-050`, `T-AGENT-019`):
+  - Verified the public `google-gemini/gemini-cli` implementation at commit
+    `bef6119500b0238ad84f6396d2a6cabda9991554`. PromptHub uses the documented
+    `settings.json`, `.env`, auth-type and Gemini API contracts as evidence; no
+    upstream source is copied or vendored.
+  - Added a complete two-file adapter for inspect/import/plan/apply/verify/
+    rollback. JSONC edits are limited to `model.name` and
+    `security.auth.selectedType`; environment edits are limited to
+    `GEMINI_API_KEY` and `GOOGLE_GEMINI_BASE_URL`. One encrypted bundle protects
+    both files, both are checked for concurrent changes, and any partial write
+    or failed reread restores the exact prior pair.
+  - Paid API profiles use the main-only `GEMINI_API_KEY` secret and native
+    `/v1beta/models` plus `streamGenerateContent` probes. OAuth personal,
+    Vertex AI, compute ADC, Cloud Shell and gateway authentication stay
+    platform-owned: PromptHub preserves those modes and neither borrows nor
+    tests their credentials.
+  - The unified Profile form now defaults Gemini to `google-gemini` /
+    `google-generative-ai`, clears managed credentials when switching to a
+    native mode, records the selected native auth type and exposes the verified
+    protocol label in all seven locales. Gemini remains an enterprise/paid
+    compatibility target; Antigravity remains the consumer entry.
+  - Focused verification passed 9 files / 100 tests after adversarial and
+    locale expansion. The two new production modules reached 100% statements
+    and lines; the adapter also reached 100% functions and 99%+ branches,
+    while the network probe reached 96%+ functions and 94%+ branches.
+    Remaining uncovered probe branches are transport-injection/default-TLS
+    variants, not untested security or rollback decisions. Desktop typecheck,
+    affected ESLint, Prettier, production build and isolated Agent workspace
+    Electron E2E passed; Playwright closed its app process. The repository-wide
+    file-size gate remains red only for concurrent Skill work:
+    `SkillStore.tsx` and `SkillStoreDetail.tsx` are each 1,536 lines. Neither
+    file belongs to this Provider batch; all Gemini source and test files are
+    below the 1,000-line default.
+
+- Kimi Code unified Provider activation
+  (2026-07-28; `FR-AGENT-003` to `FR-AGENT-006`,
+  `FR-AGENT-011`, `DES-AGENT-033`, `TEST-AGENT-051`,
+  `T-AGENT-086`):
+  - Verified the official Kimi Code provider, config-file and environment
+    contracts and the public `MoonshotAI/kimi-cli` implementation at revision
+    `4a550effdfcb29a25a5d325bf935296cc50cd417`. PromptHub reuses the documented
+    TOML contract and existing bounded Provider probes; no upstream source was
+    copied or vendored.
+  - Added a full `config.toml` adapter for inspect/import/plan/apply/verify/
+    rollback/test. Direct `kimi`, `openai`, `openai_responses`, `anthropic` and
+    `google-genai` profiles project one provider entry, one model entry and
+    `default_model`, while preserving unrelated semantic TOML fields. Provider
+    id, model alias, upstream model id and context size are validated before a
+    main-only secret is resolved.
+  - Kimi `/login`, provider OAuth, provider environment, custom credential
+    headers and Vertex ADC remain platform-owned and read-only. Inspect/import,
+    snapshots, renderer state, logs and ordinary exports expose only redacted
+    ownership/status metadata. A regression test found and closed a boundary
+    where `vertexai` could otherwise be treated as a direct plaintext-key
+    profile.
+  - Activation rejects malformed, oversized, symlinked, path-unsafe and
+    concurrently modified files. It writes atomically, stores the exact prior
+    bytes in an encrypted device-local backup, optionally runs bounded
+    `kimi doctor config <path>`, re-reads the native state, and restores the
+    original bytes or file absence after validation, verification or later
+    rollback failure.
+  - Direct connection and explicit streaming model tests dispatch to the
+    existing OpenAI-compatible, Anthropic and Google Gemini probes. Kimi adds
+    no proxy, OAuth pool, protocol converter or separate network policy.
+  - The unified Profile form now exposes the official provider types, provider
+    id, model alias, upstream model id and context limit. Direct keys remain
+    write-only; platform-native authentication hides the credential input. New
+    labels and validation errors are present in all seven locales.
+  - Focused Kimi verification passed 3 files / 27 tests. The three new
+    main-process modules reached 100% statements, branches, functions and
+    lines. The broader Provider/Profile/activation/UI/i18n regression passed
+    26 files / 253 tests. Shared and desktop typechecks, affected desktop
+    ESLint, Prettier, the desktop production build, and the isolated Agent
+    workspace Electron E2E passed; Playwright closed its Electron process and
+    test server.
+  - All Kimi source and test files remain below the 1,000-line default. The
+    repository-wide file-size gate is still blocked only by concurrent Skill
+    work: `SkillStore.tsx` and `SkillStoreDetail.tsx` are each 1,536 lines and
+    were not modified by this Provider batch.
+
+- Qwen Code v4 Provider activation
+  (2026-07-28; `FR-AGENT-003` to `FR-AGENT-006`,
+  `FR-AGENT-011`, `DES-AGENT-034`, `TEST-AGENT-052`,
+  `T-AGENT-087`):
+  - Verified the current `settings.json`, `.env`, authentication, custom
+    provider and model-provider contracts against the official
+    `QwenLM/qwen-code` documentation and public implementation at revision
+    `bfd4c8e519f96ca5bdc6cdd9f7a635b9345dbf11`. PromptHub reuses only the
+    documented contract and its existing Provider infrastructure; no upstream
+    source was copied or vendored.
+  - Added inspect/import/plan/apply/verify/rollback/test for the current
+    `$version: 4` bare-array `modelProviders` shape. Direct OpenAI-compatible,
+    Anthropic and Google GenAI Profiles preserve provider/model extension
+    fields, map custom ids through `providerProtocol`, select the same provider
+    and model through native settings, and project the managed credential only
+    to the user `.env`.
+  - Vertex ADC, legacy Qwen OAuth, automatic Alibaba Coding Plan ownership and
+    credentials not owned by a Profile remain platform-owned and read-only.
+    Deprecated inline auth fields are removed during direct activation;
+    plaintext credentials never cross IPC, enter snapshots, logs or ordinary
+    exports.
+  - Settings and environment files share one bounded digest and one encrypted
+    exact-byte backup. The adapter rejects malformed, oversized, symlinked,
+    path-unsafe and concurrently modified inputs, uses atomic replacements,
+    restores both files after partial failure, and semantically re-reads both
+    files before reporting success.
+  - Extracted one main-process protocol probe dispatcher for the existing
+    OpenAI chat/responses, Anthropic Messages and Google GenAI probes, plus a
+    shared comment-preserving dotenv codec. Gemini now reuses the same dotenv
+    boundary instead of maintaining a duplicate parser.
+  - The unified Profile form exposes the Qwen provider id, official protocol,
+    environment-key name, endpoint, primary model and write-only credential.
+    Platform-native entries hide credential and endpoint controls. Validation
+    and labels are present in all seven locales.
+  - Focused Qwen/Kimi/Gemini verification passed 7 files / 83 tests; the full
+    Provider/Profile/activation regression passed 27 files / 316 tests. Qwen
+    adapter, shared probe dispatcher and dotenv codec reached 100% statements,
+    branches, functions and lines. Desktop/shared typechecks, affected ESLint,
+    Prettier, spec governance, production build and the real Agent workspace
+    Electron E2E passed. The E2E created and activated a Qwen direct Profile,
+    verified the native v4 provider/model projection, preserved an unrelated
+    `.env` entry, observed the managed credential only on disk, and confirmed
+    it never appeared in renderer text. Playwright closed its Electron process.
+  - The Qwen adapter is 990 lines and every new or changed Qwen source/test
+    file remains below the 1,500-line batch limit. Existing concurrent Skill
+    files above that preference were not modified by this Provider batch.
+
+- OpenCode current-v1 Provider activation
+  (2026-07-28; `FR-AGENT-003` to `FR-AGENT-006`,
+  `FR-AGENT-011`, `DES-AGENT-035`, `TEST-AGENT-053`,
+  `T-AGENT-088`):
+  - Verified the stable singular `provider` / `model` / `small_model` config
+    contract and XDG data-root `auth.json` ownership against official OpenCode
+    docs, installed OpenCode `1.18.3`, and public `anomalyco/opencode`
+    revision `017a5977d2107092007623e507fc5c6eb337d3b2`. No upstream source was
+    copied or vendored.
+  - Added a dedicated adapter and pure native codec for
+    inspect/import/plan/apply/verify/rollback/test. The adapter follows
+    `opencode.jsonc`, `opencode.json`, `config.json` precedence, preserves
+    JSONC comments and unrelated provider/model fields, and writes only the
+    documented `@ai-sdk/openai-compatible` Chat or `@ai-sdk/openai` Responses
+    custom-provider shapes.
+  - Direct activation stores the PromptHub-owned API key only as
+    `{ type: "api", key }` in main-resolved XDG `auth.json`. Native API,
+    OAuth, well-known, environment, file, cloud and unsupported-package
+    credentials are imported as redacted read-only state and are never
+    borrowed for connectivity tests. Existing authorization headers and the
+    experimental plural-v2 `providers` contract fail closed.
+  - Config and auth share one bounded digest and one encrypted exact-byte
+    backup. Both files reject malformed, oversized and symlink inputs; stale
+    or partially failed writes restore the exact prior pair before returning
+    an error. Semantic reread verifies provider/package/endpoint/model/auth
+    identity without exposing credential values.
+  - The unified Profile form now offers the two supported runtime packages
+    without asking users to type npm package names. It requires provider id,
+    endpoint, primary model and a write-only credential; imported native
+    Profiles remain visibly read-only. The capability inventory now marks
+    OpenCode Provider & Model supported, while the generic model-only fallback
+    remains available only to platforms without a full adapter.
+  - Focused OpenCode/Profile verification passed 6 files / 70 tests; the
+    complete Provider regression passed 30 files / 426 tests. The OpenCode
+    adapter and native codec reached 100% statements, branches, functions and
+    lines. Desktop/shared typechecks, affected ESLint, Prettier, production
+    build and the real Agent workspace Electron E2E passed. The E2E activated
+    a direct Profile against isolated config and XDG auth fixtures, preserved
+    native OAuth and unrelated config state, and confirmed neither native nor
+    managed secrets appeared in renderer text. Playwright closed its Electron
+    process and local provider server.
+  - The adapter is 821 lines, the codec is 240 lines, and every new OpenCode
+    source or test file remains below the 1,500-line batch limit.
+
+- GitHub Copilot CLI current asset and model-only boundary
+  (2026-07-28; `FR-AGENT-036`, `DES-AGENT-036`, `TEST-AGENT-054`,
+  `T-AGENT-089`):
+  - Re-audited the installed Copilot CLI `1.0.48` and GitHub's public CLI
+    configuration references. PromptHub reuses documented contracts only; no
+    upstream source is copied or vendored.
+  - The canonical registry now resolves `COPILOT_HOME` before `~/.copilot` and
+    exposes the documented user-owned Skills, SubAgents, MCP, Rules, installed
+    Plugin discovery, and `settings.json` paths. Platform-managed auth,
+    `config.json`, permissions, sessions, MCP secrets, logs, and Plugin
+    registration metadata remain excluded.
+  - Added a JSONC-preserving model-only adapter for the top-level
+    `settings.json` `model` preference. It supports missing-file creation,
+    bounded input validation, symlink rejection, exact backup, stale-plan
+    rejection, atomic replacement, semantic reread, and rollback while
+    preserving comments and unrelated fields.
+  - Copilot BYOK remains environment-only, so endpoint, secret, and non-native
+    protocol Profiles fail closed. The capability is intentionally `partial`,
+    not a full Provider adapter.
+  - Focused verification passed 6 files / 69 tests after documentation
+    convergence. Desktop and shared typechecks, the shared contract suite,
+    affected desktop ESLint, targeted Prettier, spec governance, and
+    `git diff --check` passed.
+  - The isolated Copilot suite passed 5 tests under V8 coverage. The shared
+    legacy `agent-model-config.ts` and generic Provider adapter remain below
+    whole-file 100% because the report includes unrelated platform branches;
+    the Copilot root, JSONC model, missing, malformed, oversized, symlink,
+    stale-plan, apply, verify, rollback, and environment-only BYOK decisions
+    are all exercised by `TEST-AGENT-054` and the common adapter suite.
+
+- GitHub Copilot native Plugin installation truth gate
+  (2026-07-28; `FR-AGENT-037`, `DES-AGENT-037`, `TEST-AGENT-055`,
+  `T-AGENT-090`):
+  - Corrected the target matrix so Copilot remains visible as an Adapter but is
+    disabled until PromptHub has a real `copilot plugin install` integration.
+    Direct distribution now fails in the shared target gate before path
+    resolution or filesystem mutation.
+  - Preserved read-only discovery of valid packages under the documented
+    `installed-plugins/<name>/<version>/` tree. PromptHub no longer equates a
+    generated `plugin.json` or a copied directory with native registration.
+  - The focused Plugin regression passed 5 files / 57 tests, including
+    fail-before-write and installed-package discovery. Desktop/core typechecks
+    and affected test ESLint passed. The existing PluginManager component suite
+    still emits pre-existing React `act(...)` warnings despite passing; this
+    batch did not modify that component or suppress the warning.
+
+- Cursor current asset and native Plugin truth boundary
+  (2026-07-28; `FR-AGENT-038`, `DES-AGENT-038`, `TEST-AGENT-056`,
+  `T-AGENT-091`):
+  - Corrected the canonical Cursor user asset projection to
+    `~/.cursor/skills`, `~/.cursor/agents`, `~/.cursor/mcp.json`, and
+    `~/.cursor/plugins`. Removed the fabricated `plugins/cache/prompthub`
+    target and did not invent a global Rules or generic Config Files path.
+  - Kept Provider, Sessions, Usage, and Maintenance planned. Private Cursor
+    settings databases, authentication, transcripts, checkpoints, snapshots,
+    caches, logs, and runtime state remain excluded.
+  - Preserved bounded read-only discovery of Marketplace-cache packages and
+    local test packages. Cursor remains visible as a Plugin adapter but direct
+    distribution now fails before target resolution or filesystem mutation;
+    package generation is no longer presented as native installation. The
+    corrected Plugin root is scanned once rather than through two equivalent
+    recursive roots.
+  - Test-first verification demonstrated four failures against the prior
+    behavior. After implementation, the focused suite passed 5 files / 63
+    tests. Shared, core, and desktop typechecks passed; affected desktop test
+    ESLint, targeted Prettier, spec governance, and `git diff --check` passed.
+    Shared/core have no package-level ESLint configuration, so their two
+    constant-only source edits were checked by TypeScript and Prettier rather
+    than a fabricated lint invocation.
+
+- Cherry Studio current database and Skill boundary
+  (2026-07-28; `FR-AGENT-039`, `DES-AGENT-039`, `TEST-AGENT-057`,
+  `T-AGENT-092`):
+  - Re-audited Cherry Studio's public path registry and Skill service at
+    upstream revision `9785c652a6d477fcf3ab86719f4bdd1e57736bbd`.
+    PromptHub references the public contract only; no upstream source is copied
+    or vendored.
+  - The existing database-backed Skill adapter now probes current
+    `Data/cherrystudio.sqlite` before compatible `Data/agent.db`,
+    `Data/agents.db`, and root `cherrystudio.sqlite` databases. This prevents a
+    compatible obsolete database from receiving a write while Cherry Studio
+    reads the current v2 database.
+  - The canonical registry now uses the cross-platform `Data/Skills` relative
+    path and the verified macOS system/user Applications launch allowlist.
+    Provider, MCP, Rules, Config, Plugins, Sessions, Usage, Maintenance,
+    credentials, IndexedDB, Local Storage, caches, and runtime state remain
+    unclaimed. The composite Plugin target stays visible and disabled.
+  - The red phase reproduced three prior mismatches: current database
+    precedence, the Windows-only Skill separator, and missing launch support.
+    After the minimal implementation, the focused suite passed 4 files / 55
+    tests. Shared and desktop typechecks, affected desktop ESLint, targeted
+    Prettier, spec governance, and `git diff --check` passed.
+  - Database selection performs at most four existence checks and one schema
+    probe. No unbounded scan, network request, migration, or new persistent
+    state was introduced. Existing cross-filesystem transaction hardening
+    remains a separate Skills-owner task rather than an inflated capability
+    claim.
+
+- Windsurf public transcript boundary
+  (2026-07-28; `FR-AGENT-040`, `DES-AGENT-040`, `TEST-AGENT-058`,
+  `T-AGENT-093`):
+  - Added a bounded, read-only adapter for the documented opt-in
+    `~/.windsurf/transcripts/<trajectory_id>.jsonl` export. It exposes only
+    `user_input.user_response` and `planner_response.response`; code actions,
+    commands, tool payloads, file contents, and unknown future steps remain
+    hidden.
+  - Kept resume, project, model, mutation, deletion, and lifecycle metadata
+    unavailable. The Sessions capability is `partial`, while proprietary
+    `~/.codeium/windsurf/cascade/*.pb` state remains excluded.
+  - The red phase produced four expected failures against the unsupported
+    adapter/capability baseline. After implementation, the focused suite passed
+    4 files / 44 tests, including malformed JSONL, pagination, sorting,
+    truncation, 64 KiB entry bounds, invalid identifiers, symlinks, source
+    immutability, capability truth, and fail-before-write composite Plugin
+    distribution.
+  - Scanning is limited to the direct transcript directory and 2,000 files;
+    metadata reads at most 256 KiB per selected page entry, details at most
+    2 MiB, and no network call, database write, runtime mutation, or copied
+    upstream source was introduced.
+
+- Provider Profile capability-driven test controls
+  (`FR-AGENT-003`, `FR-AGENT-011`, `TEST-AGENT-046`):
+  - Removed the renderer-only `codex` gate around connection and streaming
+    model tests. Every Agent whose canonical Provider capability is
+    `supported` now exposes the same tested workflow; partial, planned, and
+    unsupported adapters remain hidden without a second platform allowlist.
+  - A Gemini regression reproduced the missing control before the fix and the
+    focused Provider Profile component suite passed 1 file / 22 tests after
+    implementation. Credentials still resolve only in the main process and
+    connection results remain redacted.
+
+- Kiro current CLI boundary
+  (2026-07-28; `FR-AGENT-041`, `DES-AGENT-041`, `TEST-AGENT-059`,
+  `T-AGENT-094`):
+  - Added `KIRO_HOME` root resolution, global Skills/Agents/MCP paths,
+    `settings/cli.json`, and the verified macOS launch allowlist. Kiro's
+    multi-file `steering/` directory is not misrepresented as a single editable
+    Rules file.
+  - Added a partial model-only adapter for `chat.defaultModel`. It reports
+    credentials as platform-managed, exposes no endpoint, preserves JSONC
+    comments and unrelated fields, and reuses backup, atomic replacement,
+    concurrent-change detection, reread verification, and rollback. The common
+    Provider activation adapter now preserves the nested settings path during
+    rollback.
+  - Added a partial, read-only CLI session adapter for locally verified
+    `sessions/cli` metadata and JSONL. Only Prompt/Assistant `text` content is
+    visible; thinking, tool-use, tool-result, runtime state, unknown records,
+    and malformed data are hidden or counted. Resume and mutation remain
+    unavailable.
+  - Disabled direct Kiro Plugin distribution before resolver or filesystem
+    access. Existing Power package structures remain available for bounded
+    read-only inventory; native import/registration is a separate future
+    adapter.
+  - PromptHub reuses documented behavior and verified runtime contracts only;
+    no Kiro or CC Switch source file is copied, vendored, or loaded at runtime.
+  - The red phase reproduced nine missing capability/path/adapter gates plus the
+    native Power distribution misclaim. The expanded focused suite passes 8
+    files / 93 tests; shared, core, and desktop typechecks, affected desktop
+    ESLint, targeted Prettier, spec governance, and `git diff --check` pass.
+    The new Kiro session adapter has measured 100% lines, statements, functions,
+    and branches. New Kiro model and nested rollback branches are covered in
+    the focused tests; the legacy shared model-config module is not claimed as
+    whole-file 100% coverage.
+
+- Grok Build Provider and Model adapter
+  (2026-07-29; `FR-AGENT-042`, `DES-AGENT-042`, `TEST-AGENT-060`,
+  `T-AGENT-095`):
+  - Added the verified `$GROK_HOME` or `~/.grok` root and a dedicated adapter
+    for the public `[models].default` plus `[model.<alias>]` contract in
+    `config.toml`. The adapter maps `chat_completions`, `responses`, and
+    `messages` to PromptHub's existing direct-provider protocols while
+    preserving unrelated TOML fields.
+  - Custom Provider Profiles are environment-owned: PromptHub stores only the
+    environment-variable name and resolves its value inside bounded
+    main-process probes. Native session/OIDC, `XAI_API_KEY`, inline
+    `api_key`, and sensitive headers remain Grok-owned; imported inline
+    credentials are redacted and read-only.
+  - Activation requires an encrypted full-config backup, expected-digest race
+    check, atomic replacement, semantic reread verification, and exact rollback
+    or new-file removal after failure. Bounded reads reject malformed,
+    oversized, symlinked, and out-of-root configuration.
+  - The Provider Profile form exposes provider alias, environment key,
+    endpoint, model alias, upstream model, and context window without a
+    managed-secret control. Native inline-auth imports cannot be edited or
+    saved through the form.
+  - The red phase failed because the Grok adapter module did not exist. After
+    implementation, the focused adapter and boundary suite passes 2 files / 16
+    tests and measured 100% statements, branches, functions, and lines for the
+    new adapter. The implementation uses public contract evidence only; no
+    Grok Build, CC Switch, or other upstream source is copied or vendored.
+  - Final targeted verification passed the Grok adapter, boundary, Profile UI,
+    capability inventory, shared model-provider dispatch, activation IPC,
+    Provider Profile workbench, and Agent workspace suites: 8 files / 92 tests.
+    Shared, core, and desktop typechecks, affected desktop ESLint, Prettier,
+    spec governance, and `git diff --check` passed. The repository file-size
+    gate remains red only for the pre-existing unrelated
+    `SkillStore.tsx` and `SkillStoreDetail.tsx` files at 1,536 lines each;
+    this Grok batch's new source and test files remain below 1,000 lines.
+
+- Governance and evidence reconciliation audit (2026-07-29):
+  - Re-audited all `FR-AGENT-*`, `DES-AGENT-*`, `TEST-AGENT-*` and
+    `T-AGENT-*` definitions and references. No true duplicate definition or
+    orphan reference remains; proposal and implementation both remain in the
+    `implement` / `in-progress` phase.
+  - Corrected the review snapshot so Grok Provider matches its verified adapter
+    and reframed the historical Codex checkpoints as intermediate state rather
+    than current blockers.
+  - Narrowed `T-AGENT-084` traceability to the Codex migration and convergence
+    behavior it actually completes. The cross-platform secret, import,
+    filesystem rollback and tray umbrella tests remain open until every
+    applicable platform and the tray path pass them.
+  - Current Kilo documentation proves a split-root contract:
+    `~/.kilo/skills/` for global Skills and `~/.config/kilo/` for global
+    config, Agents and instructions. PromptHub's existing
+    `~/.kilo/rules/global.md` projection is stale; it is recorded as a design
+    conflict and is not promoted to supported capability. Correcting the
+    shared path contract requires an explicit compatibility decision before
+    production code changes.
+  - The CC Switch checkout remains a research reference outside PromptHub's
+    build and public assets. PromptHub reuses only public protocol and workflow
+    evidence and keeps independently implemented storage, secret and rollback
+    boundaries.
+
+- Amp current asset and MCP boundary
+  (2026-07-29; `FR-AGENT-043`, `DES-AGENT-043`, `TEST-AGENT-061`,
+  `T-AGENT-096`):
+  - Replaced the stale Windows `%APPDATA%\amp` primary root with the current
+    cross-platform `%USERPROFILE%\.config\amp` contract while retaining the
+    former path as a read fallback. Unix-like platforms continue to use
+    `~/.config/amp`.
+  - Added user and project MCP targets for `settings.json` and
+    `.amp/settings.json`. Both reuse the owning MCP library and preserve the
+    literal top-level `amp.mcpServers` key, unrelated dotted settings and
+    unmanaged server entries during reconciliation.
+  - Kept Provider explicitly unsupported because Amp does not expose a
+    user-managed provider projection. Hosted account, model, thread and usage
+    data remain Amp-owned. Raw settings editing and direct TypeScript Plugin
+    copying remain disabled because public file locations alone do not prove a
+    safe install/activation/rollback contract.
+  - The initial focused test failed four assertions for the stale root,
+    missing presets, incorrect MCP key and Provider overclaim. The completed
+    focused suite passes 5 files / 46 tests; shared, core and desktop
+    typechecks, affected ESLint, Prettier, spec governance and
+    `git diff --check` pass.
+  - The full desktop suite completed 4,186 of 4,188 tests. Its two failures are
+    outside this Amp batch: the Skill UI integration expects the old one-arg
+    installer call, and the Plugin path test expects `plugins` while the
+    current worktree returns `installed-plugins`. The repository file-size
+    gate also remains red only for the unrelated pre-existing
+    `SkillStore.tsx` and `SkillStoreDetail.tsx` files at 1,536 lines each.
+    Amp's new test file is 208 lines; no Amp-touched source exceeds the project
+    limits.
+
+- Provider Profile credential replacement compensation
+  (2026-07-29; `FR-AGENT-044`, `DES-AGENT-044`, `TEST-AGENT-062`,
+  `T-AGENT-097`):
+  - Audited PromptHub's Provider Profile transaction against the public
+    CC Switch `v3.18.0` Provider write and compensation workflow. The checkout
+    remains at `/Users/lingxiaotian/Programs/public/cc-switch`, outside every
+    PromptHub application asset directory; no source file, runtime dependency
+    or bundled public asset was copied.
+  - Reproduced a cross-store failure where SQLite had committed the stable
+    replacement secret reference, cleanup of the legacy reference failed, and
+    the former compensation restored secret state without restoring the
+    Profile and mappings. The resulting Profile could point at a cleared
+    replacement secret.
+  - Changed compensation to restore the prior Profile and exact mappings first
+    with the committed optimistic timestamp. Only after SQLite restoration
+    succeeds does it clear the replacement reference and restore the prior
+    secret. When SQLite compensation itself fails, the replacement secret is
+    retained because the current durable Profile still requires it, and the
+    service returns the stable
+    `AGENT_PROVIDER_PROFILE_UPDATE_ROLLBACK_FAILED` result.
+  - Test-first red verification failed both new scenarios: no compensating DB
+    update was attempted after legacy cleanup failure, and a DB compensation
+    failure returned the generic update error. The completed Profile
+    credential suite passes 5 files / 48 tests, including a real SQLite
+    integration that asserts the exact durable Profile, mappings and secret
+    state. The changed service has 100% statement, branch, function and line
+    coverage. Desktop typecheck, affected ESLint, Prettier, spec governance and
+    `git diff --check` pass.
+  - The full desktop suite passes 4,189 of 4,191 tests across 454 passing test
+    files. Its two failures are unrelated existing-worktree expectations: the
+    Skill UI integration still expects the former one-argument installer call,
+    and the Plugin path test expects `plugins` while current implementation
+    returns `installed-plugins`.
+
+- Device-local session metadata persistence foundation
+  (2026-07-29; `FR-AGENT-010`, `DES-AGENT-045`, `TEST-AGENT-063`,
+  `T-AGENT-012`, `T-AGENT-098`):
+  - Added shared source, index, scan, annotation and bounded-list contracts plus
+    `agent_session_sources` and `agent_session_index` SQLite tables. Fresh
+    schema and existing-user startup share the idempotent
+    `agent_session_index_v1` migration and indexed source/status/update query
+    paths.
+  - External transcript files remain platform-owned. The tables contain only
+    bounded redacted metadata, device-local paths, stable scan state and
+    PromptHub-owned tags/note; no transcript body column or remote sync/export
+    projection was added.
+  - Added transactional full and incremental scan commits. Full scans mark
+    unseen rows missing, incremental scans leave them untouched, observed rows
+    update metadata without replacing annotations, and source cursor/result
+    changes commit with the same transaction. Stable scan failures update only
+    the source status. Injected SQLite write failure proves source and session
+    changes roll back together.
+  - The initial red test failed all 8 cases because the DB class, tables and
+    migration marker did not exist. The completed focused suite passes 10
+    tests covering fresh/migrated schema, identity, missing/parse-error,
+    annotation preservation, literal search, 200-row page cap, 10,000-record
+    scan cap, malformed/corrupt input, cascade deletion and failure rollback.
+    The new DB class has 100% statement, branch, function and line coverage.
+    Expanded migration regression passes 3 files / 28 tests; shared, DB and
+    desktop typechecks plus affected ESLint pass.
+  - This batch intentionally does not connect the existing platform session
+    readers to persistence or renderer IPC. That orchestration, incremental
+    adapter cursors, cancellation and 10,000-session end-to-end stress remain
+    under `T-AGENT-022`, `TEST-AGENT-010` and `TEST-AGENT-011`.
+
+- Claude/Gemini opt-in session index orchestration
+  (2026-07-29; `FR-AGENT-010`, `DES-AGENT-046`, `TEST-AGENT-064`,
+  `T-AGENT-099`):
+  - Added one desktop main-process orchestration service between the existing
+    verified Claude/Gemini read-only adapters and `AgentSessionIndexDB`.
+    Merely opening or live-listing Sessions creates no persistent source row;
+    source registration remains an explicit opt-in action.
+  - Full scans enumerate only the verified bounded directory shapes, cap the
+    inventory at 10,000 files, reuse unchanged metadata by path/mtime/size and
+    adapter version, re-digest changed bounded prefixes, isolate malformed
+    files as `parse-error`, and commit source/index state atomically.
+  - Cancellation is checked during enumeration, between records and before
+    commit. A cancelled scan leaves the prior source/index state unchanged.
+    Other failures record one stable source error without deleting the prior
+    inventory. Missing transcripts become metadata-only `missing` rows while
+    PromptHub annotations remain.
+  - Stored titles redact supported key/token/password shapes, previews remain
+    null, and transcript bodies are never persisted. Indexed search uses
+    SQLite pagination; detail reads always return to the live adapter, so a
+    missing source cannot be reconstructed from cached metadata.
+  - The initial red test could not load the absent orchestration service. The
+    completed real-SQLite fixture suite passes 11 tests and covers explicit
+    opt-in/disable, idle live fallback, Claude/Gemini scan, unchanged reuse,
+    adapter-version reparse, multi-page prior state, malformed files,
+    redaction, cancellation, stable failure, source missing, annotation
+    retention, search and live detail. The new orchestration file has 100%
+    statement, branch, function and line coverage; the expanded focused
+    session suite passes 3 files / 32 tests.
+  - Renderer state/progress/cancel IPC is not introduced in this batch. It
+    remains the next UI wiring step under `T-AGENT-022`,
+    `TEST-AGENT-010` and `TEST-AGENT-011`.
+
+- Session index IPC and renderer control
+  (2026-07-29; `FR-AGENT-010`, `FR-AGENT-015`, `DES-AGENT-047`,
+  `TEST-AGENT-065`, `T-AGENT-101`):
+  - Added typed shared, preload and main-process contracts for redacted state,
+    explicit opt-in, refresh, cancellation, progress and indexed search.
+    Renderer-visible state contains no source id, root path, cursor, digest,
+    indexed path, preview or transcript body.
+  - Refresh controllers are scoped by renderer sender id and request id.
+    Duplicate requests fail closed, another renderer cannot cancel the scan,
+    renderer destruction aborts it, and controller/listener state is released
+    in `finally` or component cleanup.
+  - The Sessions sidebar now shows the local-index switch only for verified
+    adapters. Enabling starts the first refresh; enabled sources expose one
+    compact refresh action, active scans show determinate progress and cancel,
+    and a selected-Agent change invalidates late state, progress and list
+    results.
+  - Indexed search is debounced and uses bounded SQLite pagination. Disabled
+    sources preserve the existing live-reader and in-page filter behavior.
+    Transcript detail continues to use the external read-only adapter on
+    demand.
+  - Added all seven locale keys and preload contract coverage. The focused
+    session/index/i18n suite passes 8 files / 54 tests. New IPC, operation
+    factory and renderer hook modules each have 100% statement, branch,
+    function and line coverage. Shared and desktop typechecks, affected
+    ESLint and Prettier pass. The existing panel suite still emits its prior
+    React `act(...)` warnings while passing; no warning is suppressed.
+
+- Verified Provider Profile tray quick switching
+  (2026-07-29; `FR-AGENT-012`, `DES-AGENT-048`, `TEST-AGENT-013`,
+  `TEST-AGENT-066`, `T-AGENT-024`, `T-AGENT-102`):
+  - Extracted one main-process Provider runtime that owns the Profile service,
+    secure secret store, adapter registry, activation service and tray
+    projection. IPC and tray now receive the same runtime instance, including
+    after database handler rebind; no active-provider record was added.
+  - The tray groups active Profiles by the fixed adapter registry. A latest
+    verified snapshot is shown as current only after a fresh native preview
+    still returns the same platform, Profile, native digest and no-review
+    `preserve` plan. External changes, read errors and stale snapshots remove
+    the current marker instead of trusting cached state.
+  - Selecting an alternate Profile uses the existing preview, a single native
+    localized confirmation, and the same activation/backup/verify/rollback
+    service as the workspace. Conflicts and blocked plans open the Agent
+    workspace; cancelled and already-active plans produce no extra dialog;
+    failures expose only a stable localized result.
+  - Provider menu refresh is bounded by the fixed adapter set and uses a
+    generation token so late loads after a newer refresh or tray destruction
+    cannot replace the menu. A refresh failure retains the prior menu and logs
+    no underlying error text.
+  - Test-first verification initially failed because the tray service,
+    runtime, provider submenu, confirmation handler and async reload contract
+    did not exist. The completed focused suite passes 6 files / 47 tests,
+    and the dedicated five-file coverage run passes 42 tests with 100%
+    statement, branch, function and line coverage for the new runtime,
+    projection, handler, tray controller and tray menu. Desktop typecheck and
+    affected ESLint, desktop production build, spec governance and
+    `git diff --check` pass. Every new file is below 400 lines. The file-size
+    gate now accepts the touched legacy main entry at its 1,974-line baseline;
+    it remains red only for the unrelated existing `SkillStore.tsx` and
+    `SkillStoreDetail.tsx` files at 1,536 lines each. No commit, push, tag or
+    release action was run.
+
+- Read-only Agent CLI diagnostics
+  (2026-07-29; `FR-AGENT-014`, `DES-AGENT-049`, `TEST-AGENT-067`,
+  `T-AGENT-103`):
+  - Added one optional CLI descriptor to the canonical platform registry and
+    derived maintenance capability from it. Claude Code, Codex, Kimi Code,
+    Qwen Code, OpenCode and Oh My Pi now have evidence-backed version
+    diagnostics; all other built-ins remain `planned`, and custom Agents do
+    not accept renderer-provided executable paths.
+  - Replaced shell-based native command lookup with a bounded executable-file
+    search. It checks at most 256 deduplicated PATH, package-manager and
+    standard directories, honors Windows `PATHEXT`, canonicalizes the first
+    accessible path and never launches an Agent merely to resolve it.
+  - Added a main-owned diagnostic service and typed IPC/preload contract.
+    Version execution uses fixed registry arguments without a shell, a
+    5-second timeout and 64 KiB per captured stream. Renderer results contain
+    only status, canonical path, one 160-character normalized version line,
+    coarse install source, timestamp and stable error code; raw output,
+    process errors and environment values stay in main.
+  - Added a localized read-only dialog under the existing overflow menu.
+    Unsupported platforms no longer show a false actionable entry; supported
+    diagnostics expose retry, installed/not-installed/unhealthy states and no
+    install or update action. All seven locales are present, stale async
+    responses are ignored and custom Agents fail closed.
+  - Test-first verification initially failed for the absent service, contract,
+    dialog, truthful menu capability and shell-free resolver. The completed
+    focused suite passes 8 files / 92 tests. The dedicated three-file coverage
+    run passes 33 tests with 100% statement, branch, function and line
+    coverage for the diagnostic service, native resolver and dialog. Desktop,
+    core and shared typechecks, affected desktop ESLint, production build,
+    spec governance and `git diff --check` pass. Root ESLint remains
+    unavailable for shared/core because the repository has no root
+    `eslint.config.*`. The file-size gate remains red only for the unrelated
+    existing `SkillStore.tsx` and `SkillStoreDetail.tsx` at 1,536 lines each.
+    No commit, push, tag or release action was run.
+
+- OpenClaw read-only CLI evidence expansion
+  (2026-07-29; `FR-AGENT-014`, `DES-AGENT-049`, `TEST-AGENT-068`,
+  `T-AGENT-104`):
+  - Confirmed from current official OpenClaw CLI, install and update
+    documentation that `openclaw --version` is a fast read-only global flag.
+    The richer setup, update, repair, Gateway, Plugin, Skill and session
+    commands are not exposed by this batch.
+  - Added the exact executable, fixed argument and evidence identifier only to
+    the canonical platform registry. The existing bounded main-process
+    resolver, diagnostic IPC and localized dialog are reused without another
+    executable or maintenance state store.
+  - The initial capability test failed because OpenClaw had no CLI descriptor.
+    The completed focused suite passes 4 files / 68 tests and keeps
+    maintenance `partial`; install/update remains under the open
+    `T-AGENT-029` and `TEST-AGENT-016` lifecycle gate.
+  - The current development machine has no `openclaw` executable on `PATH`, so
+    the real-machine smoke reaches the expected not-installed boundary rather
+    than a version result. No installation or network mutation was attempted.
+
+- Shared verified-current Provider workbench projection
+  (2026-07-29; `FR-AGENT-012`, `DES-AGENT-050`, `TEST-AGENT-069`,
+  `T-AGENT-105`):
+  - Added one public current-state contract with only platform id, status,
+    current Profile id and check timestamp. The main-process tray projection
+    remains the sole owner of the latest-snapshot plus fresh-native-preview
+    verification; renderer code does not derive active state from selection
+    or activation history.
+  - Added a validated, redacted IPC/preload query and wired it into the
+    existing Provider store. Profile lists and current state load together,
+    stale platform responses are discarded, and current-state read failures
+    do not hide usable Profiles.
+  - The workbench shows a current marker and disables redundant activation
+    only for `verified`. Missing snapshot, external native change, stale
+    Profile reference and unavailable native inspection never claim a current
+    Profile. Successful activation, deletion or archival of the current
+    Profile triggers a fresh main-process query.
+  - The interaction borrows the discoverable current-card concept from CC
+    Switch v3.18.0 `ProviderList.tsx` and `ProviderCard.tsx`, while retaining
+    PromptHub's stricter native verification, secret separation and existing
+    React/Tailwind architecture. No upstream runtime code, assets, database,
+    Tauri/Rust layer or bundled checkout was introduced.
+  - Test-first verification initially failed for the absent service method,
+    IPC/preload contract, store state and visible current marker. The completed
+    focused suite passes 5 files / 53 tests. The new IPC has 100% statement,
+    branch, function and line coverage, while the shared tray projection has
+    100% statement/line/function and 98.21% branch coverage; its only
+    uncovered branch is the pre-existing empty or unnamed registry-group
+    skip. Shared and desktop typechecks,
+    affected desktop ESLint and Prettier pass. New files remain below 1,000
+    lines; touched production files remain below 700 lines. No commit, push,
+    tag or release action was run.
+
+- Session index cancellation and 10,000-record boundary
+  (2026-07-29; `FR-AGENT-047`, `DES-AGENT-053`, `TEST-AGENT-072`,
+  `T-AGENT-108`; completes `T-AGENT-022`):
+  - Added a main-process abort guard before prior-index paging and immediately
+    after adapter scan completion. Pre-cancelled refreshes never invoke an
+    adapter; cancellation that wins after scan but before commit writes no
+    rows, cursor, timestamp, status or failure state.
+  - The guard creates one stable `AbortError` instead of propagating arbitrary
+    `AbortSignal.reason` values. Existing non-abort scan failures continue to
+    record only `AGENT_SESSION_SCAN_FAILED` and preserve committed rows.
+  - Added a real SQLite scale regression that commits exactly 10,000 metadata
+    rows in one transaction, traverses all 50 bounded 200-row pages, verifies
+    total/has-more and Unicode literal search, and confirms the schema has no
+    content/body/transcript column. Ordinary backup/export remains covered by
+    the existing Agent runtime exclusion test and does not query session
+    details.
+  - Test-first verification initially failed both cancellation cases: a
+    pre-cancelled request still called `scanIndex`, and a late cancellation
+    committed its scan result. After the barrier fix, the service suite passes
+    13 tests and the scale suite passes its 10,000-row case in 1.30 seconds.
+    The combined session-index, IPC, renderer hook and backup-exclusion gate
+    passes 7 files / 45 tests. The changed session-index service has 100%
+    statement, branch, function and line coverage. Desktop and database
+    typechecks, affected desktop ESLint, Prettier, `pnpm spec:test` and
+    `git diff --check` pass. The size gate reports only three unrelated known
+    files between 1,500 and 2,000 lines; this batch does not expand them. No
+    commit, push, tag or release action was run. `TEST-AGENT-010` and
+    `TEST-AGENT-011` remain open for their other cross-adapter, virtualized UI
+    and privacy cases.
+
+- Agent and Provider list UI resilience
+  (2026-07-29; `NFR-AGENT-004`, `NFR-AGENT-006`, `DES-AGENT-057`,
+  `TEST-AGENT-076`, `T-AGENT-112`; advances `T-AGENT-025`):
+  - Reused the repository's existing `@tanstack/react-virtual` dependency for
+    the enabled built-in/custom Agent sidebar and Provider Profile master
+    list. Production renders only the viewport plus six overscan rows with
+    stable Agent/Profile ids, fixed row estimates and explicit total-position
+    semantics; no second collection, cache or persistent state was added.
+  - Kept filtering as one `O(n)` pass while DOM work remains proportional to
+    the visible range. Regression fixtures cover 60 Agents and 120 Provider
+    Profiles, search, selection, native-verified current state and accessible
+    list positions.
+  - Long Agent identity and root text remains truncated inside `min-w-0`
+    containers. The launch button uses the stable localized Open label while
+    retaining the full Agent name in its accessible label; header actions wrap
+    and Provider master width contracts at narrow desktop sizes.
+  - Test-first verification initially failed because neither list invoked the
+    virtualizer and the launch action repeated the unbounded Agent name. The
+    completed focused suite passes 3 files / 54 tests. Desktop typecheck and
+    affected ESLint pass. The existing JSDOM virtualizer shim deliberately
+    renders every row, so the test also asserts the exact production count,
+    key, estimate and overscan configuration instead of claiming layout
+    measurement in JSDOM. Agent asset 1,000-row bounding remains open under
+    `T-AGENT-025`; this batch does not claim that aggregate gate complete.
+
+- Bounded Agent asset pages
+  (2026-07-29; `NFR-AGENT-004`, `NFR-AGENT-006`, `DES-AGENT-058`,
+  `TEST-AGENT-077`, `T-AGENT-113`; completes `T-AGENT-025`):
+  - Added one renderer-only bounded-page primitive. Skill cards keep the
+    existing responsive grid in 60-item pages; MCP, Rules and Plugin compact
+    inventories use 100-item pages. Search and Skill filters still evaluate
+    the complete owning-domain result before slicing.
+  - Page state is ephemeral and resets when the owning result, Agent, domain,
+    search or filter changes. Shrinking results clamp to a valid page. Native
+    Previous/Next buttons use existing seven-locale commands, expose disabled
+    boundaries and announce the numeric range.
+  - The renderer never copies asset state. Detail, open-folder, import,
+    install, uninstall and refresh actions continue to receive the original
+    owning-domain object.
+  - Test-first verification initially rendered all 1,000 MCP rows and all
+    1,000 Skill cards. The completed gate proves 1,000-row MCP, Rules and
+    Plugin inventories, 1,000 Skill cards, page boundaries, next/previous,
+    source/domain/search/filter reset, clamp behavior and an exact page-two
+    open-folder action. The focused suite passes 2 files / 20 tests. The new
+    pager has 100% statement, branch, function and line coverage. Desktop
+    typecheck and affected ESLint pass.
+
+- Focused Provider and Session verification evidence is kept in
+  `verification-evidence.md` so this implementation record stays bounded.
+- Credential mutations are serialized per secret file and use unique atomic
+  staging paths; the regression and provenance details are recorded in
+  `verification-evidence.md` and `cc-switch-coverage.md`.
+- OpenCode now has the first confirmed CLI update slice
+  (`DES-AGENT-059`, `TEST-AGENT-078`, `T-AGENT-114`): a detached main-owned
+  plan, explicit command review, sender-bound one-shot apply, post-update
+  verification and exact-version recovery attempt. Detailed evidence is in
+  `maintenance-cli-designs.md` and `verification-evidence.md`; install and
+  other CLI update lifecycles remain open.
+- `TEST-AGENT-017` is complete: the shared Agent shell now recovers keyboard
+  focus when an Agent change disables the selected tab, without stealing focus
+  outside the tab list, and all seven locale `agents` trees are structurally
+  identical and non-empty. Aggregate evidence is in `verification-evidence.md`.
+- The focused Agent workspace Electron E2E now navigates the virtualized Agent
+  inventory through the same search flow users have, rather than assuming every
+  offscreen row exists in the DOM; the production build and E2E pass.
+- The current full desktop gate now passes 482 files / 4,380 tests. Its first
+  run exposed and the follow-up corrected two stale assertions for Copilot's
+  read-only `installed-plugins/` inventory and the explicit disabled safety
+  scan policy for local Skill sources; no production behavior was changed.
+- Provider Profile deep links now use a main-owned, bounded
+  `prompthub://import` parser and FIFO router. Only version-1, non-secret,
+  evidence-backed Provider Profile payloads reach the renderer; unsupported
+  objects and literal credentials fail closed. The existing Profile service is
+  called only after preview confirmation, creates one inactive Profile, and
+  performs no native activation. CC Switch remains a pinned MIT workflow
+  reference outside PromptHub and contributes no runtime, asset, or copied
+  subsystem. Full evidence is in `verification-evidence.md`.
+
 - Source-of-truth boundary: documented; Agent identity and assets reuse existing owners.
 - CC Switch parity boundary: documented; product capabilities are phased and risky OAuth/proxy behavior is not copied implicitly.
-- Traceability: provisionally complete for the documented scope.
-- Implementation blockers: secure Provider Profile storage, activation/reconciliation fixtures, persistent session indexing, destructive session actions and deep capability inventory remain open; affected platform tabs are explicitly disabled.
-- Registry/shell/raw config/model/read-only session gate: implemented for this batch, including the first Qwen Code adapters; the active change remains open because Qwen project SubAgent/Commands management, full Qwen Electron E2E, full provider activation, credential projection, config versioning, session retention/delete, backup and tray activation are intentionally not claimed as delivered.
+- Traceability definitions are unique for the completed batches. Aggregate
+  verification and delivery rows that still depend on UI scale, CLI lifecycle,
+  platform breadth or final release gates remain explicitly open.
+- Qwen user/project SubAgent and Command discovery is complete; detailed
+  delivery and verification evidence is in `qwen-definition-implementation.md`.
+- Qwen deep-page session continuity now keeps at most 256 native metadata rows
+  in process, strips internal paths from list results, and revalidates the
+  selected transcript below `QWEN_RUNTIME_DIR`; focused coverage is 100%.
+- Provider credential editing now requires an explicit keep, replace or remove
+  action and reveals only a newly typed renderer draft. PromptHub retains its
+  existing main-only secure store; CC Switch is interaction evidence only.
+- Remaining implementation blockers are generic fixture/security aggregation,
+  maintenance install plus non-OpenCode update lifecycle, broader Electron E2E
+  coverage and the final release-quick gate.
+  Unsupported platform actions remain disabled with status-specific guidance.
+- Registry, shared shell, allowlisted config, Provider activation, read-only
+  sessions, portable Agent backup/restore and tray Provider switching are
+  implemented. PromptHub intentionally does not edit, delete, synchronize or
+  back up external transcript bodies; destructive session actions are outside
+  this change rather than an unfinished blocker.
+- npm-managed Codex installs now reuse the main-owned CLI lifecycle for
+  reviewed update, same-executable verification and exact-version rollback;
+  unsupported install sources remain read-only diagnostics.
+- npm-managed Qwen Code updates use the same lifecycle with their own canonical
+  package identity; exact evidence is recorded in `verification-evidence.md`.
 
 ## Converge
 
@@ -244,9 +1491,8 @@
 
 ## Follow-Ups
 
-- Confirm the remaining security and phase-boundary decisions in `proposal.md`.
-- Audit current AI credential storage before defining reusable provider connections.
-- Build a capability inventory for every preset platform and collect representative native configs without secrets in priority order.
-- Write failing provider import/reconciliation/rollback tests before production adapters.
+- Collect representative native configs without secrets in priority order and promote only evidence-backed inventory entries from planned/partial.
+- Complete the remaining Electron E2E, fixture/security, CLI lifecycle and
+  release gates before convergence.
 - Keep proxy, failover and OAuth work outside the Phase 1 implementation branch.
 - Run the first live Dream Skin compatibility apply as an explicit manual action before release. The pinned upstream runtime is last verified against Codex desktop `26.707.72221`, while the current development machine runs `26.715.21425`; successful start, landmark verification and restore on that version remain a manual release gate.

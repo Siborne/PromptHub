@@ -7,7 +7,115 @@ first-party source code, or a verified local runtime. PromptHub does not enable 
 adapter from an inferred filename alone. A platform remains visible when a deep
 adapter is unavailable.
 
-Research refreshed on 2026-07-22.
+Research refreshed on 2026-07-29.
+
+## Complete Built-In Capability Inventory
+
+`packages/shared/constants/agent-platform-capabilities.ts` is the
+machine-readable capability projection. It combines explicit deep-adapter
+evidence with paths and launch allowlists derived from the canonical
+`SKILL_PLATFORMS` registry. This table is a review snapshot, not a second
+runtime source.
+
+Status codes: `S` = supported by a verified adapter, `P` = partial/path-level
+support, `D` = planned because protocol evidence or implementation is pending,
+and `N` = unsupported by the current product boundary. A declared path alone
+never upgrades a capability from partial to supported.
+
+| Platform      | Install | Provider | Skills | MCP | Rules | Plugins | Config | Sessions | Usage | Launch | CLI | Backup | Exclusion | Appearance |
+| ------------- | ------- | -------- | ------ | --- | ----- | ------- | ------ | -------- | ----- | ------ | --- | ------ | --------- | ---------- |
+| claude        | P       | S        | P      | P   | P     | P       | P      | S        | S     | S      | P   | P      | P         | N          |
+| copilot       | P       | P        | P      | P   | P     | P       | P      | D        | S     | D      | D   | P      | P         | N          |
+| cursor        | P       | D        | P      | P   | D     | P       | D      | D        | D     | S      | D   | P      | P         | N          |
+| cherry-studio | P       | D        | P      | D   | D     | D       | D      | D        | D     | S      | D   | P      | P         | N          |
+| windsurf      | P       | D        | P      | P   | P     | D       | D      | P        | D     | S      | D   | P      | P         | N          |
+| kiro          | P       | P        | P      | P   | D     | P       | P      | P        | D     | S      | D   | P      | P         | N          |
+| gemini        | P       | S        | P      | P   | P     | P       | P      | S        | S     | D      | D   | P      | P         | N          |
+| antigravity   | P       | D        | P      | P   | P     | P       | D      | D        | S     | S      | D   | P      | P         | N          |
+| trae          | P       | D        | P      | D   | D     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| trae-cn       | P       | D        | P      | D   | D     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| trae-work     | P       | D        | P      | D   | D     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| trae-work-cn  | P       | D        | P      | D   | D     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| opencode      | P       | S        | P      | P   | P     | D       | P      | S        | D     | D      | P   | P      | P         | N          |
+| oh-my-pi      | P       | P        | P      | P   | P     | P       | P      | S        | D     | D      | P   | P      | P         | N          |
+| cline         | P       | D        | P      | P   | D     | D       | P      | D        | D     | D      | D   | P      | P         | N          |
+| codex         | P       | S        | P      | P   | P     | P       | P      | S        | S     | S      | P   | P      | P         | S          |
+| kimi          | P       | S        | P      | P   | P     | P       | P      | S        | S     | D      | P   | P      | P         | N          |
+| reasonix      | P       | D        | P      | P   | D     | D       | P      | D        | D     | D      | D   | P      | P         | N          |
+| augment       | P       | D        | P      | P   | D     | D       | P      | D        | D     | D      | D   | P      | P         | N          |
+| zcode         | P       | D        | P      | P   | P     | D       | P      | D        | D     | D      | D   | P      | P         | N          |
+| grok          | P       | S        | P      | P   | P     | P       | P      | S        | D     | D      | D   | P      | P         | N          |
+| qwen          | P       | S        | P      | P   | P     | P       | P      | S        | D     | D      | P   | P      | P         | N          |
+| kilo          | P       | D        | P      | P   | P     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| amp           | P       | N        | P      | P   | P     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| openclaw      | P       | P        | P      | D   | P     | D       | P      | S        | D     | D      | P   | P      | P         | N          |
+| qclaw         | P       | D        | P      | D   | P     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| qoder         | P       | D        | P      | D   | D     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| qoderwork     | P       | D        | P      | D   | D     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| hermes        | P       | D        | P      | D   | P     | D       | D      | D        | D     | D      | D   | P      | P         | N          |
+| codebuddy     | P       | D        | P      | P   | P     | D       | P      | D        | D     | D      | D   | P      | P         | N          |
+| workbuddy     | P       | D        | P      | P   | D     | D       | P      | D        | D     | D      | D   | P      | P         | N          |
+
+Custom Agents use the same projection but may only derive declared path and
+launch capabilities. PromptHub must not assign them provider, session, usage,
+or appearance support by matching a directory name.
+
+## Kilo Code Split-Root Boundary
+
+Current first-party Kilo Code documentation defines separate ownership roots:
+
+- Skills use `~/.kilo/skills/` globally and `.kilo/skills/` per project.
+- Global configuration, Agents and instructions use `~/.config/kilo/`, including
+  `kilo.jsonc`, `agents/*.md` and `AGENTS.md`.
+- Project configuration may use `kilo.jsonc` or `.kilo/kilo.jsonc`; the
+  `.kilo` form wins when both exist.
+- MCP configuration is the top-level `mcp` field in the selected JSONC config.
+
+PromptHub's current single-root platform projection still maps Kilo Rules to
+`~/.kilo/rules/global.md`. That path is not a current first-party global
+instruction contract and must not be treated as supported evidence. Correcting
+it requires an additive multi-root path contract with an explicit legacy
+compatibility policy; the active implementation therefore keeps Kilo Provider,
+Config and Rules depth planned until that public path decision is approved.
+
+First-party references:
+
+- <https://kilo.ai/docs/code-with-ai/platforms/cli>
+- <https://kilo.ai/docs/getting-started/settings>
+- <https://kilo.ai/docs/customize/skills>
+- <https://kilo.ai/docs/customize/custom-instructions>
+- <https://kilo.ai/docs/customize/custom-rules>
+- <https://kilo.ai/docs/automate/mcp/using-in-kilo-code>
+
+## Amp Current Public Boundary
+
+Amp's current public Owner's Manual now provides stable evidence beyond the
+former login-gated placeholder:
+
+- user settings: `~/.config/amp/settings.json` or `settings.jsonc` on
+  macOS/Linux and `%USERPROFILE%\.config\amp\` on Windows
+- workspace settings: nearest `.amp/settings.json` or `settings.jsonc`
+- Skills precedence: `~/.config/agents/skills/`, `~/.agents/skills/`,
+  `~/.config/amp/skills/`, `.agents/skills/`, then compatibility locations
+- Rules: `~/.config/amp/AGENTS.md`, `~/.config/AGENTS.md` and project/tree
+  `AGENTS.md`
+- MCP: the literal top-level `amp.mcpServers` settings key; workspace servers
+  require native Amp trust approval
+- Plugins: `.amp/plugins/*.ts` per project and
+  `~/.config/amp/plugins/*.ts` per user
+- maintenance: the public CLI documents `amp update`
+
+PromptHub implements only the owning MCP target and existing path-level
+Skills/Rules projection in this batch. Amp's service-owned model modes do not
+provide a user-managed Provider projection, so Provider is explicitly
+unsupported rather than planned. Hosted threads, costs, account state, OAuth,
+workspace-global Plugins and executable Plugin activation remain Amp-owned.
+Raw settings editing, Sessions, Usage, Launch, Maintenance and Plugin
+distribution stay planned until separate safe adapters exist.
+
+First-party reference:
+
+- <https://ampcode.com/manual>
 
 ## Google Product Identity And Asset Boundary
 
@@ -35,6 +143,61 @@ First-party references:
 - <https://antigravity.google/docs/skills>
 - <https://antigravity.google/docs/mcp>
 - <https://antigravity.google/docs/plugins>
+
+## Cursor Asset And Native Plugin Boundary
+
+Cursor's current public and verified runtime contracts support only a bounded
+path-level projection in this batch:
+
+| Domain    | User scope           | Project scope                 | PromptHub policy                                                               |
+| --------- | -------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
+| Skills    | `~/.cursor/skills/`  | `.cursor/skills/`             | Manage through the existing Skills owner; do not infer commands or workflows   |
+| SubAgents | `~/.cursor/agents/`  | `.cursor/agents/`             | Derive from the canonical Agent root; project assets stay project-owned        |
+| MCP       | `~/.cursor/mcp.json` | `.cursor/mcp.json`            | Use the existing MCP owner and native `mcpServers` contract                    |
+| Rules     | Cursor Settings      | `.cursor/rules/`, `AGENTS.md` | No synthetic user global rule file; project Rules stay in the Rules owner      |
+| Plugins   | `~/.cursor/plugins/` | package/project-specific      | Marketplace cache and local packages are read-only discovery; distribution off |
+
+The public Plugin manifest proves package structure, not installation or
+activation. PromptHub therefore disables Cursor distribution until a bounded
+Marketplace or verified local-plugin workflow can preview, confirm, verify
+native loading, and roll back. CLI `--model`, session list/resume, and
+interactive usage exist, but no durable Provider, public transcript schema, or
+programmatic quota contract is verified. Those capabilities remain planned.
+Private settings databases, authentication, checkpoints, snapshots, caches,
+logs, and runtime state are excluded.
+
+First-party references:
+
+- <https://cursor.com/docs/context/rules>
+- <https://cursor.com/docs/context/skills>
+- <https://cursor.com/docs/agent/subagents>
+- <https://cursor.com/docs/reference/plugins>
+- <https://github.com/cursor/plugins>
+- <https://docs.cursor.com/en/cli/overview>
+- <https://docs.cursor.com/en/cli/reference/parameters>
+
+## Windsurf Public Transcript Boundary
+
+Windsurf / Devin Desktop documents an opt-in transcript hook that writes
+`~/.windsurf/transcripts/<trajectory_id>.jsonl`. PromptHub treats this export
+as a sensitive, read-only compatibility surface rather than as the canonical
+Cascade session store.
+
+The adapter exposes only user responses and planner responses. It ignores code
+actions, commands, tool arguments and results, file contents, and unknown step
+types. It applies bounded file, entry, scan, pagination, identifier, and
+symlink controls. Because the public export has no verified resume, deletion,
+project, model, or lifecycle contract, Sessions is `partial`; proprietary
+`~/.codeium/windsurf/cascade/*.pb` state remains excluded.
+
+First-party references:
+
+- <https://docs.devin.ai/desktop/cascade/hooks>
+- <https://docs.devin.ai/desktop/cascade/skills>
+- <https://docs.devin.ai/desktop/cascade/workflows>
+- <https://docs.devin.ai/desktop/cascade/mcp>
+- <https://docs.devin.ai/desktop/cascade/memories>
+- <https://docs.devin.ai/desktop/cascade/agents-md>
 
 ## Qwen Code Product And Asset Boundary
 
@@ -76,16 +239,17 @@ First-party references:
 
 ## Provider And Model Configuration
 
-| Platform    | Native configuration                                                                                                                                               | Supported management direction                                                                                                                              | Credential boundary                                                                                                       |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code | `~/.claude/settings.json`; model fields include `model`, `availableModels`, `modelOverrides`, and provider environment values                                      | Structured model/default-model editing; provider projection through a redacted plan; preserve unrelated settings                                            | OAuth remains platform-owned. API keys and tokens must not enter renderer payloads or ordinary PromptHub JSON             |
-| Codex CLI   | `~/.codex/config.toml`; `model`, `model_provider`, `model_providers`, `profiles`, `model_reasoning_effort`                                                         | Structured TOML inspection, profile/model selection, and previewed activation with backup/verify/rollback                                                   | Preserve Codex auth/keyring ownership. PromptHub-owned secrets use encrypted secret references                            |
-| Kimi Code   | Current `KIMI_CODE_HOME` / `~/.kimi-code/config.toml`; `default_model`, `models`, and `providers`; legacy `KIMI_SHARE_DIR` / `~/.kimi` is fallback-only            | Inspect and update the non-secret default-model projection with backup, atomic replace, semantic reread, rollback, and `kimi doctor config` when available  | Literal `api_key`, authorization headers, `credentials/`, and token-bearing provider values never enter renderer payloads |
-| Qwen Code   | `QWEN_HOME` / `~/.qwen/settings.json`; project `.qwen/settings.json`; `modelProviders`, `security.auth.selectedType`, `model.name`, and `env`                      | Redacted inspection first; later structured user/project editing must respect settings precedence and preserve unrelated fields                             | Provider keys, expanded `env`, auth state, and token files stay main-only and are excluded from backup/sync               |
-| Gemini CLI  | `~/.gemini/settings.json`; enterprise/paid-API compatibility only after the 2026-06-18 consumer cutoff; `model.name`, `modelConfigs`, `security.auth.selectedType` | Preserve structured inspection/editing for supported enterprise users; direct Free/Pro/Ultra users to Antigravity instead of claiming consumer availability | Google login, ADC, and service-account credentials stay platform-owned. API keys are sensitive secret references          |
-| OpenCode    | `~/.config/opencode/opencode.json` or `opencode.jsonc`; `model`, `small_model`, and `provider`                                                                     | Structured model/provider editing; model catalog through `opencode models`; use native auth commands when credentials must change                           | `~/.local/share/opencode/auth.json` is an authentication artifact and is never exposed as a raw editable config file      |
-| OpenClaw    | `~/.openclaw/openclaw.json`; `agents.defaults.model`, fallbacks, allowlist, and `models.providers`                                                                 | Prefer `openclaw models status/list/set` and `openclaw config` commands over direct mutation; support aliases and fallbacks after the base adapter          | Native auth profiles and SecretRef markers remain platform-owned. Status may expose readiness but not literal secrets     |
-| Cline       | Provider/model state is owned by Cline storage; current first-party source includes task-scoped settings and provider settings services                            | Keep Provider & Model partial until the current VS Code/CLI storage contract and migration path are fixture-tested                                          | VS Code secrets and Cline credential storage must not be copied into PromptHub                                            |
+| Platform    | Native configuration                                                                                                                                               | Supported management direction                                                                                                                              | Credential boundary                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code | `~/.claude/settings.json`; model fields include `model`, `availableModels`, `modelOverrides`, and provider environment values                                      | Structured model/default-model editing; provider projection through a redacted plan; preserve unrelated settings                                            | OAuth remains platform-owned. API keys and tokens must not enter renderer payloads or ordinary PromptHub JSON                                |
+| Codex CLI   | `~/.codex/config.toml`; `model`, `model_provider`, `model_providers`, `profiles`, `model_reasoning_effort`                                                         | Structured TOML inspection, profile/model selection, and previewed activation with backup/verify/rollback                                                   | Preserve Codex auth/keyring ownership. PromptHub-owned secrets use encrypted secret references                                               |
+| Kimi Code   | Current `KIMI_CODE_HOME` / `~/.kimi-code/config.toml`; `default_model`, `models`, and `providers`; legacy `KIMI_SHARE_DIR` / `~/.kimi` is fallback-only            | Full Profile inspect/import/preview/activate/verify/rollback for verified direct protocols; native validation when available                                | Literal `api_key` is projected only after confirmation and encrypted for rollback; OAuth, custom headers and credentials stay platform-owned |
+| Qwen Code   | `QWEN_HOME` / `~/.qwen/settings.json`; project `.qwen/settings.json`; current v4 `modelProviders`, `model.name`, and user `.env`                                   | Full user-scope Profile inspect/import/preview/activate/verify/rollback for verified direct protocols; preserve unrelated JSONC and dotenv entries          | Native OAuth/ADC/Coding Plan and non-Profile credential sources stay read-only; renderer receives no secret value                            |
+| Gemini CLI  | `~/.gemini/settings.json`; enterprise/paid-API compatibility only after the 2026-06-18 consumer cutoff; `model.name`, `modelConfigs`, `security.auth.selectedType` | Preserve structured inspection/editing for supported enterprise users; direct Free/Pro/Ultra users to Antigravity instead of claiming consumer availability | Google login, ADC, and service-account credentials stay platform-owned. API keys are sensitive secret references                             |
+| OpenCode    | `~/.config/opencode/opencode.json` or `opencode.jsonc`; `model`, `small_model`, and `provider`                                                                     | Structured model/provider editing; model catalog through `opencode models`; use native auth commands when credentials must change                           | `~/.local/share/opencode/auth.json` is an authentication artifact and is never exposed as a raw editable config file                         |
+| Copilot CLI | `COPILOT_HOME` / `~/.copilot/settings.json`; top-level `model`                                                                                                     | JSONC-preserving model-only inspect/update with backup, atomic replace, semantic reread, and rollback; direct endpoint/secret Profiles fail closed          | Native auth and `config.json` remain platform-owned; BYOK credentials and endpoints are process-environment-only                             |
+| OpenClaw    | `~/.openclaw/openclaw.json`; `agents.defaults.model`, fallbacks, allowlist, and `models.providers`                                                                 | Prefer `openclaw models status/list/set` and `openclaw config` commands over direct mutation; support aliases and fallbacks after the base adapter          | Native auth profiles and SecretRef markers remain platform-owned. Status may expose readiness but not literal secrets                        |
+| Cline       | Provider/model state is owned by Cline storage; current first-party source includes task-scoped settings and provider settings services                            | Keep Provider & Model partial until the current VS Code/CLI storage contract and migration path are fixture-tested                                          | VS Code secrets and Cline credential storage must not be copied into PromptHub                                                               |
 
 ### First-Party References
 
@@ -108,6 +272,10 @@ First-party references:
   <https://opencode.ai/docs/providers>,
   <https://dev.opencode.ai/docs/config/>, and
   <https://dev.opencode.ai/docs/cli/>
+- GitHub Copilot CLI configuration directory and commands:
+  <https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference>
+  and
+  <https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference>
 - OpenClaw models and providers:
   <https://docs.openclaw.ai/cli/models>,
   <https://docs.openclaw.ai/concepts/model-providers>, and
@@ -164,6 +332,7 @@ Quota safety rules:
 | Kimi Code         | Current root `session_index.jsonl`; `sessions/<workDirKey>/<sessionId>/state.json`; transcript `agents/main/wire.jsonl`                           | Resume with `kimi --session <id>`                                                                     | Index-first bounded metadata reads, canonical-path containment, lazy transcript detail, malformed-row isolation, and no transcript mutation                                          |
 | Qwen Code         | `QWEN_RUNTIME_DIR` or `QWEN_HOME` runtime root; per-project chats and runtime sidecars                                                            | `qwen sessions list --json` plus native resume/export surfaces                                        | Native CLI first with timeout/output cap, bounded metadata page, no recursive filesystem scan, and no transcript persistence in PromptHub                                            |
 | OpenCode          | `~/.local/share/opencode/`; project storage contains session/message data                                                                         | `opencode session list --format json`, `session delete`, `export --sanitize`, resume with `--session` | Native CLI adapter. Use sanitized export for detail and never read `auth.json`                                                                                                       |
+| Copilot CLI       | `<COPILOT_HOME>/session-state/` plus platform-managed `session-store.db`                                                                          | `copilot --resume=<id>` and native session management                                                 | No PromptHub adapter yet. Any future reader must be bounded and read-only; PromptHub must not modify, migrate, back up, or synchronize native session state                          |
 | OpenClaw          | `~/.openclaw/agents/<agentId>/sessions/sessions.json` and per-session JSONL; newer stores may be SQLite-backed                                    | Bounded JSON session list, tail, cleanup, compact, and trajectory export                              | Native CLI/RPC adapter. Prefer dry-run for maintenance and platform-managed cleanup over raw file deletion                                                                           |
 | Cline             | Host global storage `tasks/<taskId>/`; files include `api_conversation_history.json`, `ui_messages.json`, `task_metadata.json`, and task settings | Native history and task deletion UI                                                                   | Adapter remains partial until host storage roots and CLI/VS Code variants are normalized and tested                                                                                  |
 
@@ -185,19 +354,23 @@ Quota safety rules:
 ### Implemented Baseline
 
 - Non-secret model inspection and default-model updates are enabled for Claude
-  Code, Codex CLI, Kimi Code, Gemini CLI, OpenCode, and OpenClaw. JSON/JSONC
-  writes preserve unrelated fields; Codex and Kimi TOML writes create a backup
-  and surface the possible formatting change. Kimi additionally runs its native
-  config doctor when available.
+  Code, Codex, Kimi Code, Gemini CLI, OpenCode, OpenClaw, Qwen Code, and Oh My
+  Pi. Codex additionally has a verified Provider Profile adapter; the other
+  seven remain partial model-config adapters. JSON/JSONC writes preserve
+  unrelated fields; Codex and Kimi TOML writes create a backup and surface the
+  possible formatting change. Kimi additionally runs its native config doctor
+  when available.
 - Provider endpoints returned to the renderer remove user info, query strings,
   and fragments. Literal keys and tokens are never returned.
 - Read-only session browse, local search, bounded detail, and resume-command
-  copy are enabled for Claude Code, Gemini CLI, Kimi Code, and OpenCode.
+  copy are enabled for Claude Code, Codex, Gemini CLI, Grok Build, Kimi Code,
+  OpenCode, OpenClaw, Qwen Code, and Oh My Pi.
 - Claude and Gemini file adapters cap scanned files, metadata bytes, detail
   bytes, and entry text. OpenCode uses bounded native JSON commands and
   sanitized export instead of scanning its multi-gigabyte data root.
-- Codex, OpenClaw, Cline, and other session tabs remain disabled until their
-  index or native command adapters pass representative fixture and scale tests.
+- Cline and all other session capabilities marked planned remain disabled until
+  their index or native command adapters pass representative fixture, security,
+  and scale tests.
 
 ### First-Party References
 
@@ -223,6 +396,30 @@ Quota safety rules:
   <https://github.com/openai/codex/issues/22004>
 - Cline task storage source:
   <https://github.com/cline/cline/blob/main/apps/vscode/src/core/storage/disk.ts>
+
+## Maintenance CLI Evidence
+
+| Platform    | Official update surface                                   | Exact recovery evidence                                  | Current PromptHub policy                                                                           |
+| ----------- | --------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| OpenCode    | `opencode upgrade`                                        | `opencode upgrade v<version>`                            | Confirmed plan/review/apply/verify/rollback update; install remains disabled                       |
+| Claude Code | `claude update`                                           | No exact-version rollback contract in the reviewed docs  | Read-only diagnostic                                                                               |
+| Codex       | npm and Homebrew installation/update paths                | npm accepts exact `@openai/codex@<version>` restoration  | npm/Node version-manager installs support confirmed update; all other sources stay diagnostic-only |
+| Qwen Code   | npm, standalone binary and Homebrew installation surfaces | No one cross-source exact rollback contract was verified | Read-only diagnostic until each source has its own verified apply and recovery contract            |
+
+Primary references:
+
+- OpenCode CLI: <https://opencode.ai/docs/cli/>
+- Claude Code setup: <https://code.claude.com/docs/en/setup>
+- Codex source and installation: <https://github.com/openai/codex>
+- npm exact package-version installation:
+  <https://docs.npmjs.com/cli/v11/commands/npm-install>
+- Codex mixed-install evidence: <https://github.com/openai/codex/issues/24035>
+- Qwen Code quickstart and troubleshooting:
+  <https://qwenlm.github.io/qwen-code-docs/en/users/quickstart/> and
+  <https://qwenlm.github.io/qwen-code-docs/en/users/support/troubleshooting/>
+
+The table records protocol evidence rather than copied implementation. PromptHub
+does not import another project's updater, package-manager state or UI.
 
 ## Verified Local Scale
 

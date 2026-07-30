@@ -226,6 +226,15 @@ For platforms with verified session formats, the system MUST support opt-in meta
 - And provides `kimi --session <id>` as the resume action
 - And never edits session files or exposes credential files
 
+#### Scenario: Open a Qwen session from a deep metadata page
+
+- Given `qwen sessions list --json` returns more than 200 bounded metadata rows
+- When the user opens a Qwen session that was returned after the first 200 rows
+- Then PromptHub reads that selected session without rescanning every transcript
+- And retains only a bounded in-memory metadata window
+- And revalidates the selected transcript path beneath `QWEN_RUNTIME_DIR` before reading
+- And never persists or copies the transcript body
+
 ### `FR-AGENT-011`: Provider Health And Model Test
 
 The system MUST support a redacted provider connectivity test and, where the protocol permits, a real streaming model test that records selected model, result, latency, time to first token, retry count, and structured error category.
@@ -236,6 +245,81 @@ The system MUST support a redacted provider connectivity test and, where the pro
 - When a model test is run
 - Then the result distinguishes authentication failure from network or model-not-found errors
 - And the credential is never included in logs or renderer error details
+
+#### Scenario: Activate a paid Gemini API profile
+
+- Given a Gemini Provider Profile owns a `GEMINI_API_KEY` through PromptHub secure storage
+- When the user previews and confirms activation
+- Then PromptHub updates only the user-level `model.name`, `security.auth.selectedType`, and managed entries in `~/.gemini/.env`
+- And preserves unrelated JSON settings, comments, environment entries, and Gemini-owned OAuth or ADC credentials
+- And verifies both files before reporting success
+- And restores both files if either write or verification step fails
+
+#### Scenario: Preserve enterprise native authentication
+
+- Given Gemini CLI uses Vertex AI, Google OAuth, compute ADC, Cloud Shell, or a Gemini-owned gateway credential
+- When PromptHub imports or activates a platform-native Profile
+- Then PromptHub records only the non-secret authentication type and model
+- And does not read, copy, overwrite, export, or test the external credential
+- And directs ordinary consumer users to Antigravity instead of presenting Gemini as the current consumer CLI
+
+#### Scenario: Activate a Kimi Code direct provider
+
+- Given a Kimi Code Provider Profile declares an official provider type, provider id, model alias, upstream model id, context limit, endpoint, and PromptHub-owned API key
+- When the user previews and confirms activation
+- Then PromptHub updates only the corresponding `providers`, `models`, and `default_model` entries in the resolved `config.toml`
+- And preserves unrelated top-level settings, provider/model fields, services, hooks, permissions, and other provider/model entries
+- And creates an encrypted backup before the plaintext native credential projection
+- And validates, re-reads, and semantically verifies the complete projection before reporting success
+- And restores the exact prior file when writing, native validation, or verification fails
+
+#### Scenario: Preserve Kimi Code managed authentication
+
+- Given the selected Kimi provider is owned by `/login`, contains an `oauth` reference, uses Vertex ADC, or contains custom credential headers
+- When PromptHub imports or activates the platform-native Profile
+- Then PromptHub exposes only redacted provider/model identity
+- And never reads, copies, exports, overwrites, or network-tests the platform-owned credential
+- And activation may select only an already valid native model entry rather than inventing authentication or provider metadata
+
+#### Scenario: Activate a Qwen Code direct provider model
+
+- Given a Qwen Code Provider Profile declares a provider id, an official protocol, model id, environment key, endpoint, and PromptHub-owned API key
+- When the user previews and confirms activation
+- Then PromptHub writes the current bare-array `modelProviders[providerId]` shape in user `settings.json`
+- And a custom provider id is mapped through `providerProtocol`
+- And `security.auth.selectedType` and `model.name` select the same provider model
+- And the credential is projected only to the user `.env` file under the declared environment key
+- And unrelated settings, provider entries, model entries, environment variables, and unknown fields remain intact
+- And apply uses encrypted backup, digest validation, atomic writes, semantic reread verification, and exact rollback
+- And connection and explicit model tests reuse the existing main-only protocol probes
+
+#### Scenario: Preserve Qwen Code platform-owned authentication
+
+- Given the selected Qwen provider uses Vertex ADC, legacy Qwen OAuth, Alibaba automatic Coding Plan ownership, or a provider model whose credential source is not owned by the Profile
+- When PromptHub imports or previews that native state
+- Then only provider, protocol, model, endpoint, environment-key name, and credential-status metadata may cross IPC
+- And inline environment values, `.env` values, custom headers, deprecated auth credentials, OAuth state, and ADC material remain hidden
+- And PromptHub may select only an already-valid platform-native entry
+- And PromptHub does not test or overwrite the platform-owned credential
+
+#### Scenario: Activate an OpenCode custom direct provider
+
+- Given an OpenCode Provider Profile declares a unique provider id, one of the documented OpenAI-compatible runtime packages, an endpoint, primary and optional small model ids, and a PromptHub-owned API key
+- When the user previews and confirms activation
+- Then PromptHub updates only the selected user `opencode.jsonc`, `opencode.json`, or legacy-precedence `config.json` provider catalog plus `model` and `small_model`
+- And stores the API credential only in the native data-root `auth.json` API entry for the same provider id
+- And does not write plaintext API keys or authorization headers into the config file
+- And preserves unrelated JSONC comments, providers, models, settings, auth entries, and OAuth or well-known credentials
+- And applies one digest, encrypted backup, atomic write, semantic reread, and exact two-file rollback boundary
+
+#### Scenario: Preserve OpenCode native authentication
+
+- Given an existing OpenCode provider uses API, OAuth, well-known, environment, file substitution, cloud identity, or an unsupported runtime package not owned by the Profile
+- When PromptHub imports or previews the current native state
+- Then only the provider/model/endpoint/package and redacted credential-status metadata may cross IPC
+- And PromptHub does not read, copy, export, overwrite, or network-test the native credential
+- And native activation may select only an already-valid current provider/model state
+- And the experimental v2 plural `providers` contract is not written while the stable schema and installed release still use singular `provider`
 
 ### `FR-AGENT-012`: Tray Quick Switching
 
@@ -270,6 +354,39 @@ For supported Agents, the system SHOULD provide CLI installation status, install
 - Then adapter-specific path resolution can still locate it
 - And the UI reports the resolved source rather than only a boolean
 
+#### Scenario: Confirm and verify an OpenCode CLI update
+
+- Given the installed OpenCode CLI is healthy and its current executable and semantic version are known
+- When the user requests an update
+- Then PromptHub shows a short-lived review plan containing the fixed official command and detected install source
+- And no command runs until the same renderer explicitly confirms that plan
+- And apply rechecks the executable and version before running the command without a shell
+- And PromptHub verifies the resulting executable after the command
+- And a failed verification attempts the official exact-version rollback and verifies the restored executable
+- And replayed, expired, foreign-renderer, mutated or stale plans fail without running an update
+- And command output, environment values, credentials and raw errors never cross IPC
+
+#### Scenario: Update an npm-managed Codex CLI
+
+- Given the active Codex executable resolves to an npm or Node version-manager installation
+- And the matching `npm` executable is available through the main-process command resolver
+- When the user reviews and confirms an update
+- Then PromptHub runs only the canonical `npm install -g @openai/codex@latest` argument array without a shell
+- And it rechecks the active Codex executable and version before mutation
+- And it verifies that the same active executable reports a new or unchanged semantic version
+- And a partial failure uses the captured prior version with `npm install -g @openai/codex@<version>` and verifies restoration
+- And Homebrew, standalone, system, unknown or ambiguous installations remain non-updatable because no exact rollback contract is claimed
+
+#### Scenario: Update an npm-managed Qwen Code CLI
+
+- Given the active Qwen Code executable resolves to an npm or Node version-manager installation
+- And the matching `npm` executable is available through the main-process command resolver
+- When the user reviews and confirms an update
+- Then PromptHub runs only `npm install -g @qwen-code/qwen-code@latest` without a shell
+- And it verifies the same active executable after the command
+- And any changed or unhealthy post-state triggers exact-version npm recovery
+- And standalone, Homebrew, source, system and ambiguous installations remain diagnostic-only
+
 ### `FR-AGENT-015`: Usage And Quota Visibility
 
 The system SHOULD support local usage summaries from verified session or request logs and provider quota/balance queries through explicit adapters. Estimates, provider-reported values, and proxy-observed values MUST be labeled separately.
@@ -283,15 +400,20 @@ The system SHOULD support local usage summaries from verified session or request
 
 ### `FR-AGENT-016`: Safe Deep-Link Import
 
-The system MAY support a versioned `prompthub://` import protocol for Provider Profiles and existing asset domains. Every deep-link import MUST show a decoded, redacted preview and require explicit confirmation before persistence or native config changes.
+The system MAY support a versioned `prompthub://` import protocol for Provider
+Profiles and existing asset domains. Each supported object type MUST have its
+own bounded portable contract. A valid non-secret import MUST show a decoded
+preview and require explicit confirmation before persistence or native config
+changes. Unsupported object types and sensitive launch arguments MUST fail
+closed before reaching the renderer.
 
 #### Scenario: Link contains a literal API key
 
 - Given a deep link contains sensitive provider data
 - When PromptHub opens it
-- Then the UI warns that sensitive data is present
-- And the value is masked in previews and logs
-- And no Agent config is changed before confirmation
+- Then the import is rejected with a stable public error
+- And the sensitive value is not forwarded, previewed, logged, or persisted
+- And no Agent Profile or native config is changed
 
 ### `FR-AGENT-017`: Proxy And Failover Are Separate Capabilities
 
@@ -466,7 +588,18 @@ For Claude Code, the system MUST read the platform's own OAuth credential from i
 
 ### `FR-AGENT-024`: Codex Third-Party Provider Management
 
-For Codex, the system MUST support listing, adding, updating, and removing `model_providers.*` entries and their `profiles.*` in `config.toml` through the verified write pipeline (backup, concurrency digest, atomic write, re-read verification, rollback), without modifying `auth.json`, the built-in `openai` provider, or unrelated config keys. Reserved provider ids (`openai`, `ollama`, `lmstudio`) MUST be rejected. Removing the provider referenced by the active `model_provider` MUST be refused unless the default is switched first. Switching the default `model_provider` MUST use the same verified pipeline and MUST be reversible to `openai`.
+For Codex, the unified Provider Profile database MUST be PromptHub's management
+source of truth while `config.toml` remains the Codex runtime projection.
+PromptHub MUST support listing, adding, updating, importing and removing
+third-party Provider Profiles, then projecting `model_providers.*`,
+`profiles.*`, endpoint, protocol, model and credential state through the
+verified write pipeline (backup, concurrency digest, atomic write, re-read
+verification, rollback), without modifying `auth.json`, the built-in `openai`
+provider, or unrelated config keys. Reserved provider ids (`openai`, `ollama`,
+`lmstudio`) MUST be rejected. Removing the Provider referenced by the active
+`model_provider` MUST be refused unless the default is switched first.
+Switching the default `model_provider` MUST use the same verified pipeline and
+MUST be reversible to `openai`.
 
 #### Scenario: Add a third-party provider without touching the subscription
 
@@ -481,6 +614,41 @@ For Codex, the system MUST support listing, adding, updating, and removing `mode
 - When the write completes
 - Then the key is stored in the PromptHub secret store (safeStorage-encrypted, 0600, main-process only) and projected into `experimental_bearer_token`
 - And no IPC response, log, error, backup manifest, or sync payload contains the key value
+
+#### Scenario: Explicit credential editing
+
+- Given a saved Provider Profile reports only available, missing, or none
+- When the user edits its credential
+- Then the user explicitly chooses to keep, replace, or remove it
+- And replace requires a newly typed value while keep and remove never request
+  the stored value
+- And visibility can reveal only the unsaved value typed in the current form
+- And the renderer never receives the existing credential or its secret
+  reference
+
+#### Scenario: Explicitly migrate legacy PromptHub Providers
+
+- Given existing Codex Providers use legacy
+  `codex-provider:<providerId>` custody, an environment variable, or a native
+  inline token
+- When PromptHub discovers them
+- Then it shows a redacted migration review and makes no change before the user
+  confirms selected Provider ids
+- And confirmation creates unified Profile records and
+  `agent-provider:<profileId>` credential ownership without rewriting the
+  native file
+- And legacy secret ownership is removed only after every selected Provider
+  has been copied and verified
+
+#### Scenario: Decline or fail legacy migration
+
+- Given a legacy migration review is open
+- When the user declines, the preview becomes stale, or any Profile/secret
+  operation fails
+- Then native config, legacy Profiles and legacy credentials remain usable
+- And partial unified Profiles and new secret refs are removed
+- And renderer payloads and diagnostics contain no credential value or secret
+  reference
 
 #### Scenario: Refuse to remove the active provider
 
@@ -538,7 +706,7 @@ For Codex, the system MUST read the platform OAuth credential from `~/.codex/aut
 - When usage is requested
 - Then a guided no-credentials or expired state is returned without a retry loop
 
-### `FR-AGENT-027`: Codex Product Identity Preference
+### `FR-AGENT-035`: Codex Product Identity Preference
 
 The built-in `codex` platform MUST use `Codex` as its default user-facing name
 without a `CLI` suffix. PromptHub MUST let the user independently choose the
@@ -670,6 +838,15 @@ guess.
 - And Rules distinguish global `~/.qwen/QWEN.md`, project `QWEN.md`, and local `.qwen/QWEN.local.md`
 - And Extensions remain parent-owned bundles instead of duplicating their child Skills, SubAgents, MCP servers, or commands into PromptHub ownership
 
+#### Scenario: Inspect user and project definitions without taking ownership
+
+- Given Qwen Code user or project SubAgents and Commands exist
+- When the user opens the Qwen-only Definitions surface and selects a known project
+- Then PromptHub resolves the project root from the existing project registry instead of accepting a renderer path
+- And it displays bounded, validated metadata for SubAgents and nested Command namespaces
+- And definition bodies, absolute paths, credential-like metadata, extension-owned children, and unknown frontmatter do not cross the renderer boundary
+- And opening a definition revalidates the relative path, file type, symlink, and containment immediately before the OS action
+
 #### Scenario: Preserve Qwen settings and secret boundaries
 
 - Given `settings.json` contains unrelated options or secret-bearing provider, `env`, or MCP fields
@@ -768,6 +945,489 @@ workspace-only copy of path or identity state.
 - Then the same modal also exposes its name, enabled state, root, and relative asset paths
 - And Save validates and persists through the existing custom Agent action
 - And validation failure leaves the modal open and reports the error without partial state
+
+### `FR-AGENT-033`: Oh My Pi Native Agent Boundary
+
+The Agent workspace MUST expose Oh My Pi as the built-in `oh-my-pi` platform
+without a `CLI` suffix. Its default user root MUST be `~/.omp/agent` and the
+`PI_CODING_AGENT_DIR` environment variable MUST override that root when it is
+an absolute path. PromptHub MUST derive Oh My Pi Skills, Rules, MCP, Plugin and
+allowlisted config paths from that root and MUST preserve project MCP at
+`.omp/mcp.json` as a separate workspace target.
+
+When the Oh My Pi session contract is available, the workspace MUST provide a
+bounded, read-only JSONL history adapter under `<root>/sessions/`. It MUST
+ignore nested subagent transcripts and symlink escapes, cap metadata and
+transcript reads, isolate malformed rows, and expose `omp --resume <id>` rather
+than executing a command or writing platform state. Provider switching, usage,
+credential management and plugin package installation MUST remain independently
+planned until their native contracts have dedicated adapters and tests.
+
+#### Scenario: Manage Oh My Pi assets
+
+- Given Oh My Pi is enabled in the built-in registry
+- When the Agent workspace resolves its root
+- Then it shows the native root, `skills/`, `RULES.md`, `mcp.json`, sibling
+  `../plugins`, and the allowlisted config files
+- And the user can target the global MCP file or project `.omp/mcp.json`
+- And the UI does not invent provider, usage, or plugin-install support
+
+#### Scenario: Browse Oh My Pi history safely
+
+- Given `<root>/sessions/` contains direct project JSONL files with valid
+  session headers
+- When the user opens Oh My Pi History
+- Then PromptHub returns bounded metadata and visible user/assistant/tool rows
+  on demand, with malformed rows counted but not rendered
+- And nested subagent files, symlinks, unsafe ids, and transcript writes are
+  excluded
+- And the selected session exposes `omp --resume <id>` metadata only
+
+### `FR-AGENT-034`: Oh My Pi Non-Secret Model Projection
+
+The Agent workspace MUST inspect the Oh My Pi global `config.yml` (or the
+documented `config.yaml` fallback) and the optional `models.yml` under the
+resolved agent root. It MUST expose only the selected `modelRoles.default`,
+provider/model selectors declared in `models.yml`, sanitized provider endpoint,
+and credential readiness. API keys, headers, OAuth records, and arbitrary model
+metadata MUST NOT cross the main/renderer boundary.
+
+When the user changes the Oh My Pi default model, PromptHub MUST update only
+`modelRoles.default` through the existing backup, atomic-write, re-read and
+rollback pipeline. It MUST preserve unrelated YAML values and comments as far
+as the parser allows, refuse malformed or oversized input, and leave native
+provider authentication and usage ownership to Oh My Pi.
+
+#### Scenario: Inspect Oh My Pi model routing without exposing secrets
+
+- Given `models.yml` declares providers and model ids and `config.yml` selects
+  `modelRoles.default`
+- When the Agent workspace opens Provider & Model
+- Then it shows the selected provider/model, available provider/model selectors,
+  and a sanitized endpoint when present
+- And `apiKey`, headers, OAuth data, and unrelated provider fields are absent
+  from the returned model configuration
+
+#### Scenario: Update and verify the Oh My Pi default model
+
+- Given a valid Oh My Pi `config.yml`
+- When the user saves a new model selector
+- Then only `modelRoles.default` changes, a local backup is created, the file is
+  atomically replaced and re-read, and the verified model configuration is
+  returned
+- And a parse, concurrent-change, or verification failure restores the exact
+  previous file and returns an update error
+
+### `FR-AGENT-036`: GitHub Copilot CLI Native Boundary
+
+PromptHub MUST resolve the current Copilot CLI root from `COPILOT_HOME` or
+`~/.copilot` and MUST use only GitHub's documented user-editable paths for
+Skills, MCP, personal instructions, custom agents, settings, and installed
+Plugin discovery. Automatically managed `config.json`, native authentication,
+session state, permission decisions, OAuth fallback stores, and Plugin metadata
+MUST remain Copilot-owned.
+
+The Provider & Model surface MAY inspect and update only the documented
+top-level `model` in `settings.json` through the shared backup, atomic-write,
+re-read, and rollback pipeline. Copilot BYOK Provider configuration is
+environment-only; PromptHub MUST NOT claim endpoint or credential activation
+without a separately approved launch/runtime environment design.
+
+#### Scenario: Change only the Copilot CLI model preference
+
+- Given a valid JSONC `settings.json` with unrelated user settings and comments
+- When the user activates a platform-native Profile with a different model
+- Then PromptHub changes only the top-level `model`, preserves the other
+  settings and comments, and verifies the re-read value
+- And endpoint/secret Profiles remain blocked because no durable native
+  Provider projection contract exists
+
+### `FR-AGENT-037`: Copilot Plugin Installation Must Be Native
+
+PromptHub MAY discover valid Copilot packages under documented installed
+locations, but MUST NOT treat direct filesystem projection into
+`installed-plugins/` as an installation. Until PromptHub has a bounded native
+`copilot plugin install` adapter with preview, confirmation, verification, and
+rollback, the Copilot Plugin distribution target MUST remain visible but
+disabled with an explicit reason.
+
+#### Scenario: Reject an unregistered Copilot Plugin distribution
+
+- Given a valid PromptHub Plugin bundle and a Copilot installation
+- When the user inspects Agent Plugin targets
+- Then GitHub Copilot is visible as an adapter target but disabled
+- And a direct distribution request fails before resolving or writing a target
+  path
+- And already installed Copilot packages remain available to read-only
+  discovery
+
+### `FR-AGENT-038`: Cursor Current Asset And Native Plugin Truth Boundary
+
+PromptHub MUST resolve Cursor from `~/.cursor` and expose only evidence-backed
+user-owned asset paths: `skills/`, `agents/`, `mcp.json`, and read-only Plugin
+discovery below `plugins/`. It MUST NOT invent a global rule file or generic
+config path for settings-owned user rules, and MUST NOT expose private
+authentication, transcript, checkpoint, snapshot, cache, log, or Electron /
+VS Code database state.
+
+PromptHub MAY discover valid Cursor packages from Marketplace cache and local
+Plugin roots, but MUST NOT treat generated package output or a copied directory
+as an installed or loaded Plugin. Until a native Marketplace or local-plugin
+adapter provides preview, confirmation, activation verification, and rollback,
+the Cursor distribution target MUST remain visible but disabled.
+
+#### Scenario: Project verified Cursor assets without private runtime state
+
+- Given the built-in Cursor Agent is listed
+- When PromptHub projects its paths and capabilities
+- Then Skills, SubAgents, MCP, and the Plugin root derive from `~/.cursor`
+- And no global rule file or generic config file is claimed
+- And Provider, Sessions, Usage, and Maintenance remain planned
+
+#### Scenario: Reject an unverified Cursor Plugin distribution
+
+- Given a valid PromptHub Plugin bundle and a Cursor installation
+- When the user inspects Agent Plugin targets
+- Then Cursor is visible as an adapter target but disabled
+- And a direct distribution request fails before target resolution or writes
+- And installed Marketplace-cache and local packages remain read-only
+
+### `FR-AGENT-039`: Cherry Studio Current Data And Skill Boundary
+
+PromptHub MUST project the Cherry Studio default user-data root and
+`Data/Skills` path without treating its SQLite, IndexedDB, Local Storage,
+memory, credential, cache, or runtime files as generic Agent assets. For the
+existing database-backed Skill adapter, `Data/cherrystudio.sqlite` MUST take
+precedence over compatible `Data/agent.db`, `Data/agents.db`, and root-level
+legacy databases.
+
+Cherry Studio Provider, MCP, Sessions, Usage, Config Files, Rules, and
+Maintenance MUST remain planned until separately verified adapters exist. The
+composite Plugin target MUST remain disabled because current Cherry Studio
+Skills do not establish a general Plugin bundle contract.
+
+#### Scenario: Prefer the current Cherry Studio v2 database
+
+- Given `Data/cherrystudio.sqlite` and a compatible legacy database both exist
+- When PromptHub installs or reconciles a Cherry Studio Skill
+- Then it updates only the current v2 Skill registry
+- And the legacy registry remains unchanged
+- And the complete Skill package remains under `Data/Skills`
+
+#### Scenario: Project only evidence-backed Agent capabilities
+
+- Given the built-in Cherry Studio Agent is listed on macOS
+- When PromptHub builds its paths and capabilities
+- Then the default root, `Data/Skills`, and installed application launch path
+  are available
+- And no MCP, Rules, Plugin directory, Config, Provider, Session, Usage, or
+  Maintenance support is claimed
+
+### `FR-AGENT-040`: Windsurf Public Transcript History
+
+PromptHub MUST read only explicit Cascade transcript exports from
+`~/.windsurf/transcripts/*.jsonl`. It MUST NOT parse proprietary Cascade
+protobuf/runtime state below `~/.codeium/windsurf/cascade`, memories, code
+tracker data, databases, credentials, or caches.
+
+The adapter MUST be local-only, read-only, paginated, size bounded, symlink
+safe, and resilient to malformed or future JSONL step types. It MUST expose
+only visible user input and planner response text; code actions, file content,
+command output, tool arguments, and other tool payloads MUST remain hidden.
+Because the public transcript contract provides no native resume command,
+session metadata MUST use `resume: null` and the capability MUST be `partial`.
+
+#### Scenario: Browse an opt-in Windsurf transcript
+
+- Given Cascade Hooks wrote a valid transcript JSONL with `user_input`,
+  `planner_response`, and tool/code steps
+- When PromptHub lists and reads Windsurf history
+- Then the trajectory id, first user prompt, update time, source path, and
+  visible user/assistant messages are available
+- And tool/code payloads are absent
+- And no resume command is offered
+
+#### Scenario: Reject unsafe or unbounded transcript input
+
+- Given a symlinked transcript, path traversal id, oversized file, malformed
+  JSONL line, or unknown step type
+- When PromptHub scans or reads Windsurf history
+- Then symlinks and traversal are rejected
+- And reads remain within the file, entry, page, and scan limits
+- And malformed lines are counted without exposing hidden payloads
+- And no source file is modified
+
+#### Scenario: Preserve Windsurf capability boundaries
+
+- Given the built-in Windsurf Agent
+- When PromptHub projects its current capabilities
+- Then Skills, MCP, global Rules, launch, and partial transcript history use
+  their documented paths
+- And Provider, Usage, generic Config Files, Maintenance, and native Plugin
+  installation remain unavailable until separately verified
+
+### `FR-AGENT-041`: Kiro Current CLI Boundary
+
+PromptHub MUST use Kiro's documented `KIRO_HOME` / `~/.kiro` root and MUST
+limit model mutation to `settings/cli.json` field `chat.defaultModel`.
+Credentials, account state, endpoints, and provider selection remain
+platform-managed and MUST NOT enter renderer payloads, ordinary backup, or
+PromptHub-owned secret storage.
+
+Kiro's global `steering/` directory MUST NOT be exposed as a single editable
+Rules file. It remains unavailable until the Rules owner supports bounded
+multi-file directories with explicit selection and write semantics.
+
+PromptHub MAY expose locally verified Kiro CLI session files as a partial,
+read-only capability. It MUST expose only visible prompt and assistant text,
+hide thinking/tool/result/unknown payloads, enforce bounded and symlink-safe
+reads, and set `resume: null` because no documented per-session resume
+contract has been verified.
+
+PromptHub MUST NOT claim that direct filesystem copying installs a Kiro Power.
+Kiro Plugin distribution remains disabled until an official import or
+registration workflow can be previewed, explicitly confirmed, verified, and
+rolled back.
+
+#### Scenario: Inspect and change the Kiro default model
+
+- Given a valid Kiro `settings/cli.json` with comments or unrelated fields
+- When PromptHub inspects or changes the default model
+- Then only `chat.defaultModel` is projected or changed
+- And comments and unrelated fields are preserved
+- And backup, atomic replacement, digest race detection, reread verification,
+  and rollback protect the write
+- And no credential, endpoint, account, or provider value is exposed
+
+#### Scenario: Browse visible Kiro CLI session content
+
+- Given matching Kiro CLI metadata and JSONL files
+- When PromptHub lists and reads a session
+- Then metadata and visible Prompt/Assistant text are available
+- And ToolResults, thinking, tool-use, malformed, and unknown payloads are not
+  exposed
+- And pagination, entry/file/scan limits, safe ids, root containment, and
+  symlink rejection remain enforced
+- And the session has no synthetic resume command
+
+#### Scenario: Reject fake Kiro Power installation
+
+- Given a valid PromptHub Plugin package and the Kiro target
+- When direct distribution is requested
+- Then the operation fails before resolving a package or writing files
+- And the UI explains that native Kiro import/registration is required
+- And existing Power package structures may remain available for bounded,
+  read-only inventory without being reported as PromptHub-installed
+
+### `FR-AGENT-042`: Grok Build Provider And Model Boundary
+
+PromptHub MUST resolve Grok Build from `GROK_HOME` or `~/.grok` and MAY manage
+the documented user `config.toml` Provider and default-model projection.
+Provider Profiles MUST use Grok's public `[model.<alias>]` and
+`[models].default` contract and MUST preserve unrelated TOML data.
+
+PromptHub MUST NOT copy or vendor Grok Build or CC Switch source. It MAY reuse
+their documented protocol shapes and workflow concepts through an independent
+PromptHub adapter.
+
+Grok-native session/OIDC credentials and `XAI_API_KEY` remain
+platform/environment owned. Custom Providers MAY reference an environment
+variable through `env_key`, but PromptHub MUST NOT project a managed secret,
+inline `api_key`, sensitive header, session token, or auth file into
+`config.toml`. Native entries containing inline credentials or sensitive
+headers MUST be redacted and read-only. Connection and model tests MAY resolve
+an `env_key` only inside the main process.
+
+#### Scenario: Activate an environment-owned custom Provider
+
+- Given a valid Grok Provider Profile with alias, protocol, upstream model,
+  endpoint, context window, and environment-key name
+- When the user previews and confirms activation
+- Then PromptHub updates only `[model.<alias>]` and `[models].default`
+- And creates an encrypted backup before an atomic write
+- And detects concurrent changes, rereads the file, verifies the intended
+  projection, and restores the backup on failure
+- And no credential value crosses IPC or enters ordinary backup/export
+
+#### Scenario: Keep Grok-owned authentication read-only
+
+- Given the active Grok model uses the native session, `XAI_API_KEY`, an
+  inline `api_key`, or sensitive custom headers
+- When PromptHub inspects or imports the current Provider
+- Then only redacted Provider, protocol, endpoint, model, context, environment
+  key name, and credential readiness metadata may cross IPC
+- And PromptHub does not copy, export, overwrite, or persist the credential
+- And an inline-secret or sensitive-header Provider cannot be taken over by a
+  mutable PromptHub Profile
+
+#### Scenario: Reject unsafe Grok configuration input
+
+- Given a malformed, oversized, symlinked, out-of-root, duplicate, or
+  concurrently modified Grok configuration
+- When PromptHub inspects, imports, previews, applies, verifies, or rolls back
+- Then the operation fails with a stable redacted error
+- And no partial Provider state or plaintext backup remains
+
+### `FR-AGENT-043`: Amp Current Public Asset And MCP Boundary
+
+PromptHub MUST model Amp from the current public Owner's Manual rather than the
+previous evidence-limited placeholder. The user root is `~/.config/amp` on
+macOS/Linux and `%USERPROFILE%\.config\amp` on Windows. PromptHub MAY retain
+the former Windows `%APPDATA%\amp` path as a read-only compatibility fallback.
+
+Amp Skills, `AGENTS.md`, Plugins and MCP settings MUST continue through their
+existing owning domains. Global MCP lives in `settings.json` or
+`settings.jsonc` below the user root; project MCP lives in the nearest
+`.amp/settings.json` or `.amp/settings.jsonc`; server entries use the literal
+top-level key `amp.mcpServers`. PromptHub MUST preserve all unrelated dotted
+settings and MUST NOT flatten this key into a nested `amp` object.
+
+Amp's hosted account, models, threads, OAuth cache and workspace-managed global
+Plugins remain platform-owned. PromptHub MUST NOT claim a Provider adapter,
+local transcript adapter, usage adapter, native Plugin installer, or writable
+raw-config surface without a separate verified contract.
+
+#### Scenario: Synchronize global and project Amp MCP settings
+
+- Given a user or project Amp settings file with unrelated dotted settings
+- When the user previews and confirms an MCP synchronization through the MCP
+  owning domain
+- Then PromptHub reads and writes only the literal `amp.mcpServers` entry map
+- And preserves unrelated JSON/JSONC settings
+- And uses the canonical user or project settings path for the selected scope
+
+#### Scenario: Keep unsupported Amp depth capabilities explicit
+
+- Given Amp is enabled in Agent Management
+- When PromptHub builds its capability inventory
+- Then Skills, MCP and Rules reflect their documented path-level support
+- And Provider is unsupported because Amp does not expose a user-managed
+  provider projection
+- And Sessions, Usage, Config Files, Launch, Maintenance and Plugin
+  distribution remain planned until dedicated adapters satisfy their gates
+
+### `FR-AGENT-044`: Provider Credential Replacement Compensation
+
+PromptHub MUST treat Provider Profile metadata, model mappings and the
+main-process secret store as one recoverable credential-management operation.
+When replacing a legacy or current secret reference, a failure after the
+database points at the new reference MUST restore the prior database record,
+model mappings and secret state before reporting failure.
+
+The operation MUST distinguish an ordinary rejected update from a failed
+compensation. It MUST NOT clear the new secret while the database still points
+at it, and it MUST NOT leave the database pointing at a cleared or missing
+secret reference. Renderer results, logs and stable errors MUST remain
+secret-free.
+
+#### Scenario: Legacy secret cleanup fails after database update
+
+- Given a Provider Profile references a legacy secret and both prior metadata
+  and model mappings are readable
+- And the replacement secret is written and the database update succeeds
+- When deleting the legacy secret fails
+- Then PromptHub restores the prior profile and model mappings using the
+  updated optimistic timestamp
+- And restores the exact prior secret state only after the database rollback
+- And reports `AGENT_PROVIDER_PROFILE_UPDATE_FAILED` when compensation
+  succeeds
+
+#### Scenario: Database compensation fails
+
+- Given the database already points at the replacement secret
+- When legacy secret cleanup and database compensation both fail
+- Then PromptHub preserves the replacement secret required by the current
+  database record
+- And reports `AGENT_PROVIDER_PROFILE_UPDATE_ROLLBACK_FAILED`
+- And no credential value appears in the error
+
+### `FR-AGENT-045`: Provider Endpoint Credential Exclusion
+
+Provider Profile endpoints are public metadata and MUST NOT contain embedded
+credentials. PromptHub MUST accept only bounded HTTP(S) endpoints without URL
+userinfo or fragments, and MUST reject malformed URLs, unsupported schemes,
+control characters and oversized values before persistence or IPC projection.
+
+The same validation MUST protect renderer submission, SQLite create/update and
+SQLite reads. Stable errors MUST NOT echo the rejected endpoint. Existing
+unsafe rows MUST fail closed when read; this change MUST NOT silently rewrite
+legacy data without a separately reviewed migration and recovery plan.
+
+#### Scenario: A user pastes a credential-bearing endpoint
+
+- Given the Provider form contains all other required fields
+- When the endpoint contains a username or password component
+- Then the form shows a localized validation error
+- And no Profile create/update request is sent
+- And a direct storage call rejects the endpoint before SQLite changes
+
+#### Scenario: A legacy row contains endpoint credentials
+
+- Given a pre-existing SQLite row contains URL userinfo
+- When PromptHub loads the Provider Profile
+- Then the public projection fails with `AGENT_PROVIDER_ENDPOINT_INVALID`
+- And the stable error does not include the credential
+- And PromptHub does not silently mutate the row
+
+### `FR-AGENT-046`: Provider Public JSON Credential Exclusion
+
+Provider Profile config, model mappings, audit snapshots and recovered
+activation baselines MUST contain only bounded public JSON metadata. The
+storage boundary MUST reject sensitive key families and non-JSON values before
+write, MUST validate the same records again on read, and MUST use the same
+policy for baseline recovery.
+
+Errors MUST be stable and MUST NOT contain a rejected value. Existing unsafe
+rows MUST fail closed without silent mutation or automatic credential
+migration. A rejected create or update MUST leave the database unchanged.
+
+#### Scenario: An adapter tries to persist a credential in an audit snapshot
+
+- Given an activation result contains an API token, private key or
+  authorization header in `redactedSnapshot`
+- When the audit repository records the result
+- Then SQLite rejects the snapshot before insertion
+- And no credential value appears in the error
+- And the activation workflow reports an audit-write failure rather than
+  treating the unsafe snapshot as verified
+
+#### Scenario: An older database contains unsafe public JSON
+
+- Given a Profile config, model mapping or verified snapshot contains a
+  credential-bearing key
+- When PromptHub projects that row or restores the baseline
+- Then it fails with a stable public-config or baseline error
+- And it neither returns the record nor mutates the stored value
+
+### `FR-AGENT-047`: Session Index Cancellation And Scale Boundary
+
+A persistent session-index refresh MUST treat cancellation as a commit
+barrier. If cancellation is already requested, or arrives after the adapter
+finishes scanning but before SQLite commit, PromptHub MUST write no session
+rows, cursor, scan timestamp or failure state. Cancellation reasons from
+renderer or platform code MUST NOT become stored or user-visible diagnostics.
+
+The metadata index MUST accept the documented 10,000-session hard limit in one
+transaction and expose it only through bounded pages of at most 200 records.
+The persisted schema and ordinary backup/export flow MUST exclude transcript
+bodies; details continue to be read from the external source on demand.
+
+#### Scenario: Cancellation races with scan completion
+
+- Given an enabled source has finished producing a valid scan result
+- When its abort signal becomes cancelled before commit
+- Then refresh rejects with the stable `AGENT_SESSION_SCAN_CANCELLED` error
+- And the source cursor, status and indexed rows remain unchanged
+- And no scan failure is recorded
+
+#### Scenario: A source contains 10,000 sessions
+
+- Given a verified adapter produces exactly 10,000 bounded metadata records
+- When PromptHub commits and lists the index
+- Then all records are committed atomically and reachable through 200-row
+  pages
+- And search remains literal and Unicode-safe
+- And no transcript body column or ordinary backup payload is introduced
 
 ## Non-Functional Requirements
 

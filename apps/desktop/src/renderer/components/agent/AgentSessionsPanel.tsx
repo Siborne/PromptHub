@@ -4,7 +4,9 @@ import {
   CopyIcon,
   HistoryIcon,
   Loader2Icon,
+  RefreshCwIcon,
   SearchIcon,
+  XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -13,6 +15,7 @@ import type {
   AgentSessionMetadata,
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
+import { useAgentSessionIndex } from "./use-agent-session-index";
 
 const SESSION_PAGE_SIZE = 50;
 const TRANSCRIPT_PAGE_SIZE = 80;
@@ -34,8 +37,20 @@ function displayResumeCommand(session: AgentSessionMetadata): string {
     .join(" ");
 }
 
+function listSessions(
+  agentId: string,
+  limit: number,
+  offset: number,
+  search?: string,
+) {
+  return search
+    ? window.api.agent.listSessions(agentId, limit, offset, search)
+    : window.api.agent.listSessions(agentId, limit, offset);
+}
+
 export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
   const { t } = useTranslation();
+  const sessionIndex = useAgentSessionIndex(agent.id);
   const [sessions, setSessions] = useState<AgentSessionMetadata[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AgentSessionDetail | null>(null);
@@ -63,8 +78,7 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
     setSelectedId(null);
     setDetail(null);
     setQuery("");
-    window.api.agent
-      .listSessions(agent.id, SESSION_PAGE_SIZE, 0)
+    listSessions(agent.id, SESSION_PAGE_SIZE, 0)
       .then((result) => {
         if (!active) return;
         setSessions(result.sessions);
@@ -79,6 +93,30 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
       active = false;
     };
   }, [agent.id, t]);
+
+  useEffect(() => {
+    if (!sessionIndex.state.enabled) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setIsLoading(true);
+      setError(null);
+      listSessions(agent.id, SESSION_PAGE_SIZE, 0, query.trim() || undefined)
+        .then((result) => {
+          if (!active || currentAgentId.current !== agent.id) return;
+          setSessions(result.sessions);
+          setTotal(result.total);
+          setHasMore(result.hasMore);
+          setNextOffset(SESSION_PAGE_SIZE);
+          setSelectedId(result.sessions[0]?.id || null);
+        })
+        .catch(() => active && setError(t("agents.sessionsLoadFailed")))
+        .finally(() => active && setIsLoading(false));
+    }, 250);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [agent.id, query, sessionIndex.revision, sessionIndex.state.enabled, t]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -106,13 +144,13 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    if (!normalized) return sessions;
+    if (!normalized || sessionIndex.state.enabled) return sessions;
     return sessions.filter((session) =>
       [session.title, session.projectLabel, session.projectPath, session.model]
         .filter(Boolean)
         .some((value) => value?.toLocaleLowerCase().includes(normalized)),
     );
-  }, [query, sessions]);
+  }, [query, sessionIndex.state.enabled, sessions]);
   const selected =
     sessions.find((session) => session.id === selectedId) || null;
   const visibleEntries = detail?.entries.slice(0, visibleEntryCount) || [];
@@ -122,10 +160,11 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
     setIsLoadingMore(true);
     setError(null);
     try {
-      const result = await window.api.agent.listSessions(
+      const result = await listSessions(
         agent.id,
         SESSION_PAGE_SIZE,
         nextOffset,
+        sessionIndex.state.enabled ? query.trim() || undefined : undefined,
       );
       if (currentAgentId.current !== agent.id) return;
       setSessions((current) => {
@@ -180,6 +219,94 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
               className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
             />
           </label>
+          {sessionIndex.state.supported ? (
+            <div className="mt-3 border-t border-border/70 pt-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-foreground">
+                  {t("agents.localSessionIndex")}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label={t("agents.enableLocalSessionIndex")}
+                  aria-checked={sessionIndex.state.enabled}
+                  disabled={sessionIndex.isChanging || sessionIndex.isIndexing}
+                  onClick={() =>
+                    void sessionIndex.setEnabled(!sessionIndex.state.enabled)
+                  }
+                  className={`relative ml-auto h-5 w-9 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    sessionIndex.state.enabled
+                      ? "bg-primary"
+                      : "bg-muted-foreground/30"
+                  }`}
+                >
+                  <span
+                    className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                      sessionIndex.state.enabled
+                        ? "translate-x-4"
+                        : "translate-x-0"
+                    }`}
+                  />
+                </button>
+                {sessionIndex.state.enabled && !sessionIndex.isIndexing ? (
+                  <button
+                    type="button"
+                    aria-label={t("agents.refreshLocalSessionIndex")}
+                    title={t("agents.refreshLocalSessionIndex")}
+                    onClick={() => void sessionIndex.refresh()}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <RefreshCwIcon className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
+              {sessionIndex.isIndexing && sessionIndex.progress ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>
+                        {t("agents.indexingSessions", {
+                          processed: sessionIndex.progress.processed,
+                          total: sessionIndex.progress.total,
+                        })}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full bg-primary transition-[width]"
+                        style={{
+                          width: `${
+                            sessionIndex.progress.total > 0
+                              ? Math.min(
+                                  100,
+                                  (sessionIndex.progress.processed /
+                                    sessionIndex.progress.total) *
+                                    100,
+                                )
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={t("agents.cancelSessionIndexing")}
+                    title={t("agents.cancelSessionIndexing")}
+                    onClick={() => void sessionIndex.cancel()}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : null}
+              {sessionIndex.error ? (
+                <p className="mt-2 text-[11px] text-destructive">
+                  {t("agents.sessionIndexFailed")}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {filtered.map((session) => (
@@ -217,7 +344,7 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
               ) : null}
             </div>
           ) : null}
-          {hasMore && !query ? (
+          {hasMore ? (
             <button
               type="button"
               onClick={() => void loadMoreSessions()}

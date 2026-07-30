@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { app, ipcMain, safeStorage } from "electron";
 import Database from "../database/sqlite";
 import { registerPromptIPC } from "./prompt.ipc";
 import { registerFolderIPC } from "./folder.ipc";
@@ -8,7 +8,21 @@ import { registerRulesIPC } from "./rules.ipc";
 import { registerSkillIPC } from "./skill.ipc";
 import { registerAIIPC } from "./ai.ipc";
 import { registerAgentIPC } from "./agent.ipc";
+import { registerAgentQwenDefinitionIPC } from "./agent-qwen-definition.ipc";
+import { registerAgentSessionIndexIPC } from "./agent-session-index.ipc";
+import { createAgentSessionIndexOperations } from "../services/agent-session-index-operations";
+import { registerAgentProviderProfileIPC } from "./agent-provider-profile.ipc";
+import { registerAgentManagementBackupIPC } from "./agent-management-backup.ipc";
+import { registerAgentProviderActivationIPC } from "./agent-provider-activation.ipc";
+import { registerAgentProviderCurrentStateIPC } from "./agent-provider-current-state.ipc";
+import { registerAgentProviderMigrationIPC } from "./agent-provider-migration.ipc";
 import { registerAgentAppearanceIPC } from "./agent-appearance.ipc";
+import { createAgentCodexProviderMigrationService } from "../services/agent-codex-provider-migration-service";
+import { resolveAgentProviderContext } from "../services/agent-platform-context";
+import {
+  createAgentProviderRuntime,
+  type AgentProviderRuntime,
+} from "../services/agent-provider-runtime";
 import { PromptDB } from "../database/prompt";
 import { FolderDB } from "../database/folder";
 import { SkillDB } from "../database/skill";
@@ -126,6 +140,30 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.AGENT_CONFIG_FILES_LIST,
   IPC_CHANNELS.AGENT_CONFIG_FILE_READ,
   IPC_CHANNELS.AGENT_CONFIG_FILE_WRITE,
+  IPC_CHANNELS.AGENT_DEFINITIONS_LIST,
+  IPC_CHANNELS.AGENT_DEFINITION_OPEN,
+  IPC_CHANNELS.AGENT_SESSIONS_LIST,
+  IPC_CHANNELS.AGENT_SESSION_READ,
+  IPC_CHANNELS.AGENT_SESSION_INDEX_GET_STATE,
+  IPC_CHANNELS.AGENT_SESSION_INDEX_SET_ENABLED,
+  IPC_CHANNELS.AGENT_SESSION_INDEX_REFRESH,
+  IPC_CHANNELS.AGENT_SESSION_INDEX_CANCEL,
+  IPC_CHANNELS.AGENT_PROVIDER_PROFILES_LIST,
+  IPC_CHANNELS.AGENT_PROVIDER_PROFILES_CREATE,
+  IPC_CHANNELS.AGENT_PROVIDER_PROFILES_UPDATE,
+  IPC_CHANNELS.AGENT_PROVIDER_PROFILES_ARCHIVE,
+  IPC_CHANNELS.AGENT_PROVIDER_PROFILES_DUPLICATE,
+  IPC_CHANNELS.AGENT_PROVIDER_PROFILES_EXPORT,
+  IPC_CHANNELS.AGENT_PROVIDER_PROFILES_DELETE,
+  IPC_CHANNELS.AGENT_PROVIDER_MIGRATION_PREVIEW,
+  IPC_CHANNELS.AGENT_PROVIDER_MIGRATION_APPLY,
+  IPC_CHANNELS.AGENT_PROVIDER_IMPORT_CURRENT,
+  IPC_CHANNELS.AGENT_PROVIDER_TEST_CONNECTION,
+  IPC_CHANNELS.AGENT_PROVIDER_TEST_MODEL,
+  IPC_CHANNELS.AGENT_PROVIDER_CANCEL_MODEL_TEST,
+  IPC_CHANNELS.AGENT_PROVIDER_PREVIEW,
+  IPC_CHANNELS.AGENT_PROVIDER_ACTIVATE,
+  IPC_CHANNELS.AGENT_PROVIDER_CURRENT_STATE,
   IPC_CHANNELS.AGENT_APPEARANCE_GET,
   IPC_CHANNELS.AGENT_APPEARANCE_IMPORT_THEME,
   IPC_CHANNELS.AGENT_APPEARANCE_APPLY_THEME,
@@ -235,6 +273,8 @@ function registerIpcGroup(label: string, register: () => void): void {
 export function registerAllIPC(
   db: Database.Database,
   setDbRef: (db: Database.Database) => void,
+  onAgentProviderRuntime: (runtime: AgentProviderRuntime) => void = () =>
+    undefined,
 ): void {
   resetAllRegisteredIpcHandlers();
 
@@ -249,7 +289,9 @@ export function registerAllIPC(
   registerIpcGroup("cloud", () => registerCloudIPC());
   registerIpcGroup("security", () => registerSecurityIPC(db));
   registerIpcGroup("backup", () =>
-    registerBackupIPC(setDbRef, (nextDb) => registerAllIPC(nextDb, setDbRef)),
+    registerBackupIPC(setDbRef, (nextDb) =>
+      registerAllIPC(nextDb, setDbRef, onAgentProviderRuntime),
+    ),
   );
   registerIpcGroup("cli", () => registerCliIPC());
   registerIpcGroup("skill", () => registerSkillIPC(skillDB));
@@ -258,7 +300,36 @@ export function registerAllIPC(
   registerIpcGroup("image", () => registerImageIPC());
   registerIpcGroup("ai", () => registerAIIPC());
   registerIpcGroup("agent", () => {
+    const userDataPath = app.getPath("userData");
+    const runtime = createAgentProviderRuntime({
+      database: db,
+      userDataPath,
+      encryption: safeStorage,
+    });
+    onAgentProviderRuntime(runtime);
     registerAgentIPC();
+    registerAgentQwenDefinitionIPC(db);
+    registerAgentSessionIndexIPC({
+      createService: (agentId) =>
+        createAgentSessionIndexOperations(runtime.sessionIndexDb, agentId),
+    });
+    registerAgentProviderProfileIPC(runtime.profileService);
+    registerAgentManagementBackupIPC(runtime.backupService);
+    registerAgentProviderMigrationIPC(
+      createAgentCodexProviderMigrationService({
+        sourceReader: {
+          inspect: (agentId) =>
+            runtime.legacyProviderService.inspectMigrationSources(agentId),
+        },
+        profiles: runtime.profileService,
+        secrets: runtime.secretStore,
+      }),
+    );
+    registerAgentProviderActivationIPC(
+      runtime.activationService,
+      resolveAgentProviderContext,
+    );
+    registerAgentProviderCurrentStateIPC(runtime.trayService);
     registerAgentAppearanceIPC();
   });
   registerIpcGroup("generation", () => registerGenerationIPC(db));

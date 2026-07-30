@@ -213,6 +213,14 @@ Backup rules:
 - A future encrypted credential export requires a separate explicit format, user password, authenticated encryption, and dedicated threat model.
 - Deep links with literal credentials are treated as transient sensitive input and never logged.
 
+Claude Code Provider Profiles use `config_json.credentialEnvKey` only for the
+allowlisted values `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN`. The matching
+secret remains under PromptHub main-process custody and is projected only into
+`~/.claude/settings.json` after preview and confirmation. A
+`platform-native` Claude Profile removes PromptHub-managed direct-provider env
+keys and leaves Claude's own OAuth/keychain flow in control. PromptHub never
+reads, writes, migrates, backs up or exports Claude-owned `.credentials.json`.
+
 ## `DES-AGENT-006`: Native Config Reconciliation And Activation
 
 Every supported switch follows:
@@ -320,7 +328,25 @@ P1 usage summaries derive from verified session logs. Proxy-observed usage and p
 
 ## `DES-AGENT-009`: Provider And Model Testing
 
-Provider tests run in main/core with an abort signal, connect timeout, total timeout, bounded retries, and response-size limits.
+Provider tests run in main/core and never mutate the active Agent configuration.
+The capability is split into two explicit levels so the UI does not confuse
+endpoint reachability with a billable model inference:
+
+1. **Connection inventory check**: a bounded, read-only protocol request that
+   verifies endpoint policy, authentication and model discovery.
+2. **Streaming model test**: an explicit user action that performs a minimal
+   inference and records first-token timing. It requires a quota confirmation
+   and remains separate from activation because it can consume provider quota.
+
+The Codex OpenAI-compatible connection inventory check resolves the unified
+Provider Profile, model mapping and secure secret only in main memory. It calls
+`GET /models` with zero retries, an 8-second total timeout, a 1 MiB response
+limit and no redirects. Public endpoints require HTTPS; explicit loopback HTTP
+is allowed for a user-owned local provider; other private, link-local and
+internal addresses are rejected after DNS resolution. The result returns only
+the endpoint origin, model count/presence, stable status and elapsed time.
+Query, fragment, userinfo, response bodies, native paths and credentials never
+cross IPC.
 
 Result fields:
 
@@ -331,7 +357,52 @@ Result fields:
 - success, HTTP category, protocol category, retry count
 - bounded redacted response preview only when safe
 
-Testing must not modify the active Agent configuration. The adapter builds an isolated request from the Provider Profile and secure secret reference.
+The streaming test uses OpenAI Responses or Chat Completions SSE according to
+the stored protocol. It sends one fixed minimal prompt with an 8-token output
+cap, uses 5-second connect, 8-second first-token and 20-second total deadlines,
+permits at most one retry for a bounded transient category, rejects redirects
+and unsafe targets, and caps the response at 256 KiB. Only a control-character
+free, credential-redacted 256-character preview crosses IPC. Profile switches,
+explicit cancellation and renderer destruction abort the main-owned request.
+The adapter builds every test request from the Provider Profile and secure
+secret reference without reading the active native projection as a second
+source of truth.
+
+Claude Code uses the same two-level test contract with Anthropic's native
+protocol: `GET /v1/models` for inventory and `POST /v1/messages` with SSE for
+the explicit minimal model test. `ANTHROPIC_API_KEY` maps to `x-api-key`;
+`ANTHROPIC_AUTH_TOKEN` maps to `Authorization: Bearer`. The probe shares the
+HTTPS/explicit-loopback, DNS pinning, redirect, timeout, response-size, retry,
+cancellation and redaction boundaries above. IP endpoints omit TLS SNI because
+Node rejects IP literals as `servername`.
+
+Gemini CLI keeps its enterprise/paid-API compatibility identity separate from
+Antigravity. The complete Gemini adapter owns a two-file runtime projection:
+
+- `~/.gemini/settings.json`: `model.name` and
+  `security.auth.selectedType` only, edited as JSONC while preserving unrelated
+  fields and comments.
+- `~/.gemini/.env`: only the managed `GEMINI_API_KEY` and optional
+  `GOOGLE_GEMINI_BASE_URL` entries. Other variables, comments and formatting
+  remain byte-stable where possible.
+
+Managed paid API profiles use protocol `google-generative-ai`, auth type
+`gemini-api-key`, and a main-only `agent-provider:<profileId>` secret. The
+default endpoint is `https://generativelanguage.googleapis.com`; an override
+must use HTTPS or explicit loopback HTTP. Connection inventory calls bounded
+`GET /v1beta/models`; the explicit model test calls bounded
+`POST /v1beta/models/{model}:streamGenerateContent?alt=sse`. Both authenticate
+with `x-goog-api-key`, reject redirects and unsafe DNS targets, and share the
+existing timeout, response-cap, retry, cancellation and redaction contract.
+
+Platform-native profiles may preserve the documented non-secret auth types
+`oauth-personal`, `vertex-ai`, `compute-default-credentials`, `cloud-shell` and
+`gateway`. PromptHub does not read or migrate Gemini keychain data,
+`oauth_creds.json`, ADC/service-account files, or Antigravity credentials.
+Native-auth connection and model tests report unsupported instead of borrowing
+those credentials. Activation uses one encrypted bundle backup, checks both
+files for concurrent edits, writes each atomically, rereads both, and restores
+both on any partial failure.
 
 ## `DES-AGENT-010`: UI Information Architecture
 
@@ -639,27 +710,75 @@ inputs only and are not generic asset distribution targets.
 
 ## `DES-AGENT-018`: Traceability
 
-| Requirements                                                                                                          | Design                                             | Verification                                                                                                                                                     | Tasks                                                                                                                                 |
-| --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `FR-AGENT-001`, `FR-AGENT-002`, `FR-AGENT-018`, `FR-AGENT-019`                                                        | `DES-AGENT-001` to `003`, `010`, `014`, `016`      | `TEST-AGENT-001`, `TEST-AGENT-002`, `TEST-AGENT-016`, `TEST-AGENT-021`                                                                                           | `T-AGENT-006`, `011`, `013`, `014`, `021B`, `034`                                                                                     |
-| `FR-AGENT-003`, `FR-AGENT-004`, `FR-AGENT-005`, `FR-AGENT-006`, `FR-AGENT-007`                                        | `DES-AGENT-004` to `006`, `012`                    | `TEST-AGENT-003`, `TEST-AGENT-004`, `TEST-AGENT-005`, `TEST-AGENT-006`, `TEST-AGENT-007`, `TEST-AGENT-015`                                                       | `T-AGENT-005`, `T-AGENT-007`, `T-AGENT-012`, `T-AGENT-015`, `T-AGENT-016`, `T-AGENT-017`, `T-AGENT-018`, `T-AGENT-019`, `T-AGENT-027` |
-| `FR-AGENT-008`                                                                                                        | `DES-AGENT-002`, `007`                             | `TEST-AGENT-008`, `017`                                                                                                                                          | `T-AGENT-013`, `021`                                                                                                                  |
-| `FR-AGENT-009`                                                                                                        | `DES-AGENT-006`, `010`, `015`, `023`               | `TEST-AGENT-006`, `009`, `037`                                                                                                                                   | `T-AGENT-015`, `021`, `021A`, `065`                                                                                                   |
-| `FR-AGENT-010`, `FR-AGENT-015`                                                                                        | `DES-AGENT-008`                                    | `TEST-AGENT-010`, `011`                                                                                                                                          | `T-AGENT-016`, `022`, `028`, `030`                                                                                                    |
-| `FR-AGENT-011`                                                                                                        | `DES-AGENT-009`, `015`                             | `TEST-AGENT-012`                                                                                                                                                 | `T-AGENT-017`, `018`, `019`, `021`                                                                                                    |
-| `FR-AGENT-012`                                                                                                        | `DES-AGENT-011`                                    | `TEST-AGENT-013`                                                                                                                                                 | `T-AGENT-024`                                                                                                                         |
-| `FR-AGENT-013`, `FR-AGENT-016`                                                                                        | `DES-AGENT-012`                                    | `TEST-AGENT-014`, `015`                                                                                                                                          | `T-AGENT-023`, `031`                                                                                                                  |
-| `FR-AGENT-014`                                                                                                        | `DES-AGENT-003`, `010`, `014`                      | `TEST-AGENT-016`                                                                                                                                                 | `T-AGENT-029`                                                                                                                         |
-| `FR-AGENT-017`                                                                                                        | `DES-AGENT-013`, `016`                             | separate change                                                                                                                                                  | `T-AGENT-032`, `033`                                                                                                                  |
-| `FR-AGENT-020`                                                                                                        | `DES-AGENT-003`, `010`, `014`, `015`               | `TEST-AGENT-020`                                                                                                                                                 | `T-AGENT-026B`                                                                                                                        |
-| `FR-AGENT-021`                                                                                                        | `DES-AGENT-001`, `002`, `003`, `017`               | `TEST-AGENT-022`                                                                                                                                                 | `T-AGENT-026C`                                                                                                                        |
-| `FR-AGENT-022`, `FR-AGENT-023`                                                                                        | `DES-AGENT-019`                                    | `TEST-AGENT-023`, `TEST-AGENT-024`                                                                                                                               | `T-AGENT-040`, `T-AGENT-041`, `T-AGENT-042`, `T-AGENT-043`, `T-AGENT-044`                                                             |
-| `FR-AGENT-027` (quota)                                                                                                | `DES-AGENT-023`                                    | `TEST-AGENT-035`, `TEST-AGENT-037`, `TEST-AGENT-041`                                                                                                             | `T-AGENT-061`, `T-AGENT-065`, `T-AGENT-070`                                                                                           |
-| `FR-AGENT-029`                                                                                                        | `DES-AGENT-003`, `007`, `008`, `014`, `015`, `025` | `TEST-AGENT-036`                                                                                                                                                 | `T-AGENT-062`, `T-AGENT-063`, `T-AGENT-064`                                                                                           |
-| `FR-AGENT-030`                                                                                                        | `DES-AGENT-026`                                    | `TEST-AGENT-038`                                                                                                                                                 | `T-AGENT-067`                                                                                                                         |
-| `FR-AGENT-031`                                                                                                        | `DES-AGENT-027`                                    | `TEST-AGENT-039`                                                                                                                                                 | `T-AGENT-068`                                                                                                                         |
-| `FR-AGENT-032`                                                                                                        | `DES-AGENT-028`                                    | `TEST-AGENT-040`                                                                                                                                                 | `T-AGENT-069`                                                                                                                         |
-| `NFR-AGENT-001`, `NFR-AGENT-002`, `NFR-AGENT-003`, `NFR-AGENT-004`, `NFR-AGENT-005`, `NFR-AGENT-006`, `NFR-AGENT-007` | `DES-AGENT-005`, `008`, `009`, `014`, `015`        | `TEST-AGENT-004`, `TEST-AGENT-007`, `TEST-AGENT-009`, `TEST-AGENT-011`, `TEST-AGENT-012`, `TEST-AGENT-015`, `TEST-AGENT-016`, `TEST-AGENT-017`, `TEST-AGENT-018` | `T-AGENT-005`, `T-AGENT-015`, `T-AGENT-016`, `T-AGENT-025`, `T-AGENT-035`                                                             |
+| Requirements                                                                                                          | Design                                                                                                                                                 | Verification                                                                                                                                                                                         | Tasks                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FR-AGENT-001`, `FR-AGENT-002`, `FR-AGENT-018`, `FR-AGENT-019`                                                        | `DES-AGENT-001`, `DES-AGENT-002`, `DES-AGENT-003`, `DES-AGENT-010`, `DES-AGENT-014`, `DES-AGENT-016`, `DES-AGENT-032`                                  | `TEST-AGENT-001`, `TEST-AGENT-002`, `TEST-AGENT-016`, `TEST-AGENT-019`, `TEST-AGENT-021`, `TEST-AGENT-045`                                                                                           | `T-AGENT-001`, `T-AGENT-002`, `T-AGENT-003`, `T-AGENT-004`, `T-AGENT-006`, `T-AGENT-009`, `T-AGENT-010`, `T-AGENT-011`, `T-AGENT-013`, `T-AGENT-014`, `T-AGENT-020`, `T-AGENT-021B`, `T-AGENT-026`, `T-AGENT-026A`, `T-AGENT-034`, `T-AGENT-073`, `T-AGENT-076`                             |
+| `FR-AGENT-003`, `FR-AGENT-004`, `FR-AGENT-005`, `FR-AGENT-006`, `FR-AGENT-007`                                        | `DES-AGENT-004`, `DES-AGENT-005`, `DES-AGENT-006`, `DES-AGENT-012`, `DES-AGENT-033`, `DES-AGENT-034`, `DES-AGENT-035`                                  | `TEST-AGENT-003`, `TEST-AGENT-004`, `TEST-AGENT-005`, `TEST-AGENT-006`, `TEST-AGENT-007`, `TEST-AGENT-015`, `TEST-AGENT-051`, `TEST-AGENT-052`, `TEST-AGENT-053`                                     | `T-AGENT-005`, `T-AGENT-007`, `T-AGENT-012`, `T-AGENT-015`, `T-AGENT-016`, `T-AGENT-017`, `T-AGENT-018`, `T-AGENT-019`, `T-AGENT-020`, `T-AGENT-027`, `T-AGENT-074`, `T-AGENT-075`, `T-AGENT-077`, `T-AGENT-078`, `T-AGENT-079`, `T-AGENT-086`, `T-AGENT-087`, `T-AGENT-088`, `T-AGENT-100` |
+| `FR-AGENT-008`                                                                                                        | `DES-AGENT-002`, `DES-AGENT-007`                                                                                                                       | `TEST-AGENT-008`, `TEST-AGENT-017`                                                                                                                                                                   | `T-AGENT-013`, `T-AGENT-021`, `T-AGENT-060`, `T-AGENT-076`                                                                                                                                                                                                                                  |
+| `FR-AGENT-009`                                                                                                        | `DES-AGENT-006`, `DES-AGENT-010`, `DES-AGENT-015`                                                                                                      | `TEST-AGENT-006`, `TEST-AGENT-009`                                                                                                                                                                   | `T-AGENT-015`, `T-AGENT-021`, `T-AGENT-021A`                                                                                                                                                                                                                                                |
+| `FR-AGENT-010`, `FR-AGENT-015`                                                                                        | `DES-AGENT-008`, `DES-AGENT-045`, `DES-AGENT-046`, `DES-AGENT-047`, `DES-AGENT-053`, `DES-AGENT-064` in `session-index-designs.md`                     | `TEST-AGENT-010`, `TEST-AGENT-011`, `TEST-AGENT-040`, `TEST-AGENT-063`, `TEST-AGENT-064`, `TEST-AGENT-065`, `TEST-AGENT-072`, `TEST-AGENT-082`                                                       | `T-AGENT-008`, `T-AGENT-016`, `T-AGENT-022`, `T-AGENT-028`, `T-AGENT-030`, `T-AGENT-067`, `T-AGENT-069`, `T-AGENT-098`, `T-AGENT-099`, `T-AGENT-101`, `T-AGENT-108`, `T-AGENT-119`                                                                                                          |
+| `FR-AGENT-011`                                                                                                        | `DES-AGENT-009`, `DES-AGENT-015`, `DES-AGENT-033`, `DES-AGENT-034`, `DES-AGENT-035`                                                                    | `TEST-AGENT-012`, `TEST-AGENT-050`, `TEST-AGENT-051`, `TEST-AGENT-052`, `TEST-AGENT-053`                                                                                                             | `T-AGENT-017`, `T-AGENT-018`, `T-AGENT-019`, `T-AGENT-085`, `T-AGENT-086`, `T-AGENT-087`, `T-AGENT-088`                                                                                                                                                                                     |
+| `FR-AGENT-012`                                                                                                        | `DES-AGENT-011`, `DES-AGENT-048`, `DES-AGENT-050` in `tray-provider-designs.md`                                                                        | `TEST-AGENT-013`, `TEST-AGENT-066`, `TEST-AGENT-069`                                                                                                                                                 | `T-AGENT-024`, `T-AGENT-102`, `T-AGENT-105`                                                                                                                                                                                                                                                 |
+| `FR-AGENT-013`, `FR-AGENT-016`                                                                                        | `DES-AGENT-012`; `DES-AGENT-061` in `deep-link-designs.md`                                                                                             | `TEST-AGENT-014`, `TEST-AGENT-015`, `TEST-AGENT-079`                                                                                                                                                 | `T-AGENT-023`, `T-AGENT-031`, `T-AGENT-116`                                                                                                                                                                                                                                                 |
+| `FR-AGENT-014`                                                                                                        | `DES-AGENT-003`, `DES-AGENT-010`, `DES-AGENT-014`, `DES-AGENT-049`, `DES-AGENT-059`, `DES-AGENT-063`, `DES-AGENT-065` in `maintenance-cli-designs.md`  | `TEST-AGENT-016`, `TEST-AGENT-067`, `TEST-AGENT-068`, `TEST-AGENT-078`, `TEST-AGENT-081`, `TEST-AGENT-083`                                                                                           | `T-AGENT-029`, `T-AGENT-103`, `T-AGENT-104`, `T-AGENT-114`, `T-AGENT-118`, `T-AGENT-120`                                                                                                                                                                                                    |
+| `FR-AGENT-017`                                                                                                        | `DES-AGENT-013`, `DES-AGENT-016`                                                                                                                       | separate change                                                                                                                                                                                      | `T-AGENT-032`, `T-AGENT-033`                                                                                                                                                                                                                                                                |
+| `FR-AGENT-020`                                                                                                        | `DES-AGENT-003`, `DES-AGENT-010`, `DES-AGENT-014`, `DES-AGENT-015`                                                                                     | `TEST-AGENT-020`                                                                                                                                                                                     | `T-AGENT-026B`                                                                                                                                                                                                                                                                              |
+| `FR-AGENT-021`                                                                                                        | `DES-AGENT-001`, `DES-AGENT-002`, `DES-AGENT-003`, `DES-AGENT-017`                                                                                     | `TEST-AGENT-022`                                                                                                                                                                                     | `T-AGENT-026C`                                                                                                                                                                                                                                                                              |
+| `FR-AGENT-022`, `FR-AGENT-023`                                                                                        | `DES-AGENT-019`                                                                                                                                        | `TEST-AGENT-023`, `TEST-AGENT-024`                                                                                                                                                                   | `T-AGENT-040`, `T-AGENT-041`, `T-AGENT-042`, `T-AGENT-043`, `T-AGENT-044`                                                                                                                                                                                                                   |
+| `FR-AGENT-024`                                                                                                        | `DES-AGENT-020`                                                                                                                                        | `TEST-AGENT-004`, `TEST-AGENT-005`, `TEST-AGENT-007`, `TEST-AGENT-013`, `TEST-AGENT-025`, `TEST-AGENT-026`, `TEST-AGENT-027`, `TEST-AGENT-049`                                                       | `T-AGENT-045`, `T-AGENT-046`, `T-AGENT-047`, `T-AGENT-048`, `T-AGENT-049`, `T-AGENT-079`, `T-AGENT-084`                                                                                                                                                                                     |
+| `FR-AGENT-025`                                                                                                        | `DES-AGENT-021`                                                                                                                                        | `TEST-AGENT-028`                                                                                                                                                                                     | `T-AGENT-050`, `T-AGENT-051`, `T-AGENT-052`                                                                                                                                                                                                                                                 |
+| `FR-AGENT-026`                                                                                                        | `DES-AGENT-022`                                                                                                                                        | `TEST-AGENT-029`, `TEST-AGENT-030`, `TEST-AGENT-031`                                                                                                                                                 | `T-AGENT-053`, `T-AGENT-054`, `T-AGENT-055`, `T-AGENT-056`                                                                                                                                                                                                                                  |
+| `FR-AGENT-027`                                                                                                        | `DES-AGENT-023`                                                                                                                                        | `TEST-AGENT-032`, `TEST-AGENT-033`, `TEST-AGENT-035`, `TEST-AGENT-037`, `TEST-AGENT-041`                                                                                                             | `T-AGENT-057`, `T-AGENT-058`, `T-AGENT-059`, `T-AGENT-061`, `T-AGENT-065`, `T-AGENT-070`                                                                                                                                                                                                    |
+| `FR-AGENT-028`                                                                                                        | `DES-AGENT-024`                                                                                                                                        | `TEST-AGENT-034`                                                                                                                                                                                     | `T-AGENT-060`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-029`                                                                                                        | `DES-AGENT-003`, `DES-AGENT-007`, `DES-AGENT-008`, `DES-AGENT-014`, `DES-AGENT-015`, `DES-AGENT-025`; `DES-AGENT-062` in `platform-adapter-designs.md` | `TEST-AGENT-036`, `TEST-AGENT-080`                                                                                                                                                                   | `T-AGENT-062`, `T-AGENT-063`, `T-AGENT-064`, `T-AGENT-117`                                                                                                                                                                                                                                  |
+| `FR-AGENT-030`                                                                                                        | `DES-AGENT-026`                                                                                                                                        | `TEST-AGENT-038`                                                                                                                                                                                     | `T-AGENT-067`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-031`                                                                                                        | `DES-AGENT-027`                                                                                                                                        | `TEST-AGENT-039`                                                                                                                                                                                     | `T-AGENT-068`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-032`                                                                                                        | `DES-AGENT-028`                                                                                                                                        | `TEST-AGENT-040`                                                                                                                                                                                     | `T-AGENT-069`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-033`                                                                                                        | `DES-AGENT-029`                                                                                                                                        | `TEST-AGENT-042`                                                                                                                                                                                     | `T-AGENT-071`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-034`                                                                                                        | `DES-AGENT-030`                                                                                                                                        | `TEST-AGENT-043`                                                                                                                                                                                     | `T-AGENT-072`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-035`                                                                                                        | `DES-AGENT-031`                                                                                                                                        | `TEST-AGENT-044`                                                                                                                                                                                     | `T-AGENT-026D`                                                                                                                                                                                                                                                                              |
+| `FR-AGENT-036`                                                                                                        | `DES-AGENT-036`                                                                                                                                        | `TEST-AGENT-054`                                                                                                                                                                                     | `T-AGENT-089`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-037`                                                                                                        | `DES-AGENT-037`                                                                                                                                        | `TEST-AGENT-055`                                                                                                                                                                                     | `T-AGENT-090`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-038`                                                                                                        | `DES-AGENT-038` in `platform-adapter-designs.md`                                                                                                       | `TEST-AGENT-056`                                                                                                                                                                                     | `T-AGENT-091`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-039`                                                                                                        | `DES-AGENT-039` in `platform-adapter-designs.md`                                                                                                       | `TEST-AGENT-057`                                                                                                                                                                                     | `T-AGENT-092`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-040`                                                                                                        | `DES-AGENT-040` in `platform-adapter-designs.md`                                                                                                       | `TEST-AGENT-058`                                                                                                                                                                                     | `T-AGENT-093`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-041`                                                                                                        | `DES-AGENT-041` in `platform-adapter-designs.md`                                                                                                       | `TEST-AGENT-059`                                                                                                                                                                                     | `T-AGENT-094`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-042`                                                                                                        | `DES-AGENT-042` in `platform-adapter-designs.md`                                                                                                       | `TEST-AGENT-060`                                                                                                                                                                                     | `T-AGENT-095`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-043`                                                                                                        | `DES-AGENT-043` in `platform-adapter-designs.md`                                                                                                       | `TEST-AGENT-061`                                                                                                                                                                                     | `T-AGENT-096`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-044`                                                                                                        | `DES-AGENT-044` in `provider-credential-designs.md`                                                                                                    | `TEST-AGENT-062`                                                                                                                                                                                     | `T-AGENT-097`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-045`                                                                                                        | `DES-AGENT-051` in `provider-credential-designs.md`                                                                                                    | `TEST-AGENT-070`                                                                                                                                                                                     | `T-AGENT-106`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-046`                                                                                                        | `DES-AGENT-052` in `provider-credential-designs.md`                                                                                                    | `TEST-AGENT-071`                                                                                                                                                                                     | `T-AGENT-107`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-047`                                                                                                        | `DES-AGENT-053` in `session-index-designs.md`                                                                                                          | `TEST-AGENT-072`                                                                                                                                                                                     | `T-AGENT-108`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-048`                                                                                                        | `DES-AGENT-054` in `backup-portability-designs.md`                                                                                                     | `TEST-AGENT-073`                                                                                                                                                                                     | `T-AGENT-109`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-049`                                                                                                        | `DES-AGENT-055` in `backup-portability-designs.md`                                                                                                     | `TEST-AGENT-074`                                                                                                                                                                                     | `T-AGENT-110`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-050`                                                                                                        | `DES-AGENT-056` in `backup-portability-designs.md`                                                                                                     | `TEST-AGENT-075`                                                                                                                                                                                     | `T-AGENT-111`                                                                                                                                                                                                                                                                               |
+| `NFR-AGENT-001`, `NFR-AGENT-002`, `NFR-AGENT-003`, `NFR-AGENT-004`, `NFR-AGENT-005`, `NFR-AGENT-006`, `NFR-AGENT-007` | `DES-AGENT-005`, `DES-AGENT-008`, `DES-AGENT-009`, `DES-AGENT-014`, `DES-AGENT-015`, `DES-AGENT-060` in `ui-resilience-designs.md`                     | `TEST-AGENT-004`, `TEST-AGENT-007`, `TEST-AGENT-009`, `TEST-AGENT-011`, `TEST-AGENT-012`, `TEST-AGENT-015`, `TEST-AGENT-016`, `TEST-AGENT-017`, `TEST-AGENT-018`, `TEST-AGENT-047`, `TEST-AGENT-048` | `T-AGENT-025`, `T-AGENT-035`, `T-AGENT-036`, `T-AGENT-037`, `T-AGENT-038`, `T-AGENT-039`, `T-AGENT-082`, `T-AGENT-083`, `T-AGENT-115`                                                                                                                                                       |
+| `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-057` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-076`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-112`                                                                                                                                                                                                                                                                |
+| `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-058` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-077`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-113`                                                                                                                                                                                                                                                                |
+
+`T-AGENT-081` is the program-level delivery gate for the in-scope rows above.
+It introduces no parallel requirement or design source and cannot substitute
+for any row-level task or test. It closes only after every remaining in-scope
+task has either passed its linked verification or converged to an
+evidence-backed `unsupported` capability declaration.
+
+## `DES-AGENT-032`: Machine-Readable Capability Inventory
+
+The canonical platform registry remains the only source of path, asset, launch,
+and built-in identity facts. A shared capability projection derives those facts
+and combines them with an explicit deep-adapter declaration for every built-in
+platform.
+
+- Each capability is one of `supported`, `partial`, `planned`, or
+  `unsupported`, and every declaration carries a non-empty evidence code.
+- Deep adapters (`providerModel`, `sessions`, `usage`, and `appearance`) are
+  declared explicitly for all 31 built-ins so an omitted platform fails a test.
+- Path-owned capabilities are derived from `SKILL_PLATFORMS`; the inventory
+  must not duplicate path strings or infer a working protocol from a filename.
+- Custom Agents derive only registry-backed path capabilities. They inherit no
+  deep protocol support from a built-in platform with a similar directory.
+- Renderer capability summaries are projections of this inventory, not a
+  second set of hard-coded platform id allowlists.
 
 ## `DES-AGENT-019`: Overview Navigation Hub And Claude Quota Adapter
 
@@ -693,30 +812,114 @@ Batch confirmed on 2026-07-20; implements `FR-AGENT-024`.
 
 ### Source of truth and custody split
 
-- `config.toml` remains the platform-native source of truth for provider entries (`model_providers.*`) and profiles (`profiles.*`); PromptHub never forks it into a parallel store.
-- API keys have two homes by design: the PromptHub secret store (encrypted master, used for custody, rotation, and device-local recovery) and the platform-native projection (`experimental_bearer_token`, required because Codex only reads env vars or inline config at launch). Entries using `env_key` are fully supported and skip the secret store.
-- Provider metadata is derived by parsing `config.toml`; a provider counts as PromptHub-managed when a matching secret-store entry exists. No DB migration is introduced in this batch.
+The 2026-07-20 implementation used `config.toml` as the management source of
+truth. That transitional boundary is superseded by the user-confirmed unified
+Profile migration on 2026-07-28:
+
+- SQLite `agent_provider_profiles` and
+  `agent_provider_model_mappings` are PromptHub's management source of truth.
+  `config.toml` is the Codex runtime projection and may also contain
+  externally-owned entries that PromptHub must reconcile rather than silently
+  adopt.
+- API keys have two representations only when Codex runtime requires it:
+  encrypted custody under `agent-provider:<profileId>` and a verified native
+  projection (`experimental_bearer_token`). Entries using `env_key` keep the
+  credential external and store no secret.
+- The legacy `codex-provider:<providerId>` namespace is migration input, not a
+  second durable source. It remains untouched until explicit user consent and
+  is removed only after the selected migration batch verifies completely.
+- Declining migration preserves legacy behavior and data. It does not create a
+  Profile, copy or delete a credential, or rewrite `config.toml`.
+
+### CC Switch source reference and migration
+
+CC Switch stable `v3.18.0`
+(`606e7bbe75db7f8285f7a3be006fac22b5d22796`, MIT) is pinned at the sibling
+checkout `/Users/lingxiaotian/Programs/public/cc-switch`. Its SQLite Provider
+library, explicit import, live projection, atomic Codex writes and rollback
+orchestration are the reference workflow. PromptHub adapts those boundaries to
+the existing TypeScript/Electron architecture and does not copy CC Switch's
+plaintext credential-in-`settings_config` storage.
+
+Migration is main-process orchestration:
+
+1. Parse the current Codex Provider entries and discover legacy managed,
+   external environment and native-inline credential states.
+2. Return a bounded public preview containing only provider identity,
+   endpoint/protocol/model metadata, active state and credential readiness.
+3. Require an explicit request containing selected provider ids and the
+   preview digest. A stale digest cancels migration.
+4. Create Profile records and model mappings, copy selected credential
+   material directly between main-process secret boundaries, and verify the
+   new public readiness state.
+5. After every selected Provider succeeds, remove legacy secret refs. If any
+   create, copy, verify or cleanup step fails, restore cleared legacy refs and
+   remove all Profile records and new refs created by that request.
+6. Leave `config.toml` byte-identical. Activation is a separate reviewed
+   operation and owns backup, atomic write, re-read verification and rollback.
+
+The algorithm is linear in selected Provider count and performs one bounded
+native-config parse, one batched legacy-secret read and at most one Profile
+transaction plus two secret-store writes per selected Provider. Migration
+concurrency is serialized per platform; no unbounded request or retry loop is
+introduced.
 
 ### Secret store
 
-- New `agent-secret-store.ts` in main, generalizing the audited `cloud-auth-storage.ts` pattern: Electron `safeStorage` behind an injectable encryption interface, one JSON file under userData (`agent-secrets.json`, mode 0600, atomic tmp+rename), keyed by secret reference (`codex-provider:<providerId>`), main-process only. Unavailable encryption fails closed with a categorized error.
+- `agent-secret-store.ts` remains the main-only encrypted boundary. New Profile
+  ownership uses `agent-provider:<profileId>`. The old
+  `codex-provider:<providerId>` namespace is read only by the migration
+  orchestrator and is never returned across IPC. Unavailable encryption fails
+  closed with a categorized error.
 
 ### Provider service and write pipeline
 
-- New `agent-codex-provider-service.ts` in main reuses the `agent-model-config.ts` pipeline (backup to device-local `agent-config-backups`, concurrency digest, smol-toml parse/modify, atomic write with 0600, re-read semantic verify, rollback on failure). Provider ids must match a slug rule and must not be reserved (`openai`, `ollama`, `lmstudio`) or collide with an existing entry on add.
-- `base_url` is validated: https required except loopback hosts; userinfo/query/hash rejected; the SSRF guard shared with the image download path is applied before any test request.
-- Removal refuses the provider referenced by the active `model_provider`, strips referencing `profiles.*`, and clears the matching secret-store entry. `setCodexDefaultProvider` flips the top-level `model_provider` through the same pipeline; switching back to `openai` is always offered.
-- Connectivity test: `GET <base_url>/models` with the credential resolved in the main process (secret store or env var presence), 10s timeout, categorized redacted result (`ok` with model count and latency, `auth-error`, `network-error`, `timeout`, `http-error`); no key material in the result. SSRF rules block private/reserved ranges and non-http(s) schemes, with an explicit loopback exemption (127.0.0.0/8, `localhost`, `::1`, including DNS-resolved loopback) so user-configured local providers such as Ollama remain testable — the SSRF threat model does not apply to loopback URLs the user entered themselves.
+- `agent-codex-provider-adapter.ts` is the only Codex activation writer used by
+  the unified Profile service. It implements
+  `inspect/import/plan/apply/verify/rollback`, requires an explicit Provider id
+  and one primary model mapping, validates protocol and endpoint policy, and
+  preserves unrelated TOML keys, tables and comments.
+- Activation resolves `agent-provider:<profileId>` only in main memory,
+  creates a safeStorage-encrypted device-local backup, checks the preview
+  digest, writes `config.toml` atomically with mode `0600`, re-reads semantic
+  state and rolls back on any write or verification failure. It does not edit
+  `auth.json`.
+- `agent-codex-provider-service.ts` remains main-only migration input for
+  inspecting legacy native entries and credentials. Its legacy list/upsert/
+  remove/set-default/test IPC and preload surface has been removed; it is not a
+  second management API.
+- `agent-codex-provider-adapter.ts` exposes isolated connection inventory and
+  explicit streaming model tests through the unified activation service. Both
+  use main-process credentials, the same validated target boundary, bounded
+  resources and stable redacted results; activation still makes no implicit
+  network request.
 
 ### Contract
 
-- Shared types in `packages/shared/types/agent.ts`: `AgentCodexProvider`, `AgentCodexProviderList`, `UpsertAgentCodexProviderInput`, `AgentCodexProviderTestResult`. Fields never include key material; `hasKey`/`keySource: "managed" | "env" | "none"` convey readiness.
-- IPC channels `agent:providers:list|upsert|remove|setDefault|test`; every handler guards `agentId === "codex"` (other platforms return `unsupported`), validates input shapes, and never throws raw errors to the renderer. Preload mirrors the methods under `agent.*`.
-- Renderer key input is write-only; the edit dialog pre-fills everything except the key, which shows a "keep existing key" placeholder.
+- Shared Provider Profile, model-mapping, migration-preview and activation
+  contracts in `packages/shared/types/agent.ts` contain public metadata and
+  readiness only. They never contain secret material or a secret-store
+  reference.
+- Renderer operations use the unified Profile CRUD, migration and
+  import/preview/activate IPC channels. Main validates every request and emits
+  stable `AGENT_PROVIDER_*` failures without native paths or credentials.
+- Renderer credential input is write-only. Edit preserves the existing
+  credential unless the user explicitly replaces or clears it; the current
+  value is never prefilled or returned.
 
 ### UI
 
-- `AgentProviderModelPanel.tsx` gains a third-party provider section (Codex only): provider list with base URL, wire API, key readiness, and managed/external badge; add/edit dialog; delete with active-provider guard messaging; set-default and test actions. Neutral design tokens only; seven locales.
+- The unified `AgentProviderProfileWorkbench` is the final Codex Provider
+  surface. Before the first migration it shows a non-blocking migration review
+  entry; the review lists each legacy Provider and credential source, selects
+  nothing silently, and provides explicit migrate / not-now actions.
+- The legacy `AgentProviderModelPanel.tsx` and
+  `AgentCodexProviderFormDialog.tsx` renderer surfaces were removed after
+  migration, full activation, encrypted rollback, unit regression and Electron
+  consent/activation E2E gates passed. There is one renderer management source
+  for Codex Providers.
+- Migration review, failure/retry state and the unified workbench use neutral
+  design tokens, keyboard/reader semantics and all seven locales.
 
 ## `DES-AGENT-021`: Desktop-Native Workspace Layout
 
@@ -810,9 +1013,9 @@ Batch confirmed on 2026-07-21; implements `FR-AGENT-028`.
 - Guided states reuse the existing mappings (no-credentials / expired / unavailable / `custom-provider-active`) in compact banner form.
 - `AgentUsagePanel.tsx` is repurposed into the overview banner component; the usage navigation cell is removed from the grid.
 
-## `DES-AGENT-023`: Codex / ChatGPT Presentation Identity
+## `DES-AGENT-031`: Codex / ChatGPT Presentation Identity
 
-Batch confirmed on 2026-07-21; implements `FR-AGENT-027`.
+Batch confirmed on 2026-07-21; implements `FR-AGENT-035`.
 
 - `codex` remains the stable platform id and `~/.codex` remains the native data root. Name and icon preferences are renderer presentation settings and do not alter platform detection, filesystem paths, IPC, provider ids, sessions, assets, or appearance adapters.
 - The default registry name becomes `Codex`. A normalized `agentIdentityPreferences.codex` setting independently stores an allowlisted name choice (`codex | chatgpt`) and icon choice (`codex | chatgpt`). Missing values default to Codex; malformed values are rejected field by field.
@@ -959,3 +1162,335 @@ Opening, editing, resetting, saving, validation failure, and closing are bounded
 UI operations over one Agent draft, with `O(f)` time and memory where `f` is the
 small fixed number of editable path fields. Changing the selected Agent closes
 the modal so a stale draft cannot be applied to a different target.
+
+## `DES-AGENT-029`: Oh My Pi Native Boundary
+
+This design implements `FR-AGENT-033` for issue #187. Oh My Pi is represented
+by the stable platform id `oh-my-pi` and the display name `Oh My Pi`; no
+presentation alias with a `CLI` suffix is introduced.
+
+### Roots and assets
+
+- The default user root is `~/.omp/agent`. `PI_CODING_AGENT_DIR` is resolved
+  through the existing platform-root service and wins when it is an absolute
+  path; PromptHub settings overrides remain higher priority through the same
+  service.
+- User Skills live at `<root>/skills`, global Rules at `<root>/RULES.md`, and
+  user MCP at `<root>/mcp.json`. A project target is `<project>/.omp/mcp.json`.
+- Oh My Pi plugins are installed by the native runtime below the sibling
+  `<root>/../plugins` directory (normally `~/.omp/plugins`). PromptHub exposes
+  this as a derived path only; it does not scan or install package contents as
+  PromptHub-owned Plugin records in this batch.
+- Config Files uses an allowlist of `config.yml`, `config.yaml`,
+  `settings.json`, `mcp.json`, `.mcp.json`, and `RULES.md`. Credentials,
+  session files, caches, and arbitrary profile files are not promoted into the
+  editor.
+
+### Sessions
+
+The read-only adapter scans only direct project directories one level below
+`<root>/sessions` and accepts JSONL files whose first session record contains a
+safe id. It reads at most 16 KiB for header discovery, 256 KiB for metadata,
+2 MiB for a selected transcript, and 64 KiB per visible entry through the
+shared session utility bounds. Metadata is deduplicated by id and sorted by
+file mtime; malformed lines are isolated. `toolResult` records are rendered as
+tool entries, while system/developer messages are not presented as user or
+assistant conversation. Symlinks and unsafe ids are rejected before detail
+reads. The resume payload is `{ executable: "omp", args: ["--resume", id] }`
+with the parsed project cwd when available; PromptHub never launches it from
+the session adapter.
+
+The adapter intentionally excludes nested subagent transcripts. Native
+profile/config-directory overrides beyond `PI_CODING_AGENT_DIR` (for example
+XDG or named profiles), provider activation, credential editing, usage/quota,
+and package installation require a later contract-specific change rather than
+guessed filesystem behavior. The non-secret model projection is defined by
+`DES-AGENT-030` below.
+
+## `DES-AGENT-030`: Oh My Pi YAML Model Projection
+
+This design implements `FR-AGENT-034` without creating a second provider store
+or copying Oh My Pi credentials into PromptHub. The adapter uses the resolved
+Oh My Pi root and two native files:
+
+- `config.yml` is preferred, with `config.yaml` as a compatibility fallback;
+  only `modelRoles.default` is read or written for the global model selection.
+- `models.yml` is optional and supplies provider ids, explicit model ids and
+  provider-level `baseUrl`/`auth` metadata. Its `apiKey`, headers, OAuth data,
+  model metadata and unknown fields are never returned to the renderer.
+
+The read path is bounded by the existing 2 MiB config limit and parses YAML
+with the repository's existing `yaml` dependency. The normalized result uses
+the existing `AgentModelConfiguration` contract and reports the adapter as
+`oh-my-pi-yaml-v1`; available models are concrete `provider/model` selectors,
+with the selected model retained even when it is not listed in the static
+catalog. A provider endpoint is passed through the existing URL sanitizer.
+Credential status is presence-only: `apiKey` configured, `auth: oauth`, and
+keyless `auth: none` never reveal the credential value or environment lookup.
+
+Writes parse the selected YAML document, set only `modelRoles.default`, create
+the existing per-agent backup, guard against a concurrent source change, write
+through the existing atomic path, re-read and verify the selector, and restore
+the exact original bytes on any failure. Provider switching, credential writes,
+quota requests, runtime discovery and plugin installation remain outside this
+adapter.
+
+The contract was re-audited against upstream revision
+`cc00ab161b2721e50d8a96a0dc9552abfd258b8b`. Current Oh My Pi owns stored API
+keys, OAuth accounts, multi-account rotation, and broker-backed credentials in
+or behind `<root>/agent.db`; it also resolves runtime and environment sources.
+PromptHub therefore keeps `providerModel` at `partial`. It may select a
+documented `provider/model` value, but it must not present the generic
+model-only adapter as a full Profile endpoint/credential adapter. Reading or
+writing `agent.db`, copying an Oh My Pi credential into PromptHub's secret
+store, or projecting a PromptHub secret into `models.yml` would change the
+credential source of truth and requires a separately approved design. No
+upstream source is copied or vendored.
+
+## `DES-AGENT-033`: Kimi Code Provider And Model Projection
+
+This design extends the existing Kimi model-only adapter under
+`FR-AGENT-003` to `FR-AGENT-006` and `FR-AGENT-011`. It is based on the
+official Kimi Code `config.toml` contract and the upstream
+`MoonshotAI/kimi-cli` revision
+`4a550effdfcb29a25a5d325bf935296cc50cd417`; no upstream source is copied or
+vendored.
+
+### Native ownership and profile shape
+
+- The resolved Kimi root and `config.toml` remain the runtime source of truth.
+  PromptHub owns Provider Profiles, model mappings, secure secret references,
+  redacted snapshots, and encrypted rollback backups.
+- A managed Profile stores only public metadata: native provider id and type,
+  protocol, endpoint, model alias, upstream model id, and
+  `max_context_size`. The API key remains in the main-process secret store and
+  is projected to native plaintext only during confirmed activation because
+  Kimi Code requires the credential in `config.toml`.
+- Model alias is `modelMappings.primary.modelId`; upstream model id and context
+  size are validated mapping parameters. Provider id is public profile config.
+  No credential, OAuth reference, custom header value, or provider `env` value
+  enters renderer state, snapshots, exports, logs, or ordinary backups.
+
+### Supported protocol projection
+
+| Kimi provider `type` | PromptHub protocol       | Credential policy                                |
+| -------------------- | ------------------------ | ------------------------------------------------ |
+| `kimi`               | `openai-chat`            | PromptHub-owned direct API key                   |
+| `openai`             | `openai-chat`            | PromptHub-owned direct API key                   |
+| `openai_responses`   | `openai-responses`       | PromptHub-owned direct API key                   |
+| `anthropic`          | `anthropic-messages`     | PromptHub-owned direct API key                   |
+| `google-genai`       | `google-generative-ai`   | PromptHub-owned direct API key                   |
+| `vertexai`           | `platform-native`        | Google ADC remains entirely platform-owned       |
+| OAuth/custom headers | `platform-native` import | Read-only; PromptHub never owns or tests secrets |
+
+Kimi `/login` credentials, `credentials/`, provider `oauth`, provider `env`,
+and `custom_headers` are external authentication surfaces. Import reports their
+presence without values. Direct providers with native plaintext credentials
+can be imported as incomplete Profiles, but require an explicit write-only
+credential entry before reactivation.
+
+### Apply, verification, and rollback
+
+The adapter performs one bounded read of `config.toml`, parses it as TOML,
+preserves all unknown semantic fields, and edits only the selected provider
+entry, selected model entry, and `default_model`. It validates identifiers,
+endpoint, model metadata, file size, regular-file status, symlink rejection,
+and the pre-write digest. The prior bytes are stored only in the encrypted
+Agent config backup area. The write uses the shared atomic replacement path,
+optionally invokes the allowlisted native `kimi doctor config` validator,
+re-reads the file, verifies provider/model/default selection semantically, and
+restores the exact prior bytes on any failure.
+
+Platform-native activation never creates a provider or model. It can only
+select an already valid native model whose provider/type matches the imported
+Profile. Direct connection and streaming tests dispatch to the existing
+OpenAI-compatible, Anthropic, or Google Gemini main-process probes. Their
+SSRF/DNS, timeout, response-size, abort, retry, and redaction policies remain
+the single network boundary; the Kimi adapter adds no proxy or protocol
+conversion layer.
+
+Runtime complexity is `O(n)` time and memory in the bounded TOML size for
+inspect/apply/verify. Network probes are one bounded request plus at most one
+existing retry. No recursive filesystem scan or unbounded provider/model
+enumeration is introduced.
+
+## `DES-AGENT-034`: Qwen Code Provider Catalog And Credential Projection
+
+This design extends the existing Qwen model-only projection under
+`FR-AGENT-003` to `FR-AGENT-006` and `FR-AGENT-011`. Evidence is the official
+Qwen Code settings, authentication, and model-provider documentation plus the
+public `QwenLM/qwen-code` revision
+`bfd4c8e519f96ca5bdc6cdd9f7a635b9345dbf11`. No upstream source is copied or
+vendored.
+
+### Current native contract
+
+- User `settings.json` is the provider catalog and active-selection source of
+  truth. Project `.qwen/settings.json` remains a higher-precedence
+  project-owned layer and is not rewritten by a user Profile activation.
+- Current `$version: 4` uses a bare `ModelConfig[]` at
+  `modelProviders[providerId]`. The earlier wrapped
+  `{ protocol, models }` form is invalid for this adapter because current Qwen
+  silently skips it.
+- A provider model is identified by provider id plus model `id` and normalized
+  `baseUrl`. Built-in provider ids route directly; a custom provider id must
+  have an explicit `providerProtocol` mapping.
+- `security.auth.selectedType` selects the provider id and `model.name`
+  selects the model. PromptHub never writes the deprecated
+  `security.auth.apiKey` or `security.auth.baseUrl` fields.
+
+### Profile and secret ownership
+
+A direct Qwen Profile stores public provider id, protocol, endpoint, model id,
+environment-key name, and non-secret Provider metadata. The credential remains
+in the main-process secret store until confirmed activation. Activation writes
+that value only to user `.env`, the location recommended by current Qwen
+documentation, and removes the same selected key from the lower-priority
+`settings.json.env` object so one credential has one active native source.
+Other environment entries and all unrelated settings remain intact.
+
+| Provider protocol | Qwen routing value | Credential policy                          |
+| ----------------- | ------------------ | ------------------------------------------ |
+| OpenAI-compatible | `openai`           | PromptHub-owned direct API key             |
+| Anthropic         | `anthropic`        | PromptHub-owned direct API key             |
+| Google GenAI      | `gemini`           | PromptHub-owned direct API key             |
+| Google Vertex     | `vertex-ai`        | ADC remains platform-owned                 |
+| Legacy Qwen OAuth | `qwen-oauth`       | Read-only; free tier discontinued upstream |
+
+Custom provider ids may map only to `openai`, `anthropic`, or `gemini`.
+Provider `generationConfig`, capabilities, descriptions, custom headers, and
+other unknown fields are preserved when the exact model entry already exists;
+PromptHub does not synthesize an advanced generation policy. Automatic Coding
+Plan entries and reserved `BAILIAN_CODING_PLAN_API_KEY` ownership are imported
+as platform-managed unless the user creates a distinct manual provider/env-key
+Profile, matching Qwen's overwrite warning.
+
+### Apply, verification, and rollback
+
+The adapter performs bounded parallel reads of `settings.json` and `.env`,
+rejects non-regular files, symlinks, malformed input, unsafe identifiers and
+endpoints, and computes one digest over both byte streams. One encrypted bundle
+contains the exact prior bytes for both files. After a pre-write digest check,
+settings and environment files are atomically replaced in order; any partial
+failure restores both prior files. A bounded semantic reread verifies provider
+protocol, exact provider/model/endpoint identity, active selection,
+environment-key name, and credential presence without exposing the value.
+
+Direct health and streaming tests resolve the Profile secret only in main and
+reuse the existing OpenAI-compatible, Anthropic, and Google Gemini probes.
+Platform-owned entries return a stable unsupported result and are never tested
+with borrowed credentials. Runtime complexity is `O(n)` time and memory in the
+bounded settings and environment files. Provider lookup is a single bounded
+linear scan of the selected provider's model array; no recursive scan,
+unbounded network fan-out, proxy, protocol conversion, or OAuth pool is added.
+
+## `DES-AGENT-035`: OpenCode Provider Catalog And Native Auth Boundary
+
+This design extends the existing OpenCode model-only projection under
+`FR-AGENT-003` to `FR-AGENT-006` and `FR-AGENT-011`. Evidence is the official
+OpenCode config/provider documentation and the public `anomalyco/opencode`
+revision `017a5977d2107092007623e507fc5c6eb337d3b2`. No upstream source is
+copied or vendored.
+
+### Version and path boundary
+
+The current stable schema and installed OpenCode `1.18.3` use singular
+`provider`, `model`, and `small_model` in the global
+`~/.config/opencode/opencode.jsonc` or `opencode.json`. The adapter preserves
+JSONC comments and chooses the same `opencode.jsonc`, `opencode.json`,
+`config.json` precedence implemented upstream. The separate experimental v2
+documentation uses a materially different plural `providers` contract;
+PromptHub detects but does not write that shape until it becomes the stable
+schema and has its own compatibility fixtures.
+
+Credentials are owned by OpenCode's XDG data root, not its config root. The
+main process resolves `${XDG_DATA_HOME}/opencode/auth.json`, with the platform
+XDG default when the variable is absent. The renderer never supplies or sees
+this path. Tests inject an isolated data root rather than changing process
+home state.
+
+### Supported Profile shapes
+
+PromptHub supports only the two custom-provider packages documented for direct
+OpenAI-compatible endpoints:
+
+| Profile protocol   | OpenCode `npm` package      | Native request contract |
+| ------------------ | --------------------------- | ----------------------- |
+| `openai-chat`      | `@ai-sdk/openai-compatible` | Chat Completions        |
+| `openai-responses` | `@ai-sdk/openai`            | Responses               |
+
+A direct Profile stores public provider id, package/protocol, sanitized
+endpoint, primary model id, optional small model id, and non-secret Provider
+metadata. Activation writes or updates the exact `provider[providerId]`,
+selects native model strings as `providerId/modelId`, and writes only
+`{ type: "api", key }` at `auth.json[providerId]`. It removes a selected
+provider's legacy inline `options.apiKey` only after an encrypted backup exists.
+Existing custom authorization headers block direct activation instead of being
+silently removed or combined with another credential source.
+
+Built-in providers, unsupported npm packages, environment/file substitutions,
+OAuth, well-known auth, cloud identity and pre-existing API credentials are
+imported as platform-native, redacted and read-only. PromptHub may retain or
+select only an already-valid native state and never borrows those credentials
+for a network test.
+
+### Apply, verification, and rollback
+
+The adapter performs bounded parallel reads of the selected config and native
+auth files, rejects non-regular files, symlinks, malformed input, unsafe ids,
+model names and endpoints, and computes one digest over both byte streams. One
+encrypted bundle contains the exact prior bytes and target-relative config
+name. A pre-write digest check protects both files; config and auth are
+atomically replaced with mode `0600`, and a partial failure restores both.
+Semantic reread verifies provider/package/endpoint/model/auth type and key
+presence without returning the key.
+
+Direct connection and streaming tests resolve only the Profile secret in the
+main process and reuse the existing OpenAI Chat or Responses probes. Runtime
+complexity is `O(n)` time and memory in the bounded config/auth files, with
+constant provider/model lookups inside their bounded maps. No recursive scan,
+native database access, proxy, protocol conversion, OAuth pool, or network
+fan-out is introduced.
+
+## `DES-AGENT-036`: GitHub Copilot CLI Model And Asset Boundary
+
+This design implements `FR-AGENT-036` from current GitHub Copilot CLI `1.0.48`
+and GitHub's public CLI configuration reference. PromptHub reuses documented
+contracts only; it does not copy or vendor Copilot source.
+
+`COPILOT_HOME` overrides the default `~/.copilot` root. The registry exposes
+only documented user-owned assets: `skills/`, `agents/`,
+`copilot-instructions.md`, `mcp-config.json`, `settings.json`, and installed
+Plugin discovery. Automatically managed `config.json`, `session-state/`,
+`session-store.db`, permissions, logs, MCP OAuth/secrets, Plugin metadata, and
+native authentication remain excluded from generic editing and ordinary
+configuration backup.
+
+The model adapter reads JSONC `settings.json` and projects only the top-level
+`model` as a platform-native Profile mapping. It writes that field through the
+existing bounded read, exact backup, digest race check, atomic replacement,
+semantic reread, and rollback pipeline. Missing files may be created; malformed,
+oversized, symlinked, or concurrently changed files fail closed.
+
+Copilot BYOK is process-environment-only:
+`COPILOT_PROVIDER_BASE_URL`, provider type, wire API/model, and credential
+variables affect a launched process but have no documented durable settings
+projection. The model-only adapter therefore blocks endpoint and secret
+Profiles and keeps `providerModel` at `partial`. A future runtime-launch
+environment design must be explicit and user-confirmed before PromptHub can
+claim full Provider activation.
+
+## `DES-AGENT-037`: Copilot Native Plugin Install Gate
+
+Copilot package shape and installation are separate contracts. PromptHub keeps
+the existing read-only scan of documented installed package markers, but
+removes Copilot from filesystem-based distribution. The target matrix remains
+the single UI and service gate: `github-copilot` is visible as an `adapter`,
+disabled, and explains that native CLI registration is required.
+
+`assertSupportedPluginTargets` rejects direct calls before target resolution or
+filesystem mutation. A later implementation may enable the target only after a
+bounded `copilot plugin install` adapter provides preview, explicit
+confirmation, timeout/output limits, post-install verification, uninstall or
+rollback, and tests against the current CLI. No platform-managed Plugin
+metadata is edited directly.

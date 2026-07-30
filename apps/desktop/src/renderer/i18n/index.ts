@@ -1,18 +1,22 @@
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+import { withAgentDefinitionMessages } from "./locales/agent-definitions";
 
 const localeLoaders = {
-  en: () => import('./locales/en.json').then((module) => module.default),
-  zh: () => import('./locales/zh.json').then((module) => module.default),
-  'zh-TW': () => import('./locales/zh-TW.json').then((module) => module.default),
-  ja: () => import('./locales/ja.json').then((module) => module.default),
-  es: () => import('./locales/es.json').then((module) => module.default),
-  de: () => import('./locales/de.json').then((module) => module.default),
-  fr: () => import('./locales/fr.json').then((module) => module.default),
+  en: () => import("./locales/en.json").then((module) => module.default),
+  zh: () => import("./locales/zh.json").then((module) => module.default),
+  "zh-TW": () =>
+    import("./locales/zh-TW.json").then((module) => module.default),
+  ja: () => import("./locales/ja.json").then((module) => module.default),
+  es: () => import("./locales/es.json").then((module) => module.default),
+  de: () => import("./locales/de.json").then((module) => module.default),
+  fr: () => import("./locales/fr.json").then((module) => module.default),
 } as const;
 
 type SupportedLocale = keyof typeof localeLoaders;
-type LocaleMessages = Awaited<ReturnType<(typeof localeLoaders)[SupportedLocale]>>;
+type LocaleMessages = Awaited<
+  ReturnType<(typeof localeLoaders)[SupportedLocale]>
+>;
 type LocaleResources = Record<string, { translation: LocaleMessages }>;
 type InitialResources = {
   language: SupportedLocale;
@@ -24,14 +28,14 @@ const localeCache = new Map<string, LocaleMessages>();
 
 function normalizeLanguage(lang: string): SupportedLocale {
   if (lang in localeLoaders) return lang as SupportedLocale;
-  const lower = (lang || '').toLowerCase();
-  if (lower === 'zh-tw' || lower === 'zh-hant') return 'zh-TW';
-  if (lower.startsWith('zh')) return 'zh';
-  if (lower.startsWith('ja')) return 'ja';
-  if (lower.startsWith('es')) return 'es';
-  if (lower.startsWith('de')) return 'de';
-  if (lower.startsWith('fr')) return 'fr';
-  return 'en';
+  const lower = (lang || "").toLowerCase();
+  if (lower === "zh-tw" || lower === "zh-hant") return "zh-TW";
+  if (lower.startsWith("zh")) return "zh";
+  if (lower.startsWith("ja")) return "ja";
+  if (lower.startsWith("es")) return "es";
+  if (lower.startsWith("de")) return "de";
+  if (lower.startsWith("fr")) return "fr";
+  return "en";
 }
 
 // Get system language
@@ -44,7 +48,7 @@ const getSystemLanguage = (): string => {
 // 获取保存的语言设置 (从 zustand persist store 读取)
 const getSavedLanguage = (): string | null => {
   try {
-    const stored = localStorage.getItem('prompthub-settings');
+    const stored = localStorage.getItem("prompthub-settings");
     if (stored) {
       const parsed = JSON.parse(stored);
       return parsed.state?.language || null;
@@ -63,11 +67,14 @@ async function loadLocale(lang: string): Promise<LocaleMessages> {
     return cached;
   }
 
-  const messages = await localeLoaders[normalized]();
+  const messages = withAgentDefinitionMessages(
+    normalized,
+    await localeLoaders[normalized](),
+  );
   loadedLocales.add(normalized);
   localeCache.set(normalized, messages);
   if (i18n.isInitialized) {
-    i18n.addResourceBundle(normalized, 'translation', messages, true, true);
+    i18n.addResourceBundle(normalized, "translation", messages, true, true);
   }
   return messages;
 }
@@ -75,22 +82,24 @@ async function loadLocale(lang: string): Promise<LocaleMessages> {
 async function loadInitialResources(lang: string): Promise<InitialResources> {
   const normalized = normalizeLanguage(lang);
   const resources: LocaleResources = {
-    en: { translation: await loadLocale('en') },
+    en: { translation: await loadLocale("en") },
   };
 
-  if (normalized !== 'en') {
+  if (normalized !== "en") {
     try {
       resources[normalized] = { translation: await loadLocale(normalized) };
     } catch (error) {
-      console.error('Failed to load initial language resources:', error);
-      return { language: 'en', resources };
+      console.error("Failed to load initial language resources:", error);
+      return { language: "en", resources };
     }
   }
 
   return { language: normalized, resources };
 }
 
-const initialLanguage = normalizeLanguage(getSavedLanguage() || getSystemLanguage());
+const initialLanguage = normalizeLanguage(
+  getSavedLanguage() || getSystemLanguage(),
+);
 
 export const i18nReady = (async () => {
   const { language, resources } = await loadInitialResources(initialLanguage);
@@ -99,14 +108,20 @@ export const i18nReady = (async () => {
     await i18n.use(initReactI18next).init({
       resources,
       lng: language,
-      fallbackLng: 'en',
+      fallbackLng: "en",
       interpolation: {
         escapeValue: false,
       },
     });
   } else {
     for (const [lang, bundle] of Object.entries(resources)) {
-      i18n.addResourceBundle(lang, 'translation', bundle.translation, true, true);
+      i18n.addResourceBundle(
+        lang,
+        "translation",
+        bundle.translation,
+        true,
+        true,
+      );
     }
     await i18n.changeLanguage(language);
   }

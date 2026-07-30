@@ -19,6 +19,9 @@
 - 对没有公开官方文档、正文不可抓取、或当前只能通过产品 UI/登录后页面确认的平台，必须明确标注为 `PromptHub inferred` 或 `Evidence limited`。
 - 对于“功能存在但本轮未拿到明确本地路径”的资产，可以记录为“feature documented, local path not confirmed in current pass”，不要伪装成已确认路径。
 - 内置平台 id 必须唯一；平台图标不得用相同的通用 fallback 冒充不同品牌。能够确认来源时，优先使用官方 mark 或 favicon，并在本节记录来源。
+- `packages/shared/constants/agent-platform-capabilities.ts` 是平台能力状态的 machine-readable 投影：深度 adapter 必须逐个平台显式声明，路径/资产/launch 能力只能从 `packages/shared/constants/platforms.ts` 派生，不得另建 id allowlist 或复制路径事实。
+- 平台能力状态只允许 `supported`、`partial`、`planned`、`unsupported`，并必须携带证据代码。已声明路径只证明可定位资产，不能单独证明配置协议、会话格式、额度端点或维护命令已经受支持。
+- 自定义 Agent 可以从自身根目录和派生路径获得路径级能力，但不得因为目录名相似而继承内置 Agent 的 Provider、Session、Usage 或 Appearance adapter。
 
 ## Icon Provenance Snapshot
 
@@ -38,6 +41,33 @@ Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加�
 - `skills / plugins / rules / commands / agents / workflows / config` 等都属于从根目录派生出的本地资产表面。
 - 因此设置页和后续 Agent 管理页应优先暴露根目录管理与派生资产预览；仅保留零散扫描路径会把产品错误收窄成 Skill 导入工具。
 - 对 PromptHub 而言，Plugin 是比 Skill 更高一级的分发包；它可以包含 Skill、MCP server、App/connector、commands、hooks、assets 等子资产。稳定概念映射见 `spec/knowledge/reference/codex-extension-surfaces.md`。
+
+## Read-Only CLI Diagnostic Snapshot
+
+`packages/shared/constants/platforms.ts` is the only executable-descriptor
+source of truth. PromptHub currently exposes a read-only version diagnostic
+for the following evidence-backed built-ins:
+
+| Platform    | Executable | Version arguments | Capability |
+| ----------- | ---------- | ----------------- | ---------- |
+| Claude Code | `claude`   | `--version`       | `partial`  |
+| Codex       | `codex`    | `--version`       | `partial`  |
+| Kimi Code   | `kimi`     | `--version`       | `partial`  |
+| Qwen Code   | `qwen`     | `--version`       | `partial`  |
+| OpenCode    | `opencode` | `--version`       | `partial`  |
+| Oh My Pi    | `omp`      | `--version`       | `partial`  |
+| OpenClaw    | `openclaw` | `--version`       | `partial`  |
+
+The Electron main process resolves only those registry-owned executable names
+through a bounded PATH search and executes fixed argument arrays without a
+shell. Results expose only a canonical path, one bounded version line, coarse
+install-source classification, timestamp and stable error code. Raw output,
+environment values and process errors do not cross IPC. Platforms without a
+verified descriptor remain `planned`, and custom Agents do not accept
+renderer-provided executable paths. Install and update remain separate
+plan/confirm/apply work. OpenCode native updates and npm-managed Codex or Qwen
+Code updates additionally reuse the bounded main-owned lifecycle; every other
+installation source and all installation workflows remain diagnostic-only.
 
 ## MCP Config Support Snapshot
 
@@ -88,6 +118,8 @@ Stable product rule:
 - Kimi Code: `~/.kimi-code/AGENTS.md`
 - Gemini CLI: `~/.gemini/GEMINI.md`
 - OpenCode: `~/.config/opencode/AGENTS.md`
+- GitHub Copilot CLI: `~/.copilot/copilot-instructions.md` or the resolved
+  `<COPILOT_HOME>/copilot-instructions.md`
 - Windsurf: `~/.codeium/windsurf/memories/global_rules.md`
 - OpenClaw: `~/.openclaw/workspace/SOUL.md`
 - Qwen Code: `~/.qwen/QWEN.md` or the resolved `<QWEN_HOME>/QWEN.md`
@@ -95,7 +127,11 @@ Stable product rule:
 补充说明：
 
 - `OpenClaw` 已进入 Rules 白名单，但只暴露 workspace 内的 canonical 单文件 `SOUL.md`；其余 workspace bootstrap / memory 文件仍不按多文件模型完整管理。
-- `Cursor`、`Kiro`、`Roo Code`、`GitHub Copilot` 也都已经在资产文档中建模，但当前仍未进入 `Rules` 运行时全局规则白名单。
+- `GitHub Copilot CLI` 已进入 Rules 白名单，但只暴露用户根目录下的
+  `copilot-instructions.md`；仓库级 `.github/instructions/` 多文件规则仍由
+  Copilot 和项目上下文管理。
+- `Cursor`、`Kiro`、`Roo Code` 已在资产文档中建模，但当前仍未进入
+  `Rules` 运行时全局规则白名单。
 - `Reasonix` 不进入当前白名单：它使用项目层级或记忆文件合并。Augment 仍以 rules 目录为主。
 - `Qwen Code` 已进入全局 Rules 运行时白名单，使用解析后的 `<QWEN_HOME>/QWEN.md`。项目 `QWEN.md` 与个人覆盖 `.qwen/QWEN.local.md` 的专用 scope UI 仍属于后续门禁，当前不得把 auto-memory 当作 Rule 导入。
 - 这些平台未进入白名单的主要原因分别是：缺少已确认的单一本地全局规则文件、以 steering / rules directory / multi-entry 结构为主，或其协议本身以 repository-scoped 文件为核心，而非用户级单文件。
@@ -118,6 +154,7 @@ Stable product rule:
 | `CODEBUDDY.md`                           | CodeBuddy Code                                                                                         | CodeBuddy memory / instructions file           | Officially documented | 用户级位于 `~/.codebuddy/CODEBUDDY.md`，项目级位于仓库根 `CODEBUDDY.md`。                                                                                                                   |
 | `.github/copilot-instructions.md`        | GitHub Copilot                                                                                         | Copilot repository-wide custom instructions    | Officially documented | 作用于整个仓库，不等同于 `AGENTS.md` 的就近目录覆盖模型。                                                                                                                                   |
 | `.github/instructions/*.instructions.md` | GitHub Copilot                                                                                         | Copilot path-specific custom instructions      | Officially documented | 通过 frontmatter `applyTo` 绑定路径。                                                                                                                                                       |
+| `copilot-instructions.md`                | GitHub Copilot CLI                                                                                     | Copilot CLI user-wide custom instructions      | Officially documented | 位于解析后的 `<COPILOT_HOME>/copilot-instructions.md`；不替代仓库级 instructions。                                                                                                          |
 | `global_rules.md`                        | Windsurf                                                                                               | Windsurf 全局规则单文件                        | Officially documented | 规范路径为 `~/.codeium/windsurf/memories/global_rules.md`。                                                                                                                                 |
 | `.roorules`                              | Roo Code                                                                                               | Roo workspace generic fallback rule file       | Officially documented | 当 `.roo/rules/` 不存在或为空时才回退到该单文件。                                                                                                                                           |
 | `.roorules-{mode}`                       | Roo Code                                                                                               | Roo mode-specific fallback rule file           | Officially documented | 当 `.roo/rules-{modeSlug}/` 不存在或为空时使用。                                                                                                                                            |
@@ -132,31 +169,31 @@ Stable product rule:
 
 ### Documented Platforms
 
-| Platform                              | Default Root / Config Dir                                                                                                            | Rules / Context Surface                                                                                                                                                                                       | Memory / History / Checkpoints                                                                                                                                                                                                                                                                                          | Reusable Assets                                                                                                                                                                                                                                            | Config / Profiles                                                                                                                                                                                                         | Evidence                                                         |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Claude Code                           | `~/.claude`                                                                                                                          | `~/.claude/CLAUDE.md`, project `CLAUDE.md`, `./.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/rules/**/*.md`                                                                                                 | Per-project auto memory in `~/.claude/projects/<project>/memory/` with `MEMORY.md` entrypoint                                                                                                                                                                                                                           | `.claude/skills/<name>/SKILL.md`; subagents documented; `@AGENTS.md` import supported                                                                                                                                                                      | user / local / managed settings documented; exact settings file set not re-listed here                                                                                                                                    | Officially documented                                            |
-| Codex CLI                             | `~/.codex`                                                                                                                           | `AGENTS.override.md` or `AGENTS.md`; per-directory discovery; fallback names configurable in `config.toml`                                                                                                    | `~/.codex/memories/`; Chronicle in `~/.codex/memories_extensions/chronicle/`; temp captures in `$TMPDIR/chronicle/screen_recording/`; logs in `~/.codex/log/` and optional `session-*.jsonl`                                                                                                                            | Skills in `.agents/skills/`, `~/.agents/skills/`, `/etc/codex/skills`; plugins are installable bundles with `.codex-plugin/plugin.json` metadata; subagents and workflows documented                                                                       | `~/.codex/config.toml`, `.codex/config.toml`, `/etc/codex/config.toml`, `--profile`, `CODEX_HOME`                                                                                                                         | Officially documented                                            |
-| Kimi Code                             | Current `~/.kimi-code` or `KIMI_CODE_HOME`; legacy fallback `~/.kimi` or `KIMI_SHARE_DIR`                                            | Current user `~/.kimi-code/AGENTS.md`; project `AGENTS.md` discovery remains platform-owned                                                                                                                   | Current index `session_index.jsonl`; per-session `sessions/<workDirKey>/<sessionId>/state.json` and `agents/main/wire.jsonl`; PromptHub reads these lazily and never edits transcripts                                                                                                                                  | Current user `~/.kimi-code/skills/` and `plugins/`; legacy `~/.kimi/skills/` remains a compatibility fallback only                                                                                                                                         | Current `config.toml`, `tui.toml`, `mcp.json`; `credentials/`, logs and runtime update state are excluded from raw editing                                                                                                | Officially documented; legacy compatibility verified locally     |
-| Grok Build                            | `~/.grok` or `$GROK_HOME`                                                                                                            | Global `~/.grok/AGENTS.md`; supported instruction filename family and `.grok/rules/` from repository root to cwd; Claude/Cursor compatibility is configurable                                                 | User sessions are stored below `~/.grok/sessions/`; experimental user/workspace memory is under `~/.grok/memory/`; both are runtime state, not PromptHub-managed assets                                                                                                                                                 | Skills in `~/.grok/skills/`, `.grok/skills/`, and `.agents/skills/`; plugins in `~/.grok/plugins/` and `.grok/plugins/`; agents in `~/.grok/agents/` and `.grok/agents/`; roles, personas, hooks, MCP servers, and marketplaces are separate Grok surfaces | `~/.grok/config.toml`, `pager.toml`, `settings.json`, `lsp.json`, `sandbox.toml`; project `.grok/config.toml`, `.grok/hooks/`, `.grok/agents/`, `.grok/lsp.json`, `.grok/sandbox.toml`; ACP and headless modes documented | Officially documented                                            |
-| Qwen Code                             | `~/.qwen` or `$QWEN_HOME`; runtime may move independently through `$QWEN_RUNTIME_DIR`                                                | Global `~/.qwen/QWEN.md`; shared project `QWEN.md`; personal project `.qwen/QWEN.local.md`                                                                                                                    | Runtime project chats and sidecars live below the runtime root; native `qwen sessions list --json` exposes bounded metadata. Auto-memory and `.qwen/team-memory/` remain Qwen-owned and are excluded from normal PromptHub backup/sync                                                                                  | User/project Skills in `skills/`; compatibility discovery in `~/.agents/skills/`; SubAgents in `agents/`; commands in `commands/`; Extensions in `extensions/<name>/qwen-extension.json`, whose child assets remain parent-owned                           | User `~/.qwen/settings.json`, project `.qwen/settings.json`, system defaults/overrides; MCP uses `mcpServers`; provider, `env`, headers, OAuth and credential fields require redaction                                    | Officially documented                                            |
-| Reasonix                              | `~/.reasonix` (macOS/Linux); `%APPDATA%\reasonix` (Windows)                                                                          | Project `./reasonix.toml`; `REASONIX.md` / `AGENTS.md` memory documents; no synthetic global Rules entry                                                                                                      | Sessions, archives, memory, logs, and caches are under the Reasonix state/cache roots; these remain Reasonix-owned runtime data                                                                                                                                                                                         | Global Skills in `~/.reasonix/skills/`; global commands in `~/.reasonix/commands/`; Skills support `runAs = subagent`; MCP/plugins are TOML `[[plugins]]` entries rather than a Skill directory                                                            | Global `config.toml`, `settings.json` hooks, `trust.json`; project `reasonix.toml`; `.mcp.json` may be merged into plugin configuration                                                                                   | Officially documented (current main-v2)                          |
-| Gemini CLI (enterprise compatibility) | `~/.gemini`                                                                                                                          | `~/.gemini/GEMINI.md`; workspace `GEMINI.md`; customizable `context.fileName`; `/memory` manages loaded context                                                                                               | Session transcripts under `~/.gemini/tmp/<project>/chats/`; resume / rewind / checkpointing documented; project memory inbox and patch workflow documented but not all canonical directories are named on one page                                                                                                      | Skills in `~/.gemini/skills/`, `.gemini/skills/`, plus `.agents/skills/` aliases; commands in `~/.gemini/commands/`, `.gemini/commands/`                                                                                                                   | `~/.gemini/settings.json`, `.gemini/settings.json`; Free/Pro/Ultra request service ended 2026-06-18; enterprise, Google Cloud and paid API keys remain supported                                                          | Official transition announcement + legacy docs                   |
-| Google Antigravity                    | Managed customizations in `~/.gemini/config`; desktop runtime in `~/.gemini/antigravity`; CLI runtime in `~/.gemini/antigravity-cli` | Global `~/.gemini/GEMINI.md`; workspace `GEMINI.md`, `AGENTS.md`, and `.agents/rules/`                                                                                                                        | Antigravity 2.0 and CLI keep separate product-owned conversations, artifacts, knowledge, cache, and updater state; PromptHub does not use those runtime roots as Skill targets                                                                                                                                          | Shared global Skills in `~/.gemini/config/skills/`; Plugins in `~/.gemini/config/plugins/`; workspace Skills and Plugins in `.agents/skills/` and `.agents/plugins/`                                                                                       | Global MCP `~/.gemini/config/mcp_config.json`; workspace `.agents/mcp_config.json`; CLI preferences `~/.gemini/antigravity-cli/settings.json`                                                                             | Officially documented for Antigravity CLI and Antigravity 2.0    |
-| Cline                                 | `~/.cline`                                                                                                                           | `AGENTS.md`; `.clinerules/`; `~/Documents/Cline/Rules`; project `.cline/` instruction assets                                                                                                                  | Session data in `~/.cline/data/sessions/`; additional db state under `~/.cline/data/db/`                                                                                                                                                                                                                                | `~/.cline/skills/`, `.cline/skills/`, `~/.cline/agents/`, `.cline/agents/`, plugins / hooks / workflows documented                                                                                                                                         | `~/.cline/data/settings/global-settings.json`, `providers.json`, `cline_mcp_settings.json`                                                                                                                                | Officially documented                                            |
-| Augment                               | `~/.augment`                                                                                                                         | User rules in `~/.augment/rules/`; workspace `.augment/rules/` and `.augment-guidelines`; directory rules use `always_apply` / `agent_requested` frontmatter; no single global rule file                      | Runtime sessions are Auggie-owned; not part of the stable Skill target contract                                                                                                                                                                                                                                         | Skills in `~/.augment/skills/`, `.augment/skills/`, plus compatible `.claude/skills/` and `.agents/skills/`; commands in `~/.augment/commands/` and `.augment/commands/`                                                                                   | Persistent MCP servers in `~/.augment/settings.json` under `mcpServers`; one-shot `--mcp-config` overrides are supported                                                                                                  | Officially documented (CLI docs, 2026)                           |
-| CodeBuddy                             | `~/.codebuddy`; project `.codebuddy/`; project MCP at `.mcp.json`                                                                    | user `~/.codebuddy/CODEBUDDY.md`; project `CODEBUDDY.md`; modular `rules/` documented in SDK reference                                                                                                        | Local conversation resume is documented; exact persisted transcript path not confirmed in current pass                                                                                                                                                                                                                  | user/project Skills in `~/.codebuddy/skills/` and `.codebuddy/skills/`; user/project agents in `~/.codebuddy/agents/` and `.codebuddy/agents/`; commands; hooks; plugin packages with `.codebuddy-plugin/plugin.json`; plugins may include MCP servers     | `~/.codebuddy/settings.json`, `.codebuddy/settings.json`, `.codebuddy/settings.local.json`, `~/.codebuddy/.mcp.json`, project `.mcp.json`                                                                                 | Officially documented                                            |
-| ZCode Agent                           | `~/.zcode`; project `.zcode/`                                                                                                        | user `~/.zcode/AGENTS.md`; workspace `AGENTS.md`                                                                                                                                                              | Session/task persistence is product-documented; stable transcript path not confirmed in current pass                                                                                                                                                                                                                    | user Skills in `~/.zcode/skills/`; commands in `~/.zcode/commands/`; subagents in `~/.zcode/agents/`; Plugin bundles are documented, but a stable local package marker/path is not confirmed                                                               | user MCP `~/.zcode/cli/config.json`; project MCP `.zcode/config.json`; native JSON shape `mcp.servers`                                                                                                                    | Officially documented (partial)                                  |
-| OpenClaw                              | `~/.openclaw`                                                                                                                        | workspace bootstrap files in `~/.openclaw/workspace` (or `workspace-<profile>`), including `AGENTS.md`, `SOUL.md`, `USER.md`, `IDENTITY.md`, `TOOLS.md`, optional `HEARTBEAT.md` / `BOOT.md` / `BOOTSTRAP.md` | Session store in `~/.openclaw/agents/<agentId>/sessions/sessions.json`; transcripts in `~/.openclaw/agents/<agentId>/sessions/<sessionId>.jsonl`; daily memory in workspace `memory/YYYY-MM-DD.md`; long-term memory `MEMORY.md`; dreaming surface `DREAMS.md`; gateway logs in `/tmp/openclaw/openclaw-YYYY-MM-DD.log` | Workspace skills in `~/.openclaw/workspace/skills/`; managed skills in `~/.openclaw/skills/`; canvas files in workspace `canvas/`                                                                                                                          | `~/.openclaw/openclaw.json`; profile-specific workspace via `OPENCLAW_PROFILE`; sandbox workspaces in `~/.openclaw/sandboxes`                                                                                             | Officially documented                                            |
-| QClaw                                 | PromptHub default `~/.qclaw`; can one-click associate existing OpenClaw                                                              | OpenClaw-compatible assistant; no separate public single-file global rule path confirmed in current pass                                                                                                      | Product docs confirm strong context memory, but public local memory/session paths were not confirmed in current pass                                                                                                                                                                                                    | ClawHub official skill market, GitHub open source Skills, custom/shareable Skills, and MCP Server protocol support documented; PromptHub uses `skills/` as a compatibility surface until local installed-skill paths are public                            | No public config file path confirmed in current pass                                                                                                                                                                      | Officially documented (partial) + PromptHub local root inferred  |
-| OpenCode                              | `~/.config/opencode`                                                                                                                 | `~/.config/opencode/AGENTS.md`; local traversal of `AGENTS.md`; Claude fallback `CLAUDE.md`; extra `instructions` via `opencode.json`                                                                         | Snapshot / undo feature documented; canonical persisted conversation-history path not confirmed in current pass                                                                                                                                                                                                         | Agents in `agents/`; skills in `skills/`; commands in `commands/`; plugins in `plugins/`; modes in `modes/`                                                                                                                                                | `~/.config/opencode/opencode.json`, `~/.config/opencode/tui.json`, project `opencode.json`, env-based overrides, managed configs                                                                                          | Officially documented                                            |
-| Cursor                                | `~/.cursor`                                                                                                                          | `.cursor/rules/` project rules; `AGENTS.md` in root and subdirectories; user rules and team rules documented                                                                                                  | No public local memory / transcript / checkpoint path confirmed in current pass                                                                                                                                                                                                                                         | Rule files in `.cursor/rules/`; no official local `skills/` directory confirmed in current pass                                                                                                                                                            | Team rules via dashboard; public local user-rule file path not confirmed in current pass                                                                                                                                  | Officially documented (partial)                                  |
-| Windsurf                              | `~/.codeium/windsurf`                                                                                                                | `memories/global_rules.md`; `.windsurf/rules/*.md`; directory-scoped `AGENTS.md`; enterprise system rules                                                                                                     | Workspace memories in `~/.codeium/windsurf/memories/`; memories are local and workspace-scoped                                                                                                                                                                                                                          | Skills in `.windsurf/skills/` and `~/.codeium/windsurf/skills/`; workflows in `.windsurf/workflows/` and `~/.codeium/windsurf/global_workflows/`; `.agents/skills/` compatibility                                                                          | Root config dir documented by feature paths; separate public settings-file contract not the focus of current pass                                                                                                         | Officially documented                                            |
-| Kiro                                  | `~/.kiro`                                                                                                                            | Workspace and global steering in `.kiro/steering/` and `~/.kiro/steering/`; root or global `AGENTS.md` also supported                                                                                         | No public local transcript / checkpoint directory confirmed in current pass                                                                                                                                                                                                                                             | Skills in `.kiro/skills/` and `~/.kiro/skills/`; manual steering files also surface as slash commands                                                                                                                                                      | Steering inclusion modes and panel-driven management documented; standalone config file path not confirmed in current pass                                                                                                | Officially documented (partial)                                  |
-| Roo Code                              | `~/.roo`                                                                                                                             | `~/.roo/rules/`, `~/.roo/rules-{mode}/`, `.roo/rules/`, `.roo/rules-{mode}/`, `.roorules`, `.roorules-{mode}`, workspace `AGENTS.md` / `AGENT.md`                                                             | Checkpoints enabled by default via shadow git repo; task-scoped restore / diff documented                                                                                                                                                                                                                               | Skills in `.roo/skills/`, `.roo/skills-{mode}/`, `~/.roo/skills/`, `~/.roo/skills-{mode}/`, plus `.agents/skills/`; slash commands in `.roo/commands/`, `~/.roo/commands/`                                                                                 | VS Code setting `roo-cline.useAgentRules`; mode and prompt UI configs documented                                                                                                                                          | Officially documented                                            |
-| GitHub Copilot                        | repo-scoped for instructions; plugin storage is managed by Copilot CLI / VS Code Agent Plugins                                       | `.github/copilot-instructions.md`; `.github/instructions/*.instructions.md`; `AGENTS.md` anywhere in repo; root `CLAUDE.md` or `GEMINI.md` alternative                                                        | No local memory / transcript / checkpoint path documented in this repository-customization pass                                                                                                                                                                                                                         | Copilot / VS Code Agent Plugins via `plugin.json`; component paths include agents, skills, commands, hooks, MCP servers, and LSP servers                                                                                                                   | Repository settings can enable / disable custom instructions; Copilot CLI / VS Code settings manage plugin marketplaces and plugin locations                                                                              | Officially documented                                            |
-| WorkBuddy                             | `~/.workbuddy` for user MCP config; project `.workbuddy/` for project MCP config                                                     | WorkBuddy assistant / expert / skill surfaces documented; no public single-file global rule path confirmed in current pass                                                                                    | Memory is documented as a product feature; public local memory/session paths were not confirmed in current pass                                                                                                                                                                                                         | Skill Marketplace documented; custom WorkBuddy Skills typically include `skill.yml`, implementation files, and `README`; local installed-skill directory not confirmed in current pass                                                                     | `~/.workbuddy/mcp.json`, project `.workbuddy/mcp.json`; MCP market and WeCom bot example documented                                                                                                                       | Officially documented (partial)                                  |
-| Amp                                   | `~/.config/agents`                                                                                                                   | login-gated agents manual exists                                                                                                                                                                              | not confirmed                                                                                                                                                                                                                                                                                                           | not confirmed                                                                                                                                                                                                                                              | not confirmed                                                                                                                                                                                                             | Evidence limited                                                 |
-| Cherry Studio                         | macOS `~/Library/Application Support/CherryStudioDev`; Windows `%APPDATA%\CherryStudio`; Linux `~/.config/CherryStudio`              | no stable global rule file modeled in current pass                                                                                                                                                            | not confirmed                                                                                                                                                                                                                                                                                                           | Skill files under `Data/Skills`; installed/global skill registry in `cherrystudio.sqlite.agent_global_skill`; per-agent enablement in `agent_skill`                                                                                                        | app data directory documented; skill registry confirmed from local Cherry Studio source and SQLite migrations                                                                                                             | Officially documented (storage root) + source-inspected registry |
+| Platform                              | Default Root / Config Dir                                                                                                            | Rules / Context Surface                                                                                                                                                                                       | Memory / History / Checkpoints                                                                                                                                                                                                                                                                                          | Reusable Assets                                                                                                                                                                                                                                            | Config / Profiles                                                                                                                                                                                                         | Evidence                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Claude Code                           | `~/.claude`                                                                                                                          | `~/.claude/CLAUDE.md`, project `CLAUDE.md`, `./.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/rules/**/*.md`                                                                                                 | Per-project auto memory in `~/.claude/projects/<project>/memory/` with `MEMORY.md` entrypoint                                                                                                                                                                                                                           | `.claude/skills/<name>/SKILL.md`; subagents documented; `@AGENTS.md` import supported                                                                                                                                                                      | user / local / managed settings documented; exact settings file set not re-listed here                                                                                                                                    | Officially documented                                           |
+| Codex CLI                             | `~/.codex`                                                                                                                           | `AGENTS.override.md` or `AGENTS.md`; per-directory discovery; fallback names configurable in `config.toml`                                                                                                    | `~/.codex/memories/`; Chronicle in `~/.codex/memories_extensions/chronicle/`; temp captures in `$TMPDIR/chronicle/screen_recording/`; logs in `~/.codex/log/` and optional `session-*.jsonl`                                                                                                                            | Skills in `.agents/skills/`, `~/.agents/skills/`, `/etc/codex/skills`; plugins are installable bundles with `.codex-plugin/plugin.json` metadata; subagents and workflows documented                                                                       | `~/.codex/config.toml`, `.codex/config.toml`, `/etc/codex/config.toml`, `--profile`, `CODEX_HOME`                                                                                                                         | Officially documented                                           |
+| Kimi Code                             | Current `~/.kimi-code` or `KIMI_CODE_HOME`; legacy fallback `~/.kimi` or `KIMI_SHARE_DIR`                                            | Current user `~/.kimi-code/AGENTS.md`; project `AGENTS.md` discovery remains platform-owned                                                                                                                   | Current index `session_index.jsonl`; per-session `sessions/<workDirKey>/<sessionId>/state.json` and `agents/main/wire.jsonl`; PromptHub reads these lazily and never edits transcripts                                                                                                                                  | Current user `~/.kimi-code/skills/` and `plugins/`; legacy `~/.kimi/skills/` remains a compatibility fallback only                                                                                                                                         | Current `config.toml`, `tui.toml`, `mcp.json`; `credentials/`, logs and runtime update state are excluded from raw editing                                                                                                | Officially documented; legacy compatibility verified locally    |
+| Grok Build                            | `~/.grok` or `$GROK_HOME`                                                                                                            | Global `~/.grok/AGENTS.md`; supported instruction filename family and `.grok/rules/` from repository root to cwd; Claude/Cursor compatibility is configurable                                                 | User sessions are stored below `~/.grok/sessions/`; experimental user/workspace memory is under `~/.grok/memory/`; both are runtime state, not PromptHub-managed assets                                                                                                                                                 | Skills in `~/.grok/skills/`, `.grok/skills/`, and `.agents/skills/`; plugins in `~/.grok/plugins/` and `.grok/plugins/`; agents in `~/.grok/agents/` and `.grok/agents/`; roles, personas, hooks, MCP servers, and marketplaces are separate Grok surfaces | `~/.grok/config.toml`, `pager.toml`, `settings.json`, `lsp.json`, `sandbox.toml`; project `.grok/config.toml`, `.grok/hooks/`, `.grok/agents/`, `.grok/lsp.json`, `.grok/sandbox.toml`; ACP and headless modes documented | Officially documented                                           |
+| Qwen Code                             | `~/.qwen` or `$QWEN_HOME`; runtime may move independently through `$QWEN_RUNTIME_DIR`                                                | Global `~/.qwen/QWEN.md`; shared project `QWEN.md`; personal project `.qwen/QWEN.local.md`                                                                                                                    | Runtime project chats and sidecars live below the runtime root; native `qwen sessions list --json` exposes bounded metadata. Auto-memory and `.qwen/team-memory/` remain Qwen-owned and are excluded from normal PromptHub backup/sync                                                                                  | User/project Skills in `skills/`; compatibility discovery in `~/.agents/skills/`; SubAgents in `agents/`; commands in `commands/`; Extensions in `extensions/<name>/qwen-extension.json`, whose child assets remain parent-owned                           | User `~/.qwen/settings.json`, project `.qwen/settings.json`, system defaults/overrides; MCP uses `mcpServers`; provider, `env`, headers, OAuth and credential fields require redaction                                    | Officially documented                                           |
+| Reasonix                              | `~/.reasonix` (macOS/Linux); `%APPDATA%\reasonix` (Windows)                                                                          | Project `./reasonix.toml`; `REASONIX.md` / `AGENTS.md` memory documents; no synthetic global Rules entry                                                                                                      | Sessions, archives, memory, logs, and caches are under the Reasonix state/cache roots; these remain Reasonix-owned runtime data                                                                                                                                                                                         | Global Skills in `~/.reasonix/skills/`; global commands in `~/.reasonix/commands/`; Skills support `runAs = subagent`; MCP/plugins are TOML `[[plugins]]` entries rather than a Skill directory                                                            | Global `config.toml`, `settings.json` hooks, `trust.json`; project `reasonix.toml`; `.mcp.json` may be merged into plugin configuration                                                                                   | Officially documented (current main-v2)                         |
+| Gemini CLI (enterprise compatibility) | `~/.gemini`                                                                                                                          | `~/.gemini/GEMINI.md`; workspace `GEMINI.md`; customizable `context.fileName`; `/memory` manages loaded context                                                                                               | Session transcripts under `~/.gemini/tmp/<project>/chats/`; resume / rewind / checkpointing documented; project memory inbox and patch workflow documented but not all canonical directories are named on one page                                                                                                      | Skills in `~/.gemini/skills/`, `.gemini/skills/`, plus `.agents/skills/` aliases; commands in `~/.gemini/commands/`, `.gemini/commands/`                                                                                                                   | `~/.gemini/settings.json`, `.gemini/settings.json`; Free/Pro/Ultra request service ended 2026-06-18; enterprise, Google Cloud and paid API keys remain supported                                                          | Official transition announcement + legacy docs                  |
+| Google Antigravity                    | Managed customizations in `~/.gemini/config`; desktop runtime in `~/.gemini/antigravity`; CLI runtime in `~/.gemini/antigravity-cli` | Global `~/.gemini/GEMINI.md`; workspace `GEMINI.md`, `AGENTS.md`, and `.agents/rules/`                                                                                                                        | Antigravity 2.0 and CLI keep separate product-owned conversations, artifacts, knowledge, cache, and updater state; PromptHub does not use those runtime roots as Skill targets                                                                                                                                          | Shared global Skills in `~/.gemini/config/skills/`; Plugins in `~/.gemini/config/plugins/`; workspace Skills and Plugins in `.agents/skills/` and `.agents/plugins/`                                                                                       | Global MCP `~/.gemini/config/mcp_config.json`; workspace `.agents/mcp_config.json`; CLI preferences `~/.gemini/antigravity-cli/settings.json`                                                                             | Officially documented for Antigravity CLI and Antigravity 2.0   |
+| Cline                                 | `~/.cline`                                                                                                                           | `AGENTS.md`; `.clinerules/`; `~/Documents/Cline/Rules`; project `.cline/` instruction assets                                                                                                                  | Session data in `~/.cline/data/sessions/`; additional db state under `~/.cline/data/db/`                                                                                                                                                                                                                                | `~/.cline/skills/`, `.cline/skills/`, `~/.cline/agents/`, `.cline/agents/`, plugins / hooks / workflows documented                                                                                                                                         | `~/.cline/data/settings/global-settings.json`, `providers.json`, `cline_mcp_settings.json`                                                                                                                                | Officially documented                                           |
+| Augment                               | `~/.augment`                                                                                                                         | User rules in `~/.augment/rules/`; workspace `.augment/rules/` and `.augment-guidelines`; directory rules use `always_apply` / `agent_requested` frontmatter; no single global rule file                      | Runtime sessions are Auggie-owned; not part of the stable Skill target contract                                                                                                                                                                                                                                         | Skills in `~/.augment/skills/`, `.augment/skills/`, plus compatible `.claude/skills/` and `.agents/skills/`; commands in `~/.augment/commands/` and `.augment/commands/`                                                                                   | Persistent MCP servers in `~/.augment/settings.json` under `mcpServers`; one-shot `--mcp-config` overrides are supported                                                                                                  | Officially documented (CLI docs, 2026)                          |
+| CodeBuddy                             | `~/.codebuddy`; project `.codebuddy/`; project MCP at `.mcp.json`                                                                    | user `~/.codebuddy/CODEBUDDY.md`; project `CODEBUDDY.md`; modular `rules/` documented in SDK reference                                                                                                        | Local conversation resume is documented; exact persisted transcript path not confirmed in current pass                                                                                                                                                                                                                  | user/project Skills in `~/.codebuddy/skills/` and `.codebuddy/skills/`; user/project agents in `~/.codebuddy/agents/` and `.codebuddy/agents/`; commands; hooks; plugin packages with `.codebuddy-plugin/plugin.json`; plugins may include MCP servers     | `~/.codebuddy/settings.json`, `.codebuddy/settings.json`, `.codebuddy/settings.local.json`, `~/.codebuddy/.mcp.json`, project `.mcp.json`                                                                                 | Officially documented                                           |
+| ZCode Agent                           | `~/.zcode`; project `.zcode/`                                                                                                        | user `~/.zcode/AGENTS.md`; workspace `AGENTS.md`                                                                                                                                                              | Session/task persistence is product-documented; stable transcript path not confirmed in current pass                                                                                                                                                                                                                    | user Skills in `~/.zcode/skills/`; commands in `~/.zcode/commands/`; subagents in `~/.zcode/agents/`; Plugin bundles are documented, but a stable local package marker/path is not confirmed                                                               | user MCP `~/.zcode/cli/config.json`; project MCP `.zcode/config.json`; native JSON shape `mcp.servers`                                                                                                                    | Officially documented (partial)                                 |
+| OpenClaw                              | `~/.openclaw`                                                                                                                        | workspace bootstrap files in `~/.openclaw/workspace` (or `workspace-<profile>`), including `AGENTS.md`, `SOUL.md`, `USER.md`, `IDENTITY.md`, `TOOLS.md`, optional `HEARTBEAT.md` / `BOOT.md` / `BOOTSTRAP.md` | Session store in `~/.openclaw/agents/<agentId>/sessions/sessions.json`; transcripts in `~/.openclaw/agents/<agentId>/sessions/<sessionId>.jsonl`; daily memory in workspace `memory/YYYY-MM-DD.md`; long-term memory `MEMORY.md`; dreaming surface `DREAMS.md`; gateway logs in `/tmp/openclaw/openclaw-YYYY-MM-DD.log` | Workspace skills in `~/.openclaw/workspace/skills/`; managed skills in `~/.openclaw/skills/`; canvas files in workspace `canvas/`                                                                                                                          | `~/.openclaw/openclaw.json`; profile-specific workspace via `OPENCLAW_PROFILE`; sandbox workspaces in `~/.openclaw/sandboxes`                                                                                             | Officially documented                                           |
+| QClaw                                 | PromptHub default `~/.qclaw`; can one-click associate existing OpenClaw                                                              | OpenClaw-compatible assistant; no separate public single-file global rule path confirmed in current pass                                                                                                      | Product docs confirm strong context memory, but public local memory/session paths were not confirmed in current pass                                                                                                                                                                                                    | ClawHub official skill market, GitHub open source Skills, custom/shareable Skills, and MCP Server protocol support documented; PromptHub uses `skills/` as a compatibility surface until local installed-skill paths are public                            | No public config file path confirmed in current pass                                                                                                                                                                      | Officially documented (partial) + PromptHub local root inferred |
+| OpenCode                              | `~/.config/opencode`                                                                                                                 | `~/.config/opencode/AGENTS.md`; local traversal of `AGENTS.md`; Claude fallback `CLAUDE.md`; extra `instructions` via `opencode.json`                                                                         | Snapshot / undo feature documented; canonical persisted conversation-history path not confirmed in current pass                                                                                                                                                                                                         | Agents in `agents/`; skills in `skills/`; commands in `commands/`; plugins in `plugins/`; modes in `modes/`                                                                                                                                                | `~/.config/opencode/opencode.json`, `~/.config/opencode/tui.json`, project `opencode.json`, env-based overrides, managed configs                                                                                          | Officially documented                                           |
+| Cursor                                | `~/.cursor`                                                                                                                          | `.cursor/rules/` project rules; `AGENTS.md` in root and subdirectories; user rules are settings-owned                                                                                                         | CLI session list/resume and product history exist, but no public stable local transcript/checkpoint schema is managed by PromptHub                                                                                                                                                                                      | User/project Skills in `~/.cursor/skills/` and `.cursor/skills/`; user/project SubAgents in `~/.cursor/agents/` and `.cursor/agents/`; Plugins below `~/.cursor/plugins/` are discovery-only                                                               | User `~/.cursor/mcp.json`, project `.cursor/mcp.json`; Marketplace cache/local Plugin roots are read-only; private settings/auth/database/runtime state excluded                                                          | Official docs + verified current local runtime (partial)        |
+| Windsurf                              | `~/.codeium/windsurf`                                                                                                                | `memories/global_rules.md`; `.windsurf/rules/*.md`; directory-scoped `AGENTS.md`; enterprise system rules                                                                                                     | Workspace memories in `~/.codeium/windsurf/memories/`; memories are local and workspace-scoped                                                                                                                                                                                                                          | Skills in `.windsurf/skills/` and `~/.codeium/windsurf/skills/`; workflows in `.windsurf/workflows/` and `~/.codeium/windsurf/global_workflows/`; `.agents/skills/` compatibility                                                                          | Root config dir documented by feature paths; separate public settings-file contract not the focus of current pass                                                                                                         | Officially documented                                           |
+| Kiro                                  | `KIRO_HOME` or `~/.kiro`                                                                                                             | Workspace and global steering in `.kiro/steering/` and `~/.kiro/steering/`; the current single-file Rules contract does not expose this directory                                                             | CLI session metadata and JSONL are locally verified below `sessions/cli`; PromptHub projects visible Prompt/Assistant text only, read-only, without a synthetic resume command                                                                                                                                          | Skills in `.kiro/skills/` and `~/.kiro/skills/`; agents in `.kiro/agents/` and `~/.kiro/agents/`; Power packages below `powers/` are read-only until native import/registration exists                                                                     | user MCP `settings/mcp.json`; CLI model preference `settings/cli.json` field `chat.defaultModel`; credentials and account state remain Kiro-owned                                                                         | Official docs + verified current local runtime (partial)        |
+| Roo Code                              | `~/.roo`                                                                                                                             | `~/.roo/rules/`, `~/.roo/rules-{mode}/`, `.roo/rules/`, `.roo/rules-{mode}/`, `.roorules`, `.roorules-{mode}`, workspace `AGENTS.md` / `AGENT.md`                                                             | Checkpoints enabled by default via shadow git repo; task-scoped restore / diff documented                                                                                                                                                                                                                               | Skills in `.roo/skills/`, `.roo/skills-{mode}/`, `~/.roo/skills/`, `~/.roo/skills-{mode}/`, plus `.agents/skills/`; slash commands in `.roo/commands/`, `~/.roo/commands/`                                                                                 | VS Code setting `roo-cline.useAgentRules`; mode and prompt UI configs documented                                                                                                                                          | Officially documented                                           |
+| GitHub Copilot                        | repo-scoped for instructions; plugin storage is managed by Copilot CLI / VS Code Agent Plugins                                       | `.github/copilot-instructions.md`; `.github/instructions/*.instructions.md`; `AGENTS.md` anywhere in repo; root `CLAUDE.md` or `GEMINI.md` alternative                                                        | No local memory / transcript / checkpoint path documented in this repository-customization pass                                                                                                                                                                                                                         | Copilot / VS Code Agent Plugins via `plugin.json`; component paths include agents, skills, commands, hooks, MCP servers, and LSP servers                                                                                                                   | Repository settings can enable / disable custom instructions; Copilot CLI / VS Code settings manage plugin marketplaces and plugin locations                                                                              | Officially documented                                           |
+| WorkBuddy                             | `~/.workbuddy` for user MCP config; project `.workbuddy/` for project MCP config                                                     | WorkBuddy assistant / expert / skill surfaces documented; no public single-file global rule path confirmed in current pass                                                                                    | Memory is documented as a product feature; public local memory/session paths were not confirmed in current pass                                                                                                                                                                                                         | Skill Marketplace documented; custom WorkBuddy Skills typically include `skill.yml`, implementation files, and `README`; local installed-skill directory not confirmed in current pass                                                                     | `~/.workbuddy/mcp.json`, project `.workbuddy/mcp.json`; MCP market and WeCom bot example documented                                                                                                                       | Officially documented (partial)                                 |
+| Amp                                   | `~/.config/agents`                                                                                                                   | login-gated agents manual exists                                                                                                                                                                              | not confirmed                                                                                                                                                                                                                                                                                                           | not confirmed                                                                                                                                                                                                                                              | not confirmed                                                                                                                                                                                                             | Evidence limited                                                |
+| Cherry Studio                         | macOS `~/Library/Application Support/CherryStudio`; Windows `%APPDATA%\CherryStudio`; Linux `~/.config/CherryStudio`                 | no stable global rule file modeled in current pass                                                                                                                                                            | Provider, credentials, agent/session memory, IndexedDB, Local Storage, caches, and other runtime state remain Cherry-owned and are not PromptHub Agent assets                                                                                                                                                           | Canonical Skill files under `Data/Skills`; current catalog in `Data/cherrystudio.sqlite` (`skills` / `agent_skills`); compatible older databases may use `Data/agent.db`, `Data/agents.db`, or root `cherrystudio.sqlite` and legacy skill tables          | current public path registry and Skill service define the database/Skill boundary; macOS launch allowlist covers system and user Applications directories; no single native Plugin package contract is modeled            | Official current source contract (partial)                      |
 
 ### PromptHub-Inferred Inventory
 
@@ -205,7 +242,7 @@ Current support boundary:
 | CodeBuddy    | CodeBuddy Code has grown beyond a simple `skills/` surface into settings, memory, agents, commands, hooks, plugins, marketplaces, and MCP  | `~/.codebuddy/settings.json`, `.codebuddy/settings.json`, `.codebuddy/settings.local.json`, `CODEBUDDY.md`, `~/.codebuddy/.mcp.json`, project `.mcp.json`, `skills/`, `agents/`, `commands/`, `rules/`, `.codebuddy-plugin/plugin.json` | Built-in platform; MCP target supported                                    |
 | ZCode Agent  | ZCode publicly documents Skills, user instructions, commands, subagents, nested MCP config, and Plugin bundles                             | `~/.zcode/skills/`, `~/.zcode/AGENTS.md`, `~/.zcode/commands/`, `~/.zcode/agents/`, `~/.zcode/cli/config.json`, project `.zcode/config.json`; Plugin marker/path not confirmed                                                          | Built-in platform; Skills, Rules, and MCP target supported; Plugin pending |
 | QClaw        | Tencent PC Manager localized OpenClaw assistant with WeChat binding, OpenClaw association, ClawHub/GitHub Skills, and MCP protocol support | Product docs confirm QClaw is based on OpenClaw, can associate existing OpenClaw, and supports ClawHub/GitHub Skills, MCP Server protocol, custom/shareable Skills                                                                      | Built-in OpenClaw-compatible platform; no MCP path yet                     |
-| Kilo Code    | Kilo 用户实际 MCP 配置优先使用 `kilo.json`，历史 JSONC 配置仍可通过自定义路径兼容                                                          | `.kilo/skills/`, `~/.kilo/skills/`, `.kilo/rules/`, default global `~/.config/kilo/kilo.json`, default project `kilo.json`, compatible `.config/kilo/kilo.jsonc` / `.kilo/kilo.jsonc` custom config paths, `AGENTS.md`                  | Built-in platform; MCP target supported                                    |
+| Kilo Code    | Kilo 使用分离的 Skill 与配置根；MCP 位于所选 JSONC 配置的顶层 `mcp` 字段                                                                   | `.kilo/skills/`, `~/.kilo/skills/`, global `~/.config/kilo/kilo.jsonc`, global `~/.config/kilo/AGENTS.md`, project `kilo.jsonc` or `.kilo/kilo.jsonc`, project `AGENTS.md`, global/project `agents/*.md`                                | Built-in platform; MCP supported, split-root Provider/Rules design pending |
 | TRAE Work    | 国际站下载页和文档入口展示 TRAE Work，与 TRAE IDE 分开展示；本轮已作为独立内置 Agent 平台落入 `trae-work`                                  | Product entry available via `trae.ai`; local skills path remains PromptHub inferred                                                                                                                                                     | Promoted to built-in platform with isolated default root                   |
 | TRAE Work CN | 中国站和文档显示 TRAE Work 是独立客户端，不依赖 TRAE IDE；本轮已作为独立内置 Agent 平台落入 `trae-work-cn`                                 | Product docs entry available via `docs.trae.cn`; local skills path remains PromptHub inferred                                                                                                                                           | Promoted to built-in platform with isolated default root                   |
 
@@ -245,9 +282,23 @@ Current support boundary:
 - Reusable assets:
   - skills in `.claude/skills/<name>/SKILL.md`
   - subagent persistent memory is officially documented
+- Provider and credentials:
+  - user Provider projection is `~/.claude/settings.json`; PromptHub edits it
+    structurally and preserves unrelated JSON/JSONC content
+  - the selected model is the top-level `model`; direct or compatible
+    Anthropic endpoints use `env.ANTHROPIC_BASE_URL`
+  - PromptHub-managed credentials may project only
+    `env.ANTHROPIC_API_KEY` or `env.ANTHROPIC_AUTH_TOKEN`
+  - Bedrock, Vertex and Foundry flags are detected and imported as read-only
+    platform-native profiles until dedicated adapters exist
+  - Claude-owned `.credentials.json` remains outside PromptHub Provider
+    activation, backup and export
 - Evidence note:
   - Claude has the strongest official separation between rules (`CLAUDE.md`) and auto memory.
   - Current pass re-verified the memory directory, but did not separately re-verify a canonical transcript JSONL pathname.
+  - Provider/config evidence: `https://code.claude.com/docs/en/settings`,
+    `https://code.claude.com/docs/en/env-vars`, and
+    `https://code.claude.com/docs/en/model-config`.
 
 ### Codex CLI
 
@@ -271,6 +322,9 @@ Current support boundary:
 - Config and profiles:
   - `~/.codex/config.toml`, `.codex/config.toml`, `/etc/codex/config.toml`
   - named profiles and enterprise `requirements.toml` documented
+- Maintenance:
+  - npm- and Node version-manager-managed installs may review and confirm the canonical `npm install -g @openai/codex@latest` update; PromptHub verifies the same active Codex executable and can restore the captured exact package version
+  - Homebrew, standalone, system, user-local and ambiguous installs remain read-only diagnostics rather than being routed through the npm writer
 - PromptHub appearance adapter:
   - Codex desktop skins use PromptHub-managed Codex Dream Skin schema-v1 directories (`theme.json` plus one contained local image) and the pinned audited Dream Skin runtime; application files and signatures remain untouched
   - local Pets remain Codex-owned under the resolved `<codex-root>/pets/<pet-id>` and are not included in PromptHub backup or sync by default
@@ -297,6 +351,26 @@ Current support boundary:
   - `tui.toml`: terminal UI preferences
   - `mcp.json`: MCP configuration
   - `credentials/`, logs and update/runtime state are not allowlisted.
+- PromptHub Provider adapter:
+  - Supports the official `kimi`, `openai`, `openai_responses`, `anthropic`,
+    and `google-genai` direct-provider types through unified Provider Profiles.
+    The native provider id, model alias, upstream model id, and required
+    `max_context_size` remain explicit rather than inferred.
+  - Direct API keys remain in PromptHub main-process secure storage until a
+    confirmed activation projects them into Kimi Code's required plaintext
+    `config.toml` field. The complete prior config is stored only as an
+    encrypted rollback bundle.
+  - Kimi `/login` OAuth references, provider `env`, `custom_headers`, and
+    Vertex ADC remain platform-owned. PromptHub imports only redacted identity,
+    does not read or test those credentials, and may only select an already
+    valid native model entry.
+  - Activation preserves unrelated TOML data semantically, checks the source
+    digest, writes atomically, invokes `kimi doctor config` when the allowlisted
+    executable is available, re-reads and verifies the full projection, and
+    restores the exact prior bytes on failure.
+  - Connectivity and streaming tests reuse the existing bounded
+    OpenAI-compatible, Anthropic, and Google Gemini probes; no proxy or protocol
+    conversion is introduced.
 - Sessions:
   - `session_index.jsonl` is the bounded index.
   - session metadata is read from `state.json`; transcript detail is read on
@@ -412,6 +486,26 @@ Current support boundary:
 - Config and settings:
   - user settings: `~/.gemini/settings.json`
   - workspace settings: `.gemini/settings.json`
+- Provider Profile boundary:
+  - paid Gemini API profiles project `model.name` and
+    `security.auth.selectedType=gemini-api-key` into the user settings file
+  - PromptHub manages only `GEMINI_API_KEY` and optional
+    `GOOGLE_GEMINI_BASE_URL` entries in `~/.gemini/.env`; the credential stays
+    main-process only and backups of both files are encrypted
+  - OAuth personal, Vertex AI, compute ADC, Cloud Shell and gateway auth remain
+    Gemini-owned platform-native modes; PromptHub preserves but does not read,
+    test, migrate, back up or export their credentials
+  - paid API connection inventory uses `GET /v1beta/models`; explicit model
+    tests use `POST /v1beta/models/{model}:streamGenerateContent?alt=sse`
+    with bounded response, timeout, retry, cancellation, SSRF/DNS and
+    credential-redaction controls
+- Provider evidence:
+  - official `google-gemini/gemini-cli` commit
+    `bef6119500b0238ad84f6396d2a6cabda9991554`
+  - `packages/core/src/config/settingsSchema.ts`,
+    `packages/core/src/core/contentGenerator.ts`,
+    `packages/core/src/code_assist/server.ts` and
+    `packages/core/src/config/config.ts`
 
 ### Google Antigravity
 
@@ -451,10 +545,13 @@ Current support boundary:
   - commands: `~/.config/opencode/commands/`, `.opencode/commands/`
   - plugins / modes / tools / themes share the same plural-directory convention
 - Config and runtime:
-  - `~/.config/opencode/opencode.json`
+  - stable user config precedence: `~/.config/opencode/opencode.jsonc`, `~/.config/opencode/opencode.json`, then legacy `~/.config/opencode/config.json`
   - `~/.config/opencode/tui.json`
   - project `opencode.json`
   - custom path / custom directory / managed config / MDM preferences all documented
+  - provider selection uses singular `provider`, `model`, and `small_model`; the experimental v2 plural `providers` shape is detected but not written
+  - native credentials live separately at `${XDG_DATA_HOME}/opencode/auth.json` (defaulting to the platform XDG data root), not under the config root
+  - PromptHub-managed direct Profiles support only the documented `@ai-sdk/openai-compatible` Chat Completions and `@ai-sdk/openai` Responses packages; native API, OAuth, well-known, environment, file and cloud credentials remain redacted and read-only
 - State handling:
   - snapshot system is documented and configurable, but current public docs pass does not name a stable on-disk conversation-history directory
   - PromptHub therefore lists conversations through the bounded native `opencode session list --format json --max-count` interface and reads one selected transcript through `opencode export <session-id> --sanitize`
@@ -463,6 +560,46 @@ Current support boundary:
 - Plugin modeling note:
   - OpenCode's documented plugin surface is a JavaScript/TypeScript or npm hook-module runtime loaded from `.opencode/plugins/`, `~/.config/opencode/plugins/`, or `opencode.json` `plugin`.
   - It is not modeled as a first-version PromptHub Plugin bundle adapter because the public plugin contract is function/hook oriented rather than a multi-child inventory package.
+
+### Oh My Pi
+
+- Identity and root: PromptHub uses built-in id `oh-my-pi`, display name `Oh My Pi`,
+  and resolves `~/.omp/agent` through `PI_CODING_AGENT_DIR` when set. The
+  display name intentionally has no `CLI` suffix.
+- Assets: native user Skills are `<root>/skills`; global rules are
+  `<root>/RULES.md`; the user MCP file is `<root>/mcp.json`; project MCP is
+  `.omp/mcp.json`; and native plugins are derived from the sibling
+  `~/.omp/plugins` directory. PromptHub does not claim plugin package
+  installation or marketplace ownership yet.
+- Config: the first raw-editor allowlist is `config.yml`, `config.yaml`,
+  `settings.json`, `mcp.json`, `.mcp.json`, and `RULES.md`. Secret-bearing
+  `models.yml`, session files, caches, and profile-specific runtime files remain
+  outside the raw renderer editor.
+- Provider/model projection: PromptHub reads `modelRoles.default` from the
+  preferred `config.yml` (or `config.yaml`) and model ids plus sanitized
+  provider endpoints from main-process-only `models.yml`. It can update only
+  `modelRoles.default` with backup, atomic replacement, re-read verification,
+  and exact-byte rollback. API keys, headers, OAuth data, model metadata, and
+  unknown provider fields never enter renderer state. Current Oh My Pi stores
+  native API-key/OAuth accounts in `<root>/agent.db`, can delegate auth to a
+  broker, and resolves additional credentials from runtime/environment
+  sources. PromptHub does not read, copy, write, export, sync, or migrate any
+  of those native credentials. Full Provider endpoint/credential activation,
+  usage/quota, and plugin package installation therefore remain unsupported
+  until a separate credential-ownership decision is approved.
+- Sessions: PromptHub scans only direct project JSONL files below
+  `<root>/sessions`, bounds header/metadata/detail reads, ignores nested
+  subagent transcripts and symlinks, filters to visible user/assistant/tool
+  rows, and exposes `omp --resume <id>` metadata without launching or editing
+  the native client.
+- Current PromptHub status: registry, icon fallback, path derivation, Rules,
+  global/project MCP presets, allowlisted config paths, redacted model
+  projection/default-model editing, and read-only Sessions are implemented.
+  The Provider & Model capability remains `partial`: model selection is
+  verified, while Profile-owned endpoint/credential projection is
+  intentionally unavailable. Usage/quota, native credential management, and
+  package installation remain unsupported or planned according to their
+  capability declarations.
 
 ### OpenClaw
 
@@ -495,6 +632,11 @@ Current support boundary:
 - Modeling note:
   - OpenClaw is no longer just a PromptHub-inferred root-directory target; current public docs are sufficient to model its workspace files, memory surfaces, session persistence, and logs as stable local assets.
   - PromptHub runtime still does not expose OpenClaw under the `Rules` global-file whitelist, because the current `Rules` UX models one canonical global file per platform rather than a multi-file workspace bootstrap surface.
+  - The official CLI global flags include `-V`, `--version`, and `-v`.
+    PromptHub declares only the read-only `openclaw --version` diagnostic.
+    Native setup, update, repair, Gateway, Plugin, Skill and session commands
+    remain outside the maintenance writer until an explicit lifecycle plan
+    and rollback contract exists.
 
 ### QClaw
 
@@ -568,14 +710,30 @@ Current support boundary:
 - Officially confirmed assets in current pass:
   - `.cursor/rules/` for project rules
   - root and nested `AGENTS.md`
-  - user rules and team rules exist as product concepts
+  - user `~/.cursor/skills/` and project `.cursor/skills/`
+  - user `~/.cursor/agents/` and project `.cursor/agents/`
+  - user `~/.cursor/mcp.json` and project `.cursor/mcp.json`
+  - Cursor Plugin packages use `.cursor-plugin/plugin.json`; current runtime
+    stores Marketplace packages below `~/.cursor/plugins/cache/` and local test
+    packages below `~/.cursor/plugins/local/`
+  - user rules and team rules exist as product concepts, with user rules owned
+    by Cursor Settings
 - Not confirmed in current pass:
   - a canonical local global-rule file pathname
-  - a local `skills/` directory or reusable command/workflow directory
-  - local transcript / memory / checkpoint storage paths
+  - a public stable local transcript, checkpoint, quota, or durable Provider
+    configuration schema
+  - a non-interactive native Plugin install/load command with a verified
+    activation and rollback contract
 - Modeling note:
-  - Cursor is now strong enough for documentation-level support around rules, but still not ready for PromptHub runtime support beyond the current `AGENTS.md`-style workspace model without more public file-path evidence.
-  - It is intentionally not listed in the current `Rules` global whitelist because this pass still does not confirm one stable local user-level canonical rule file equivalent to `CLAUDE.md` or `GEMINI.md`.
+  - PromptHub exposes user Skills, SubAgents, MCP, and read-only Plugin
+    discovery from the canonical root. Project assets remain owned by their
+    existing domains.
+  - It is intentionally not listed in the current `Rules` global whitelist
+    because user Rules are settings-owned and no stable local equivalent to
+    `CLAUDE.md` or `GEMINI.md` is documented.
+  - Provider, Sessions, Usage, Maintenance, and Plugin distribution remain
+    planned. Private settings databases, auth state, snapshots, caches, logs,
+    and runtime state are excluded rather than reverse-engineered.
 
 ### Windsurf
 
@@ -588,18 +746,37 @@ Current support boundary:
 - Memory and history:
   - workspace memories stored locally in `~/.codeium/windsurf/memories/`
   - memories are workspace-scoped and not committed to the repo
+  - opt-in transcript hooks write JSONL to `~/.windsurf/transcripts/<trajectory_id>.jsonl`
+  - PromptHub reads only public `user_input.user_response` and
+    `planner_response.response` fields from those exports; it does not parse
+    proprietary `~/.codeium/windsurf/cascade/*.pb` runtime state
 - Reusable assets:
   - workspace skills: `.windsurf/skills/<name>/SKILL.md`
   - global skills: `~/.codeium/windsurf/skills/<name>/SKILL.md`
   - workspace workflows: `.windsurf/workflows/*.md`
   - global workflows: `~/.codeium/windsurf/global_workflows/*.md`
   - compatible skill discovery: `.agents/skills/`, `~/.agents/skills/`, optional `.claude/skills/`
+- Integration boundary:
+  - MCP config: `~/.codeium/windsurf/mcp_config.json`
+  - user hooks: `~/.codeium/windsurf/hooks.json`
+  - workspace hooks: `.windsurf/hooks.json`
+  - transcript export is optional, read-only, sensitive, and version-tolerant;
+    unknown steps, code actions, tool payloads, and file contents remain hidden
+  - Provider, Usage, generic Config editing, Maintenance, and native Plugin
+    installation remain unclaimed
 - Modeling note:
-  - Windsurf is now one of the clearest platforms for PromptHub to model because its rules, memories, skills, and workflows all expose stable local paths.
+  - Windsurf exposes stable paths for rules, skills, workflows, hooks, MCP, and
+    opt-in transcript exports. Sessions are therefore `partial`, not fully
+    supported: PromptHub cannot resume, mutate, or reconstruct proprietary
+    Cascade state.
 
 ### Kiro
 
-- Root: `~/.kiro`
+- Root: `KIRO_HOME` or `~/.kiro`
+- CLI settings:
+  - `~/.kiro/settings/cli.json`
+  - PromptHub projects only `chat.defaultModel`
+  - authentication, endpoints, credentials, and account state remain Kiro-owned
 - Steering assets:
   - workspace steering: `.kiro/steering/`
   - global steering: `~/.kiro/steering/`
@@ -609,6 +786,9 @@ Current support boundary:
   - workspace skills: `.kiro/skills/`
   - global skills: `~/.kiro/skills/`
   - skills can also be invoked from slash-command UI
+- Agent assets:
+  - workspace agents: `.kiro/agents/`
+  - global agents: `~/.kiro/agents/`
 - MCP config:
   - user/global: `~/.kiro/settings/mcp.json`
   - workspace/project: `.kiro/settings/mcp.json`
@@ -618,15 +798,24 @@ Current support boundary:
   - manual and auto steering files surface like commands, but Kiro does not present a separate dedicated local `commands/` directory in current docs
 - Modeling note:
   - Kiro is documented well enough for asset-level modeling, but its steering-first directory model is not the same thing as a single canonical global rule file, so it is not part of the current `Rules` whitelist.
+  - locally verified CLI session metadata and JSONL are read-only runtime
+    evidence, not a claimed public stable schema. PromptHub exposes only
+    visible Prompt/Assistant `text` content, rejects unsafe files, hides
+    thinking/tool/result records, and provides no resume action.
+  - existing Power directories may be inventoried, but direct copying is not
+    native installation. Distribution remains disabled until Kiro import or
+    registration can be confirmed and rolled back.
 
 ### Kilo Code MCP Status
 
 - PromptHub tracks Kilo Code as a separate `kilo` Skill/Rules/MCP platform, not as an alias for Kiro.
 - Kilo Code MCP config uses the root `mcp` key. Local servers use `type: "local"` with a combined `command` array and optional `environment`; remote servers use `type: "remote"` with `url` and optional `headers`.
-- Global config: default `~/.config/kilo/kilo.json`.
-- Project config: default `<projectRoot>/kilo.json`; compatible custom paths include `~/.config/kilo/kilo.jsonc` and `<projectRoot>/.kilo/kilo.jsonc`.
-- PromptHub's built-in MCP UI exposes one default Kilo Code target per scope. Compatible JSONC/custom paths are supported as parsing/custom-path inputs, not as duplicate Agent MCP or Project MCP cards.
-- Kilo JSONC config reads must tolerate comments and trailing commas, but PromptHub writes normalized JSON.
+- Global config: canonical `~/.config/kilo/kilo.jsonc`; `.json` remains a compatibility input.
+- Project config: `<projectRoot>/kilo.jsonc` or `<projectRoot>/.kilo/kilo.jsonc`; the `.kilo` path takes priority when both exist.
+- Global Skills remain under `~/.kilo/skills/`, while global instructions and custom Agents live under `~/.config/kilo/AGENTS.md` and `~/.config/kilo/agents/`. This is a real split-root contract, not one synthetic Kilo root.
+- PromptHub's built-in MCP UI exposes one default Kilo Code target per scope. Compatible JSON/JSONC/custom paths are parsing inputs, not duplicate Agent MCP or Project MCP cards.
+- Kilo JSONC config reads and writes must preserve comments, trailing commas and unrelated fields. Normalizing the complete file to plain JSON is not an acceptable default write policy.
+- Current implementation debt: the shared platform/Rules registry still projects `~/.kilo/rules/global.md`. That legacy PromptHub path is not a current first-party global instruction contract and remains planned until an additive multi-root path contract and compatibility policy are approved.
 
 ### Roo Code
 
@@ -653,10 +842,20 @@ Current support boundary:
 ### GitHub Copilot
 
 - Scope model:
-  - no single user-level local platform root is documented in this pass for repository custom instructions
-  - repository-level instruction assets remain the important durable rules/context contract
-  - Copilot CLI and VS Code Agent Plugins define a separate plugin package mechanism, so PromptHub should treat Copilot as an Adapter target for Plugin distribution rather than an instruction-only target
+  - current Copilot CLI uses `COPILOT_HOME` or `~/.copilot` as the user root
+  - PromptHub models only documented user-owned files and directories; it does
+    not copy or vendor Copilot source
+  - repository-level instructions remain a separate project-context contract
+- User-owned assets:
+  - `settings.json` is JSONC; PromptHub may inspect and update only its top-level
+    `model` preference
+  - `copilot-instructions.md`, `instructions/`, `skills/`, `agents/`,
+    `mcp-config.json`, `lsp-config.json`, and hooks remain independently owned
+    asset surfaces
+  - BYOK provider endpoint, wire type, model override, API key and bearer token
+    are process environment variables, not a durable Provider Profile format
 - Official instruction assets:
+  - `<COPILOT_HOME>/copilot-instructions.md` for user-wide CLI instructions
   - `.github/copilot-instructions.md` for repository-wide instructions
   - `.github/instructions/*.instructions.md` for path-specific instructions with `applyTo`
   - `AGENTS.md` files anywhere in the repository for agent instructions
@@ -668,9 +867,18 @@ Current support boundary:
   - `copilot plugin install`, `list`, `update`, `enable`, `disable`, and marketplace commands manage Copilot CLI plugins
   - VS Code Agent Plugins can discover and install plugins from Git-backed marketplaces and local plugin locations
 - Modeling note:
-  - Copilot remains excluded from the current `Rules` global whitelist because its durable instruction contract is repository-scoped, not a single user-level local global rule file.
-  - Copilot should be enabled in the future Plugin Targets UI as an Adapter target when PromptHub can generate a Copilot-format plugin package.
+  - Copilot is in the global Rules whitelist through the documented user file;
+    repository instruction trees are not flattened into that file.
+  - PromptHub may discover `installed-plugins/`, but direct filesystem writes do
+    not constitute a Copilot installation. Installation and registration must
+    use the native `copilot plugin install` workflow before Plugin distribution
+    can be marked supported.
   - Do not describe Copilot as natively supporting Codex `.codex-plugin`; describe PromptHub as adapting a Plugin inventory into Copilot / VS Code Agent Plugin format.
+- Excluded platform-managed state:
+  - `config.json`, permission state, `session-state/`, `session-store.db`,
+    `mcp-oauth-config`, `mcp-secrets`, logs, native authentication, and Plugin
+    registration metadata are excluded from generic config editing and ordinary
+    backup/sync
 
 ### Tencent WorkBuddy
 
@@ -690,41 +898,71 @@ Current support boundary:
 
 ### Amp
 
-- PromptHub root convention: `~/.config/agents`
-- Public evidence state:
-  - an agents manual entry exists
-  - the detailed content remains login-gated in the current pass
+- Root:
+  - macOS/Linux: `~/.config/amp`
+  - Windows: `%USERPROFILE%\.config\amp`
+  - PromptHub retains its former `%APPDATA%\amp` Windows root only as a
+    compatibility fallback.
+- Skills:
+  - user precedence begins with `~/.config/agents/skills/`,
+    `~/.agents/skills/`, then `~/.config/amp/skills/`
+  - project-native Skills live in `.agents/skills/`
+  - `.claude/skills/` and `~/.claude/skills/` are compatibility inputs
+- Rules:
+  - global `~/.config/amp/AGENTS.md` and `~/.config/AGENTS.md`
+  - project and subtree `AGENTS.md`, with `AGENT.md`/`CLAUDE.md` fallbacks
+- MCP:
+  - global `~/.config/amp/settings.json` or `settings.jsonc`
+  - project nearest `.amp/settings.json` or `settings.jsonc`
+  - literal top-level key `amp.mcpServers`
+  - workspace MCP servers require approval in Amp; PromptHub does not bypass
+    or claim that trust decision
+- Plugins:
+  - project `.amp/plugins/*.ts`
+  - user `~/.config/amp/plugins/*.ts`
+  - executable TypeScript discovery is not native installation or trust, so
+    PromptHub keeps Plugin distribution disabled
 - Modeling note:
-  - keep Amp in the platform list, but do not assert rules / skills / workflow subpaths as official facts until public docs are available.
+  - Amp-owned modes/models do not define a user-managed Provider projection;
+    Provider is unsupported in the current PromptHub boundary.
+  - hosted threads, account/cost state, OAuth cache and workspace-managed
+    global Plugins remain Amp-owned and are excluded from ordinary backup and
+    raw editing.
+  - Launch, Usage, Sessions, Maintenance and Config Files remain planned even
+    though `amp`, `amp update` and settings paths are documented; each still
+    requires its own bounded product adapter.
 
 ### Grok Build
 
 - Root: `~/.grok` by default; `GROK_HOME` can override the home directory.
 - PromptHub-managed user assets: `~/.grok/skills/` and `~/.grok/AGENTS.md` through the existing Skill and Rules workflows.
 - Discovery-only user assets: `~/.grok/plugins/`, `~/.grok/agents/`, and `~/.grok/commands/`. The current Plugin library does not advertise Grok bundle distribution until a Grok-specific target adapter is implemented.
-- Preview-only user configuration: `~/.grok/config.toml`, `~/.grok/pager.toml`, `~/.grok/settings.json`, `~/.grok/lsp.json`, and `~/.grok/sandbox.toml`.
+- Provider-managed user configuration: PromptHub can inspect and update only the public model projection in `<root>/config.toml`: `[models].default` and `[model.<alias>]` fields `model`, `base_url`, `name`, `env_key`, `api_backend`, and optional `context_window`. Supported direct backends are `chat_completions`, `responses`, and `messages`; unrelated TOML fields and formatting semantics remain platform-owned.
+- Preview-only user configuration: `<root>/pager.toml`, `<root>/settings.json`, `<root>/lsp.json`, and `<root>/sandbox.toml`.
 - Project discovery assets: `.grok/skills/`, `.grok/plugins/`, `.grok/agents/`, `.grok/hooks/`, `.grok/config.toml`, `.grok/lsp.json`, and `.grok/sandbox.toml`. The current built-in platform does not write project-scoped Grok configuration.
 - Instructions: Grok Build reads global `~/.grok/AGENTS.md`, supported instruction filenames from the repository root to the current directory, and `.grok/rules/*.md`; Claude Code and Cursor compatibility can add their instruction surfaces.
 - Agent customization: user/project agents are in `agents/`; user/project roles and personas are in `roles/` and `personas/`; hooks are in `hooks/`. These are recognized Grok assets but not individually managed by the current PromptHub platform model.
 - Runtime and protected assets: `auth.json`, `mcp_credentials.json`, `sessions/`, `memory/`, `worktrees/`, `worktrees.db`, `logs/`, `bundled/`, `marketplace-cache/`, and installed-plugin runtime state remain Grok-owned. PromptHub must not write credentials, histories, tool-managed bundled files, caches, or runtime metadata.
+- Provider credential boundary: native session/OIDC and `XAI_API_KEY` remain Grok-owned. PromptHub custom Provider Profiles store an environment-variable name only; the value is resolved only by main-process probes and is never projected into `config.toml`, renderer state, logs, exports, or ordinary backups. Existing inline `api_key` values and sensitive headers are redacted and read-only.
+- Provider mutation safety: activation requires an encrypted full-config backup, expected-digest validation, atomic replacement, semantic reread verification, and rollback or new-file removal on failure. Unknown TOML fields are preserved and symlinked, oversized, malformed, or out-of-root input is rejected.
 - Sessions: PromptHub reads only `sessions/<encoded-project>/<session-id>/summary.json` plus the selected `chat_history.jsonl`, filters runtime/tool records from the transcript, bounds all reads, and exposes `grok --resume <id>` metadata without editing Grok state.
 - MCP: Grok Build documents user and project `config.toml` with `[mcp_servers.<name>]`. PromptHub shows `~/.grok/config.toml` as the derived MCP configuration path, but does not expose it as an MCP distribution preset because Grok uses remote `headers` while the current Codex TOML adapter writes `http_headers`.
 - Visual identity: PromptHub uses the current Grok icon in exact black and white treatments for light and dark themes. xAI's official brand guidelines and downloadable Grok asset pack are the provenance boundary; the mark is used only to identify the Grok Build target.
-- Modeling note: PromptHub supports user-root Skill distribution, global rules, and Agent/config discovery as built-in platform `grok`; it does not install the CLI, manage xAI authentication, write project config automatically, or advertise incomplete Plugin/MCP distribution.
+- Modeling note: PromptHub supports user-root Skill distribution, global rules, bounded sessions, and the verified user-level Provider & Model projection as built-in platform `grok`; it does not install the CLI, manage xAI authentication, write project config automatically, or advertise incomplete Plugin/MCP distribution. The adapter independently implements the public contract and does not copy or vendor Grok Build or CC Switch source.
 
 ### Qwen Code
 
 - Identity: built-in platform id `qwen`, display name `Qwen Code`. It is separate from `qoder` and does not reuse `~/.qoder`.
 - Root: user configuration and assets resolve from `QWEN_HOME`, falling back to `~/.qwen`. `QWEN_RUNTIME_DIR` independently relocates conversations, logs, and todos; project `.qwen/` paths are unaffected by either user-root convention.
 - Skills: user `<root>/skills/<name>/SKILL.md`, project `.qwen/skills/<name>/SKILL.md`, and source-verified compatibility discovery in `~/.agents/skills/`. PromptHub manages the whole Skill package, not only `SKILL.md`, and writes to native Qwen locations unless the user explicitly selects a compatibility target.
-- SubAgents: user `<root>/agents/*.md`, project `.qwen/agents/*.md`, with YAML frontmatter and Markdown instructions. They are reusable assets, not extra Qwen platform records.
+- SubAgents: user `<root>/agents/*.md`, project `.qwen/agents/*.md`, with YAML frontmatter and Markdown instructions. PromptHub exposes them through a Qwen-only, bounded, read-only Definitions inventory; Qwen remains their lifecycle owner.
 - Rules and memory: global `<root>/QWEN.md`, shared project `QWEN.md`, and personal project `.qwen/QWEN.local.md`. Auto-memory below runtime project data and opt-in `.qwen/team-memory/` remain Qwen-owned and do not enter the Rules workspace or ordinary backup/sync.
 - MCP: user `<root>/settings.json` and project `.qwen/settings.json` use `mcpServers`; transports include stdio, streamable HTTP, and SSE. PromptHub must preserve unrelated settings and redact command environment values, headers, OAuth client secrets, and token files.
-- Extensions and commands: extensions live under user/project `extensions/<name>/qwen-extension.json`; commands live under user/project `commands/`. Extension-provided Skills, SubAgents, MCP servers, commands, and hooks remain derived children of the extension bundle and must not be double-owned.
-- Provider/config: `settings.json` is layered with defaults, user, project, system override, environment, and CLI precedence. Provider identities and models may be inspected structurally; secret-bearing `modelProviders`, `env`, auth, and MCP fields stay main-process only.
-- Sessions: PromptHub uses the native bounded `qwen sessions list --json --limit` surface and `qwen --resume <id>` arguments instead of recursive runtime scanning. Referenced transcript realpaths must remain below `QWEN_RUNTIME_DIR`; malformed rows are isolated. Session bodies, runtime sidecars, logs, and todos remain local and platform-owned.
+- Extensions and commands: extensions live under user/project `extensions/<name>/qwen-extension.json`; commands live under user/project `commands/`. PromptHub recursively discovers user/project commands through the same bounded, read-only Definitions inventory. Extension-provided Skills, SubAgents, MCP servers, commands, and hooks remain derived children of the extension bundle and must not be double-owned.
+- Provider/config: `settings.json` is layered with defaults, user, project, system override, environment, and CLI precedence. Current `$version: 4` stores bare model arrays at `modelProviders[providerId]`; custom provider ids require `providerProtocol`, active selection uses `security.auth.selectedType` plus `model.name`, and model identity is provider id + `id` + normalized `baseUrl`. PromptHub-owned direct credentials are projected to user `<root>/.env` under the public model `envKey`, never to deprecated `security.auth.apiKey` / `security.auth.baseUrl`. Vertex ADC, legacy Qwen OAuth, automatic Coding Plan credentials, custom headers, and credentials not owned by the Profile remain redacted and read-only.
+- Sessions: PromptHub uses the native bounded `qwen sessions list --json --limit` surface and `qwen --resume <id>` arguments instead of recursive runtime scanning. A 256-entry process-local metadata window keeps deep-page results readable without persisting transcript bodies; selected transcript realpaths are revalidated below `QWEN_RUNTIME_DIR` before every read, and internal paths never enter list results. Malformed rows are isolated. Session bodies, runtime sidecars, logs, and todos remain local and platform-owned.
 - Visual identity: bundled 512x512 icon comes from `QwenLM/qwen-code` commit `760ffd7a4dc4db7834c68fba6533fa15e17accaa`, path `packages/desktop/apps/electron/resources/brands/qwen-code/icon.png`; bundled SHA-256 is `02dac7ae657ddd32793b55cb63c00497807d1b6cf55343cea2b97120d048839a`.
-- Current PromptHub status: registry, icon, root resolution, native/read-only-compatible Skill discovery, global/project MCP presets, global Rules, extension bundle discovery, redacted model config, and bounded read-only Sessions are implemented. Raw secret-bearing settings, Usage, project SubAgent/Commands dedicated management, and the complete `TEST-AGENT-036` Electron E2E remain unavailable or planned; the UI capability matrix must preserve those distinctions.
+- Current PromptHub status: registry, icon, root resolution, native/read-only-compatible Skill discovery, global/project MCP presets, global Rules, extension bundle discovery, redacted model config, bounded read-only Sessions, and Qwen-only user/project SubAgent plus Command discovery are implemented. Definition bodies and absolute paths remain main-process-only; extension children, raw secret-bearing settings, and Usage remain unavailable or planned. The UI capability matrix must preserve those distinctions.
 
 ### TRAE IDE / TRAE Work
 
@@ -790,18 +1028,33 @@ Current support boundary:
 - OpenClaw sessions: `https://docs.openclaw.ai/reference/session-management-compaction`
 - OpenClaw logging: `https://docs.openclaw.ai/gateway/logging`
 - Cursor rules: `https://cursor.com/docs/context/rules`
-- Windsurf memories and rules: `https://docs.windsurf.com/windsurf/cascade/memories`
-- Windsurf AGENTS.md: `https://docs.windsurf.com/windsurf/cascade/agents-md`
-- Windsurf skills: `https://docs.windsurf.com/windsurf/cascade/skills`
-- Windsurf workflows: `https://docs.windsurf.com/windsurf/cascade/workflows`
+- Cursor skills: `https://cursor.com/docs/context/skills`
+- Cursor subagents: `https://cursor.com/docs/agent/subagents`
+- Cursor Plugin reference: `https://cursor.com/docs/reference/plugins`
+- Cursor official Plugin repository: `https://github.com/cursor/plugins`
+- Cursor CLI overview and parameters: `https://docs.cursor.com/en/cli/overview`,
+  `https://docs.cursor.com/en/cli/using`,
+  `https://docs.cursor.com/en/cli/reference/parameters`
+- Windsurf / Devin Desktop memories and rules: `https://docs.devin.ai/desktop/cascade/memories`
+- Windsurf / Devin Desktop AGENTS.md: `https://docs.devin.ai/desktop/cascade/agents-md`
+- Windsurf / Devin Desktop skills: `https://docs.devin.ai/desktop/cascade/skills`
+- Windsurf / Devin Desktop workflows: `https://docs.devin.ai/desktop/cascade/workflows`
+- Windsurf / Devin Desktop MCP: `https://docs.devin.ai/desktop/cascade/mcp`
+- Windsurf / Devin Desktop hooks and transcript export: `https://docs.devin.ai/desktop/cascade/hooks`
 - Kiro steering: `https://kiro.dev/docs/steering/`
 - Kiro agent skills: `https://kiro.dev/docs/skills/`
 - Kiro MCP: `https://kiro.dev/docs/mcp/`
+- Kiro CLI settings: `https://kiro.dev/docs/cli/reference/settings/`
+- Kiro CLI commands: `https://kiro.dev/docs/cli/reference/cli-commands/`
+- Kiro CLI models: `https://kiro.dev/docs/cli/models/`
+- Kiro Power installation: `https://kiro.dev/docs/powers/installation/`
 - Roo Code custom instructions: `https://docs.roocode.com/features/custom-instructions`
 - Roo Code skills: `https://docs.roocode.com/features/skills`
 - Roo Code slash commands: `https://docs.roocode.com/features/slash-commands`
 - Roo Code checkpoints: `https://docs.roocode.com/features/checkpoints`
 - GitHub Copilot repository custom instructions: `https://docs.github.com/en/copilot/customizing-copilot/adding-repository-custom-instructions-for-github-copilot`
+- GitHub Copilot CLI configuration directory: `https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference`
+- GitHub Copilot CLI command reference: `https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference`
 - GitHub Copilot CLI plugin reference: `https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference`
 - VS Code Agent Plugins: `https://code.visualstudio.com/docs/agent-customization/agent-plugins`
 - TRAE Work CN docs entry: `https://docs.trae.cn`
@@ -829,11 +1082,32 @@ Current support boundary:
 - Augment CLI reference: `https://docs.augmentcode.com/cli/reference`
 - Augment MCP: `https://docs.augmentcode.com/cli/integrations`
 - Cherry Studio storage locations: `https://docs.cherry-ai.com/advanced-basic/data-storage-location`
-- Cherry Studio local source inspected for skill registry behavior:
-  - `/Users/lingxiaotian/Programs/public/cherry-studio/src/main/services/agents/skills/SkillService.ts`
-  - `/Users/lingxiaotian/Programs/public/cherry-studio/src/main/data/db/schemas/agentGlobalSkill.ts`
-  - `/Users/lingxiaotian/Programs/public/cherry-studio/src/main/data/db/schemas/agentSkill.ts`
-  - `/Users/lingxiaotian/Programs/public/cherry-studio/migrations/sqlite-drizzle/0000_loud_sugar_man.sql`
+- Cherry Studio current source contract at revision
+  `9785c652a6d477fcf3ab86719f4bdd1e57736bbd`:
+  - path registry:
+    `https://github.com/CherryHQ/cherry-studio/blob/9785c652a6d477fcf3ab86719f4bdd1e57736bbd/src/main/core/paths/pathRegistry.ts`
+  - Skill service:
+    `https://github.com/CherryHQ/cherry-studio/blob/9785c652a6d477fcf3ab86719f4bdd1e57736bbd/src/main/ai/skills/SkillService.ts`
+  - v2 database migration reference:
+    `https://github.com/CherryHQ/cherry-studio/blob/9785c652a6d477fcf3ab86719f4bdd1e57736bbd/src/main/data/migration/v2/README.md`
+
+## Oh My Pi Evidence
+
+- Evidence was re-audited at upstream revision
+  `cc00ab161b2721e50d8a96a0dc9552abfd258b8b`; PromptHub reuses the public
+  contracts only and does not copy or vendor upstream source.
+- Repository and Skills:
+  `https://github.com/can1357/oh-my-pi/tree/cc00ab161b2721e50d8a96a0dc9552abfd258b8b`
+  and
+  `https://github.com/can1357/oh-my-pi/blob/cc00ab161b2721e50d8a96a0dc9552abfd258b8b/docs/skills.md`
+- Settings and root precedence:
+  `https://github.com/can1357/oh-my-pi/blob/cc00ab161b2721e50d8a96a0dc9552abfd258b8b/docs/settings.md`
+- Model/provider configuration and credential ownership:
+  `https://github.com/can1357/oh-my-pi/blob/cc00ab161b2721e50d8a96a0dc9552abfd258b8b/docs/models.md`
+  and
+  `https://github.com/can1357/oh-my-pi/blob/cc00ab161b2721e50d8a96a0dc9552abfd258b8b/docs/providers.md`
+- Session switching and recent listing:
+  `https://github.com/can1357/oh-my-pi/blob/cc00ab161b2721e50d8a96a0dc9552abfd258b8b/docs/session-switching-and-recent-listing.md`
 
 ## Canonical Sources
 

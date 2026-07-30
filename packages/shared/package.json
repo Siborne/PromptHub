@@ -12,7 +12,8 @@
     "./utils/*": "./utils/*.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test --experimental-test-coverage tests/*.test.ts"
   },
   "devDependencies": {
     "typescript": "5.9.3"

@@ -25,6 +25,7 @@ import {
 import { useSkillStore } from "../../stores/skill.store";
 import { useUIStore } from "../../stores/ui.store";
 import { useToast } from "../ui/Toast";
+import { BoundedListPager, useBoundedPage } from "./BoundedListPager";
 
 export type AgentSkillAssetFilter =
   | "all"
@@ -562,6 +563,7 @@ export function AgentSkillAssetPanel({
   onOpenDetail: (skill: AgentScannedSkill) => void;
 }) {
   const { t } = useTranslation();
+  const skillPage = useBoundedPage(assets.visibleRows, 60, assets.visibleRows);
 
   const filterLabels: Record<AgentSkillAssetFilter, string> = {
     all: t("skill.agentStatsTotal", {
@@ -666,7 +668,7 @@ export function AgentSkillAssetPanel({
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {assets.visibleRows.map((row) => (
+            {skillPage.items.map((row) => (
               <AgentSkillAssetCard
                 key={row.skill.localPath}
                 row={row}
@@ -680,6 +682,7 @@ export function AgentSkillAssetPanel({
           </div>
         )}
       </div>
+      <BoundedListPager page={skillPage} />
     </>
   );
 }

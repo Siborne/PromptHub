@@ -1,0 +1,196 @@
+import type {
+  AgentCapabilityStatus,
+  AgentPlatformCapabilityDeclaration,
+  AgentPlatformCapabilityInventory,
+} from "@prompthub/shared/types/agent";
+import { AGENT_PLATFORM_CAPABILITY_KEYS } from "@prompthub/shared/types/agent";
+import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
+
+export { AGENT_PLATFORM_CAPABILITY_KEYS };
+
+type DepthCapabilityKey = "providerModel" | "sessions" | "usage" | "appearance";
+
+type DepthCapabilityInventory = Record<
+  DepthCapabilityKey,
+  AgentPlatformCapabilityDeclaration
+>;
+
+function declaration(
+  status: AgentCapabilityStatus,
+  evidence: string,
+): AgentPlatformCapabilityDeclaration {
+  return { status, evidence };
+}
+
+const PLANNED_ADAPTER = declaration("planned", "adapter-evidence-pending");
+const UNSUPPORTED_APPEARANCE = declaration(
+  "unsupported",
+  "appearance-adapter-unavailable",
+);
+const SERVICE_MANAGED_PROVIDER = declaration(
+  "unsupported",
+  "service-managed-provider-contract",
+);
+
+function depthCapabilities(
+  overrides: Partial<DepthCapabilityInventory> = {},
+): DepthCapabilityInventory {
+  return {
+    providerModel: PLANNED_ADAPTER,
+    sessions: PLANNED_ADAPTER,
+    usage: PLANNED_ADAPTER,
+    appearance: UNSUPPORTED_APPEARANCE,
+    ...overrides,
+  };
+}
+
+const MODEL_CONFIG_ONLY = declaration("partial", "model-config-adapter");
+const VERIFIED_SESSION = declaration("supported", "verified-session-adapter");
+const VERIFIED_USAGE = declaration("supported", "verified-usage-adapter");
+const VERIFIED_TRANSCRIPT_HOOK_SESSION = declaration(
+  "partial",
+  "verified-transcript-hook-adapter",
+);
+const VERIFIED_LOCAL_PARTIAL_SESSION = declaration(
+  "partial",
+  "verified-local-session-adapter",
+);
+
+/**
+ * Explicit deep-adapter declarations for every built-in platform.
+ * Path-owned capabilities are derived from the canonical platform registry by
+ * getAgentPlatformCapabilityInventory so they cannot drift into a second path
+ * inventory.
+ */
+export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
+  claude: depthCapabilities({
+    providerModel: declaration("supported", "verified-provider-adapter"),
+    sessions: VERIFIED_SESSION,
+    usage: VERIFIED_USAGE,
+  }),
+  copilot: depthCapabilities({
+    providerModel: MODEL_CONFIG_ONLY,
+    usage: VERIFIED_USAGE,
+  }),
+  cursor: depthCapabilities(),
+  "cherry-studio": depthCapabilities(),
+  windsurf: depthCapabilities({ sessions: VERIFIED_TRANSCRIPT_HOOK_SESSION }),
+  kiro: depthCapabilities({
+    providerModel: MODEL_CONFIG_ONLY,
+    sessions: VERIFIED_LOCAL_PARTIAL_SESSION,
+  }),
+  gemini: depthCapabilities({
+    providerModel: declaration("supported", "verified-provider-adapter"),
+    sessions: VERIFIED_SESSION,
+    usage: VERIFIED_USAGE,
+  }),
+  antigravity: depthCapabilities({ usage: VERIFIED_USAGE }),
+  trae: depthCapabilities(),
+  "trae-cn": depthCapabilities(),
+  "trae-work": depthCapabilities(),
+  "trae-work-cn": depthCapabilities(),
+  opencode: depthCapabilities({
+    providerModel: declaration("supported", "verified-provider-adapter"),
+    sessions: VERIFIED_SESSION,
+  }),
+  "oh-my-pi": depthCapabilities({
+    providerModel: MODEL_CONFIG_ONLY,
+    sessions: VERIFIED_SESSION,
+  }),
+  cline: depthCapabilities(),
+  codex: depthCapabilities({
+    providerModel: declaration("supported", "verified-provider-adapter"),
+    sessions: VERIFIED_SESSION,
+    usage: VERIFIED_USAGE,
+    appearance: declaration("supported", "verified-appearance-adapter"),
+  }),
+  kimi: depthCapabilities({
+    providerModel: declaration("supported", "verified-provider-adapter"),
+    sessions: VERIFIED_SESSION,
+    usage: VERIFIED_USAGE,
+  }),
+  reasonix: depthCapabilities(),
+  augment: depthCapabilities(),
+  zcode: depthCapabilities(),
+  grok: depthCapabilities({
+    providerModel: declaration("supported", "verified-provider-adapter"),
+    sessions: VERIFIED_SESSION,
+  }),
+  qwen: depthCapabilities({
+    providerModel: declaration("supported", "verified-provider-adapter"),
+    sessions: VERIFIED_SESSION,
+  }),
+  kilo: depthCapabilities(),
+  amp: depthCapabilities({
+    providerModel: SERVICE_MANAGED_PROVIDER,
+  }),
+  openclaw: depthCapabilities({
+    providerModel: MODEL_CONFIG_ONLY,
+    sessions: VERIFIED_SESSION,
+  }),
+  qclaw: depthCapabilities(),
+  qoder: depthCapabilities(),
+  qoderwork: depthCapabilities(),
+  hermes: depthCapabilities(),
+  codebuddy: depthCapabilities(),
+  workbuddy: depthCapabilities(),
+} satisfies Record<string, DepthCapabilityInventory>;
+
+const FALLBACK_DEPTH_CAPABILITIES = depthCapabilities();
+
+function hasLaunchPath(platform: SkillPlatform): boolean {
+  return Object.values(platform.launchPaths || {}).some(
+    (paths) => paths && paths.length > 0,
+  );
+}
+
+function pathCapability(
+  relativePath: string | string[] | undefined,
+  evidence: string,
+): AgentPlatformCapabilityDeclaration {
+  const hasPath = Array.isArray(relativePath)
+    ? relativePath.length > 0
+    : Boolean(relativePath?.trim());
+  return hasPath
+    ? declaration("partial", evidence)
+    : declaration("planned", "protocol-evidence-pending");
+}
+
+export function getAgentPlatformCapabilityInventory(
+  platform: SkillPlatform,
+): AgentPlatformCapabilityInventory {
+  const depth =
+    AGENT_PLATFORM_DEPTH_CAPABILITIES[
+      platform.id as keyof typeof AGENT_PLATFORM_DEPTH_CAPABILITIES
+    ] || FALLBACK_DEPTH_CAPABILITIES;
+
+  return {
+    installationPath: declaration("partial", "platform-root-declaration"),
+    providerModel: depth.providerModel,
+    skills: declaration("partial", "skills-relative-path"),
+    mcp: pathCapability(platform.mcpRelativePath, "mcp-relative-path"),
+    rules: pathCapability(platform.globalRuleFile, "global-rule-path"),
+    plugins: pathCapability(
+      platform.pluginsRelativePath,
+      "plugins-relative-path",
+    ),
+    configFiles: pathCapability(platform.configFiles, "config-file-allowlist"),
+    sessions: depth.sessions,
+    usage: depth.usage,
+    launch: hasLaunchPath(platform)
+      ? declaration("supported", "platform-launch-allowlist")
+      : declaration("planned", "launch-evidence-pending"),
+    maintenanceCli: platform.cli
+      ? declaration("partial", platform.cli.evidence)
+      : declaration("planned", "lifecycle-adapter-pending"),
+    backupExportImport: declaration(
+      "partial",
+      "non-secret-agent-settings-backup",
+    ),
+    secretRuntimeExclusion: declaration(
+      "partial",
+      "runtime-and-secret-exclusion-policy",
+    ),
+    appearance: depth.appearance,
+  };
+}

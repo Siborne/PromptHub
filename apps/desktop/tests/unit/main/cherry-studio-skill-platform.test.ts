@@ -144,6 +144,10 @@ function dbPath(): string {
   return path.join(tempRoot, "cherrystudio.sqlite");
 }
 
+function currentDbPath(): string {
+  return path.join(tempRoot, "Data", "cherrystudio.sqlite");
+}
+
 function modernDbPath(): string {
   return path.join(tempRoot, "Data", "agents.db");
 }
@@ -362,6 +366,42 @@ describe("cherry-studio-skill-platform", () => {
     await expect(
       getCherryStudioSkillStatus(CHERRY_PLATFORM, "svg", options()),
     ).resolves.toBe(true);
+  });
+
+  it("prefers the current Data/cherrystudio.sqlite registry over a compatible legacy database", async () => {
+    await fs.mkdir(path.dirname(currentDbPath()), { recursive: true });
+    const currentDatabase = new DatabaseAdapter(currentDbPath());
+    createModernCherryStudioSchema(currentDatabase);
+    currentDatabase.close();
+    const sourceDir = await writeSkillPackage(
+      "current-v2",
+      "---\nname: current-v2\n---\ncontent",
+    );
+
+    await installCherryStudioSkill(
+      CHERRY_PLATFORM,
+      "current-v2",
+      sourceDir,
+      options(),
+    );
+
+    const selectedDatabase = new DatabaseAdapter(currentDbPath());
+    try {
+      expect(
+        selectedDatabase.get(
+          "SELECT folder_name FROM skills WHERE folder_name = ?",
+          "current-v2",
+        ),
+      ).toMatchObject({ folder_name: "current-v2" });
+    } finally {
+      selectedDatabase.close();
+    }
+    expect(readGlobalSkill("current-v2")).toBeNull();
+    await expect(
+      fs.access(
+        path.join(tempRoot, "Data", "Skills", "current-v2", "SKILL.md"),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it("registers symlink installs in Cherry Studio DB and uninstalls only the link", async () => {

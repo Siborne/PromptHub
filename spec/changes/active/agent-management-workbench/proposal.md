@@ -2,10 +2,10 @@
 
 ## Phase And Status
 
-- Phase: clarify / plan
+- Phase: implement
 - Status: in-progress
 - Primary requirement: `FR-AGENT-001`
-- Exit condition: 全量平台展示规则、能力分级、敏感配置策略和优先级获得确认，且 `FR -> DES -> TEST -> T` 无阻塞缺口。
+- Exit condition: 31 个内置平台的能力声明、第一/第二阶段实现、验证矩阵和稳定文档完成收敛，且 `FR -> DES -> TEST -> T` 无重复、孤立或虚假完成项。
 
 ## Why
 
@@ -36,6 +36,34 @@ Google 已把普通用户的终端入口从 Gemini CLI 迁移到 Antigravity CLI
 提供请求服务；企业许可证、Google Cloud 和付费 Gemini API Key 场景仍受
 支持。PromptHub 因此把 Antigravity 作为当前 Google Agent 入口，同时保留
 `gemini` 身份作为企业/旧版兼容目标，避免破坏既有配置和资产路径。
+
+## Scope Addendum 2026-07-25: Oh My Pi (#187)
+
+Issue #187 is accepted as a platform-adaptation request, not an advertising or
+provider-preset request. The first delivery adds Oh My Pi as the built-in
+`oh-my-pi` Agent identity without a `CLI` suffix and reuses the existing Agent
+asset and capability surfaces:
+
+- default root `~/.omp/agent`, overridden by `PI_CODING_AGENT_DIR`;
+- Skills under `skills/`, global `RULES.md`, user `mcp.json`, and project
+  `.omp/mcp.json` with the native `mcpServers` JSON key;
+- the sibling user plugin directory `~/.omp/plugins` is exposed as a derived
+  path, but PromptHub does not claim package installation or marketplace
+  ownership yet;
+- read-only, bounded JSONL session browsing with `omp --resume <id>` metadata.
+
+Provider switching, usage/quota, credential handling, profile management and
+plugin package installation remain planned capabilities. Oh My Pi session files
+remain platform-owned local state: PromptHub never edits, syncs, exports, or
+persists transcript bodies. Removing this batch is safe because it only removes
+the registry projection, derived target presets, and read-only adapter.
+
+Follow-up implementation now narrows the first Provider & Model increment to a
+non-secret projection: read `config.yml`/`config.yaml` and optional `models.yml`,
+show concrete provider/model selectors plus sanitized endpoint/readiness, and
+update only `modelRoles.default` through the existing backup and rollback
+pipeline. It does not write credentials, query usage, or install plugin
+packages.
 
 ## Goals
 
@@ -184,7 +212,7 @@ Google 已把普通用户的终端入口从 Gemini CLI 迁移到 Antigravity CLI
 - Stable Rules behavior: `spec/knowledge/behavior/rules-workspace.md`
 - Platform preview: `spec/changes/active/platform-workbench-prototype/`
 - Existing platform configuration: `spec/changes/active/project-skill-management/`
-- Agent asset tray actions: `spec/changes/active/desktop-agent-asset-tray-actions/`
+- Agent asset tray actions: `spec/changes/archive/2026/07/2026-07-28-desktop-agent-asset-tray-actions/`
 - CC Switch capability comparison: `cc-switch-coverage.md`
 - Screen-level UI design: `ui-design.md`
 
@@ -194,10 +222,10 @@ Google 已把普通用户的终端入口从 Gemini CLI 迁移到 Antigravity CLI
 2. `[已确认]` 产品方向是覆盖 CC Switch 大部分核心能力，同时复用 PromptHub 的资产管理优势。
 3. `[已确认]` 全部预置 Agent 均进入工作台；常用平台优先展示，深度 adapter 按优先级逐步补齐，暂不支持的配置能力不得导致整个平台消失。
 4. `[已确认]` Kimi 平台升级到当前独立 Kimi Code 契约：优先使用 `KIMI_CODE_HOME` / `~/.kimi-code`，仅在新根不存在时兼容 `KIMI_SHARE_DIR` / `~/.kimi`；两代会话和凭据不得混合。
-5. `[待确认]` Agent 原生凭据是否统一迁入系统安全存储，并在原生配置需要明文时按需投影。推荐：是，但需先验证各平台兼容性。
-6. `[待确认]` 外部会话是否默认只读、本地、按需读取正文且不进入同步。推荐：是。
-7. `[待确认]` 第一阶段是否只做基础模型测试，把本地代理、协议转换和故障转移拆成独立 change。推荐：是。
-8. `[待确认]` Agent Profile/Persona 是否延期为后续组合能力，不进入第一阶段数据模型。推荐：是。
+5. `[已确认]` PromptHub 自有 Provider Profile 凭据使用主进程安全存储引用；Agent 原生 OAuth、Keychain、认证缓存和 SecretRef 保持平台所有，不统一迁移。只有平台存在稳定明文配置契约且适配器通过安全验证时，才允许按需投影 PromptHub 托管密钥。
+6. `[已确认]` 外部会话默认只读、本地、按需读取正文且不进入同步、备份、遥测或普通搜索索引。
+7. `[已确认]` 当前范围只做受支持平台的基础连接/模型测试；本地代理、协议转换、故障转移、请求拦截和 OAuth 账户池属于高风险独立范围，本变更不得实现。
+8. `[已确认]` Agent Profile/Persona 延期为后续组合能力，不进入当前数据模型。
 
 ## Scope Addendum 2026-07-20: Overview Navigation And Claude Quota
 
@@ -217,6 +245,33 @@ Confirmed with the maintainer on 2026-07-20:
 3. Credential strategy confirmed: PromptHub-managed keys. The master copy lives in a new main-process secret store that reuses the audited Electron `safeStorage` encrypted-file pattern (`cloud-auth-storage.ts`: userData file, 0600, atomic rename, injectable encryption, main-only access). Codex has no env-free secure field contract, so at write time the key is projected into the provider's native `experimental_bearer_token` in `config.toml` (the platform's own field, file kept 0600); `env_key` entries remain supported for users who prefer environment variables. Keys are write-only over IPC: the renderer never receives a key back, backups and exports stay device-local and are excluded from sync.
 4. opencodex-style local proxy, protocol translation, account pooling, and failover remain gated as a separate Phase 3 subsystem and are explicitly out of scope.
 5. Reserved provider ids (`openai`, `ollama`, `lmstudio`) are never written; `model_provider` default switches go through the same backup/atomic-write/verify/rollback pipeline as existing model writes.
+
+### CC Switch-aligned credential convergence (confirmed 2026-07-28)
+
+The user approved CC Switch as the Provider and credential workflow reference
+and explicitly approved a consent-gated migration from the existing Codex-only
+Provider implementation.
+
+- The unified Provider Profile database becomes PromptHub's management source
+  of truth. Agent-native files remain the runtime projection read by each
+  Agent.
+- Existing `codex-provider:<providerId>` credentials and native inline tokens
+  are discovered only in the main process. The renderer receives provider
+  names, source type and credential readiness, never a secret or secret
+  reference.
+- PromptHub shows a migration review before changing ownership. Declining or
+  closing the review makes no database, secret-store or native-file change.
+- Confirmed migration copies credentials to stable
+  `agent-provider:<profileId>` ownership, creates Profile records, verifies the
+  result and removes legacy secret ownership only after the entire selected
+  batch succeeds. Any failure restores legacy credentials and removes partial
+  Profile records.
+- Native config is not overwritten merely because migration was accepted.
+  Provider activation remains a separate preview, backup, atomic write,
+  verification and rollback operation.
+- The legacy Codex renderer becomes a temporary compatibility reader only
+  during migration and is removed after the unified Profile workflow can
+  activate Codex endpoint, protocol, model and credential projections.
 
 ## Scope Addendum 2026-07-20: Desktop-Native Workspace Layout
 
@@ -271,3 +326,32 @@ Confirmed with the maintainer on 2026-07-22:
 3. First delivery covers the platform registry plus documented global/project Skills, SubAgents, MCP, Rules, Extensions, config inventory, and native session discovery. Each capability is enabled independently only after its adapter and regression contract pass.
 4. PromptHub manages canonical user/project assets, not Qwen-owned runtime state. Sessions, logs, todos, auto-memory, team memory, OAuth token files, credentials, extension caches, and extension-owned child assets remain local and are excluded from ordinary backup/sync unless a later explicit policy says otherwise.
 5. Qwen Code settings may contain provider keys, `env` values, MCP headers, MCP environment variables, OAuth client secrets, or token references. Renderer payloads, logs, snapshots, exports, and sync results must therefore be structural and redacted; PromptHub must never expose or silently rewrite secret-bearing fields.
+
+## Scope Addendum 2026-07-28: Cursor Evidence And Native Plugin Boundary
+
+1. Cursor remains rooted at `~/.cursor`. PromptHub may expose only verified user-owned paths: `skills/`, `agents/`, `mcp.json`, and read-only Plugin discovery below `plugins/`. Project `.cursor/skills/`, `.cursor/agents/`, `.cursor/rules/`, `.cursor/mcp.json`, and `AGENTS.md` remain project-owned assets.
+2. Cursor user rules are settings-owned. PromptHub must not invent a global rule file or expose private settings databases, authentication state, transcripts, checkpoints, snapshots, caches, or logs as editable Agent configuration.
+3. A generated `.cursor-plugin/plugin.json` package is not an installed or loaded Cursor Plugin. Cursor remains visible as a Plugin adapter target but distribution stays disabled until a bounded Marketplace or local-plugin workflow can preview, confirm, verify activation, and roll back.
+4. Cursor Provider, Sessions, Usage, and Maintenance remain `planned` until a public durable contract and real fixtures exist. Per-run CLI model flags and interactive history/usage surfaces do not establish persistent management protocols.
+
+## Scope Addendum 2026-07-28: Cherry Studio Current Data Boundary
+
+1. Cherry Studio's default Electron user-data root remains platform-specific, with installed Skills under `Data/Skills`. A user-relocated Cherry data directory continues to require the existing explicit Agent root override; PromptHub does not infer it from private runtime stores.
+2. Current upstream v2 stores the primary database at `Data/cherrystudio.sqlite`. PromptHub must prefer that path before compatible `Data/agent.db`, `Data/agents.db`, or root-level legacy databases so a Skill operation cannot update an obsolete database while the current application reads another.
+3. PromptHub reuses the public schema contract and existing database-backed Skill adapter; it does not copy Cherry Studio source. Provider, MCP, agent/session, credential, memory, cache, and runtime tables remain Cherry-owned and are not exposed through Agent management in this batch.
+4. Cherry Studio has no single native Plugin bundle contract. Its composite Plugin target remains visible but disabled; the Skills owner remains the only supported package surface.
+
+## Scope Addendum 2026-07-28: Windsurf Public Transcript Boundary
+
+1. Windsurf keeps its evidence-backed global Skills, MCP, global Rules, and macOS launch paths. Project Workflows, Rules, AGENTS.md, Hooks, and Skills remain project-owned and are not collapsed into a synthetic Plugin bundle.
+2. Current official Cascade Hooks documentation defines opt-in transcript files at `~/.windsurf/transcripts/<trajectory_id>.jsonl`, with `0600` permissions and an automatic 100-file retention limit. PromptHub may provide a bounded read-only adapter for these explicit transcript exports; it must not parse proprietary `~/.codeium/windsurf/cascade/*.pb` runtime files.
+3. The transcript adapter exposes only visible user input and planner response text. File contents, command output, tool arguments, code actions, and other sensitive tool payloads remain hidden even when present in the JSONL source.
+4. Public transcript JSONL does not provide a stable native resume command. PromptHub must show read-only history with `resume: null`, describe the capability as partial, and leave Provider, Usage, generic Config editing, Maintenance, and native Plugin installation unclaimed.
+
+## Scope Addendum 2026-07-28: Kiro Current CLI And Power Boundary
+
+1. PromptHub reuses Kiro's documented settings, asset, session-command, and Power import contracts; it does not copy, vendor, or execute upstream source.
+2. The default root remains `~/.kiro`, with `KIRO_HOME` as the supported override. Global Skills, MCP, agents, and `settings/cli.json` stay Kiro-owned files that PromptHub only projects through bounded adapters. The multi-file `steering/` directory is not misrepresented through the current single-file Rules contract.
+3. Kiro CLI model selection is limited to `chat.defaultModel`. Authentication, endpoints, credentials, account state, and provider selection remain platform-managed.
+4. Kiro CLI sessions may be browsed read-only from the locally verified `sessions/cli` runtime shape. Only visible prompt and assistant text is projected; thinking, tool calls, tool results, and unknown records remain hidden, and no resume command is synthesized.
+5. Writing a directory below `~/.kiro/powers` is not equivalent to Kiro's native Power import and registration workflow. Direct Plugin distribution remains disabled until PromptHub can invoke, preview, confirm, verify, and roll back an official import path.

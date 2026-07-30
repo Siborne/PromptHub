@@ -33,7 +33,9 @@ export const MCP_JSON_TARGETS: McpTargetKind[] = [
   "codebuddy",
   "kimi",
   "augment",
+  "amp",
   "qwen",
+  "oh-my-pi",
   "zcode",
   "custom-json",
 ];
@@ -44,9 +46,12 @@ export const MCP_JSON_TARGETS: McpTargetKind[] = [
  */
 export function getMcpServersJsonKey(
   target: McpTargetKind,
-): "mcpServers" | "servers" | "mcp" {
+): "mcpServers" | "servers" | "mcp" | "amp.mcpServers" {
   if (target === "vscode") {
     return "servers";
+  }
+  if (target === "amp") {
+    return "amp.mcpServers";
   }
   if (target === "opencode" || target === "kilo") {
     return "mcp";

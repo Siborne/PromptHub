@@ -86,12 +86,28 @@ export function deriveProjectMcpTargetPresets(
         platformId: "augment",
       },
       {
+        id: `project:${project.id}:amp`,
+        target: "amp",
+        scope: "workspace",
+        label: `${project.name} / Amp`,
+        path: joinProjectPath(rootPath, ".amp/settings.json"),
+        platformId: "amp",
+      },
+      {
         id: `project:${project.id}:qwen`,
         target: "qwen",
         scope: "workspace",
         label: `${project.name} / Qwen Code`,
         path: joinProjectPath(rootPath, ".qwen/settings.json"),
         platformId: "qwen",
+      },
+      {
+        id: `project:${project.id}:oh-my-pi`,
+        target: "oh-my-pi",
+        scope: "workspace",
+        label: `${project.name} / Oh My Pi`,
+        path: joinProjectPath(rootPath, ".omp/mcp.json"),
+        platformId: "oh-my-pi",
       },
     ];
   });

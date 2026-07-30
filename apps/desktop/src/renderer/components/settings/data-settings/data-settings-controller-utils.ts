@@ -23,7 +23,8 @@ export type ExportScopeKey =
   | "rules"
   | "skills"
   | "mcp"
-  | "plugins";
+  | "plugins"
+  | "agents";
 
 export type ExportScope = Record<ExportScopeKey, boolean>;
 

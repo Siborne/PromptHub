@@ -8,6 +8,7 @@ import type { AgentAssetDomain } from "./use-agent-asset-domain";
 export type AgentWorkspaceTabKey =
   | "overview"
   | AgentAssetDomain
+  | "definitions"
   | "provider"
   | "appearance"
   | "configFiles"
@@ -21,6 +22,14 @@ export interface AgentWorkspaceTab {
   fallback: string;
   key: AgentWorkspaceTabKey;
   labelKey: string;
+  platformIds?: readonly string[];
+}
+
+export interface AgentCapabilityGuidance {
+  fallback: string;
+  key:
+    | "agents.adapterPlannedDescription"
+    | "agents.adapterUnsupportedDescription";
 }
 
 export const AGENT_ASSET_DOMAINS: AgentAssetDomain[] = [
@@ -49,6 +58,13 @@ export const AGENT_WORKSPACE_TABS: AgentWorkspaceTab[] = [
     capability: "assets",
     labelKey: "agents.skills",
     fallback: "Skills",
+  },
+  {
+    key: "definitions",
+    capability: "assets",
+    labelKey: "agents.definitions",
+    fallback: "Definitions",
+    platformIds: ["qwen"],
   },
   {
     key: "mcp",
@@ -101,10 +117,21 @@ export function getAgentTabStatus(
   agent: ManagedAgentSummary,
   tab: AgentWorkspaceTab,
 ): AgentCapabilityStatus {
+  if (tab.platformIds && !tab.platformIds.includes(agent.id)) {
+    return "unsupported";
+  }
   if (tab.assetDomain && !agent.paths[tab.assetDomain]) {
     return "unsupported";
   }
   return agent.capabilities[tab.capability].status;
+}
+
+export function getAgentWorkspaceTabs(
+  agent: ManagedAgentSummary,
+): AgentWorkspaceTab[] {
+  return AGENT_WORKSPACE_TABS.filter(
+    (tab) => !tab.platformIds || tab.platformIds.includes(agent.id),
+  );
 }
 
 export function isAgentTabEnabled(
@@ -113,4 +140,22 @@ export function isAgentTabEnabled(
 ): boolean {
   const status = getAgentTabStatus(agent, tab);
   return status === "supported" || status === "partial";
+}
+
+export function getAgentCapabilityGuidance(
+  status: AgentCapabilityStatus,
+): AgentCapabilityGuidance | null {
+  if (status === "planned") {
+    return {
+      key: "agents.adapterPlannedDescription",
+      fallback: "This adapter is planned and is not available yet.",
+    };
+  }
+  if (status === "unsupported") {
+    return {
+      key: "agents.adapterUnsupportedDescription",
+      fallback: "No verified adapter is available for this Agent.",
+    };
+  }
+  return null;
 }
