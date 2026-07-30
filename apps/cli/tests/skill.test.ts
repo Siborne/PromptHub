@@ -878,6 +878,7 @@ describe("CLI skill commands", () => {
       "platform-skill",
       expect.stringContaining("# Platform Skill"),
       "claude",
+      installRes.json.id,
     );
 
     const uninstallMdRes = await execCli(
@@ -897,7 +898,11 @@ describe("CLI skill commands", () => {
       skillId: installRes.json.id,
       platformId: "claude",
     });
-    expect(uninstallSkillMd).toHaveBeenCalledWith("platform-skill", "claude");
+    expect(uninstallSkillMd).toHaveBeenCalledWith(
+      "platform-skill",
+      "claude",
+      installRes.json.id,
+    );
   });
 
   it("installs platform skills as full directories instead of only SKILL.md", async () => {
@@ -960,6 +965,62 @@ describe("CLI skill commands", () => {
       expect(
         fs.readFileSync(path.join(platformDir, "assets", "helper.txt"), "utf8"),
       ).toBe("helper");
+    } finally {
+      process.env.HOME = originalHome;
+    }
+  });
+
+  it("installs and safely uninstalls the shared global Agent Skills target", async () => {
+    const root = makeTempRoot(tempDirs);
+    const originalHome = process.env.HOME;
+    const homeDir = path.join(root, "home");
+    const sourceDir = path.join(root, "shared-target-skill");
+    fs.mkdirSync(sourceDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sourceDir, "SKILL.md"),
+      "---\nname: shared-target-skill\n---\n# Shared Target",
+      "utf8",
+    );
+
+    try {
+      process.env.HOME = homeDir;
+      fs.mkdirSync(homeDir, { recursive: true });
+      const installRes = await execCli([
+        ...withDataDir(root),
+        "skill",
+        "install",
+        sourceDir,
+      ]);
+      expect(installRes.exitCode).toBe(0);
+
+      const distributeRes = await execCli([
+        ...withDataDir(root),
+        "skill",
+        "install-md",
+        "shared-target-skill",
+        "--platform",
+        "agent-skills-global",
+      ]);
+      expect(distributeRes.exitCode).toBe(0);
+      const targetDir = path.join(
+        homeDir,
+        ".agents",
+        "skills",
+        "shared-target-skill",
+      );
+      expect(fs.existsSync(path.join(targetDir, "SKILL.md"))).toBe(true);
+
+      const uninstallRes = await execCli([
+        ...withDataDir(root),
+        "skill",
+        "uninstall-md",
+        "shared-target-skill",
+        "--platform",
+        "agent-skills-global",
+      ]);
+      expect(uninstallRes.exitCode).toBe(0);
+      expect(fs.existsSync(targetDir)).toBe(false);
+      expect(fs.existsSync(sourceDir)).toBe(true);
     } finally {
       process.env.HOME = originalHome;
     }

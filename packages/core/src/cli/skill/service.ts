@@ -24,6 +24,10 @@ import {
 } from "@prompthub/shared/utils/skill-source-update";
 import { getSkillsDir } from "../../runtime-paths";
 import { installSkillFromSource } from "../../skills/install-flow";
+import {
+  SHARED_AGENT_SKILLS_TARGET_ID,
+  sharedSkillDistributionService,
+} from "../../skill-distribution-targets";
 import { serializeSkillMd } from "../../skills/skill-frontmatter";
 import { assertSkillPackageEntriesSafe } from "../../skills/package-policy";
 import {
@@ -514,14 +518,24 @@ export function createCliSkillService(
     skillName: string,
     skillMdContent: string,
     platformId: string,
+    skillId?: string,
   ): Promise<void> {
+    const canonicalRepoPath =
+      (await getRepoPathForSkillName(skillDb, skillName)) ??
+      (await saveContent(skillName, skillMdContent));
+    if (platformId === SHARED_AGENT_SKILLS_TARGET_ID) {
+      await sharedSkillDistributionService.install({
+        skillId: skillId ?? skillName,
+        skillName,
+        sourcePath: canonicalRepoPath,
+        mode: "copy",
+      });
+      return;
+    }
     const platform = SKILL_PLATFORMS.find((item) => item.id === platformId);
     if (!platform) {
       throw new Error(`Unknown platform: ${platformId}`);
     }
-    const canonicalRepoPath =
-      (await getRepoPathForSkillName(skillDb, skillName)) ??
-      (await saveContent(skillName, skillMdContent));
     const skillDir = path.join(
       getPlatformSkillsDir(platform),
       validateSkillName(skillName),
@@ -618,7 +632,15 @@ export function createCliSkillService(
   async function uninstallSkillMd(
     skillName: string,
     platformId: string,
+    skillId?: string,
   ): Promise<void> {
+    if (platformId === SHARED_AGENT_SKILLS_TARGET_ID) {
+      await sharedSkillDistributionService.uninstall({
+        skillId: skillId ?? skillName,
+        skillName,
+      });
+      return;
+    }
     const platform = SKILL_PLATFORMS.find((item) => item.id === platformId);
     if (!platform) {
       throw new Error(`Unknown platform: ${platformId}`);
@@ -650,6 +672,7 @@ export function createCliSkillService(
 
   async function getSkillMdInstallStatus(
     skillName: string,
+    skillId?: string,
   ): Promise<Record<string, boolean>> {
     const status: Record<string, boolean> = {};
     for (const platform of SKILL_PLATFORMS) {
@@ -659,6 +682,13 @@ export function createCliSkillService(
       );
       status[platform.id] = await fileExists(skillDir);
     }
+    const sharedStatus = await sharedSkillDistributionService.getStatus({
+      skillId: skillId ?? skillName,
+      skillName,
+    });
+    status[SHARED_AGENT_SKILLS_TARGET_ID] =
+      sharedStatus.state === "managed-clean" ||
+      sharedStatus.state === "managed-modified";
     return status;
   }
 

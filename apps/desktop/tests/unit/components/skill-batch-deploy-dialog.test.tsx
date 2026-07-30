@@ -108,6 +108,9 @@ describe("SkillBatchDeployDialog install mode", () => {
         screen.getByRole("button", { name: /Claude Code/ }),
       ).toBeInTheDocument();
     });
+    expect(
+      screen.getByRole("button", { name: /Shared Agent Skills/ }),
+    ).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(screen.getByRole("button", { name: /Symlink/ }));
     fireEvent.click(getSubmitButton());
@@ -211,7 +214,7 @@ describe("SkillBatchDeployDialog install mode", () => {
     expect(screen.queryByText("Codex CLI")).not.toBeInTheDocument();
   });
 
-  it("still hides disabled configured Agent targets", async () => {
+  it("still hides disabled configured Agent targets while keeping the shared target", async () => {
     bindSettingsState(
       createSettingsState({ disabledPlatformIds: ["custom-agent-1"] }),
     );
@@ -244,7 +247,7 @@ describe("SkillBatchDeployDialog install mode", () => {
     });
     expect(screen.queryByText("Team Agent")).not.toBeInTheDocument();
     expect(
-      screen.getByText("No deployable Agent targets available."),
+      screen.getByRole("button", { name: /Shared Agent Skills/ }),
     ).toBeInTheDocument();
   });
 

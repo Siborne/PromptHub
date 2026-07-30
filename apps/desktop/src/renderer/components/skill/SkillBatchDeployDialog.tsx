@@ -16,6 +16,10 @@ import { PlatformIcon } from "../ui/PlatformIcon";
 import { useSettingsStore } from "../../stores/settings.store";
 import { filterDeployablePlatforms } from "../../services/platform-visibility";
 import {
+  appendSharedSkillDistributionTarget,
+  getSkillDistributionTargetName,
+} from "../../services/shared-skill-distribution-target";
+import {
   syncSkillsToPlatforms,
   type SkillInstallMode,
   unsyncSkillsFromPlatforms,
@@ -77,6 +81,11 @@ export function SkillBatchDeployDialog({
     [detectedPlatforms, disabledPlatformIds, supportedPlatforms],
   );
   const totalTargets = skills.length * selectedPlatforms.size;
+  const hasSharedDiscoveryRisk =
+    selectedPlatforms.has("agent-skills-global") &&
+    ["gemini", "augment", "windsurf", "opencode"].some((platformId) =>
+      selectedPlatforms.has(platformId),
+    );
 
   useEffect(() => {
     if (availablePlatforms.length === 0) return;
@@ -85,7 +94,11 @@ export function SkillBatchDeployDialog({
       if (previous.size > 0) {
         return previous;
       }
-      return new Set(availablePlatforms.map((platform) => platform.id));
+      return new Set(
+        availablePlatforms
+          .filter((platform) => platform.id !== "agent-skills-global")
+          .map((platform) => platform.id),
+      );
     });
   }, [availablePlatforms]);
 
@@ -102,7 +115,7 @@ export function SkillBatchDeployDialog({
         if (cancelled) {
           return;
         }
-        setSupportedPlatforms(platforms);
+        setSupportedPlatforms(appendSharedSkillDistributionTarget(platforms));
         setDetectedPlatforms(detected);
       } catch (error) {
         console.error("Failed to load skill platforms:", error);
@@ -410,6 +423,11 @@ export function SkillBatchDeployDialog({
                           "This only removes PromptHub-distributed skills from selected platforms. Your local repo remains untouched.",
                         )}
                   </div>
+                  {hasSharedDiscoveryRisk ? (
+                    <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                      {t("skill.sharedTargetDuplicateWarning")}
+                    </div>
+                  ) : null}
                   <div className="grid gap-3 sm:grid-cols-2">
                     {availablePlatforms.map((platform) => {
                       const isSelected = selectedPlatforms.has(platform.id);
@@ -437,7 +455,7 @@ export function SkillBatchDeployDialog({
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-medium">
-                              {platform.name}
+                              {getSkillDistributionTargetName(platform, t)}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {platform.id}

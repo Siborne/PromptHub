@@ -451,7 +451,9 @@ describe("skill-installer-platform symlink install", () => {
       ["writer"],
     );
 
-    expect(Object.values(status).every(Boolean)).toBe(true);
+    const { "agent-skills-global": sharedStatus, ...platformStatus } = status;
+    expect(Object.values(platformStatus).every(Boolean)).toBe(true);
+    expect(sharedStatus).toBe(false);
   });
 
   it("does not report same-name inactive variants as installed", async () => {
@@ -489,7 +491,12 @@ describe("skill-installer-platform symlink install", () => {
       ["writer"],
     );
 
-    expect(Object.values(activeStatus).every(Boolean)).toBe(true);
+    const {
+      "agent-skills-global": activeSharedStatus,
+      ...activePlatformStatus
+    } = activeStatus;
+    expect(Object.values(activePlatformStatus).every(Boolean)).toBe(true);
+    expect(activeSharedStatus).toBe(false);
     expect(Object.values(inactiveStatus).some(Boolean)).toBe(false);
     expect(
       Object.values(inactiveDetails).some((entry) => entry.installed),

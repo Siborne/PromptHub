@@ -13,6 +13,7 @@ import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { getRuntimeCapabilities } from "../../runtime";
 import { filterDeployablePlatforms } from "../../services/platform-visibility";
+import { appendSharedSkillDistributionTarget } from "../../services/shared-skill-distribution-target";
 
 export type { SkillInstallMode } from "@prompthub/shared/types";
 
@@ -132,7 +133,7 @@ export function useSkillPlatform(
       window.api.skill.getSupportedPlatforms(),
       window.api.skill.detectPlatforms(),
     ]);
-    setSupportedPlatforms(platforms);
+    setSupportedPlatforms(appendSharedSkillDistributionTarget(platforms));
     setDetectedPlatforms(detected);
   }, [runtimeCapabilities.skillPlatformIntegration]);
 

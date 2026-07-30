@@ -5,6 +5,7 @@ export * from "./cli/skill-cli-service";
 export * from "./skills/install-flow";
 export * from "./skills/package-operation";
 export * from "./skills/skill-frontmatter";
+export * from "./skill-distribution-targets";
 export * from "./platform-paths";
 export * from "./rules-workspace";
 export * from "./ai-client";

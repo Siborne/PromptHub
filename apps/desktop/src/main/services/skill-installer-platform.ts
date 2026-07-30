@@ -6,6 +6,10 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import {
+  SHARED_AGENT_SKILLS_TARGET_ID,
+  sharedSkillDistributionService,
+} from "@prompthub/core";
+import {
   SKILL_PLATFORMS,
   type SkillPlatform,
 } from "@prompthub/shared/constants/platforms";
@@ -58,7 +62,10 @@ type PlatformActivationMap = Record<string, PlatformActivationRecord>;
 const PLATFORM_ACTIVATION_STATE_FILE = ".prompthub-platform-activations.json";
 
 function getPlatformActivationStatePath(platform: SkillPlatform): string {
-  return path.join(getPlatformSkillsDir(platform), PLATFORM_ACTIVATION_STATE_FILE);
+  return path.join(
+    getPlatformSkillsDir(platform),
+    PLATFORM_ACTIVATION_STATE_FILE,
+  );
 }
 
 async function readPlatformActivationState(
@@ -187,7 +194,10 @@ async function inspectSkillSourcePathInstall(
       continue;
     }
 
-    const status = await inspectPlatformSkillInstall(platform, platformSkillName);
+    const status = await inspectPlatformSkillInstall(
+      platform,
+      platformSkillName,
+    );
     if (status.installed) {
       return status;
     }
@@ -499,7 +509,8 @@ export async function installSkillMd(
 
   // Ensure the canonical copy exists in local repo
   const canonicalDir =
-    canonicalRepoPath ?? (await saveContentToLocalRepo(skillName, skillMdContent));
+    canonicalRepoPath ??
+    (await saveContentToLocalRepo(skillName, skillMdContent));
 
   const skillsDir = getPlatformSkillsDir(platform);
   const skillDir = path.join(skillsDir, skillName);
@@ -507,7 +518,11 @@ export async function installSkillMd(
   try {
     if (isCherryStudioPlatform(platform.id)) {
       await installCherryStudioSkill(platform, skillName, canonicalDir);
-      await cleanupLegacyCherryStudioSkills(platform, skillName, options?.legacySkillNames);
+      await cleanupLegacyCherryStudioSkills(
+        platform,
+        skillName,
+        options?.legacySkillNames,
+      );
       console.log(
         `Successfully registered skill directory for "${skillName}" in ${platform.name}`,
       );
@@ -516,13 +531,20 @@ export async function installSkillMd(
 
     await fs.mkdir(skillsDir, { recursive: true });
     await copySkillRepoToPlatform(canonicalDir, skillDir);
-    await cleanupLegacyPlatformSkillDirs(platform, skillName, options?.legacySkillNames);
+    await cleanupLegacyPlatformSkillDirs(
+      platform,
+      skillName,
+      options?.legacySkillNames,
+    );
 
     console.log(
       `Successfully installed skill directory for "${skillName}" to ${platform.name} at ${skillDir}`,
     );
   } catch (error) {
-    console.error(`Failed to install skill directory to ${platform.name}:`, error);
+    console.error(
+      `Failed to install skill directory to ${platform.name}:`,
+      error,
+    );
     throw error;
   }
 }
@@ -544,7 +566,11 @@ export async function uninstallSkillMd(
   try {
     if (isCherryStudioPlatform(platform.id)) {
       await uninstallCherryStudioSkill(platform, skillName);
-      await cleanupLegacyCherryStudioSkills(platform, skillName, options?.legacySkillNames);
+      await cleanupLegacyCherryStudioSkills(
+        platform,
+        skillName,
+        options?.legacySkillNames,
+      );
       console.log(
         `Successfully unregistered SKILL.md for "${skillName}" from ${platform.name}`,
       );
@@ -552,7 +578,11 @@ export async function uninstallSkillMd(
     }
 
     await removePlatformSkillDir(platform, skillName);
-    await cleanupLegacyPlatformSkillDirs(platform, skillName, options?.legacySkillNames);
+    await cleanupLegacyPlatformSkillDirs(
+      platform,
+      skillName,
+      options?.legacySkillNames,
+    );
     console.log(
       `Successfully uninstalled SKILL.md for "${skillName}" from ${platform.name}`,
     );
@@ -610,7 +640,10 @@ async function inspectPlatformSkillInstall(
       return { installed: false };
     }
 
-    const skillDir = path.join(getPlatformSkillsDir(platform), platformSkillName);
+    const skillDir = path.join(
+      getPlatformSkillsDir(platform),
+      platformSkillName,
+    );
     try {
       const stat = await fs.lstat(skillDir);
       return {
@@ -704,7 +737,11 @@ export async function installSkillMdSymlink(
   const canonicalDir = canonicalRepoPath ?? path.join(mainSkillsDir, skillName);
   if (!canonicalRepoPath) {
     await fs.mkdir(canonicalDir, { recursive: true });
-    await fs.writeFile(path.join(canonicalDir, "SKILL.md"), skillMdContent, "utf-8");
+    await fs.writeFile(
+      path.join(canonicalDir, "SKILL.md"),
+      skillMdContent,
+      "utf-8",
+    );
   }
 
   // 2. Create a platform skill dir as a directory symlink to the managed repo
@@ -716,7 +753,13 @@ export async function installSkillMdSymlink(
     console.warn(
       `Symlink install unsupported for "${skillName}" on ${platform.name}; falling back to copy install. Reason: ${reason}`,
     );
-    await installSkillMd(skillName, skillMdContent, platformId, canonicalDir, options);
+    await installSkillMd(
+      skillName,
+      skillMdContent,
+      platformId,
+      canonicalDir,
+      options,
+    );
     return {
       requestedMode: "symlink",
       effectiveMode: "copy",
@@ -729,7 +772,11 @@ export async function installSkillMdSymlink(
       await installCherryStudioSkill(platform, skillName, canonicalDir, {
         mode: "symlink",
       });
-      await cleanupLegacyCherryStudioSkills(platform, skillName, options?.legacySkillNames);
+      await cleanupLegacyCherryStudioSkills(
+        platform,
+        skillName,
+        options?.legacySkillNames,
+      );
       return {
         requestedMode: "symlink",
         effectiveMode: "symlink",
@@ -751,7 +798,11 @@ export async function installSkillMdSymlink(
 
     // Create directory symlink
     await fs.symlink(canonicalDir, platformSkillDir, "dir");
-    await cleanupLegacyPlatformSkillDirs(platform, skillName, options?.legacySkillNames);
+    await cleanupLegacyPlatformSkillDirs(
+      platform,
+      skillName,
+      options?.legacySkillNames,
+    );
     console.log(
       `Symlinked "${skillName}" repo directory → ${platform.name}: ${canonicalDir} → ${platformSkillDir}`,
     );
@@ -802,14 +853,34 @@ export async function installSkillMdForSkill(
   canonicalRepoPath?: string,
   legacySkillNames?: string[],
 ): Promise<void> {
-  const platform = getSupportedPlatforms().find((entry) => entry.id === platformId);
+  if (platformId === SHARED_AGENT_SKILLS_TARGET_ID) {
+    const sourcePath =
+      canonicalRepoPath ??
+      (await saveContentToLocalRepo(skill.name, skillMdContent));
+    await sharedSkillDistributionService.install({
+      skillId: skill.id,
+      skillName: skill.name,
+      sourcePath,
+      mode: "copy",
+    });
+    return;
+  }
+  const platform = getSupportedPlatforms().find(
+    (entry) => entry.id === platformId,
+  );
   if (!platform) {
     throw new Error(`Unknown platform: ${platformId}`);
   }
 
-  await installSkillMd(skill.name, skillMdContent, platformId, canonicalRepoPath, {
-    legacySkillNames,
-  });
+  await installSkillMd(
+    skill.name,
+    skillMdContent,
+    platformId,
+    canonicalRepoPath,
+    {
+      legacySkillNames,
+    },
+  );
   await setPlatformActivation(platform, skill);
 }
 
@@ -820,7 +891,24 @@ export async function installSkillMdSymlinkForSkill(
   canonicalRepoPath?: string,
   legacySkillNames?: string[],
 ): Promise<SkillPlatformInstallResult> {
-  const platform = getSupportedPlatforms().find((entry) => entry.id === platformId);
+  if (platformId === SHARED_AGENT_SKILLS_TARGET_ID) {
+    const sourcePath =
+      canonicalRepoPath ??
+      (await saveContentToLocalRepo(skill.name, skillMdContent));
+    const result = await sharedSkillDistributionService.install({
+      skillId: skill.id,
+      skillName: skill.name,
+      sourcePath,
+      mode: "symlink",
+    });
+    return {
+      requestedMode: "symlink",
+      effectiveMode: result.effectiveMode ?? "symlink",
+    };
+  }
+  const platform = getSupportedPlatforms().find(
+    (entry) => entry.id === platformId,
+  );
   if (!platform) {
     throw new Error(`Unknown platform: ${platformId}`);
   }
@@ -841,7 +929,16 @@ export async function uninstallSkillMdForSkill(
   platformId: string,
   legacySkillNames?: string[],
 ): Promise<void> {
-  const platform = getSupportedPlatforms().find((entry) => entry.id === platformId);
+  if (platformId === SHARED_AGENT_SKILLS_TARGET_ID) {
+    await sharedSkillDistributionService.uninstall({
+      skillId: skill.id,
+      skillName: skill.name,
+    });
+    return;
+  }
+  const platform = getSupportedPlatforms().find(
+    (entry) => entry.id === platformId,
+  );
   if (!platform) {
     throw new Error(`Unknown platform: ${platformId}`);
   }
@@ -854,7 +951,9 @@ export async function getSkillMdInstallStatusForSkill(
   skill: SkillPlatformIdentity,
   legacySkillNames?: string[],
 ): Promise<Record<string, boolean>> {
-  const baseStatus = await getSkillMdInstallStatus(skill.name, { legacySkillNames });
+  const baseStatus = await getSkillMdInstallStatus(skill.name, {
+    legacySkillNames,
+  });
   const status: Record<string, boolean> = {};
 
   for (const platform of getSupportedPlatforms()) {
@@ -870,6 +969,13 @@ export async function getSkillMdInstallStatusForSkill(
       await inspectSkillSourcePathInstall(platform, skill),
     );
   }
+  const sharedStatus = await sharedSkillDistributionService.getStatus({
+    skillId: skill.id,
+    skillName: skill.name,
+  });
+  status[SHARED_AGENT_SKILLS_TARGET_ID] =
+    sharedStatus.state === "managed-clean" ||
+    sharedStatus.state === "managed-modified";
 
   return status;
 }
@@ -893,11 +999,23 @@ export async function getSkillMdInstallStatusDetailsForSkill(
       continue;
     }
 
-    status[platform.id] =
-      (await inspectSkillSourcePathInstall(platform, skill)) ?? {
-        installed: false,
-      };
+    status[platform.id] = (await inspectSkillSourcePathInstall(
+      platform,
+      skill,
+    )) ?? {
+      installed: false,
+    };
   }
+  const sharedStatus = await sharedSkillDistributionService.getStatus({
+    skillId: skill.id,
+    skillName: skill.name,
+  });
+  status[SHARED_AGENT_SKILLS_TARGET_ID] = {
+    installed:
+      sharedStatus.state === "managed-clean" ||
+      sharedStatus.state === "managed-modified",
+    mode: sharedStatus.effectiveMode,
+  };
 
   return status;
 }

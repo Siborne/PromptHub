@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckIcon,
+  AlertTriangleIcon,
   CheckSquareIcon,
   CopyPlusIcon,
   FileTextIcon,
@@ -19,10 +20,10 @@ import {
 import type { TFunction } from "i18next";
 import type { Skill, SkillProject } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
-import { PlatformIcon } from "../ui/PlatformIcon";
 import { getProtocolDisplayLabel, getSkillSourceMeta } from "./detail-utils";
 import { getRuntimeCapabilities } from "../../runtime";
 import type { ProjectDeployedSkillTarget } from "../../services/project-skill-targets";
+import { SkillPlatformTargetRow } from "./SkillPlatformTargetRow";
 
 interface SkillPlatformPanelProps {
   availablePlatforms: SkillPlatform[];
@@ -122,6 +123,11 @@ export function SkillPlatformPanel({
     typeof onCreateProject === "function" &&
     typeof onDeployToProjects === "function";
   const showIntegrationSection = hasGlobalIntegration || hasProjectIntegration;
+  const hasSharedDiscoveryRisk =
+    selectedPlatforms.has("agent-skills-global") &&
+    ["gemini", "augment", "windsurf", "opencode"].some((platformId) =>
+      selectedPlatforms.has(platformId),
+    );
   const [integrationScope, setIntegrationScope] = useState<
     "global" | "project"
   >(hasGlobalIntegration ? "global" : "project");
@@ -593,6 +599,20 @@ export function SkillPlatformPanel({
                       })}
                     </div>
 
+                    {hasSharedDiscoveryRisk ? (
+                      <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                        <AlertTriangleIcon
+                          aria-hidden="true"
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                        />
+                        <span>
+                          {t(
+                            "skill.sharedTargetDuplicateWarning",
+                            "The selected Agent may discover both its native Skill copy and the shared ~/.agents/skills copy.",
+                          )}
+                        </span>
+                      </div>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => {
@@ -758,88 +778,16 @@ export function SkillPlatformPanel({
                     const isSelected = selectedPlatforms.has(platform.id);
 
                     return (
-                      <div
+                      <SkillPlatformTargetRow
                         key={platform.id}
-                        role={isInstalled ? undefined : "button"}
-                        tabIndex={
-                          isInstalled || isBatchInstalling ? undefined : 0
-                        }
-                        aria-label={isInstalled ? undefined : platform.name}
-                        aria-pressed={isInstalled ? undefined : isSelected}
-                        onClick={() => {
-                          if (isInstalled || isBatchInstalling) return;
-                          togglePlatformSelection(platform.id);
-                        }}
-                        onKeyDown={(event) => {
-                          if (isInstalled || isBatchInstalling) return;
-                          if (event.key !== "Enter" && event.key !== " ")
-                            return;
-
-                          event.preventDefault();
-                          togglePlatformSelection(platform.id);
-                        }}
-                        className={`p-3 rounded-xl border transition-all flex items-center justify-between ${
-                          isInstalled
-                            ? "bg-primary/5 border-primary cursor-default"
-                            : isSelected
-                              ? "bg-primary/10 border-primary cursor-pointer"
-                              : "bg-accent/30 border-border hover:bg-accent/50 cursor-pointer"
-                        } ${isBatchInstalling && !isInstalled ? "opacity-70 cursor-wait" : ""}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            aria-hidden="true"
-                            className="w-9 h-9 flex items-center justify-center flex-shrink-0"
-                          >
-                            <PlatformIcon platformId={platform.id} size={28} />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-sm">
-                              {platform.name}
-                            </h4>
-                            <p className="text-[10px] text-muted-foreground">
-                              {isInstalled
-                                ? t("skill.installed")
-                                : isSelected
-                                  ? t("skill.selectedForInstall")
-                                  : t("skill.clickToSelect")}
-                            </p>
-                          </div>
-                        </div>
-                        {isInstalled ? (
-                          <div className="flex items-center gap-2">
-                            <CheckIcon
-                              aria-hidden="true"
-                              className="w-4 h-4 text-primary"
-                            />
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                uninstallFromPlatform(platform.id);
-                              }}
-                              className="text-[10px] text-destructive hover:underline"
-                            >
-                              {t("skill.uninstall")}
-                            </button>
-                          </div>
-                        ) : (
-                          <div
-                            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                              isSelected
-                                ? "bg-primary border-primary"
-                                : "border-muted-foreground/30"
-                            }`}
-                          >
-                            {isSelected ? (
-                              <CheckIcon
-                                aria-hidden="true"
-                                className="w-3 h-3 text-white"
-                              />
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
+                        isBatchInstalling={isBatchInstalling}
+                        isInstalled={Boolean(isInstalled)}
+                        isSelected={isSelected}
+                        onToggle={() => togglePlatformSelection(platform.id)}
+                        onUninstall={() => uninstallFromPlatform(platform.id)}
+                        platform={platform}
+                        t={t}
+                      />
                     );
                   })}
                 </div>

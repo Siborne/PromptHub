@@ -325,7 +325,7 @@ export async function handleSkillCommand(
     const { skill } = resolveSkillIdentifier(skillDb, identifier);
     emitSuccess(
       context,
-      await context.skills.getSkillMdInstallStatus(skill.name),
+      await context.skills.getSkillMdInstallStatus(skill.name, skill.id),
     );
     return;
   }
@@ -348,6 +348,7 @@ export async function handleSkillCommand(
       skill.name,
       skill.instructions || skill.content || "",
       platformId.trim(),
+      skill.id,
     );
     emitSuccess(context, {
       installed: true,
@@ -370,7 +371,11 @@ export async function handleSkillCommand(
       );
     }
     const { skill } = resolveSkillIdentifier(skillDb, identifier);
-    await context.skills.uninstallSkillMd(skill.name, platformId.trim());
+    await context.skills.uninstallSkillMd(
+      skill.name,
+      platformId.trim(),
+      skill.id,
+    );
     emitSuccess(context, {
       uninstalled: true,
       skillId: skill.id,

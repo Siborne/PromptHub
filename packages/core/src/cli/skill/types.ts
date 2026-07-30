@@ -31,7 +31,10 @@ export interface CliSkillService {
   exportAsJson(skill: import("@prompthub/shared/types").Skill): string;
   exportAsSkillMd(skill: import("@prompthub/shared/types").Skill): string;
   getSupportedPlatforms(): SkillPlatform[];
-  getSkillMdInstallStatus(skillName: string): Promise<Record<string, boolean>>;
+  getSkillMdInstallStatus(
+    skillName: string,
+    skillId?: string,
+  ): Promise<Record<string, boolean>>;
   installFromSource(
     source: string,
     skillDb: SkillDB,
@@ -42,6 +45,7 @@ export interface CliSkillService {
     skillName: string,
     skillMdContent: string,
     platformId: string,
+    skillId?: string,
   ): Promise<void>;
   installSkillToProject(
     skillDb: SkillDB,
@@ -110,7 +114,11 @@ export interface CliSkillService {
     skillId: string,
     options?: { fetchRemote?: boolean },
   ): Promise<import("@prompthub/shared/types").SkillSourceUpdateCheck>;
-  uninstallSkillMd(skillName: string, platformId: string): Promise<void>;
+  uninstallSkillMd(
+    skillName: string,
+    platformId: string,
+    skillId?: string,
+  ): Promise<void>;
   writeLocalFile(
     skillDb: SkillDB,
     skillId: string,
