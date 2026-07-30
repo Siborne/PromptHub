@@ -48,7 +48,7 @@ describe("standalone cli wiring", () => {
     const result = await execCli(["--version"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.joinedStdout.trim()).toBe("0.5.9");
+    expect(result.joinedStdout.trim()).toBe("0.6.0");
     expect(result.stderr).toEqual([]);
   });
 

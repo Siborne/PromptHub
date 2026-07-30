@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### 维护 / Maintenance
+
+- **0.6.0 版本准备**：统一 Desktop、CLI、自部署 Web、Cloudflare Worker 与 Mobile 的构建版本；在正式发布前，官网稳定版徽标和下载链接继续指向已发布的 `0.5.9`
+  - **0.6.0 Release Preparation**: Aligned Desktop, CLI, self-hosted Web, Cloudflare Worker, and Mobile build versions while keeping public stable badges and downloads on the published `0.5.9` release until publication
+
 ## [0.5.9] - 2026-07-14
 
 ### 新功能 / Features
