@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRulesWorkspaceService } from "@prompthub/core";
 import { getPlatformById } from "@prompthub/shared/constants/platforms";
 
-import { closeDatabase, initDatabase, RuleDB } from "../../../src/main/database";
+import {
+  closeDatabase,
+  initDatabase,
+  RuleDB,
+} from "../../../src/main/database";
 import {
   configureRuntimePaths,
   getRulesDir,
@@ -15,11 +19,14 @@ import {
   createProjectRule,
   exportRuleBackupRecords,
   importRuleBackupRecords,
+  listCachedRuleDescriptors,
   listRuleDescriptors,
   readRuleContent,
+  removeMissingProjectRules,
   removeProjectRule,
   resolveRuleConflict,
   saveRuleContent,
+  scanRuleDescriptors,
 } from "../../../src/main/services/rules-workspace";
 import { getPlatformGlobalRulePath } from "../../../src/main/services/skill-installer-utils";
 
@@ -27,7 +34,9 @@ describe("rules workspace storage", () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(process.env.TMPDIR || "/tmp", "prompthub-rules-"));
+    tempDir = fs.mkdtempSync(
+      path.join(process.env.TMPDIR || "/tmp", "prompthub-rules-"),
+    );
     configureRuntimePaths({ userDataPath: tempDir });
     initDatabase();
   });
@@ -66,7 +75,11 @@ describe("rules workspace storage", () => {
   it("creates a managed project rule and indexes it in SQLite", async () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
-    fs.writeFileSync(path.join(projectRoot, "AGENTS.md"), "# Existing docs rule", "utf8");
+    fs.writeFileSync(
+      path.join(projectRoot, "AGENTS.md"),
+      "# Existing docs rule",
+      "utf8",
+    );
 
     const descriptor = await createProjectRule({
       id: "docs-site",
@@ -76,7 +89,12 @@ describe("rules workspace storage", () => {
 
     expect(descriptor.id).toBe("project:docs-site");
 
-    const managedPath = path.join(getRulesDir(), "projects", "docs-site__docs-site", "AGENTS.md");
+    const managedPath = path.join(
+      getRulesDir(),
+      "projects",
+      "docs-site__docs-site",
+      "AGENTS.md",
+    );
     expect(fs.existsSync(managedPath)).toBe(true);
     expect(fs.readFileSync(managedPath, "utf8")).toBe("# Existing docs rule");
 
@@ -88,6 +106,61 @@ describe("rules workspace storage", () => {
         currentVersion: 1,
       }),
     );
+  });
+
+  it("persists a missing project target across a rescan and fresh cached read", async () => {
+    const projectRoot = path.join(tempDir, "missing-site");
+    const targetPath = path.join(projectRoot, "AGENTS.md");
+    fs.mkdirSync(projectRoot, { recursive: true });
+    fs.writeFileSync(targetPath, "# Recoverable project rule", "utf8");
+
+    await createProjectRule({
+      id: "missing-site",
+      name: "Missing Site",
+      rootPath: projectRoot,
+    });
+    await saveRuleContent("project:missing-site", "# Recoverable project rule");
+    expect(
+      new RuleDB(initDatabase()).getById("project:missing-site")?.syncStatus,
+    ).toBe("synced");
+    fs.rmSync(targetPath);
+
+    const rescanned = await scanRuleDescriptors();
+    const scannedProject = rescanned.find(
+      (descriptor) => descriptor.id === "project:missing-site",
+    );
+    expect(scannedProject).toEqual(
+      expect.objectContaining({
+        exists: false,
+        syncStatus: "target-missing",
+      }),
+    );
+
+    const cached = await listCachedRuleDescriptors();
+    expect(
+      cached.find((descriptor) => descriptor.id === "project:missing-site"),
+    ).toEqual(
+      expect.objectContaining({
+        exists: false,
+        syncStatus: "target-missing",
+      }),
+    );
+
+    const db = new RuleDB(initDatabase());
+    expect(db.getById("project:missing-site")?.syncStatus).toBe(
+      "target-missing",
+    );
+    expect(
+      fs.readFileSync(
+        path.join(
+          getRulesDir(),
+          "projects",
+          "missing-site__missing-site",
+          "AGENTS.md",
+        ),
+        "utf8",
+      ),
+    ).toBe("# Recoverable project rule");
   });
 
   it("rejects unsafe project ids before creating managed project directories", async () => {
@@ -102,21 +175,34 @@ describe("rules workspace storage", () => {
       }),
     ).rejects.toThrow("Invalid rule project id");
 
-    expect(fs.existsSync(path.join(getRulesDir(), "escape-create", "AGENTS.md"))).toBe(false);
+    expect(
+      fs.existsSync(path.join(getRulesDir(), "escape-create", "AGENTS.md")),
+    ).toBe(false);
     const projectsDir = path.join(getRulesDir(), "projects");
-    expect(fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir) : []).toEqual([]);
+    expect(
+      fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir) : [],
+    ).toEqual([]);
   });
 
   it("saves managed content, writes versions, and updates rule index state", async () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
 
-    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await createProjectRule({
+      id: "docs-site",
+      name: "Docs Site",
+      rootPath: projectRoot,
+    });
 
-    const updated = await saveRuleContent("project:docs-site", "# Updated docs rule\n\n## Policy");
+    const updated = await saveRuleContent(
+      "project:docs-site",
+      "# Updated docs rule\n\n## Policy",
+    );
 
     expect(updated.content).toContain("Updated docs rule");
-    expect(fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8")).toContain("## Policy");
+    expect(
+      fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8"),
+    ).toContain("## Policy");
 
     const versionFile = path.join(
       getRulesDir(),
@@ -144,19 +230,30 @@ describe("rules workspace storage", () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
 
-    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await createProjectRule({
+      id: "docs-site",
+      name: "Docs Site",
+      rootPath: projectRoot,
+    });
     await saveRuleContent("project:docs-site", "# Stable docs rule");
 
-    const managedPath = path.join(getRulesDir(), "projects", "docs-site__docs-site", "AGENTS.md");
+    const managedPath = path.join(
+      getRulesDir(),
+      "projects",
+      "docs-site__docs-site",
+      "AGENTS.md",
+    );
     const originalWriteFile = fsp.writeFile.bind(fsp);
-    vi.spyOn(fsp, "writeFile").mockImplementation(async (file, data, options) => {
-      if (data === "# Interrupted update") {
-        await originalWriteFile(file, "partial-write", options);
-        throw new Error("simulated interrupted managed write");
-      }
+    vi.spyOn(fsp, "writeFile").mockImplementation(
+      async (file, data, options) => {
+        if (data === "# Interrupted update") {
+          await originalWriteFile(file, "partial-write", options);
+          throw new Error("simulated interrupted managed write");
+        }
 
-      return originalWriteFile(file, data, options);
-    });
+        return originalWriteFile(file, data, options);
+      },
+    );
 
     await expect(
       saveRuleContent("project:docs-site", "# Interrupted update"),
@@ -169,10 +266,18 @@ describe("rules workspace storage", () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
 
-    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await createProjectRule({
+      id: "docs-site",
+      name: "Docs Site",
+      rootPath: projectRoot,
+    });
     await saveRuleContent("project:docs-site", "# PromptHub copy");
 
-    fs.writeFileSync(path.join(projectRoot, "AGENTS.md"), "# Edited outside PromptHub", "utf8");
+    fs.writeFileSync(
+      path.join(projectRoot, "AGENTS.md"),
+      "# Edited outside PromptHub",
+      "utf8",
+    );
 
     const content = await readRuleContent("project:docs-site");
 
@@ -185,9 +290,17 @@ describe("rules workspace storage", () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
 
-    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await createProjectRule({
+      id: "docs-site",
+      name: "Docs Site",
+      rootPath: projectRoot,
+    });
     await saveRuleContent("project:docs-site", "# PromptHub copy");
-    fs.writeFileSync(path.join(projectRoot, "AGENTS.md"), "# Edited outside PromptHub", "utf8");
+    fs.writeFileSync(
+      path.join(projectRoot, "AGENTS.md"),
+      "# Edited outside PromptHub",
+      "utf8",
+    );
 
     const resolved = await resolveRuleConflict(
       "project:docs-site",
@@ -198,8 +311,15 @@ describe("rules workspace storage", () => {
     expect(resolved.content).toBe("# Edited outside PromptHub");
     expect(resolved.targetContent).toBeUndefined();
 
-    const managedPath = path.join(getRulesDir(), "projects", "docs-site__docs-site", "AGENTS.md");
-    expect(fs.readFileSync(managedPath, "utf8")).toBe("# Edited outside PromptHub");
+    const managedPath = path.join(
+      getRulesDir(),
+      "projects",
+      "docs-site__docs-site",
+      "AGENTS.md",
+    );
+    expect(fs.readFileSync(managedPath, "utf8")).toBe(
+      "# Edited outside PromptHub",
+    );
     expect(fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8")).toBe(
       "# Edited outside PromptHub",
     );
@@ -209,9 +329,17 @@ describe("rules workspace storage", () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
 
-    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await createProjectRule({
+      id: "docs-site",
+      name: "Docs Site",
+      rootPath: projectRoot,
+    });
     await saveRuleContent("project:docs-site", "# PromptHub copy");
-    fs.writeFileSync(path.join(projectRoot, "AGENTS.md"), "# Edited outside PromptHub", "utf8");
+    fs.writeFileSync(
+      path.join(projectRoot, "AGENTS.md"),
+      "# Edited outside PromptHub",
+      "utf8",
+    );
 
     const resolved = await resolveRuleConflict(
       "project:docs-site",
@@ -230,19 +358,166 @@ describe("rules workspace storage", () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
 
-    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await createProjectRule({
+      id: "docs-site",
+      name: "Docs Site",
+      rootPath: projectRoot,
+    });
     await saveRuleContent("project:docs-site", "# Updated docs rule");
 
     await removeProjectRule("docs-site");
 
-    expect(fs.existsSync(path.join(getRulesDir(), "projects", "docs-site__docs-site"))).toBe(false);
     expect(
-      fs.existsSync(path.join(getRulesDir(), ".versions", encodeURIComponent("project:docs-site"))),
+      fs.existsSync(
+        path.join(getRulesDir(), "projects", "docs-site__docs-site"),
+      ),
+    ).toBe(false);
+    expect(
+      fs.existsSync(
+        path.join(
+          getRulesDir(),
+          ".versions",
+          encodeURIComponent("project:docs-site"),
+        ),
+      ),
     ).toBe(false);
 
     const db = new RuleDB(initDatabase());
     expect(db.getById("project:docs-site")).toBeNull();
     expect(db.getVersions("project:docs-site")).toEqual([]);
+  });
+
+  it("cleans only deduplicated project records whose targets are still missing", async () => {
+    const missingRoot = path.join(tempDir, "missing-cleanup");
+    const presentRoot = path.join(tempDir, "present-cleanup");
+    fs.mkdirSync(missingRoot, { recursive: true });
+    fs.mkdirSync(presentRoot, { recursive: true });
+    fs.writeFileSync(path.join(missingRoot, "AGENTS.md"), "# Missing", "utf8");
+    fs.writeFileSync(path.join(presentRoot, "AGENTS.md"), "# Present", "utf8");
+
+    await createProjectRule({
+      id: "missing-cleanup",
+      name: "Missing",
+      rootPath: missingRoot,
+    });
+    await createProjectRule({
+      id: "present-cleanup",
+      name: "Present",
+      rootPath: presentRoot,
+    });
+    fs.rmSync(path.join(missingRoot, "AGENTS.md"));
+
+    const result = await removeMissingProjectRules([
+      "project:missing-cleanup",
+      "project:missing-cleanup",
+      "project:present-cleanup",
+      "claude-global",
+      "project:../unsafe",
+    ]);
+
+    expect(result).toEqual({
+      removed: ["project:missing-cleanup"],
+      skipped: [
+        "project:present-cleanup",
+        "claude-global",
+        "project:../unsafe",
+      ],
+      failed: [],
+    });
+    expect(
+      new RuleDB(initDatabase()).getById("project:missing-cleanup"),
+    ).toBeNull();
+    expect(
+      new RuleDB(initDatabase()).getById("project:present-cleanup"),
+    ).not.toBeNull();
+    expect(fs.existsSync(path.join(presentRoot, "AGENTS.md"))).toBe(true);
+  });
+
+  it("fails closed when a missing project record points outside its managed directory", async () => {
+    const projectRoot = path.join(tempDir, "tampered-cleanup");
+    const protectedRoot = path.join(tempDir, "protected");
+    fs.mkdirSync(projectRoot, { recursive: true });
+    fs.mkdirSync(protectedRoot, { recursive: true });
+    fs.writeFileSync(path.join(projectRoot, "AGENTS.md"), "# Missing", "utf8");
+    fs.writeFileSync(path.join(protectedRoot, "keep.txt"), "keep", "utf8");
+
+    await createProjectRule({
+      id: "tampered-cleanup",
+      name: "Tampered",
+      rootPath: projectRoot,
+    });
+    const managedRoot = path.join(getRulesDir(), "projects");
+    const managedDir = fs
+      .readdirSync(managedRoot)
+      .map((name) => path.join(managedRoot, name))
+      .find((candidate) => fs.existsSync(path.join(candidate, "_rule.json")));
+    expect(managedDir).toBeTruthy();
+    const metaPath = path.join(managedDir!, "_rule.json");
+    const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+    fs.writeFileSync(
+      metaPath,
+      JSON.stringify({
+        ...meta,
+        managedPath: path.join(protectedRoot, "AGENTS.md"),
+      }),
+      "utf8",
+    );
+    fs.rmSync(path.join(projectRoot, "AGENTS.md"));
+
+    await expect(
+      removeMissingProjectRules(["project:tampered-cleanup"]),
+    ).resolves.toEqual({
+      removed: [],
+      skipped: [],
+      failed: ["project:tampered-cleanup"],
+    });
+    expect(fs.readFileSync(path.join(protectedRoot, "keep.txt"), "utf8")).toBe(
+      "keep",
+    );
+    expect(fs.existsSync(metaPath)).toBe(true);
+  });
+
+  it("reports a per-record cleanup failure without removing another missing record", async () => {
+    for (const projectId of ["cleanup-fails", "cleanup-succeeds"]) {
+      const projectRoot = path.join(tempDir, projectId);
+      fs.mkdirSync(projectRoot, { recursive: true });
+      fs.writeFileSync(
+        path.join(projectRoot, "AGENTS.md"),
+        "# Missing",
+        "utf8",
+      );
+      await createProjectRule({
+        id: projectId,
+        name: projectId,
+        rootPath: projectRoot,
+      });
+      fs.rmSync(path.join(projectRoot, "AGENTS.md"));
+    }
+
+    const originalRm = fsp.rm.bind(fsp);
+    vi.spyOn(fsp, "rm").mockImplementation(async (target, options) => {
+      if (String(target).includes("cleanup-fails__cleanup-fails")) {
+        throw new Error("simulated cleanup failure");
+      }
+      return originalRm(target, options);
+    });
+
+    await expect(
+      removeMissingProjectRules([
+        "project:cleanup-fails",
+        "project:cleanup-succeeds",
+      ]),
+    ).resolves.toEqual({
+      removed: ["project:cleanup-succeeds"],
+      skipped: [],
+      failed: ["project:cleanup-fails"],
+    });
+    expect(
+      new RuleDB(initDatabase()).getById("project:cleanup-fails"),
+    ).not.toBeNull();
+    expect(
+      new RuleDB(initDatabase()).getById("project:cleanup-succeeds"),
+    ).toBeNull();
   });
 
   it("imports backup records into managed files and SQLite index", async () => {
@@ -292,7 +567,9 @@ describe("rules workspace storage", () => {
         currentVersion: 1,
       }),
     );
-    expect(fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8")).toBe("# Imported rule");
+    expect(fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8")).toBe(
+      "# Imported rule",
+    );
   });
 
   it("rejects imported project ids that would escape the managed project root", async () => {
@@ -320,7 +597,9 @@ describe("rules workspace storage", () => {
       ]),
     ).rejects.toThrow("Invalid rule project id");
 
-    expect(fs.existsSync(path.join(getRulesDir(), "escaped-rules", "AGENTS.md"))).toBe(false);
+    expect(
+      fs.existsSync(path.join(getRulesDir(), "escaped-rules", "AGENTS.md")),
+    ).toBe(false);
     expect(fs.readdirSync(path.join(getRulesDir(), "projects"))).toEqual([]);
   });
 
@@ -328,7 +607,11 @@ describe("rules workspace storage", () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
 
-    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await createProjectRule({
+      id: "docs-site",
+      name: "Docs Site",
+      rootPath: projectRoot,
+    });
     await saveRuleContent("project:docs-site", "# version-1");
     await saveRuleContent("project:docs-site", "# version-2");
 
@@ -339,14 +622,16 @@ describe("rules workspace storage", () => {
     ]);
 
     const originalWriteFile = fsp.writeFile.bind(fsp);
-    vi.spyOn(fsp, "writeFile").mockImplementation(async (file, data, options) => {
-      if (data === "# imported version 2") {
-        await originalWriteFile(file, "partial-import-version", options);
-        throw new Error("simulated import version write failure");
-      }
+    vi.spyOn(fsp, "writeFile").mockImplementation(
+      async (file, data, options) => {
+        if (data === "# imported version 2") {
+          await originalWriteFile(file, "partial-import-version", options);
+          throw new Error("simulated import version write failure");
+        }
 
-      return originalWriteFile(file, data, options);
-    });
+        return originalWriteFile(file, data, options);
+      },
+    );
 
     await expect(
       importRuleBackupRecords([
@@ -392,7 +677,11 @@ describe("rules workspace storage", () => {
   it("removes project rules missing from a replace import", async () => {
     const staleProjectRoot = path.join(tempDir, "stale-site");
     fs.mkdirSync(staleProjectRoot, { recursive: true });
-    await createProjectRule({ id: "stale-site", name: "Stale Site", rootPath: staleProjectRoot });
+    await createProjectRule({
+      id: "stale-site",
+      name: "Stale Site",
+      rootPath: staleProjectRoot,
+    });
     await saveRuleContent("project:stale-site", "# stale");
 
     const keptProjectRoot = path.join(tempDir, "kept-site");
@@ -431,7 +720,11 @@ describe("rules workspace storage", () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
 
-    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await createProjectRule({
+      id: "docs-site",
+      name: "Docs Site",
+      rootPath: projectRoot,
+    });
 
     for (let index = 1; index <= 22; index += 1) {
       await saveRuleContent("project:docs-site", `# version-${index}`);
@@ -455,7 +748,9 @@ describe("rules workspace storage", () => {
   it("always includes built-in global rule descriptors even when target files are missing", async () => {
     const service = createGlobalRulesTestService();
     for (const platformRoot of [".claude", "codex", "grok", "opencode"]) {
-      fs.mkdirSync(path.join(tempDir, "home", platformRoot), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, "home", platformRoot), {
+        recursive: true,
+      });
     }
 
     const descriptors = await service.listRuleDescriptors();
@@ -469,7 +764,9 @@ describe("rules workspace storage", () => {
       ]),
     );
 
-    const opencodeRule = descriptors.find((descriptor) => descriptor.id === "opencode-global");
+    const opencodeRule = descriptors.find(
+      (descriptor) => descriptor.id === "opencode-global",
+    );
     expect(opencodeRule?.path).toContain("AGENTS.md");
   });
 
@@ -482,7 +779,11 @@ describe("rules workspace storage", () => {
     expect(globalRulePath).toBeTruthy();
 
     fs.mkdirSync(path.dirname(globalRulePath!), { recursive: true });
-    fs.writeFileSync(globalRulePath!, "# Claude global rule\n\nFollow the house style.", "utf8");
+    fs.writeFileSync(
+      globalRulePath!,
+      "# Claude global rule\n\nFollow the house style.",
+      "utf8",
+    );
 
     await Promise.all([
       service.listRuleDescriptors(),
@@ -503,7 +804,11 @@ describe("rules workspace storage", () => {
     const homeDir = path.join(tempDir, "home");
     fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
     fs.mkdirSync(path.join(homeDir, ".claude-custom"), { recursive: true });
-    fs.writeFileSync(path.join(homeDir, ".claude", "CLAUDE.md"), "# Original", "utf8");
+    fs.writeFileSync(
+      path.join(homeDir, ".claude", "CLAUDE.md"),
+      "# Original",
+      "utf8",
+    );
 
     const service = createRulesWorkspaceService({
       getRulesDir,
@@ -524,7 +829,9 @@ describe("rules workspace storage", () => {
 
     await listRuleDescriptors();
     const refreshed = await service.listRuleDescriptors();
-    const claude = refreshed.find((descriptor) => descriptor.id === "claude-global");
+    const claude = refreshed.find(
+      (descriptor) => descriptor.id === "claude-global",
+    );
 
     expect(claude?.path).toContain(".claude-custom/CLAUDE.md");
   });
@@ -560,7 +867,9 @@ describe("rules workspace storage", () => {
     });
 
     const descriptors = await service.scanRuleDescriptors();
-    const kilo = descriptors.find((descriptor) => descriptor.id === "kilo-global");
+    const kilo = descriptors.find(
+      (descriptor) => descriptor.id === "kilo-global",
+    );
 
     expect(kilo).toEqual(
       expect.objectContaining({
@@ -681,14 +990,20 @@ describe("rules workspace storage", () => {
 
     const cached = await createService(false).listCachedRuleDescriptors();
 
-    expect(cached.find((descriptor) => descriptor.id === "custom:team-agents")).toBeUndefined();
+    expect(
+      cached.find((descriptor) => descriptor.id === "custom:team-agents"),
+    ).toBeUndefined();
   });
 
   it("skips missing version files and repairs the index instead of crashing", async () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });
 
-    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await createProjectRule({
+      id: "docs-site",
+      name: "Docs Site",
+      rootPath: projectRoot,
+    });
     await saveRuleContent("project:docs-site", "# version-1");
     await saveRuleContent("project:docs-site", "# version-2");
 
@@ -731,7 +1046,12 @@ describe("rules workspace storage", () => {
     await service.listRuleDescriptors();
 
     // Delete the managed copy but keep versions
-    const managedPath = path.join(getRulesDir(), "global", "claude", "CLAUDE.md");
+    const managedPath = path.join(
+      getRulesDir(),
+      "global",
+      "claude",
+      "CLAUDE.md",
+    );
     fs.rmSync(managedPath, { force: true });
 
     // Re-materialize (e.g., a later scan)
@@ -772,7 +1092,11 @@ describe("rules workspace storage", () => {
       "# Current Claude rule",
       "# Legacy Claude rule",
     ]);
-    expect(fs.existsSync(path.join(getRulesDir(), ".versions", "claude-global", "index.json"))).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(getRulesDir(), ".versions", "claude-global", "index.json"),
+      ),
+    ).toBe(true);
   });
 
   it("restores managed content from legacy rule-history when the target file is missing", async () => {

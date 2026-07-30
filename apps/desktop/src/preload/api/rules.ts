@@ -7,6 +7,7 @@ import type {
   RuleFileContent,
   RuleFileDescriptor,
   RuleFileId,
+  RuleMissingCleanupResult,
   RuleRewriteRequest,
   RuleRewriteResult,
   RuleVersionSnapshot,
@@ -32,11 +33,18 @@ export const rulesApi = {
     ipcRenderer.invoke(IPC_CHANNELS.RULES_ADD_PROJECT, input),
   removeProject: (projectId: string): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_CHANNELS.RULES_REMOVE_PROJECT, projectId),
+  removeMissingProjects: (
+    ruleIds: string[],
+  ): Promise<RuleMissingCleanupResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RULES_REMOVE_MISSING_PROJECTS, ruleIds),
   importRecords: (
     records: RuleBackupRecord[],
     options?: { replace?: boolean },
   ): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC_CHANNELS.RULES_IMPORT_RECORDS, records, options),
-  deleteVersion: (ruleId: RuleFileId, versionId: string): Promise<RuleVersionSnapshot[]> =>
+  deleteVersion: (
+    ruleId: RuleFileId,
+    versionId: string,
+  ): Promise<RuleVersionSnapshot[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.RULES_VERSION_DELETE, ruleId, versionId),
 };

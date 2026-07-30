@@ -17,10 +17,13 @@ const qwenPlatform = requirePlatform("qwen");
 const kimiPlatform = requirePlatform("kimi");
 const geminiPlatform = requirePlatform("gemini");
 const opencodePlatform = requirePlatform("opencode");
+const piPlatform = requirePlatform("pi");
 const ohMyPiPlatform = requirePlatform("oh-my-pi");
 const windsurfPlatform = requirePlatform("windsurf");
 const openclawPlatform = requirePlatform("openclaw");
+const qclawPlatform = requirePlatform("qclaw");
 const hermesPlatform = requirePlatform("hermes");
+const codebuddyPlatform = requirePlatform("codebuddy");
 const ampPlatform = requirePlatform("amp");
 const kiloPlatform = requirePlatform("kilo");
 
@@ -36,10 +39,13 @@ export const RULE_PLATFORM_ORDER = [
   "kimi",
   "gemini",
   "opencode",
+  "pi",
   "oh-my-pi",
   "windsurf",
   "openclaw",
+  "qclaw",
   "hermes",
+  "codebuddy",
   "amp",
   "kilo",
 ] as const;
@@ -162,6 +168,17 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     description: "Global Oh My Pi rules loaded for every project.",
     group: "assistant",
   },
+  "pi-global": {
+    id: "pi-global",
+    platformId: "pi",
+    platformName: piPlatform.name,
+    platformIcon: piPlatform.icon,
+    platformDescription:
+      "Global Pi instructions stored in the local Pi agent directory.",
+    name: "AGENTS.md",
+    description: "Global Pi instructions loaded for every project.",
+    group: "assistant",
+  },
   "windsurf-global": {
     id: "windsurf-global",
     platformId: "windsurf",
@@ -186,6 +203,18 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
       "Global OpenClaw persona rules loaded from the local workspace bootstrap directory.",
     group: "assistant",
   },
+  "qclaw-global": {
+    id: "qclaw-global",
+    platformId: "qclaw",
+    platformName: qclawPlatform.name,
+    platformIcon: qclawPlatform.icon,
+    platformDescription:
+      "QClaw compatibility persona rules stored in its OpenClaw-style workspace directory.",
+    name: "SOUL.md",
+    description:
+      "QClaw compatibility persona rules loaded from the local workspace bootstrap directory.",
+    group: "assistant",
+  },
   "hermes-global": {
     id: "hermes-global",
     platformId: "hermes",
@@ -196,6 +225,18 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     name: "AGENTS.md",
     description:
       "Global Hermes Agent rules loaded from the local Hermes configuration.",
+    group: "assistant",
+  },
+  "codebuddy-global": {
+    id: "codebuddy-global",
+    platformId: "codebuddy",
+    platformName: codebuddyPlatform.name,
+    platformIcon: codebuddyPlatform.icon,
+    platformDescription:
+      "Global CodeBuddy instructions stored in the local CodeBuddy configuration directory.",
+    name: "CODEBUDDY.md",
+    description:
+      "Global CodeBuddy instructions loaded from the local CodeBuddy configuration.",
     group: "assistant",
   },
   "amp-global": {

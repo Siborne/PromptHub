@@ -18,6 +18,7 @@ import type {
   RuleFileDescriptor,
   RuleFileGroup,
   RuleFileId,
+  RuleMissingCleanupResult,
   RuleRecord,
   RuleSyncStatus,
   RuleVersionRecord,
@@ -30,27 +31,47 @@ import {
   getDefaultPlatformRootDir,
 } from "./platform-paths";
 import { getRulesDir } from "./runtime-paths";
-
-const RULE_VERSION_LIMIT = 20;
-const RULE_META_FILE_NAME = "_rule.json";
-const RULE_VERSION_INDEX_FILE_NAME = "index.json";
-const RULE_VERSION_STAGING_PREFIX = ".versions-staging-";
-const RULE_VERSION_BACKUP_PREFIX = ".versions-backup-";
-const LEGACY_RULE_HISTORY_DIR_NAME = "rule-history";
-const SAFE_PROJECT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
-
-type ProjectRuleId = `project:${string}`;
-
-export interface ExtraGlobalRuleTemplate {
-  id: CustomRuleFileId;
-  platformId: RuleFileDescriptor["platformId"];
-  platformName: string;
-  platformIcon: string;
-  platformDescription: string;
-  name: string;
-  description: string;
-  group: RuleFileGroup;
-}
+export type {
+  ExtraGlobalRuleTemplate,
+  RulesWorkspaceService,
+  RulesWorkspaceServiceDeps,
+} from "./rules-workspace-support";
+import {
+  LEGACY_RULE_HISTORY_DIR_NAME,
+  RULE_META_FILE_NAME,
+  RULE_VERSION_INDEX_FILE_NAME,
+  RULE_VERSION_LIMIT,
+  RULE_VERSION_STAGING_PREFIX,
+  SAFE_PROJECT_ID_PATTERN,
+  assertSafeProjectId,
+  createSiblingTempDirectory,
+  encodeRuleId,
+  ensureDir,
+  fileExists,
+  getErrorCode,
+  hashContent,
+  isCustomRuleFileId,
+  isProjectRuleFileId,
+  isRecord,
+  normalizeLegacySavedAt,
+  normalizeRuleVersionSource,
+  pathsEqual,
+  readJsonFile,
+  replaceDirectoryAtomic,
+  resolveDisplayedRuleFileName,
+  ruleGroupForKnownId,
+  slugify,
+  writeJsonFile,
+  writeTextFileAtomic,
+  type ImportRuleBackupRecordsOptions,
+  type ExtraGlobalRuleTemplate,
+  type ProjectRuleId,
+  type RuleSyncInspection,
+  type RulesWorkspaceService,
+  type RulesWorkspaceServiceDeps,
+  type StoredRuleMeta,
+  type StoredRuleVersionIndexEntry,
+} from "./rules-workspace-support";
 
 interface AppendRuleVersionResult {
   index: StoredRuleVersionIndexEntry[];
@@ -63,240 +84,13 @@ interface ReadRuleVersionsResult {
   repaired: boolean;
 }
 
-interface StoredRuleMeta {
-  id: RuleFileId;
-  scope: "global" | "project";
-  platformId: RuleFileDescriptor["platformId"];
-  platformName: string;
-  platformIcon: string;
-  platformDescription: string;
-  canonicalFileName: string;
-  description: string;
-  managedPath: string;
-  targetPath: string;
-  projectRootPath?: string | null;
-  syncStatus?: RuleSyncStatus;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface StoredRuleVersionIndexEntry {
-  id: string;
-  savedAt: string;
-  source: RuleVersionSnapshot["source"];
-  fileName: string;
-}
-
-interface ImportRuleBackupRecordsOptions {
-  replace?: boolean;
-}
-
-export interface RulesWorkspaceServiceDeps {
-  getRulesDir: () => string;
-  createRuleDb: () => RuleDB;
-  getPlatformGlobalRulePath: (platform: SkillPlatform) => string | null;
-  getPlatformRootDir: (platform: SkillPlatform) => string;
-  getExtraGlobalRuleTemplates?: () => ExtraGlobalRuleTemplate[];
-  getExtraGlobalRuleTargetPath?: (template: ExtraGlobalRuleTemplate) => string;
-}
-
-export interface RulesWorkspaceService {
-  listRuleDescriptors: () => Promise<RuleFileDescriptor[]>;
-  listCachedRuleDescriptors: () => Promise<RuleFileDescriptor[]>;
-  scanRuleDescriptors: () => Promise<RuleFileDescriptor[]>;
-  getProjectMetaById: (ruleId: ProjectRuleId) => Promise<StoredRuleMeta | null>;
-  resolveRuleMeta: (ruleId: RuleFileId) => Promise<StoredRuleMeta>;
-  readRuleContent: (ruleId: RuleFileId) => Promise<RuleFileContent>;
-  saveRuleContent: (ruleId: RuleFileId, content: string) => Promise<RuleFileContent>;
-  resolveRuleConflict: (
-    ruleId: RuleFileId,
-    strategy: RuleConflictResolutionStrategy,
-  ) => Promise<RuleFileContent>;
-  deleteRuleVersion: (ruleId: RuleFileId, versionId: string) => Promise<RuleVersionSnapshot[]>;
-  createProjectRule: (input: CreateRuleProjectInput) => Promise<RuleFileDescriptor>;
-  bootstrapRuleWorkspace: () => Promise<void>;
-  removeProjectRule: (projectId: string) => Promise<void>;
-  exportRuleBackupRecords: () => Promise<RuleBackupRecord[]>;
-  importRuleBackupRecords: (
-    records: RuleBackupRecord[],
-    options?: ImportRuleBackupRecordsOptions,
-  ) => Promise<void>;
-}
-
-function isProjectRuleFileId(ruleId: RuleFileId): ruleId is ProjectRuleId {
-  return ruleId.startsWith("project:");
-}
-
-function isCustomRuleFileId(ruleId: RuleFileId): ruleId is CustomRuleFileId {
-  return ruleId.startsWith("custom:");
-}
-
-function assertSafeProjectId(projectId: string): void {
-  if (!SAFE_PROJECT_ID_PATTERN.test(projectId)) {
-    throw new Error("Invalid rule project id: project id contains unsafe characters");
-  }
-}
-
-function ensureDir(targetPath: string): void {
-  fs.mkdirSync(targetPath, { recursive: true });
-}
-
-function slugify(input: string | null | undefined): string {
-  const normalized = (input ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return normalized || "rule";
-}
-
-function encodeRuleId(ruleId: RuleFileId): string {
-  return encodeURIComponent(ruleId);
-}
-
-function hashContent(content: string): string {
-  return crypto.createHash("sha256").update(content).digest("hex");
-}
-
-function hasErrorCode(value: unknown): value is { code?: unknown } {
-  return typeof value === "object" && value !== null && "code" in value;
-}
-
-function resolveDisplayedRuleFileName(
-  canonicalFileName: string,
-  targetPath: string,
-): string {
-  const targetFileName = path.basename(targetPath);
-  return targetFileName || canonicalFileName;
-}
-
-function getErrorCode(error: unknown): string | undefined {
-  if (!hasErrorCode(error)) {
-    return undefined;
-  }
-
-  const code = error.code;
-  return typeof code === "string" ? code : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function normalizeRuleVersionSource(value: unknown): RuleVersionSnapshot["source"] {
-  if (value === "create" || value === "manual-save" || value === "ai-rewrite") {
-    return value;
-  }
-
-  if (typeof value === "string" && value.toLowerCase().includes("rewrite")) {
-    return "ai-rewrite";
-  }
-
-  return "manual-save";
-}
-
-function normalizeLegacySavedAt(value: unknown): string | null {
-  if (typeof value === "string" && value.trim()) {
-    const time = Date.parse(value);
-    return Number.isFinite(time) ? new Date(time).toISOString() : null;
-  }
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return new Date(value).toISOString();
-  }
-
-  return null;
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fsp.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function readJsonFile<T>(filePath: string): Promise<T | null> {
-  try {
-    const raw = await fsp.readFile(filePath, "utf-8");
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
-  await writeTextFileAtomic(filePath, JSON.stringify(value, null, 2));
-}
-
-async function writeTextFileAtomic(filePath: string, content: string): Promise<void> {
-  await fsp.mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = path.join(
-    path.dirname(filePath),
-    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`,
-  );
-
-  try {
-    await fsp.writeFile(tempPath, content, "utf-8");
-    await fsp.rename(tempPath, filePath);
-  } catch (error) {
-    try {
-      await fsp.rm(tempPath, { force: true });
-    } catch {
-      // Best-effort cleanup; preserving the original write error matters most.
-    }
-    throw error;
-  }
-}
-
-async function createSiblingTempDirectory(targetDir: string, prefix: string): Promise<string> {
-  await fsp.mkdir(path.dirname(targetDir), { recursive: true });
-  return fsp.mkdtemp(path.join(path.dirname(targetDir), prefix));
-}
-
-async function replaceDirectoryAtomic(targetDir: string, stagingDir: string): Promise<void> {
-  const backupDir = await createSiblingTempDirectory(targetDir, RULE_VERSION_BACKUP_PREFIX);
-  await fsp.rm(backupDir, { recursive: true, force: true });
-
-  let liveMoved = false;
-  try {
-    if (await fileExists(targetDir)) {
-      await fsp.rename(targetDir, backupDir);
-      liveMoved = true;
-    }
-
-    await fsp.rename(stagingDir, targetDir);
-    try {
-      await fsp.rm(backupDir, { recursive: true, force: true });
-    } catch {
-      // The replacement is already published; stale backup cleanup is best-effort.
-    }
-  } catch (error) {
-    if (!(await fileExists(targetDir)) && liveMoved && (await fileExists(backupDir))) {
-      await fsp.rename(backupDir, targetDir);
-    }
-    throw error;
-  }
-}
-
-function ruleGroupForKnownId(ruleId: RuleFileId): RuleFileGroup {
-  if (isProjectRuleFileId(ruleId)) {
-    return "workspace";
-  }
-
-  if (isCustomRuleFileId(ruleId)) {
-    return "assistant";
-  }
-
-  return KNOWN_RULE_FILE_TEMPLATES[ruleId].group;
-}
-
 export function createRulesWorkspaceService(
   deps: RulesWorkspaceServiceDeps,
 ): RulesWorkspaceService {
-  const pendingRuleVersionWrites = new Map<RuleFileId, Promise<AppendRuleVersionResult>>();
+  const pendingRuleVersionWrites = new Map<
+    RuleFileId,
+    Promise<AppendRuleVersionResult>
+  >();
 
   function getAllGlobalRuleTemplates(): Array<
     | (typeof KNOWN_RULE_FILE_TEMPLATES)[KnownRuleFileId]
@@ -310,7 +104,9 @@ export function createRulesWorkspaceService(
 
   function getActiveCustomRuleIds(): Set<CustomRuleFileId> {
     return new Set(
-      (deps.getExtraGlobalRuleTemplates?.() ?? []).map((template) => template.id),
+      (deps.getExtraGlobalRuleTemplates?.() ?? []).map(
+        (template) => template.id,
+      ),
     );
   }
 
@@ -366,19 +162,31 @@ export function createRulesWorkspaceService(
 
     const rulePath = deps.getPlatformGlobalRulePath(platform);
     if (!rulePath) {
-      throw new Error(`Rules file path is not defined for platform: ${template.platformId}`);
+      throw new Error(
+        `Rules file path is not defined for platform: ${template.platformId}`,
+      );
     }
 
     return rulePath;
   }
 
   function getManagedCustomRulePath(template: ExtraGlobalRuleTemplate): string {
-    return path.join(deps.getRulesDir(), "global", template.platformId, template.name);
+    return path.join(
+      deps.getRulesDir(),
+      "global",
+      template.platformId,
+      template.name,
+    );
   }
 
   function getManagedCopyPathForGlobal(ruleId: KnownRuleFileId): string {
     const template = KNOWN_RULE_FILE_TEMPLATES[ruleId];
-    return path.join(deps.getRulesDir(), "global", template.platformId, template.name);
+    return path.join(
+      deps.getRulesDir(),
+      "global",
+      template.platformId,
+      template.name,
+    );
   }
 
   function buildGlobalMeta(ruleId: KnownRuleFileId): StoredRuleMeta {
@@ -400,7 +208,9 @@ export function createRulesWorkspaceService(
     };
   }
 
-  function buildCustomGlobalMeta(template: ExtraGlobalRuleTemplate): StoredRuleMeta {
+  function buildCustomGlobalMeta(
+    template: ExtraGlobalRuleTemplate,
+  ): StoredRuleMeta {
     const targetPath =
       deps.getExtraGlobalRuleTargetPath?.(template) ??
       getManagedCustomRulePath(template);
@@ -421,8 +231,14 @@ export function createRulesWorkspaceService(
     };
   }
 
-  async function readVersionIndex(ruleId: RuleFileId): Promise<StoredRuleVersionIndexEntry[]> {
-    return (await readJsonFile<StoredRuleVersionIndexEntry[]>(getRuleVersionIndexPath(ruleId))) ?? [];
+  async function readVersionIndex(
+    ruleId: RuleFileId,
+  ): Promise<StoredRuleVersionIndexEntry[]> {
+    return (
+      (await readJsonFile<StoredRuleVersionIndexEntry[]>(
+        getRuleVersionIndexPath(ruleId),
+      )) ?? []
+    );
   }
 
   async function writeVersionIndex(
@@ -441,7 +257,9 @@ export function createRulesWorkspaceService(
     return Number.parseInt(match[1], 10) || 0;
   }
 
-  function getNextVersionSequence(index: StoredRuleVersionIndexEntry[]): number {
+  function getNextVersionSequence(
+    index: StoredRuleVersionIndexEntry[],
+  ): number {
     const highestExistingSequence = index.reduce((highest, entry) => {
       return Math.max(highest, getVersionSequenceFromFileName(entry.fileName));
     }, 0);
@@ -460,7 +278,10 @@ export function createRulesWorkspaceService(
 
     for (const entry of index) {
       try {
-        const content = await fsp.readFile(path.join(versionDir, entry.fileName), "utf-8");
+        const content = await fsp.readFile(
+          path.join(versionDir, entry.fileName),
+          "utf-8",
+        );
         nextIndex.push(entry);
         versions.push({
           id: entry.id,
@@ -485,7 +306,9 @@ export function createRulesWorkspaceService(
     };
   }
 
-  async function readRuleVersions(ruleId: RuleFileId): Promise<ReadRuleVersionsResult> {
+  async function readRuleVersions(
+    ruleId: RuleFileId,
+  ): Promise<ReadRuleVersionsResult> {
     const index = await readVersionIndex(ruleId);
     const result = await readRuleVersionsFromIndex(ruleId, index);
     if (result.repaired) {
@@ -501,7 +324,9 @@ export function createRulesWorkspaceService(
     allowUnscoped: boolean,
   ): unknown[] {
     if (Array.isArray(value)) {
-      return value.flatMap((entry) => collectLegacyHistoryValues(entry, ruleId, allowUnscoped));
+      return value.flatMap((entry) =>
+        collectLegacyHistoryValues(entry, ruleId, allowUnscoped),
+      );
     }
 
     if (!isRecord(value)) {
@@ -528,7 +353,9 @@ export function createRulesWorkspaceService(
 
     if (Array.isArray(value.versions)) {
       return allowUnscoped || scoped
-        ? value.versions.flatMap((entry) => collectLegacyHistoryValues(entry, ruleId, true))
+        ? value.versions.flatMap((entry) =>
+            collectLegacyHistoryValues(entry, ruleId, true),
+          )
         : [];
     }
 
@@ -557,9 +384,10 @@ export function createRulesWorkspaceService(
       return null;
     }
 
-    const id = typeof value.id === "string" && value.id.trim()
-      ? value.id
-      : `legacy-${hashContent(`${ruleId}\n${savedAt}\n${value.content}`).slice(0, 16)}`;
+    const id =
+      typeof value.id === "string" && value.id.trim()
+        ? value.id
+        : `legacy-${hashContent(`${ruleId}\n${savedAt}\n${value.content}`).slice(0, 16)}`;
 
     return {
       id,
@@ -569,7 +397,9 @@ export function createRulesWorkspaceService(
     };
   }
 
-  async function readLegacyRuleHistoryVersions(ruleId: RuleFileId): Promise<RuleVersionSnapshot[]> {
+  async function readLegacyRuleHistoryVersions(
+    ruleId: RuleFileId,
+  ): Promise<RuleVersionSnapshot[]> {
     const legacyDir = getLegacyRuleHistoryDir();
     if (!(await fileExists(legacyDir))) {
       return [];
@@ -600,8 +430,12 @@ export function createRulesWorkspaceService(
       }
     }
 
-    const candidateSet = new Set(candidateFiles.map((filePath) => path.resolve(filePath)));
-    const entries = await fsp.readdir(legacyDir, { withFileTypes: true }).catch(() => []);
+    const candidateSet = new Set(
+      candidateFiles.map((filePath) => path.resolve(filePath)),
+    );
+    const entries = await fsp
+      .readdir(legacyDir, { withFileTypes: true })
+      .catch(() => []);
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".json")) {
         continue;
@@ -617,7 +451,8 @@ export function createRulesWorkspaceService(
     }
 
     return versions.sort(
-      (left, right) => new Date(right.savedAt).getTime() - new Date(left.savedAt).getTime(),
+      (left, right) =>
+        new Date(right.savedAt).getTime() - new Date(left.savedAt).getTime(),
     );
   }
 
@@ -648,17 +483,26 @@ export function createRulesWorkspaceService(
     versions: RuleVersionSnapshot[],
   ): Promise<StoredRuleVersionIndexEntry[]> {
     const versionDir = getRuleVersionsDir(ruleId);
-    const stagingDir = await createSiblingTempDirectory(versionDir, RULE_VERSION_STAGING_PREFIX);
+    const stagingDir = await createSiblingTempDirectory(
+      versionDir,
+      RULE_VERSION_STAGING_PREFIX,
+    );
 
     const orderedVersions = [...versions]
-      .sort((left, right) => new Date(left.savedAt).getTime() - new Date(right.savedAt).getTime())
+      .sort(
+        (left, right) =>
+          new Date(left.savedAt).getTime() - new Date(right.savedAt).getTime(),
+      )
       .slice(-RULE_VERSION_LIMIT);
 
     try {
       const index: StoredRuleVersionIndexEntry[] = [];
       for (const [indexPosition, version] of orderedVersions.entries()) {
         const fileName = `${String(indexPosition + 1).padStart(4, "0")}.md`;
-        await writeTextFileAtomic(path.join(stagingDir, fileName), version.content);
+        await writeTextFileAtomic(
+          path.join(stagingDir, fileName),
+          version.content,
+        );
         index.unshift({
           id: version.id,
           savedAt: version.savedAt,
@@ -667,7 +511,10 @@ export function createRulesWorkspaceService(
         });
       }
 
-      await writeJsonFile(path.join(stagingDir, RULE_VERSION_INDEX_FILE_NAME), index);
+      await writeJsonFile(
+        path.join(stagingDir, RULE_VERSION_INDEX_FILE_NAME),
+        index,
+      );
       await replaceDirectoryAtomic(versionDir, stagingDir);
       return index;
     } catch (error) {
@@ -727,7 +574,8 @@ export function createRulesWorkspaceService(
       });
 
     const nextWrite = previousWrite.then(async () => {
-      const { index: previousIndex, versions: current } = await readRuleVersions(ruleId);
+      const { index: previousIndex, versions: current } =
+        await readRuleVersions(ruleId);
       if (current[0]?.content === content) {
         return {
           index: previousIndex,
@@ -764,7 +612,9 @@ export function createRulesWorkspaceService(
       await Promise.all(
         staleEntries.map(async (entry) => {
           try {
-            await fsp.rm(path.join(versionDir, entry.fileName), { force: true });
+            await fsp.rm(path.join(versionDir, entry.fileName), {
+              force: true,
+            });
           } catch {
             return;
           }
@@ -788,11 +638,17 @@ export function createRulesWorkspaceService(
     }
   }
 
-  async function writeManagedRule(meta: StoredRuleMeta, content: string): Promise<void> {
+  async function writeManagedRule(
+    meta: StoredRuleMeta,
+    content: string,
+  ): Promise<void> {
     await writeTextFileAtomic(meta.managedPath, content);
   }
 
-  async function writeTargetRule(meta: StoredRuleMeta, content: string): Promise<RuleSyncStatus> {
+  async function writeTargetRule(
+    meta: StoredRuleMeta,
+    content: string,
+  ): Promise<RuleSyncStatus> {
     try {
       await fsp.mkdir(path.dirname(meta.targetPath), { recursive: true });
       await fsp.writeFile(meta.targetPath, content, "utf-8");
@@ -802,7 +658,9 @@ export function createRulesWorkspaceService(
     }
   }
 
-  async function readStoredMeta(metaPath: string): Promise<StoredRuleMeta | null> {
+  async function readStoredMeta(
+    metaPath: string,
+  ): Promise<StoredRuleMeta | null> {
     return readJsonFile<StoredRuleMeta>(metaPath);
   }
 
@@ -810,44 +668,84 @@ export function createRulesWorkspaceService(
     await writeJsonFile(getRuleMetaPath(meta.managedPath), meta);
   }
 
-  async function syncStatusForMeta(meta: StoredRuleMeta): Promise<RuleSyncStatus> {
-    if (!(await fileExists(meta.targetPath))) {
-      return "target-missing";
+  async function inspectRuleSyncState(
+    meta: StoredRuleMeta,
+  ): Promise<RuleSyncInspection> {
+    const exists = await fileExists(meta.targetPath);
+    if (!exists) {
+      return { exists, syncStatus: "target-missing" };
     }
 
     try {
       const managedExists = await fileExists(meta.managedPath);
       const [managedContent, targetContent] = await Promise.all([
-        managedExists ? fsp.readFile(meta.managedPath, "utf-8") : Promise.resolve(""),
+        managedExists
+          ? fsp.readFile(meta.managedPath, "utf-8")
+          : Promise.resolve(""),
         fsp.readFile(meta.targetPath, "utf-8"),
       ]);
 
-      return hashContent(managedContent) === hashContent(targetContent)
-        ? "synced"
-        : "out-of-sync";
+      return {
+        exists,
+        syncStatus:
+          hashContent(managedContent) === hashContent(targetContent)
+            ? "synced"
+            : "out-of-sync",
+      };
     } catch {
-      return "sync-error";
+      return { exists, syncStatus: "sync-error" };
     }
   }
 
-  async function buildDescriptor(meta: StoredRuleMeta): Promise<RuleFileDescriptor> {
-    const exists = await fileExists(meta.targetPath);
+  async function syncStatusForMeta(
+    meta: StoredRuleMeta,
+  ): Promise<RuleSyncStatus> {
+    return (await inspectRuleSyncState(meta)).syncStatus;
+  }
+
+  async function buildDescriptor(
+    meta: StoredRuleMeta,
+    inspection?: RuleSyncInspection,
+  ): Promise<RuleFileDescriptor> {
+    const state = inspection ?? (await inspectRuleSyncState(meta));
     return {
       id: meta.id,
       platformId: meta.platformId,
       platformName: meta.platformName,
       platformIcon: meta.platformIcon,
       platformDescription: meta.platformDescription,
-      name: resolveDisplayedRuleFileName(meta.canonicalFileName, meta.targetPath),
+      name: resolveDisplayedRuleFileName(
+        meta.canonicalFileName,
+        meta.targetPath,
+      ),
       description: meta.description,
       path: meta.targetPath,
       targetPath: meta.targetPath,
       managedPath: meta.managedPath,
       projectRootPath: meta.projectRootPath ?? null,
-      exists,
-      group: meta.scope === "project" ? "workspace" : ruleGroupForKnownId(meta.id),
-      syncStatus: await syncStatusForMeta(meta),
+      exists: state.exists,
+      group:
+        meta.scope === "project" ? "workspace" : ruleGroupForKnownId(meta.id),
+      syncStatus: state.syncStatus,
     };
+  }
+
+  async function reconcileProjectRule(
+    meta: StoredRuleMeta,
+  ): Promise<RuleFileDescriptor> {
+    const inspection = await inspectRuleSyncState(meta);
+    if (inspection.syncStatus === meta.syncStatus) {
+      return buildDescriptor(meta, inspection);
+    }
+
+    const nextMeta = {
+      ...meta,
+      syncStatus: inspection.syncStatus,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeMeta(nextMeta);
+    await syncRuleIndex(nextMeta);
+    return buildDescriptor(nextMeta, inspection);
   }
 
   function descriptorFromRuleRecord(record: RuleRecord): RuleFileDescriptor {
@@ -857,14 +755,20 @@ export function createRulesWorkspaceService(
       platformName: record.platformName,
       platformIcon: record.platformIcon,
       platformDescription: record.platformDescription,
-      name: resolveDisplayedRuleFileName(record.canonicalFileName, record.targetPath),
+      name: resolveDisplayedRuleFileName(
+        record.canonicalFileName,
+        record.targetPath,
+      ),
       description: record.description,
       path: record.targetPath,
       targetPath: record.targetPath,
       managedPath: record.managedPath,
       projectRootPath: record.projectRootPath ?? null,
       exists: record.syncStatus !== "target-missing",
-      group: record.scope === "project" ? "workspace" : ruleGroupForKnownId(record.id),
+      group:
+        record.scope === "project"
+          ? "workspace"
+          : ruleGroupForKnownId(record.id),
       syncStatus: record.syncStatus,
     };
   }
@@ -888,7 +792,11 @@ export function createRulesWorkspaceService(
     };
   }
 
-  function toRuleRecord(meta: StoredRuleMeta, currentVersion: number, contentHash: string): RuleRecord {
+  function toRuleRecord(
+    meta: StoredRuleMeta,
+    currentVersion: number,
+    contentHash: string,
+  ): RuleRecord {
     return {
       id: meta.id,
       scope: meta.scope,
@@ -929,8 +837,13 @@ export function createRulesWorkspaceService(
       ? await fsp.readFile(meta.managedPath, "utf-8")
       : "";
     const versionRead = await readRuleVersions(meta.id);
-    db.upsert(toRuleRecord(meta, versionRead.index.length, hashContent(content)));
-    db.replaceVersions(meta.id, toRuleVersionRecords(meta.id, versionRead.index));
+    db.upsert(
+      toRuleRecord(meta, versionRead.index.length, hashContent(content)),
+    );
+    db.replaceVersions(
+      meta.id,
+      toRuleVersionRecords(meta.id, versionRead.index),
+    );
   }
 
   async function syncRuleIndexWithData(
@@ -1092,14 +1005,21 @@ export function createRulesWorkspaceService(
           return null;
         }
 
-        return buildDescriptor(meta);
+        return reconcileProjectRule(meta);
       }),
     );
 
-    return [...globalDescriptors, ...projectDescriptors.filter((item): item is RuleFileDescriptor => item !== null)];
+    return [
+      ...globalDescriptors,
+      ...projectDescriptors.filter(
+        (item): item is RuleFileDescriptor => item !== null,
+      ),
+    ];
   }
 
-  async function getProjectMetaById(ruleId: ProjectRuleId): Promise<StoredRuleMeta | null> {
+  async function getProjectMetaById(
+    ruleId: ProjectRuleId,
+  ): Promise<StoredRuleMeta | null> {
     const metaPaths = await listProjectMetaPaths();
     for (const metaPath of metaPaths) {
       const meta = await readStoredMeta(metaPath);
@@ -1124,7 +1044,9 @@ export function createRulesWorkspaceService(
     return ensureGlobalRuleMaterialized(ruleId);
   }
 
-  async function resolveCachedRuleMeta(ruleId: RuleFileId): Promise<StoredRuleMeta> {
+  async function resolveCachedRuleMeta(
+    ruleId: RuleFileId,
+  ): Promise<StoredRuleMeta> {
     const cachedRecord = getRuleDb().getById(ruleId);
     if (cachedRecord) {
       return metaFromRuleRecord(cachedRecord);
@@ -1166,7 +1088,10 @@ export function createRulesWorkspaceService(
     };
   }
 
-  async function saveRuleContent(ruleId: RuleFileId, content: string): Promise<RuleFileContent> {
+  async function saveRuleContent(
+    ruleId: RuleFileId,
+    content: string,
+  ): Promise<RuleFileContent> {
     const meta = await resolveRuleMeta(ruleId);
     const existedBefore = await fileExists(meta.managedPath);
 
@@ -1229,12 +1154,18 @@ export function createRulesWorkspaceService(
     }
 
     if (!(await fileExists(meta.targetPath))) {
-      throw new Error(`Cannot resolve rule conflict because target file is missing: ${meta.targetPath}`);
+      throw new Error(
+        `Cannot resolve rule conflict because target file is missing: ${meta.targetPath}`,
+      );
     }
 
     const targetContent = await fsp.readFile(meta.targetPath, "utf-8");
     await writeManagedRule(meta, targetContent);
-    const versionWrite = await appendRuleVersion(ruleId, targetContent, "manual-save");
+    const versionWrite = await appendRuleVersion(
+      ruleId,
+      targetContent,
+      "manual-save",
+    );
     const nextMeta: StoredRuleMeta = {
       ...meta,
       syncStatus: await syncStatusForMeta(meta),
@@ -1296,7 +1227,9 @@ export function createRulesWorkspaceService(
     return versionRead.versions;
   }
 
-  async function createProjectRule(input: CreateRuleProjectInput): Promise<RuleFileDescriptor> {
+  async function createProjectRule(
+    input: CreateRuleProjectInput,
+  ): Promise<RuleFileDescriptor> {
     const name = input.name.trim();
     const rootPath = input.rootPath.trim();
     if (!name || !rootPath) {
@@ -1304,7 +1237,9 @@ export function createRulesWorkspaceService(
     }
 
     const existingProjectMeta = await Promise.all(
-      (await listProjectMetaPaths()).map((metaPath) => readStoredMeta(metaPath)),
+      (await listProjectMetaPaths()).map((metaPath) =>
+        readStoredMeta(metaPath),
+      ),
     );
     const duplicate = existingProjectMeta.find(
       (meta) => meta?.projectRootPath?.toLowerCase() === rootPath.toLowerCase(),
@@ -1338,7 +1273,9 @@ export function createRulesWorkspaceService(
     };
 
     const targetExists = await fileExists(targetPath);
-    const initialContent = targetExists ? await fsp.readFile(targetPath, "utf-8") : "";
+    const initialContent = targetExists
+      ? await fsp.readFile(targetPath, "utf-8")
+      : "";
     await writeManagedRule(meta, initialContent);
     if (initialContent.trim()) {
       const versionIndex = await readVersionIndex(ruleId);
@@ -1352,7 +1289,9 @@ export function createRulesWorkspaceService(
     return buildDescriptor(meta);
   }
 
-  async function removeMissingProjectRules(importedRecords: RuleBackupRecord[]): Promise<void> {
+  async function removeProjectRulesMissingFromImport(
+    importedRecords: RuleBackupRecord[],
+  ): Promise<void> {
     const importedProjectIds = new Set(
       importedRecords.map((record) => record.id).filter(isProjectRuleFileId),
     );
@@ -1378,14 +1317,65 @@ export function createRulesWorkspaceService(
 
   async function removeProjectRule(projectId: string): Promise<void> {
     const ruleId: ProjectRuleId = `project:${projectId}`;
-    const meta = await getProjectMetaById(ruleId);
-    if (!meta) {
+    const records = await Promise.all(
+      (await listProjectMetaPaths()).map(async (metaPath) => ({
+        meta: await readStoredMeta(metaPath),
+        metaPath,
+      })),
+    );
+    const record = records.find(({ meta }) => meta?.id === ruleId);
+    if (!record?.meta) {
       return;
     }
+    const managedDir = path.dirname(record.metaPath);
+    const expectedManagedPath = path.join(managedDir, "AGENTS.md");
+    if (
+      record.meta.scope !== "project" ||
+      !pathsEqual(record.meta.managedPath, expectedManagedPath)
+    ) {
+      throw new Error(`Unsafe managed rule path for ${ruleId}`);
+    }
 
-    await fsp.rm(path.dirname(meta.managedPath), { recursive: true, force: true });
-    await fsp.rm(getRuleVersionsDir(meta.id), { recursive: true, force: true });
-    getRuleDb().delete(meta.id);
+    await fsp.rm(managedDir, { recursive: true, force: true });
+    await fsp.rm(getRuleVersionsDir(record.meta.id), {
+      recursive: true,
+      force: true,
+    });
+    getRuleDb().delete(record.meta.id);
+  }
+
+  async function removeMissingProjectRules(
+    ruleIds: string[],
+  ): Promise<RuleMissingCleanupResult> {
+    const result: RuleMissingCleanupResult = {
+      removed: [],
+      skipped: [],
+      failed: [],
+    };
+
+    for (const ruleId of new Set(ruleIds)) {
+      const projectId = ruleId.startsWith("project:")
+        ? ruleId.slice("project:".length)
+        : "";
+      if (!SAFE_PROJECT_ID_PATTERN.test(projectId)) {
+        result.skipped.push(ruleId);
+        continue;
+      }
+
+      try {
+        const meta = await getProjectMetaById(`project:${projectId}`);
+        if (!meta || (await fileExists(meta.targetPath))) {
+          result.skipped.push(ruleId);
+          continue;
+        }
+        await removeProjectRule(projectId);
+        result.removed.push(meta.id);
+      } catch {
+        result.failed.push(ruleId);
+      }
+    }
+
+    return result;
   }
 
   async function exportRuleBackupRecords(): Promise<RuleBackupRecord[]> {
@@ -1420,7 +1410,7 @@ export function createRulesWorkspaceService(
     await bootstrapRuleWorkspace();
 
     if (options.replace) {
-      await removeMissingProjectRules(records);
+      await removeProjectRulesMissingFromImport(records);
     }
 
     for (const record of records) {
@@ -1431,7 +1421,9 @@ export function createRulesWorkspaceService(
           await createProjectRule({
             id: projectId,
             name: record.platformName,
-            rootPath: record.projectRootPath ?? path.dirname(record.targetPath ?? record.path),
+            rootPath:
+              record.projectRootPath ??
+              path.dirname(record.targetPath ?? record.path),
           });
         }
       }
@@ -1463,6 +1455,7 @@ export function createRulesWorkspaceService(
     createProjectRule,
     bootstrapRuleWorkspace,
     removeProjectRule,
+    removeMissingProjectRules,
     exportRuleBackupRecords,
     importRuleBackupRecords,
   };
@@ -1487,6 +1480,7 @@ export const {
   createProjectRule,
   bootstrapRuleWorkspace,
   removeProjectRule,
+  removeMissingProjectRules,
   exportRuleBackupRecords,
   importRuleBackupRecords,
 } = coreRulesWorkspaceService;

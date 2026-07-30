@@ -59,6 +59,12 @@ export interface CreateRuleProjectInput {
   rootPath: string;
 }
 
+export interface RuleMissingCleanupResult {
+  removed: RuleFileId[];
+  skipped: string[];
+  failed: string[];
+}
+
 export interface RuleBackupRecord {
   id: RuleFileId;
   platformId: RulePlatformId;

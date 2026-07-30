@@ -12,6 +12,7 @@ const saveRuleContentMock = vi.fn();
 const resolveRuleConflictMock = vi.fn();
 const createProjectRuleMock = vi.fn();
 const removeProjectRuleMock = vi.fn();
+const removeMissingProjectRulesMock = vi.fn();
 const importRuleBackupRecordsMock = vi.fn();
 const rewriteRuleWithAiMock = vi.fn();
 
@@ -30,6 +31,7 @@ vi.mock("../../../src/main/services/rules-workspace", () => ({
   resolveRuleConflict: resolveRuleConflictMock,
   createProjectRule: createProjectRuleMock,
   removeProjectRule: removeProjectRuleMock,
+  removeMissingProjectRules: removeMissingProjectRulesMock,
   importRuleBackupRecords: importRuleBackupRecordsMock,
 }));
 
@@ -68,6 +70,7 @@ describe("rules IPC", () => {
     resolveRuleConflictMock.mockReset();
     createProjectRuleMock.mockReset();
     removeProjectRuleMock.mockReset();
+    removeMissingProjectRulesMock.mockReset();
     importRuleBackupRecordsMock.mockReset();
     rewriteRuleWithAiMock.mockReset();
   });
@@ -186,6 +189,41 @@ describe("rules IPC", () => {
       rootPath: "/tmp/docs-site",
     });
     expect(removeProjectRuleMock).toHaveBeenCalledWith("docs-site");
+  });
+
+  it("validates and removes missing project rules through workspace services", async () => {
+    removeMissingProjectRulesMock.mockResolvedValue({
+      removed: ["project:missing"],
+      skipped: [],
+      failed: [],
+    });
+    const { handlers, IPC_CHANNELS } = await setupRulesIpc();
+
+    await expect(
+      handlers[IPC_CHANNELS.RULES_REMOVE_MISSING_PROJECTS](
+        null,
+        "project:missing",
+      ),
+    ).rejects.toThrow("rules:removeMissingProjects requires string ids");
+    await expect(
+      handlers[IPC_CHANNELS.RULES_REMOVE_MISSING_PROJECTS](
+        null,
+        ["project:missing", 42],
+      ),
+    ).rejects.toThrow("rules:removeMissingProjects requires string ids");
+    await expect(
+      handlers[IPC_CHANNELS.RULES_REMOVE_MISSING_PROJECTS](
+        null,
+        ["project:missing"],
+      ),
+    ).resolves.toEqual({
+      removed: ["project:missing"],
+      skipped: [],
+      failed: [],
+    });
+    expect(removeMissingProjectRulesMock).toHaveBeenCalledWith([
+      "project:missing",
+    ]);
   });
 
   it("imports backup records through workspace services", async () => {

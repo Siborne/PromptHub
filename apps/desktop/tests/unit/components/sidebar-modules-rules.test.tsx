@@ -575,6 +575,100 @@ describe("Sidebar", () => {
     );
   });
 
+  it("marks missing project rules and confirms scoped batch cleanup", async () => {
+    useUIStore.setState({
+      appModule: "rules",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+    });
+    const cleanupMissingProjectRules = vi.fn().mockResolvedValue({
+      removed: ["project:rule-project-1"],
+      skipped: [],
+      failed: [],
+    });
+    useRulesStore.setState((state) => ({
+      files: state.files.map((file) =>
+        file.id === "project:rule-project-1"
+          ? { ...file, syncStatus: "target-missing" as const }
+          : file,
+      ),
+      cleanupMissingProjectRules,
+    }));
+
+    await act(async () => {
+      await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    expect(screen.getByText("Target missing")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select Docs Site for cleanup" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clean up missing rules" }),
+    );
+
+    expect(
+      screen.getByText(
+        "Remove 1 managed rule and its history? External project folders are never deleted.",
+      ),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Clean up" }));
+    });
+
+    expect(cleanupMissingProjectRules).toHaveBeenCalledWith([
+      "project:rule-project-1",
+    ]);
+  });
+
+  it("keeps the cleanup selection and reports an error when cleanup fails", async () => {
+    useUIStore.setState({
+      appModule: "rules",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+    });
+    const cleanupMissingProjectRules = vi
+      .fn()
+      .mockRejectedValue(new Error("cleanup unavailable"));
+    useRulesStore.setState((state) => ({
+      files: state.files.map((file) =>
+        file.id === "project:rule-project-1"
+          ? { ...file, syncStatus: "target-missing" as const }
+          : file,
+      ),
+      cleanupMissingProjectRules,
+    }));
+
+    await act(async () => {
+      await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select Docs Site for cleanup" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clean up missing rules" }),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Clean up" }));
+    });
+
+    expect(showToastMock).toHaveBeenCalledWith(
+      "Failed to clean up missing rules",
+      "error",
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Select Docs Site for cleanup" }),
+    ).toBeChecked();
+  });
+
   it("filters the rules sidebar using the shared rules search query", async () => {
     useUIStore.setState({
       appModule: "rules",

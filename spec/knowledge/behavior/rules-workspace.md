@@ -110,6 +110,14 @@
   when a rewrite fails: managed content, `_rule.json`, version files, and
   `index.json` must not be left in a half-new/half-old state after an
   interrupted version write.
+- A forced scan reconciles registered project targets with the filesystem and
+  persists a changed `syncStatus` to `_rule.json` and RuleDB. A missing target
+  remains visible as `target-missing`; its managed body and versions remain
+  recoverable until the user explicitly deploys or cleans it up.
+- Missing-project cleanup is confirmation-gated and accepts only selected safe
+  `project:` IDs whose targets are still absent. It deletes PromptHub-managed
+  rule/version data and the matching RuleDB row, never the external project
+  root or target path, and reports removed, skipped, and failed IDs.
 
 ### 10. Path Derivation Constraints
 

@@ -1,4 +1,5 @@
 import {
+  AlertTriangleIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   FolderPlusIcon,
@@ -14,6 +15,7 @@ import { useSettingsStore } from "../../stores/settings.store";
 import { useRulesStore } from "../../stores/rules.store";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { useToast } from "../ui/Toast";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 interface RulesSidebarPanelProps {
   currentPage: "home" | "settings";
@@ -27,6 +29,9 @@ export function RulesSidebarPanel({
   const { t } = useTranslation();
   const addRuleProject = useRulesStore((state) => state.addProjectRule);
   const removeRuleProject = useRulesStore((state) => state.removeProjectRule);
+  const cleanupMissingProjectRules = useRulesStore(
+    (state) => state.cleanupMissingProjectRules,
+  );
   const ruleFiles = useRulesStore((state) => state.files);
   const rulesSearchQuery = useRulesStore((state) => state.searchQuery);
   const selectedRuleId = useRulesStore((state) => state.selectedRuleId);
@@ -44,6 +49,11 @@ export function RulesSidebarPanel({
   });
   const { showToast } = useToast();
   const canAddRuleProject = !isWebRuntime();
+  const [selectedMissingRuleIds, setSelectedMissingRuleIds] = useState<
+    Set<string>
+  >(new Set());
+  const [isCleanupConfirmOpen, setIsCleanupConfirmOpen] = useState(false);
+  const [isCleaningMissingRules, setIsCleaningMissingRules] = useState(false);
 
   useEffect(() => {
     if (ruleFiles.length > 0) {
@@ -95,6 +105,7 @@ export function RulesSidebarPanel({
         canRemove: false,
         projectId: null,
         name: file.platformName,
+        isMissing: false,
       }));
 
     const projectItems = ruleFiles
@@ -111,6 +122,7 @@ export function RulesSidebarPanel({
         canRemove: true,
         projectId: file.id.slice("project:".length),
         name: file.platformName,
+        isMissing: file.syncStatus === "target-missing",
       }));
 
     return [
@@ -124,6 +136,22 @@ export function RulesSidebarPanel({
       },
     ];
   }, [ruleFiles, rulesSearchQuery, selectedRuleId, skillPlatformOrder]);
+
+  useEffect(() => {
+    const currentMissingIds = new Set<string>(
+      ruleFiles
+        .filter(
+          (file) =>
+            file.id.startsWith("project:") &&
+            file.syncStatus === "target-missing",
+        )
+        .map((file) => file.id),
+    );
+    setSelectedMissingRuleIds(
+      (selected) =>
+        new Set([...selected].filter((id) => currentMissingIds.has(id))),
+    );
+  }, [ruleFiles]);
 
   const handleAddRuleProject = useCallback(async () => {
     const selectedPath = await window.electron?.selectFolder?.();
@@ -157,6 +185,50 @@ export function RulesSidebarPanel({
       [sectionId]: !current[sectionId],
     }));
   }, []);
+
+  const toggleMissingRuleSelection = useCallback((ruleId: string) => {
+    setSelectedMissingRuleIds((selected) => {
+      const next = new Set(selected);
+      if (next.has(ruleId)) {
+        next.delete(ruleId);
+      } else {
+        next.add(ruleId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleCleanupMissingRules = useCallback(async () => {
+    setIsCleaningMissingRules(true);
+    try {
+      const result = await cleanupMissingProjectRules([
+        ...selectedMissingRuleIds,
+      ]);
+      setSelectedMissingRuleIds(new Set());
+      setIsCleanupConfirmOpen(false);
+      if (result.failed.length > 0 || result.skipped.length > 0) {
+        showToast(
+          t(
+            "rules.missingCleanupPartial",
+            "Cleanup finished with skipped or failed records.",
+          ),
+          "error",
+        );
+      } else {
+        showToast(
+          t("rules.missingCleanupDone", "Missing rules cleaned up"),
+          "success",
+        );
+      }
+    } catch {
+      showToast(
+        t("rules.missingCleanupFailed", "Failed to clean up missing rules"),
+        "error",
+      );
+    } finally {
+      setIsCleaningMissingRules(false);
+    }
+  }, [cleanupMissingProjectRules, selectedMissingRuleIds, showToast, t]);
 
   return (
     <>
@@ -220,6 +292,20 @@ export function RulesSidebarPanel({
 
               {!collapsedRuleSections[section.id] ? (
                 <div className="space-y-2">
+                  {section.id === "project" &&
+                  selectedMissingRuleIds.size > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsCleanupConfirmOpen(true)}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/15"
+                    >
+                      <Trash2Icon aria-hidden="true" className="h-3.5 w-3.5" />
+                      {t(
+                        "rules.missingCleanupAction",
+                        "Clean up missing rules",
+                      )}
+                    </button>
+                  ) : null}
                   {section.items.map((item) => (
                     <div
                       key={item.id}
@@ -258,6 +344,15 @@ export function RulesSidebarPanel({
                               <div className="truncate text-sm font-medium text-foreground">
                                 {item.name}
                               </div>
+                              {item.isMissing ? (
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                                  <AlertTriangleIcon
+                                    aria-hidden="true"
+                                    className="h-3 w-3"
+                                  />
+                                  {t("rules.targetMissing", "Target missing")}
+                                </span>
+                              ) : null}
                             </div>
                             <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
                               {item.type === "project"
@@ -268,7 +363,26 @@ export function RulesSidebarPanel({
                         </div>
                       </button>
 
-                      {item.canRemove && item.projectId ? (
+                      {item.isMissing ? (
+                        <div className="mt-3 flex justify-end">
+                          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={selectedMissingRuleIds.has(item.id)}
+                              onChange={() =>
+                                toggleMissingRuleSelection(item.id)
+                              }
+                              aria-label={t(
+                                "rules.selectMissingForCleanup",
+                                "Select {{name}} for cleanup",
+                                { name: item.name },
+                              )}
+                              className="h-4 w-4 accent-primary"
+                            />
+                            {t("common.select", "Select")}
+                          </label>
+                        </div>
+                      ) : item.canRemove && item.projectId ? (
                         <div className="mt-3 flex justify-end">
                           <button
                             type="button"
@@ -342,6 +456,21 @@ export function RulesSidebarPanel({
           ))}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={isCleanupConfirmOpen}
+        onClose={() => setIsCleanupConfirmOpen(false)}
+        onConfirm={() => void handleCleanupMissingRules()}
+        title={t("rules.missingCleanupTitle", "Clean up missing rules")}
+        message={t(
+          "rules.missingCleanupMessage",
+          "Remove {{count}} managed rule and its history? External project folders are never deleted.",
+          { count: selectedMissingRuleIds.size },
+        )}
+        confirmText={t("rules.missingCleanupConfirm", "Clean up")}
+        cancelText={t("common.cancel", "Cancel")}
+        variant="destructive"
+        isLoading={isCleaningMissingRules}
+      />
     </>
   );
 }

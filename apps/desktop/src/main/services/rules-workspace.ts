@@ -28,20 +28,27 @@ export const desktopRulesWorkspaceService = createRulesWorkspaceService({
         platformName: agent.name,
         platformIcon: "Bot",
         platformDescription: `Custom agent rules loaded from ${agent.rootPath}`,
-        name: agent.rulesRelativePath!.split(/[\\/]+/).filter(Boolean).pop() || "AGENTS.md",
+        name:
+          agent
+            .rulesRelativePath!.split(/[\\/]+/)
+            .filter(Boolean)
+            .pop() || "AGENTS.md",
         description: `Global rules for custom agent ${agent.name}.`,
         group: "assistant" as const,
       })),
   getExtraGlobalRuleTargetPath: (template) => {
     const customAgentId = template.id.slice("custom:".length);
-    const agent = readCustomAgentsFromSettings().find((entry) => entry.id === customAgentId);
+    const agent = readCustomAgentsFromSettings().find(
+      (entry) => entry.id === customAgentId,
+    );
     if (!agent?.rulesRelativePath) {
       return resolvePlatformPath(agent?.rootPath ?? "");
     }
     const root = resolvePlatformPath(agent.rootPath);
-    return [root, ...agent.rulesRelativePath.split(/[\\/]+/).filter(Boolean)].join(
-      root.includes("\\") ? "\\" : "/",
-    );
+    return [
+      root,
+      ...agent.rulesRelativePath.split(/[\\/]+/).filter(Boolean),
+    ].join(root.includes("\\") ? "\\" : "/");
   },
 });
 
@@ -58,6 +65,7 @@ export const {
   createProjectRule,
   bootstrapRuleWorkspace,
   removeProjectRule,
+  removeMissingProjectRules,
   exportRuleBackupRecords,
   importRuleBackupRecords,
 } = desktopRulesWorkspaceService;

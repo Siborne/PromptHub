@@ -101,6 +101,7 @@ export const IPC_CHANNELS = {
   RULES_REWRITE: "rules:rewrite",
   RULES_ADD_PROJECT: "rules:addProject",
   RULES_REMOVE_PROJECT: "rules:removeProject",
+  RULES_REMOVE_MISSING_PROJECTS: "rules:removeMissingProjects",
   RULES_IMPORT_RECORDS: "rules:importRecords",
   RULES_VERSION_DELETE: "rules:version:delete",
 
