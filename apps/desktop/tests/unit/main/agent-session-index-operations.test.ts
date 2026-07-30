@@ -55,6 +55,7 @@ describe("Agent session index operation factory", () => {
     ["grok", "grokRootDir"],
     ["kimi", "kimiRootDir"],
     ["openclaw", "openclawRootDir"],
+    ["pi", "piRootDir"],
     ["oh-my-pi", "ohMyPiRootDir"],
     ["kiro", "kiroRootDir"],
   ])(

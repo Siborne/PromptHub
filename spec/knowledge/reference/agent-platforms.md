@@ -561,6 +561,29 @@ Current support boundary:
   - OpenCode's documented plugin surface is a JavaScript/TypeScript or npm hook-module runtime loaded from `.opencode/plugins/`, `~/.config/opencode/plugins/`, or `opencode.json` `plugin`.
   - It is not modeled as a first-version PromptHub Plugin bundle adapter because the public plugin contract is function/hook oriented rather than a multi-child inventory package.
 
+### Pi
+
+- Identity and root: PromptHub uses built-in id `pi`, display name `Pi`, command
+  `pi`, and default root `~/.pi/agent`. `PI_CODING_AGENT_DIR` is honored as the
+  upstream override. Pi and Oh My Pi remain separate products even though the
+  fork retains the same environment-variable name.
+- Assets: native user Skills are `<root>/skills`, extensions are
+  `<root>/extensions`, and global instructions are `<root>/AGENTS.md`.
+  PromptHub does not advertise native MCP support because upstream Pi exposes
+  MCP through optional extensions rather than a built-in MCP configuration
+  contract.
+- Config: the raw-editor allowlist is `settings.json`, `models.json`, and
+  `AGENTS.md`; authentication files, sessions, caches and installed package
+  state are excluded. The model projection reads `defaultProvider` and
+  `defaultModel` from `settings.json` and updates only those selection fields
+  through the existing backup, atomic-write and verification workflow.
+- Sessions: PromptHub scans only JSONL files below `<root>/sessions`, bounds
+  metadata and detail reads, rejects unsafe ids and symlinks, and exposes
+  `pi --session <id>` resume metadata without launching or editing Pi.
+- Product relationship: Oh My Pi is a fork of Pi, not an alias. PromptHub may
+  share version-3 JSONL parsing code, but detection, roots, adapter ids,
+  executables, settings and results remain independent.
+
 ### Oh My Pi
 
 - Identity and root: PromptHub uses built-in id `oh-my-pi`, display name `Oh My Pi`,
@@ -1108,6 +1131,15 @@ Current support boundary:
   `https://github.com/can1357/oh-my-pi/blob/cc00ab161b2721e50d8a96a0dc9552abfd258b8b/docs/providers.md`
 - Session switching and recent listing:
   `https://github.com/can1357/oh-my-pi/blob/cc00ab161b2721e50d8a96a0dc9552abfd258b8b/docs/session-switching-and-recent-listing.md`
+
+## Pi Evidence
+
+- Product, assets and CLI:
+  `https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/README.md`
+- Settings and root override:
+  `https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/settings.md`
+- Session format:
+  `https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/session.md`
 
 ## Canonical Sources
 

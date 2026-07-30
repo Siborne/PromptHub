@@ -93,6 +93,10 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
     providerModel: declaration("supported", "verified-provider-adapter"),
     sessions: VERIFIED_SESSION,
   }),
+  pi: depthCapabilities({
+    providerModel: MODEL_CONFIG_ONLY,
+    sessions: VERIFIED_SESSION,
+  }),
   "oh-my-pi": depthCapabilities({
     providerModel: MODEL_CONFIG_ONLY,
     sessions: VERIFIED_SESSION,

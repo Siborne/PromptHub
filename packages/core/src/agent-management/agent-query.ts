@@ -21,6 +21,7 @@ const COMMON_AGENT_ORDER = [
   "kimi",
   "qwen",
   "opencode",
+  "pi",
   "oh-my-pi",
   "cursor",
   "copilot",

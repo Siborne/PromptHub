@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 32 |
+| Active | 38 |
 | Archived | 182 |
 | Legacy | 1 |
 
@@ -25,6 +25,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-home-layout-controls` | active | `spec/changes/active/desktop-home-layout-controls/` |
 | `desktop-image-generation-workbench` | active | `spec/changes/active/desktop-image-generation-workbench/` |
 | `desktop-issue-179-configured-skill-targets` | active | `spec/changes/active/desktop-issue-179-configured-skill-targets/` |
+| `desktop-issue-192-copy-action-parity` | active | `spec/changes/active/desktop-issue-192-copy-action-parity/` |
 | `desktop-prompt-context-move` | active | `spec/changes/active/desktop-prompt-context-move/` |
 | `desktop-renderer-ui-test-coverage` | active | `spec/changes/active/desktop-renderer-ui-test-coverage/` |
 | `desktop-update-dialog-polish` | active | `spec/changes/active/desktop-update-dialog-polish/` |
@@ -33,7 +34,9 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `macos-developer-id-signing` | active | `spec/changes/active/macos-developer-id-signing/` |
 | `mobile-app-shell` | active | `spec/changes/active/mobile-app-shell/` |
 | `mobile-prompt-persistence-hardening` | release-pending | `spec/changes/active/mobile-prompt-persistence-hardening/` |
+| `pi-agent-separation` | active | `spec/changes/active/pi-agent-separation/` |
 | `platform-workbench-prototype` | in progress | `spec/changes/active/platform-workbench-prototype/` |
+| `plugin-issue-190-multi-native-manifests` | active | `spec/changes/active/plugin-issue-190-multi-native-manifests/` |
 | `plugin-management` | active | `spec/changes/active/plugin-management/` |
 | `project-skill-management` | in progress | `spec/changes/active/project-skill-management/` |
 | `prompt-output-format-contribution` | active | `spec/changes/active/prompt-output-format-contribution/` |
@@ -42,9 +45,12 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `release-0-6-0-version-alignment` | active | `spec/changes/active/release-0-6-0-version-alignment/` |
 | `republish-0-5-9-20260714` | active | `spec/changes/active/republish-0-5-9-20260714/` |
 | `risk-aware-verification-harness` | active | `spec/changes/active/risk-aware-verification-harness/` |
+| `rules-issue-193-missing-project-reconciliation` | active | `spec/changes/active/rules-issue-193-missing-project-reconciliation/` |
 | `rules-managed-copies` | in progress | `spec/changes/active/rules-managed-copies/` |
 | `self-hosted-skill-sync-reliability` | active | `spec/changes/active/self-hosted-skill-sync-reliability/` |
 | `skill-uninstall-lifecycle` | active | `spec/changes/active/skill-uninstall-lifecycle/` |
+| `skills-issue-194-shared-global-target` | active | `spec/changes/active/skills-issue-194-shared-global-target/` |
+| `sync-issue-191-safety-report-contract` | active | `spec/changes/active/sync-issue-191-safety-report-contract/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
 | `web-sync-contract-completion` | active | `spec/changes/active/web-sync-contract-completion/` |
 

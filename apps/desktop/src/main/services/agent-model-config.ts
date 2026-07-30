@@ -36,6 +36,7 @@ const JSON_ADAPTER_PATHS: Record<string, string[]> = {
   claude: ["settings.json"],
   copilot: ["settings.json"],
   gemini: ["settings.json"],
+  pi: ["settings.json"],
   qwen: ["settings.json"],
   opencode: ["opencode.jsonc", "opencode.json"],
   openclaw: ["openclaw.json"],
@@ -379,6 +380,23 @@ function inspectCopilot(
   });
 }
 
+function inspectPi(
+  data: JsonRecord,
+  relativePath: string,
+): AgentModelConfiguration {
+  const model = getString(data, "defaultModel");
+  const provider = getString(data, "defaultProvider");
+  return emptyResult("pi", model ? "configured" : "not-configured", {
+    adapter: "pi-settings-v1",
+    model,
+    provider,
+    availableModels: model ? [model] : [],
+    credentialStatus: "platform-managed",
+    sourceRelativePath: relativePath,
+    canSetModel: true,
+  });
+}
+
 function getQwenProviderEntries(
   data: JsonRecord,
   provider: string | null,
@@ -504,6 +522,7 @@ function inspectJsonAdapter(
   if (agentId === "claude") return inspectClaude(data, relativePath);
   if (agentId === "copilot") return inspectCopilot(data, relativePath);
   if (agentId === "gemini") return inspectGemini(data, relativePath);
+  if (agentId === "pi") return inspectPi(data, relativePath);
   if (agentId === "qwen") return inspectQwen(data, relativePath);
   if (agentId === "opencode") return inspectOpenCode(data, relativePath);
   if (agentId === "kiro") return inspectKiro(data, relativePath);
@@ -513,6 +532,7 @@ function inspectJsonAdapter(
 function jsonAdapterId(agentId: string): string {
   if (agentId === "copilot") return "copilot-settings-v1";
   if (agentId === "kiro") return "kiro-cli-settings-v1";
+  if (agentId === "pi") return "pi-settings-v1";
   return agentId === "qwen" ? "qwen-settings-v1" : `${agentId}-config-v1`;
 }
 
@@ -744,6 +764,27 @@ function jsonModelEdits(
   secondaryModel?: string | null,
 ): string {
   const formatting = { insertSpaces: true, tabSize: 2, eol: "\n" };
+  if (agentId === "pi") {
+    const separator = model.indexOf("/");
+    const provider = separator > 0 ? model.slice(0, separator) : null;
+    const nativeModel = separator > 0 ? model.slice(separator + 1) : model;
+    let next = raw;
+    if (provider) {
+      next = applyEdits(
+        next,
+        modify(next, ["defaultProvider"], provider, {
+          formattingOptions: formatting,
+        }),
+      );
+    }
+    next = applyEdits(
+      next,
+      modify(next, ["defaultModel"], nativeModel, {
+        formattingOptions: formatting,
+      }),
+    );
+    return next.endsWith("\n") ? next : `${next}\n`;
+  }
   const modelPath =
     agentId === "gemini" || agentId === "qwen"
       ? ["model", "name"]
@@ -865,7 +906,12 @@ export async function updateAgentModelConfig(
   try {
     await atomicWrite(resolved.absolutePath, next);
     return {
-      ...(await verifyModelUpdate(context, model)),
+      ...(await verifyModelUpdate(
+        context,
+        context.agentId === "pi" && model.includes("/")
+          ? model.slice(model.indexOf("/") + 1)
+          : model,
+      )),
       backupPath,
     };
   } catch {

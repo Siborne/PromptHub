@@ -12,6 +12,7 @@ import {
   CommandIcon,
   LayoutGridIcon,
   BugIcon,
+  CircleDotIcon,
 } from "lucide-react";
 
 // Import platform icons
@@ -116,6 +117,7 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   "trae-cn": <ZapIcon />,
   "trae-work-cn": <ZapIcon />,
   opencode: <TerminalIcon />,
+  pi: <CircleDotIcon />,
   "oh-my-pi": <TerminalIcon />,
   cline: <TerminalIcon />,
   codex: <TerminalIcon />,

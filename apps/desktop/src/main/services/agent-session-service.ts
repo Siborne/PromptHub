@@ -20,7 +20,10 @@ import { createCodexSessionAdapter } from "./agent-session-codex";
 import { createGrokSessionAdapter } from "./agent-session-grok";
 import { createOpenClawSessionAdapter } from "./agent-session-openclaw";
 import { createQwenSessionAdapter } from "./agent-session-qwen";
-import { createOhMyPiSessionAdapter } from "./agent-session-oh-my-pi";
+import {
+  createOhMyPiSessionAdapter,
+  createPiSessionAdapter,
+} from "./agent-session-pi-family";
 import { createWindsurfSessionAdapter } from "./agent-session-windsurf";
 import { createKiroSessionAdapter } from "./agent-session-kiro";
 
@@ -33,6 +36,7 @@ interface AgentSessionServiceOptions {
   kimiRootDir?: string;
   openclawRootDir?: string;
   qwenRuntimeDir?: string;
+  piRootDir?: string;
   ohMyPiRootDir?: string;
   kiroRootDir?: string;
 }
@@ -653,6 +657,8 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
   const openclawRoot =
     options.openclawRootDir || path.join(options.homeDir, ".openclaw");
   const qwenRuntimeRoot = resolveQwenRuntimeRoot(options);
+  const piRoot =
+    options.piRootDir || path.join(options.homeDir, ".pi", "agent");
   const ohMyPiRoot =
     options.ohMyPiRootDir || path.join(options.homeDir, ".omp", "agent");
   const kiroRoot =
@@ -663,6 +669,7 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
   const grokAdapter = createGrokSessionAdapter(grokRoot);
   const openclawAdapter = createOpenClawSessionAdapter(openclawRoot);
   const qwenAdapter = createQwenSessionAdapter(qwenRuntimeRoot, commandRunner);
+  const piAdapter = createPiSessionAdapter(piRoot);
   const ohMyPiAdapter = createOhMyPiSessionAdapter(ohMyPiRoot);
   const windsurfAdapter = createWindsurfSessionAdapter(
     path.join(options.homeDir, ".windsurf", "transcripts"),
@@ -829,6 +836,10 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
         return qwenAdapter.list(input.limit, offset);
       }
 
+      if (agentId === "pi") {
+        return piAdapter.list(input.limit, offset);
+      }
+
       if (agentId === "oh-my-pi") {
         return ohMyPiAdapter.list(input.limit, offset);
       }
@@ -929,6 +940,10 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
 
       if (agentId === "qwen") {
         return qwenAdapter.read(sessionId);
+      }
+
+      if (agentId === "pi") {
+        return piAdapter.read(sessionId);
       }
 
       if (agentId === "oh-my-pi") {

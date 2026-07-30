@@ -26,6 +26,8 @@ function rootOption(agentId: string, rootPath: string) {
       return { kimiRootDir: rootPath };
     case "openclaw":
       return { openclawRootDir: rootPath };
+    case "pi":
+      return { piRootDir: rootPath };
     case "oh-my-pi":
       return { ohMyPiRootDir: rootPath };
     case "kiro":

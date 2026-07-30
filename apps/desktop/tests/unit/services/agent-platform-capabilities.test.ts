@@ -21,6 +21,7 @@ const expectedProviderAdapters = [
   "oh-my-pi",
   "openclaw",
   "opencode",
+  "pi",
   "qwen",
 ];
 
@@ -33,6 +34,7 @@ const expectedSessionAdapters = [
   "oh-my-pi",
   "openclaw",
   "opencode",
+  "pi",
   "qwen",
 ];
 
@@ -62,7 +64,7 @@ describe("Agent platform capability inventory", () => {
     const registryIds = SKILL_PLATFORMS.map((platform) => platform.id).sort();
     const inventoryIds = Object.keys(AGENT_PLATFORM_DEPTH_CAPABILITIES).sort();
 
-    expect(new Set(registryIds).size).toBe(31);
+    expect(new Set(registryIds).size).toBe(32);
     expect(inventoryIds).toEqual(registryIds);
   });
 
@@ -241,6 +243,7 @@ describe("Agent platform capability inventory", () => {
       "oh-my-pi",
       "openclaw",
       "opencode",
+      "pi",
       "qwen",
     ]);
     for (const platform of SKILL_PLATFORMS) {

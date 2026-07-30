@@ -20,11 +20,17 @@ import {
   sessionTimestamp,
 } from "./agent-session-adapter-utils";
 
-const ADAPTER = "oh-my-pi-session-jsonl-v1";
 const MAX_HEADER_BYTES = 16 * 1024;
 const MAX_METADATA_BYTES = 256 * 1024;
 
-interface OhMyPiCandidate {
+interface PiFamilySessionAdapterOptions {
+  agentId: "pi" | "oh-my-pi";
+  adapter: "pi-session-jsonl-v1" | "oh-my-pi-session-jsonl-v1";
+  executable: "pi" | "omp";
+  resumeArgs(sessionId: string): string[];
+}
+
+interface PiFamilyCandidate {
   id: string;
   path: string;
   updatedAt: number;
@@ -49,7 +55,18 @@ function normalizeRole(value: unknown): AgentSessionEntry["role"] | null {
   return null;
 }
 
-function visibleOhMyPiEntry(
+function qualifyModel(
+  modelValue: unknown,
+  providerValue: unknown,
+): string | null {
+  const model = sessionString(modelValue);
+  const provider = sessionString(providerValue);
+  return model && provider && !model.includes("/")
+    ? `${provider}/${model}`
+    : model;
+}
+
+function visiblePiFamilyEntry(
   value: Record<string, unknown>,
   index: number,
 ): AgentSessionEntry | null {
@@ -109,7 +126,8 @@ function parseMetadata(raw: string, truncated: boolean): SessionMetadataParts {
       continue;
     }
     if (value.type === "model_change") {
-      model = sessionString(value.model) || model;
+      model =
+        qualifyModel(value.model ?? value.modelId, value.provider) || model;
       continue;
     }
     if (value.type !== "message" || !isSessionRecord(value.message)) continue;
@@ -121,7 +139,7 @@ function parseMetadata(raw: string, truncated: boolean): SessionMetadataParts {
       );
     }
     if (!model) {
-      model = sessionString(message.model);
+      model = qualifyModel(message.model, message.provider);
     }
   }
 
@@ -135,15 +153,15 @@ function parseMetadata(raw: string, truncated: boolean): SessionMetadataParts {
   };
 }
 
-async function scanOhMyPiSessions(
+async function scanPiFamilySessions(
   sessionsRoot: string,
-): Promise<OhMyPiCandidate[]> {
+): Promise<PiFamilyCandidate[]> {
   const files = await scanSessionFiles(
     sessionsRoot,
     (name) => name.endsWith(".jsonl"),
     1,
   );
-  const unique = new Map<string, OhMyPiCandidate>();
+  const unique = new Map<string, PiFamilyCandidate>();
   for (const file of files) {
     const { raw } = await readSessionPrefix(file.path, MAX_HEADER_BYTES);
     const header = parseSessionHeader(raw);
@@ -161,7 +179,8 @@ async function scanOhMyPiSessions(
 }
 
 async function readMetadata(
-  candidate: OhMyPiCandidate,
+  candidate: PiFamilyCandidate,
+  options: PiFamilySessionAdapterOptions,
 ): Promise<AgentSessionMetadata> {
   const { raw, truncated } = await readSessionPrefix(
     candidate.path,
@@ -183,33 +202,36 @@ async function readMetadata(
     messageCount: truncated ? null : parsed.messageCount,
     sourcePath: candidate.path,
     resume: {
-      executable: "omp",
-      args: ["--resume", candidate.id],
+      executable: options.executable,
+      args: options.resumeArgs(candidate.id),
       ...(parsed.projectPath ? { cwd: parsed.projectPath } : {}),
     },
   };
 }
 
-export function createOhMyPiSessionAdapter(ohMyPiRoot: string) {
-  const sessionsRoot = path.join(ohMyPiRoot, "sessions");
+function createPiFamilySessionAdapter(
+  rootPath: string,
+  options: PiFamilySessionAdapterOptions,
+) {
+  const sessionsRoot = path.join(rootPath, "sessions");
 
   return {
     async list(limit: number, offset = 0): Promise<AgentSessionListResult> {
-      const candidates = await scanOhMyPiSessions(sessionsRoot);
+      const candidates = await scanPiFamilySessions(sessionsRoot);
       const sessions: AgentSessionMetadata[] = [];
       for (const candidate of candidates.slice(offset, offset + limit)) {
-        sessions.push(await readMetadata(candidate));
+        sessions.push(await readMetadata(candidate, options));
       }
       return {
-        agentId: "oh-my-pi",
-        adapter: ADAPTER,
+        agentId: options.agentId,
+        adapter: options.adapter,
         sessions,
         total: candidates.length,
         hasMore: candidates.length > offset + limit,
       };
     },
     async read(sessionId: string): Promise<AgentSessionDetail> {
-      const candidate = (await scanOhMyPiSessions(sessionsRoot)).find(
+      const candidate = (await scanPiFamilySessions(sessionsRoot)).find(
         (item) => item.id === sessionId,
       );
       if (!candidate) throw new Error("AGENT_SESSION_NOT_FOUND");
@@ -219,10 +241,10 @@ export function createOhMyPiSessionAdapter(ohMyPiRoot: string) {
         transcript,
         MAX_SESSION_DETAIL_BYTES,
       );
-      const parsed = parseVisibleJsonLines(raw, visibleOhMyPiEntry);
+      const parsed = parseVisibleJsonLines(raw, visiblePiFamilyEntry);
       return {
-        agentId: "oh-my-pi",
-        adapter: ADAPTER,
+        agentId: options.agentId,
+        adapter: options.adapter,
         sessionId,
         entries: parsed.entries,
         parseErrors: parsed.parseErrors,
@@ -230,4 +252,22 @@ export function createOhMyPiSessionAdapter(ohMyPiRoot: string) {
       };
     },
   };
+}
+
+export function createPiSessionAdapter(piRoot: string) {
+  return createPiFamilySessionAdapter(piRoot, {
+    agentId: "pi",
+    adapter: "pi-session-jsonl-v1",
+    executable: "pi",
+    resumeArgs: (sessionId) => ["--session", sessionId],
+  });
+}
+
+export function createOhMyPiSessionAdapter(ohMyPiRoot: string) {
+  return createPiFamilySessionAdapter(ohMyPiRoot, {
+    agentId: "oh-my-pi",
+    adapter: "oh-my-pi-session-jsonl-v1",
+    executable: "omp",
+    resumeArgs: (sessionId) => ["--resume", sessionId],
+  });
 }
