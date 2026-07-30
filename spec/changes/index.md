@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 40 |
-| Archived | 168 |
+| Active | 30 |
+| Archived | 181 |
 | Legacy | 1 |
 
 ## Active
@@ -20,9 +20,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `cli-feature-completeness` | active | `spec/changes/active/cli-feature-completeness/` |
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
-| `data-safety-hardening` | implemented | `spec/changes/active/data-safety-hardening/` |
-| `database-integrity-repair` | implemented | `spec/changes/active/database-integrity-repair/` |
-| `desktop-agent-asset-tray-actions` | implemented | `spec/changes/active/desktop-agent-asset-tray-actions/` |
 | `desktop-frontend-animation-system` | active | `spec/changes/active/desktop-frontend-animation-system/` |
 | `desktop-frontend-perf-tuneup` | active | `spec/changes/active/desktop-frontend-perf-tuneup/` |
 | `desktop-home-layout-controls` | active | `spec/changes/active/desktop-home-layout-controls/` |
@@ -30,15 +27,12 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-issue-179-configured-skill-targets` | active | `spec/changes/active/desktop-issue-179-configured-skill-targets/` |
 | `desktop-prompt-context-move` | active | `spec/changes/active/desktop-prompt-context-move/` |
 | `desktop-renderer-ui-test-coverage` | active | `spec/changes/active/desktop-renderer-ui-test-coverage/` |
-| `desktop-sqlite-backup-drag-recovery` | implemented | `spec/changes/active/desktop-sqlite-backup-drag-recovery/` |
 | `desktop-update-dialog-polish` | active | `spec/changes/active/desktop-update-dialog-polish/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
 | `homepage-changelog-route-retirement` | active | `spec/changes/active/homepage-changelog-route-retirement/` |
 | `macos-developer-id-signing` | active | `spec/changes/active/macos-developer-id-signing/` |
-| `macos-menu-bar-template-icon` | implemented | `spec/changes/active/macos-menu-bar-template-icon/` |
-| `mcp-env-sync-reapply` | implemented | `spec/changes/active/mcp-env-sync-reapply/` |
 | `mobile-app-shell` | active | `spec/changes/active/mobile-app-shell/` |
-| `mobile-prompt-persistence-hardening` | implemented | `spec/changes/active/mobile-prompt-persistence-hardening/` |
+| `mobile-prompt-persistence-hardening` | release-pending | `spec/changes/active/mobile-prompt-persistence-hardening/` |
 | `platform-workbench-prototype` | in progress | `spec/changes/active/platform-workbench-prototype/` |
 | `plugin-management` | active | `spec/changes/active/plugin-management/` |
 | `project-skill-management` | in progress | `spec/changes/active/project-skill-management/` |
@@ -48,11 +42,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `republish-0-5-9-20260714` | active | `spec/changes/active/republish-0-5-9-20260714/` |
 | `rules-managed-copies` | in progress | `spec/changes/active/rules-managed-copies/` |
 | `self-hosted-skill-sync-reliability` | active | `spec/changes/active/self-hosted-skill-sync-reliability/` |
-| `skill-install-safety-resilience` | implemented | `spec/changes/active/skill-install-safety-resilience/` |
-| `skill-source-update-reconciliation` | completed | `spec/changes/active/skill-source-update-reconciliation/` |
 | `skill-uninstall-lifecycle` | active | `spec/changes/active/skill-uninstall-lifecycle/` |
-| `source-trust-and-mcp-market-updates` | implemented | `spec/changes/active/source-trust-and-mcp-market-updates/` |
-| `unified-custom-store-sources` | implemented | `spec/changes/active/unified-custom-store-sources/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
 | `web-sync-contract-completion` | active | `spec/changes/active/web-sync-contract-completion/` |
 
@@ -228,6 +218,19 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-16-self-hosted-backup-only-automation` | archived | `spec/changes/archive/2026/07/2026-07-16-self-hosted-backup-only-automation/` |
 | `2026-07-21-prompt-image-preview-gallery` | archived | `spec/changes/archive/2026/07/2026-07-21-prompt-image-preview-gallery/` |
 | `2026-07-21-prompt-media-upload-reliability` | archived | `spec/changes/archive/2026/07/2026-07-21-prompt-media-upload-reliability/` |
+| `2026-07-28-cli-test-runtime-optimization` | archived | `spec/changes/archive/2026/07/2026-07-28-cli-test-runtime-optimization/` |
+| `2026-07-28-data-safety-hardening` | archived | `spec/changes/archive/2026/07/2026-07-28-data-safety-hardening/` |
+| `2026-07-28-database-integrity-repair` | archived | `spec/changes/archive/2026/07/2026-07-28-database-integrity-repair/` |
+| `2026-07-28-desktop-agent-asset-tray-actions` | archived | `spec/changes/archive/2026/07/2026-07-28-desktop-agent-asset-tray-actions/` |
+| `2026-07-28-desktop-sqlite-backup-drag-recovery` | archived | `spec/changes/archive/2026/07/2026-07-28-desktop-sqlite-backup-drag-recovery/` |
+| `2026-07-28-macos-menu-bar-template-icon` | archived | `spec/changes/archive/2026/07/2026-07-28-macos-menu-bar-template-icon/` |
+| `2026-07-28-mcp-env-sync-reapply` | archived | `spec/changes/archive/2026/07/2026-07-28-mcp-env-sync-reapply/` |
+| `2026-07-28-repository-quality-gates-and-change-convergence` | archived | `spec/changes/archive/2026/07/2026-07-28-repository-quality-gates-and-change-convergence/` |
+| `2026-07-28-skill-install-safety-resilience` | archived | `spec/changes/archive/2026/07/2026-07-28-skill-install-safety-resilience/` |
+| `2026-07-28-skill-safety-policy-controls` | archived | `spec/changes/archive/2026/07/2026-07-28-skill-safety-policy-controls/` |
+| `2026-07-28-skill-source-update-reconciliation` | archived | `spec/changes/archive/2026/07/2026-07-28-skill-source-update-reconciliation/` |
+| `2026-07-28-source-trust-and-mcp-market-updates` | archived | `spec/changes/archive/2026/07/2026-07-28-source-trust-and-mcp-market-updates/` |
+| `2026-07-28-unified-custom-store-sources` | archived | `spec/changes/archive/2026/07/2026-07-28-unified-custom-store-sources/` |
 
 ## Legacy
 

@@ -2,9 +2,11 @@
 
 ## Status
 
-Implemented. Mobile Prompt persistence now has an explicit schema version and
-transactional initialization, repository parsing and failures are hardened, and
-the list/detail/edit workflow uses functional controls with localized feedback.
+Release-pending. Mobile Prompt persistence now has an explicit schema version
+and transactional initialization, repository parsing and failures are
+hardened, and the list/detail/edit workflow uses functional controls with
+localized feedback. The change remains active until the non-quick release
+harness and native iOS/Android release-candidate checks are complete.
 
 ## Delivered
 
