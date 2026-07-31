@@ -144,7 +144,9 @@ function buildCapabilities(
   const sessions =
     inventory.sessions.status === "supported"
       ? capability("supported")
-      : capability(inventory.sessions.status, "adapter-pending");
+      : inventory.sessions.status === "partial"
+        ? capability("partial", inventory.sessions.evidence)
+        : capability(inventory.sessions.status, "adapter-pending");
   const usage =
     inventory.usage.status === "supported"
       ? capability("supported")
