@@ -580,7 +580,11 @@ describe("Agent session service", () => {
       },
     });
 
-    await expect(service.list("cursor", { limit: 20 })).rejects.toThrow(
+    await expect(service.list("cursor", { limit: 20 })).resolves.toMatchObject({
+      sessions: [],
+      total: 0,
+    });
+    await expect(service.list("cherry-studio", { limit: 20 })).rejects.toThrow(
       "AGENT_SESSION_UNSUPPORTED",
     );
     await expect(service.list("opencode", { limit: 20 })).rejects.toThrow(

@@ -55,6 +55,18 @@ const VERIFIED_LOCAL_PARTIAL_SESSION = declaration(
   "partial",
   "verified-local-session-adapter",
 );
+const VERIFIED_READONLY_DATABASE_SESSION = declaration(
+  "partial",
+  "verified-readonly-session-store",
+);
+const VERIFIED_READONLY_SNAPSHOT_SESSION = declaration(
+  "partial",
+  "verified-readonly-session-snapshots",
+);
+const VERIFIED_READONLY_AGENT_TRANSCRIPT_SESSION = declaration(
+  "partial",
+  "verified-readonly-agent-transcripts",
+);
 
 /**
  * Explicit deep-adapter declarations for every built-in platform.
@@ -70,9 +82,12 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
   }),
   copilot: depthCapabilities({
     providerModel: MODEL_CONFIG_ONLY,
+    sessions: VERIFIED_READONLY_DATABASE_SESSION,
     usage: VERIFIED_USAGE,
   }),
-  cursor: depthCapabilities(),
+  cursor: depthCapabilities({
+    sessions: VERIFIED_READONLY_AGENT_TRANSCRIPT_SESSION,
+  }),
   "cherry-studio": depthCapabilities(),
   windsurf: depthCapabilities({ sessions: VERIFIED_TRANSCRIPT_HOOK_SESSION }),
   kiro: depthCapabilities({
@@ -101,7 +116,7 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
     providerModel: MODEL_CONFIG_ONLY,
     sessions: VERIFIED_SESSION,
   }),
-  cline: depthCapabilities(),
+  cline: depthCapabilities({ sessions: VERIFIED_READONLY_SNAPSHOT_SESSION }),
   codex: depthCapabilities({
     providerModel: declaration("supported", "verified-provider-adapter"),
     sessions: VERIFIED_SESSION,

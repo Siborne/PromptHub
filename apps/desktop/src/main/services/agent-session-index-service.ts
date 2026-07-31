@@ -131,7 +131,18 @@ function filterLiveResult(
   search?: string,
 ): AgentSessionListResult {
   const query = search?.trim().toLocaleLowerCase();
-  if (!query) return result;
+  // Copilot, Cline, and Cursor apply the query inside their native stores,
+  // including visible turn text that is intentionally absent from metadata.
+  // Re-filtering that page here would drop valid matches that occur only in a
+  // turn.
+  if (
+    !query ||
+    result.adapter === "copilot-session-store-v1" ||
+    result.adapter === "cline-session-snapshot-v1" ||
+    result.adapter === "cursor-agent-transcript-v1"
+  ) {
+    return result;
+  }
   const sessions = result.sessions.filter((session) =>
     [session.title, session.projectLabel, session.projectPath, session.model]
       .filter((value): value is string => Boolean(value))
@@ -241,6 +252,7 @@ export function createAgentSessionIndexService(
         await options.reader.list(agentId, {
           limit: input.limit,
           offset: input.offset,
+          search: input.search,
         }),
         input.search,
       );

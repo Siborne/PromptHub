@@ -26,11 +26,17 @@ import {
 } from "./agent-session-pi-family";
 import { createWindsurfSessionAdapter } from "./agent-session-windsurf";
 import { createKiroSessionAdapter } from "./agent-session-kiro";
+import { createCopilotSessionAdapter } from "./agent-session-copilot";
+import { createClineSessionAdapter } from "./agent-session-cline";
+import { createCursorSessionAdapter } from "./agent-session-cursor";
 
 interface AgentSessionServiceOptions {
   homeDir: string;
   commandRunner?: NativeCommandRunner;
   claudeConfigDir?: string;
+  copilotRootDir?: string;
+  clineRootDir?: string;
+  cursorRootDir?: string;
   codexRootDir?: string;
   grokRootDir?: string;
   kimiRootDir?: string;
@@ -44,6 +50,7 @@ interface AgentSessionServiceOptions {
 interface ListOptions {
   limit: number;
   offset?: number;
+  search?: string;
 }
 
 export interface AgentSessionIndexSourceDescriptor {
@@ -648,6 +655,22 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
     options.claudeConfigDir || path.join(options.homeDir, ".claude"),
     "projects",
   );
+  const copilotRoot =
+    options.copilotRootDir ||
+    resolveEnvironmentRoot(
+      process.env.COPILOT_HOME,
+      options.homeDir,
+      ".copilot",
+    );
+  const clineRoot =
+    options.clineRootDir ||
+    resolveEnvironmentRoot(
+      process.env.CLINE_DATA_DIR,
+      options.homeDir,
+      ".cline",
+    );
+  const cursorRoot =
+    options.cursorRootDir || path.join(options.homeDir, ".cursor");
   const geminiProjectsRoot = path.join(options.homeDir, ".gemini", "tmp");
   const kimiRoot =
     options.kimiRootDir || path.join(options.homeDir, ".kimi-code");
@@ -675,6 +698,9 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
     path.join(options.homeDir, ".windsurf", "transcripts"),
   );
   const kiroAdapter = createKiroSessionAdapter(kiroRoot);
+  const copilotAdapter = createCopilotSessionAdapter(copilotRoot);
+  const clineAdapter = createClineSessionAdapter(clineRoot);
+  const cursorAdapter = createCursorSessionAdapter(cursorRoot);
 
   return {
     getIndexSource(agentId: string): AgentSessionIndexSourceDescriptor | null {
@@ -816,6 +842,18 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
         };
       }
 
+      if (agentId === "copilot") {
+        return copilotAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "cline") {
+        return clineAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "cursor") {
+        return cursorAdapter.list(input.limit, offset, input.search);
+      }
+
       if (agentId === "kimi") {
         return kimiAdapter.list(input.limit, offset);
       }
@@ -920,6 +958,18 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
           };
         }
         throw new Error("AGENT_SESSION_NOT_FOUND");
+      }
+
+      if (agentId === "copilot") {
+        return copilotAdapter.read(sessionId);
+      }
+
+      if (agentId === "cline") {
+        return clineAdapter.read(sessionId);
+      }
+
+      if (agentId === "cursor") {
+        return cursorAdapter.read(sessionId);
       }
 
       if (agentId === "kimi") {

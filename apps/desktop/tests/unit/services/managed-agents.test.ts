@@ -192,9 +192,7 @@ describe("managed Agent projection", () => {
 
   it("does not advertise CLI maintenance for platforms without a verified descriptor", () => {
     const [agent] = buildManagedAgents({
-      platforms: [
-        platform("cursor", "Cursor"),
-      ],
+      platforms: [platform("cursor", "Cursor")],
       detectedPlatformIds: ["cursor"],
       pinnedPlatformIds: [],
       builtinOverrides: {},
@@ -259,6 +257,8 @@ describe("managed Agent projection", () => {
         platform("kimi", "Kimi Code"),
         platform("opencode", "OpenCode"),
         platform("grok", "Grok Build"),
+        platform("copilot", "GitHub Copilot"),
+        platform("cline", "Cline"),
         platform("openclaw", "OpenClaw"),
         platform("qwen", "Qwen Code"),
         platform("antigravity", "Antigravity"),
@@ -285,12 +285,27 @@ describe("managed Agent projection", () => {
         `${id} sessions capability`,
       ).toEqual({ status: "supported" });
     }
-    for (const id of ["antigravity", "cursor"]) {
-      expect(
-        agents.find((agent) => agent.id === id)?.capabilities.sessions,
-        `${id} sessions capability`,
-      ).toEqual({ status: "planned", reason: "adapter-pending" });
-    }
+    expect(
+      agents.find((agent) => agent.id === "copilot")?.capabilities.sessions,
+    ).toEqual({
+      status: "partial",
+      reason: "verified-readonly-session-store",
+    });
+    expect(
+      agents.find((agent) => agent.id === "cline")?.capabilities.sessions,
+    ).toEqual({
+      status: "partial",
+      reason: "verified-readonly-session-snapshots",
+    });
+    expect(
+      agents.find((agent) => agent.id === "cursor")?.capabilities.sessions,
+    ).toEqual({
+      status: "partial",
+      reason: "verified-readonly-agent-transcripts",
+    });
+    expect(
+      agents.find((agent) => agent.id === "antigravity")?.capabilities.sessions,
+    ).toEqual({ status: "planned", reason: "adapter-pending" });
   });
 
   it("enables config editing only for declared relative paths", () => {
@@ -442,7 +457,10 @@ describe("managed Agent projection", () => {
     expect(agent.paths.rules).toBeUndefined();
     expect(agent.capabilities).toMatchObject({
       provider: { status: "planned", reason: "adapter-pending" },
-      sessions: { status: "planned", reason: "adapter-pending" },
+      sessions: {
+        status: "partial",
+        reason: "verified-readonly-agent-transcripts",
+      },
       usage: { status: "planned", reason: "adapter-pending" },
     });
   });
@@ -531,7 +549,10 @@ describe("managed Agent projection", () => {
     expect(agent.paths.plugins).toBeUndefined();
     expect(agent.capabilities).toMatchObject({
       provider: { status: "planned", reason: "adapter-pending" },
-      sessions: { status: "partial", reason: "adapter-pending" },
+      sessions: {
+        status: "partial",
+        reason: "verified-transcript-hook-adapter",
+      },
       usage: { status: "planned", reason: "adapter-pending" },
       configFiles: {
         status: "unsupported",
@@ -620,7 +641,10 @@ describe("managed Agent projection", () => {
     expect(agent.paths.rules).toBeUndefined();
     expect(agent.capabilities).toMatchObject({
       provider: { status: "partial", reason: "model-config-only" },
-      sessions: { status: "partial", reason: "adapter-pending" },
+      sessions: {
+        status: "partial",
+        reason: "verified-local-session-adapter",
+      },
       usage: { status: "planned", reason: "adapter-pending" },
       configFiles: { status: "partial" },
     });

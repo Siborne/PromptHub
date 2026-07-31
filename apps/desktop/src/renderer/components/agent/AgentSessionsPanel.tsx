@@ -95,7 +95,7 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
   }, [agent.id, t]);
 
   useEffect(() => {
-    if (!sessionIndex.state.enabled) return;
+    if (!sessionIndex.state.enabled && !query.trim()) return;
     let active = true;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
@@ -144,7 +144,18 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    if (!normalized || sessionIndex.state.enabled) return sessions;
+    // Copilot, Cline, and Cursor search visible turn text in native stores. That text
+    // is intentionally not copied into metadata, so do not filter the
+    // already-matched page a second time in the renderer.
+    if (
+      !normalized ||
+      sessionIndex.state.enabled ||
+      agent.id === "copilot" ||
+      agent.id === "cline" ||
+      agent.id === "cursor"
+    ) {
+      return sessions;
+    }
     return sessions.filter((session) =>
       [session.title, session.projectLabel, session.projectPath, session.model]
         .filter(Boolean)
@@ -164,7 +175,7 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
         agent.id,
         SESSION_PAGE_SIZE,
         nextOffset,
-        sessionIndex.state.enabled ? query.trim() || undefined : undefined,
+        query.trim() || undefined,
       );
       if (currentAgentId.current !== agent.id) return;
       setSessions((current) => {

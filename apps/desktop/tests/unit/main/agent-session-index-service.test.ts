@@ -159,6 +159,78 @@ describe("Agent session index service", () => {
     );
   });
 
+  it("preserves Cline matches found in visible turns when no persistent index is enabled", async () => {
+    const snapshotPath = path.join(
+      homeDir,
+      ".cline",
+      "data",
+      "sessions",
+      "cline-live.json",
+    );
+    await fs.mkdir(path.dirname(snapshotPath), { recursive: true });
+    await fs.writeFile(
+      snapshotPath,
+      JSON.stringify({
+        sessionId: "cline-live",
+        manifest: { cwd: "/workspace/cline", title: "Cline live" },
+        messages: [
+          { role: "user", content: "Visible assistant-only search" },
+          { role: "assistant", content: "assistant-only search phrase" },
+        ],
+      }),
+    );
+
+    const live = await service.list("cline", {
+      limit: 10,
+      offset: 0,
+      search: "assistant-only search phrase",
+    });
+    expect(live).toMatchObject({
+      adapter: "cline-session-snapshot-v1",
+      total: 1,
+      sessions: [expect.objectContaining({ id: "cline-live" })],
+    });
+  });
+
+  it("preserves Cursor matches found in visible turns when no persistent index is enabled", async () => {
+    const transcriptPath = path.join(
+      homeDir,
+      ".cursor",
+      "projects",
+      "workspace",
+      "agent-transcripts",
+      "cursor-live",
+      "cursor-live.jsonl",
+    );
+    await fs.mkdir(path.dirname(transcriptPath), { recursive: true });
+    await fs.writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({
+          role: "user",
+          message: { content: [{ type: "text", text: "Cursor metadata" }] },
+        }),
+        JSON.stringify({
+          role: "assistant",
+          message: {
+            content: [{ type: "text", text: "cursor-only search phrase" }],
+          },
+        }),
+      ].join("\n"),
+    );
+
+    const live = await service.list("cursor", {
+      limit: 10,
+      offset: 0,
+      search: "cursor-only search phrase",
+    });
+    expect(live).toMatchObject({
+      adapter: "cursor-agent-transcript-v1",
+      total: 1,
+      sessions: [expect.objectContaining({ id: "cursor-live" })],
+    });
+  });
+
   it("reuses unchanged metadata and preserves annotations across full scans", async () => {
     const sourcePath = await writeClaudeSession(
       homeDir,

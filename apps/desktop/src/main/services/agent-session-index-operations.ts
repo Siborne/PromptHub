@@ -18,6 +18,12 @@ function rootOption(agentId: string, rootPath: string) {
             : rootPath,
       };
     }
+    case "copilot":
+      return { copilotRootDir: rootPath };
+    case "cline":
+      return { clineRootDir: rootPath };
+    case "cursor":
+      return { cursorRootDir: rootPath };
     case "codex":
       return { codexRootDir: rootPath };
     case "grok":

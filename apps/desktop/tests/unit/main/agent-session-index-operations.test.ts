@@ -51,6 +51,9 @@ describe("Agent session index operation factory", () => {
 
   it.each([
     ["claude", "claudeConfigDir"],
+    ["copilot", "copilotRootDir"],
+    ["cline", "clineRootDir"],
+    ["cursor", "cursorRootDir"],
     ["codex", "codexRootDir"],
     ["grok", "grokRootDir"],
     ["kimi", "kimiRootDir"],

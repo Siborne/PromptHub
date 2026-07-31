@@ -371,4 +371,152 @@ describe("AgentSessionsPanel", () => {
       await screen.findByRole("button", { name: /Session 7/ }),
     ).toBeVisible();
   });
+
+  it("keeps Copilot matches found only in visible turn text", async () => {
+    const listSessions = vi.fn(
+      async (
+        _agentId: string,
+        _limit: number,
+        _offset: number,
+        _search?: string,
+      ) => ({
+        agentId: "copilot",
+        adapter: "copilot-session-store-v1",
+        sessions: [metadata(1)],
+        total: 1,
+        hasMore: false,
+      }),
+    );
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions,
+          readSession: vi.fn().mockResolvedValue({
+            agentId: "copilot",
+            adapter: "copilot-session-store-v1",
+            sessionId: "session-1",
+            entries: [],
+            parseErrors: 0,
+            truncated: false,
+          }),
+        },
+      },
+    });
+
+    await renderWithI18n(
+      <AgentSessionsPanel
+        agent={{ ...agent, id: "copilot", name: "GitHub Copilot" }}
+      />,
+      { language: "en", settleAsyncEffects: true },
+    );
+    const search = await screen.findByRole("textbox", {
+      name: "Search sessions",
+    });
+    fireEvent.change(search, { target: { value: "private" } });
+    await waitFor(() =>
+      expect(listSessions).toHaveBeenLastCalledWith(
+        "copilot",
+        50,
+        0,
+        "private",
+      ),
+    );
+    expect(
+      await screen.findByRole("button", { name: /Session 1/ }),
+    ).toBeVisible();
+  });
+
+  it("keeps Cline matches found only in visible turn text", async () => {
+    const listSessions = vi.fn(
+      async (
+        _agentId: string,
+        _limit: number,
+        _offset: number,
+        _search?: string,
+      ) => ({
+        agentId: "cline",
+        adapter: "cline-session-snapshot-v1",
+        sessions: [metadata(1)],
+        total: 1,
+        hasMore: false,
+      }),
+    );
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions,
+          readSession: vi.fn().mockResolvedValue({
+            agentId: "cline",
+            adapter: "cline-session-snapshot-v1",
+            sessionId: "session-1",
+            entries: [],
+            parseErrors: 0,
+            truncated: false,
+          }),
+        },
+      },
+    });
+
+    await renderWithI18n(
+      <AgentSessionsPanel agent={{ ...agent, id: "cline", name: "Cline" }} />,
+      { language: "en", settleAsyncEffects: true },
+    );
+    const search = await screen.findByRole("textbox", {
+      name: "Search sessions",
+    });
+    fireEvent.change(search, { target: { value: "private" } });
+    await waitFor(() =>
+      expect(listSessions).toHaveBeenLastCalledWith("cline", 50, 0, "private"),
+    );
+    expect(
+      await screen.findByRole("button", { name: /Session 1/ }),
+    ).toBeVisible();
+  });
+
+  it("keeps Cursor matches found only in visible turn text", async () => {
+    const listSessions = vi.fn(
+      async (
+        _agentId: string,
+        _limit: number,
+        _offset: number,
+        _search?: string,
+      ) => ({
+        agentId: "cursor",
+        adapter: "cursor-agent-transcript-v1",
+        sessions: [metadata(1)],
+        total: 1,
+        hasMore: false,
+      }),
+    );
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions,
+          readSession: vi.fn().mockResolvedValue({
+            agentId: "cursor",
+            adapter: "cursor-agent-transcript-v1",
+            sessionId: "session-1",
+            entries: [],
+            parseErrors: 0,
+            truncated: false,
+          }),
+        },
+      },
+    });
+
+    await renderWithI18n(
+      <AgentSessionsPanel agent={{ ...agent, id: "cursor", name: "Cursor" }} />,
+      { language: "en", settleAsyncEffects: true },
+    );
+    const search = await screen.findByRole("textbox", {
+      name: "Search sessions",
+    });
+    fireEvent.change(search, { target: { value: "private" } });
+    await waitFor(() =>
+      expect(listSessions).toHaveBeenLastCalledWith("cursor", 50, 0, "private"),
+    );
+    expect(
+      await screen.findByRole("button", { name: /Session 1/ }),
+    ).toBeVisible();
+  });
 });
