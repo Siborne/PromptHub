@@ -585,21 +585,49 @@ MCP and Plugins, followed by Rules and any platform-specific Definitions tab.
 This keeps the three installable/configurable asset inventories adjacent while
 preserving each domain as a direct top-level destination.
 
-MCP and Plugins reuse the Skills inventory's two-column card rhythm:
+Skills, MCP and Plugins reuse one Agent asset-management presentation surface
+instead of maintaining three lookalike implementations. The shared
+`AgentAssetManagementSurface`, `AgentAssetCard` and
+`AgentAssetActionButton` own the toolbar, search, filter chips, path display,
+refresh state, bounded two-column grid, card shell, action footer, empty state
+and pager. Domain panels provide only their canonical data, labels, detail
+content and owning-store actions:
 
-- the existing fixed toolbar and internal scrolling remain unchanged;
-- the bounded page renders a responsive `sm:grid-cols-2` card grid;
-- every card uses the same compact border, background, padding, title and
-  status-badge hierarchy as a Skill card;
-- MCP uses `ServerIcon`; Plugins uses `PlugIcon` everywhere the Agent
-  workspace represents the domain, including the Overview navigation cell;
-- read-only inventory cards do not render fake install, edit or delete
-  controls.
+- MCP renders `AgentMcpAssetPanel` as a direct, scoped card grid over the
+  selected Agent's target preset and status; it does not embed the owning
+  module's target sidebar. Cards open the entry detail and expose config,
+  import, managed server and confirmed removal actions.
+- Plugins renders a single card grid from the selected Agent's scoped target
+  matrix and the owning Plugin library; it does not embed a second target
+  navigation sidebar. Cards open Plugin detail and expose import, distribute,
+  folder and confirmed removal actions alongside the same filter and pager
+  rhythm used by Skills.
+- Skills keeps `AgentSkillAssetPanel` and its existing detail/action flow, but
+  renders the same shared surface and card/action primitives as MCP and
+  Plugins.
+- Each adapter filters canonical store data by stable Agent id, refreshes the
+  owning store after mutations, and keeps failures visible in the current
+  workspace. No new persistence, IPC or Agent-owned asset records are added.
 
-The renderer still derives all content from
-`useAgentAssetInventoryMap`. The change is `O(n)` rendering over the existing
-bounded page (at most 100 generic cards) with no new persistence, IPC, file
-I/O, network request or cache.
+### `DES-AGENT-075`: Agent Asset Management Adapters
+
+`AgentAssetsWorkspace` dispatches Skills, MCP and Plugins to separate scoped
+adapters so React hook lifecycles remain deterministic. The adapters compose
+existing domain views and actions rather than reimplementing their cards:
+
+```text
+Agent detail
+  -> AgentSkillAssetPanel (Skills store)
+  -> AgentMcpAssetPanel (MCP store + target actions)
+  -> AgentPluginAssetPanel (scoped Plugin store + target actions)
+```
+
+MCP target identity is matched by exact preset `platformId`, `target` or `id`;
+Plugin target identity is matched by exact target id (with the existing
+display-icon alias only when the platform registry declares it). Actions stay
+inside the owning store/service boundary. A missing target renders the
+owning view's scoped empty state, while store failures render a retryable
+diagnostic and never fall back to unrelated global targets.
 
 ### `DES-AGENT-076`: Explicit Claw Family Taxonomy
 
@@ -619,7 +647,9 @@ OpenClaw fork or that its files are OpenClaw-compatible.
 - Reuse `PlatformIcon`, shared buttons, menus, tabs, tooltips, dialogs, virtualized lists, toast, titlebar and wallpaper tokens.
 - Reuse `RulesManager` for Agent global-rule editing; Agent code may select the
   matching descriptor but must not copy its editor or persistence behavior.
-- Reuse successful left-platform/right-detail interaction patterns from `SkillAgentsView` and `McpAgentsView`, but do not import their domain stores into Agent sections.
+- Reuse successful card, detail and action patterns from the owning domains,
+  but do not import their target sidebars or duplicate their domain stores into
+  Agent sections.
 - Existing Agent path settings remain available during migration and become advanced configuration links.
 - `PlatformWorkbenchPrototype` remains a prototype reference only; production Agents UI must use real stores, typed contracts and the shared application shell.
 

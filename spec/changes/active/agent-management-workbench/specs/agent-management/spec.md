@@ -1637,6 +1637,45 @@ does not yet support.
 - And MCP and Plugin inventories render as bounded responsive cards
 - And Plugin identity uses a plug icon rather than a package or cube icon
 
+### `FR-AGENT-060`: Agent Asset Management Workspaces
+
+The Agent detail Skills, MCP and Plugins tabs MUST provide the same actionable
+management experience as their owning top-level domains, scoped to the
+selected Agent. Asset entries MUST be selectable and open a detail view or
+domain-owned action surface. Quick actions MUST call the canonical Skill, MCP
+or Plugin stores/services, show progress and failure states, and require
+confirmation before destructive changes. The Agent workspace MUST NOT create a
+second asset store, invent mutations for unsupported platforms, or silently
+navigate away before an operation is complete.
+
+#### Scenario: Manage MCP from an Agent
+
+- Given an Agent has configured MCP entries and PromptHub-managed MCP servers
+- When the user opens the Agent MCP tab and selects an entry
+- Then a detail view shows the target path, transport and sanitized config
+- And the user can open the native config, open the managed server, import an
+  external entry or remove it through owning MCP operations
+- And a failed action leaves the entry and selection state unchanged
+
+#### Scenario: Manage Plugins from an Agent
+
+- Given an Agent has installed or distributable Plugin packages
+- When the user opens the Agent Plugins tab
+- Then target and library Plugin entries are selectable and show their detail
+- And the user can import a target package, distribute a library package,
+  open its folder or remove a distribution through owning Plugin operations
+- And the view refreshes from the canonical Plugin store after a successful
+  operation
+
+#### Scenario: Scope actions to the selected Agent
+
+- Given multiple Agent targets exist in the global MCP or Plugin stores
+- When one Agent detail workspace is active
+- Then only that Agent's targets and installed entries are shown in the shared
+  card grid
+- And an action cannot mutate another Agent target unless the user explicitly
+  chooses it in the owning domain's target picker
+
 ### `FR-AGENT-061`: Explicit Claw Family Taxonomy
 
 The Agent Management display-order surface MUST classify the built-in
@@ -1683,6 +1722,109 @@ silently mapped to OpenClaw.
   global NanoClaw directory
 - And the default compatibility candidates are not treated as proof of a
   native NanoClaw global root
+
+### `FR-AGENT-063`: Evidence-Backed Copilot History
+
+For the built-in `copilot` Agent, PromptHub MUST expose a read-only History
+surface when the local native session store is available. The adapter MUST
+resolve `COPILOT_HOME` before `~/.copilot`, read only
+`<root>/session-store.db`, and preserve the capability as `partial` because
+the schema and lifecycle are Copilot-owned. Missing stores MUST produce an
+explicit empty state rather than an invented session or a filesystem scan.
+History listing MUST support bounded pagination and search over session
+metadata and visible turn text; detail reads MUST expose only user/assistant
+text with row, field, byte, parse-error, and unsafe-source bounds. PromptHub
+MUST NOT write, index, back up, synchronize, or migrate Copilot's native
+session state.
+
+#### Scenario: Browse and search Copilot history
+
+- Given `<root>/session-store.db` contains valid Copilot `sessions` and
+  `turns` rows
+- When the user opens the Copilot History tab or searches a visible turn
+- Then PromptHub returns bounded session metadata and visible user/assistant
+  entries, preserves the native `copilot --resume=<id>` command, and reports
+  the store-backed adapter as `partial`
+
+#### Scenario: Missing or unsafe Copilot history store
+
+- Given the resolved store is missing, malformed, or a symlink/non-file
+- When the Copilot History tab is loaded
+- Then PromptHub returns an explicit empty/unavailable result without creating
+  files, recursively scanning the root, or exposing native runtime tables
+
+### `FR-AGENT-064`: Evidence-Backed Cline History
+
+For the built-in `cline` Agent, PromptHub MUST expose a read-only History
+surface for the documented local session stores. The adapter MUST resolve the
+configured Cline root (including `CLINE_DATA_DIR` when it is an absolute
+override), prefer the authoritative JSON snapshots under
+`data/sessions/`, and support the documented task history under
+`data/tasks/<taskId>/api_conversation_history.json` as a compatibility source.
+The optional `data/sessions/sessions.db` file MAY be used as a read-only
+metadata index, but it MUST NOT become a second transcript source or be
+mutated. Listing MUST be bounded, paginated, searchable across visible
+metadata and user/assistant text, and preserve `cline --id <session-id>` as
+the native resume command. Detail reads MUST hide tool payloads and enforce
+row, field, body, malformed-input, and unsafe-path bounds. PromptHub MUST NOT
+write, index, back up, synchronize, or migrate Cline's native session state.
+
+#### Scenario: Browse Cline hub snapshots
+
+- Given `data/sessions/sessions.db` and matching `<session-id>.json` snapshots
+  contain valid Cline metadata and messages
+- When the user opens or searches Cline History
+- Then PromptHub returns bounded metadata and visible user/assistant entries,
+  uses the indexed order without opening every full transcript for an
+  unfiltered page, and preserves `cline --id <session-id>` for resume
+
+#### Scenario: Read legacy Cline task history
+
+- Given a Cline task directory contains
+  `api_conversation_history.json` and optional `task_metadata.json`
+- When the task is listed or opened
+- Then PromptHub exposes it through the same History surface with the task
+  metadata and visible user/assistant messages, without exposing tool inputs,
+  tool results, credentials, or provider settings
+
+#### Scenario: Missing or unsafe Cline history source
+
+- Given a Cline session index, snapshot, or task file is missing, malformed,
+  oversized, or symlinked outside the configured root
+- When Cline History is loaded
+- Then PromptHub skips or reports that source explicitly, never follows an
+  unsafe transcript path, and never creates or repairs Cline files
+
+### `FR-AGENT-065`: Evidence-Backed Cursor Transcript History
+
+For the built-in `cursor` Agent, PromptHub MUST expose a read-only History
+surface from Cursor's local per-project `agent-transcripts` JSONL exports.
+The adapter MUST resolve the configured Cursor root, scan only
+`projects/<project>/agent-transcripts/<session-id>/<session-id>.jsonl`, and
+keep the capability `partial` because Cursor owns the history index, retention,
+and application lifecycle. Listing MUST be bounded, paginated, and searchable
+across visible metadata and user/assistant text. Detail reads MUST hide system
+and tool records, enforce byte/row/field/parse-error limits, reject symlinks and
+paths outside the configured root, and preserve Cursor's
+`cursor-agent --resume <chat-id>` command. PromptHub MUST NOT write, index,
+back up, synchronize, or migrate Cursor's native history, settings database,
+checkpoints, or snapshots.
+
+#### Scenario: Browse and search Cursor transcripts
+
+- Given a Cursor project contains a valid local agent transcript JSONL file
+- When the user opens or searches Cursor History
+- Then PromptHub returns bounded metadata and visible user/assistant entries,
+  matches text that appears only in a visible turn, and exposes the native
+  `cursor-agent --resume <chat-id>` metadata
+
+#### Scenario: Missing or unsafe Cursor transcript source
+
+- Given a Cursor transcript is missing, malformed, oversized, symlinked, or
+  outside the configured root
+- When Cursor History is loaded
+- Then PromptHub skips or reports that source without creating the Cursor root,
+  following the link, exposing hidden payloads, or mutating Cursor state
 
 ## Non-Functional Requirements
 

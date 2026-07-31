@@ -307,7 +307,20 @@ Confirmed with the maintainer on 2026-07-21:
 
 1. The direct Skills tab is upgraded from plain rows to the same card paradigm used by the Skills module's Agent Skill view: badge semantics (In My Skills / symlink / copy / unmanaged / built-in), inline actions (open folder, adopt into My Skills, open managed skill, uninstall with confirmation), and click-through to the full skill detail page with the agent context action bar.
 2. "Install My Skill" into the current Agent directory reuses the existing library-import modal and install pipeline (copy/symlink).
-3. All behavior is a renderer-side composition of existing Skills-domain services and components; no new main-process surface. MCP/Rules/Plugins keep compact rows in this batch; their deep actions remain in their owning modules.
+3. All behavior is a renderer-side composition of the existing owning-domain
+   services and components; no new main-process surface is required. Rules keep
+   their editor workspace, while MCP and Plugins use the same bounded card-grid
+   presentation as Skills and keep deep actions in their owning modules.
+
+## Scope Addendum 2026-07-31: Agent Asset Management Workbench
+
+The Agent detail Skills, MCP and Plugins tabs are management surfaces rather
+than read-only summaries. Each domain reuses its owning workspace's existing
+master-detail view, stores and mutation actions while scoping targets to the
+selected Agent. Asset cards are selectable and expose only canonical
+domain-owned quick actions (open detail, import/distribute, open location and
+remove with confirmation where supported). No Agent-owned asset store or
+duplicate IPC contract is introduced.
 
 ## Scope Addendum 2026-07-31: Hermes Claw Family Taxonomy
 
@@ -348,9 +361,9 @@ Confirmed with the maintainer on 2026-07-22:
 ## Scope Addendum 2026-07-28: Cursor Evidence And Native Plugin Boundary
 
 1. Cursor remains rooted at `~/.cursor`. PromptHub may expose only verified user-owned paths: `skills/`, `agents/`, `mcp.json`, and read-only Plugin discovery below `plugins/`. Project `.cursor/skills/`, `.cursor/agents/`, `.cursor/rules/`, `.cursor/mcp.json`, and `AGENTS.md` remain project-owned assets.
-2. Cursor user rules are settings-owned. PromptHub must not invent a global rule file or expose private settings databases, authentication state, transcripts, checkpoints, snapshots, caches, or logs as editable Agent configuration.
+2. Cursor user rules are settings-owned. PromptHub must not invent a global rule file or expose private settings databases, authentication state, checkpoints, snapshots, caches, or logs as editable Agent configuration. A later read-only History surface may consume the documented/local `agent-transcripts` export without treating it as editable configuration.
 3. A generated `.cursor-plugin/plugin.json` package is not an installed or loaded Cursor Plugin. Cursor remains visible as a Plugin adapter target but distribution stays disabled until a bounded Marketplace or local-plugin workflow can preview, confirm, verify activation, and roll back.
-4. Cursor Provider, Sessions, Usage, and Maintenance remain `planned` until a public durable contract and real fixtures exist. Per-run CLI model flags and interactive history/usage surfaces do not establish persistent management protocols.
+4. Cursor Provider, Usage, and Maintenance remain `planned`. Sessions are `partial` after the evidence-backed local transcript adapter: PromptHub reads bounded `agent-transcripts` JSONL and exposes native resume metadata, but does not claim ownership of Cursor's private history index, retention, checkpoints, or remote Background Agent chats.
 
 ## Scope Addendum 2026-07-28: Cherry Studio Current Data Boundary
 
@@ -373,3 +386,24 @@ Confirmed with the maintainer on 2026-07-22:
 3. Kiro CLI model selection is limited to `chat.defaultModel`. Authentication, endpoints, credentials, account state, and provider selection remain platform-managed.
 4. Kiro CLI sessions may be browsed read-only from the locally verified `sessions/cli` runtime shape. Only visible prompt and assistant text is projected; thinking, tool calls, tool results, and unknown records remain hidden, and no resume command is synthesized.
 5. Writing a directory below `~/.kiro/powers` is not equivalent to Kiro's native Power import and registration workflow. Direct Plugin distribution remains disabled until PromptHub can invoke, preview, confirm, verify, and roll back an official import path.
+
+## Scope Addendum 2026-07-31: Copilot Read-Only History
+
+The Agent workspace now treats GitHub Copilot's local `session-store.db` as a
+verified, platform-owned history source. This slice covers bounded browsing,
+search, visible user/assistant detail, and the native resume command; it does
+not make the database editable or portable. Missing, malformed, symlinked, or
+unreadable stores remain explicit empty/unavailable states. The rollback path
+is removal of the adapter/capability declaration, with no migration because
+PromptHub never writes or persists Copilot session rows.
+
+## Scope Addendum 2026-07-31: Cline Read-Only History
+
+Cline now has an evidence-backed partial History adapter. PromptHub reads
+platform-owned JSON snapshots from `~/.cline/data/sessions/`, optionally uses
+the adjacent `sessions.db` only for bounded metadata enrichment, and falls
+back to the documented `data/tasks/<taskId>/api_conversation_history.json`
+format for older tasks. The adapter searches visible user/assistant text,
+hides tool payloads, preserves `cline --id <session-id>`, rejects unsafe paths,
+and never starts the Cline hub or writes native state. The capability remains
+partial because Cline owns its schema, retention, and runtime lifecycle.

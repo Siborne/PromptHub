@@ -761,8 +761,12 @@ inputs only and are not generic asset distribution targets.
 | `FR-AGENT-057`                                                                                                        | `DES-AGENT-072` in `ui-design.md`                                                                                                                      | `TEST-AGENT-090`                                                                                                                                                                                     | `T-AGENT-127`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-058`                                                                                                        | `DES-AGENT-073` in `ui-design.md`                                                                                                                      | `TEST-AGENT-091`                                                                                                                                                                                     | `T-AGENT-128`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-059`                                                                                                        | `DES-AGENT-074` in `ui-design.md`                                                                                                                      | `TEST-AGENT-092`                                                                                                                                                                                     | `T-AGENT-129`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-060`                                                                                                        | `DES-AGENT-075` in `ui-design.md`                                                                                                                      | `TEST-AGENT-093`                                                                                                                                                                                     | `T-AGENT-130`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-061`                                                                                                        | `DES-AGENT-076` in `ui-design.md`                                                                                                                      | `TEST-AGENT-094`                                                                                                                                                                                     | `T-AGENT-131`                                                                                                                                                                                                                                                                               |
-| `FR-AGENT-062`                                                                                                        | `DES-AGENT-077`                                                                                                                                          | `TEST-AGENT-095`                                                                                                                                                                                     | `T-AGENT-132`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-062`                                                                                                        | `DES-AGENT-077`                                                                                                                                        | `TEST-AGENT-095`                                                                                                                                                                                     | `T-AGENT-132`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-063`                                                                                                        | `DES-AGENT-078`                                                                                                                                        | `TEST-AGENT-096`                                                                                                                                                                                     | `T-AGENT-133`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-064`                                                                                                        | `DES-AGENT-079`                                                                                                                                        | `TEST-AGENT-097`                                                                                                                                                                                     | `T-AGENT-134`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-065`                                                                                                        | `DES-AGENT-080`                                                                                                                                        | `TEST-AGENT-098`                                                                                                                                                                                     | `T-AGENT-135`                                                                                                                                                                                                                                                                               |
 | `NFR-AGENT-001`, `NFR-AGENT-002`, `NFR-AGENT-003`, `NFR-AGENT-004`, `NFR-AGENT-005`, `NFR-AGENT-006`, `NFR-AGENT-007` | `DES-AGENT-005`, `DES-AGENT-008`, `DES-AGENT-009`, `DES-AGENT-014`, `DES-AGENT-015`, `DES-AGENT-060` in `ui-resilience-designs.md`                     | `TEST-AGENT-004`, `TEST-AGENT-007`, `TEST-AGENT-009`, `TEST-AGENT-011`, `TEST-AGENT-012`, `TEST-AGENT-015`, `TEST-AGENT-016`, `TEST-AGENT-017`, `TEST-AGENT-018`, `TEST-AGENT-047`, `TEST-AGENT-048` | `T-AGENT-025`, `T-AGENT-035`, `T-AGENT-036`, `T-AGENT-037`, `T-AGENT-038`, `T-AGENT-039`, `T-AGENT-082`, `T-AGENT-083`, `T-AGENT-115`                                                                                                                                                       |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-057` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-076`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-112`                                                                                                                                                                                                                                                                |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-058` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-077`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-113`                                                                                                                                                                                                                                                                |
@@ -772,6 +776,86 @@ It introduces no parallel requirement or design source and cannot substitute
 for any row-level task or test. It closes only after every remaining in-scope
 task has either passed its linked verification or converged to an
 evidence-backed `unsupported` capability declaration.
+
+## `DES-AGENT-078`: Copilot Read-Only Native Session Store
+
+The Copilot History adapter is deliberately separate from the existing
+filesystem and native-command readers. It resolves the root using the same
+environment precedence as the registry (`COPILOT_HOME`, then the injected
+home directory's `.copilot`) and opens only `session-store.db` through the
+read-only SQLite adapter. A missing store is an empty result; a symlink,
+non-file, missing table, or unreadable database is an explicit unavailable
+state. No WAL cleanup, migration, backup, or write transaction is performed.
+
+List queries use parameterized metadata/turn predicates, a count query, and
+`LIMIT/OFFSET` pagination. Session titles fall back to the first non-empty
+user turn. Search covers summary, cwd, repository, and visible user/assistant
+turn text without loading the full transcript. Detail reads cap rows at 128,
+each field at 16 KiB, and the complete visible body at 2 MiB; malformed rows
+are counted, and only user/assistant text is projected. Metadata carries the
+native `copilot --resume=<id>` command and the local source path, while the
+adapter remains `partial` because Copilot owns the database schema and
+retention lifecycle.
+
+The renderer passes search terms to live adapters even when the persistent
+PromptHub session index is disabled. This keeps Copilot's native search
+semantics and pagination intact while preserving the existing index boundary
+for Claude/Gemini. Complexity is bounded by SQLite's filtered query work plus
+the requested page; no recursive scan or unbounded transcript load is
+introduced.
+
+## `DES-AGENT-079`: Cline Read-Only Session Sources
+
+The Cline History adapter resolves an injected root or absolute
+`CLINE_DATA_DIR` and never starts the Cline CLI or hub. It scans only the
+documented `data/sessions/` and compatibility `data/tasks/` directories,
+skipping symlinks and bounding the scan at 2,000 files. Session snapshots are
+the transcript source of truth. When `data/sessions/sessions.db` is present,
+PromptHub opens it read-only and uses an allow-listed `sessions` table only to
+enrich metadata and ordering; it never copies rows into PromptHub or treats
+the index as a transcript.
+
+Listing reads a bounded metadata prefix and supports pagination plus search
+over title, workspace, model, and visible user/assistant text. The legacy task
+adapter reads `api_conversation_history.json` and optional
+`task_metadata.json`, while a snapshot's id wins when both stores contain the
+same id. Detail reads resolve an optional `messagesPath` only after canonical
+path containment, hide tool/system records, count malformed array items, cap
+visible entries at 256 and the body at 2 MiB, and return an explicit truncated
+result for oversized or incomplete JSON. Metadata carries `cline --id <id>`
+with a validated workspace cwd when available.
+
+The adapter is intentionally partial: Cline owns the schema, hub lifecycle,
+retention, and credential storage. Complexity is `O(n)` over the bounded
+candidate scan for live listing/search and `O(p)` for the requested page; no
+unbounded recursive parse or native process startup is introduced.
+
+## `DES-AGENT-080`: Cursor Read-Only Agent Transcripts
+
+Cursor's official History and CLI documentation confirms local chat history
+and the `cursor-agent ls` / `--resume` workflow, while the current local
+runtime stores visible transcript exports under
+`projects/<project>/agent-transcripts/<session-id>/<session-id>.jsonl`.
+PromptHub resolves an injected Cursor root or `~/.cursor`, scans only that
+bounded project/transcript shape, and never opens Cursor's private settings
+database, checkpoints, snapshots, authentication state, or caches.
+
+Listing reads only a 64 KiB prefix for the requested page. Search reads the
+same bounded prefix for at most 2,000 candidates with eight concurrent file
+reads, then applies offset/limit to matching sessions. Details are capped at
+2 MiB and expose only visible user/assistant records; system/tool payloads,
+malformed records, symlinked sources, and paths outside the configured root
+are skipped or counted without mutation. Metadata carries
+`cursor-agent --resume <chat-id>` and a project directory label, but does not
+invent an absolute workspace path that Cursor's transcript export does not
+provide.
+
+The adapter is intentionally `partial`: Cursor owns the local history index,
+retention, and runtime lifecycle, and Background Agent chats are remote rather
+than part of the local transcript source. Complexity is `O(n)` for the bounded
+candidate scan and search, `O(p)` for an unfiltered page, and `O(visible
+bytes)` for a selected detail read; concurrency is capped and transcript
+bodies never enter PromptHub persistence or sync.
 
 ## `DES-AGENT-032`: Machine-Readable Capability Inventory
 
@@ -1009,7 +1093,7 @@ Batch confirmed on 2026-07-21; implements `FR-AGENT-028`.
 
 ### Composition (renderer-only, no new main-process surface)
 
-- The Skills domain of `AgentAssetsWorkspace` renders `AgentSkillAssetPanel`: toolbar (search, managed/unmanaged/symlink/copy filter chips, refresh, "Install My Skill") plus a responsive card grid; other domains keep compact rows.
+- The Skills domain of `AgentAssetsWorkspace` renders `AgentSkillAssetPanel`: toolbar (search, managed/unmanaged/symlink/copy filter chips, refresh, "Install My Skill") plus a responsive card grid. Skills, MCP and Plugins now render through the same `AgentAssetManagementSurface`, `AgentAssetCard` and `AgentAssetActionButton` primitives rather than duplicating visually similar toolbar, grid, card and action markup. Domain panels retain only scoped selectors, card body content, detail routes and owning-store actions; Rules retain their editor workspace.
 - Rows reuse `agentScanState[agent.id]` from the skill store and `getSkillScanStatus` for badge semantics — the same source of truth as `SkillAgentsView`; `AgentAssetItem` is not extended; the panel consumes `AgentScannedSkill` directly via a dedicated hook.
 - Actions map one-to-one to existing flows: open folder (`window.electron.openPath`), adopt (`useSkillStore.importScannedSkills` with the `handleImportAgentSkill` hydration pattern), open managed skill (jump to the Skills module my-skills view), install from library (`SkillLibraryImportModal` with the agent's skills dir as fixed target), uninstall (`skillApi.uninstallPlatformSkill` + `ConfirmDialog`, built-in blocked).
 - Card click opens `SkillFullDetailPage` with `overrideSkill` + `agentContext` + `agentActions` (the `buildProjectDetailSkill` adapter), replacing the right pane with a back action — the same drill-in contract as the Skills module, embedded in the workspace shell.

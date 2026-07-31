@@ -285,3 +285,44 @@ Completed 2026-07-29 for `FR-AGENT-024`, `DES-AGENT-020`,
 - Desktop typecheck, affected ESLint and Prettier pass. The file-size gate
   remains red only for unrelated dirty `SkillStore.tsx` and
   `SkillStoreDetail.tsx` at 1,536 lines each.
+
+## Cline Native History
+
+Completed 2026-07-31 for `FR-AGENT-064`, `DES-AGENT-079`,
+`TEST-AGENT-097`, and `T-AGENT-134`.
+
+- The red test first proved that the Cline branch was unsupported. The focused
+  adapter suite now covers absolute `CLINE_DATA_DIR`, native
+  `sessions.db`/snapshot reads, visible-turn search, legacy task fallback,
+  malformed records, missing roots, symlink rejection, and in-root external
+  message artifacts (5 tests).
+- The index-service, index-root, managed-agent capability, and renderer search
+  regressions pass in the focused gate (59 tests across 5 files). Cline is
+  declared `partial` and carries `cline --id <session-id>` without starting a
+  native process.
+- Desktop, core, and shared typechecks, affected desktop ESLint, Prettier and
+  `git diff --check` pass. The Cline adapter is read-only and no native Cline
+  files, hub, credentials, index rows or transcript copies are created.
+- A standalone coverage probe reports 95.35% line and 70.3% branch coverage
+  for the new adapter; the remaining uncovered branches are defensive
+  malformed-index/oversized-body fallbacks and remain a pre-release hardening
+  item rather than a claim of full module coverage.
+
+## Cursor Native History
+
+Completed 2026-07-31 for `FR-AGENT-065`, `DES-AGENT-080`,
+`TEST-AGENT-098`, and `T-AGENT-135`.
+
+- The red test first proved that the Cursor branch was unsupported. The
+  focused adapter suite now covers local project transcript discovery, search
+  through visible turns, user/assistant projection, 2 MiB truncation,
+  malformed input, symlink rejection, missing roots, and native resume metadata
+  (5 tests).
+- The focused Cursor/service/index/renderer/managed-agent gate passes 73 tests
+  across 6 files. Cursor is declared `partial`; the adapter reads only local
+  `agent-transcripts` JSONL and never starts Cursor, opens its private history
+  database, or mutates native state. The standalone adapter coverage probe is
+  100% statements, branches, functions, and lines.
+- Desktop and shared typechecks, affected desktop ESLint, and `git diff
+  --check` pass. Full desktop/e2e and release harness runs remain pending for
+  the broader active change.

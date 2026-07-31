@@ -7,7 +7,7 @@ first-party source code, or a verified local runtime. PromptHub does not enable 
 adapter from an inferred filename alone. A platform remains visible when a deep
 adapter is unavailable.
 
-Research refreshed on 2026-07-29.
+Research refreshed on 2026-07-31.
 
 ## Complete Built-In Capability Inventory
 
@@ -26,7 +26,7 @@ never upgrades a capability from partial to supported.
 | ------------- | ------- | -------- | ------ | --- | ----- | ------- | ------ | -------- | ----- | ------ | --- | ------ | --------- | ---------- |
 | claude        | P       | S        | P      | P   | P     | P       | P      | S        | S     | S      | P   | P      | P         | N          |
 | copilot       | P       | P        | P      | P   | P     | P       | P      | D        | S     | D      | D   | P      | P         | N          |
-| cursor        | P       | D        | P      | P   | D     | P       | D      | D        | D     | S      | D   | P      | P         | N          |
+| cursor        | P       | D        | P      | P   | D     | P       | D      | P        | D     | S      | D   | P      | P         | N          |
 | cherry-studio | P       | D        | P      | D   | D     | D       | D      | D        | D     | S      | D   | P      | P         | N          |
 | windsurf      | P       | D        | P      | P   | P     | D       | D      | P        | D     | S      | D   | P      | P         | N          |
 | kiro          | P       | P        | P      | P   | D     | P       | P      | P        | D     | S      | D   | P      | P         | N          |
@@ -160,11 +160,13 @@ path-level projection in this batch:
 The public Plugin manifest proves package structure, not installation or
 activation. PromptHub therefore disables Cursor distribution until a bounded
 Marketplace or verified local-plugin workflow can preview, confirm, verify
-native loading, and roll back. CLI `--model`, session list/resume, and
-interactive usage exist, but no durable Provider, public transcript schema, or
-programmatic quota contract is verified. Those capabilities remain planned.
-Private settings databases, authentication, checkpoints, snapshots, caches,
-logs, and runtime state are excluded.
+native loading, and roll back. Cursor documents local History and CLI
+`ls`/`--resume`; the current runtime exposes per-project
+`agent-transcripts/<session-id>/<session-id>.jsonl` files. PromptHub reads that
+export as a bounded, read-only `partial` Sessions adapter, hides system/tool
+payloads, and never treats it as the private history index. Provider, Usage,
+and Maintenance remain planned. Private settings databases, authentication,
+checkpoints, snapshots, caches, logs, and runtime state are excluded.
 
 First-party references:
 
@@ -174,6 +176,7 @@ First-party references:
 - <https://cursor.com/docs/reference/plugins>
 - <https://github.com/cursor/plugins>
 - <https://docs.cursor.com/en/cli/overview>
+- <https://docs.cursor.com/en/agent/chat/history>
 - <https://docs.cursor.com/en/cli/reference/parameters>
 
 ## Windsurf Public Transcript Boundary
@@ -281,7 +284,9 @@ First-party references:
   <https://docs.openclaw.ai/concepts/model-providers>, and
   <https://docs.openclaw.ai/gateway/config-tools>
 - Cline storage source:
-  <https://github.com/cline/cline/blob/main/apps/vscode/src/core/storage/disk.ts>
+  <https://github.com/cline/cline/blob/main/apps/vscode/src/core/storage/disk.ts>,
+  <https://docs.cline.bot/sdk/architecture/hub-spoke>, and
+  <https://docs.cline.bot/sdk/clinecore>
 
 ## Official Subscription Quota Matrix
 
@@ -332,9 +337,9 @@ Quota safety rules:
 | Kimi Code         | Current root `session_index.jsonl`; `sessions/<workDirKey>/<sessionId>/state.json`; transcript `agents/main/wire.jsonl`                           | Resume with `kimi --session <id>`                                                                     | Index-first bounded metadata reads, canonical-path containment, lazy transcript detail, malformed-row isolation, and no transcript mutation                                          |
 | Qwen Code         | `QWEN_RUNTIME_DIR` or `QWEN_HOME` runtime root; per-project chats and runtime sidecars                                                            | `qwen sessions list --json` plus native resume/export surfaces                                        | Native CLI first with timeout/output cap, bounded metadata page, no recursive filesystem scan, and no transcript persistence in PromptHub                                            |
 | OpenCode          | `~/.local/share/opencode/`; project storage contains session/message data                                                                         | `opencode session list --format json`, `session delete`, `export --sanitize`, resume with `--session` | Native CLI adapter. Use sanitized export for detail and never read `auth.json`                                                                                                       |
-| Copilot CLI       | `<COPILOT_HOME>/session-state/` plus platform-managed `session-store.db`                                                                          | `copilot --resume=<id>` and native session management                                                 | No PromptHub adapter yet. Any future reader must be bounded and read-only; PromptHub must not modify, migrate, back up, or synchronize native session state                          |
+| Copilot CLI       | `<COPILOT_HOME>/session-state/` plus platform-managed `session-store.db`                                                                          | `copilot --resume=<id>` and native session management                                                 | PromptHub uses a read-only SQLite adapter over `session-store.db` with bounded metadata/turn pagination, search and visible text reads; the platform-owned schema keeps Sessions `partial`, and native state is not modified, migrated, indexed, backed up or synchronized |
 | OpenClaw          | `~/.openclaw/agents/<agentId>/sessions/sessions.json` and per-session JSONL; newer stores may be SQLite-backed                                    | Bounded JSON session list, tail, cleanup, compact, and trajectory export                              | Native CLI/RPC adapter. Prefer dry-run for maintenance and platform-managed cleanup over raw file deletion                                                                           |
-| Cline             | Host global storage `tasks/<taskId>/`; files include `api_conversation_history.json`, `ui_messages.json`, `task_metadata.json`, and task settings | Native history and task deletion UI                                                                   | Adapter remains partial until host storage roots and CLI/VS Code variants are normalized and tested                                                                                  |
+| Cline             | Current local sessions use `~/.cline/data/sessions/sessions.db` plus `<session-id>.json` snapshots; legacy tasks use `~/.cline/data/tasks/<taskId>/api_conversation_history.json` and `task_metadata.json` | Native `cline history` / `cline --id <session-id>` surfaces                                                                   | PromptHub reads snapshots and legacy task files read-only, uses the SQLite index only for bounded metadata enrichment, hides tool payloads, and keeps Sessions `partial` because Cline owns schema and retention |
 
 ### Session Safety Decisions
 
@@ -364,13 +369,15 @@ Quota safety rules:
   and fragments. Literal keys and tokens are never returned.
 - Read-only session browse, local search, bounded detail, and resume-command
   copy are enabled for Claude Code, Codex, Gemini CLI, Grok Build, Kimi Code,
-  OpenCode, OpenClaw, Qwen Code, and Oh My Pi.
+  OpenCode, OpenClaw, Qwen Code, Oh My Pi, Copilot (partial), and Cline
+  (partial).
 - Claude and Gemini file adapters cap scanned files, metadata bytes, detail
   bytes, and entry text. OpenCode uses bounded native JSON commands and
   sanitized export instead of scanning its multi-gigabyte data root.
-- Cline and all other session capabilities marked planned remain disabled until
-  their index or native command adapters pass representative fixture, security,
-  and scale tests.
+- Cline Sessions is now a partial, read-only snapshot/task adapter. Provider,
+  Usage, and native task mutation remain outside this slice; all other session
+  capabilities marked planned remain disabled until their index or native
+  command adapters pass representative fixture, security, and scale tests.
 
 ### First-Party References
 
@@ -396,6 +403,10 @@ Quota safety rules:
   <https://github.com/openai/codex/issues/22004>
 - Cline task storage source:
   <https://github.com/cline/cline/blob/main/apps/vscode/src/core/storage/disk.ts>
+- Cline session persistence and CLI history:
+  <https://docs.cline.bot/sdk/architecture/hub-spoke>,
+  <https://docs.cline.bot/sdk/clinecore>, and
+  <https://docs.cline.bot/cli/cli-reference>
 
 ## Maintenance CLI Evidence
 

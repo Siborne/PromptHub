@@ -238,7 +238,7 @@
 - Agent 详情头部 ⋯ 菜单的“打开 Agent 设置”改为工作台内“编辑 Agent”弹窗，不再切换到应用设置页。弹窗复用 `BuiltinAgentEditor` 与现有 settings actions：内置 Agent 编辑 root/Skills/MCP/Rules/Agents/Config/可用 Plugin 路径及 Codex 身份，自定义 Agent 同时编辑名称和启用状态；Reset 只重置草稿，Save 后沿原同步链路刷新 managed Agent projection。
 - 移除 Agent 详情头部重复的“管理 Skills”主按钮；右上角仅保留启动 Agent、刷新和更多操作，Skills 统一从 Overview 卡片或顶部 Skills 页签进入。
 - 补齐常用 Agent 的只读历史会话：`codex` 同时索引 active/archived rollout JSONL 并按 session id 去重，ChatGPT 展示身份继续复用同一稳定 id 和 `~/.codex`；Grok Build 读取限定的 summary/chat history；OpenClaw 从每个 Agent 的 `sessions.json` 定位受控 transcript；Qwen Code 使用原生有界 JSON 列表后只读取 runtime root 内的 realpath。四个 adapter 均限制扫描数、metadata/detail bytes 和单条文本长度，隔离畸形记录，不编辑或同步平台 transcript。
-- Sessions capability 现在对 Claude、Codex、Gemini、Grok Build、Kimi Code、OpenClaw、OpenCode、Qwen Code、Oh My Pi 启用；Windsurf 对 opt-in public transcript export 提供 partial、只读浏览；Antigravity、Cursor 等格式未确认的平台继续保持 planned/disabled。OpenCode 原生命令在当前工作区没有会话并返回空 stdout 时按空列表处理，不再误报解析失败。
+- Sessions capability 现在对 Claude、Codex、Gemini、Grok Build、Kimi Code、OpenClaw、OpenCode、Qwen Code、Oh My Pi 启用；Windsurf、Copilot、Cline 和 Cursor 对各自有证据的本地 transcript/store 提供 partial、只读浏览；Antigravity 等格式未确认的平台继续保持 planned/disabled。OpenCode 原生命令在当前工作区没有会话并返回空 stdout 时按空列表处理，不再误报解析失败。
 - Sessions capability 现在也对 Oh My Pi 启用；其 JSONL adapter 使用固定上限和直接项目目录扫描，nested subagent transcripts 保持排除。Oh My Pi 不会因为具备 Sessions 而自动获得 provider、usage 或 plugin installation 能力。
 
 ## Native Config Evidence
@@ -902,9 +902,11 @@
     `~/.cursor/skills`, `~/.cursor/agents`, `~/.cursor/mcp.json`, and
     `~/.cursor/plugins`. Removed the fabricated `plugins/cache/prompthub`
     target and did not invent a global Rules or generic Config Files path.
-  - Kept Provider, Sessions, Usage, and Maintenance planned. Private Cursor
-    settings databases, authentication, transcripts, checkpoints, snapshots,
-    caches, logs, and runtime state remain excluded.
+  - Kept Provider, Usage, and Maintenance planned. Sessions were planned at
+    this earlier boundary and are superseded by the later evidence-backed
+    read-only transcript adapter. Private Cursor settings databases,
+    authentication, checkpoints, snapshots, caches, logs, and runtime state
+    remain excluded.
   - Preserved bounded read-only discovery of Marketplace-cache packages and
     local test packages. Cursor remains visible as a Plugin adapter but direct
     distribution now fails before target resolution or filesystem mutation;
@@ -1612,6 +1614,38 @@
     Desktop typecheck, affected ESLint, changed-file formatting,
     traceability validation and `git diff --check` also pass.
 
+- Agent asset management workbench is implemented
+  (2026-07-31; `FR-AGENT-060`, `DES-AGENT-075`, `TEST-AGENT-093`,
+  `T-AGENT-130`):
+  - Replaced the generic read-only MCP/Plugin inventory path in Agent detail
+    with scoped adapters over the owning stores and direct management card grids.
+  - The selected Agent's canonical id/display icon id is matched against exact
+    target ids; no fuzzy name matching or duplicate persistence state is used.
+  - MCP now renders a direct scoped card grid without the owning module's
+    target sidebar. Server cards, detail view, config reveal, open-in-library,
+    external import, uninstall and refresh all remain available while the target
+    list is restricted to the selected Agent.
+  - Plugins now render a single scoped, responsive card grid directly in the
+    Agent workspace instead of embedding the old target-sidebar view. Target
+    installs and My Plugins entries share the same card rhythm, filters and
+    bounded pager; cards remain keyboard/click selectable, target installs can
+    be imported, My Plugins entries can be distributed or confirmed-removed,
+    folders can be opened, and detail actions retain delete/favorite/store
+    behavior through the owning Plugin store.
+  - Skills, MCP and Plugins now literally reuse
+    `AgentAssetManagementSurface`, `AgentAssetCard` and
+    `AgentAssetActionButton`; toolbar/search/filter/path/refresh, bounded grid,
+    card shell/action footer, loading/empty state and pager are no longer three
+    duplicated implementations. Rules continues to use its editor workspace.
+    No new IPC channel, database table, filesystem layout, or network request
+    was introduced.
+  - Focused `agent-assets-workspace.test.tsx` passes 19 tests, including the
+    shared-surface contract for all three domains and MCP no-sidebar card-grid
+    regression. Desktop typecheck and affected ESLint pass.
+    Playwright was intentionally not run; manual UI verification remains the
+    requested release gate. The changed renderer files remain below the
+    repository's source-size limit.
+
 - Hermes Claw family taxonomy is implemented
   (2026-07-31; `FR-AGENT-061`, `DES-AGENT-076`, `TEST-AGENT-094`,
   `T-AGENT-131`):
@@ -1649,6 +1683,69 @@
     `Search assets` control while the parallel Agent MCP workspace renders its
     scoped panel). That unrelated worktree failure remains a release gate and
     is not attributed to the Claw registry change.
+
+- Copilot native History is implemented
+  (2026-07-31; `FR-AGENT-063`, `DES-AGENT-078`, `TEST-AGENT-096`,
+  `T-AGENT-133`):
+  - Added a read-only SQLite adapter for `<COPILOT_HOME>/session-store.db`
+    with fallback to `~/.copilot`, safe file validation, parameterized
+    metadata/turn search, bounded pagination, title fallback, and native
+    `copilot --resume=<id>` metadata.
+  - Detail reads expose only visible user/assistant turns and enforce 128-row,
+    16 KiB field, 2 MiB total, malformed-row, and truncation bounds. No
+    Copilot database rows, WAL files, transcripts, credentials, or runtime
+    tables are written, indexed, backed up, synchronized, or sent to the
+    renderer beyond the bounded result.
+  - Copilot Sessions is declared `partial` with evidence
+    `verified-readonly-session-store`; the existing History workspace forwards
+    search terms to live adapters even when the persistent local index is not
+    enabled. Focused Copilot/index/panel/managed-agent suites pass, and
+    desktop/core/shared typechecks pass.
+- Stable platform reference and active research docs now describe the
+  session-store boundary and its residual platform-owned schema risk.
+
+- Cline native History is implemented
+  (2026-07-31; `FR-AGENT-064`, `DES-AGENT-079`, `TEST-AGENT-097`,
+  `T-AGENT-134`):
+  - Added a read-only Cline adapter for bounded JSON snapshots under
+    `<CLINE_DATA_DIR or ~/.cline>/data/sessions/`, with optional read-only
+    metadata enrichment from `sessions.db`.
+  - Added compatibility reads for legacy
+    `data/tasks/<taskId>/api_conversation_history.json` plus
+    `task_metadata.json`; snapshot ids win when both stores expose the same
+    session.
+  - Listing supports bounded pagination and search over visible user/assistant
+    text, while detail reads hide tool/system records, enforce entry/body
+    limits, reject symlinked or out-of-root message artifacts, and preserve
+    `cline --id <session-id>` resume metadata.
+  - Cline Sessions is declared `partial` with evidence
+    `verified-readonly-session-snapshots`. The adapter never starts the Cline
+    hub/CLI and never writes, indexes, backs up, synchronizes, or migrates
+    native session state.
+- Focused Cline/service/index/renderer tests cover native snapshots, legacy
+  tasks, visible-turn search, malformed records, missing roots and unsafe
+  symlinks.
+
+- Cursor native History is implemented
+  (2026-07-31; `FR-AGENT-065`, `DES-AGENT-080`, `TEST-AGENT-098`,
+  `T-AGENT-135`):
+  - Added a read-only adapter for Cursor's local
+    `projects/*/agent-transcripts/*/*.jsonl` exports below `~/.cursor` or an
+    injected root override. It does not read Cursor's private settings DB,
+    checkpoints, snapshots, credentials, caches, or remote Background Agent
+    history.
+  - Listing uses bounded project/session discovery, 64 KiB metadata prefixes,
+    eight concurrent reads for search, and offset/limit pagination. Search
+    includes visible user/assistant turn text so a match is not lost when it is
+    absent from the generated title.
+  - Detail reads cap the body at 2 MiB, hide system/tool records, count
+    malformed lines, reject symlinked/out-of-root paths, and expose
+    `cursor-agent --resume <chat-id>` metadata.
+  - Cursor Sessions is declared `partial` with evidence
+    `verified-readonly-agent-transcripts`; no Cursor native state is written,
+    indexed, backed up, synchronized, or migrated.
+  - Focused Cursor adapter/index/renderer/managed-agent tests pass, together
+    with desktop and shared typechecks and affected desktop ESLint.
 
 ## Converge
 
