@@ -1,20 +1,14 @@
-import {
-  act,
-  fireEvent,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   AgentScannedSkill,
   ManagedAgentSummary,
+  PluginLibraryEntry,
   ScannedSkill,
   Skill,
 } from "@prompthub/shared/types";
 import { AgentAssetsWorkspace } from "../../../src/renderer/components/agent/AgentAssetsWorkspace";
-import { agentAssetAggregationService } from "../../../src/renderer/services/agent-asset-domain-adapters";
 import { useMcpStore } from "../../../src/renderer/stores/mcp.store";
 import { usePluginStore } from "../../../src/renderer/stores/plugin.store";
 import { useRulesStore } from "../../../src/renderer/stores/rules.store";
@@ -82,6 +76,23 @@ vi.mock(
       ) : null,
   }),
 );
+
+vi.mock("../../../src/renderer/components/plugin/PluginFullDetailPage", () => ({
+  PluginFullDetailPage: ({
+    onBack,
+    plugin,
+  }: {
+    onBack: () => void;
+    plugin: { displayName: string };
+  }) => (
+    <div data-testid="plugin-full-detail-page">
+      <span>{plugin.displayName}</span>
+      <button type="button" onClick={onBack}>
+        Back
+      </button>
+    </div>
+  ),
+}));
 
 const claudeAgent: ManagedAgentSummary = {
   id: "claude",
@@ -183,6 +194,20 @@ function seedStores() {
         path: "~/.claude.json",
         exists: true,
         serverNames: ["fs", "web"],
+        servers: [
+          {
+            id: "server-fs",
+            name: "fs",
+            displayName: "Filesystem",
+            transport: "stdio",
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-filesystem"],
+            enabled: true,
+            source: { type: "import", label: "Claude Code" },
+            createdAt: 0,
+            updatedAt: 0,
+          },
+        ],
       },
     ],
   });
@@ -291,7 +316,7 @@ describe("AgentAssetsWorkspace", () => {
     });
   });
 
-  it("renders the requested domain without a secondary assets menu", async () => {
+  it("renders real management workspaces for each agent asset domain", async () => {
     const view = await renderWithI18n(
       <AgentAssetsWorkspace agent={claudeAgent} domain="skills" />,
     );
@@ -302,13 +327,27 @@ describe("AgentAssetsWorkspace", () => {
     expect(screen.getByText("write")).toBeVisible();
     expect(screen.getByText("ext-one")).toBeVisible();
     expect(screen.getByText("~/.claude/skills")).toBeVisible();
+    expect(
+      screen.getByTestId("agent-asset-management-surface"),
+    ).toHaveAttribute("data-domain", "skills");
 
     view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />);
+    expect(
+      screen.getByTestId("agent-asset-management-surface"),
+    ).toHaveAttribute("data-domain", "mcp");
     expect(screen.getByText("fs")).toBeVisible();
-    expect(screen.getByText("web")).toBeVisible();
-    expect(screen.getAllByText("Configured")).toHaveLength(2);
+    expect(screen.getAllByText("web").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("mcp-agent-server-list")).toBeVisible();
+    expect(screen.getByTestId("mcp-agent-grid")).toBeVisible();
+    expect(screen.getAllByTestId("mcp-agent-server-card")).toHaveLength(2);
+    expect(
+      screen.queryByTestId("mcp-agent-sidebar-header"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mcp-agent-target-row"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("ext-one")).not.toBeInTheDocument();
-    expect(screen.getByText("~/.claude.json")).toBeVisible();
+    expect(screen.getAllByText("~/.claude.json").length).toBeGreaterThan(0);
 
     view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="rules" />);
     expect(screen.getByText("CLAUDE.md")).toBeVisible();
@@ -322,168 +361,232 @@ describe("AgentAssetsWorkspace", () => {
     view.rerender(
       <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
     );
+    expect(
+      screen.getByTestId("agent-asset-management-surface"),
+    ).toHaveAttribute("data-domain", "plugins");
     expect(screen.getByText("Formatter")).toBeVisible();
     expect(screen.getByText("1.2.0")).toBeVisible();
+    expect(screen.getByTestId("agent-plugin-grid")).toBeVisible();
+    expect(screen.getByTestId("agent-plugin-target-card")).toBeVisible();
+    expect(
+      screen.queryByTestId("agent-plugin-sidebar-header"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-plugin-target-row"),
+    ).not.toBeInTheDocument();
   });
 
-  it("filters only the active domain through the toolbar search", async () => {
+  it("opens MCP entry details and keeps quick actions scoped to the agent", async () => {
     await renderWithI18n(
       <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
-      { settleAsyncEffects: true },
     );
-    await act(async () => {
-      await Promise.resolve();
-    });
 
-    fireEvent.change(screen.getByRole("textbox", { name: /search assets/i }), {
-      target: { value: "web" },
-    });
-
-    expect(screen.getByText("web")).toBeVisible();
-    expect(screen.queryByText("fs")).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByRole("textbox", { name: /search assets/i }), {
-      target: { value: "" },
-    });
-    expect(screen.getByText("fs")).toBeVisible();
+    fireEvent.click(screen.getByText("fs"));
+    expect(await screen.findByTestId("mcp-agent-entry-detail")).toBeVisible();
+    fireEvent.click(
+      within(screen.getByTestId("mcp-agent-detail-actions")).getByRole(
+        "button",
+        { name: /open agent config/i },
+      ),
+    );
+    expect(window.electron.openPath).toHaveBeenCalledWith("~/.claude.json");
   });
 
-  it("shows the unavailable state when a direct domain has no path", async () => {
-    const limitedAgent: ManagedAgentSummary = {
-      ...claudeAgent,
-      paths: {
-        root: "~/.claude",
-        skills: "~/.claude/skills",
-        mcp: "~/.claude.json",
-        configFiles: [],
-        configFileRelativePaths: [],
-      },
-    };
+  it("confirms MCP removal before changing the selected Agent target", async () => {
+    const removeTargetNames = vi.fn().mockResolvedValue({});
+    const refreshTargetStatus = vi.fn().mockResolvedValue(undefined);
+    useMcpStore.setState({ removeTargetNames, refreshTargetStatus });
 
     await renderWithI18n(
-      <AgentAssetsWorkspace agent={limitedAgent} domain="rules" />,
+      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
     );
 
-    expect(screen.getByText("Not available")).toBeVisible();
-    expect(screen.queryByText("ext-one")).not.toBeInTheDocument();
-  });
+    fireEvent.click(screen.getByText("fs"));
+    const detail = await screen.findByTestId("mcp-agent-entry-detail");
+    fireEvent.click(
+      within(detail).getByRole("button", { name: /uninstall from agent/i }),
+    );
 
-  it("refreshes the active domain through its owning store loader", async () => {
-    const load = vi.fn().mockImplementation(async () => {
-      useMcpStore.setState({
-        targetStatus: [
-          {
-            presetId: "preset-claude",
-            path: "~/.claude.json",
-            exists: true,
-            serverNames: ["fresh-server"],
-          },
-        ],
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Uninstall from Agent",
+    });
+    expect(removeTargetNames).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Uninstall" }));
+    await waitFor(() => {
+      expect(removeTargetNames).toHaveBeenCalledWith({
+        target: "claude",
+        scope: "global",
+        path: "~/.claude.json",
+        serverNames: ["fs"],
       });
     });
-    useMcpStore.setState({ load });
-
-    await renderWithI18n(
-      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
-    );
-    expect(load).not.toHaveBeenCalled();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /refresh current view/i }),
-    );
-
-    expect(load).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText("fresh-server")).toBeVisible();
-    expect(screen.queryByText("fs")).not.toBeInTheDocument();
+    expect(refreshTargetStatus).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a sanitized domain failure instead of a false empty state", async () => {
-    const listForTarget = vi
-      .spyOn(agentAssetAggregationService, "listForTarget")
-      .mockRejectedValueOnce(new Error("Bearer secret-token"));
-
+  it("opens Plugin details from the management card and returns to the list", async () => {
     await renderWithI18n(
-      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
-    );
-
-    expect(
-      await screen.findByText("Asset inventory could not be loaded."),
-    ).toBeVisible();
-    expect(screen.queryByText(/secret-token/i)).not.toBeInTheDocument();
-    listForTarget.mockRestore();
-  });
-
-  it("uses the same responsive card grid for MCP and Plugin inventories", async () => {
-    const view = await renderWithI18n(
-      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
-      { settleAsyncEffects: true },
-    );
-
-    expect(screen.getByTestId("agent-asset-card-grid")).toHaveAttribute(
-      "data-domain",
-      "mcp",
-    );
-    expect(screen.getAllByTestId("agent-asset-card")).toHaveLength(2);
-    expect(screen.getAllByTestId("agent-asset-domain-icon")[0]).toHaveAttribute(
-      "data-icon",
-      "server",
-    );
-
-    view.rerender(
       <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
     );
 
-    expect(screen.getByTestId("agent-asset-card-grid")).toHaveAttribute(
-      "data-domain",
-      "plugins",
+    fireEvent.click(
+      screen.getByRole("button", { name: /open plugin details formatter/i }),
     );
-    expect(screen.getAllByTestId("agent-asset-card")).toHaveLength(1);
-    expect(screen.getByTestId("agent-asset-domain-icon")).toHaveAttribute(
-      "data-icon",
-      "plug",
-    );
+    expect(await screen.findByTestId("plugin-full-detail-page")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByTestId("agent-plugin-grid")).toBeVisible();
   });
 
-  it("bounds 1,000-item MCP and Plugin inventories and keeps every page reachable", async () => {
-    const validation = vi
-      .spyOn(agentAssetAggregationService, "listForTarget")
-      .mockResolvedValue({
-        platformId: "claude",
-        total: 0,
-        domains: ["skill", "mcp", "rule", "plugin"].map((kind) => ({
-          kind: kind as "skill" | "mcp" | "rule" | "plugin",
-          status: "available" as const,
-          items: [],
-        })),
-      });
-    const serverNames = Array.from(
-      { length: 1_000 },
-      (_, index) => `server-${String(index).padStart(4, "0")}`,
+  it("renders My Plugins in the same card grid and filters the Agent view", async () => {
+    const libraryPlugin: PluginLibraryEntry = {
+      id: "plugin-local",
+      name: "local-plugin",
+      displayName: "Local Plugin",
+      description: "A locally managed Plugin",
+      trustLevel: "custom",
+      inventory: {
+        skills: 1,
+        mcpServers: 0,
+        apps: 0,
+        commands: 0,
+        hooks: 0,
+        agents: 0,
+        assets: 0,
+        docs: 0,
+        lspServers: 0,
+        scripts: 0,
+      },
+      classification: "bundle",
+      source: { kind: "local", localPackagePath: "/Users/demo/local-plugin" },
+      installedAt: 1,
+      updatedAt: 1,
+    };
+    usePluginStore.setState({
+      library: {
+        kind: "prompthub-plugin-library",
+        version: 1,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        plugins: [libraryPlugin],
+      },
+    });
+
+    await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
     );
+
+    expect(screen.getByTestId("agent-plugin-grid")).toBeVisible();
+    expect(screen.getByTestId("agent-plugin-library-card")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /open plugin details local plugin/i }),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByTestId("agent-plugin-filter-my-plugins"));
+    expect(screen.getByText("Local Plugin")).toBeVisible();
+    expect(screen.queryByText("Formatter")).not.toBeInTheDocument();
+  });
+
+  it("confirms removing a distributed Plugin before updating the Agent target", async () => {
+    const removePluginDistribution = vi.fn().mockResolvedValue(undefined);
+    const distributedPlugin: PluginLibraryEntry = {
+      id: "plugin-distributed",
+      name: "distributed-plugin",
+      displayName: "Distributed Plugin",
+      description: "A Plugin already installed in the selected Agent",
+      trustLevel: "custom",
+      inventory: {
+        skills: 0,
+        mcpServers: 1,
+        apps: 0,
+        commands: 0,
+        hooks: 0,
+        agents: 0,
+        assets: 0,
+        docs: 0,
+        lspServers: 0,
+        scripts: 0,
+      },
+      classification: "bundle",
+      source: {
+        kind: "local",
+        localPackagePath: "/Users/demo/distributed-plugin",
+      },
+      distributedTargetIds: ["claude"],
+      installedAt: 1,
+      updatedAt: 1,
+    };
+    usePluginStore.setState({
+      library: {
+        kind: "prompthub-plugin-library",
+        version: 1,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        plugins: [distributedPlugin],
+      },
+      removePluginDistribution,
+    });
+
+    await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
+    );
+
+    const card = screen.getByTestId("agent-plugin-library-card");
+    fireEvent.click(
+      within(card).getByRole("button", {
+        name: /remove distributed plugin from agent/i,
+      }),
+    );
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Remove Plugin from Agent",
+    });
+    expect(removePluginDistribution).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Remove from Agent" }),
+    );
+    await waitFor(() => {
+      expect(removePluginDistribution).toHaveBeenCalledWith(
+        "plugin-distributed",
+        ["claude"],
+      );
+    });
+  });
+
+  it("keeps MCP and Plugin targets scoped to the selected agent", async () => {
     useMcpStore.setState({
-      targetStatus: [
+      targetPresets: [
+        ...useMcpStore.getState().targetPresets,
         {
-          presetId: "preset-claude",
-          path: "~/.claude.json",
+          id: "preset-other",
+          target: "cursor",
+          scope: "global",
+          label: "Cursor",
+          path: "~/.cursor/mcp.json",
+          platformId: "cursor",
+        },
+      ],
+      targetStatus: [
+        ...useMcpStore.getState().targetStatus,
+        {
+          presetId: "preset-other",
+          path: "~/.cursor/mcp.json",
           exists: true,
-          serverNames,
+          serverNames: ["cursor-only"],
         },
       ],
     });
     usePluginStore.setState({
       targetMatrix: [
+        ...usePluginStore.getState().targetMatrix,
         {
-          id: "claude",
-          displayName: "Claude Code",
+          id: "cursor",
+          displayName: "Cursor",
           status: "native",
           enabled: true,
-          installedPlugins: Array.from({ length: 1_000 }, (_, index) => {
-            const suffix = String(index).padStart(4, "0");
-            return {
-              id: `plugin-${suffix}`,
-              name: `plugin-${suffix}`,
-              displayName: `Plugin ${suffix}`,
-              version: "1.0.0",
+          installedPlugins: [
+            {
+              id: "plugin-cursor-only",
+              name: "cursor-only",
+              displayName: "Cursor Only",
               inventory: {
                 skills: 0,
                 mcpServers: 0,
@@ -496,44 +599,55 @@ describe("AgentAssetsWorkspace", () => {
                 lspServers: 0,
                 scripts: 0,
               },
-            };
-          }),
+            },
+          ],
         },
       ],
     });
 
     const view = await renderWithI18n(
       <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
-      { settleAsyncEffects: true },
     );
+    expect(screen.queryByText("cursor-only")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cursor")).not.toBeInTheDocument();
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(100);
-    expect(screen.getByText("server-0000")).toBeVisible();
-    expect(screen.queryByText("server-0100")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.queryByText("server-0000")).not.toBeInTheDocument();
-    expect(screen.getByText("server-0100")).toBeVisible();
-
-    fireEvent.change(screen.getByRole("textbox", { name: /search assets/i }), {
-      target: { value: "server-0000" },
-    });
-    expect(screen.getByText("server-0000")).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "Next" }),
-    ).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByRole("textbox", { name: /search assets/i }), {
-      target: { value: "" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     view.rerender(
       <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
     );
-    expect(screen.getAllByRole("listitem")).toHaveLength(100);
-    expect(screen.getByText("Plugin 0000")).toBeVisible();
-    expect(screen.queryByText("Plugin 0100")).not.toBeInTheDocument();
-    validation.mockRestore();
+    expect(screen.getByText("Formatter")).toBeVisible();
+    expect(screen.queryByText("Cursor Only")).not.toBeInTheDocument();
+  });
+
+  it("refreshes MCP through its owning store loader", async () => {
+    const load = vi.fn().mockImplementation(async () => {
+      useMcpStore.setState({
+        targetStatus: [
+          {
+            presetId: "preset-claude",
+            path: "~/.claude.json",
+            exists: true,
+            serverNames: ["fresh-server"],
+          },
+        ],
+      });
+    });
+    useMcpStore.setState({
+      load,
+      refreshTargetStatus: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
+    );
+    expect(load).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /refresh/i })[0]);
+
+    expect(load).toHaveBeenCalledTimes(1);
+    expect((await screen.findAllByText("fresh-server")).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByText("fs")).not.toBeInTheDocument();
   });
 
   describe("skills domain cards", () => {

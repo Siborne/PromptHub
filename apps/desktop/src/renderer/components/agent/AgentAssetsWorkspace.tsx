@@ -1,112 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
-import { PlugIcon, RefreshCwIcon, SearchIcon, ServerIcon } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
   AgentScannedSkill,
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
-import {
-  useAgentAssetInventoryMap,
-  type AgentAssetDomain,
-  type AgentAssetItem,
-} from "./use-agent-asset-domain";
+import type { AgentAssetDomain } from "./use-agent-asset-domain";
 import {
   AgentSkillAssetPanel,
   useAgentSkillAssets,
 } from "./AgentSkillAssetPanel";
+import { AgentMcpAssetPanel } from "./AgentMcpAssetPanel";
+import { AgentPluginAssetPanel } from "./AgentPluginAssetPanel";
+import { AgentRulesWorkspace } from "./AgentRulesWorkspace";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { SkillFullDetailPage } from "../skill/SkillFullDetailPage";
 import { SkillLibraryImportModal } from "../skill/SkillLibraryImportModal";
 import { buildProjectDetailSkill } from "../skill/project-detail-adapter";
-import { BoundedListPager, useBoundedPage } from "./BoundedListPager";
-import { AgentRulesWorkspace } from "./AgentRulesWorkspace";
 
-const DOMAIN_META: Record<
-  AgentAssetDomain,
-  {
-    labelKey: string;
-    fallback: string;
-    emptyKey: string;
-    emptyFallback: string;
-  }
-> = {
-  skills: {
-    labelKey: "agents.skills",
-    fallback: "Skills",
-    emptyKey: "agents.noSkillsDetected",
-    emptyFallback: "No skills were detected for this Agent.",
-  },
-  mcp: {
-    labelKey: "agents.mcp",
-    fallback: "MCP",
-    emptyKey: "agents.noMcpDetected",
-    emptyFallback: "No MCP servers were detected for this Agent.",
-  },
-  rules: {
-    labelKey: "agents.rules",
-    fallback: "Rules",
-    emptyKey: "agents.noRulesDetected",
-    emptyFallback: "No rules file was detected for this Agent.",
-  },
-  plugins: {
-    labelKey: "agents.plugins",
-    fallback: "Plugins",
-    emptyKey: "agents.noPluginsDetected",
-    emptyFallback: "No plugins were detected for this Agent.",
-  },
-};
-
-const INVENTORY_CARD_META: Record<
-  "mcp" | "plugins",
-  { icon: LucideIcon; iconName: "plug" | "server" }
-> = {
-  mcp: { icon: ServerIcon, iconName: "server" },
-  plugins: { icon: PlugIcon, iconName: "plug" },
-};
-
-function AgentInventoryCard({
-  agentName,
-  domain,
-  item,
-}: {
-  agentName: string;
-  domain: "mcp" | "plugins";
-  item: AgentAssetItem;
-}) {
-  const Icon = INVENTORY_CARD_META[domain].icon;
-  return (
-    <li
-      data-testid="agent-asset-card"
-      className="group flex min-h-32 flex-col rounded-md border border-border/70 bg-card p-4 transition-colors hover:border-primary/40"
-    >
-      <div className="flex min-w-0 items-start gap-3">
-        <span
-          data-testid="agent-asset-domain-icon"
-          data-icon={INVENTORY_CARD_META[domain].iconName}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/40 text-muted-foreground"
-        >
-          <Icon aria-hidden="true" className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold text-foreground">
-            {item.label}
-          </h3>
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-            {agentName}
-          </p>
-        </div>
-      </div>
-      <div className="mt-auto flex items-center border-t border-border/60 pt-3">
-        <span className="rounded-full border border-border bg-background/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-          {item.meta || item.state}
-        </span>
-      </div>
-    </li>
-  );
-}
-
+/**
+ * Renders the selected asset domain for one Agent.
+ *
+ * Each domain owns its workflow and store. Keeping the dispatch here prevents
+ * the agent page from turning MCP and Plugin data into a read-only inventory
+ * that cannot perform the same actions as the top-level managers.
+ */
 export function AgentAssetsWorkspace({
   agent,
   domain,
@@ -122,19 +40,27 @@ export function AgentAssetsWorkspace({
     );
   }
 
-  return <AgentInventoryWorkspace agent={agent} domain={domain} />;
+  if (domain === "mcp") {
+    return (
+      <section className="flex h-full min-w-0 flex-1 flex-col">
+        <AgentMcpAssetPanel agent={agent} />
+      </section>
+    );
+  }
+
+  if (domain === "plugins") {
+    return (
+      <section className="flex h-full min-w-0 flex-1 flex-col">
+        <AgentPluginAssetPanel agent={agent} />
+      </section>
+    );
+  }
+
+  return <AgentSkillWorkspace agent={agent} />;
 }
 
-function AgentInventoryWorkspace({
-  agent,
-  domain,
-}: {
-  agent: ManagedAgentSummary;
-  domain: Exclude<AgentAssetDomain, "rules">;
-}) {
+function AgentSkillWorkspace({ agent }: { agent: ManagedAgentSummary }) {
   const { t } = useTranslation();
-  const [query, setQuery] = useState("");
-  const inventories = useAgentAssetInventoryMap(agent);
   const skillAssets = useAgentSkillAssets(agent);
   const [selectedSkillPath, setSelectedSkillPath] = useState<string | null>(
     null,
@@ -148,21 +74,6 @@ function AgentInventoryWorkspace({
     );
   }, [skillAssets.rows]);
 
-  const activeDomain = agent.paths[domain] ? domain : null;
-
-  const activeInventory = activeDomain ? inventories[activeDomain] : null;
-  const filteredItems = useMemo(() => {
-    const items = activeInventory?.items ?? [];
-    const normalized = query.trim().toLocaleLowerCase();
-    if (!normalized) return items;
-    return items.filter((item) =>
-      [item.label, item.meta]
-        .filter(Boolean)
-        .some((value) => value?.toLocaleLowerCase().includes(normalized)),
-    );
-  }, [activeInventory?.items, query]);
-  const itemPage = useBoundedPage(filteredItems, 100, filteredItems);
-
   const selectedSkillRow = useMemo(
     () =>
       skillAssets.rows.find(
@@ -170,13 +81,9 @@ function AgentInventoryWorkspace({
       ) ?? null,
     [skillAssets.rows, selectedSkillPath],
   );
-
   const selectedManagedSkill = selectedSkillRow?.status.managedSkill ?? null;
-
   const detailSkill = useMemo(() => {
-    if (!selectedSkillRow) {
-      return null;
-    }
+    if (!selectedSkillRow) return null;
     return buildProjectDetailSkill({
       scannedSkill: selectedSkillRow.skill,
       importedSkill: selectedSkillRow.status.managedSkill,
@@ -192,139 +99,60 @@ function AgentInventoryWorkspace({
   return (
     <>
       <section className="flex h-full min-w-0 flex-1 flex-col">
-        {!activeDomain || !activeInventory ? (
+        {!agent.paths.skills ? (
           <div className="flex min-h-48 flex-1 items-center justify-center px-6 text-sm text-muted-foreground">
             {t("agents.notAvailable", "Not available")}
           </div>
-        ) : activeDomain === "skills" ? (
-          detailSkill && selectedSkillRow ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <SkillFullDetailPage
-                overrideSkill={detailSkill}
-                agentContext={{
-                  installMode: selectedSkillRow.skill.installMode,
-                  isManaged: Boolean(selectedManagedSkill),
-                  isPlatformBuiltin: selectedSkillRow.skill.isPlatformBuiltin,
-                  platformId: agent.id,
-                  platformName: agent.name,
-                  sourcePath: selectedSkillRow.skill.localPath,
-                  symlinkTargetPath: selectedSkillRow.skill.symlinkTargetPath,
-                }}
-                agentActions={{
-                  isImporting:
-                    skillAssets.importingSkillPath ===
+        ) : detailSkill && selectedSkillRow ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <SkillFullDetailPage
+              overrideSkill={detailSkill}
+              agentContext={{
+                installMode: selectedSkillRow.skill.installMode,
+                isManaged: Boolean(selectedManagedSkill),
+                isPlatformBuiltin: selectedSkillRow.skill.isPlatformBuiltin,
+                platformId: agent.id,
+                platformName: agent.name,
+                sourcePath: selectedSkillRow.skill.localPath,
+                symlinkTargetPath: selectedSkillRow.skill.symlinkTargetPath,
+              }}
+              agentActions={{
+                isImporting:
+                  skillAssets.importingSkillPath ===
+                  selectedSkillRow.skill.localPath,
+                isUninstalling: skillAssets.isUninstalling,
+                onImport: selectedManagedSkill
+                  ? undefined
+                  : () => void skillAssets.importSkill(selectedSkillRow.skill),
+                onOpenFolder: async () => {
+                  await window.electron?.openPath?.(
                     selectedSkillRow.skill.localPath,
-                  isUninstalling: skillAssets.isUninstalling,
-                  onImport: selectedManagedSkill
-                    ? undefined
-                    : () =>
-                        void skillAssets.importSkill(selectedSkillRow.skill),
-                  onOpenFolder: async () => {
-                    await window.electron?.openPath?.(
-                      selectedSkillRow.skill.localPath,
-                    );
-                  },
-                  onOpenSymlinkTarget: selectedSkillRow.skill.symlinkTargetPath
-                    ? async () => {
-                        await window.electron?.openPath?.(
-                          selectedSkillRow.skill.symlinkTargetPath ?? "",
-                        );
-                      }
-                    : undefined,
-                  onOpenManagedSkill: selectedManagedSkill
-                    ? () => skillAssets.openManagedSkill(selectedManagedSkill)
-                    : undefined,
-                  onUninstall: selectedSkillRow.skill.isReadOnlyDiscovery
-                    ? undefined
-                    : () =>
-                        skillAssets.setPendingUninstall(selectedSkillRow.skill),
-                }}
-                onBack={() => setSelectedSkillPath(null)}
-              />
-            </div>
-          ) : (
-            <AgentSkillAssetPanel
-              agent={agent}
-              assets={skillAssets}
-              onOpenDetail={handleOpenSkillDetail}
+                  );
+                },
+                onOpenSymlinkTarget: selectedSkillRow.skill.symlinkTargetPath
+                  ? async () => {
+                      await window.electron?.openPath?.(
+                        selectedSkillRow.skill.symlinkTargetPath ?? "",
+                      );
+                    }
+                  : undefined,
+                onOpenManagedSkill: selectedManagedSkill
+                  ? () => skillAssets.openManagedSkill(selectedManagedSkill)
+                  : undefined,
+                onUninstall: selectedSkillRow.skill.isReadOnlyDiscovery
+                  ? undefined
+                  : () =>
+                      skillAssets.setPendingUninstall(selectedSkillRow.skill),
+              }}
+              onBack={() => setSelectedSkillPath(null)}
             />
-          )
+          </div>
         ) : (
-          <>
-            <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-5 py-3">
-              <h2 className="text-sm font-semibold text-foreground">
-                {t(
-                  DOMAIN_META[activeDomain].labelKey,
-                  DOMAIN_META[activeDomain].fallback,
-                )}
-              </h2>
-              <label className="relative block min-w-40 flex-1 sm:max-w-72">
-                <SearchIcon
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  aria-label={t("agents.searchAssets", "Search assets")}
-                  placeholder={t("agents.searchAssets", "Search assets")}
-                  className="h-8 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                />
-              </label>
-              <span className="hidden min-w-0 flex-1 truncate text-right font-mono text-xs text-muted-foreground lg:block">
-                {agent.paths[activeDomain]}
-              </span>
-              <button
-                type="button"
-                onClick={activeInventory.refresh}
-                aria-label={t(
-                  "agents.refreshCurrentAsset",
-                  "Refresh current view",
-                )}
-                title={t("agents.refreshCurrentAsset", "Refresh current view")}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              {activeInventory.status === "failed" ? (
-                <div className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center">
-                  <p className="max-w-md text-sm leading-6 text-destructive">
-                    {t(
-                      "agents.assetLoadFailed",
-                      "Asset inventory could not be loaded.",
-                    )}
-                  </p>
-                </div>
-              ) : filteredItems.length === 0 ? (
-                <div className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center">
-                  <p className="max-w-md text-sm leading-6 text-muted-foreground">
-                    {t(
-                      DOMAIN_META[activeDomain].emptyKey,
-                      DOMAIN_META[activeDomain].emptyFallback,
-                    )}
-                  </p>
-                </div>
-              ) : (
-                <ul
-                  data-testid="agent-asset-card-grid"
-                  data-domain={activeDomain}
-                  className="grid gap-3 sm:grid-cols-2"
-                >
-                  {itemPage.items.map((item) => (
-                    <AgentInventoryCard
-                      key={item.id}
-                      agentName={agent.name}
-                      domain={activeDomain}
-                      item={item}
-                    />
-                  ))}
-                </ul>
-              )}
-            </div>
-            <BoundedListPager page={itemPage} />
-          </>
+          <AgentSkillAssetPanel
+            agent={agent}
+            assets={skillAssets}
+            onOpenDetail={handleOpenSkillDetail}
+          />
         )}
       </section>
 
