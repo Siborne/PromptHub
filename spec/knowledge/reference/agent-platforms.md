@@ -32,6 +32,8 @@
 | Kimi Code | `apps/desktop/src/renderer/assets/platforms/kimi.png`     | Official Kimi site favicon: `https://www.kimi.com/favicon.ico`      |
 | Augment   | `apps/desktop/src/renderer/assets/platforms/augment.svg`  | Official Augment favicon: `https://www.augmentcode.com/favicon.svg` |
 | Reasonix  | `apps/desktop/src/renderer/assets/platforms/reasonix.svg` | Official Reasonix repository mark                                   |
+| Pi        | `apps/desktop/src/renderer/assets/platforms/pi.svg`      | Official Pi badge: `https://pi.dev/press-kit` (`https://pi.dev/favicon.svg`) |
+| Oh My Pi  | `apps/desktop/src/renderer/assets/platforms/oh-my-pi.svg` | Official upstream mark: `https://github.com/can1357/oh-my-pi/blob/main/assets/icon.svg` |
 
 Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加载失败，二者也使用不同的命名 fallback。内置平台注册表对 id 做唯一性回归校验，避免把已有平台再次注册。
 
@@ -1149,11 +1151,11 @@ Current support boundary:
 ## Pi Evidence
 
 - Product, assets and CLI:
-  `https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/README.md`
+  `https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md`
 - Settings and root override:
-  `https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/settings.md`
+  `https://pi.dev/docs/latest/environment-variables`
 - Session format:
-  `https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/session.md`
+  `https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/session.md`
 
 ## Canonical Sources
 

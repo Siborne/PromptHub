@@ -190,6 +190,35 @@ describe("PlatformIcon", () => {
     expect(asset.readUInt32BE(20)).toBe(512);
   });
 
+  it("renders the official Pi badge instead of a generic fallback", () => {
+    render(<PlatformIcon platformId="pi" size={20} />);
+
+    const icon = screen.getByRole("img", { name: "pi icon" });
+    expect(icon).toHaveAttribute("src", expect.stringContaining("pi.svg"));
+
+    const asset = readFileSync(join(platformAssetsDir, "pi.svg"), "utf8");
+    expect(asset).toContain(
+      '<rect width="800" height="800" rx="120" fill="#09090b"/>',
+    );
+    expect(asset).toContain("M517.36 400 H634.72 V634.72 H517.36 Z");
+  });
+
+  it("renders the official Oh My Pi plugin-connected mark", () => {
+    render(<PlatformIcon platformId="oh-my-pi" size={20} />);
+
+    const icon = screen.getByRole("img", { name: "oh-my-pi icon" });
+    expect(icon).toHaveAttribute(
+      "src",
+      expect.stringContaining("oh-my-pi.svg"),
+    );
+    expect(icon).toHaveClass("rounded", "bg-[#0d0d0d]");
+
+    const asset = readFileSync(join(platformAssetsDir, "oh-my-pi.svg"), "utf8");
+    expect(asset).toContain('viewBox="0 0 120 90"');
+    expect(asset).toContain('fill="#f97316"');
+    expect(asset).toContain('x="71" y="55" width="20" height="16"');
+  });
+
   it("keeps the Auggie mark legible in app-controlled light and dark themes", () => {
     render(<PlatformIcon platformId="augment" size={20} />);
 

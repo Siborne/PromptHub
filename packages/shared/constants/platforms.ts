@@ -442,7 +442,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
   {
     id: "pi",
     name: "Pi",
-    icon: "CircleDot",
+    icon: "Pi",
     rootDir: {
       darwin: "~/.pi/agent",
       win32: "%USERPROFILE%\\.pi\\agent",

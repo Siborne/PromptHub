@@ -14,8 +14,15 @@ until it is included in a published release.
   result identities and resume commands.
 - Added Pi `settings.json` model inspection, JSONC-preserving updates, backup,
   atomic replacement, verification and rollback.
+- Replaced the generic Pi `CircleDot` fallback with the official Pi badge at
+  `apps/desktop/src/renderer/assets/platforms/pi.svg`, sourced from the Pi
+  press kit (`https://pi.dev/press-kit`, asset `https://pi.dev/favicon.svg`).
+- Replaced the generic Oh My Pi terminal fallback with the upstream
+  plugin-connected mark at
+  `apps/desktop/src/renderer/assets/platforms/oh-my-pi.svg` and added a dark
+  rounded backing so the transparent light mark remains visible in light mode.
 - Updated the stable Agent platform reference with the product relationship,
-  supported boundaries and official upstream evidence.
+  supported boundaries, current upstream paths and official icon provenance.
 
 ## Performance And Capacity
 
@@ -25,6 +32,10 @@ until it is included in a published release.
   number of candidate JSONL files and `p` is the requested page size.
 - Metadata and transcript reads retain the existing prefix/detail byte limits;
   no unbounded cache, background process or additional network call was added.
+- The Pi badge is a static bundled SVG, so rendering does not add network I/O
+  or depend on the upstream site being reachable.
+- The Oh My Pi mark is also bundled and its local SVG hash matches the upstream
+  `assets/icon.svg` at the time of verification.
 
 ## Verification
 
@@ -44,6 +55,10 @@ tests/unit/main/agent-session-index-operations.test.ts` — passed, 86 tests.
 - `pnpm --filter @prompthub/shared typecheck` — passed.
 - `pnpm --filter @prompthub/core typecheck` — passed.
 - `pnpm --filter @prompthub/desktop typecheck` — passed.
+- `pnpm --filter @prompthub/desktop test -- --run
+  tests/unit/components/platform-icon.test.tsx` — passed, 16 tests; the
+  regression tests verify the rendered `pi.svg` and `oh-my-pi.svg` paths,
+  official geometry and light-theme backing.
 - `pnpm spec:test` — passed after regenerating the active-change index.
 - `pnpm verify:release:quick` — 20 of 22 checks passed. The complete desktop,
   CLI, core, shared, web, worker and mobile checks passed. The run initially

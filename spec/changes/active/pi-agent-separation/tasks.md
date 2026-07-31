@@ -9,5 +9,10 @@
       input behavior.
 - [x] `T-PI-004` Define `FR-PI-004 -> DES-PI-004 -> TEST-PI-004` and cover
       Pi settings inspection, update, unknown-field preservation and rollback.
+- [x] `T-PI-005` Define `FR-PI-005 -> DES-PI-005 -> TEST-PI-005`, replace the
+      placeholder Pi icon with the official Pi badge, verify the bundled asset
+      path, and record its provenance.
+- [x] `T-PI-006` Define `FR-PI-006 -> DES-PI-006 -> TEST-PI-006`, bundle the
+      official Oh My Pi mark, add theme-safe contrast, and verify its source.
 - [x] Run focused tests, affected typechecks, formatting, diff checks and
       scoped review; record evidence in `implementation.md`.

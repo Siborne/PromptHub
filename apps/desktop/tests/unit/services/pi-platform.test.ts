@@ -13,6 +13,7 @@ describe("Pi platform support", () => {
     expect(getPlatformById("pi")).toMatchObject({
       id: "pi",
       name: "Pi",
+      icon: "Pi",
       rootEnvironmentVariable: "PI_CODING_AGENT_DIR",
       rootDir: {
         darwin: "~/.pi/agent",

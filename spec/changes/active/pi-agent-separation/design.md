@@ -51,6 +51,25 @@ separate provider and model fields in the shared UI contract; a qualified
 `provider/model` update is split back into the two native fields. Provider
 credentials and `models.json` contents are not projected.
 
+## `DES-PI-005`: Bundled Official Badge
+
+Bundle the official Pi badge from `https://pi.dev/favicon.svg` at
+`apps/desktop/src/renderer/assets/platforms/pi.svg` and map `pi` to it in
+`PlatformIcon`. Keep the renderer asset local so the Agent workbench has no
+runtime network dependency. If the asset cannot load, use Lucide's semantic
+`Pi` icon as the failure fallback; Oh My Pi retains its own terminal fallback.
+Record the source and local path in `spec/knowledge/reference/agent-platforms.md`.
+
+## `DES-PI-006`: Bundled Oh My Pi Mark
+
+Bundle the official Oh My Pi mark from
+`https://github.com/can1357/oh-my-pi/blob/main/assets/icon.svg` at
+`apps/desktop/src/renderer/assets/platforms/oh-my-pi.svg` and map
+`oh-my-pi` to it in `PlatformIcon`. The upstream SVG is transparent with a
+light mark, so apply a small dark rounded backing and padding to the image in
+the renderer; do not recolor or redraw the upstream mark. Keep the terminal
+Lucide icon only as the load-failure fallback.
+
 ## Failure And Recovery
 
 - Missing directories produce an undetected Agent or an empty session list.

@@ -12,7 +12,7 @@ import {
   CommandIcon,
   LayoutGridIcon,
   BugIcon,
-  CircleDotIcon,
+  PiIcon,
 } from "lucide-react";
 
 // Import platform icons
@@ -47,6 +47,8 @@ import reasonixIcon from "../../assets/platforms/reasonix.svg";
 import augmentIcon from "../../assets/platforms/augment.svg";
 import kimiIcon from "../../assets/platforms/kimi.png";
 import qwenIcon from "../../assets/platforms/qwen.png";
+import piIcon from "../../assets/platforms/pi.svg";
+import ohMyPiIcon from "../../assets/platforms/oh-my-pi.svg";
 import chatgptLightIcon from "../../assets/platforms/chatgpt-light.png";
 import chatgptDarkIcon from "../../assets/platforms/chatgpt-dark.png";
 
@@ -94,6 +96,8 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   augment: augmentIcon,
   kimi: kimiIcon,
   qwen: qwenIcon,
+  pi: piIcon,
+  "oh-my-pi": ohMyPiIcon,
   "cherry-studio": cherryStudioIcon,
   codebuddy: {
     light: codebuddyLightIcon,
@@ -102,8 +106,8 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   hermes: hermesIcon,
 };
 
-// Fallback Lucide icons for platforms without PNG
-// 没有 PNG 图标时的 Lucide 图标 fallback
+// Fallback Lucide icons for platforms without a bundled brand asset
+// 没有内置品牌资源时的 Lucide 图标 fallback
 const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   claude: <SparklesIcon />,
   cursor: <TerminalIcon />,
@@ -117,7 +121,7 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   "trae-cn": <ZapIcon />,
   "trae-work-cn": <ZapIcon />,
   opencode: <TerminalIcon />,
-  pi: <CircleDotIcon />,
+  pi: <PiIcon />,
   "oh-my-pi": <TerminalIcon />,
   cline: <TerminalIcon />,
   codex: <TerminalIcon />,
@@ -147,8 +151,8 @@ interface PlatformIconProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 /**
- * Platform icon component with PNG icons and Lucide fallback
- * 平台图标组件，支持 PNG 图标和 Lucide 图标 fallback
+ * Platform icon component with bundled brand assets and Lucide fallback
+ * 平台图标组件，支持内置品牌资源和 Lucide 图标 fallback
  */
 export function PlatformIcon({
   platformId,
@@ -162,8 +166,8 @@ export function PlatformIcon({
   const iconSrc = PLATFORM_ICONS[platformId];
   const fallbackIcon = FALLBACK_ICONS[platformId] || <LayoutGridIcon />;
 
-  // If no PNG icon or image failed to load, use fallback
-  // 如果没有 PNG 图标或图片加载失败，使用 fallback
+  // If no bundled asset or image failed to load, use fallback
+  // 如果没有内置资源或图片加载失败，使用 fallback
   if (!iconSrc || imageError) {
     return (
       <span
@@ -203,9 +207,11 @@ export function PlatformIcon({
               ? "brightness-0 dark:brightness-0 dark:invert"
               : platformId === "augment"
                 ? "brightness-0 dark:invert"
-                : platformId === "hermes"
-                  ? "rounded-full bg-white"
-                  : ""
+                : platformId === "oh-my-pi"
+                  ? "rounded bg-[#0d0d0d] p-0.5"
+                  : platformId === "hermes"
+                    ? "rounded-full bg-white"
+                    : ""
           }`}
           onError={() => setImageError(true)}
           loading="lazy"

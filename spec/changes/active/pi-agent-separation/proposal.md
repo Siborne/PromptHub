@@ -14,6 +14,10 @@ products hides installed Pi assets and conversations.
   session paths.
 - Reuse the verified Pi-family JSONL parser without aliasing platform identity
   or storage.
+- Bundle Pi's official badge as a traceable local platform asset instead of a
+  generic icon fallback.
+- Bundle Oh My Pi's official plugin-connected mark with a theme-safe backing so
+  it remains legible on the Agent workbench.
 - Keep MCP unsupported for Pi until a native built-in MCP contract exists;
   extension-provided MCP remains owned by Pi packages.
 
