@@ -182,6 +182,9 @@ export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "trae-cn",
   "trae-work-cn",
   "openclaw",
+  "copaw",
+  "autoclaw",
+  "nanoclaw",
   "qclaw",
   "qoder",
   "qoderwork",
@@ -193,11 +196,18 @@ export const DEFAULT_SKILL_PLATFORM_ORDER = [
 /**
  * Agent product family for UI grouping.
  * - code-work: coding IDE / CLI workbenches (Claude Code, Codex, Cursor, …)
- * - claw: Claw-family agent runtimes (OpenClaw, QClaw, …) — aka 龙虾系
+ * - claw: Claw-family agent runtimes (OpenClaw, QClaw, Hermes, …) — aka 龙虾系
  */
 export type AgentPlatformFamily = "code-work" | "claw";
 
-export const CLAW_PLATFORM_IDS = ["openclaw", "qclaw"] as const;
+export const CLAW_PLATFORM_IDS = [
+  "openclaw",
+  "copaw",
+  "autoclaw",
+  "nanoclaw",
+  "qclaw",
+  "hermes",
+] as const;
 
 const CLAW_PLATFORM_ID_SET = new Set<string>(CLAW_PLATFORM_IDS);
 
@@ -707,6 +717,54 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       versionArgs: ["--version"],
       evidence: "official-openclaw-cli",
     },
+  },
+  {
+    id: "copaw",
+    name: "CoPaw",
+    icon: "Bot",
+    rootDir: {
+      darwin: "~/.qwenpaw",
+      win32: "%USERPROFILE%\\.qwenpaw",
+      linux: "~/.qwenpaw",
+    },
+    rootDirFallbacks: {
+      darwin: ["~/.copaw"],
+      win32: ["%USERPROFILE%\\.copaw"],
+      linux: ["~/.copaw"],
+    },
+    skillsRelativePath: "skills",
+  },
+  {
+    id: "autoclaw",
+    name: "AutoClaw",
+    icon: "Bot",
+    rootDir: {
+      darwin: "~/.autoclaw",
+      win32: "%USERPROFILE%\\.autoclaw",
+      linux: "~/.autoclaw",
+    },
+    rootDirFallbacks: {
+      darwin: ["~/.openclaw-autoclaw"],
+      win32: ["%USERPROFILE%\\.openclaw-autoclaw"],
+      linux: ["~/.openclaw-autoclaw"],
+    },
+    skillsRelativePath: "skills",
+  },
+  {
+    id: "nanoclaw",
+    name: "NanoClaw",
+    icon: "Bot",
+    rootDir: {
+      darwin: "~/.nanoclaw",
+      win32: "%USERPROFILE%\\.nanoclaw",
+      linux: "~/.nanoclaw",
+    },
+    rootDirFallbacks: {
+      darwin: ["~/nanoclaw", "~/nanoclaw-v2"],
+      win32: ["%USERPROFILE%\\nanoclaw", "%USERPROFILE%\\nanoclaw-v2"],
+      linux: ["~/nanoclaw", "~/nanoclaw-v2"],
+    },
+    skillsRelativePath: "skills",
   },
   {
     id: "qclaw",

@@ -34,6 +34,9 @@
 | Reasonix  | `apps/desktop/src/renderer/assets/platforms/reasonix.svg` | Official Reasonix repository mark                                   |
 | Pi        | `apps/desktop/src/renderer/assets/platforms/pi.svg`      | Official Pi badge: `https://pi.dev/press-kit` (`https://pi.dev/favicon.svg`) |
 | Oh My Pi  | `apps/desktop/src/renderer/assets/platforms/oh-my-pi.svg` | Official upstream mark: `https://github.com/can1357/oh-my-pi/blob/main/assets/icon.svg` |
+| CoPaw     | `apps/desktop/src/renderer/assets/platforms/copaw.png`   | AgentScope/QwenPaw public mark: `https://github.com/agentscope-ai/QwenPaw/blob/main/website/public/paw.png` |
+| AutoClaw  | `apps/desktop/src/renderer/assets/platforms/autoclaw.png` | Official AutoClaw mark: `https://autoclaw.zhipuai.cn/` (`https://resource.zhipuai.cn/landing-page/og-image.png`) |
+| NanoClaw  | `apps/desktop/src/renderer/assets/platforms/nanoclaw.png` | Official NanoClaw repository asset: `https://github.com/nanocoai/nanoclaw/blob/main/assets/nanoclaw-icon.png` |
 
 Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加载失败，二者也使用不同的命名 fallback。内置平台注册表对 id 做唯一性回归校验，避免把已有平台再次注册。
 
@@ -43,6 +46,7 @@ Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加�
 - `skills / plugins / rules / commands / agents / workflows / config` 等都属于从根目录派生出的本地资产表面。
 - 因此设置页和后续 Agent 管理页应优先暴露根目录管理与派生资产预览；仅保留零散扫描路径会把产品错误收窄成 Skill 导入工具。
 - 对 PromptHub 而言，Plugin 是比 Skill 更高一级的分发包；它可以包含 Skill、MCP server、App/connector、commands、hooks、assets 等子资产。稳定概念映射见 `spec/knowledge/reference/codex-extension-surfaces.md`。
+- Agent 工作台的 family 分组是 PromptHub 的展示分类，不是上游兼容性声明；`openclaw`、`copaw`、`autoclaw`、`nanoclaw`、`qclaw` 和 `hermes` 明确归入 Claw（龙虾）组，但各自仍保留独立的平台 id、根目录、能力适配器和原生文件合同。
 
 ## Read-Only CLI Diagnostic Snapshot
 
@@ -692,6 +696,54 @@ Current support boundary:
 - Modeling note:
   - do not alias `qclaw` to `openclaw`; keep a separate platform id so the UI can explain the Tencent/OpenClaw relationship and so future QClaw-specific local paths can be added without migration ambiguity.
 
+### CoPaw
+
+- Product: CoPaw is tracked as an independent local Agent identity. The
+  current AgentScope distribution is published as QwenPaw, so the registry
+  keeps `copaw` as the stable PromptHub id while using the current
+  `~/.qwenpaw` installation root.
+- PromptHub roots: primary `~/.qwenpaw`; legacy/compatibility fallback
+  `~/.copaw` on all desktop platforms. The official QwenPaw installer
+  documents `%USERPROFILE%\\.qwenpaw\\bin` on Windows; the host data root can
+  still vary by install mode, so PromptHub only derives user-overridable
+  `skills/` paths and does not claim a universal native skill directory.
+- Reusable assets: `skills/` is a PromptHub compatibility surface. The public
+  deployment documentation confirms local data and Skills, but does not
+  establish one stable host-side Skills directory for every install mode.
+- Capability boundary: Provider, Sessions, Usage and CLI maintenance remain
+  `planned`; path-level Agent/Skill management is available as `partial`.
+
+### AutoClaw
+
+- Product: Zhipu AutoClaw is a locally installed desktop Agent for macOS and
+  Windows and is based on the OpenClaw ecosystem. It remains an independent
+  `autoclaw` identity; PromptHub does not alias it to `openclaw`.
+- PromptHub roots: primary `~/.autoclaw`; fallback `~/.openclaw-autoclaw` on
+  all desktop platforms. These are `PromptHub inferred` compatibility
+  candidates because the official landing page does not publish a canonical
+  host data root.
+- Reusable assets: `skills/` is a compatibility surface only. No native MCP,
+  Rules, config, transcript, credential, or session path is claimed in this
+  batch.
+- Capability boundary: Provider, Sessions, Usage and CLI maintenance remain
+  `planned`; path-level Agent/Skill management is available as `partial`.
+
+### NanoClaw
+
+- Product: NanoClaw is an open-source local Agent runtime with an arbitrary
+  checkout root. Its official repository describes state under the project
+  root (`store/`, `groups/`, `data/`) rather than a single global home folder.
+- PromptHub roots: compatibility candidates are `~/.nanoclaw`, `~/nanoclaw`,
+  and `~/nanoclaw-v2` (with the first existing path selected). Users can set a
+  built-in Agent root override to the actual checkout; PromptHub never creates
+  a checkout automatically.
+- Reusable assets: the registry exposes `skills/` only as a user-overridable
+  compatibility surface. NanoClaw group skills and `CLAUDE.md` files remain
+  project/group-owned until a native mapping is verified.
+- Capability boundary: Provider, Sessions, Usage, CLI maintenance, MCP and
+  Rules remain `planned`; path-level Agent/Skill management is available as
+  `partial`.
+
 ### Cline
 
 - Root: `~/.cline`
@@ -1162,3 +1214,8 @@ Current support boundary:
 - 平台元数据源码：`packages/shared/constants/platforms.ts`
 - Rules 注册表源码：`packages/shared/constants/rules.ts`
 - 平台路径派生逻辑：`apps/desktop/src/main/services/skill-installer-utils.ts`
+- CoPaw / QwenPaw: `https://github.com/agentscope-ai/QwenPaw`,
+  `https://www.copaw.uk/`
+- AutoClaw: `https://autoclaw.zhipuai.cn/`
+- NanoClaw: `https://github.com/nanocoai/nanoclaw`
+- QClaw: `https://intl.cloud.tencent.com/zh/document/product/1300/81043`

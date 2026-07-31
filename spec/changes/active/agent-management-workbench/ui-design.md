@@ -601,6 +601,19 @@ The renderer still derives all content from
 bounded page (at most 100 generic cards) with no new persistence, IPC, file
 I/O, network request or cache.
 
+### `DES-AGENT-076`: Explicit Claw Family Taxonomy
+
+The display-order list uses the shared `getAgentPlatformFamily` policy rather
+than inferring a group from a product name, icon, root path, or capability.
+The explicit Claw registry contains `openclaw`, `qclaw`, and `hermes`. The
+renderer renders Hermes in the same Claw section and the Rules ordering helper
+reuses the same policy so the two surfaces cannot disagree.
+
+This is presentation-only taxonomy. Each platform remains independently
+identified and keeps its own root, adapters, capabilities, and native file
+contracts; adding Hermes to the Claw group does not imply that Hermes is an
+OpenClaw fork or that its files are OpenClaw-compatible.
+
 ## Reuse And Migration
 
 - Reuse `PlatformIcon`, shared buttons, menus, tabs, tooltips, dialogs, virtualized lists, toast, titlebar and wallpaper tokens.

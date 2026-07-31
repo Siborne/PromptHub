@@ -144,6 +144,36 @@ describe("SkillSettings", () => {
     );
   });
 
+  it("places the local Claw platforms in the Claw family group", async () => {
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const list = screen.getByRole("list", { name: "Platform Display Order" });
+    const clawHeading = screen.getByText("Claw", { exact: true });
+    const clawGroup = clawHeading.parentElement;
+
+    expect(clawGroup).toBeTruthy();
+    for (const platformId of [
+      "openclaw",
+      "qclaw",
+      "hermes",
+      "copaw",
+      "autoclaw",
+      "nanoclaw",
+    ]) {
+      expect(
+        clawGroup?.querySelector(`[data-platform-id="${platformId}"]`),
+        platformId,
+      ).toBeTruthy();
+      expect(
+        list.querySelector(`[data-platform-id="${platformId}"]`)
+          ?.parentElement,
+        platformId,
+      ).toBe(clawGroup);
+    }
+  });
+
   it("reorders platforms through drag and drop", async () => {
     const settingsState = createSettingsState();
     useSettingsStoreMock.mockReturnValue(settingsState);

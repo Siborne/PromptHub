@@ -309,6 +309,24 @@ Confirmed with the maintainer on 2026-07-21:
 2. "Install My Skill" into the current Agent directory reuses the existing library-import modal and install pipeline (copy/symlink).
 3. All behavior is a renderer-side composition of existing Skills-domain services and components; no new main-process surface. MCP/Rules/Plugins keep compact rows in this batch; their deep actions remain in their owning modules.
 
+## Scope Addendum 2026-07-31: Hermes Claw Family Taxonomy
+
+The Agent display-order settings now classify Hermes with OpenClaw and QClaw
+under PromptHub's Claw family. This is a presentation and ordering taxonomy for
+the Agent workbench, not a claim that Hermes is an OpenClaw fork or that the
+three platforms share native files. Hermes keeps its independent `hermes` id,
+root path, capability declarations and adapters.
+
+## Scope Addendum 2026-07-31: Local Claw Platform Coverage
+
+The Agent registry now covers the requested local Claw products as independent
+identities: OpenClaw, CoPaw, AutoClaw, NanoClaw and QClaw. CoPaw, AutoClaw and
+NanoClaw receive bounded compatibility root candidates and official brand
+assets, while unsupported native protocols remain explicitly planned. NanoClaw
+is modeled as an arbitrary project checkout rather than a fabricated global
+home directory. No session/history, provider, credential, MCP or Rules adapter
+is claimed for these three new identities in this slice.
+
 ## Scope Addendum 2026-07-21: Usage Moves Into The Overview Dashboard
 
 Confirmed with the maintainer on 2026-07-21:

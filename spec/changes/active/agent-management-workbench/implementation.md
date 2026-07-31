@@ -1612,10 +1612,50 @@
     Desktop typecheck, affected ESLint, changed-file formatting,
     traceability validation and `git diff --check` also pass.
 
+- Hermes Claw family taxonomy is implemented
+  (2026-07-31; `FR-AGENT-061`, `DES-AGENT-076`, `TEST-AGENT-094`,
+  `T-AGENT-131`):
+  - Added `hermes` to the explicit shared Claw family registry. Agent display
+    order and Rules ordering both consume the existing family resolver, so
+    Hermes appears with OpenClaw and QClaw without changing its platform id,
+    root path, capability declarations or native file contract.
+  - Red-first regression covered the previous Code / Work placement, then
+    verified the shared resolver, Rules partition and settings grouping after
+    the registry update. The focused desktop suites pass 2 files / 23 tests;
+    shared and desktop typechecks, affected ESLint, traceability validation and
+    `git diff --check` also pass. The existing Markdown table formatting warning
+    remains outside this change's scope.
+
+- Local Claw platform coverage is implemented
+  (2026-07-31; `FR-AGENT-062`, `DES-AGENT-077`, `TEST-AGENT-095`,
+  `T-AGENT-132`):
+  - Added independent `copaw`, `autoclaw` and `nanoclaw` registry entries next
+    to the existing `openclaw` and `qclaw` identities. All five are classified
+    in the shared Claw family without aliasing their roots or native contracts.
+  - Added bounded compatibility roots: CoPaw resolves the official
+    QwenPaw `~/.qwenpaw` root and falls back to legacy `~/.copaw`, AutoClaw
+    to `~/.openclaw-autoclaw`, and NanoClaw to common checkout names;
+    users can override NanoClaw to the actual project root. No checkout or
+    directory is created by discovery.
+  - Added official upstream brand assets for CoPaw, AutoClaw and NanoClaw and
+    mapped them through `PlatformIcon`; the renderer no longer falls back to a
+    generic Lucide icon for these ids.
+  - Kept Provider, Sessions, Usage and CLI maintenance planned for the three
+    new identities, with only path-level Skills/Agent management partial. The
+    focused desktop suite passes 4 files / 53 tests; shared and desktop
+    typechecks pass; `git diff --check` passes. The full desktop unit run
+    completed 502 files / 4,496 tests successfully and stopped on one existing
+    Agent workspace assertion (`agents-workspace.test.tsx` expects the generic
+    `Search assets` control while the parallel Agent MCP workspace renders its
+    scoped panel). That unrelated worktree failure remains a release gate and
+    is not attributed to the Claw registry change.
+
 ## Converge
 
-- Stable workflow/knowledge/rules synced: not yet; behavior has not shipped.
-- Issues/releases/ADRs/indexes synced: not yet.
+- Stable knowledge reference synced in `spec/knowledge/reference/agent-platforms.md`;
+  workflow/rules are unchanged because this is still an active, unreleased
+  registry change.
+- Issues/releases/ADRs/indexes remain pending publication and convergence.
 - Final change destination: remain active until implementation, verification and convergence complete.
 
 ## Follow-Ups

@@ -1637,6 +1637,53 @@ does not yet support.
 - And MCP and Plugin inventories render as bounded responsive cards
 - And Plugin identity uses a plug icon rather than a package or cube icon
 
+### `FR-AGENT-061`: Explicit Claw Family Taxonomy
+
+The Agent Management display-order surface MUST classify the built-in
+`openclaw`, `qclaw`, and `hermes` platforms under the Claw family and keep all
+other platforms in their existing Code / Work family unless they are added to
+the explicit Claw registry. This family is a PromptHub presentation taxonomy;
+it MUST NOT alias platform ids, roots, capabilities, adapters, or native
+configuration contracts.
+
+#### Scenario: Move Hermes with the Claw platforms
+
+- Given the Agent display-order settings show the Code / Work and Claw groups
+- When the user opens the display-order list
+- Then Hermes appears in the Claw group beside OpenClaw and QClaw
+- And Hermes keeps its own `hermes` identity, `~/.hermes` root, and capability
+  declarations
+- And rule ordering uses the same family classification without changing rule
+  file paths or ownership
+
+### `FR-AGENT-062`: Independent Local Claw Platform Identities
+
+The Agent registry MUST expose `openclaw`, `copaw`, `autoclaw`, `nanoclaw`,
+and `qclaw` as independent built-in platform identities. The Claw family is a
+display taxonomy only: platform ids, roots, asset paths, capability states,
+icons and adapters MUST NOT be aliased without evidence. A platform whose
+native local path or protocol is not publicly verified MUST remain visible with
+an explicit `partial` or `planned` capability state rather than being hidden or
+silently mapped to OpenClaw.
+
+#### Scenario: Local Claw platforms are visible independently
+
+- Given the built-in registry contains the requested local Claw platforms
+- When the Agent Management or platform-order view is opened
+- Then each platform appears with its own name, icon, id and resolved root
+- And all five platforms are grouped under Claw for display ordering
+- And unsupported Provider, Session, Usage, MCP, Rules or CLI capabilities are
+  labeled individually instead of being reported as supported
+
+#### Scenario: Project-root NanoClaw installation
+
+- Given NanoClaw is checked out under a user-selected project directory
+- When the user overrides the NanoClaw Agent root to that directory
+- Then PromptHub uses the override for path previews without creating a new
+  global NanoClaw directory
+- And the default compatibility candidates are not treated as proof of a
+  native NanoClaw global root
+
 ## Non-Functional Requirements
 
 ### `NFR-AGENT-001`: Local-First And Privacy

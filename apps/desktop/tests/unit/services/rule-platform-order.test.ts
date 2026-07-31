@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { getAgentPlatformFamily } from "@prompthub/shared/constants/platforms";
+import type { RuleFileDescriptor } from "@prompthub/shared/types";
 import {
   getOrderedGlobalRuleFiles,
   partitionGlobalRuleFilesByFamily,
 } from "../../../src/renderer/services/rule-platform-order";
-import type { RuleFileDescriptor } from "@prompthub/shared/types";
 
 function ruleFile(
   platformId: string,
@@ -57,10 +58,29 @@ describe("rule platform order", () => {
         id: "custom:qclaw",
         platformId: "qclaw" as RuleFileDescriptor["platformId"],
       }),
+      ruleFile("hermes"),
+      ruleFile("copaw"),
+      ruleFile("autoclaw"),
+      ruleFile("nanoclaw"),
     ];
 
     const { codeWork, claw } = partitionGlobalRuleFilesByFamily(files);
-    expect(codeWork.map((file) => file.platformId)).toEqual(["claude", "codex"]);
-    expect(claw.map((file) => file.platformId)).toEqual(["openclaw", "qclaw"]);
+    expect(codeWork.map((file) => file.platformId)).toEqual([
+      "claude",
+      "codex",
+    ]);
+    expect(claw.map((file) => file.platformId)).toEqual([
+      "openclaw",
+      "qclaw",
+      "hermes",
+      "copaw",
+      "autoclaw",
+      "nanoclaw",
+    ]);
+  });
+
+  it("classifies Hermes as a Claw-family runtime", () => {
+    expect(getAgentPlatformFamily("hermes")).toBe("claw");
+    expect(getAgentPlatformFamily("claude")).toBe("code-work");
   });
 });

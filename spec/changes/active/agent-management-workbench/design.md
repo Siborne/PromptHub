@@ -761,6 +761,8 @@ inputs only and are not generic asset distribution targets.
 | `FR-AGENT-057`                                                                                                        | `DES-AGENT-072` in `ui-design.md`                                                                                                                      | `TEST-AGENT-090`                                                                                                                                                                                     | `T-AGENT-127`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-058`                                                                                                        | `DES-AGENT-073` in `ui-design.md`                                                                                                                      | `TEST-AGENT-091`                                                                                                                                                                                     | `T-AGENT-128`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-059`                                                                                                        | `DES-AGENT-074` in `ui-design.md`                                                                                                                      | `TEST-AGENT-092`                                                                                                                                                                                     | `T-AGENT-129`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-061`                                                                                                        | `DES-AGENT-076` in `ui-design.md`                                                                                                                      | `TEST-AGENT-094`                                                                                                                                                                                     | `T-AGENT-131`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-062`                                                                                                        | `DES-AGENT-077`                                                                                                                                          | `TEST-AGENT-095`                                                                                                                                                                                     | `T-AGENT-132`                                                                                                                                                                                                                                                                               |
 | `NFR-AGENT-001`, `NFR-AGENT-002`, `NFR-AGENT-003`, `NFR-AGENT-004`, `NFR-AGENT-005`, `NFR-AGENT-006`, `NFR-AGENT-007` | `DES-AGENT-005`, `DES-AGENT-008`, `DES-AGENT-009`, `DES-AGENT-014`, `DES-AGENT-015`, `DES-AGENT-060` in `ui-resilience-designs.md`                     | `TEST-AGENT-004`, `TEST-AGENT-007`, `TEST-AGENT-009`, `TEST-AGENT-011`, `TEST-AGENT-012`, `TEST-AGENT-015`, `TEST-AGENT-016`, `TEST-AGENT-017`, `TEST-AGENT-018`, `TEST-AGENT-047`, `TEST-AGENT-048` | `T-AGENT-025`, `T-AGENT-035`, `T-AGENT-036`, `T-AGENT-037`, `T-AGENT-038`, `T-AGENT-039`, `T-AGENT-082`, `T-AGENT-083`, `T-AGENT-115`                                                                                                                                                       |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-057` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-076`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-112`                                                                                                                                                                                                                                                                |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-058` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-077`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-113`                                                                                                                                                                                                                                                                |
@@ -1503,3 +1505,31 @@ bounded `copilot plugin install` adapter provides preview, explicit
 confirmation, timeout/output limits, post-install verification, uninstall or
 rollback, and tests against the current CLI. No platform-managed Plugin
 metadata is edited directly.
+
+## `DES-AGENT-077`: Local Claw Registry And Evidence Boundary
+
+The built-in registry adds independent `copaw`, `autoclaw`, and `nanoclaw`
+identities beside the existing `openclaw` and `qclaw` entries. The shared Claw
+family resolver is the only presentation grouping; no platform id is aliased
+to OpenClaw and no deep adapter is inherited from a similar directory name.
+
+Path handling is conservative and reversible:
+
+- CoPaw keeps the stable `copaw` PromptHub id but uses the current
+  AgentScope/QwenPaw `~/.qwenpaw` installation root; the legacy `~/.copaw`
+  directory is a bounded fallback.
+- AutoClaw uses `~/.autoclaw` and the `~/.openclaw-autoclaw` compatibility
+  candidate. Both are explicitly inferred because the official desktop page
+  does not publish a canonical host root.
+- NanoClaw uses bounded compatibility candidates (`~/.nanoclaw`,
+  `~/nanoclaw`, `~/nanoclaw-v2`) while allowing the existing built-in root
+  override to point at the actual arbitrary project checkout. It does not
+  claim a global native root or invent a session/config adapter.
+
+All three entries expose only a user-overridable `skills/` compatibility
+surface. Their Provider/Session/Usage/CLI capabilities remain `planned`, and
+no MCP, Rules, config, credential, or transcript paths are added without a
+stable upstream contract. The UI still exposes the shared Agent shell and
+individual capability states so these platforms can be promoted adapter by
+adapter later. Registry path lookup remains O(1) per platform and performs no
+recursive scan or network request.

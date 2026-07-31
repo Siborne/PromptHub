@@ -99,6 +99,25 @@ describe("PlatformIcon", () => {
     );
   });
 
+  it("renders bundled brand assets for the newly supported local Claw platforms", () => {
+    const expectedAssets = {
+      copaw: "copaw.png",
+      autoclaw: "autoclaw.png",
+      nanoclaw: "nanoclaw.png",
+    };
+
+    for (const [platformId, fileName] of Object.entries(expectedAssets)) {
+      const { unmount } = render(
+        <PlatformIcon platformId={platformId} size={20} />,
+      );
+      const icon = screen.getByRole("img", { name: `${platformId} icon` });
+
+      expect(icon).toHaveAttribute("src", expect.stringContaining(fileName));
+      expect(readFileSync(join(platformAssetsDir, fileName)).length).toBeGreaterThan(0);
+      unmount();
+    }
+  });
+
   it("keeps TRAE IDE and TRAE Work variants on the TRAE brand icon", () => {
     for (const platformId of ["trae", "trae-work", "trae-cn", "trae-work-cn"]) {
       const { unmount } = render(

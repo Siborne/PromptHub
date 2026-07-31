@@ -64,8 +64,47 @@ describe("Agent platform capability inventory", () => {
     const registryIds = SKILL_PLATFORMS.map((platform) => platform.id).sort();
     const inventoryIds = Object.keys(AGENT_PLATFORM_DEPTH_CAPABILITIES).sort();
 
-    expect(new Set(registryIds).size).toBe(32);
+    expect(new Set(registryIds).size).toBe(35);
     expect(inventoryIds).toEqual(registryIds);
+  });
+
+  it("keeps the requested local Claw platforms as independent planned identities", () => {
+    const expectedRoots = {
+      copaw: {
+        primary: "~/.qwenpaw",
+        fallbacks: ["~/.copaw"],
+      },
+      autoclaw: {
+        primary: "~/.autoclaw",
+        fallbacks: ["~/.openclaw-autoclaw"],
+      },
+      nanoclaw: {
+        primary: "~/.nanoclaw",
+        fallbacks: ["~/nanoclaw", "~/nanoclaw-v2"],
+      },
+    } as const;
+
+    for (const platformId of Object.keys(expectedRoots) as Array<
+      keyof typeof expectedRoots
+    >) {
+      const platform = SKILL_PLATFORMS.find(
+        (candidate) => candidate.id === platformId,
+      );
+      expect(platform, platformId).toBeDefined();
+      expect(platform?.rootDir.darwin, platformId).toBe(
+        expectedRoots[platformId].primary,
+      );
+      expect(platform?.rootDirFallbacks?.darwin, platformId).toEqual(
+        expectedRoots[platformId].fallbacks,
+      );
+
+      const inventory = getAgentPlatformCapabilityInventory(platform!);
+      expect(inventory.providerModel.status, platformId).toBe("planned");
+      expect(inventory.sessions.status, platformId).toBe("planned");
+      expect(inventory.usage.status, platformId).toBe("planned");
+      expect(inventory.maintenanceCli.status, platformId).toBe("planned");
+      expect(inventory.skills.status, platformId).toBe("partial");
+    }
   });
 
   it("provides a status and evidence for every capability on every platform", () => {

@@ -35,6 +35,9 @@ import grokDarkIcon from "../../assets/platforms/grok-dark.svg";
 import kiloLightIcon from "../../assets/platforms/kilo-light.svg";
 import kiloDarkIcon from "../../assets/platforms/kilo-dark.svg";
 import openclawIcon from "../../assets/platforms/openclaw.png";
+import copawIcon from "../../assets/platforms/copaw.png";
+import autoclawIcon from "../../assets/platforms/autoclaw.png";
+import nanoclawIcon from "../../assets/platforms/nanoclaw.png";
 import qclawIcon from "../../assets/platforms/qclaw.png";
 import qoderIcon from "../../assets/platforms/qoder.png";
 import qoderworkIcon from "../../assets/platforms/qoderwork.png";
@@ -89,6 +92,9 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
     dark: kiloDarkIcon,
   },
   openclaw: openclawIcon,
+  copaw: copawIcon,
+  autoclaw: autoclawIcon,
+  nanoclaw: nanoclawIcon,
   qclaw: qclawIcon,
   qoder: qoderIcon,
   qoderwork: qoderworkIcon,
@@ -130,6 +136,9 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   kilo: <BotIcon />,
   amp: <ZapIcon />,
   openclaw: <BugIcon />,
+  copaw: <BotIcon />,
+  autoclaw: <BotIcon />,
+  nanoclaw: <BotIcon />,
   qclaw: <BugIcon />,
   qoder: <BotIcon />,
   qoderwork: <BotIcon />,
