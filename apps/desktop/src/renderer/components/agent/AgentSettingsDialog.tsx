@@ -14,10 +14,8 @@ import {
   DEFAULT_CODEX_IDENTITY,
   normalizeAgentIdentityPreferences,
 } from "../../services/agent-identity";
-import {
-  getDefaultPluginsRelativePath,
-  getEffectiveBuiltinAgentConfig,
-} from "../../services/agent-root-paths";
+import { getEffectiveBuiltinAgentConfig } from "../../services/agent-root-paths";
+import { buildBuiltinAgentPathOverride } from "../../services/agent-edit-adapter";
 import { getRendererPlatform } from "../../services/runtime-platform";
 import { useSettingsStore } from "../../stores/settings.store";
 import {
@@ -41,6 +39,7 @@ const EMPTY_DRAFT: BuiltinAgentEditDraft = {
   pluginsPath: "",
   rulesPath: "",
   agentsPath: "",
+  commandsPath: "",
   configPaths: "",
   identity: DEFAULT_CODEX_IDENTITY,
 };
@@ -53,6 +52,7 @@ function toDraft(
     pluginsRelativePath?: string;
     rulesRelativePath?: string;
     agentsRelativePath?: string;
+    commandsRelativePath?: string;
     configRelativePaths?: string[];
   },
   identity = DEFAULT_CODEX_IDENTITY,
@@ -64,6 +64,7 @@ function toDraft(
     pluginsPath: config.pluginsRelativePath || "",
     rulesPath: config.rulesRelativePath || "",
     agentsPath: config.agentsRelativePath || "",
+    commandsPath: config.commandsRelativePath || "",
     configPaths: (config.configRelativePaths || []).join(", "),
     identity,
   };
@@ -115,13 +116,6 @@ export function AgentSettingsDialog({
     () => customAgents.find((item) => item.id === agent?.id),
     [agent?.id, customAgents],
   );
-  const supportsPluginPackages = agent?.isCustom
-    ? true
-    : Boolean(
-        platform &&
-        (getDefaultPluginsRelativePath(platform.id) || draft.pluginsPath),
-      );
-
   useEffect(() => {
     if (!isOpen || !agent) return;
 
@@ -192,20 +186,14 @@ export function AgentSettingsDialog({
           pluginsRelativePath: draft.pluginsPath,
           rulesRelativePath: draft.rulesPath,
           agentsRelativePath: draft.agentsPath,
+          commandsRelativePath: draft.commandsPath,
           configRelativePaths: parseConfigPaths(draft.configPaths),
         });
-      } else {
-        updateBuiltinAgentOverride(agent.id, {
-          rootPath: draft.rootPath,
-          skillsRelativePath: draft.skillsPath,
-          mcpRelativePath: draft.mcpPath,
-          pluginsRelativePath: supportsPluginPackages
-            ? draft.pluginsPath
-            : undefined,
-          rulesRelativePath: draft.rulesPath,
-          agentsRelativePath: draft.agentsPath,
-          configRelativePaths: parseConfigPaths(draft.configPaths),
-        });
+      } else if (platform) {
+        updateBuiltinAgentOverride(
+          agent.id,
+          buildBuiltinAgentPathOverride(platform, draft.rootPath, draft),
+        );
         if (agent.id === "codex") {
           setCodexIdentityPreference(draft.identity);
         }
@@ -217,6 +205,13 @@ export function AgentSettingsDialog({
         error instanceof Error ? error.message : String(error),
         "error",
       );
+    }
+  };
+
+  const browseRoot = async () => {
+    const selectedPath = await window.electron?.selectFolder?.();
+    if (selectedPath) {
+      setDraft((current) => ({ ...current, rootPath: selectedPath }));
     }
   };
 
@@ -260,10 +255,11 @@ export function AgentSettingsDialog({
 
         {agent && (agent.isCustom ? customAgent : platform) ? (
           <BuiltinAgentEditor
-            platformId={agent.id}
-            supportsPluginPackages={supportsPluginPackages}
+            platform={platform}
+            isCustom={agent.isCustom}
             value={draft}
             onChange={setDraft}
+            onBrowseRoot={() => void browseRoot()}
           />
         ) : (
           <p className="text-sm text-muted-foreground">

@@ -236,6 +236,7 @@ const REQUIRED_MIGRATION_NAMES = [
   "backfill_skill_legacy_fingerprint_algorithm_v1",
   "agent_provider_profiles_v1",
   "agent_session_index_v1",
+  "agent_conversation_projection_v1",
 ] as const;
 
 const REQUIRED_TABLES = [
@@ -252,6 +253,8 @@ const REQUIRED_TABLES = [
   "agent_provider_snapshots",
   "agent_session_sources",
   "agent_session_index",
+  "agent_conversation_metadata",
+  "agent_conversation_handoffs",
 ] as const;
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -478,6 +481,21 @@ export function initDatabase(
         throw new Error("Agent session index tables were not created");
       }
       markMigration("agent_session_index_v1");
+    }
+
+    if (!hasMigration("agent_conversation_projection_v1")) {
+      const requiredConversationTables = [
+        "agent_conversation_metadata",
+        "agent_conversation_handoffs",
+      ];
+      if (
+        requiredConversationTables.some((table) => !tableExists(db!, table))
+      ) {
+        throw new Error(
+          "Agent conversation projection tables were not created",
+        );
+      }
+      markMigration("agent_conversation_projection_v1");
     }
 
     // Migrations: prompts table (query column list once)

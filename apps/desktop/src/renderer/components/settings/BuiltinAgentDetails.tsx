@@ -53,12 +53,23 @@ export function BuiltinAgentDetails({
           </span>
         </div>
       ) : null}
-      <div>
-        {t("settings.agentDerivedAgentDirs", "Derived agent directories")}:
-        <span className="ml-1 font-mono">
-          {preview.agentDirectories.join(", ")}
-        </span>
-      </div>
+      {preview.agentDirectories.length > 0 ? (
+        <div>
+          {t("settings.agentDerivedAgentDirs", "Derived agent directories")}:
+          <span className="ml-1 font-mono">
+            {preview.agentDirectories.join(", ")}
+          </span>
+        </div>
+      ) : null}
+      {preview.commandDirectories.length > 0 ? (
+        <div>
+          {t("settings.agentDerivedCommandDirs", "Derived command directories")}
+          :
+          <span className="ml-1 font-mono">
+            {preview.commandDirectories.join(", ")}
+          </span>
+        </div>
+      ) : null}
       <div className="text-[10px] text-muted-foreground/80">
         {t(
           "settings.agentConfigurationsHint",

@@ -161,11 +161,11 @@ export function getEffectiveBuiltinAgentConfig(
       undefined,
     agentsRelativePath:
       normalizedOverride.agentsRelativePath ||
-      normalizeRelativePath(platform.agentsRelativePath || "agents") ||
+      normalizeRelativePath(platform.agentsRelativePath) ||
       undefined,
     commandsRelativePath:
       normalizedOverride.commandsRelativePath ||
-      normalizeRelativePath("commands") ||
+      normalizeRelativePath(platform.commandsRelativePath) ||
       undefined,
     configRelativePaths: normalizedOverride.configRelativePaths?.length
       ? normalizedOverride.configRelativePaths
@@ -210,6 +210,7 @@ export interface AgentRootAssetPreview {
   pluginDirectories: string[];
   ruleCandidates: string[];
   agentDirectories: string[];
+  commandDirectories: string[];
   configCandidates: string[];
 }
 
@@ -340,9 +341,12 @@ export function buildAgentRootAssetPreview(
   const pluginDirectories = agent.pluginsRelativePath
     ? [joinRootPath(normalizedRoot, agent.pluginsRelativePath)]
     : [];
-  const agentDirectories = [
-    joinRootPath(normalizedRoot, agent.agentsRelativePath || "agents"),
-  ];
+  const agentDirectories = agent.agentsRelativePath
+    ? [joinRootPath(normalizedRoot, agent.agentsRelativePath)]
+    : [];
+  const commandDirectories = agent.commandsRelativePath
+    ? [joinRootPath(normalizedRoot, agent.commandsRelativePath)]
+    : [];
   const configCandidates =
     agent.configRelativePaths !== undefined
       ? uniqPaths(
@@ -363,6 +367,7 @@ export function buildAgentRootAssetPreview(
     pluginDirectories: uniqPaths(pluginDirectories),
     ruleCandidates: uniqPaths(ruleCandidates),
     agentDirectories: uniqPaths(agentDirectories),
+    commandDirectories: uniqPaths(commandDirectories),
     configCandidates: uniqPaths(configCandidates),
   };
 }

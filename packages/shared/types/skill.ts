@@ -282,6 +282,10 @@ export interface SkillLocalFileEntry {
   path: string;
   content: string;
   isDirectory: boolean;
+  /** Digest of the main-process source used for optimistic concurrency. */
+  revision?: string;
+  /** True when sensitive values were replaced before crossing IPC. */
+  redacted?: boolean;
   mimeType?: string;
   encoding?: "text" | "data-url" | "placeholder";
   previewKind?: "image" | "audio" | "video" | "pdf";

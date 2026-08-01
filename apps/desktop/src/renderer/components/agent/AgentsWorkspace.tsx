@@ -10,8 +10,12 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { ManagedAgentSummary } from "@prompthub/shared/types";
+import type {
+  ManagedAgentSummary,
+  SkillProject,
+} from "@prompthub/shared/types";
 import { useAgentStore } from "../../stores/agent.store";
+import { useSettingsStore } from "../../stores/settings.store";
 import { ContextMenu } from "../ui/ContextMenu";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { AgentAppearancePanel } from "./AgentAppearancePanel";
@@ -173,7 +177,7 @@ function AgentHeaderActions({
   const { t } = useTranslation();
   return (
     <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
-      {agent.launchable ? (
+      {agent.isDetected && agent.launchable ? (
         <button
           type="button"
           onClick={onLaunch}
@@ -193,15 +197,17 @@ function AgentHeaderActions({
       >
         <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
       </button>
-      <AgentOverflowMenu
-        diagnosticsEnabled={
-          agent.capabilities.maintenance.status === "partial" ||
-          agent.capabilities.maintenance.status === "supported"
-        }
-        onDiagnostics={onDiagnostics}
-        onRefresh={onRefresh}
-        onEdit={onEdit}
-      />
+      {agent.isDetected ? (
+        <AgentOverflowMenu
+          diagnosticsEnabled={
+            agent.capabilities.maintenance.status === "partial" ||
+            agent.capabilities.maintenance.status === "supported"
+          }
+          onDiagnostics={onDiagnostics}
+          onRefresh={onRefresh}
+          onEdit={onEdit}
+        />
+      ) : null}
     </div>
   );
 }
@@ -298,10 +304,14 @@ function AgentTabs({
 
 function AgentWorkspacePanel({
   agent,
+  agents,
+  projects,
   onNavigate,
   target,
 }: {
   agent: ManagedAgentSummary;
+  agents: ManagedAgentSummary[];
+  projects: SkillProject[];
   onNavigate: AgentWorkspaceNavigate;
   target: AgentWorkspaceTarget;
 }) {
@@ -336,7 +346,12 @@ function AgentWorkspacePanel({
           <AgentConfigFilesPanel agent={agent} />
         ) : null}
         {target.tab === "sessions" ? (
-          <AgentSessionsPanel key={agent.id} agent={agent} />
+          <AgentSessionsPanel
+            key={agent.id}
+            agent={agent}
+            agents={agents}
+            projects={projects}
+          />
         ) : null}
       </div>
     </main>
@@ -349,6 +364,7 @@ export function AgentsWorkspace() {
   const selectedAgentId = useAgentStore((state) => state.selectedAgentId);
   const ensureLoaded = useAgentStore((state) => state.ensureLoaded);
   const refresh = useAgentStore((state) => state.refresh);
+  const projects = useSettingsStore((state) => state.skillProjects);
   const [target, setTarget] = useState<AgentWorkspaceTarget>({
     tab: "overview",
   });
@@ -406,6 +422,8 @@ export function AgentsWorkspace() {
       <AgentWorkspacePanel
         target={target}
         agent={agent}
+        agents={agents}
+        projects={projects}
         onNavigate={handleNavigate}
       />
       <AgentSettingsDialog

@@ -308,7 +308,7 @@ describe("managed Agent projection", () => {
     ).toEqual({ status: "planned", reason: "adapter-pending" });
   });
 
-  it("enables config editing only for declared relative paths", () => {
+  it("enables user-root config discovery with declared paths as preferences", () => {
     const [supported, unsupported] = buildManagedAgents({
       platforms: [
         platform("codex", "Codex CLI", {
@@ -333,8 +333,8 @@ describe("managed Agent projection", () => {
     });
     expect(unsupported.paths.configFileRelativePaths).toEqual([]);
     expect(unsupported.capabilities.configFiles).toEqual({
-      status: "unsupported",
-      reason: "no-verified-config-path",
+      status: "partial",
+      reason: "direct-file-editing",
     });
     expect(unsupported.capabilities.appearance).toEqual({
       status: "unsupported",
@@ -555,8 +555,8 @@ describe("managed Agent projection", () => {
       },
       usage: { status: "planned", reason: "adapter-pending" },
       configFiles: {
-        status: "unsupported",
-        reason: "no-verified-config-path",
+        status: "partial",
+        reason: "direct-file-editing",
       },
     });
     expect(agent.launchable).toBe(true);

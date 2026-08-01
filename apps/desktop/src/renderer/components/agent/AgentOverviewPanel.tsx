@@ -222,6 +222,44 @@ function SessionsNavCell({
   );
 }
 
+function ConfigFilesNavCell({
+  agent,
+  status,
+  onSelect,
+}: {
+  agent: ManagedAgentSummary;
+  status: AgentCapabilityStatus;
+  onSelect: () => void;
+}) {
+  const { t } = useTranslation();
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void window.api.agent
+      .listConfigFiles(agent.id)
+      .then((files) => {
+        if (active) setCount(files.filter((file) => !file.isDirectory).length);
+      })
+      .catch(() => {
+        if (active) setCount(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [agent.id]);
+
+  return (
+    <NavCellShell
+      icon={FileCogIcon}
+      label={t("agents.configFiles")}
+      primary={count === null ? "—" : String(count)}
+      secondary={t(`agents.capabilityStatus.${status}`)}
+      onSelect={onSelect}
+    />
+  );
+}
+
 function ProviderNavCell({
   agent,
   onSelect,
@@ -445,11 +483,9 @@ function OverviewNavGrid({
           />
         )}
         {isEnabled(configFilesStatus) ? (
-          <NavCellShell
-            icon={FileCogIcon}
-            label={t("agents.configFiles")}
-            primary={String(agent.paths.configFileRelativePaths.length)}
-            secondary={t(`agents.capabilityStatus.${configFilesStatus}`)}
+          <ConfigFilesNavCell
+            agent={agent}
+            status={configFilesStatus}
             onSelect={() => onNavigate("configFiles")}
           />
         ) : (
@@ -562,12 +598,21 @@ export function AgentOverviewPanel({
   agent: ManagedAgentSummary;
   onNavigate: AgentWorkspaceNavigate;
 }) {
+  if (!agent.isDetected) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-card px-5 py-4">
+          <AttentionPanel agent={agent} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto bg-card">
         <AgentUsageBanner agent={agent} />
         <div className="space-y-6 px-5 py-4">
-          <AttentionPanel agent={agent} />
           <OverviewNavGrid agent={agent} onNavigate={onNavigate} />
           <PathsPanel agent={agent} />
         </div>

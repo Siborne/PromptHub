@@ -437,6 +437,125 @@ export interface AgentSessionDetail {
   truncated: boolean;
 }
 
+export interface AgentConversationMetadata {
+  id: string;
+  agentId: string;
+  sessionId: string;
+  title: string | null;
+  projectId: string | null;
+  projectPath: string | null;
+  tags: string[];
+  note: string | null;
+  favorite: boolean;
+  archivedAt: number | null;
+  deletedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface UpsertAgentConversationMetadataInput {
+  agentId: string;
+  sessionId: string;
+  title?: string | null;
+  projectId?: string | null;
+  projectPath?: string | null;
+  tags: string[];
+  note?: string | null;
+  favorite?: boolean;
+  archived?: boolean;
+}
+
+export type AgentConversationHandoffTransport =
+  | "direct"
+  | "launch-and-copy"
+  | "unavailable";
+
+export type AgentConversationHandoffStatus =
+  | "planned"
+  | "launched"
+  | "copied"
+  | "failed";
+
+export interface AgentConversationHandoffRecord {
+  id: string;
+  sourceAgentId: string;
+  sourceSessionId: string;
+  targetAgentId: string;
+  projectId: string | null;
+  projectPath: string | null;
+  transport: AgentConversationHandoffTransport;
+  payloadDigest: string;
+  status: AgentConversationHandoffStatus;
+  targetSessionId: string | null;
+  errorCode: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CreateAgentConversationHandoffInput {
+  sourceAgentId: string;
+  sourceSessionId: string;
+  targetAgentId: string;
+  projectId?: string | null;
+  projectPath?: string | null;
+  transport: AgentConversationHandoffTransport;
+  payloadDigest: string;
+  status: AgentConversationHandoffStatus;
+}
+
+export interface UpdateAgentConversationHandoffInput {
+  status: AgentConversationHandoffStatus;
+  targetSessionId?: string | null;
+  errorCode?: string | null;
+}
+
+export interface AgentConversationResumeRequest {
+  agentId: string;
+  sessionId: string;
+}
+
+export interface AgentConversationActionResult {
+  status: "launched" | "copied" | "unavailable";
+  mode: "native-resume" | "cross-agent";
+  errorCode?: string;
+}
+
+export interface AgentConversationHandoffRequest {
+  sourceAgentId: string;
+  sourceSessionId: string;
+  targetAgentId: string;
+  projectId?: string | null;
+  projectPath: string;
+}
+
+export interface AgentConversationHandoffPreview extends AgentConversationHandoffRequest {
+  sourceTitle: string;
+  payload: string;
+  payloadDigest: string;
+  transport: AgentConversationHandoffTransport;
+}
+
+export interface ContinueAgentConversationRequest extends AgentConversationHandoffPreview {
+  confirmedPayloadDigest: string;
+}
+
+export interface AgentConversationExportRequest {
+  agentId: string;
+  sessionId: string;
+  format: "json" | "markdown";
+}
+
+export interface AgentConversationExportResult {
+  fileName: string;
+  content: string;
+  mimeType: "application/json" | "text/markdown";
+}
+
+export interface AgentConversationExportSaveResult {
+  canceled: boolean;
+  filePath: string | null;
+}
+
 export type AgentUsageQuotaStatus =
   | "ok"
   | "no-credentials"

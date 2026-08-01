@@ -78,9 +78,13 @@ describe("agent root paths", () => {
 
     expect(config.skillsRelativePath).toBe("skills");
     expect(config.mcpRelativePath).toBe("mcp.json");
-    expect(buildAgentRootAssetPreview(config).mcpConfigPaths).toEqual([
-      "~/.workbuddy/mcp.json",
-    ]);
+    expect(config.agentsRelativePath).toBeUndefined();
+    expect(config.commandsRelativePath).toBeUndefined();
+    expect(buildAgentRootAssetPreview(config)).toMatchObject({
+      mcpConfigPaths: ["~/.workbuddy/mcp.json"],
+      agentDirectories: [],
+      commandDirectories: [],
+    });
   });
 
   it("resolves ZCode's documented user assets", () => {
@@ -127,9 +131,11 @@ describe("agent root paths", () => {
       ".mcp.json",
       "CODEBUDDY.md",
     ]);
-    expect(buildAgentRootAssetPreview(config).mcpConfigPaths).toEqual([
-      "~/.codebuddy/.mcp.json",
-    ]);
+    expect(buildAgentRootAssetPreview(config)).toMatchObject({
+      mcpConfigPaths: ["~/.codebuddy/.mcp.json"],
+      agentDirectories: ["~/.codebuddy/agents"],
+      commandDirectories: ["~/.codebuddy/commands"],
+    });
   });
 
   it("shows Grok Build's documented user assets without enabling an MCP writer", () => {

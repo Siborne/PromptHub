@@ -336,6 +336,40 @@ CREATE TABLE IF NOT EXISTS agent_session_index (
   annotation_updated_at INTEGER,
   UNIQUE(source_id, external_id)
 );
+
+CREATE TABLE IF NOT EXISTS agent_conversation_metadata (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  title TEXT,
+  project_id TEXT,
+  project_path TEXT,
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  note TEXT,
+  is_favorite INTEGER NOT NULL DEFAULT 0 CHECK(is_favorite IN (0, 1)),
+  archived_at INTEGER,
+  deleted_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(agent_id, session_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_conversation_handoffs (
+  id TEXT PRIMARY KEY,
+  source_agent_id TEXT NOT NULL,
+  source_session_id TEXT NOT NULL,
+  target_agent_id TEXT NOT NULL,
+  project_id TEXT,
+  project_path TEXT,
+  transport TEXT NOT NULL
+    CHECK(transport IN ('direct', 'launch-and-copy', 'unavailable')),
+  payload_digest TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('planned', 'launched', 'copied', 'failed')),
+  target_session_id TEXT,
+  error_code TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `;
 
 /**
@@ -401,6 +435,16 @@ CREATE INDEX IF NOT EXISTS idx_agent_session_index_source_updated
   );
 CREATE INDEX IF NOT EXISTS idx_agent_session_index_source_status
   ON agent_session_index(source_id, source_status, indexed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_conversation_metadata_agent_updated
+  ON agent_conversation_metadata(agent_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_conversation_metadata_project
+  ON agent_conversation_metadata(project_id, deleted_at, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_conversation_handoffs_source
+  ON agent_conversation_handoffs(
+    source_agent_id,
+    source_session_id,
+    created_at DESC
+  );
 
 CREATE INDEX IF NOT EXISTS idx_prompts_pinned ON prompts(is_pinned);
 CREATE INDEX IF NOT EXISTS idx_prompts_created ON prompts(created_at DESC);

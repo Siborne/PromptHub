@@ -1,4 +1,6 @@
-import { app, ipcMain, safeStorage } from "electron";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { app, clipboard, dialog, ipcMain, safeStorage, shell } from "electron";
 import Database from "../database/sqlite";
 import { registerPromptIPC } from "./prompt.ipc";
 import { registerFolderIPC } from "./folder.ipc";
@@ -10,7 +12,11 @@ import { registerAIIPC } from "./ai.ipc";
 import { registerAgentIPC } from "./agent.ipc";
 import { registerAgentQwenDefinitionIPC } from "./agent-qwen-definition.ipc";
 import { registerAgentSessionIndexIPC } from "./agent-session-index.ipc";
+import { registerAgentConversationIPC } from "./agent-conversation.ipc";
 import { createAgentSessionIndexOperations } from "../services/agent-session-index-operations";
+import { AgentConversationService } from "../services/agent-conversation-service";
+import { createAgentTerminalLauncher } from "../services/agent-terminal-launcher";
+import { createNativeCommandRunner } from "../services/native-command";
 import { registerAgentProviderProfileIPC } from "./agent-provider-profile.ipc";
 import { registerAgentManagementBackupIPC } from "./agent-management-backup.ipc";
 import { registerAgentProviderActivationIPC } from "./agent-provider-activation.ipc";
@@ -34,6 +40,8 @@ import { registerPluginIPC } from "./plugin.ipc";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import { registerCloudIPC } from "./cloud.ipc";
 import { registerGenerationIPC } from "./generation.ipc";
+import { SkillInstaller } from "../services/skill-installer";
+import { launchAgentPlatform } from "../services/agent-launch-service";
 
 const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.PROMPT_CREATE,
@@ -148,6 +156,14 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.AGENT_SESSION_INDEX_SET_ENABLED,
   IPC_CHANNELS.AGENT_SESSION_INDEX_REFRESH,
   IPC_CHANNELS.AGENT_SESSION_INDEX_CANCEL,
+  IPC_CHANNELS.AGENT_CONVERSATION_METADATA_LIST,
+  IPC_CHANNELS.AGENT_CONVERSATION_METADATA_UPDATE,
+  IPC_CHANNELS.AGENT_CONVERSATION_DELETE,
+  IPC_CHANNELS.AGENT_CONVERSATION_RESTORE,
+  IPC_CHANNELS.AGENT_CONVERSATION_RESUME,
+  IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_PREVIEW,
+  IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_CONTINUE,
+  IPC_CHANNELS.AGENT_CONVERSATION_EXPORT,
   IPC_CHANNELS.AGENT_PROVIDER_PROFILES_LIST,
   IPC_CHANNELS.AGENT_PROVIDER_PROFILES_CREATE,
   IPC_CHANNELS.AGENT_PROVIDER_PROFILES_UPDATE,
@@ -312,6 +328,69 @@ export function registerAllIPC(
     registerAgentSessionIndexIPC({
       createService: (agentId) =>
         createAgentSessionIndexOperations(runtime.sessionIndexDb, agentId),
+    });
+    const commandRunner = createNativeCommandRunner();
+    const terminal = createAgentTerminalLauncher({
+      platform: process.platform,
+      tempRoot: path.join(userDataPath, "agent-conversation-launches"),
+      openPath: (filePath) => shell.openPath(filePath),
+    });
+    const conversationService = new AgentConversationService({
+      repository: runtime.conversationDb,
+      sessions: {
+        list: (agentId, input) =>
+          createAgentSessionIndexOperations(
+            runtime.sessionIndexDb,
+            agentId,
+          ).list(agentId, input),
+        read: (agentId, sessionId) =>
+          createAgentSessionIndexOperations(
+            runtime.sessionIndexDb,
+            agentId,
+          ).read(agentId, sessionId),
+      },
+      resolveExecutable: commandRunner.resolve,
+      launch: (command) => terminal.launch(command),
+      launchAgent: async (agentId) => {
+        const platform = SkillInstaller.getSupportedPlatforms().find(
+          (candidate) => candidate.id === agentId,
+        );
+        if (!platform) return false;
+        const result = await launchAgentPlatform(platform, {
+          platform: process.platform,
+          homePath: app.getPath("home"),
+          localAppDataPath: process.env.LOCALAPPDATA,
+          pathExists: async (candidate) => {
+            try {
+              await fs.access(candidate);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          openPath: (candidate) => shell.openPath(candidate),
+        });
+        return result.success;
+      },
+      copyText: (text) => clipboard.writeText(text),
+      homeDir: app.getPath("home"),
+      supportsInteractiveLaunch: process.platform === "darwin",
+    });
+    registerAgentConversationIPC({
+      service: conversationService,
+      saveExport: async (result) => {
+        const selection = await dialog.showSaveDialog({
+          defaultPath: path.join(app.getPath("documents"), result.fileName),
+          filters: [
+            result.mimeType === "application/json"
+              ? { name: "JSON", extensions: ["json"] }
+              : { name: "Markdown", extensions: ["md"] },
+          ],
+        });
+        if (selection.canceled || !selection.filePath) return null;
+        await fs.writeFile(selection.filePath, result.content, "utf8");
+        return selection.filePath;
+      },
     });
     registerAgentProviderProfileIPC(runtime.profileService);
     registerAgentManagementBackupIPC(runtime.backupService);

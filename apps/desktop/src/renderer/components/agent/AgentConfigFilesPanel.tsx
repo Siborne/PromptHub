@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { FileCogIcon, FolderOpenIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -11,6 +12,20 @@ export function AgentConfigFilesPanel({
 }) {
   const { t } = useTranslation();
   const relativePaths = agent.paths.configFileRelativePaths;
+  const [fileCount, setFileCount] = useState(relativePaths.length);
+  const listFiles = useCallback(async () => {
+    const files = await window.api.agent.listConfigFiles(agent.id);
+    setFileCount(files.filter((file) => !file.isDirectory).length);
+    return files;
+  }, [agent.id]);
+
+  if (!agent.isDetected) {
+    return (
+      <section className="flex h-full items-center justify-center bg-background px-6 text-sm text-muted-foreground">
+        {t("agents.noConfigFiles", "No verified config files are available.")}
+      </section>
+    );
+  }
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-background">
@@ -23,7 +38,7 @@ export function AgentConfigFilesPanel({
           {t("agents.nativeConfigFiles", "Native config files")}
         </h2>
         <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
-          {relativePaths.length}
+          {fileCount}
         </span>
         <span className="hidden min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground lg:block">
           {agent.paths.root}
@@ -43,11 +58,16 @@ export function AgentConfigFilesPanel({
           localPath={agent.paths.root}
           fileSource={{
             key: `agent-config:${agent.id}`,
-            listFiles: () => window.api.agent.listConfigFiles(agent.id),
+            listFiles,
             readFile: (relativePath) =>
               window.api.agent.readConfigFile(agent.id, relativePath),
-            writeFile: (relativePath, content) =>
-              window.api.agent.writeConfigFile(agent.id, relativePath, content),
+            writeFile: (relativePath, content, expectedRevision) =>
+              window.api.agent.writeConfigFile(
+                agent.id,
+                relativePath,
+                content,
+                expectedRevision,
+              ),
             openInFileManager: async () => {
               await window.electron?.openPath?.(agent.paths.root);
             },
@@ -55,9 +75,7 @@ export function AgentConfigFilesPanel({
           skillName={agent.name}
           isOpen
           mode="inline"
-          visibleFilePaths={relativePaths}
           initialFilePath={relativePaths[0]}
-          includeMissingVisibleFiles
           allowStructuralMutations={false}
           surfaceLabels={{
             noFiles: t(

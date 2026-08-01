@@ -61,6 +61,7 @@ describe("Agent platform context", () => {
 
     const context = getAgentConfigContext("codex");
     expect(context).toEqual({
+      agentId: "codex",
       rootPath: "/Users/test/.codex",
       relativePaths: ["profiles/work.toml"],
     });

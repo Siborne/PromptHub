@@ -1,21 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArchiveIcon,
+  BotIcon,
   Clock3Icon,
   CopyIcon,
+  FolderIcon,
   HistoryIcon,
+  InfoIcon,
   Loader2Icon,
   RefreshCwIcon,
   SearchIcon,
+  TerminalSquareIcon,
+  Trash2Icon,
+  UserIcon,
   XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
+  AgentConversationMetadata,
   AgentSessionDetail,
+  AgentSessionEntry,
   AgentSessionMetadata,
   ManagedAgentSummary,
+  SkillProject,
 } from "@prompthub/shared/types";
+import { AgentConversationActions } from "./AgentConversationActions";
 import { useAgentSessionIndex } from "./use-agent-session-index";
+import { Select } from "../ui/Select";
 
 const SESSION_PAGE_SIZE = 50;
 const TRANSCRIPT_PAGE_SIZE = 80;
@@ -48,7 +60,17 @@ function listSessions(
     : window.api.agent.listSessions(agentId, limit, offset);
 }
 
-export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
+interface AgentSessionsPanelProps {
+  agent: ManagedAgentSummary;
+  agents?: ManagedAgentSummary[];
+  projects?: SkillProject[];
+}
+
+export function AgentSessionsPanel({
+  agent,
+  agents = [agent],
+  projects = [],
+}: AgentSessionsPanelProps) {
   const { t } = useTranslation();
   const sessionIndex = useAgentSessionIndex(agent.id);
   const [sessions, setSessions] = useState<AgentSessionMetadata[]>([]);
@@ -64,6 +86,13 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
   const [visibleEntryCount, setVisibleEntryCount] =
     useState(TRANSCRIPT_PAGE_SIZE);
   const [error, setError] = useState<string | null>(null);
+  const [metadataBySession, setMetadataBySession] = useState<
+    Record<string, AgentConversationMetadata>
+  >({});
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "active" | "archived" | "deleted"
+  >("active");
   const currentAgentId = useRef(agent.id);
   currentAgentId.current = agent.id;
 
@@ -78,6 +107,9 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
     setSelectedId(null);
     setDetail(null);
     setQuery("");
+    setMetadataBySession({});
+    setProjectFilter("all");
+    setStatusFilter("active");
     listSessions(agent.id, SESSION_PAGE_SIZE, 0)
       .then((result) => {
         if (!active) return;
@@ -93,6 +125,34 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
       active = false;
     };
   }, [agent.id, t]);
+
+  useEffect(() => {
+    if (
+      sessions.length === 0 ||
+      typeof window.api.agent.listConversationMetadata !== "function"
+    ) {
+      return;
+    }
+    let active = true;
+    window.api.agent
+      .listConversationMetadata(
+        agent.id,
+        sessions.slice(0, 200).map((session) => session.id),
+      )
+      .then((records) => {
+        if (!active) return;
+        setMetadataBySession((current) => ({
+          ...current,
+          ...Object.fromEntries(
+            records.map((record) => [record.sessionId, record]),
+          ),
+        }));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [agent.id, sessions]);
 
   useEffect(() => {
     if (!sessionIndex.state.enabled && !query.trim()) return;
@@ -147,24 +207,127 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
     // Copilot, Cline, and Cursor search visible turn text in native stores. That text
     // is intentionally not copied into metadata, so do not filter the
     // already-matched page a second time in the renderer.
-    if (
-      !normalized ||
-      sessionIndex.state.enabled ||
-      agent.id === "copilot" ||
-      agent.id === "cline" ||
-      agent.id === "cursor"
-    ) {
-      return sessions;
-    }
-    return sessions.filter((session) =>
-      [session.title, session.projectLabel, session.projectPath, session.model]
+    return sessions.filter((session) => {
+      const metadata = metadataBySession[session.id];
+      if (
+        statusFilter === "active" &&
+        (metadata?.archivedAt || metadata?.deletedAt)
+      ) {
+        return false;
+      }
+      if (
+        statusFilter === "archived" &&
+        (!metadata?.archivedAt || metadata.deletedAt)
+      ) {
+        return false;
+      }
+      if (statusFilter === "deleted" && !metadata?.deletedAt) return false;
+      if (
+        projectFilter !== "all" &&
+        metadata?.projectId !== projectFilter &&
+        !projects.some(
+          (project) =>
+            project.id === projectFilter &&
+            (project.rootPath === metadata?.projectPath ||
+              project.rootPath === session.projectPath),
+        )
+      ) {
+        return false;
+      }
+      if (
+        !normalized ||
+        sessionIndex.state.enabled ||
+        agent.id === "copilot" ||
+        agent.id === "cline" ||
+        agent.id === "cursor"
+      ) {
+        return true;
+      }
+      return [
+        metadata?.title,
+        metadata?.note,
+        ...((metadata?.tags as string[] | undefined) || []),
+        session.title,
+        session.projectLabel,
+        session.projectPath,
+        session.model,
+      ]
         .filter(Boolean)
-        .some((value) => value?.toLocaleLowerCase().includes(normalized)),
-    );
-  }, [query, sessionIndex.state.enabled, sessions]);
+        .some((value) => value?.toLocaleLowerCase().includes(normalized));
+    });
+  }, [
+    agent.id,
+    metadataBySession,
+    projectFilter,
+    projects,
+    query,
+    sessionIndex.state.enabled,
+    sessions,
+    statusFilter,
+  ]);
   const selected =
     sessions.find((session) => session.id === selectedId) || null;
   const visibleEntries = detail?.entries.slice(0, visibleEntryCount) || [];
+  const projectFilterOptions = useMemo(
+    () => [
+      {
+        value: "all",
+        labelText: t("agents.allProjects", "All projects"),
+        label: (
+          <FilterLabel
+            icon={<FolderIcon className="h-3.5 w-3.5" />}
+            text={t("agents.allProjects", "All projects")}
+          />
+        ),
+      },
+      ...projects.map((project) => ({
+        value: project.id,
+        labelText: project.name,
+        label: (
+          <FilterLabel
+            icon={<FolderIcon className="h-3.5 w-3.5" />}
+            text={project.name}
+          />
+        ),
+      })),
+    ],
+    [projects, t],
+  );
+  const statusFilterOptions = useMemo(
+    () => [
+      {
+        value: "active",
+        labelText: t("agents.activeConversations", "Active"),
+        label: (
+          <FilterLabel
+            icon={<span className="h-2 w-2 rounded-full bg-emerald-500" />}
+            text={t("agents.activeConversations", "Active")}
+          />
+        ),
+      },
+      {
+        value: "archived",
+        labelText: t("agents.archivedConversations", "Archived"),
+        label: (
+          <FilterLabel
+            icon={<ArchiveIcon className="h-3.5 w-3.5" />}
+            text={t("agents.archivedConversations", "Archived")}
+          />
+        ),
+      },
+      {
+        value: "deleted",
+        labelText: t("agents.deletedConversations", "Removed"),
+        label: (
+          <FilterLabel
+            icon={<Trash2Icon className="h-3.5 w-3.5" />}
+            text={t("agents.deletedConversations", "Removed")}
+          />
+        ),
+      },
+    ],
+    [t],
+  );
 
   const loadMoreSessions = async () => {
     if (isLoadingMore || !hasMore) return;
@@ -206,8 +369,8 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
 
   return (
     <div className="grid h-full min-h-0 lg:grid-cols-[20rem_minmax(0,1fr)]">
-      <aside className="flex min-h-0 flex-col border-b border-border bg-muted/15 lg:border-b-0 lg:border-r">
-        <div className="shrink-0 border-b border-border/70 p-4">
+      <aside className="flex min-h-0 flex-col border-b border-border bg-white dark:bg-muted/10 lg:border-b-0 lg:border-r">
+        <div className="shrink-0 border-b border-border/70 bg-white p-4 dark:bg-transparent">
           <div className="flex items-center gap-2">
             <HistoryIcon className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold text-foreground">
@@ -230,6 +393,29 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
               className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
             />
           </label>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Select
+              ariaLabel={t(
+                "agents.filterSessionsByProject",
+                "Filter by project",
+              )}
+              value={projectFilter}
+              onChange={setProjectFilter}
+              options={projectFilterOptions}
+              className="min-w-0"
+              triggerClassName="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border/80 bg-background px-2.5 text-left text-xs text-foreground shadow-sm outline-none transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-primary/20"
+            />
+            <Select
+              ariaLabel={t("agents.conversationStatus", "Conversation status")}
+              value={statusFilter}
+              onChange={(value) =>
+                setStatusFilter(value as typeof statusFilter)
+              }
+              options={statusFilterOptions}
+              className="min-w-0"
+              triggerClassName="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border/80 bg-background px-2.5 text-left text-xs text-foreground shadow-sm outline-none transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-primary/20"
+            />
+          </div>
           {sessionIndex.state.supported ? (
             <div className="mt-3 border-t border-border/70 pt-3">
               <div className="flex items-center gap-2">
@@ -332,7 +518,7 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
               className={`mb-1 w-full rounded-md border px-3 py-3 text-left transition-colors ${selectedId === session.id ? "border-primary/50 bg-primary/[0.08]" : "border-transparent hover:bg-accent"}`}
             >
               <span className="line-clamp-2 text-sm font-medium text-foreground">
-                {session.title}
+                {metadataBySession[session.id]?.title || session.title}
               </span>
               <span className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Clock3Icon className="h-3.5 w-3.5" />
@@ -375,38 +561,49 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
         </div>
       </aside>
 
-      <section className="flex min-h-0 min-w-0 flex-col bg-background">
+      <section className="flex min-h-0 min-w-0 flex-col bg-slate-50/70 dark:bg-background">
         {selected ? (
           <>
-            <header className="shrink-0 border-b border-border/70 px-5 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="truncate text-base font-semibold text-foreground">
-                    {selected.title}
-                  </h2>
-                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                    {selected.projectPath ||
-                      selected.projectLabel ||
-                      selected.id}
-                  </p>
-                </div>
-                {selected.resume ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void navigator.clipboard.writeText(
-                        displayResumeCommand(selected),
-                      )
-                    }
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-xs font-semibold text-foreground hover:bg-accent"
-                  >
-                    <CopyIcon className="h-4 w-4" />
-                    {t("agents.copyResumeCommand")}
-                  </button>
-                ) : null}
+            <header className="shrink-0 border-b border-border/70 bg-white px-5 py-4 dark:bg-background">
+              <div className="min-w-0">
+                <h2 className="truncate text-base font-semibold text-foreground">
+                  {metadataBySession[selected.id]?.title || selected.title}
+                </h2>
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                  {selected.projectPath || selected.projectLabel || selected.id}
+                </p>
               </div>
+              {typeof window.api.agent.resumeConversation === "function" ? (
+                <AgentConversationActions
+                  agent={agent}
+                  agents={agents}
+                  projects={projects}
+                  session={selected}
+                  metadata={metadataBySession[selected.id] || null}
+                  onMetadataChange={(metadata) =>
+                    setMetadataBySession((current) => ({
+                      ...current,
+                      [metadata.sessionId]: metadata,
+                    }))
+                  }
+                  onError={setError}
+                />
+              ) : selected.resume ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void navigator.clipboard.writeText(
+                      displayResumeCommand(selected),
+                    )
+                  }
+                  className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground hover:bg-accent"
+                >
+                  <CopyIcon className="h-4 w-4" />
+                  {t("agents.copyResumeCommand")}
+                </button>
+              ) : null}
             </header>
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-6">
               {isReading ? (
                 <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
                   <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
@@ -420,21 +617,11 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
               ) : null}
               {!isReading
                 ? visibleEntries.map((entry) => (
-                    <article
+                    <ConversationMessage
                       key={entry.id}
-                      style={{
-                        contentVisibility: "auto",
-                        containIntrinsicSize: "120px",
-                      }}
-                      className={`rounded-md border px-4 py-3 ${entry.role === "user" ? "border-border bg-muted/40" : "border-border bg-card"}`}
-                    >
-                      <div className="text-[11px] font-semibold uppercase text-muted-foreground">
-                        {t(`agents.sessionRole.${entry.role}`)}
-                      </div>
-                      <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-sm leading-6 text-foreground">
-                        {entry.text}
-                      </pre>
-                    </article>
+                      entry={entry}
+                      roleLabel={t(`agents.sessionRole.${entry.role}`)}
+                    />
                   ))
                 : null}
               {!isReading &&
@@ -474,5 +661,116 @@ export function AgentSessionsPanel({ agent }: { agent: ManagedAgentSummary }) {
         ) : null}
       </section>
     </div>
+  );
+}
+
+function FilterLabel({ icon, text }: { icon: React.ReactNode; text: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
+        {icon}
+      </span>
+      <span className="truncate">{text}</span>
+    </span>
+  );
+}
+
+function ConversationMessage({
+  entry,
+  roleLabel,
+}: {
+  entry: AgentSessionEntry;
+  roleLabel: string;
+}) {
+  const baseClass =
+    "max-w-[88%] rounded-2xl px-4 py-3 shadow-sm ring-1 ring-black/[0.025]";
+  const sharedProps = {
+    "data-testid": `conversation-message-${entry.id}`,
+    style: {
+      contentVisibility: "auto",
+      containIntrinsicSize: "120px",
+    } as React.CSSProperties,
+  };
+
+  if (entry.role === "user") {
+    return (
+      <article
+        {...sharedProps}
+        className={`${baseClass} ml-auto rounded-br-md bg-primary text-primary-foreground shadow-primary/15`}
+      >
+        <MessageRole
+          icon={<UserIcon className="h-3.5 w-3.5" />}
+          label={roleLabel}
+          className="justify-end text-primary-foreground/75"
+        />
+        <MessageText className="text-primary-foreground" text={entry.text} />
+      </article>
+    );
+  }
+
+  if (entry.role === "assistant") {
+    return (
+      <article
+        {...sharedProps}
+        className={`${baseClass} mr-auto rounded-bl-md border border-border/70 bg-white dark:bg-card`}
+      >
+        <MessageRole
+          icon={<BotIcon className="h-3.5 w-3.5" />}
+          label={roleLabel}
+          className="text-primary"
+        />
+        <MessageText className="text-foreground" text={entry.text} />
+      </article>
+    );
+  }
+
+  const isTool = entry.role === "tool";
+  return (
+    <article
+      {...sharedProps}
+      className={`${baseClass} mx-auto border ${isTool ? "border-sky-200 bg-white dark:border-sky-900/70 dark:bg-card" : "border-amber-200 bg-white dark:border-amber-900/70 dark:bg-card"}`}
+    >
+      <MessageRole
+        icon={
+          isTool ? (
+            <TerminalSquareIcon className="h-3.5 w-3.5" />
+          ) : (
+            <InfoIcon className="h-3.5 w-3.5" />
+          )
+        }
+        label={roleLabel}
+        className={isTool ? "text-sky-600" : "text-amber-600"}
+      />
+      <MessageText className="text-foreground" text={entry.text} />
+    </article>
+  );
+}
+
+function MessageRole({
+  icon,
+  label,
+  className,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  className: string;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 text-[11px] font-semibold ${className}`}
+    >
+      {icon}
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function MessageText({ text, className }: { text: string; className: string }) {
+  return (
+    <pre
+      className={`mt-2 whitespace-pre-wrap break-words font-sans text-sm leading-6 ${className}`}
+    >
+      {text}
+    </pre>
   );
 }

@@ -73,7 +73,11 @@ export interface SkillFileEditorSource {
   key: string;
   listFiles: () => Promise<SkillLocalFileTreeEntry[]>;
   readFile: (relativePath: string) => Promise<SkillLocalFileEntry | null>;
-  writeFile?: (relativePath: string, content: string) => Promise<void>;
+  writeFile?: (
+    relativePath: string,
+    content: string,
+    expectedRevision?: string,
+  ) => Promise<SkillLocalFileEntry | void>;
   openInFileManager?: () => void | Promise<void>;
 }
 
@@ -220,7 +224,11 @@ export function SkillFileEditor({
   );
 
   const writeFile = useCallback(
-    async (relativePath: string, content: string) => {
+    async (
+      relativePath: string,
+      content: string,
+      expectedRevision?: string,
+    ) => {
       if (readOnly) {
         return;
       }
@@ -228,7 +236,7 @@ export function SkillFileEditor({
         if (!fileSource.writeFile) {
           throw new Error("This file source is read only");
         }
-        return fileSource.writeFile(relativePath, content);
+        return fileSource.writeFile(relativePath, content, expectedRevision);
       }
       if (localPath) {
         return window.api.skill.writeLocalFileByPath(
@@ -623,24 +631,35 @@ export function SkillFileEditor({
     setIsSaving(true);
     try {
       const nextContent = modifiedFiles[selectedFile];
-      await writeFile(selectedFile, nextContent);
+      const savedFile = await writeFile(
+        selectedFile,
+        nextContent,
+        currentFile?.revision,
+      );
+      const persistedFile =
+        savedFile && !savedFile.isDirectory
+          ? {
+              ...savedFile,
+              path: normalizeSkillRelativePath(savedFile.path || selectedFile),
+            }
+          : {
+              path: selectedFile,
+              content: nextContent,
+              isDirectory: false,
+            };
       setFiles((prev) =>
         prev.map((file) =>
           file.path === selectedFile
             ? {
                 ...file,
-                size: new TextEncoder().encode(nextContent).length,
+                size: new TextEncoder().encode(persistedFile.content).length,
               }
             : file,
         ),
       );
       setLoadedFiles((prev) => ({
         ...prev,
-        [selectedFile]: {
-          path: selectedFile,
-          content: nextContent,
-          isDirectory: false,
-        },
+        [selectedFile]: persistedFile,
       }));
       setModifiedFiles((prev) => {
         const next = { ...prev };
@@ -663,7 +682,16 @@ export function SkillFileEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [modifiedFiles, onSave, readOnly, selectedFile, showToast, t, writeFile]);
+  }, [
+    currentFile?.revision,
+    modifiedFiles,
+    onSave,
+    readOnly,
+    selectedFile,
+    showToast,
+    t,
+    writeFile,
+  ]);
 
   // Keyboard shortcuts
   useEffect(() => {

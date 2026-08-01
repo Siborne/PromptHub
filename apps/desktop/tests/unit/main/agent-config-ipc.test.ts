@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const handleMock = vi.fn();
 const readFileMock = vi.fn();
 const writeFileMock = vi.fn();
+const listConfigFilesMock = vi.fn();
+const readConfigFileMock = vi.fn();
+const writeConfigFileMock = vi.fn();
 const getBuiltinAgentOverrideMock = vi.fn();
 const getPlatformRootDirMock = vi.fn();
 const inspectAgentModelConfigMock = vi.fn();
@@ -14,6 +17,11 @@ const launchAgentPlatformMock = vi.fn();
 vi.mock("electron", () => ({
   app: { getPath: vi.fn(() => "/tmp/prompthub") },
   ipcMain: { handle: handleMock },
+  safeStorage: {
+    isEncryptionAvailable: vi.fn(() => true),
+    encryptString: vi.fn((value: string) => Buffer.from(value)),
+    decryptString: vi.fn((value: Buffer) => value.toString("utf8")),
+  },
   shell: { openPath: vi.fn() },
 }));
 
@@ -56,6 +64,14 @@ vi.mock("../../../src/main/services/skill-installer-utils", () => ({
   getPlatformRootDir: getPlatformRootDirMock,
 }));
 
+vi.mock("../../../src/main/services/agent-user-config-files", () => ({
+  createAgentUserConfigFileService: vi.fn(() => ({
+    list: listConfigFilesMock,
+    read: readConfigFileMock,
+    write: writeConfigFileMock,
+  })),
+}));
+
 vi.mock("../../../src/main/services/agent-model-config", () => ({
   inspectAgentModelConfig: inspectAgentModelConfigMock,
   updateAgentModelConfig: updateAgentModelConfigMock,
@@ -94,6 +110,9 @@ describe("Agent config file IPC", () => {
   beforeEach(() => {
     readFileMock.mockReset();
     writeFileMock.mockReset();
+    listConfigFilesMock.mockReset();
+    readConfigFileMock.mockReset();
+    writeConfigFileMock.mockReset();
     getBuiltinAgentOverrideMock.mockReset();
     getPlatformRootDirMock.mockReset();
     inspectAgentModelConfigMock.mockReset();
@@ -103,6 +122,16 @@ describe("Agent config file IPC", () => {
     launchAgentPlatformMock.mockReset();
     getPlatformRootDirMock.mockImplementation((platform: { id: string }) =>
       platform.id === "kimi" ? "/Users/test/.kimi-code" : "/Users/test/.codex",
+    );
+    listConfigFilesMock.mockImplementation(
+      (context: { relativePaths: string[] }) =>
+        Promise.resolve(
+          context.relativePaths.map((relativePath) => ({
+            path: relativePath,
+            isDirectory: false,
+            size: 0,
+          })),
+        ),
     );
   });
 
@@ -123,10 +152,17 @@ describe("Agent config file IPC", () => {
   });
 
   it("lists, reads and writes only declared native config files", async () => {
-    readFileMock.mockResolvedValue({
+    readConfigFileMock.mockResolvedValue({
       path: "config.toml",
       isDirectory: false,
       content: 'model = "gpt-5"',
+      revision: "before",
+    });
+    writeConfigFileMock.mockResolvedValue({
+      path: "config.toml",
+      isDirectory: false,
+      content: 'model = "gpt-5.1"',
+      revision: "after",
     });
     const { handlers, IPC_CHANNELS } = await setup();
 
@@ -143,16 +179,26 @@ describe("Agent config file IPC", () => {
       "codex",
       "config.toml",
       'model = "gpt-5.1"',
+      "before",
     );
 
-    expect(readFileMock).toHaveBeenCalledWith(
-      "/Users/test/.codex",
+    expect(readConfigFileMock).toHaveBeenCalledWith(
+      {
+        agentId: "codex",
+        rootPath: "/Users/test/.codex",
+        relativePaths: ["config.toml"],
+      },
       "config.toml",
     );
-    expect(writeFileMock).toHaveBeenCalledWith(
-      "/Users/test/.codex",
+    expect(writeConfigFileMock).toHaveBeenCalledWith(
+      {
+        agentId: "codex",
+        rootPath: "/Users/test/.codex",
+        relativePaths: ["config.toml"],
+      },
       "config.toml",
       'model = "gpt-5.1"',
+      "before",
     );
   });
 
@@ -176,7 +222,7 @@ describe("Agent config file IPC", () => {
     ]);
   });
 
-  it("rejects unknown Agents, non-allowlisted paths and non-text writes", async () => {
+  it("rejects unknown Agents and malformed write payloads", async () => {
     const { handlers, IPC_CHANNELS } = await setup();
 
     await expect(
@@ -186,16 +232,6 @@ describe("Agent config file IPC", () => {
       handlers[IPC_CHANNELS.AGENT_CONFIG_FILES_LIST](null, ""),
     ).rejects.toThrow("non-empty agentId");
     await expect(
-      handlers[IPC_CHANNELS.AGENT_CONFIG_FILE_READ](null, "codex", "auth.json"),
-    ).rejects.toThrow("not allowlisted");
-    await expect(
-      handlers[IPC_CHANNELS.AGENT_CONFIG_FILE_READ](
-        null,
-        "codex",
-        "../auth.json",
-      ),
-    ).rejects.toThrow("not allowlisted");
-    await expect(
       handlers[IPC_CHANNELS.AGENT_CONFIG_FILE_WRITE](
         null,
         "codex",
@@ -203,8 +239,17 @@ describe("Agent config file IPC", () => {
         { model: "gpt-5" },
       ),
     ).rejects.toThrow("content must be a string");
-    expect(readFileMock).not.toHaveBeenCalled();
-    expect(writeFileMock).not.toHaveBeenCalled();
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_CONFIG_FILE_WRITE](
+        null,
+        "codex",
+        "config.toml",
+        'model = "gpt-5"',
+        42,
+      ),
+    ).rejects.toThrow("revision must be a string");
+    expect(readConfigFileMock).not.toHaveBeenCalled();
+    expect(writeConfigFileMock).not.toHaveBeenCalled();
   });
 
   it("reads and updates only non-secret model settings through the validated Agent root", async () => {

@@ -27,11 +27,13 @@ vi.mock("../../../src/renderer/components/skill/SkillFileEditor", () => ({
   SkillFileEditor: ({
     allowStructuralMutations,
     fileSource,
+    initialFilePath,
     localPath,
     visibleFilePaths,
   }: {
     allowStructuralMutations?: boolean;
     fileSource?: { key: string };
+    initialFilePath?: string;
     localPath?: string;
     visibleFilePaths?: string[];
   }) => (
@@ -41,7 +43,7 @@ vi.mock("../../../src/renderer/components/skill/SkillFileEditor", () => ({
       data-source-key={fileSource?.key}
       data-structural-mutations={String(allowStructuralMutations)}
     >
-      {visibleFilePaths?.join(",")}
+      {visibleFilePaths?.join(",") || initialFilePath}
     </div>
   ),
 }));
@@ -205,7 +207,7 @@ describe("Agent workspace shell", () => {
     }
   });
 
-  it("keeps the Agent list search-only and rows clickable", async () => {
+  it("keeps the Agent list search-only and hides undetected rows", async () => {
     await renderWithI18n(<AgentsSidebarPanel />);
 
     expect(
@@ -214,9 +216,14 @@ describe("Agent workspace shell", () => {
     expect(
       screen.queryByRole("combobox", { name: /sort agents/i }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /cline/i }));
-
-    expect(useAgentStore.getState().selectedAgentId).toBe("cline");
+    expect(screen.getByText("1 available")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /cline/i }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/search agents/i), {
+      target: { value: "cline" },
+    });
+    expect(screen.getByText(/no agents match this view/i)).toBeVisible();
   });
 
   it("positions the pin action at the centered right edge", async () => {
@@ -318,6 +325,48 @@ describe("Agent workspace shell", () => {
     expect(useAgentStore.getState().selectedAgentId).toBe("claude");
   });
 
+  it("projects only detected Agents and repairs a stale selection", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([
+            {
+              id: "claude",
+              name: "Claude Code",
+              icon: "Sparkles",
+              rootDir: {
+                darwin: "~/.claude",
+                win32: "%USERPROFILE%\\.claude",
+                linux: "~/.claude",
+              },
+              skillsRelativePath: "skills",
+            },
+            {
+              id: "cline",
+              name: "Cline",
+              icon: "Terminal",
+              rootDir: {
+                darwin: "~/.cline",
+                win32: "%USERPROFILE%\\.cline",
+                linux: "~/.cline",
+              },
+              skillsRelativePath: "skills",
+            },
+          ]),
+          detectPlatforms: vi.fn().mockResolvedValue(["claude"]),
+        },
+      },
+    });
+    useAgentStore.setState({ selectedAgentId: "cline" });
+
+    await useAgentStore.getState().refresh();
+
+    expect(useAgentStore.getState().agents.map((agent) => agent.id)).toEqual([
+      "claude",
+    ]);
+    expect(useAgentStore.getState().selectedAgentId).toBe("claude");
+  });
+
   it("renders direct asset tabs without maintenance, usage, or an assets submenu", async () => {
     await renderWorkspaceAndSettleOverview();
 
@@ -373,10 +422,8 @@ describe("Agent workspace shell", () => {
     useAgentStore.setState({ selectedAgentId: "cline" });
     await renderWorkspaceAndSettleOverview();
 
-    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
-
     expect(
-      screen.queryByRole("button", { name: /cli diagnostics/i }),
+      screen.queryByRole("button", { name: /more actions/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -393,13 +440,29 @@ describe("Agent workspace shell", () => {
       "title",
       "This adapter is planned and is not available yet.",
     );
-    expect(
-      screen.getAllByText(
-        "This adapter is planned and is not available yet.",
-      )[0],
-    ).toBeVisible();
+    expect(screen.getByText("Agent not detected")).toBeVisible();
     expect(window.api.agent.getModelConfig).not.toHaveBeenCalled();
     expect(window.api.agent.listProviderProfiles).not.toHaveBeenCalled();
+  });
+
+  it("keeps only Overview enabled and performs no native reads for an undetected Agent", async () => {
+    useAgentStore.setState({ agents: [agents[1]], selectedAgentId: "cline" });
+
+    await renderWorkspaceAndSettleOverview();
+
+    const tabs = screen.getAllByRole("tab");
+    expect(screen.getByRole("tab", { name: /overview/i })).toBeEnabled();
+    for (const tab of tabs.slice(1)) expect(tab).toBeDisabled();
+    expect(screen.queryByTestId("agent-config-editor")).not.toBeInTheDocument();
+    expect(window.api.agent.listConfigFiles).not.toHaveBeenCalled();
+    expect(window.api.agent.getModelConfig).not.toHaveBeenCalled();
+    expect(window.api.agent.listSessions).not.toHaveBeenCalled();
+    expect(window.api.agent.getUsage).not.toHaveBeenCalled();
+    expect(window.api.agent.getAppearance).not.toHaveBeenCalled();
+    expect(window.api.skill.scanPlatformSkills).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /more actions/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("uses roving focus and arrow keys across enabled workspace tabs", async () => {
@@ -592,6 +655,10 @@ describe("Agent workspace shell", () => {
     expect(rootInput).toHaveValue("~/team-agent");
     fireEvent.change(nameInput, { target: { value: "Research Agent" } });
     fireEvent.change(rootInput, { target: { value: "~/research-agent" } });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: /commands/i }),
+      { target: { value: "team-commands" } },
+    );
     fireEvent.click(within(dialog).getByRole("switch", { name: /enabled/i }));
     fireEvent.click(within(dialog).getByRole("button", { name: /^save$/i }));
 
@@ -604,6 +671,7 @@ describe("Agent workspace shell", () => {
         enabled: false,
         name: "Research Agent",
         rootPath: "~/research-agent",
+        commandsRelativePath: "team-commands",
       }),
     );
     await waitFor(() =>
@@ -945,7 +1013,13 @@ describe("Agent workspace shell", () => {
   });
 
   it("enables only direct asset tabs backed by a configured path", async () => {
-    useAgentStore.setState({ selectedAgentId: "cline" });
+    useAgentStore.setState({
+      agents: [
+        agents[0],
+        { ...agents[1], isDetected: true, status: "installed" as const },
+      ],
+      selectedAgentId: "cline",
+    });
 
     await renderWorkspaceAndSettleOverview();
 
@@ -977,7 +1051,13 @@ describe("Agent workspace shell", () => {
   });
 
   it("keeps Config Files disabled when no native path is verified", async () => {
-    useAgentStore.setState({ selectedAgentId: "cline" });
+    useAgentStore.setState({
+      agents: [
+        agents[0],
+        { ...agents[1], isDetected: true, status: "installed" as const },
+      ],
+      selectedAgentId: "cline",
+    });
 
     await renderWorkspaceAndSettleOverview();
 

@@ -69,7 +69,7 @@ export const useAgentStore = create<AgentState>()(
             builtinOverrides: settings.builtinAgentOverrides || {},
             agentIdentityPreferences: settings.agentIdentityPreferences,
             osKey: getOsKey(),
-          });
+          }).filter((agent) => agent.isDetected);
           const selectedAgentId = agents.some(
             (agent) => agent.id === get().selectedAgentId,
           )

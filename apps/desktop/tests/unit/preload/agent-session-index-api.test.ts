@@ -63,4 +63,60 @@ describe("Agent session index preload API", () => {
       handler,
     );
   });
+
+  it("forwards conversation metadata, continuation, and export requests", async () => {
+    const identity = { agentId: "claude", sessionId: "session-1" };
+    const metadata = {
+      ...identity,
+      title: "Release fix",
+      tags: ["release"],
+    };
+    const handoff = {
+      sourceAgentId: "claude",
+      sourceSessionId: "session-1",
+      targetAgentId: "codex",
+      projectId: "project-1",
+      projectPath: "/workspace/project",
+    };
+    const continuation = {
+      ...handoff,
+      sourceTitle: "Release fix",
+      payload: "portable context",
+      payloadDigest: `sha256:${"a".repeat(64)}`,
+      confirmedPayloadDigest: `sha256:${"a".repeat(64)}`,
+      transport: "direct" as const,
+    };
+
+    await agentApi.listConversationMetadata("claude", ["session-1"]);
+    await agentApi.updateConversationMetadata(metadata);
+    await agentApi.deleteConversation(identity);
+    await agentApi.restoreConversation(identity);
+    await agentApi.resumeConversation(identity);
+    await agentApi.previewConversationHandoff(handoff);
+    await agentApi.continueConversationInAgent(continuation);
+    await agentApi.exportConversation({ ...identity, format: "markdown" });
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [
+        IPC_CHANNELS.AGENT_CONVERSATION_METADATA_LIST,
+        {
+          agentId: "claude",
+          sessionIds: ["session-1"],
+        },
+      ],
+      [IPC_CHANNELS.AGENT_CONVERSATION_METADATA_UPDATE, metadata],
+      [IPC_CHANNELS.AGENT_CONVERSATION_DELETE, identity],
+      [IPC_CHANNELS.AGENT_CONVERSATION_RESTORE, identity],
+      [IPC_CHANNELS.AGENT_CONVERSATION_RESUME, identity],
+      [IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_PREVIEW, handoff],
+      [IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_CONTINUE, continuation],
+      [
+        IPC_CHANNELS.AGENT_CONVERSATION_EXPORT,
+        {
+          ...identity,
+          format: "markdown",
+        },
+      ],
+    ]);
+  });
 });

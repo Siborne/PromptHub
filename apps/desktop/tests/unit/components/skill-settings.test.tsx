@@ -167,8 +167,7 @@ describe("SkillSettings", () => {
         platformId,
       ).toBeTruthy();
       expect(
-        list.querySelector(`[data-platform-id="${platformId}"]`)
-          ?.parentElement,
+        list.querySelector(`[data-platform-id="${platformId}"]`)?.parentElement,
         platformId,
       ).toBe(clawGroup);
     }
@@ -438,8 +437,8 @@ describe("SkillSettings", () => {
       screen.getAllByText(/Derived skill scan paths/).length,
     ).toBeGreaterThan(0);
     expect(
-      screen.getAllByText(/Derived agent directories/).length,
-    ).toBeGreaterThan(0);
+      screen.queryByText(/Derived agent directories/),
+    ).not.toBeInTheDocument();
   }, 60000);
 
   it("fills the custom agent root path from folder picker", async () => {

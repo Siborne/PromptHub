@@ -48,6 +48,7 @@ export interface SkillPlatform {
   mcpRelativePath?: string;
   pluginsRelativePath?: string;
   agentsRelativePath?: string;
+  commandsRelativePath?: string;
   globalRuleFile?: string;
   configFiles?: string[];
   cli?: AgentCliDescriptor;
@@ -357,6 +358,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     skillsRelativePath: "skills",
     mcpRelativePath: "settings.json",
     pluginsRelativePath: "config/plugins",
+    commandsRelativePath: "commands",
     globalRuleFile: "GEMINI.md",
     configFiles: ["settings.json"],
   },
@@ -435,6 +437,8 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.config/opencode",
     },
     skillsRelativePath: "skills",
+    agentsRelativePath: "agents",
+    commandsRelativePath: "commands",
     mcpRelativePath: "opencode.json",
     globalRuleFile: "AGENTS.md",
     configFiles: ["opencode.jsonc", "opencode.json", "config.json"],
@@ -584,6 +588,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.reasonix",
     },
     skillsRelativePath: "skills",
+    commandsRelativePath: "commands",
     // Reasonix stores MCP/plugin declarations in TOML, but its schema is not
     // compatible with the Codex TOML writer. Keep this path discovery-only.
     mcpRelativePath: "config.toml",
@@ -599,6 +604,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.augment",
     },
     skillsRelativePath: "skills",
+    commandsRelativePath: "commands",
     // Auggie persists MCP servers in settings.json; no generic MCP writer is
     // exposed until the settings schema has a dedicated target adapter.
     mcpRelativePath: "settings.json",
@@ -614,6 +620,8 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.zcode",
     },
     skillsRelativePath: "skills",
+    agentsRelativePath: "agents",
+    commandsRelativePath: "commands",
     mcpRelativePath: "cli/config.json",
     globalRuleFile: "AGENTS.md",
     configFiles: ["cli/config.json"],
@@ -629,6 +637,8 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     },
     rootEnvironmentVariable: "GROK_HOME",
     skillsRelativePath: "skills",
+    agentsRelativePath: "agents",
+    commandsRelativePath: "commands",
     mcpRelativePath: "config.toml",
     pluginsRelativePath: "plugins",
     globalRuleFile: "AGENTS.md",
@@ -652,6 +662,8 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     rootEnvironmentVariable: "QWEN_HOME",
     environmentRootRelativeToCwd: true,
     skillsRelativePath: "skills",
+    agentsRelativePath: "agents",
+    commandsRelativePath: "commands",
     mcpRelativePath: "settings.json",
     pluginsRelativePath: "extensions",
     globalRuleFile: "QWEN.md",
@@ -822,6 +834,8 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.codebuddy",
     },
     skillsRelativePath: "skills",
+    agentsRelativePath: "agents",
+    commandsRelativePath: "commands",
     mcpRelativePath: ".mcp.json",
     globalRuleFile: "CODEBUDDY.md",
     configFiles: ["settings.json", ".mcp.json", "CODEBUDDY.md"],

@@ -196,7 +196,7 @@ export function getAgentPlatformCapabilityInventory(
       platform.pluginsRelativePath,
       "plugins-relative-path",
     ),
-    configFiles: pathCapability(platform.configFiles, "config-file-allowlist"),
+    configFiles: declaration("partial", "user-config-root-discovery"),
     sessions: depth.sessions,
     usage: depth.usage,
     launch: hasLaunchPath(platform)

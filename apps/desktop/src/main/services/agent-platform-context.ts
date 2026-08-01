@@ -7,6 +7,7 @@ import {
 } from "./skill-installer-utils";
 
 export interface AgentConfigContext {
+  agentId: string;
   rootPath: string;
   relativePaths: string[];
 }
@@ -50,6 +51,7 @@ export function getAgentConfigContext(agentId: unknown): AgentConfigContext {
   );
 
   return {
+    agentId: normalizedAgentId,
     rootPath: getPlatformRootDir(platform),
     relativePaths,
   };

@@ -36,3 +36,4 @@ export { SkillDB } from "./skill";
 export { RuleDB } from "./rule";
 export { AgentProviderProfileDB } from "./agent-provider-profile";
 export { AgentSessionIndexDB } from "./agent-session-index";
+export { AgentConversationDB } from "./agent-conversation";

@@ -289,6 +289,11 @@ describe("AgentOverviewPanel", () => {
   });
 
   it("renders real domain counts from the owning stores and IPC summaries", async () => {
+    window.api.agent.listConfigFiles = vi
+      .fn()
+      .mockResolvedValue([
+        { path: "settings.json", isDirectory: false, size: 128 },
+      ]);
     window.api.agent.listSessions = vi.fn().mockResolvedValue({
       agentId: "claude",
       adapter: "claude-jsonl-v1",
@@ -392,10 +397,11 @@ describe("AgentOverviewPanel", () => {
   it("greys out planned or unsupported cells and never issues their IPC", async () => {
     const onNavigate = vi.fn();
     await renderWithI18n(
-      <AgentOverviewPanel agent={clineAgent} onNavigate={onNavigate} />,
+      <AgentOverviewPanel
+        agent={{ ...clineAgent, isDetected: true, status: "installed" }}
+        onNavigate={onNavigate}
+      />,
     );
-
-    expect(screen.getByText("Agent not detected")).toBeVisible();
 
     const grid = screen.getByLabelText("Overview");
     for (const label of [
@@ -426,10 +432,6 @@ describe("AgentOverviewPanel", () => {
     expect(window.api.agent.getModelConfig).not.toHaveBeenCalled();
     expect(window.api.agent.getUsage).not.toHaveBeenCalled();
     expect(window.api.agent.getAppearance).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(window.api.skill.scanPlatformSkills).not.toHaveBeenCalled(),
-    );
-
     fireEvent.click(screen.getByRole("button", { name: /^skills/i }));
     expect(onNavigate).toHaveBeenCalledWith("skills");
   });
@@ -572,7 +574,10 @@ describe("AgentOverviewPanel", () => {
 
   it("hides the open-folder button for paths that are not configured", async () => {
     await renderWithI18n(
-      <AgentOverviewPanel agent={clineAgent} onNavigate={vi.fn()} />,
+      <AgentOverviewPanel
+        agent={{ ...clineAgent, isDetected: true, status: "installed" }}
+        onNavigate={vi.fn()}
+      />,
     );
 
     fireEvent.click(screen.getByText("Path details"));

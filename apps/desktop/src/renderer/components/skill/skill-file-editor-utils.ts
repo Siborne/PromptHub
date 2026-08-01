@@ -6,6 +6,8 @@ export interface FileEntry {
   path: string;
   content: string;
   isDirectory: boolean;
+  revision?: string;
+  redacted?: boolean;
   mimeType?: string;
   encoding?: "text" | "data-url" | "placeholder";
   previewKind?: "image" | "audio" | "video" | "pdf";

@@ -111,6 +111,279 @@ describe("AgentSessionsPanel", () => {
     expect(screen.getByText("100 / 120")).toBeVisible();
   });
 
+  it("resumes natively, previews cross-Agent continuation, and exports history", async () => {
+    const session = {
+      ...metadata(1),
+      resume: {
+        executable: "codex",
+        args: ["resume", "session-1"],
+        cwd: "/workspace/PromptHub",
+      },
+    };
+    const resumeConversation = vi.fn().mockResolvedValue({
+      status: "launched",
+      mode: "native-resume",
+    });
+    const previewConversationHandoff = vi.fn().mockResolvedValue({
+      sourceAgentId: "codex",
+      sourceSessionId: "session-1",
+      sourceTitle: "Session 1",
+      targetAgentId: "claude",
+      projectId: "project-1",
+      projectPath: "/workspace/PromptHub",
+      payload: "# Portable handoff\n\nContinue the updater fix.",
+      payloadDigest: `sha256:${"a".repeat(64)}`,
+      transport: "direct",
+    });
+    const continueConversationInAgent = vi.fn().mockResolvedValue({
+      status: "launched",
+      mode: "cross-agent",
+    });
+    const exportConversation = vi.fn().mockResolvedValue({
+      canceled: false,
+      filePath: "/tmp/session.md",
+    });
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessions: [session],
+            total: 1,
+            hasMore: false,
+          }),
+          readSession: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessionId: "session-1",
+            entries: [
+              entry(0),
+              entry(1),
+              { ...entry(2), role: "system", text: "System context" },
+              { ...entry(3), role: "tool", text: "Tool result" },
+            ],
+            parseErrors: 0,
+            truncated: false,
+          }),
+          listConversationMetadata: vi.fn().mockResolvedValue([]),
+          resumeConversation,
+          previewConversationHandoff,
+          continueConversationInAgent,
+          exportConversation,
+        },
+      },
+    });
+    const claude = {
+      ...agent,
+      id: "claude",
+      name: "Claude Code",
+    } as ManagedAgentSummary;
+
+    await renderWithI18n(
+      <AgentSessionsPanel
+        agent={agent}
+        agents={[agent, claude]}
+        projects={[
+          {
+            id: "project-1",
+            name: "PromptHub",
+            rootPath: "/workspace/PromptHub",
+            scanPaths: [],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ]}
+      />,
+      { language: "en", settleAsyncEffects: true },
+    );
+
+    expect(screen.getByLabelText("Filter by project")).toHaveAttribute(
+      "aria-haspopup",
+      "listbox",
+    );
+    expect(screen.getByLabelText("Conversation status")).toHaveAttribute(
+      "aria-haspopup",
+      "listbox",
+    );
+    expect(
+      document.querySelector('select[aria-label="Filter by project"]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('select[aria-label="Conversation status"]'),
+    ).toBeNull();
+    expect(screen.getByTestId("conversation-continuation-toolbar")).toHaveClass(
+      "grid",
+    );
+    expect(
+      await screen.findByTestId("conversation-message-entry-0"),
+    ).toHaveClass("ml-auto", "rounded-2xl", "bg-primary");
+    expect(screen.getByTestId("conversation-message-entry-1")).toHaveClass(
+      "mr-auto",
+      "rounded-2xl",
+      "bg-white",
+    );
+    expect(screen.getByTestId("conversation-message-entry-2")).toHaveClass(
+      "mx-auto",
+      "rounded-2xl",
+      "bg-white",
+    );
+    expect(screen.getByTestId("conversation-message-entry-3")).toHaveClass(
+      "mx-auto",
+      "rounded-2xl",
+      "bg-white",
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
+    await waitFor(() =>
+      expect(resumeConversation).toHaveBeenCalledWith({
+        agentId: "codex",
+        sessionId: "session-1",
+      }),
+    );
+    expect(
+      await screen.findByText("Opened the native resume flow in ChatGPT."),
+    ).toBeVisible();
+    fireEvent.click(screen.getByLabelText("Continue with Agent"));
+    fireEvent.click(
+      screen.getByRole("option", { name: "Claude Code, CLI handoff" }),
+    );
+    fireEvent.click(screen.getByLabelText("Project for continuation"));
+    fireEvent.click(
+      screen
+        .getAllByRole("option", { name: "PromptHub" })
+        .find(
+          (option) =>
+            option.tagName === "BUTTON" &&
+            option.getAttribute("aria-selected") === "true",
+        )!,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview handoff" }));
+    expect(await screen.findByText("Review handoff context")).toBeVisible();
+    expect(screen.getByText(/Continue the updater fix/)).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue in Claude Code" }),
+    );
+    await waitFor(() =>
+      expect(continueConversationInAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetAgentId: "claude",
+          confirmedPayloadDigest: `sha256:${"a".repeat(64)}`,
+        }),
+      ),
+    );
+    expect(
+      await screen.findByText("Started a new conversation in Claude Code."),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export Markdown" }));
+    await waitFor(() =>
+      expect(exportConversation).toHaveBeenCalledWith({
+        agentId: "codex",
+        sessionId: "session-1",
+        format: "markdown",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Export Markdown" }),
+      ).toBeEnabled(),
+    );
+    expect(await screen.findByText("Conversation exported.")).toBeVisible();
+  });
+
+  it("edits PromptHub metadata and soft-removes a native conversation", async () => {
+    const current = metadata(2);
+    const updateConversationMetadata = vi.fn().mockResolvedValue({
+      id: "metadata-2",
+      agentId: "codex",
+      sessionId: current.id,
+      title: "Renamed conversation",
+      projectId: null,
+      projectPath: current.projectPath,
+      tags: ["release"],
+      note: "Keep this context",
+      favorite: false,
+      archivedAt: null,
+      deletedAt: null,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const deleteConversation = vi.fn().mockResolvedValue({
+      ...(await updateConversationMetadata({})),
+      deletedAt: 3,
+    });
+    updateConversationMetadata.mockClear();
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessions: [current],
+            total: 1,
+            hasMore: false,
+          }),
+          readSession: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessionId: current.id,
+            entries: [],
+            parseErrors: 0,
+            truncated: false,
+          }),
+          listConversationMetadata: vi.fn().mockResolvedValue([]),
+          resumeConversation: vi.fn(),
+          updateConversationMetadata,
+          deleteConversation,
+          exportConversation: vi.fn(),
+        },
+      },
+    });
+
+    await renderWithI18n(<AgentSessionsPanel agent={agent} />, {
+      language: "en",
+      settleAsyncEffects: true,
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit details" }),
+    );
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Renamed conversation" },
+    });
+    fireEvent.change(screen.getByLabelText("Tags (comma separated)"), {
+      target: { value: "release" },
+    });
+    fireEvent.change(screen.getByLabelText("Note"), {
+      target: { value: "Keep this context" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updateConversationMetadata).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Renamed conversation",
+          tags: ["release"],
+          note: "Keep this context",
+        }),
+      ),
+    );
+    expect((await screen.findAllByText("Renamed conversation")).length).toBe(2);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove from history" }),
+    );
+    await waitFor(() =>
+      expect(deleteConversation).toHaveBeenCalledWith({
+        agentId: "codex",
+        sessionId: current.id,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /Renamed conversation/ }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
   it("explains a successful native-source empty result", async () => {
     installWindowMocks({
       api: {

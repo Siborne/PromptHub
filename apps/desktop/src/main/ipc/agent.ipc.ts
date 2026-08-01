@@ -1,13 +1,11 @@
 import path from "node:path";
 import { access } from "node:fs/promises";
-import { app, ipcMain, shell } from "electron";
+import { app, ipcMain, safeStorage, shell } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import type { AgentUsageQuota } from "@prompthub/shared/types";
 import { SkillInstaller } from "../services/skill-installer";
-import {
-  getAgentConfigContext,
-  requireAllowlistedAgentConfigPath,
-} from "../services/agent-platform-context";
+import { getAgentConfigContext } from "../services/agent-platform-context";
+import { createAgentUserConfigFileService } from "../services/agent-user-config-files";
 import {
   inspectAgentModelConfig,
   updateAgentModelConfig,
@@ -21,6 +19,10 @@ import { registerAgentCliLifecycleIPC } from "./agent-cli-lifecycle.ipc";
 
 export function registerAgentIPC(): void {
   const usageService = createAgentUsageService();
+  const configFileService = createAgentUserConfigFileService({
+    backupRoot: path.join(app.getPath("userData"), "agent-config-backups"),
+    encryption: safeStorage,
+  });
   registerAgentCliLifecycleIPC();
 
   ipcMain.handle(IPC_CHANNELS.AGENT_LAUNCH, async (_, agentId: unknown) => {
@@ -72,11 +74,7 @@ export function registerAgentIPC(): void {
     IPC_CHANNELS.AGENT_CONFIG_FILES_LIST,
     async (_, agentId: string) => {
       const context = getAgentConfigContext(agentId);
-      return context.relativePaths.map((relativePath) => ({
-        path: relativePath,
-        isDirectory: false,
-        size: 0,
-      }));
+      return configFileService.list(context);
     },
   );
 
@@ -84,24 +82,36 @@ export function registerAgentIPC(): void {
     IPC_CHANNELS.AGENT_CONFIG_FILE_READ,
     async (_, agentId: string, relativePath: string) => {
       const context = getAgentConfigContext(agentId);
-      return SkillInstaller.readLocalRepoFileByPath(
-        context.rootPath,
-        requireAllowlistedAgentConfigPath(context, relativePath),
-      );
+      return configFileService.read(context, relativePath);
     },
   );
 
   ipcMain.handle(
     IPC_CHANNELS.AGENT_CONFIG_FILE_WRITE,
-    async (_, agentId: string, relativePath: string, content: unknown) => {
+    async (
+      _,
+      agentId: string,
+      relativePath: string,
+      content: unknown,
+      expectedRevision: unknown,
+    ) => {
       if (typeof content !== "string") {
         throw new Error("Agent config content must be a string");
       }
+      if (
+        expectedRevision !== undefined &&
+        typeof expectedRevision !== "string"
+      ) {
+        throw new Error("Agent config revision must be a string");
+      }
+      const revision =
+        typeof expectedRevision === "string" ? expectedRevision : undefined;
       const context = getAgentConfigContext(agentId);
-      await SkillInstaller.writeLocalRepoFileByPath(
-        context.rootPath,
-        requireAllowlistedAgentConfigPath(context, relativePath),
+      return configFileService.write(
+        context,
+        relativePath,
         content,
+        revision,
       );
     },
   );

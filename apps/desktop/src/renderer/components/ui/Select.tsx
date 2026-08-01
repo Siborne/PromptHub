@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useLayoutEffect, useId } from 'react';
-import { createPortal } from 'react-dom';
-import { useTranslation } from 'react-i18next';
-import { ChevronDownIcon, CheckIcon } from 'lucide-react';
+import { useState, useRef, useEffect, useLayoutEffect, useId } from "react";
+import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import { ChevronDownIcon, CheckIcon } from "lucide-react";
 
 export interface SelectOption {
   value: string;
@@ -26,7 +26,7 @@ export function Select({
   onChange,
   options,
   placeholder,
-  className = '',
+  className = "",
   ariaLabel,
   triggerClassName,
   disabled = false,
@@ -58,7 +58,10 @@ export function Select({
       const viewportHeight = window.innerHeight;
       const spaceBelow = viewportHeight - rect.bottom - 12;
       const spaceAbove = rect.top - 12;
-      const dropdownHeight = Math.min(280, Math.max(spaceBelow, spaceAbove, 160));
+      const dropdownHeight = Math.min(
+        280,
+        Math.max(spaceBelow, spaceAbove, 160),
+      );
       const shouldOpenUpwards = spaceBelow < 160 && spaceAbove > spaceBelow;
 
       setDropdownStyle({
@@ -73,12 +76,12 @@ export function Select({
 
     updatePosition();
 
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
 
     return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
     };
   }, [isOpen]);
 
@@ -98,37 +101,41 @@ export function Select({
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
   // Close on ESC
   // 按 ESC 键关闭
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         setIsOpen(false);
       }
     };
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
     }
   }, [isOpen]);
 
   // Get current selected label
   // 获取当前选中项的标签
   const selectedOption = options.find((opt) => opt.value === value);
-  const displayLabel = selectedOption?.label || placeholder || t('common.select');
+  const displayLabel =
+    selectedOption?.label || placeholder || t("common.select");
 
   // Group options
   // 按分组整理选项
-  const groups = options.reduce((acc, opt) => {
-    const group = opt.group || '';
-    if (!acc[group]) acc[group] = [];
-    acc[group].push(opt);
-    return acc;
-  }, {} as Record<string, SelectOption[]>);
+  const groups = options.reduce(
+    (acc, opt) => {
+      const group = opt.group || "";
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(opt);
+      return acc;
+    },
+    {} as Record<string, SelectOption[]>,
+  );
 
   const groupNames = Object.keys(groups);
 
@@ -151,47 +158,47 @@ export function Select({
             flex items-center justify-between gap-2
             focus:outline-none focus:ring-2 focus:ring-primary/30
             transition-all duration-quick
-            ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-muted/80'}
-            ${isOpen ? 'ring-2 ring-primary/30' : ''}
+            ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted/80"}
+            ${isOpen ? "ring-2 ring-primary/30" : ""}
           `
         }
       >
-        <span className={selectedOption ? 'text-foreground' : 'text-muted-foreground'}>
+        <span
+          className={`min-w-0 flex-1 overflow-hidden ${
+            selectedOption ? "text-foreground" : "text-muted-foreground"
+          }`}
+        >
           {displayLabel}
         </span>
         <ChevronDownIcon
           aria-hidden="true"
-          className={`w-4 h-4 text-muted-foreground transition-transform duration-base ${
-            isOpen ? 'rotate-180' : ''
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-base ${
+            isOpen ? "rotate-180" : ""
           }`}
         />
       </button>
 
       {/* Dropdown menu */}
       {/* 下拉菜单 */}
-      {isOpen && dropdownStyle && typeof document !== 'undefined'
+      {isOpen && dropdownStyle && typeof document !== "undefined"
         ? createPortal(
             <div
               id={listboxId}
               ref={listRef}
               role="listbox"
               aria-label={ariaLabel}
-              className="
-                fixed min-w-[180px]
-                bg-popover border border-border rounded-lg shadow-lg
-                overflow-hidden animate-in fade-in-0 zoom-in-95 duration-quick ease-enter
-              "
+              className="fixed min-w-[180px] overflow-hidden rounded-xl border border-border/80 bg-popover p-1 shadow-[0_18px_48px_rgba(0,0,0,0.22)] animate-in fade-in-0 zoom-in-95 duration-quick ease-enter"
               style={{
                 top: dropdownStyle.top,
                 left: dropdownStyle.left,
                 width: dropdownStyle.width,
                 maxHeight: dropdownStyle.maxHeight,
-                overflowY: 'auto',
+                overflowY: "auto",
                 zIndex: 9999,
               }}
             >
-              {groupNames.length === 1 && groupNames[0] === '' ? (
-                <div className="py-1">
+              {groupNames.length === 1 && groupNames[0] === "" ? (
+                <div>
                   {options.map((opt) => (
                     <OptionItem
                       key={opt.value}
@@ -206,13 +213,13 @@ export function Select({
                 </div>
               ) : (
                 groupNames.map((groupName, idx) => (
-                  <div key={groupName || 'default'}>
+                  <div key={groupName || "default"}>
                     {groupName && (
                       <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/30">
                         {groupName}
                       </div>
                     )}
-                    <div className="py-1">
+                    <div>
                       {groups[groupName].map((opt) => (
                         <OptionItem
                           key={opt.value}
@@ -225,7 +232,9 @@ export function Select({
                         />
                       ))}
                     </div>
-                    {idx < groupNames.length - 1 && <div className="border-t border-border" />}
+                    {idx < groupNames.length - 1 && (
+                      <div className="border-t border-border" />
+                    )}
                   </div>
                 ))
               )}
@@ -256,17 +265,20 @@ function OptionItem({
       aria-label={option.labelText}
       onClick={onSelect}
       className={`
-        w-full px-3 py-2 text-sm text-left
+        w-full rounded-lg px-2.5 py-2 text-sm text-left
         flex items-center justify-between gap-2
         transition-colors duration-instant
-        ${isSelected 
-          ? 'bg-primary/10 text-primary font-medium' 
-          : 'text-foreground hover:bg-muted/50'
+        ${
+          isSelected
+            ? "bg-primary/10 text-primary font-medium"
+            : "text-foreground hover:bg-muted/50"
         }
       `}
     >
-      <span className="truncate">{option.label}</span>
-      {isSelected && <CheckIcon aria-hidden="true" className="w-4 h-4 flex-shrink-0" />}
+      <span className="min-w-0 flex-1 overflow-hidden">{option.label}</span>
+      {isSelected && (
+        <CheckIcon aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
+      )}
     </button>
   );
 }

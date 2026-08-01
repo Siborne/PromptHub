@@ -138,6 +138,7 @@ export function isAgentTabEnabled(
   agent: ManagedAgentSummary,
   tab: AgentWorkspaceTab,
 ): boolean {
+  if (!agent.isDetected) return tab.key === "overview";
   const status = getAgentTabStatus(agent, tab);
   return status === "supported" || status === "partial";
 }

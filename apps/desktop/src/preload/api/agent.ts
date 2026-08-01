@@ -40,11 +40,20 @@ import type {
   AgentSessionIndexRefreshRequest,
   AgentSessionIndexSetEnabledRequest,
   AgentSessionListResult,
+  AgentConversationActionResult,
+  AgentConversationExportRequest,
+  AgentConversationExportSaveResult,
+  AgentConversationHandoffPreview,
+  AgentConversationHandoffRequest,
+  AgentConversationMetadata,
+  AgentConversationResumeRequest,
+  ContinueAgentConversationRequest,
   AgentUsageQuota,
   SkillLocalFileEntry,
   SkillLocalFileTreeEntry,
   UpdateAgentModelInput,
   UpdateAgentModelResult,
+  UpsertAgentConversationMetadataInput,
   CreateAgentProviderProfileRequest,
   UpdateAgentProviderProfileRequest,
 } from "@prompthub/shared/types";
@@ -73,12 +82,14 @@ export const agentApi = {
     agentId: string,
     relativePath: string,
     content: string,
-  ): Promise<void> =>
+    expectedRevision?: string,
+  ): Promise<SkillLocalFileEntry> =>
     ipcRenderer.invoke(
       IPC_CHANNELS.AGENT_CONFIG_FILE_WRITE,
       agentId,
       relativePath,
       content,
+      expectedRevision,
     ),
   listDefinitions: (
     request: AgentDefinitionListRequest,
@@ -112,6 +123,48 @@ export const agentApi = {
     sessionId: string,
   ): Promise<AgentSessionDetail> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_SESSION_READ, agentId, sessionId),
+  listConversationMetadata: (
+    agentId: string,
+    sessionIds: string[],
+  ): Promise<AgentConversationMetadata[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONVERSATION_METADATA_LIST, {
+      agentId,
+      sessionIds,
+    }),
+  updateConversationMetadata: (
+    input: UpsertAgentConversationMetadataInput,
+  ): Promise<AgentConversationMetadata> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONVERSATION_METADATA_UPDATE, input),
+  deleteConversation: (
+    request: AgentConversationResumeRequest,
+  ): Promise<AgentConversationMetadata> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONVERSATION_DELETE, request),
+  restoreConversation: (
+    request: AgentConversationResumeRequest,
+  ): Promise<AgentConversationMetadata> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONVERSATION_RESTORE, request),
+  resumeConversation: (
+    request: AgentConversationResumeRequest,
+  ): Promise<AgentConversationActionResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONVERSATION_RESUME, request),
+  previewConversationHandoff: (
+    request: AgentConversationHandoffRequest,
+  ): Promise<AgentConversationHandoffPreview> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_PREVIEW,
+      request,
+    ),
+  continueConversationInAgent: (
+    request: ContinueAgentConversationRequest,
+  ): Promise<AgentConversationActionResult> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_CONTINUE,
+      request,
+    ),
+  exportConversation: (
+    request: AgentConversationExportRequest,
+  ): Promise<AgentConversationExportSaveResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONVERSATION_EXPORT, request),
   getSessionIndexState: (
     agentId: string,
   ): Promise<AgentSessionIndexPublicState> =>

@@ -36,9 +36,13 @@ export function AgentsSidebarPanel() {
     void ensureLoaded();
   }, [ensureLoaded]);
 
+  const installedAgents = useMemo(
+    () => filterManagedAgents(agents, "", "installed"),
+    [agents],
+  );
   const visibleAgents = useMemo(
-    () => filterManagedAgents(agents, searchQuery, "all"),
-    [agents, searchQuery],
+    () => filterManagedAgents(installedAgents, searchQuery, "all"),
+    [installedAgents, searchQuery],
   );
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
@@ -60,7 +64,7 @@ export function AgentsSidebarPanel() {
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {t("agents.agentCount", "{{count}} available", {
-                count: agents.length,
+                count: installedAgents.length,
               })}
             </p>
           </div>
