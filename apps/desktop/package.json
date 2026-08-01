@@ -30,7 +30,7 @@
     "build:analyze": "BUILD_ANALYZE=1 vite build",
     "bundle:budget": "node --experimental-strip-types scripts/check-bundle-budget.mts",
     "screenshots": "node --experimental-strip-types scripts/capture-screenshots.mts",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 out/main/index.js && electron out/main/index.js\"",
+    "electron:dev": "vite",
     "electron:build": "vite build && electron-builder --config electron-builder.config.cjs",
     "electron:package:built": "electron-builder --config electron-builder.config.cjs --publish never",
     "electron:build:mac": "vite build && electron-builder --config electron-builder.config.cjs --mac --x64 --arm64 --publish never",

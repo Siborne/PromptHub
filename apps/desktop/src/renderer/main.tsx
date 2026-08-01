@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { RendererErrorBoundary } from "./components/app/RendererErrorBoundary";
 import { ToastProvider } from "./components/ui/Toast";
 import "./styles/globals.css";
 import { i18nReady } from "./i18n";
@@ -8,6 +9,7 @@ import { i18nReady } from "./i18n";
 // making the renderer entry parse every application feature before it can boot.
 const appModule = import("./App");
 const App = React.lazy(() => appModule);
+const root = ReactDOM.createRoot(document.getElementById("root")!);
 
 const e2eBackupReady = window.electron?.e2e
   ? import("./services/database-backup").then(
@@ -20,16 +22,30 @@ const e2eBackupReady = window.electron?.e2e
     )
   : Promise.resolve();
 
-void Promise.all([i18nReady, e2eBackupReady]).then(() => {
-  ReactDOM.createRoot(document.getElementById("root")!).render(
+function renderRenderer(children: React.ReactNode) {
+  root.render(
     <React.StrictMode>
+      <RendererErrorBoundary>{children}</RendererErrorBoundary>
+    </React.StrictMode>,
+  );
+}
+
+function RendererBootstrapFailure({ error }: { error: unknown }): never {
+  throw error instanceof Error ? error : new Error(String(error));
+}
+
+void Promise.all([i18nReady, e2eBackupReady])
+  .then(() => {
+    renderRenderer(
       <ToastProvider>
         <React.Suspense
           fallback={<div className="h-screen bg-background" aria-busy="true" />}
         >
           <App />
         </React.Suspense>
-      </ToastProvider>
-    </React.StrictMode>,
-  );
-});
+      </ToastProvider>,
+    );
+  })
+  .catch((error: unknown) => {
+    renderRenderer(<RendererBootstrapFailure error={error} />);
+  });
