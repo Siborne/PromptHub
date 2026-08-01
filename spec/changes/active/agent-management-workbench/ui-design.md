@@ -37,7 +37,9 @@ Production implementation must preserve the normative interaction and hierarchy 
 
 - All built-in and enabled custom Agents use one workspace and one detail shell.
 - Agent identity is always clickable; capability availability controls actions, not navigation.
-- Common, pinned, installed, and configured Agents are prioritized without hiding the rest.
+- Only locally detected Agents enter the management list. Common and pinned
+  Agents affect ordering within that installed set; registry-only platforms
+  remain outside the workspace until detection succeeds.
 - Dense operational information is preferred over decorative cards and oversized headings.
 - Existing PromptHub tokens, wallpaper panels, Lucide icons, typography, and interaction patterns remain authoritative.
 - Skill, MCP, Rules, and Plugin editing remains in each owning workspace; Agents provides context and orchestration.
@@ -290,16 +292,38 @@ Authentication files, sessions, logs, caches and databases are excluded from the
 
 Structured editing, redacted diff and snapshot history appear only after an adapter owns the schema and safe backup/restore behavior.
 
-## Sessions Tab
+## Conversation History And Agent History
 
-When supported, use a two-pane layout:
+The primary Conversation History entry is project-centered and spans all
+verified Agent sources. It uses a desktop three-pane layout:
 
-- Session list: search, project filter, date filter, title, updated time, message count.
-- Transcript reader: session metadata, bounded virtualized messages, source status, resume command.
+- Project/filter pane: registered projects, `needs-project`, deleted/archive
+  views, source Agent, date and tags.
+- Conversation list: source Agent identity, title, updated time, message count
+  and source status.
+- Transcript reader: project, source Agent/model, bounded visible messages,
+  lineage and action feedback.
 
-Commands:
+The History tab inside Agent detail reuses the same catalog and reader with the
+source Agent fixed. It does not own a second session list or annotation store.
 
-- Copy resume command.
+Primary commands:
+
+- **Resume in original Agent** executes verified native resume.
+- **Continue in another Agent** opens a target-Agent dropdown, then an exact
+  context preview before launch.
+- **Export** opens JSON/Markdown and single/batch options.
+
+Secondary commands edit PromptHub metadata, archive, soft delete/restore, copy
+the native command, or request adapter-owned native deletion when supported.
+The target dropdown shows Agent icon, name, install state and direct,
+launch-and-copy or unavailable capability. Selecting an Agent never launches
+immediately. The local-index switch and source diagnostics live in History
+Source Settings rather than the ordinary list header.
+
+On narrow layouts, project/filter, list, detail, handoff preview and target
+selection become explicit navigable steps with Back actions and restored focus.
+
 - Resume through a validated executable/argument request when supported.
 - Open project folder.
 - Add local tag or note.

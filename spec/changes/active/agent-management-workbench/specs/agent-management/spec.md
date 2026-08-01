@@ -165,9 +165,23 @@ Each Agent MUST aggregate Skill, MCP, Rules, and Plugin states from their canoni
 
 ### `FR-AGENT-009`: Native Config File Management
 
-For each Agent with verified native configuration paths, the workspace MUST expose those files in the shared Config Files tab. The user MUST be able to open the Agent root in the system file manager and view or directly edit allowlisted text configuration files through the existing in-app file editor. Agents without a verified config path MUST keep the same tab visible but disabled.
+For each Agent with a resolved user configuration root, the workspace MUST
+discover and expose the editable user-level text configuration surface in the
+shared Config Files tab. Discovery MUST include existing safe text files below
+the root plus declared configuration files that have not been created yet; it
+MUST NOT be restricted to one hard-coded primary file. The user MUST be able to
+open the Agent root in the system file manager and directly edit discovered
+configuration files through the existing in-app file editor.
 
-This delivery MUST NOT treat authentication artifacts, session data, logs, caches, databases, or arbitrary files under the Agent root as editable configuration. Direct saves write the platform-owned file without creating PromptHub versions or snapshots. Version history, redacted diff, structured editing, and restore remain follow-up adapter capabilities.
+Authentication artifacts, secret-only files, session data, logs, caches,
+databases, generated media, installed Skills/Plugins, backups, and other
+runtime state MUST be excluded. Secret values embedded in an otherwise
+editable configuration file MUST be redacted before the file crosses IPC and
+MUST be preserved, not edited, by the raw editor. Every save MUST check the
+revision read by the editor, validate supported structured formats, create an
+encrypted device-local backup of the previous bytes, replace the file
+atomically, re-read it, and restore the previous bytes after a post-write
+failure.
 
 #### Scenario: Agent uses a known config format
 
@@ -176,6 +190,29 @@ This delivery MUST NOT treat authentication artifacts, session data, logs, cache
 - When the user opens Config Files
 - Then `config.toml` is available in the shared file editor
 - And saving writes only that allowlisted file beneath the resolved Agent root
+
+#### Scenario: Agent has multiple user configuration files
+
+- Given Claude Code resolves to `~/.claude`
+- And the root contains `settings.json`, `CLAUDE.md`, and user definition files
+- When the user opens Config Files
+- Then every safe user-level text configuration file is shown in one tree
+- And transcript, credential, cache, log, backup, Skill, and Plugin paths are absent
+
+#### Scenario: Editable configuration contains a secret
+
+- Given a user settings file contains an authentication token
+- When PromptHub reads the file for the renderer
+- Then the token is replaced with an opaque placeholder before IPC
+- And saving unrelated changes preserves the original token without returning it to the renderer
+
+#### Scenario: Configuration changes outside PromptHub
+
+- Given the editor loaded a configuration revision
+- And the Agent modifies that file before the user saves
+- When PromptHub receives the stale save
+- Then the save is rejected as an external modification
+- And neither version is silently overwritten
 
 #### Scenario: Open the native Agent directory
 
@@ -191,12 +228,13 @@ This delivery MUST NOT treat authentication artifacts, session data, logs, cache
 - Then PromptHub opens or focuses the installed application through the main process
 - And the renderer cannot provide an arbitrary executable or filesystem path
 
-#### Scenario: Platform has no verified config path
+#### Scenario: User configuration root is empty
 
-- Given a preset Agent is visible but has no verified config-file declaration
+- Given a preset Agent has a resolved user configuration root
+- And no safe text configuration file exists yet
 - When its detail shell is opened
-- Then Config Files remains visible and disabled
-- And the UI does not guess a filename or expose the full root as editable config
+- Then Config Files remains available with any declared missing files
+- And PromptHub does not expose or create arbitrary runtime files
 
 #### Scenario: Symlink escapes Agent root
 
@@ -1826,6 +1864,231 @@ checkpoints, or snapshots.
 - Then PromptHub skips or reports that source without creating the Cursor root,
   following the link, exposing hidden payloads, or mutating Cursor state
 
+### `FR-AGENT-066`: Project-Centered Conversation History
+
+PromptHub MUST expose one project-centered conversation catalog across all
+verified Agent session adapters. The History tab under a selected Agent MUST be
+a filtered view of that catalog rather than a separate inventory. A
+conversation MUST have a registered project association before continuation;
+unresolved sessions MUST remain visible in a `needs-project` queue and MUST NOT
+be silently associated by directory basename or fuzzy path matching.
+
+#### Scenario: Browse one project's Agent conversations
+
+- Given one registered project has native sessions from Claude Code and Codex
+- When the user opens Conversation History and selects that project
+- Then both Agents' conversations appear in one bounded list
+- And selecting a source Agent filters the same catalog without duplicating it
+
+#### Scenario: Associate an unresolved conversation
+
+- Given a native session has no exact registered-project root match
+- When the user selects a project for it
+- Then PromptHub stores the project association as local metadata
+- And subsequent rescans retain that association without rewriting the native transcript
+
+### `FR-AGENT-067`: Conversation Management CRUD
+
+PromptHub MUST support create/discover, read, update, delete and restore for
+the managed conversation projection. Creation occurs through verified native
+discovery or a completed cross-Agent continuation; blank synthetic histories
+MUST NOT be created. Updates MAY change only PromptHub-owned title, project,
+tags, note, favorite and archive metadata. Normal delete MUST be reversible
+and MUST prevent immediate rescan reappearance. Native transcript deletion
+MUST be a separate adapter-owned action and MUST NOT use a generic file delete.
+
+#### Scenario: Edit without changing native history
+
+- Given an indexed native conversation is available
+- When the user changes its title, project, tags and note
+- Then the catalog shows the PromptHub-owned values
+- And the external transcript bytes remain unchanged
+
+#### Scenario: Delete and restore a managed conversation
+
+- Given a native conversation is present
+- When the user deletes it from PromptHub and later refreshes its source
+- Then a local tombstone keeps it out of the active list
+- And restoring it makes the same conversation visible without recreating native data
+
+#### Scenario: Gate native deletion
+
+- Given the source Agent has no verified native delete contract
+- When the conversation action menu is opened
+- Then PromptHub does not offer native deletion
+- And it never falls back to unlinking a discovered transcript file
+
+### `FR-AGENT-068`: Resume In Original Agent
+
+When a source adapter exposes a verified resume contract, PromptHub MUST offer
+**Resume in original Agent** as the primary same-Agent action. Main process MUST
+re-resolve the session, executable, typed arguments and project working
+directory at execution time and launch without a shell. Copying the native
+command MAY remain a secondary action. Unsupported, missing or unsafe state
+MUST produce a stable actionable error and MUST NOT launch a fallback command.
+
+#### Scenario: Resume the native conversation
+
+- Given a Codex conversation still exists and its registered project is available
+- When the user selects Resume in original Agent
+- Then PromptHub executes the adapter-owned native resume arguments in that project
+- And it does not create a synthetic PromptHub transcript or target session id
+
+### `FR-AGENT-069`: Continue In Another Agent
+
+PromptHub MUST offer **Continue in another Agent** with a target-Agent dropdown.
+The dropdown MUST show only enabled Agents and label each as direct,
+launch-and-copy or unavailable with a reason. Selecting an Agent MUST open a
+preview of the exact bounded handoff context before any launch. Applying the
+plan MUST start a new target conversation in the same project or open the
+target and copy the reviewed context when direct injection is unsupported.
+
+#### Scenario: Directly continue in a different Agent
+
+- Given a Claude Code conversation is associated with a project
+- And Codex is installed with a verified direct handoff adapter
+- When the user selects Codex, reviews the context and confirms
+- Then PromptHub launches Codex in that project with the reviewed context
+- And the Claude Code conversation remains unchanged
+
+#### Scenario: Degrade to launch and copy
+
+- Given a selected Agent can open the project but cannot safely receive context
+- When the user confirms continuation
+- Then PromptHub opens that Agent in the project and copies the reviewed payload
+- And clearly reports that automatic context injection was unavailable
+
+### `FR-AGENT-070`: Handoff Context Control And Privacy
+
+The handoff preview MUST support full visible context, recent turns and
+summary-only modes plus an optional user continuation instruction. The default
+payload MUST be deterministic and MUST NOT require an AI call. Hidden reasoning,
+system prompts, tool payloads, credentials, environment values and unrestricted
+absolute paths MUST NOT enter the handoff. Optional AI summarization MUST be an
+explicit action and MUST preserve access to the selected source messages.
+
+#### Scenario: Review a bounded handoff
+
+- Given a long conversation exceeds the target context budget
+- When the user prepares a cross-Agent continuation
+- Then the preview shows which content is included or omitted and why
+- And no target process starts until the user confirms the exact payload
+
+### `FR-AGENT-071`: Conversation Export
+
+PromptHub MUST export one or multiple conversations as versioned JSON or
+human-readable Markdown. Output MUST preserve ordered visible messages and
+non-secret source/project metadata. Hidden records, credentials, native source
+paths and absolute project paths MUST be excluded by default. Partial,
+truncated, malformed or unavailable source state MUST be shown before export
+and recorded in the output when the user explicitly accepts a partial export.
+Cancellation or failure MUST leave no final or staging file.
+
+#### Scenario: Export JSON and Markdown
+
+- Given a readable project conversation
+- When the user exports it as JSON and then Markdown
+- Then both files contain the same ordered visible user/assistant messages
+- And JSON declares its schema version while Markdown uses readable role sections
+- And neither file contains source paths, credentials or hidden tool payloads
+
+### `FR-AGENT-072`: Continuation Lineage And Recovery
+
+Every applied cross-Agent continuation MUST record a device-local lineage edge
+from source conversation to target Agent and, when known, target session. The
+edge MUST store identity, status and payload digest rather than transcript
+content. Failure MUST remain retryable without claiming success. Missing or
+deleted endpoints MUST NOT cascade-delete the other conversation, and time
+proximity alone MUST NOT silently link a target session.
+
+#### Scenario: Follow a conversation across Agents
+
+- Given a Claude Code conversation was continued in Codex
+- When either conversation detail is opened
+- Then PromptHub shows the source/target relationship and its status
+- And losing the source file does not delete or corrupt the Codex conversation
+
+### `FR-AGENT-073`: Stable Desktop Development Lifecycle
+
+The desktop development command MUST keep exactly one owner for starting and
+stopping Electron. When the Vite Electron plugin owns startup, package scripts
+MUST NOT launch a second Electron process or terminate the renderer dev server
+after the single-instance lock rejects that duplicate. A lazy module load
+MUST remain available for the lifetime of the development window. Bootstrap,
+lazy-render and hot-update failures MUST be contained by a renderer-level
+recovery boundary instead of clearing the application root. Development MAY
+attempt one automatic reload, but MUST enforce a cooldown to prevent loops.
+
+#### Scenario: Keep the development window usable
+
+- Given the desktop development command starts Vite and Electron
+- When the main and preload bundles complete and the window remains open
+- Then the renderer dev server continues serving lazy modules
+- And the Agents workspace opens without a blank page or a failed dynamic import
+
+#### Scenario: Recover from a renderer hot-update failure
+
+- Given a renderer hot update temporarily invalidates a provider or lazy module
+- When React throws while rendering the application root
+- Then PromptHub attempts at most one automatic development reload per cooldown
+- And otherwise displays a localized reload action without changing local data
+
+### `FR-AGENT-074`: Evidence-Backed Agent Path Editing
+
+The built-in Agent editor MUST derive editable asset fields from the canonical
+platform registry. Skills, Rules, MCP, Plugins, Agents, Commands and declared
+Config fields MUST appear only when that platform declares the corresponding
+user-level surface, except that an existing explicit user override remains
+visible and recoverable. PromptHub MUST NOT invent generic `agents/` or
+`commands/` defaults for an undeclared platform. Custom Agents MAY expose the
+complete path schema because the user owns that definition. Every edit entry
+point MUST use the same field adapter and save only the fields it exposes.
+
+#### Scenario: Edit a built-in Agent
+
+- Given Tencent WorkBuddy declares Skills, MCP and Config but no Rules, Plugins, Agents or Commands path
+- When its Agent editor opens
+- Then only the root, Skills, MCP and Config path controls are shown
+- And saving cannot create undeclared generic path overrides
+
+#### Scenario: Preserve a prior explicit override
+
+- Given a built-in Agent has an explicit path override for a surface no longer declared by the registry
+- When its Agent editor opens
+- Then that non-empty override remains visible and editable
+- And clearing it removes the stale override instead of silently retaining it
+
+#### Scenario: Edit a custom Agent
+
+- Given a user-defined Agent is opened from either Agent management entry point
+- When its paths are edited
+- Then Skills, Rules, MCP, Plugins, Agents, Commands and Config paths are available
+- And the selected root directory and every edited path survive reload
+
+### `FR-AGENT-075`: Installed-Only Agent Management
+
+The Agents workspace MUST project only locally detected Agent installations
+into its sidebar, count, search results and normal selection state. Registry
+entries, configured templates and pinned ids MUST NOT make an undetected Agent
+manageable. If persisted or transient state still resolves an undetected Agent,
+only Overview MAY remain enabled; every other tab and editing action MUST be
+disabled, and PromptHub MUST NOT read its config files, assets, sessions,
+provider, appearance or usage data.
+
+#### Scenario: Hide an Agent that is not installed
+
+- Given CodeBuddy exists in the canonical registry but is not detected locally
+- When the Agents workspace refreshes
+- Then CodeBuddy is absent from the list, count and search results
+- And an old CodeBuddy selection falls back to an installed Agent or the empty state
+
+#### Scenario: Contain a stale undetected detail
+
+- Given stale renderer state still contains an undetected Agent detail
+- When that detail renders
+- Then Overview is the only enabled tab
+- And no config, asset, session, provider, appearance or usage reader is called
+
 ## Non-Functional Requirements
 
 ### `NFR-AGENT-001`: Local-First And Privacy
@@ -1860,12 +2123,24 @@ Operations MUST emit structured result categories, adapter name/version, duratio
 
 The first production delivery is accepted only when:
 
-- Every enabled Agent in the current built-in registry and every enabled custom Agent is visible without creating a profile; disabled Agents are absent.
-- Default ordering prioritizes pinned, installed, configured, and curated common Agents without hiding the remaining enabled Agents.
+- Every locally detected Agent in the current built-in registry and every detected custom Agent is visible without creating a profile; disabled and undetected Agents are absent.
+- Default ordering prioritizes pinned and curated common Agents within the locally detected set.
 - Every platform capability is reported independently; unsupported native config management does not block path, asset, or overview management.
 - Every adapter that declares provider support passes import, preview, activation, verification, external-change detection, and rollback tests against representative fixtures.
 - Agent asset summaries agree with their owning domains.
 - At least two verified session adapters support browse/search/read/resume.
+- All verified session adapters contribute bounded metadata to one
+  project-centered catalog, and unresolved sessions require explicit project
+  association before continuation.
+- Every adapter with a verified native resume contract can be launched through
+  Resume in original Agent without renderer-built shell commands.
+- Every enabled target Agent appears in the cross-Agent picker with an honest
+  direct, launch-and-copy or unavailable state; at least Claude Code and Codex
+  pass the direct continuation contract when installed.
+- Cross-Agent continuation preserves the source, records lineage, previews the
+  exact bounded payload and never claims native session-state migration.
+- Single and batch JSON/Markdown exports preserve ordered visible messages,
+  report partial sources and exclude secret/hidden/path data by default.
 - Provider secrets are absent from normal storage, IPC, logs, snapshots, and exports.
 - Tray switching uses the same verified activation service.
 - Full backup and restore preserve non-secret Agent configuration and expose missing secrets for repair.

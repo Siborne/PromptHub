@@ -67,7 +67,7 @@ packages.
 
 ## Goals
 
-- 将现有全部预置 Agent 和已启用的自定义 Agent 提升为桌面端一级工作区；能力尚未完善的平台也不得被隐藏。
+- 将本机已检测安装的预置 Agent 和已检测的自定义 Agent 提升为桌面端一级工作区；未安装平台保留在 registry 中，但不进入管理列表。
 - 为每个 Agent 提供 Overview、Provider & Model、Skills、MCP、Rules、Plugins、Config、Sessions、Usage、Maintenance 一级视图。
 - 支持导入当前原生供应商配置、创建多个 Provider Profile、预览差异并一键切换。
 - 支持按 Agent 管理模型映射、端点、环境参数和安全凭据引用。
@@ -82,8 +82,8 @@ packages.
 
 ### First Delivery
 
-- 全部预置 Agent 和已启用自定义 Agent 的统一列表、检测、路径和健康状态。
-- 常用、已安装、已配置或用户置顶的 Agent 优先展示，其余平台仍可搜索、筛选和进入详情。
+- 本机已检测安装的预置 Agent 和自定义 Agent 的统一列表、路径和健康状态。
+- 常用和用户置顶的已安装 Agent 优先展示；未检测平台不进入列表、搜索结果或可操作详情。
 - Provider Profile 的原生配置导入、模型映射、激活切换、差异预览、备份和回滚。
 - 原生配置、Provider、Session、CLI 等深度能力按平台 adapter 逐步扩展；未完成的能力显示 planned/partial/unsupported，不影响平台进入工作台。
 - 按 Agent 聚合 Skill、MCP、Rules、Plugin 状态和分发操作。
@@ -135,10 +135,10 @@ packages.
 
 ### Flow A: Inspect A Preset Agent
 
-1. 用户打开 Agents 工作区，看到所有启用的预置和自定义 Agent。
-2. 每个 Agent 显示 installed、configured、not-detected、degraded 或 unsupported 状态。
+1. 用户打开 Agents 工作区，只看到本机已检测安装的预置和自定义 Agent。
+2. 每个可管理 Agent 显示 installed、degraded 或 unsupported 状态。
 3. 用户进入 Claude Code 详情，查看当前供应商、模型、资产、配置文件、会话和版本诊断。
-4. 未安装或尚未创建目录的已配置 Agent 仍可见，并显示明确的下一步操作。
+4. 未安装或尚未创建目录的 Agent 不进入列表；旧选中状态只能落到只读概览，其他能力保持禁用且不读取配置。
 
 ### Flow B: Import And Switch A Provider
 
@@ -178,14 +178,14 @@ packages.
 ## Success Criteria
 
 - 用户能从单个 Agent 页面回答：是否安装、当前使用哪个供应商和模型、拥有哪些资产、配置是否健康、最近有哪些会话。
-- 当前 registry 中的全部预置 Agent 都能在工作台找到；常用平台优先展示，但任何平台都不因缺少深度 adapter 被隐藏。
-- 所有 Agent 使用同一套详情 UI；Agent 始终可进入，支持的能力可以操作，不支持的具体能力保持可见但置灰并说明原因。
+- 当前 registry 中本机已检测安装的 Agent 能在工作台找到；未安装平台不会形成无内容的管理对象。
+- 已安装 Agent 使用同一套详情 UI；旧状态意外指向未安装 Agent 时，仅概览可进入，其他能力置灰且不触发底层读取。
 - 已有预置 Agent 不需要重新创建 Profile 才能管理。
 - 供应商切换不覆盖无关配置，外部修改可被检测，失败可以恢复。
 - Agent 页面显示的资产状态与 Skill/MCP/Rules/Plugin 页面使用同一事实来源。
 - API Key 不出现在普通 SQLite JSON、renderer payload、日志、配置快照和备份中。
 - 每个声明支持原生配置管理的平台都必须使用真实 fixture 完成 import -> preview -> activate -> verify -> rollback 回归。
-- 未实现 adapter 的平台仍能作为 Agent 显示，不伪装支持供应商切换或会话管理。
+- 已安装但未实现深度 adapter 的平台仍能作为 Agent 显示，不伪装支持供应商切换或会话管理。
 
 ## Risks
 
@@ -220,7 +220,7 @@ packages.
 
 1. `[已确认]` 现有预置 Agent 是一级管理对象，不以 Agent Profile 取代或复制它们。
 2. `[已确认]` 产品方向是覆盖 CC Switch 大部分核心能力，同时复用 PromptHub 的资产管理优势。
-3. `[已确认]` 全部预置 Agent 均进入工作台；常用平台优先展示，深度 adapter 按优先级逐步补齐，暂不支持的配置能力不得导致整个平台消失。
+3. `[已确认，2026-08-01 更新]` registry 保留全部预置平台，但 Agents 工作台只展示本机已检测安装的 Agent；未安装 Agent 不因置顶、配置模板或搜索进入列表，旧选中状态下也只有概览可用。
 4. `[已确认]` Kimi 平台升级到当前独立 Kimi Code 契约：优先使用 `KIMI_CODE_HOME` / `~/.kimi-code`，仅在新根不存在时兼容 `KIMI_SHARE_DIR` / `~/.kimi`；两代会话和凭据不得混合。
 5. `[已确认]` PromptHub 自有 Provider Profile 凭据使用主进程安全存储引用；Agent 原生 OAuth、Keychain、认证缓存和 SecretRef 保持平台所有，不统一迁移。只有平台存在稳定明文配置契约且适配器通过安全验证时，才允许按需投影 PromptHub 托管密钥。
 6. `[已确认]` 外部会话默认只读、本地、按需读取正文且不进入同步、备份、遥测或普通搜索索引。
@@ -407,3 +407,24 @@ format for older tasks. The adapter searches visible user/assistant text,
 hides tool payloads, preserves `cline --id <session-id>`, rejects unsafe paths,
 and never starts the Cline hub or writes native state. The capability remains
 partial because Cline owns its schema, retention, and runtime lifecycle.
+
+## Scope Addendum 2026-08-01: Project Conversation Continuation
+
+Agent History becomes a project-centered conversation catalog rather than a
+log attached only to the currently selected Agent. The same catalog remains
+available from an Agent detail page as a source-Agent filter. Every
+conversation must be associated with a registered project before it can be
+continued; unresolved native paths enter an explicit association queue.
+
+The product defines two separate continuation modes. **Resume in original
+Agent** executes the source platform's freshly resolved native resume contract.
+**Continue in another Agent** creates a new target-Agent conversation in the
+same project using a user-reviewed portable handoff context and records the
+lineage between source and target. Cross-Agent continuation never claims to
+migrate native ids, hidden reasoning, tool state or checkpoints.
+
+Conversation management covers bounded discovery/read, PromptHub-owned
+metadata edits, reversible PromptHub deletion, optional verified native
+deletion, and single/batch JSON or Markdown export. Native transcripts remain
+platform-owned and read-only. Export and handoff payloads exclude secrets,
+hidden tool data and absolute local paths by default.

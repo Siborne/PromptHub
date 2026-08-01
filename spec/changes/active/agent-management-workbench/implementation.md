@@ -1747,6 +1747,87 @@
   - Focused Cursor adapter/index/renderer/managed-agent tests pass, together
     with desktop and shared typechecks and affected desktop ESLint.
 
+## Project Conversation Continuation Slice
+
+- Implemented device-local `agent_conversation_metadata` and
+  `agent_conversation_handoffs` projections with idempotent migration,
+  parameterized access and no transcript/message body persistence. PromptHub
+  owns titles, project association, tags, notes, favorite/archive state,
+  soft-delete tombstones and handoff lineage; native Agent files remain
+  read-only and authoritative.
+- Agent History now overlays PromptHub metadata on the adapter-backed native
+  session list, supports project and active/archive/removed filters, displays
+  the live bounded transcript and exposes edit, soft delete/restore, native
+  resume and JSON/Markdown export actions.
+- Native Resume re-resolves the current adapter session and executable in the
+  main process, then executes the adapter-owned argument vector through a
+  mode-0700 macOS terminal launcher. Arguments are staged in mode-0600 files
+  and never interpolated into renderer or shell command text. Staged launch
+  artifacts are removed when the terminal exits, immediately on open failure,
+  or by a 15-minute expiry fallback when the terminal never executes.
+- Cross-Agent continuation requires a project and exact preview. The portable
+  payload contains only bounded visible user/assistant turns, replaces the
+  home directory, redacts token-like values and excludes system/tool records.
+  Claude Code and Codex use direct CLI handoff on supported macOS desktops;
+  unsupported targets/platforms open the existing Agent application and copy
+  the reviewed payload. Launch failure preserves the copied payload and is
+  reported in the UI.
+- Handoff persistence stores source/target identity, project, transport,
+  digest and apply status only. The reviewed payload and native transcript are
+  not persisted or synchronized.
+- Single-conversation JSON and Markdown export use safe filenames, visible
+  turns only, versioned JSON, path/secret redaction and a main-process save
+  dialog. Export cancellation does not write a file.
+- The target and project controls use the shared styled Select component. The
+  target row distinguishes CLI handoff from open-and-copy, and Resume,
+  continuation and export report visible completion/fallback status. All new
+  copy is present in the seven desktop locales.
+- The History toolbar no longer uses native operating-system selects. Project
+  and status filters, continuation target and project selection, and metadata
+  project editing now share the styled listbox control. The conversation title
+  occupies its own row, while native resume, target, project and preview actions
+  use a separate aligned control grid with a bounded narrow-window fallback.
+- Transcript rendering now uses role-aware chat bubbles instead of full-width
+  gray rows: users are right-aligned in the primary color, assistants are
+  left-aligned on white, and system/tool records use centered white notice
+  bubbles with distinct accents. The light theme uses white surfaces for the
+  history rail, detail header and continuation toolbar over a restrained canvas.
+- UI verification passes the 10-test Agent Sessions component suite, the
+  4-test shared Select suite, renderer i18n hardcode/smoke checks, affected
+  ESLint, desktop TypeScript checking and the full desktop production build.
+- Focused verification passes 6 Vitest files / 32 tests across real SQLite
+  migration and CRUD, service redaction/continuation/export, secure launcher,
+  IPC validation, preload forwarding and renderer interaction. Shared, DB and
+  desktop TypeScript checks pass.
+- Remaining scope stays tracked under `T-AGENT-136`, `T-AGENT-137`,
+  `T-AGENT-139` through `T-AGENT-143`: a global cross-Agent project catalog,
+  adapter-owned native deletion, selectable handoff context policies, retry
+  and exact target-session links, batch/atomic export and narrow-window
+  step-navigation are not part of this delivered slice.
+
+## User-Level Config Files
+
+- Completed `FR-AGENT-009` / `TEST-AGENT-107` / `T-AGENT-144`: Config Files now derives the user-level Agent root from the canonical registry or user override and lists the bounded existing configuration surface instead of filtering the UI to one declared file.
+- Added a main-owned filesystem service for recursive config discovery, declared missing files, path/symlink/size bounds, runtime and credential exclusions, JSON/JSONC/TOML/YAML validation, content revisions and serialized same-file writes.
+- Sensitive values are replaced with stable opaque placeholders before IPC. Saving preserves the original values and rejects raw secret changes; successful writes require an encrypted device-local backup, atomic replacement, reread verification and rollback on failure.
+- Renderer config trees and Overview counts now use the same IPC inventory. Direct editing remains content-only and user-level; project config scanning and structural create/rename/delete are unchanged and out of scope.
+- Verification completed: 6 focused Vitest files passed with 86 tests; desktop/shared/core typechecks, affected ESLint and desktop production build passed; an isolated real Electron E2E passed with a four-file Claude user config tree, excluded `auth.json`/`sessions`, redacted IPC/editor content, secret-preserving save and ciphertext-only backup. Direct local scans found 32 safe Claude entries and 3 safe Codex entries, with credential/runtime stores excluded. The new filesystem service reports 98.45% statements/lines, 96.57% branches and 100% functions; the uncovered guards are defense-in-depth TOCTOU checks for a post-normalization root escape, a post-`lstat` realpath escape and creation of a missing target between prewrite checks. Traversal, symlink and queued/external concurrent mutation behavior is covered without weakening those guards.
+- The pre-existing all-in-one `agent-workspace.spec.ts` was also attempted and stopped before this feature at its Provider activation radio-selection flow; the independent config-files E2E is the authoritative end-to-end result for this slice.
+
+## Development Recovery And Agent Editing
+
+- Completed `FR-AGENT-073` / `DES-AGENT-088` / `TEST-AGENT-108` / `T-AGENT-145`: desktop `electron:dev` now delegates to Vite, leaving `vite-plugin-electron` as the only Electron lifecycle owner. The renderer root now contains bootstrap, lazy render and hot-update failures behind a localized recovery boundary with one development auto-reload per 10-second cooldown and a manual production reload action.
+- Completed `FR-AGENT-074` / `DES-AGENT-089` / `TEST-AGENT-109` / `T-AGENT-146`: all built-in Agent path editors derive visible fields from the canonical platform registry. Undeclared `agents/` and `commands/` defaults are no longer synthesized; explicit legacy overrides remain recoverable. Custom Agents expose and persist the complete Skills, Rules, MCP, Plugins, Agents, Commands and Config schema through both editing entry points.
+- Verified platform declarations now include known user Commands and Agents directories for Gemini, OpenCode, Reasonix, Augment, ZCode, Grok Build, Qwen Code and CodeBuddy where the stable reference already records them. WorkBuddy remains Root + Skills + MCP + Config; CodeBuddy exposes Root + Skills + Rules + MCP + Agents + Commands + Config.
+- Verification: 8 focused Vitest files pass with 89 tests; desktop and shared typechecks pass; affected desktop ESLint and desktop production build pass. `agent-edit-adapter.ts` and `RendererErrorBoundary.tsx` each reach 100% statements, branches, functions and lines. A real `pnpm dev` Electron session stayed connected through renderer HMR and full-page reload and visually/semantically verified WorkBuddy and CodeBuddy editors. Shared registry ESLint is not independently configured and is ignored outside the desktop ESLint base path; shared TypeScript and Prettier checks pass.
+
+## Installed-Only Agent Management
+
+- Completed `FR-AGENT-075` / `DES-AGENT-090` / `TEST-AGENT-110` / `T-AGENT-147`: the Agent store now projects only locally detected installations after each refresh and repairs a persisted selection against that installed set. Sidebar count and search apply the same installed-only filter as a defense against stale injected state.
+- Undetected detail state keeps only Overview enabled. The overview mounts only the not-installed guidance and does not mount usage, asset inventory, provider, appearance, session, path or config components. Launch, diagnostics and edit actions are absent, and the Config Files panel has an independent no-read guard.
+- Updated the seven locale descriptions so an undetected target is no longer described as manageable. The full platform registry and Settings path definitions remain available for detection and configuration ownership; no platform, schema, IPC or filesystem contract was removed.
+- Verification: 4 focused Vitest files pass with 57 tests; desktop typecheck, affected ESLint, traceability validation, diff check and desktop production build pass. A real Electron development window showed 15 detected Agents instead of the prior 35 registry entries; CodeBuddy and WorkBuddy were absent, searching for `CodeBuddy` returned no match, and clearing the search restored the installed list.
+
 ## Converge
 
 - Stable knowledge reference synced in `spec/knowledge/reference/agent-platforms.md`;

@@ -221,6 +221,14 @@ UI screen structure, interaction states, responsive behavior and component bound
 - [x] `T-AGENT-134` 按 `FR-AGENT-064` / `DES-AGENT-079` 接入 Cline `data/sessions` 只读快照适配器、`data/tasks` 兼容读取、`CLINE_DATA_DIR` 根解析、live 搜索透传、partial capability 和现有 History 工作台；不得启动 Cline hub/CLI，不得写入、索引、备份或同步 Cline 原生会话。
 - [x] `TEST-AGENT-098` 按 `FR-AGENT-065` 覆盖 Cursor `projects/*/agent-transcripts/*/*.jsonl` 的真实形状、分页排序、visible-turn 搜索、用户/助手可见性、2 MiB 截断、malformed/symlink/missing-root 输入和原生 resume 元数据。
 - [x] `T-AGENT-135` 按 `FR-AGENT-065` / `DES-AGENT-080` 接入 Cursor 只读 Agent transcript 适配器、root override、bounded live 搜索透传、partial capability 和现有 History 工作台；不得读取私有 settings DB、checkpoint、snapshot、凭据或写入/索引/备份/同步 Cursor 原生会话。
+- [x] `TEST-AGENT-107` 用户级 Config Files 回归：覆盖多文件递归发现、声明但缺失文件、runtime/credential/Skill/Plugin/backup 排除、软链接/越界、密钥 IPC 脱敏与保留、结构化格式校验、stale revision、加密备份、原子替换、重读验证和失败回滚；独立 Electron E2E 验证真实 HOME 下的多文件树、排除、脱敏保存和加密备份。
+- [x] `T-AGENT-144` 将 Config Files 从单文件 allowlist 升级为用户级配置空间：main-owned bounded discovery、安全排除、脱敏 IPC、expected revision、格式校验、加密备份、原子写入、验证回滚和动态文件计数；不增加项目级配置或结构性文件操作。
+- [x] `TEST-AGENT-108` Electron 开发启动回归：锁定 Vite Electron 插件为唯一 Electron 生命周期所有者；覆盖根级 render/bootstrap 恢复、单次自动重载、冷却与 storage 失败，并用真实 `pnpm dev` 验证窗口持续加载、Vite reload 后重连且 Agent 懒加载模块可用。
+- [x] `T-AGENT-145` 移除 desktop `electron:dev` 的重复 Electron 启动链，保留插件 `args.startup(["."])` 单一生命周期；增加根级 renderer recovery boundary，避免启动、lazy import 或 HMR 异常清空页面。
+- [x] `TEST-AGENT-109` Agent 编辑适配回归：遍历全部内置平台核对字段与 canonical registry 一致，覆盖旧 override 可恢复、自定义 Agent 全字段、两个编辑入口保存、目录选择和不再推断 agents/commands；真实 Electron 核对 WorkBuddy 与 CodeBuddy 相反能力样本。
+- [x] `T-AGENT-146` 增加 canonical Commands 路径声明和共享编辑适配器，使 Agent workspace 与 Settings 的内置/自定义编辑都保存真实平台字段。
+- [x] `TEST-AGENT-110` 未安装 Agent 管理门禁回归：覆盖刷新后不进入列表/计数/搜索、旧选中项回退、直接注入未检测详情时仅概览可用，以及配置/资产/会话/供应商/外观/用量读取均不触发。
+- [x] `T-AGENT-147` 将 Agent store 收敛为 installed-only workspace projection，并为详情标签、概览和编辑动作增加未检测防御门禁；保留完整 registry 与检测合同。
 - [x] `T-AGENT-105` 按 `DES-AGENT-050` 将 Provider 工作台接入与托盘共用的 verified-current query；先完成 `TEST-AGENT-069` 红测，再补 shared/IPC/preload/store/UI 与 7 locales，不建立第二 active-provider 状态源。
 - [x] `T-AGENT-106` 按 `FR-AGENT-045` / `DES-AGENT-051` 将 Provider endpoint 固化为无凭据公共元数据；先完成 `TEST-AGENT-070` 红测，再接入 shared validator、SQLite create/update/read、Profile 表单和 7 locales；不静默迁移旧行，不引入第二 credential store。
 - [x] `T-AGENT-107` 按 `FR-AGENT-046` / `DES-AGENT-052` 将 Provider public JSON validator 接入 Profile config、model mapping、audit snapshot 的 SQLite write/read 与 baseline recovery；先完成 `TEST-AGENT-071` 红测，不迁移旧 unsafe row，不扩展凭据权限。
@@ -244,13 +252,31 @@ UI screen structure, interaction states, responsive behavior and component bound
 - [x] `T-AGENT-113` 按 `DES-AGENT-058` 为 Agent Skill 卡片与 MCP/Rules/Plugin inventory 增加共享有界分页，完成 1,000 资产 `TEST-AGENT-077`；不得复制 owning-domain 状态或改变资产操作对象。
 - [x] `T-AGENT-115` 按 `DES-AGENT-060` 修复 Agent 切换后焦点滞留在 disabled tab 的键盘陷阱，并建立 Agent workspace 七语言 leaf-key 对齐回归；不新增 UI 状态、事实源或持久化。
 
+## Project Conversation Continuation
+
+- [ ] `T-AGENT-136` 先实现 `TEST-AGENT-099` 红测，再把所有 verified session adapters 接入统一 device-local catalog，复用现有 project registry，完成精确路径关联、`needs-project`、跨 Agent/项目分页搜索和 Agent detail filtered projection；不得建立第二 transcript 或 project store。
+- [ ] `T-AGENT-137` 先实现 `TEST-AGENT-100` 红测，再扩展 PromptHub-owned conversation annotations、soft-delete tombstone、restore 和 adapter-owned native-delete gate；更新/删除失败必须事务回滚，不得改写或通用 unlink 原生 transcript。（PromptHub metadata、archive、soft delete/restore 已交付；adapter-owned native delete gate 仍待实现。）
+- [x] `T-AGENT-138` 先实现 `TEST-AGENT-101` 红测，再增加 main-owned native resume plan/apply IPC、preload contract 和 UI 主动作；执行时重新解析 session、Agent executable 和 project cwd，使用 typed args、`shell: false` 与稳定错误，不再把 Copy command 作为唯一恢复入口。
+- [ ] `T-AGENT-139` 先实现 `TEST-AGENT-102` 红测，再定义 target-Agent handoff capability matrix、full/recent/summary-only context planner、预算和 exact preview；默认不调用 AI，不暴露 hidden/tool/credential/path 数据。
+- [ ] `T-AGENT-140` 先实现 `TEST-AGENT-103` 红测，再实现 target-specific direct 与 launch-and-copy apply adapters、临时 payload 生命周期、取消和部分失败补偿；不得通过 renderer 或 shell 拼接命令。（Claude/Codex macOS direct 与跨平台 open-and-copy 已交付；其余 target-specific direct adapter 和显式取消仍待实现。）
+- [ ] `T-AGENT-141` 先实现 `TEST-AGENT-104` 红测，再增加 device-local handoff lineage persistence、状态机、source/target detail links、retry 和 exact target linking；不得保存 transcript body 或按时间静默关联。（device-local lineage、digest 和 apply 状态已交付；retry、detail links 与 exact target linking 仍待实现。）
+- [ ] `T-AGENT-142` 先实现 `TEST-AGENT-105` 红测，再实现 versioned JSON/Markdown 单个与批量导出、redaction、partial warning、safe filename、staging/atomic write 和取消清理；普通导出不得包含 source path、secret 或隐藏 payload。（单会话 versioned JSON/Markdown、安全文件名、可见消息过滤和脱敏已交付；批量、partial warning 与 atomic staging 仍待实现。）
+- [ ] `T-AGENT-143` 先实现 `TEST-AGENT-106` 红测，再实现 project-centered Conversation History 三栏工作台、Agent-filtered History、目标 Agent 下拉框、handoff preview、CRUD/导出动作层级、Source Settings、窄窗口、键盘/读屏和 7 locales。（Agent-filtered History、项目/状态筛选、全自定义下拉、独立且对齐的续接操作带、preview、CRUD/导出动作和 7 locales 已交付；全局 project-centered catalog 与窄窗口分步导航仍待实现。）
+
 ## Delivery Batches And Regression Gates
 
 1. **Registry and shell:** complete Agent query, ordering, capability states and the shared UI shell first. All preset Agents must appear before any deep adapter is treated as complete.
 2. **Provider foundation:** land secure secret, reconciliation, backup/write/verify/rollback, then add provider adapters one platform at a time behind capability declarations.
 3. **Assets and config:** connect owning Skill/MCP/Rules/Plugin services and allowlisted config inventory without introducing duplicate state.
-4. **Sessions and tray:** add verified session adapters and tray actions only after shared query/action services are stable.
-5. **Backup and breadth:** finish backup/restore, locales, accessibility, E2E and additional platform adapters.
+4. **Conversation catalog:** land project association, PromptHub-owned CRUD and
+   shared source indexing before replacing the per-Agent History projection.
+5. **Continuation and export:** land native resume execution, target capability
+   matrix, handoff preview/apply, lineage and JSON/Markdown export before
+   enabling the new action hierarchy.
+6. **Sessions and tray:** add further verified session adapters and tray actions
+   only after shared query/action services are stable.
+7. **Backup and breadth:** finish backup/restore, locales, accessibility, E2E
+   and additional platform adapters.
 
 Every batch must run its targeted failing tests first, then `pnpm typecheck`, affected unit/integration tests, and `pnpm test:run` before the batch is considered complete. High-risk filesystem, secret, backup, IPC and adapter changes require failure/rollback tests in the same batch.
 
