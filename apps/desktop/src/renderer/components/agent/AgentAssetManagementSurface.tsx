@@ -11,7 +11,6 @@ export interface AgentAssetFilterOption {
 
 interface AgentAssetManagementSurfaceProps<T> {
   domain: "skills" | "mcp" | "plugins";
-  title: string;
   query: string;
   onQueryChange: (value: string) => void;
   searchLabel: string;
@@ -42,7 +41,6 @@ function filterChipClass(isActive: boolean): string {
 
 export function AgentAssetManagementSurface<T>({
   domain,
-  title,
   query,
   onQueryChange,
   searchLabel,
@@ -72,7 +70,6 @@ export function AgentAssetManagementSurface<T>({
     >
       {alert}
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-5 py-3">
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         <label className="relative block min-w-40 flex-1 sm:max-w-72">
           <SearchIcon
             aria-hidden="true"
@@ -185,6 +182,71 @@ export function AgentAssetCard({
         {actions}
       </div>
     </article>
+  );
+}
+
+interface AgentAssetCardContentProps {
+  icon: ReactNode;
+  iconTestId: string;
+  title: ReactNode;
+  status?: ReactNode;
+  description: ReactNode;
+  source: ReactNode;
+  metadata: ReactNode;
+  supplementary?: ReactNode;
+}
+
+export function AgentAssetCardContent({
+  icon,
+  iconTestId,
+  title,
+  status,
+  description,
+  source,
+  metadata,
+  supplementary,
+}: AgentAssetCardContentProps) {
+  return (
+    <div
+      data-testid="agent-asset-card-content"
+      className="flex min-w-0 items-start gap-3"
+    >
+      <div data-testid="agent-asset-card-avatar" className="shrink-0">
+        <span data-testid={iconTestId} className="block">
+          {icon}
+        </span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          data-testid="agent-asset-card-title-row"
+          className="flex min-w-0 flex-wrap items-center gap-2"
+        >
+          <span className="truncate text-base font-semibold text-foreground">
+            {title}
+          </span>
+          {status}
+        </div>
+        <div
+          data-testid="agent-asset-card-description"
+          className="mt-1.5 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground"
+        >
+          {description}
+        </div>
+        <div
+          data-testid="agent-asset-card-source"
+          className="mt-2 min-h-4 truncate font-mono text-[11px] text-muted-foreground"
+        >
+          {source}
+        </div>
+        <div
+          data-testid="agent-asset-card-metadata"
+          className="mt-3 flex flex-wrap items-center gap-1.5"
+        >
+          {metadata}
+        </div>
+        {supplementary ? <div className="mt-2">{supplementary}</div> : null}
+      </div>
+    </div>
   );
 }
 

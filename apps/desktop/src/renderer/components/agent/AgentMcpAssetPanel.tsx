@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowLeftIcon,
   BookOpenIcon,
   CheckCircle2Icon,
   DownloadIcon,
@@ -18,7 +17,7 @@ import type {
   McpTargetStatusEntry,
 } from "@prompthub/shared/types/mcp";
 import type { ManagedAgentSummary } from "@prompthub/shared/types";
-import { AgentMcpDetailActions } from "../mcp/AgentMcpDetailActions";
+import { AgentMcpEntryDetail } from "../mcp/AgentMcpEntryDetail";
 import {
   buildAgentMcpImportDraft,
   findAgentMcpServer,
@@ -31,6 +30,7 @@ import { matchesManagedAgentTarget } from "./agent-target-matching";
 import {
   AgentAssetActionButton,
   AgentAssetCard,
+  AgentAssetCardContent,
   AgentAssetManagementSurface,
 } from "./AgentAssetManagementSurface";
 import { useBoundedPage } from "./BoundedListPager";
@@ -101,12 +101,6 @@ function getAgentServer(
   );
 }
 
-function formatRecord(record?: Record<string, string>): string {
-  return Object.entries(record ?? {})
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
-}
-
 function formatInvocation(server: McpServerConfig): string {
   if (server.transport === "stdio") {
     return (
@@ -115,41 +109,6 @@ function formatInvocation(server: McpServerConfig): string {
     );
   }
   return server.url || server.name;
-}
-
-function buildAgentServerConfig(server: McpServerConfig): string {
-  const entry =
-    server.transport === "stdio"
-      ? {
-          command: server.command,
-          args: server.args,
-          cwd: server.cwd,
-          env: server.env,
-        }
-      : {
-          type: server.transport,
-          url: server.url,
-          headers: server.headers,
-        };
-
-  return JSON.stringify(
-    {
-      mcpServers: {
-        [server.name]: Object.fromEntries(
-          Object.entries(entry).filter(
-            ([, value]) =>
-              value !== undefined &&
-              (!Array.isArray(value) || value.length > 0) &&
-              (typeof value !== "object" ||
-                value === null ||
-                Object.keys(value).length > 0),
-          ),
-        ),
-      },
-    },
-    null,
-    2,
-  );
 }
 
 function AgentMcpCardView({
@@ -235,38 +194,37 @@ function AgentMcpCardView({
         </>
       }
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-          <ServerIcon aria-hidden="true" className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-base font-semibold text-foreground">
-              {server.displayName || server.name}
-            </span>
-            <span
-              className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
-                isManaged
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
-                  : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              }`}
-            >
-              {isManaged ? (
-                <CheckCircle2Icon aria-hidden="true" className="h-3 w-3" />
-              ) : null}
-              {isManaged
-                ? t("mcp.managedByPromptHub", "Managed in PromptHub")
-                : t("mcp.notInLibrary", "Not in PromptHub library")}
-            </span>
-          </div>
-          <div className="mt-1.5 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">
-            {server.description ||
-              t("mcp.defaultDescription", "MCP server configuration")}
-          </div>
-          <div className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
-            {formatInvocation(server)}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-1.5">
+      <AgentAssetCardContent
+        icon={
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <ServerIcon aria-hidden="true" className="h-5 w-5" />
+          </span>
+        }
+        iconTestId="agent-mcp-asset-icon"
+        title={server.displayName || server.name}
+        status={
+          <span
+            className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+              isManaged
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+            }`}
+          >
+            {isManaged ? (
+              <CheckCircle2Icon aria-hidden="true" className="h-3 w-3" />
+            ) : null}
+            {isManaged
+              ? t("mcp.managedByPromptHub", "Managed in PromptHub")
+              : t("mcp.notInLibrary", "Not in PromptHub library")}
+          </span>
+        }
+        description={
+          server.description ||
+          t("mcp.defaultDescription", "MCP server configuration")
+        }
+        source={formatInvocation(server)}
+        metadata={
+          <>
             <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
               {server.transport}
             </span>
@@ -287,42 +245,20 @@ function AgentMcpCardView({
                 ? t("common.enabled", "Enabled")
                 : t("common.disabled", "Disabled")}
             </span>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
     </AgentAssetCard>
   );
 }
 
-function AgentMcpDetailItem({
-  label,
-  multiline = false,
-  value,
+export function AgentMcpAssetPanel({
+  agent,
+  onDetailOpenChange,
 }: {
-  label: string;
-  multiline?: boolean;
-  value?: string;
+  agent: ManagedAgentSummary;
+  onDetailOpenChange?: (isOpen: boolean) => void;
 }) {
-  if (!value) return null;
-  return (
-    <div className="min-w-0 rounded-2xl border border-border bg-card p-4">
-      <div className="text-[11px] font-medium text-muted-foreground">
-        {label}
-      </div>
-      <div
-        className={`mt-1 font-mono text-xs text-foreground ${
-          multiline
-            ? "max-h-32 overflow-auto whitespace-pre-wrap break-words leading-5"
-            : "truncate"
-        }`}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-export function AgentMcpAssetPanel({ agent }: { agent: ManagedAgentSummary }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const library = useMcpStore((state) => state.library);
@@ -420,6 +356,12 @@ export function AgentMcpAssetPanel({ agent }: { agent: ManagedAgentSummary }) {
   useEffect(() => {
     if (selectedCardKey && !selectedCard) setSelectedCardKey(null);
   }, [selectedCard, selectedCardKey]);
+
+  useEffect(() => {
+    onDetailOpenChange?.(Boolean(selectedCard));
+  }, [onDetailOpenChange, selectedCard]);
+
+  useEffect(() => () => onDetailOpenChange?.(false), [onDetailOpenChange]);
 
   if (!agent.paths.mcp) {
     return (
@@ -535,135 +477,36 @@ export function AgentMcpAssetPanel({ agent }: { agent: ManagedAgentSummary }) {
 
   if (selectedCard) {
     const isBusy = busyServerKey === selectedCard.key;
-    const configContent = buildAgentServerConfig(selectedCard.server);
     return (
       <>
-        <div
-          data-testid="mcp-agent-entry-detail"
-          className="flex min-h-0 flex-1 flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-smooth"
-        >
-          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-5 py-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedCardKey(null)}
-                aria-label={t("common.back", "Back")}
-                title={t("common.back", "Back")}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <ArrowLeftIcon aria-hidden="true" className="h-4 w-4" />
-              </button>
-              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                <ServerIcon aria-hidden="true" className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <h2 className="truncate text-lg font-semibold text-foreground">
-                    {selectedCard.server.displayName ||
-                      selectedCard.server.name}
-                  </h2>
-                  <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                    {selectedCard.preset.label}
-                  </span>
-                </div>
-                <p className="truncate font-mono text-xs text-muted-foreground">
-                  {selectedCard.preset.path}
-                </p>
-              </div>
-            </div>
-            <div
-              data-testid="mcp-agent-detail-actions"
-              className="flex shrink-0 items-center gap-2"
-            >
-              <AgentMcpDetailActions
-                isImporting={isBusy}
-                isManaged={Boolean(selectedCard.managedServer)}
-                isUninstalling={
-                  isRemoving && pendingRemoval?.key === selectedCard.key
-                }
-                onImport={
-                  selectedCard.managedServer
-                    ? undefined
-                    : () =>
-                        runServerAction(selectedCard, () =>
-                          importExternal(selectedCard),
-                        )
-                }
-                onOpenAgentConfig={() =>
-                  void openAgentConfig(selectedCard.preset)
-                }
-                onOpenManagedMcp={
-                  selectedCard.managedServer
-                    ? () =>
-                        openManaged(
-                          selectedCard.managedServer as McpServerConfig,
-                        )
-                    : undefined
-                }
-                onUninstall={() => setPendingRemoval(selectedCard)}
-                t={t}
-              />
-            </div>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-5">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <section className="rounded-md border border-border bg-card p-5">
-                <div className="mb-4 text-sm font-semibold text-foreground">
-                  {t("mcp.sourceAndDetails", "Source and details")}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <AgentMcpDetailItem
-                    label={t("mcp.name", "Name")}
-                    value={selectedCard.server.name}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.transport", "Transport")}
-                    value={selectedCard.server.transport}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.command", "Command")}
-                    value={selectedCard.server.command}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.url", "URL")}
-                    value={selectedCard.server.url}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.cwd", "Working Directory")}
-                    value={selectedCard.server.cwd}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.args", "Args")}
-                    multiline
-                    value={selectedCard.server.args?.join("\n")}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.env", "Environment")}
-                    multiline
-                    value={formatRecord(selectedCard.server.env)}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.headers", "Headers")}
-                    multiline
-                    value={formatRecord(selectedCard.server.headers)}
-                  />
-                </div>
-              </section>
-              <section className="rounded-md border border-border bg-card p-5">
-                <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <FileJsonIcon
-                    aria-hidden="true"
-                    className="h-4 w-4 text-primary"
-                  />
-                  {t("mcp.copyConfig", "Config preview")}
-                </div>
-                <pre className="max-h-[32rem] overflow-auto rounded-md border border-border bg-background p-4 text-xs leading-5 text-foreground">
-                  {configContent}
-                </pre>
-              </section>
-            </div>
-          </div>
-        </div>
+        <AgentMcpEntryDetail
+          isImporting={isBusy}
+          isManaged={Boolean(selectedCard.managedServer)}
+          isUninstalling={
+            isRemoving && pendingRemoval?.key === selectedCard.key
+          }
+          platformId={selectedCard.preset.platformId ?? agent.id}
+          platformName={selectedCard.preset.label}
+          sectionTitle={t("mcp.agentMcp", "Agent MCP")}
+          server={selectedCard.server}
+          sourcePath={selectedCard.preset.path}
+          onBack={() => setSelectedCardKey(null)}
+          onImport={
+            selectedCard.managedServer
+              ? undefined
+              : () =>
+                  runServerAction(selectedCard, () =>
+                    importExternal(selectedCard),
+                  )
+          }
+          onOpenAgentConfig={() => openAgentConfig(selectedCard.preset)}
+          onOpenManagedMcp={
+            selectedCard.managedServer
+              ? () => openManaged(selectedCard.managedServer as McpServerConfig)
+              : undefined
+          }
+          onUninstall={() => setPendingRemoval(selectedCard)}
+        />
         <ConfirmDialog
           isOpen={Boolean(pendingRemoval)}
           onClose={() => setPendingRemoval(null)}
@@ -688,7 +531,6 @@ export function AgentMcpAssetPanel({ agent }: { agent: ManagedAgentSummary }) {
     <>
       <AgentAssetManagementSurface
         domain="mcp"
-        title={t("agents.mcp", "MCP")}
         query={query}
         onQueryChange={setQuery}
         searchLabel={t("agents.searchAssets", "Search assets")}

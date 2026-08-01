@@ -759,6 +759,9 @@ describe("McpManager", () => {
     expect(externalCard).toBeTruthy();
 
     await user.click(externalCard!);
+    expect(
+      await screen.findByTestId("mcp-agent-entry-detail-layout"),
+    ).toHaveAttribute("data-layout", "split-sidebar");
     const sidebar = await screen.findByTestId("mcp-agent-source-sidebar");
 
     expect(within(sidebar).getByText("Agent MCP")).toBeInTheDocument();

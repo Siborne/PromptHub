@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowLeftIcon,
   DownloadIcon,
   FileJsonIcon,
   FolderOpenIcon,
@@ -16,8 +15,7 @@ import type {
 } from "@prompthub/shared/types/mcp";
 import type { McpTargetPreset } from "@prompthub/core";
 import { PlatformIcon } from "../ui/PlatformIcon";
-import { AgentMcpDetailActions } from "./AgentMcpDetailActions";
-import { AgentMcpPreviewSidebar } from "./AgentMcpPreviewSidebar";
+import { AgentMcpEntryDetail } from "./AgentMcpEntryDetail";
 
 const MCP_AGENT_SECTION_HEADER_CLASS =
   "h-[132px] border-b border-border app-wallpaper-panel-strong";
@@ -60,12 +58,6 @@ function getStatusForPreset(
   return targetStatus.find((entry) => entry.presetId === presetId);
 }
 
-function formatRecord(record?: Record<string, string>): string {
-  return Object.entries(record ?? {})
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
-}
-
 function McpTargetIcon({
   preset,
   variant,
@@ -85,41 +77,6 @@ function McpTargetIcon({
       platformId={preset.platformId ?? preset.id}
       size={20}
     />
-  );
-}
-
-function buildAgentServerConfig(server: McpServerConfig): string {
-  const entry =
-    server.transport === "stdio"
-      ? {
-          command: server.command,
-          args: server.args,
-          cwd: server.cwd,
-          env: server.env,
-        }
-      : {
-          type: server.transport,
-          url: server.url,
-          headers: server.headers,
-        };
-
-  return JSON.stringify(
-    {
-      mcpServers: {
-        [server.name]: Object.fromEntries(
-          Object.entries(entry).filter(
-            ([, value]) =>
-              value !== undefined &&
-              (!Array.isArray(value) || value.length > 0) &&
-              (typeof value !== "object" ||
-                value === null ||
-                Object.keys(value).length > 0),
-          ),
-        ),
-      },
-    },
-    null,
-    2,
   );
 }
 
@@ -169,36 +126,6 @@ function formatAgentMcpInvocation(server: McpServerConfig): string {
     return command || server.name;
   }
   return server.url || server.name;
-}
-
-function AgentMcpDetailItem({
-  label,
-  multiline = false,
-  value,
-}: {
-  label: string;
-  multiline?: boolean;
-  value?: string;
-}) {
-  if (!value) {
-    return null;
-  }
-  return (
-    <div className="min-w-0 rounded-2xl border border-border app-wallpaper-surface p-4">
-      <div className="text-[11px] font-medium text-muted-foreground">
-        {label}
-      </div>
-      <div
-        className={`mt-1 font-mono text-xs text-foreground ${
-          multiline
-            ? "max-h-32 overflow-auto whitespace-pre-wrap break-words leading-5"
-            : "truncate"
-        }`}
-      >
-        {value}
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -327,7 +254,6 @@ export function McpAgentsView({
   if (selectedPreset && selectedServerName && selectedAgentServer) {
     const serverActionKey = `${selectedPreset.id}:${selectedServerName}`;
     const isServerBusy = busyServerKey === serverActionKey;
-    const configContent = buildAgentServerConfig(selectedAgentServer);
     const handleImportSelectedAgentServer = selectedManagedServer
       ? undefined
       : () =>
@@ -344,140 +270,24 @@ export function McpAgentsView({
         onRemoveAgentEntry(selectedPreset, selectedServerName),
       );
     return (
-      <div
-        data-testid="mcp-agent-entry-detail"
-        className="flex h-full min-h-0 flex-col app-wallpaper-section animate-in fade-in slide-in-from-right-4 duration-smooth"
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border app-wallpaper-panel-strong px-6 py-4">
-          <div className="flex min-w-0 items-center gap-4">
-            <button
-              type="button"
-              onClick={() => setSelectedServerName(null)}
-              className="-ml-2 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              aria-label={t("common.back", "Back")}
-              title={t("common.back", "Back")}
-            >
-              <ArrowLeftIcon aria-hidden="true" className="h-5 w-5" />
-            </button>
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-base font-semibold text-primary">
-              {selectedServerName.trim().charAt(0).toUpperCase() || "?"}
-            </div>
-            <div className="min-w-0">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="truncate text-xl font-bold text-foreground">
-                  {selectedAgentServer.displayName || selectedServerName}
-                </h2>
-                <span
-                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
-                    selectedManagedServer
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
-                      : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                  }`}
-                >
-                  {selectedManagedServer
-                    ? t("mcp.managedByPromptHub", "Managed in PromptHub")
-                    : t("mcp.notInLibrary", "Not in PromptHub library")}
-                </span>
-              </div>
-              <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                {selectedPreset.label} · {selectedPreset.path}
-              </p>
-            </div>
-          </div>
-          <div
-            data-testid="mcp-agent-detail-actions"
-            className="flex shrink-0 items-center gap-2"
-          >
-            <AgentMcpDetailActions
-              isImporting={isServerBusy}
-              isManaged={Boolean(selectedManagedServer)}
-              isUninstalling={isServerBusy}
-              openConfigLabel={resolvedOpenConfigLabel}
-              removeEntryLabel={resolvedRemoveEntryLabel}
-              onImport={handleImportSelectedAgentServer}
-              onOpenAgentConfig={handleOpenSelectedAgentConfig}
-              onOpenManagedMcp={handleOpenSelectedManagedServer}
-              onUninstall={handleRemoveSelectedAgentServer}
-              t={t}
-            />
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="space-y-4">
-              <section className="rounded-2xl border border-border app-wallpaper-panel-strong p-5">
-                <div className="mb-4 text-sm font-semibold text-foreground">
-                  {t("mcp.sourceAndDetails", "Source and details")}
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <AgentMcpDetailItem
-                    label={t("mcp.name", "Name")}
-                    value={selectedAgentServer.name}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.transport", "Transport")}
-                    value={selectedAgentServer.transport}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.command", "Command")}
-                    value={selectedAgentServer.command}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.url", "URL")}
-                    value={selectedAgentServer.url}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.cwd", "Working Directory")}
-                    value={selectedAgentServer.cwd}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.args", "Args")}
-                    multiline
-                    value={selectedAgentServer.args?.join("\n")}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.env", "Environment")}
-                    multiline
-                    value={formatRecord(selectedAgentServer.env)}
-                  />
-                  <AgentMcpDetailItem
-                    label={t("mcp.headers", "Headers")}
-                    multiline
-                    value={formatRecord(selectedAgentServer.headers)}
-                  />
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-border app-wallpaper-panel-strong p-5">
-                <div className="mb-4 text-sm font-semibold text-foreground">
-                  {t("mcp.copyConfig", "Copy config")}
-                </div>
-                <pre className="max-h-96 overflow-auto rounded-xl border border-border bg-card p-4 text-xs leading-5 text-foreground">
-                  {configContent}
-                </pre>
-              </section>
-            </div>
-
-            <aside className="space-y-4">
-              <AgentMcpPreviewSidebar
-                isImporting={isServerBusy}
-                isManaged={Boolean(selectedManagedServer)}
-                onImport={handleImportSelectedAgentServer}
-                openConfigLabel={resolvedOpenConfigLabel}
-                onOpenAgentConfig={handleOpenSelectedAgentConfig}
-                onOpenManagedMcp={handleOpenSelectedManagedServer}
-                platformId={selectedPreset.platformId ?? selectedPreset.id}
-                platformName={selectedPreset.label}
-                iconVariant={targetIconVariant}
-                sectionTitle={resolvedTitle}
-                sourcePath={selectedPreset.path}
-                t={t}
-              />
-            </aside>
-          </div>
-        </div>
-      </div>
+      <AgentMcpEntryDetail
+        iconVariant={targetIconVariant}
+        isImporting={isServerBusy}
+        isManaged={Boolean(selectedManagedServer)}
+        isUninstalling={isServerBusy}
+        openConfigLabel={resolvedOpenConfigLabel}
+        platformId={selectedPreset.platformId ?? selectedPreset.id}
+        platformName={selectedPreset.label}
+        removeEntryLabel={resolvedRemoveEntryLabel}
+        sectionTitle={resolvedTitle}
+        server={selectedAgentServer}
+        sourcePath={selectedPreset.path}
+        onBack={() => setSelectedServerName(null)}
+        onImport={handleImportSelectedAgentServer}
+        onOpenAgentConfig={handleOpenSelectedAgentConfig}
+        onOpenManagedMcp={handleOpenSelectedManagedServer}
+        onUninstall={handleRemoveSelectedAgentServer}
+      />
     );
   }
 
