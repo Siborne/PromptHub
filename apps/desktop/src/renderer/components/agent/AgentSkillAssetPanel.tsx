@@ -22,10 +22,13 @@ import {
 } from "../../services/skill-scan-status";
 import { useSkillStore } from "../../stores/skill.store";
 import { useUIStore } from "../../stores/ui.store";
+import { SkillIcon } from "../skill/SkillIcon";
+import { useEnsureSkillLibraryLoaded } from "../skill/use-ensure-skill-library-loaded";
 import { useToast } from "../ui/Toast";
 import {
   AgentAssetActionButton,
   AgentAssetCard,
+  AgentAssetCardContent,
   AgentAssetManagementSurface,
 } from "./AgentAssetManagementSurface";
 import { useBoundedPage } from "./BoundedListPager";
@@ -118,6 +121,7 @@ export function useAgentSkillAssets(
   const scanResult = scanState?.result ?? null;
   const skillsDir = scanResult?.skillsDir ?? "";
   const isScanning = Boolean(scanState?.isScanning);
+  useEnsureSkillLibraryLoaded();
 
   const rows = useMemo<AgentSkillAssetRow[]>(
     () =>
@@ -485,55 +489,64 @@ function AgentSkillAssetCard({
         </>
       }
     >
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="truncate text-base font-semibold text-foreground">
-          {skill.name}
-        </span>
-        {managedSkill ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
-            <CheckCircle2Icon aria-hidden="true" className="h-3 w-3" />
-            {t("skill.inMySkills", "In My Skills")}
-          </span>
-        ) : null}
-      </div>
-      <div className="mt-1.5 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">
-        {skill.description ? (
-          skill.description
-        ) : (
-          <span className="font-mono text-xs">{skill.localPath}</span>
-        )}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {status.isExternalInstall ? (
-          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-            {t("skill.externalInstall", "External install")}
-          </span>
-        ) : (
-          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-            {skill.installMode === "symlink"
-              ? t("skill.installModeSymlink", "Symlink install")
-              : t("skill.installModeCopy", "Copy install")}
-          </span>
-        )}
-        {skill.isPlatformBuiltin ? (
-          <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
-            {t("skill.platformBuiltin", "Built-in")}
-          </span>
-        ) : null}
-        {skill.isReadOnlyDiscovery ? (
-          <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-300">
-            {t("skill.compatibilityDiscovery", "Compatible source")}
-          </span>
-        ) : null}
-        {(skill.tags ?? []).slice(0, 3).map((tag) => (
-          <span
-            key={tag}
-            className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
-          >
-            {tag}
-          </span>
-        ))}
-      </div>
+      <AgentAssetCardContent
+        icon={
+          <SkillIcon
+            name={skill.name}
+            size="md"
+            decorative
+            className="border border-border/60"
+          />
+        }
+        iconTestId="agent-skill-asset-icon"
+        title={skill.name}
+        status={
+          managedSkill ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
+              <CheckCircle2Icon aria-hidden="true" className="h-3 w-3" />
+              {t("skill.inMySkills", "In My Skills")}
+            </span>
+          ) : null
+        }
+        description={
+          skill.description ||
+          t("skill.noDescription", "No description provided")
+        }
+        source={skill.localPath}
+        metadata={
+          <>
+            {status.isExternalInstall ? (
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                {t("skill.externalInstall", "External install")}
+              </span>
+            ) : (
+              <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                {skill.installMode === "symlink"
+                  ? t("skill.installModeSymlink", "Symlink install")
+                  : t("skill.installModeCopy", "Copy install")}
+              </span>
+            )}
+            {skill.isPlatformBuiltin ? (
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+                {t("skill.platformBuiltin", "Built-in")}
+              </span>
+            ) : null}
+            {skill.isReadOnlyDiscovery ? (
+              <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+                {t("skill.compatibilityDiscovery", "Compatible source")}
+              </span>
+            ) : null}
+            {(skill.tags ?? []).slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
+              >
+                {tag}
+              </span>
+            ))}
+          </>
+        }
+      />
     </AgentAssetCard>
   );
 }
@@ -576,7 +589,6 @@ export function AgentSkillAssetPanel({
   return (
     <AgentAssetManagementSurface
       domain="skills"
-      title={t("agents.skills", "Skills")}
       query={assets.query}
       onQueryChange={assets.setQuery}
       searchLabel={t("agents.searchAssets", "Search assets")}

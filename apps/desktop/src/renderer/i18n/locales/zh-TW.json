@@ -842,7 +842,7 @@
     "skills": "Skills",
     "mcp": "MCP",
     "rules": "規則",
-    "plugins": "外掛",
+    "plugins": "Plugins",
     "configFiles": "設定檔",
     "nativeConfigFiles": "原生設定檔",
     "nativeConfigFilesDesc": "此 Agent 已宣告並驗證的設定檔。",

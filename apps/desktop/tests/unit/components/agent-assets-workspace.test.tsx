@@ -330,6 +330,12 @@ describe("AgentAssetsWorkspace", () => {
     expect(
       screen.getByTestId("agent-asset-management-surface"),
     ).toHaveAttribute("data-domain", "skills");
+    expect(
+      within(screen.getByTestId("agent-asset-management-surface")).queryByRole(
+        "heading",
+        { name: /^skills$/i },
+      ),
+    ).not.toBeInTheDocument();
 
     view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />);
     expect(
@@ -340,6 +346,12 @@ describe("AgentAssetsWorkspace", () => {
     expect(screen.getByTestId("mcp-agent-server-list")).toBeVisible();
     expect(screen.getByTestId("mcp-agent-grid")).toBeVisible();
     expect(screen.getAllByTestId("mcp-agent-server-card")).toHaveLength(2);
+    expect(
+      within(screen.getByTestId("agent-asset-management-surface")).queryByRole(
+        "heading",
+        { name: /^mcp$/i },
+      ),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("mcp-agent-sidebar-header"),
     ).not.toBeInTheDocument();
@@ -369,6 +381,12 @@ describe("AgentAssetsWorkspace", () => {
     expect(screen.getByTestId("agent-plugin-grid")).toBeVisible();
     expect(screen.getByTestId("agent-plugin-target-card")).toBeVisible();
     expect(
+      within(screen.getByTestId("agent-asset-management-surface")).queryByRole(
+        "heading",
+        { name: /^plugins$/i },
+      ),
+    ).not.toBeInTheDocument();
+    expect(
       screen.queryByTestId("agent-plugin-sidebar-header"),
     ).not.toBeInTheDocument();
     expect(
@@ -376,13 +394,86 @@ describe("AgentAssetsWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses one icon-led card anatomy across Skills, MCP, and Plugins", async () => {
+    const view = await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="skills" />,
+    );
+
+    const readAnatomy = (card: HTMLElement) => ({
+      contentClass: within(card).getByTestId("agent-asset-card-content")
+        .className,
+      avatarClass: within(card).getByTestId("agent-asset-card-avatar")
+        .className,
+      titleClass: within(card).getByTestId("agent-asset-card-title-row")
+        .className,
+      descriptionClass: within(card).getByTestId("agent-asset-card-description")
+        .className,
+      sourceClass: within(card).getByTestId("agent-asset-card-source")
+        .className,
+      metadataClass: within(card).getByTestId("agent-asset-card-metadata")
+        .className,
+      actionsClass: within(card).getByTestId(/agent-.*-actions/).className,
+      actionCount: within(card).getAllByRole("button").length,
+    });
+
+    const skillCard = screen.getAllByTestId("agent-skill-asset-card")[0];
+    const skillAnatomy = readAnatomy(skillCard);
+    expect(
+      within(skillCard).getByTestId("agent-skill-asset-icon"),
+    ).toBeVisible();
+    expect(skillAnatomy.actionCount).toBeGreaterThan(1);
+
+    view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />);
+    const mcpCard = screen.getAllByTestId("mcp-agent-server-card")[0];
+    const mcpAnatomy = readAnatomy(mcpCard);
+    expect(within(mcpCard).getByTestId("agent-mcp-asset-icon")).toBeVisible();
+    expect(mcpAnatomy).toEqual({
+      ...skillAnatomy,
+      actionCount: mcpAnatomy.actionCount,
+    });
+    expect(mcpAnatomy.actionCount).toBeGreaterThan(1);
+
+    view.rerender(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
+    );
+    const pluginCard = screen.getByTestId("agent-plugin-target-card");
+    const pluginAnatomy = readAnatomy(pluginCard);
+    expect(
+      within(pluginCard).getByTestId("agent-plugin-asset-icon"),
+    ).toBeVisible();
+    expect(pluginAnatomy).toEqual({
+      ...skillAnatomy,
+      actionCount: pluginAnatomy.actionCount,
+    });
+    expect(pluginAnatomy.actionCount).toBeGreaterThan(0);
+  });
+
   it("opens MCP entry details and keeps quick actions scoped to the agent", async () => {
+    const onDetailOpenChange = vi.fn();
     await renderWithI18n(
-      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
+      <AgentAssetsWorkspace
+        agent={claudeAgent}
+        domain="mcp"
+        onDetailOpenChange={onDetailOpenChange}
+      />,
     );
 
     fireEvent.click(screen.getByText("fs"));
-    expect(await screen.findByTestId("mcp-agent-entry-detail")).toBeVisible();
+    const detail = await screen.findByTestId("mcp-agent-entry-detail");
+    expect(detail).toBeVisible();
+    expect(
+      within(detail).getByTestId("mcp-agent-entry-detail-layout"),
+    ).toHaveAttribute("data-layout", "split-sidebar");
+    const sourceSidebar = within(detail).getByTestId(
+      "mcp-agent-source-sidebar",
+    );
+    expect(within(sourceSidebar).getByText("Agent MCP")).toBeVisible();
+    expect(within(sourceSidebar).getByText("Claude Code")).toBeVisible();
+    expect(within(sourceSidebar).getByText("~/.claude.json")).toBeVisible();
+    expect(
+      within(sourceSidebar).getByText("Not in PromptHub library"),
+    ).toBeVisible();
+    expect(onDetailOpenChange).toHaveBeenLastCalledWith(true);
     fireEvent.click(
       within(screen.getByTestId("mcp-agent-detail-actions")).getByRole(
         "button",
@@ -390,6 +481,13 @@ describe("AgentAssetsWorkspace", () => {
       ),
     );
     expect(window.electron.openPath).toHaveBeenCalledWith("~/.claude.json");
+
+    fireEvent.click(
+      within(screen.getByTestId("mcp-agent-entry-detail")).getByRole("button", {
+        name: "Back",
+      }),
+    );
+    expect(onDetailOpenChange).toHaveBeenLastCalledWith(false);
   });
 
   it("confirms MCP removal before changing the selected Agent target", async () => {
@@ -425,15 +523,22 @@ describe("AgentAssetsWorkspace", () => {
   });
 
   it("opens Plugin details from the management card and returns to the list", async () => {
+    const onDetailOpenChange = vi.fn();
     await renderWithI18n(
-      <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
+      <AgentAssetsWorkspace
+        agent={claudeAgent}
+        domain="plugins"
+        onDetailOpenChange={onDetailOpenChange}
+      />,
     );
 
     fireEvent.click(
       screen.getByRole("button", { name: /open plugin details formatter/i }),
     );
     expect(await screen.findByTestId("plugin-full-detail-page")).toBeVisible();
+    expect(onDetailOpenChange).toHaveBeenLastCalledWith(true);
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(onDetailOpenChange).toHaveBeenLastCalledWith(false);
     expect(screen.getByTestId("agent-plugin-grid")).toBeVisible();
   });
 
@@ -651,6 +756,39 @@ describe("AgentAssetsWorkspace", () => {
   });
 
   describe("skills domain cards", () => {
+    it("loads My Skills before classifying a directly opened Agent workspace", async () => {
+      const managedSkill = createSkillFixture({
+        local_repo_path: "/Users/demo/skills/write",
+      });
+      const getAll = vi.fn().mockResolvedValue([managedSkill]);
+      installWindowMocks({ api: { skill: { getAll } } });
+      seedSkillScan(
+        [createAgentSkill({ localPath: "/Users/demo/skills/write" })],
+        [],
+      );
+
+      await renderWithI18n(
+        <AgentAssetsWorkspace agent={claudeAgent} domain="skills" />,
+        { settleAsyncEffects: true },
+      );
+
+      await waitFor(() => expect(getAll).toHaveBeenCalledTimes(1));
+      const managedCard = cardFor("write");
+      expect(
+        await within(managedCard).findByText("In My Skills"),
+      ).toBeVisible();
+      expect(
+        within(managedCard).getByRole("button", {
+          name: /open in my skills/i,
+        }),
+      ).toBeVisible();
+      expect(
+        within(managedCard).queryByRole("button", {
+          name: /import to my skills/i,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
     it("bounds 1,000 Skill cards while preserving responsive card actions", async () => {
       seedSkillScan(
         Array.from({ length: 1_000 }, (_, index) => {
@@ -1037,6 +1175,7 @@ describe("AgentAssetsWorkspace", () => {
     });
 
     it("opens the full detail page on card click and returns to the grid", async () => {
+      const onDetailOpenChange = vi.fn();
       seedSkillScan([
         createAgentSkill({ localPath: "/Users/demo/skills/write" }),
         createAgentSkill({
@@ -1046,7 +1185,11 @@ describe("AgentAssetsWorkspace", () => {
       ]);
 
       await renderWithI18n(
-        <AgentAssetsWorkspace agent={claudeAgent} domain="skills" />,
+        <AgentAssetsWorkspace
+          agent={claudeAgent}
+          domain="skills"
+          onDetailOpenChange={onDetailOpenChange}
+        />,
       );
 
       fireEvent.click(
@@ -1054,6 +1197,7 @@ describe("AgentAssetsWorkspace", () => {
       );
 
       expect(await screen.findByTestId("skill-full-detail-page")).toBeVisible();
+      expect(onDetailOpenChange).toHaveBeenLastCalledWith(true);
       expect(screen.getByTestId("detail-platform-id")).toHaveTextContent(
         "claude",
       );
@@ -1070,6 +1214,7 @@ describe("AgentAssetsWorkspace", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Back" }));
 
+      expect(onDetailOpenChange).toHaveBeenLastCalledWith(false);
       expect(
         screen.queryByTestId("skill-full-detail-page"),
       ).not.toBeInTheDocument();

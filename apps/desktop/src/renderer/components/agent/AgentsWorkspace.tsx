@@ -307,12 +307,14 @@ function AgentWorkspacePanel({
   agents,
   projects,
   onNavigate,
+  onAssetDetailOpenChange,
   target,
 }: {
   agent: ManagedAgentSummary;
   agents: ManagedAgentSummary[];
   projects: SkillProject[];
   onNavigate: AgentWorkspaceNavigate;
+  onAssetDetailOpenChange: (isOpen: boolean) => void;
   target: AgentWorkspaceTarget;
 }) {
   const { t } = useTranslation();
@@ -331,7 +333,11 @@ function AgentWorkspacePanel({
           <AgentOverviewPanel agent={agent} onNavigate={onNavigate} />
         ) : null}
         {isAgentAssetDomain(target.tab) ? (
-          <AgentAssetsWorkspace agent={agent} domain={target.tab} />
+          <AgentAssetsWorkspace
+            agent={agent}
+            domain={target.tab}
+            onDetailOpenChange={onAssetDetailOpenChange}
+          />
         ) : null}
         {target.tab === "definitions" ? (
           <AgentDefinitionsPanel key={agent.id} agent={agent} />
@@ -370,6 +376,7 @@ export function AgentsWorkspace() {
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+  const [isAssetDetailOpen, setIsAssetDetailOpen] = useState(false);
   const agent = useMemo(
     () => agents.find((item) => item.id === selectedAgentId) || agents[0],
     [agents, selectedAgentId],
@@ -390,6 +397,10 @@ export function AgentsWorkspace() {
     setIsDiagnosticsOpen(false);
   }, [agent?.id]);
 
+  useEffect(() => {
+    setIsAssetDetailOpen(false);
+  }, [agent?.id, target.tab]);
+
   if (!agent) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -402,29 +413,32 @@ export function AgentsWorkspace() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <header className="border-b border-border bg-card px-6 pb-0 pt-6 shadow-sm app-wallpaper-panel-strong sm:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <AgentIdentity agent={agent} />
-          <AgentHeaderActions
+      {!isAssetDetailOpen ? (
+        <header className="border-b border-border bg-card px-5 pb-0 pt-6 shadow-sm app-wallpaper-panel-strong">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <AgentIdentity agent={agent} />
+            <AgentHeaderActions
+              agent={agent}
+              onLaunch={() => void window.api.agent.launch(agent.id)}
+              onDiagnostics={() => setIsDiagnosticsOpen(true)}
+              onRefresh={() => void refresh()}
+              onEdit={() => setIsSettingsOpen(true)}
+            />
+          </div>
+          <AgentTabs
+            activeTab={target.tab}
             agent={agent}
-            onLaunch={() => void window.api.agent.launch(agent.id)}
-            onDiagnostics={() => setIsDiagnosticsOpen(true)}
-            onRefresh={() => void refresh()}
-            onEdit={() => setIsSettingsOpen(true)}
+            onSelect={(tab) => setTarget({ tab })}
           />
-        </div>
-        <AgentTabs
-          activeTab={target.tab}
-          agent={agent}
-          onSelect={(tab) => setTarget({ tab })}
-        />
-      </header>
+        </header>
+      ) : null}
       <AgentWorkspacePanel
         target={target}
         agent={agent}
         agents={agents}
         projects={projects}
         onNavigate={handleNavigate}
+        onAssetDetailOpenChange={setIsAssetDetailOpen}
       />
       <AgentSettingsDialog
         agent={agent}

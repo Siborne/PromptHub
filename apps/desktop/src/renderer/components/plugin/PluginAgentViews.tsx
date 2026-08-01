@@ -21,8 +21,7 @@ import type {
 } from "@prompthub/shared/types/plugin";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
-import { PluginFullDetailPage } from "./PluginFullDetailPage";
-import { buildAgentDetailPlugin } from "./agent-plugin-detail-adapter";
+import { AgentPluginDetailPage } from "./AgentPluginDetailPage";
 import {
   AGENT_PLUGIN_HEADER_CLASS,
   type AgentPluginFilter,
@@ -299,57 +298,6 @@ function PluginTargetInstalledRow({
   );
 }
 
-function AgentInstalledPluginDetailPage({
-  isImported,
-  isImporting,
-  managedPlugin,
-  onBack,
-  onImport,
-  onOpenFolder,
-  onOpenManagedPlugin,
-  plugin,
-  target,
-}: {
-  isImported?: boolean;
-  isImporting?: boolean;
-  managedPlugin?: PluginLibraryEntry | null;
-  onBack: () => void;
-  onImport: () => void;
-  onOpenFolder: () => void;
-  onOpenManagedPlugin?: () => void;
-  plugin: PluginTargetInstalledPlugin;
-  target: PluginTargetCompatibility;
-}) {
-  const detailPlugin = buildAgentDetailPlugin({
-    managedPlugin,
-    plugin,
-    target,
-  });
-
-  return (
-    <PluginFullDetailPage
-      agentActions={{
-        isImporting,
-        onImport: isImported ? undefined : onImport,
-        onOpenFolder,
-        onOpenManagedPlugin,
-      }}
-      agentContext={{
-        isManaged: isImported,
-        platformId: target.id,
-        platformName: target.displayName,
-        sourcePath: plugin.sourcePath ?? "",
-      }}
-      plugin={detailPlugin}
-      targetMatrix={[]}
-      onBack={onBack}
-      onDelete={() => undefined}
-      onDistribute={async () => undefined}
-      onOpenStore={() => undefined}
-    />
-  );
-}
-
 export function AgentPluginView(props: AgentPluginViewProps) {
   const { t } = useTranslation();
   const {
@@ -387,17 +335,13 @@ export function AgentPluginView(props: AgentPluginViewProps) {
     selectedTargetPlugin &&
     selectedTargetPluginStillExists
   ) {
-    const isImported = importedTargetPluginKeys.has(
-      `${selectedTarget.id}:${selectedTargetPlugin.name.toLowerCase()}`,
-    );
     const managedPlugin = installedPlugins.find(
       (plugin) =>
         plugin.name.toLowerCase() === selectedTargetPlugin.name.toLowerCase(),
     );
     return (
       <>
-        <AgentInstalledPluginDetailPage
-          isImported={isImported}
+        <AgentPluginDetailPage
           isImporting={importingTargetPluginId === selectedTargetPlugin.id}
           managedPlugin={managedPlugin}
           onBack={() => setSelectedTargetPlugin(null)}
@@ -412,6 +356,7 @@ export function AgentPluginView(props: AgentPluginViewProps) {
               selectedTargetPlugin.sourcePath ?? "",
             )
           }
+          onOpenStore={onOpenStore}
           plugin={selectedTargetPlugin}
           target={selectedTarget}
         />

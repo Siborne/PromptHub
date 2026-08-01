@@ -26,7 +26,7 @@ import { getSkillScanStatus } from "../../services/skill-scan-status";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { useToast } from "../ui/Toast";
-import { SkillFullDetailPage } from "./SkillFullDetailPage";
+import { AgentSkillDetailPage } from "./AgentSkillDetailPage";
 import { SkillLibraryImportModal } from "./SkillLibraryImportModal";
 import { buildProjectDetailSkill } from "./project-detail-adapter";
 import { sortSkillPlatformsByPreference } from "./use-skill-platform";
@@ -565,38 +565,18 @@ export function SkillAgentsView() {
   return (
     <>
       {selectedAgentSkill && selectedDetailSkill && selectedPlatform ? (
-        <SkillFullDetailPage
-          overrideSkill={selectedDetailSkill}
-          agentContext={{
-            installMode: selectedAgentSkill.installMode,
-            isManaged: Boolean(selectedManagedSkill),
-            isPlatformBuiltin: selectedAgentSkill.isPlatformBuiltin,
-            platformId: selectedPlatform.id,
-            platformName: selectedPlatform.name,
-            sourcePath: selectedAgentSkill.localPath,
-            symlinkTargetPath: selectedAgentSkill.symlinkTargetPath,
-          }}
-          agentActions={{
-            isImporting:
-              importingAgentSkillPath === selectedAgentSkill.localPath,
-            isUninstalling,
-            onImport: selectedManagedSkill
-              ? undefined
-              : () => handleImportAgentSkill(selectedAgentSkill),
-            onOpenFolder: async () => {
-              await window.electron?.openPath?.(selectedAgentSkill.localPath);
-            },
-            onOpenSymlinkTarget: selectedAgentSkill.symlinkTargetPath
-              ? async () => {
-                  await window.electron?.openPath?.(
-                    selectedAgentSkill.symlinkTargetPath ?? "",
-                  );
-                }
-              : undefined,
-            onOpenManagedSkill: openManagedSkill,
-            onUninstall: () => setPendingUninstall(selectedAgentSkill),
-          }}
+        <AgentSkillDetailPage
+          detailSkill={selectedDetailSkill}
+          isImporting={importingAgentSkillPath === selectedAgentSkill.localPath}
+          isUninstalling={isUninstalling}
+          managedSkill={selectedManagedSkill}
+          platformId={selectedPlatform.id}
+          platformName={selectedPlatform.name}
+          scannedSkill={selectedAgentSkill}
           onBack={() => setSelectedSkillPath(null)}
+          onImport={() => handleImportAgentSkill(selectedAgentSkill)}
+          onOpenManagedSkill={openManagedSkill}
+          onUninstall={() => setPendingUninstall(selectedAgentSkill)}
         />
       ) : (
         <div className="flex h-full min-h-0 overflow-hidden">

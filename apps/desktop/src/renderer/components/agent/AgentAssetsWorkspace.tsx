@@ -14,7 +14,7 @@ import { AgentMcpAssetPanel } from "./AgentMcpAssetPanel";
 import { AgentPluginAssetPanel } from "./AgentPluginAssetPanel";
 import { AgentRulesWorkspace } from "./AgentRulesWorkspace";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { SkillFullDetailPage } from "../skill/SkillFullDetailPage";
+import { AgentSkillDetailPage } from "../skill/AgentSkillDetailPage";
 import { SkillLibraryImportModal } from "../skill/SkillLibraryImportModal";
 import { buildProjectDetailSkill } from "../skill/project-detail-adapter";
 
@@ -28,9 +28,11 @@ import { buildProjectDetailSkill } from "../skill/project-detail-adapter";
 export function AgentAssetsWorkspace({
   agent,
   domain,
+  onDetailOpenChange,
 }: {
   agent: ManagedAgentSummary;
   domain: AgentAssetDomain;
+  onDetailOpenChange?: (isOpen: boolean) => void;
 }) {
   if (domain === "rules") {
     return (
@@ -43,7 +45,10 @@ export function AgentAssetsWorkspace({
   if (domain === "mcp") {
     return (
       <section className="flex h-full min-w-0 flex-1 flex-col">
-        <AgentMcpAssetPanel agent={agent} />
+        <AgentMcpAssetPanel
+          agent={agent}
+          onDetailOpenChange={onDetailOpenChange}
+        />
       </section>
     );
   }
@@ -51,20 +56,40 @@ export function AgentAssetsWorkspace({
   if (domain === "plugins") {
     return (
       <section className="flex h-full min-w-0 flex-1 flex-col">
-        <AgentPluginAssetPanel agent={agent} />
+        <AgentPluginAssetPanel
+          agent={agent}
+          onDetailOpenChange={onDetailOpenChange}
+        />
       </section>
     );
   }
 
-  return <AgentSkillWorkspace agent={agent} />;
+  return (
+    <AgentSkillWorkspace
+      agent={agent}
+      onDetailOpenChange={onDetailOpenChange}
+    />
+  );
 }
 
-function AgentSkillWorkspace({ agent }: { agent: ManagedAgentSummary }) {
+function AgentSkillWorkspace({
+  agent,
+  onDetailOpenChange,
+}: {
+  agent: ManagedAgentSummary;
+  onDetailOpenChange?: (isOpen: boolean) => void;
+}) {
   const { t } = useTranslation();
   const skillAssets = useAgentSkillAssets(agent);
   const [selectedSkillPath, setSelectedSkillPath] = useState<string | null>(
     null,
   );
+
+  useEffect(() => {
+    onDetailOpenChange?.(Boolean(selectedSkillPath));
+  }, [onDetailOpenChange, selectedSkillPath]);
+
+  useEffect(() => () => onDetailOpenChange?.(false), [onDetailOpenChange]);
 
   useEffect(() => {
     setSelectedSkillPath((current) =>
@@ -105,46 +130,29 @@ function AgentSkillWorkspace({ agent }: { agent: ManagedAgentSummary }) {
           </div>
         ) : detailSkill && selectedSkillRow ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <SkillFullDetailPage
-              overrideSkill={detailSkill}
-              agentContext={{
-                installMode: selectedSkillRow.skill.installMode,
-                isManaged: Boolean(selectedManagedSkill),
-                isPlatformBuiltin: selectedSkillRow.skill.isPlatformBuiltin,
-                platformId: agent.id,
-                platformName: agent.name,
-                sourcePath: selectedSkillRow.skill.localPath,
-                symlinkTargetPath: selectedSkillRow.skill.symlinkTargetPath,
-              }}
-              agentActions={{
-                isImporting:
-                  skillAssets.importingSkillPath ===
-                  selectedSkillRow.skill.localPath,
-                isUninstalling: skillAssets.isUninstalling,
-                onImport: selectedManagedSkill
-                  ? undefined
-                  : () => void skillAssets.importSkill(selectedSkillRow.skill),
-                onOpenFolder: async () => {
-                  await window.electron?.openPath?.(
-                    selectedSkillRow.skill.localPath,
-                  );
-                },
-                onOpenSymlinkTarget: selectedSkillRow.skill.symlinkTargetPath
-                  ? async () => {
-                      await window.electron?.openPath?.(
-                        selectedSkillRow.skill.symlinkTargetPath ?? "",
-                      );
-                    }
-                  : undefined,
-                onOpenManagedSkill: selectedManagedSkill
-                  ? () => skillAssets.openManagedSkill(selectedManagedSkill)
-                  : undefined,
-                onUninstall: selectedSkillRow.skill.isReadOnlyDiscovery
-                  ? undefined
-                  : () =>
-                      skillAssets.setPendingUninstall(selectedSkillRow.skill),
-              }}
+            <AgentSkillDetailPage
+              detailSkill={detailSkill}
+              isImporting={
+                skillAssets.importingSkillPath ===
+                selectedSkillRow.skill.localPath
+              }
+              isUninstalling={skillAssets.isUninstalling}
+              managedSkill={selectedManagedSkill}
+              platformId={agent.id}
+              platformName={agent.name}
+              scannedSkill={selectedSkillRow.skill}
               onBack={() => setSelectedSkillPath(null)}
+              onImport={() =>
+                void skillAssets.importSkill(selectedSkillRow.skill)
+              }
+              onOpenManagedSkill={
+                selectedManagedSkill
+                  ? () => skillAssets.openManagedSkill(selectedManagedSkill)
+                  : undefined
+              }
+              onUninstall={() =>
+                skillAssets.setPendingUninstall(selectedSkillRow.skill)
+              }
             />
           </div>
         ) : (

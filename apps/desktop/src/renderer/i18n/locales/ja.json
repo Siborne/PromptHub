@@ -842,7 +842,7 @@
     "skills": "スキル",
     "mcp": "MCP",
     "rules": "ルール",
-    "plugins": "プラグイン",
+    "plugins": "Plugins",
     "configFiles": "設定ファイル",
     "nativeConfigFiles": "ネイティブ設定ファイル",
     "nativeConfigFilesDesc": "この Agent に宣言された検証済みの設定ファイルです。",

@@ -20,6 +20,7 @@ import type {
   PluginTargetInstalledPlugin,
 } from "@prompthub/shared/types/plugin";
 import type { ManagedAgentSummary } from "@prompthub/shared/types";
+import { AgentPluginDetailPage } from "../plugin/AgentPluginDetailPage";
 import { PluginAgentTargetPicker } from "../plugin/PluginAgentTargetPicker";
 import { PluginFullDetailPage } from "../plugin/PluginFullDetailPage";
 import {
@@ -30,7 +31,6 @@ import {
   InventoryChips,
   PluginAvatar,
 } from "../plugin/plugin-manager-utils";
-import { buildAgentDetailPlugin } from "../plugin/agent-plugin-detail-adapter";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { usePluginStore } from "../../stores/plugin.store";
@@ -39,6 +39,7 @@ import { matchesManagedAgentTarget } from "./agent-target-matching";
 import {
   AgentAssetActionButton,
   AgentAssetCard,
+  AgentAssetCardContent,
   AgentAssetManagementSurface,
 } from "./AgentAssetManagementSurface";
 import { useBoundedPage } from "./BoundedListPager";
@@ -190,31 +191,28 @@ function AgentPluginTargetCardView({
         </>
       }
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-          <PlugIcon aria-hidden="true" className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-base font-semibold text-foreground">
-              {plugin.displayName}
-            </span>
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-              <CheckCircle2Icon aria-hidden="true" className="h-3 w-3" />
-              {t("plugin.inAgentPluginTarget", "Installed in Agent")}
-            </span>
-          </div>
-          <div className="mt-1.5 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">
-            {plugin.description ||
-              plugin.version ||
-              t("plugin.noDescription", "No description provided")}
-          </div>
-          {plugin.sourcePath ? (
-            <div className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
-              {plugin.sourcePath}
-            </div>
-          ) : null}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <AgentAssetCardContent
+        icon={
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <PlugIcon aria-hidden="true" className="h-5 w-5" />
+          </span>
+        }
+        iconTestId="agent-plugin-asset-icon"
+        title={plugin.displayName}
+        status={
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <CheckCircle2Icon aria-hidden="true" className="h-3 w-3" />
+            {t("plugin.inAgentPluginTarget", "Installed in Agent")}
+          </span>
+        }
+        description={
+          plugin.description ||
+          plugin.version ||
+          t("plugin.noDescription", "No description provided")
+        }
+        source={plugin.sourcePath || target.displayName}
+        metadata={
+          <>
             <span className="rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[11px] text-primary">
               {target.displayName}
             </span>
@@ -224,9 +222,9 @@ function AgentPluginTargetCardView({
               </span>
             ) : null}
             <InventoryChips inventory={plugin.inventory} />
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
     </AgentAssetCard>
   );
 }
@@ -356,29 +354,24 @@ function AgentPluginLibraryCardView({
         </>
       }
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <PluginAvatar entry={plugin} size="sm" />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-base font-semibold text-foreground">
-              {plugin.displayName}
-            </span>
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
-              <CheckCircle2Icon aria-hidden="true" className="h-3 w-3" />
-              {t("plugin.inMyPlugins", "In My Plugins")}
-            </span>
-          </div>
-          <div className="mt-1.5 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">
-            {plugin.description ||
-              plugin.author?.name ||
-              t("plugin.noDescription", "No description provided")}
-          </div>
-          {localPath ? (
-            <div className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
-              {localPath}
-            </div>
-          ) : null}
-          <div className="mt-3 flex flex-wrap gap-1.5">
+      <AgentAssetCardContent
+        icon={<PluginAvatar entry={plugin} size="sm" />}
+        iconTestId="agent-plugin-asset-icon"
+        title={plugin.displayName}
+        status={
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
+            <CheckCircle2Icon aria-hidden="true" className="h-3 w-3" />
+            {t("plugin.inMyPlugins", "In My Plugins")}
+          </span>
+        }
+        description={
+          plugin.description ||
+          plugin.author?.name ||
+          t("plugin.noDescription", "No description provided")
+        }
+        source={localPath || plugin.source.kind}
+        metadata={
+          <>
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
               {isDistributed
                 ? t("plugin.distributedToAgent", "Distributed to Agent")
@@ -402,20 +395,20 @@ function AgentPluginLibraryCardView({
                   {tag}
                 </span>
               ))}
-          </div>
-          <div className="mt-2">
-            <InventoryChips inventory={plugin.inventory} />
-          </div>
-        </div>
-      </div>
+          </>
+        }
+        supplementary={<InventoryChips inventory={plugin.inventory} />}
+      />
     </AgentAssetCard>
   );
 }
 
 export function AgentPluginAssetPanel({
   agent,
+  onDetailOpenChange,
 }: {
   agent: ManagedAgentSummary;
+  onDetailOpenChange?: (isOpen: boolean) => void;
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -567,6 +560,12 @@ export function AgentPluginAssetPanel({
       setSelectedTargetPlugin(null);
     }
   }, [selectedTargetPlugin, targetPluginCards]);
+
+  useEffect(() => {
+    onDetailOpenChange?.(Boolean(selectedPlugin || selectedTargetPlugin));
+  }, [onDetailOpenChange, selectedPlugin, selectedTargetPlugin]);
+
+  useEffect(() => () => onDetailOpenChange?.(false), [onDetailOpenChange]);
 
   if (!agent.paths.plugins) {
     return (
@@ -770,33 +769,16 @@ export function AgentPluginAssetPanel({
       targetPluginCards.find(
         (card) => card.target.id === target.id && card.plugin.id === plugin.id,
       )?.managedPlugin ?? null;
-    const detailPlugin = buildAgentDetailPlugin({
-      managedPlugin,
-      plugin,
-      target,
-    });
-
     return (
-      <PluginFullDetailPage
-        plugin={detailPlugin}
-        targetMatrix={[]}
-        agentContext={{
-          isManaged: Boolean(managedPlugin),
-          platformId: target.id,
-          platformName: target.displayName,
-          sourcePath: plugin.sourcePath ?? "",
-        }}
-        agentActions={{
-          isImporting: importingTargetPluginId === plugin.id,
-          onImport: managedPlugin
-            ? undefined
-            : () => importTargetPlugin(target, plugin),
-          onOpenFolder: () => openPathWithError(plugin.sourcePath ?? ""),
-          onOpenManagedPlugin: managedPlugin ? openPluginLibrary : undefined,
-        }}
+      <AgentPluginDetailPage
+        isImporting={importingTargetPluginId === plugin.id}
+        managedPlugin={managedPlugin}
+        plugin={plugin}
+        target={target}
         onBack={() => setSelectedTargetPlugin(null)}
-        onDelete={() => undefined}
-        onDistribute={async () => undefined}
+        onImport={() => importTargetPlugin(target, plugin)}
+        onOpenFolder={() => openPathWithError(plugin.sourcePath ?? "")}
+        onOpenManagedPlugin={managedPlugin ? openPluginLibrary : undefined}
         onOpenStore={openStore}
       />
     );
@@ -842,7 +824,6 @@ export function AgentPluginAssetPanel({
     <>
       <AgentAssetManagementSurface
         domain="plugins"
-        title={t("agents.plugins", "Plugins")}
         query={query}
         onQueryChange={setQuery}
         searchLabel={t("agents.searchAssets", "Search assets")}

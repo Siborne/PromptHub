@@ -144,6 +144,7 @@ function createQuota(
 
 function seedStores() {
   useSkillStore.setState({
+    isLoading: false,
     skills: [
       createSkillFixture({ local_repo_path: "/Users/demo/skills/write" }),
     ],
@@ -286,6 +287,37 @@ describe("AgentOverviewPanel", () => {
   beforeEach(() => {
     installWindowMocks();
     seedStores();
+  });
+
+  it("loads My Skills before rendering cold-start Agent overview counts", async () => {
+    const managedSkill = createSkillFixture({
+      local_repo_path: "/Users/demo/skills/write",
+    });
+    const getAll = vi.fn().mockResolvedValue([managedSkill]);
+    installWindowMocks({ api: { skill: { getAll } } });
+    useSkillStore.setState({ skills: [] });
+
+    await renderWithI18n(
+      <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
+    );
+
+    await waitFor(() => expect(getAll).toHaveBeenCalledTimes(1));
+    const skillsCell = screen.getByRole("button", { name: /^skills/i });
+    expect(
+      await within(skillsCell).findByText("1 managed · 2 external"),
+    ).toBeVisible();
+  });
+
+  it("does not duplicate a My Skills load already in progress", async () => {
+    const getAll = vi.fn().mockResolvedValue([]);
+    installWindowMocks({ api: { skill: { getAll } } });
+    useSkillStore.setState({ isLoading: true, skills: [] });
+
+    await renderWithI18n(
+      <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
+    );
+
+    expect(getAll).not.toHaveBeenCalled();
   });
 
   it("renders real domain counts from the owning stores and IPC summaries", async () => {

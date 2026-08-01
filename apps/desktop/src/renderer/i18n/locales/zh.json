@@ -843,7 +843,7 @@
     "skills": "Skills",
     "mcp": "MCP",
     "rules": "规则",
-    "plugins": "插件",
+    "plugins": "Plugins",
     "configFiles": "配置文件",
     "nativeConfigFiles": "原生配置文件",
     "nativeConfigFilesDesc": "此 Agent 已声明并验证的配置文件。",

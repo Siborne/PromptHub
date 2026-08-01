@@ -403,6 +403,18 @@ describe("Agent workspace shell", () => {
     expect(screen.getByRole("tab", { name: /appearance/i })).toBeDisabled();
   });
 
+  it.each(["zh", "zh-TW", "ja"])(
+    "keeps Plugins as the English Agent workspace product term in %s",
+    async (language) => {
+      await renderWithI18n(<AgentsWorkspace />, {
+        language,
+        settleAsyncEffects: true,
+      });
+
+      expect(screen.getByRole("tab", { name: "Plugins" })).toBeEnabled();
+    },
+  );
+
   it("opens read-only CLI diagnostics from the overflow menu", async () => {
     await renderWorkspaceAndSettleOverview();
 
@@ -516,6 +528,14 @@ describe("Agent workspace shell", () => {
     expect(panel.parentElement?.className).not.toContain("px-6");
   });
 
+  it("aligns the Agent header with the asset workspace left edge", async () => {
+    await renderWorkspaceAndSettleOverview();
+
+    const header = screen.getByTestId("agent-identity-icon").closest("header");
+    expect(header).toHaveClass("px-5");
+    expect(header).not.toHaveClass("sm:px-8");
+  });
+
   it("renders each asset domain directly from its top-level tab", async () => {
     await renderWorkspaceAndSettleOverview();
 
@@ -532,6 +552,68 @@ describe("Agent workspace shell", () => {
       screen.getByRole("textbox", { name: /search assets/i }),
     ).toBeVisible();
     expect(screen.getByText("~/.claude.json")).toBeVisible();
+  });
+
+  it("lets Agent asset details replace the entire right workspace", async () => {
+    useMcpStore.setState({
+      targetPresets: [
+        {
+          id: "preset-claude",
+          target: "claude",
+          scope: "global",
+          label: "Claude Code",
+          path: "~/.claude.json",
+          platformId: "claude",
+        },
+      ],
+      targetStatus: [
+        {
+          presetId: "preset-claude",
+          path: "~/.claude.json",
+          exists: true,
+          serverNames: ["fs"],
+          servers: [
+            {
+              id: "server-fs",
+              name: "fs",
+              displayName: "Filesystem",
+              transport: "stdio",
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-filesystem"],
+              enabled: true,
+              source: { type: "import", label: "Claude Code" },
+              createdAt: 0,
+              updatedAt: 0,
+            },
+          ],
+        },
+      ],
+    });
+
+    await renderWorkspaceAndSettleOverview();
+    fireEvent.click(screen.getByRole("tab", { name: /^mcp$/i }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /open mcp details filesystem/i,
+      }),
+    );
+
+    expect(await screen.findByTestId("mcp-agent-entry-detail")).toBeVisible();
+    expect(screen.queryByTestId("agent-identity-icon")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: /agent workspace/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(screen.getByTestId("mcp-agent-entry-detail")).getByRole("button", {
+        name: "Back",
+      }),
+    );
+
+    expect(await screen.findByTestId("agent-identity-icon")).toBeVisible();
+    expect(
+      screen.getByRole("tablist", { name: /agent workspace/i }),
+    ).toBeVisible();
   });
 
   it("does not duplicate Skills management in the header actions", async () => {

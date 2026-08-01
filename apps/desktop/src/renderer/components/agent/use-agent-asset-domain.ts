@@ -15,6 +15,7 @@ import { useMcpStore } from "../../stores/mcp.store";
 import { usePluginStore } from "../../stores/plugin.store";
 import { useRulesStore } from "../../stores/rules.store";
 import { useSkillStore } from "../../stores/skill.store";
+import { useEnsureSkillLibraryLoaded } from "../skill/use-ensure-skill-library-loaded";
 
 export type AgentAssetDomain = "skills" | "mcp" | "rules" | "plugins";
 
@@ -117,6 +118,7 @@ export function useAgentAssetInventoryMap(
   const [validation, setValidation] = useState<AgentAssetAggregate | null>(
     null,
   );
+  useEnsureSkillLibraryLoaded(Boolean(agent.paths.skills));
 
   useEffect(() => {
     if (
