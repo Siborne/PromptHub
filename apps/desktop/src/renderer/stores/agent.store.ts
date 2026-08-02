@@ -1,4 +1,5 @@
 import type {
+  AgentInventoryResponse,
   AgentIdentityPreferences,
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
@@ -11,6 +12,7 @@ import {
   sortManagedAgents,
 } from "../services/managed-agents";
 import { resolveAgentIdentity } from "../services/agent-identity";
+import { isWebRuntime } from "../runtime";
 import { useSettingsStore } from "./settings.store";
 
 interface AgentState {
@@ -36,6 +38,56 @@ function getOsKey(): SkillPlatformOsKey {
   return "linux";
 }
 
+function getWebAgentApi():
+  | { listManaged: () => Promise<AgentInventoryResponse> }
+  | undefined {
+  const api = window.api as unknown as {
+    agent?: { listManaged?: () => Promise<AgentInventoryResponse> };
+  };
+  return api.agent?.listManaged
+    ? { listManaged: api.agent.listManaged }
+    : undefined;
+}
+
+function applyPinnedAgents(
+  agents: ManagedAgentSummary[],
+  pinnedAgentIds: string[],
+): ManagedAgentSummary[] {
+  const pinned = new Set(pinnedAgentIds);
+  return sortManagedAgents(
+    agents.map((agent) => ({ ...agent, isPinned: pinned.has(agent.id) })),
+  );
+}
+
+async function loadDesktopAgents(
+  pinnedAgentIds: string[],
+): Promise<ManagedAgentSummary[]> {
+  const [platforms, detectedPlatformIds] = await Promise.all([
+    window.api.skill.getSupportedPlatforms(),
+    window.api.skill.detectPlatforms(),
+  ]);
+  const settings = useSettingsStore.getState();
+  return buildManagedAgents({
+    platforms,
+    detectedPlatformIds,
+    pinnedPlatformIds: pinnedAgentIds,
+    disabledPlatformIds: settings.disabledPlatformIds,
+    builtinOverrides: settings.builtinAgentOverrides || {},
+    agentIdentityPreferences: settings.agentIdentityPreferences,
+    osKey: getOsKey(),
+  }).filter((agent) => agent.isDetected);
+}
+
+async function loadManagedAgents(
+  pinnedAgentIds: string[],
+): Promise<ManagedAgentSummary[]> {
+  if (!isWebRuntime()) return loadDesktopAgents(pinnedAgentIds);
+  const api = getWebAgentApi();
+  if (!api) throw new Error("agent-inventory-api-unavailable");
+  const inventory = await api.listManaged();
+  return applyPinnedAgents(inventory.agents, pinnedAgentIds);
+}
+
 export const useAgentStore = create<AgentState>()(
   persist(
     (set, get) => ({
@@ -50,26 +102,13 @@ export const useAgentStore = create<AgentState>()(
         if (!get().hasLoaded && !get().isLoading) await get().refresh();
       },
       refresh: async () => {
-        if (!window.api?.skill) {
+        if (!isWebRuntime() && !window.api?.skill) {
           set({ hasLoaded: true, error: "agent-platform-api-unavailable" });
           return;
         }
         set({ isLoading: true, error: null });
         try {
-          const [platforms, detectedPlatformIds] = await Promise.all([
-            window.api.skill.getSupportedPlatforms(),
-            window.api.skill.detectPlatforms(),
-          ]);
-          const settings = useSettingsStore.getState();
-          const agents = buildManagedAgents({
-            platforms,
-            detectedPlatformIds,
-            pinnedPlatformIds: get().pinnedAgentIds,
-            disabledPlatformIds: settings.disabledPlatformIds,
-            builtinOverrides: settings.builtinAgentOverrides || {},
-            agentIdentityPreferences: settings.agentIdentityPreferences,
-            osKey: getOsKey(),
-          }).filter((agent) => agent.isDetected);
+          const agents = await loadManagedAgents(get().pinnedAgentIds);
           const selectedAgentId = agents.some(
             (agent) => agent.id === get().selectedAgentId,
           )

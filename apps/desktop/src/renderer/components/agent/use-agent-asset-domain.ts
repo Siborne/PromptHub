@@ -102,6 +102,9 @@ export function useAgentAssetInventoryMap(
   agent: ManagedAgentSummary,
 ): Record<AgentAssetDomain, AgentAssetInventory> {
   const { t } = useTranslation();
+  const assetsEnabled =
+    agent.capabilities.assets.status === "supported" ||
+    agent.capabilities.assets.status === "partial";
   const skillLibrary = useSkillStore((state) => state.skills);
   const skillScan = useSkillStore((state) => state.agentScanState[agent.id]);
   const scanSkills = useSkillStore((state) => state.scanAgentPlatformSkills);
@@ -118,10 +121,11 @@ export function useAgentAssetInventoryMap(
   const [validation, setValidation] = useState<AgentAssetAggregate | null>(
     null,
   );
-  useEnsureSkillLibraryLoaded(Boolean(agent.paths.skills));
+  useEnsureSkillLibraryLoaded(assetsEnabled && Boolean(agent.paths.skills));
 
   useEffect(() => {
     if (
+      assetsEnabled &&
       agent.paths.skills &&
       agent.isDetected &&
       !skillScan?.result &&
@@ -133,19 +137,21 @@ export function useAgentAssetInventoryMap(
     agent.id,
     agent.isDetected,
     agent.paths.skills,
+    assetsEnabled,
     scanSkills,
     skillScan?.isScanning,
     skillScan?.result,
   ]);
   useEffect(() => {
-    if (agent.paths.mcp && !mcpLibrary) void loadMcp();
-  }, [agent.paths.mcp, loadMcp, mcpLibrary]);
+    if (assetsEnabled && agent.paths.mcp && !mcpLibrary) void loadMcp();
+  }, [agent.paths.mcp, assetsEnabled, loadMcp, mcpLibrary]);
   useEffect(() => {
-    if (agent.paths.rules && !rulesLoaded) void loadRules();
-  }, [agent.paths.rules, loadRules, rulesLoaded]);
+    if (assetsEnabled && agent.paths.rules && !rulesLoaded) void loadRules();
+  }, [agent.paths.rules, assetsEnabled, loadRules, rulesLoaded]);
   useEffect(() => {
-    if (agent.paths.plugins && !pluginLibrary) void loadPlugins();
-  }, [agent.paths.plugins, loadPlugins, pluginLibrary]);
+    if (assetsEnabled && agent.paths.plugins && !pluginLibrary)
+      void loadPlugins();
+  }, [agent.paths.plugins, assetsEnabled, loadPlugins, pluginLibrary]);
 
   const aggregate = useMemo(
     () => readAgentAssetAggregate(agent.id),
@@ -161,6 +167,10 @@ export function useAgentAssetInventoryMap(
   );
 
   useEffect(() => {
+    if (!assetsEnabled) {
+      setValidation(null);
+      return;
+    }
     let active = true;
     void agentAssetAggregationService
       .listForTarget(agent.id)
@@ -181,6 +191,7 @@ export function useAgentAssetInventoryMap(
     };
   }, [
     agent.id,
+    assetsEnabled,
     mcpPresets,
     mcpStatus,
     pluginTargets,
@@ -190,16 +201,22 @@ export function useAgentAssetInventoryMap(
   ]);
 
   const refreshSkills = useCallback(() => {
-    if (agent.isDetected) void scanSkills(agent.id);
-  }, [agent.id, agent.isDetected, scanSkills]);
-  const refreshMcp = useCallback(() => void loadMcp(), [loadMcp]);
+    if (assetsEnabled && agent.isDetected) void scanSkills(agent.id);
+  }, [agent.id, agent.isDetected, assetsEnabled, scanSkills]);
+  const refreshMcp = useCallback(() => {
+    if (assetsEnabled) void loadMcp();
+  }, [assetsEnabled, loadMcp]);
   const refreshRules = useCallback(
-    () => void loadRules({ force: true }),
-    [loadRules],
+    () => {
+      if (assetsEnabled) void loadRules({ force: true });
+    },
+    [assetsEnabled, loadRules],
   );
   const refreshPlugins = useCallback(
-    () => void loadPlugins({ force: true }),
-    [loadPlugins],
+    () => {
+      if (assetsEnabled) void loadPlugins({ force: true });
+    },
+    [assetsEnabled, loadPlugins],
   );
 
   return useMemo(() => {

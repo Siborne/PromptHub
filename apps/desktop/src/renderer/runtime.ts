@@ -1,4 +1,5 @@
 export interface PromptHubRuntimeCapabilities {
+  agentManagement: boolean;
   appUpdate: boolean;
   dataRecovery: boolean;
   desktopWindowControls: boolean;
@@ -46,6 +47,7 @@ export function isPromptHubCloudEnabled(): boolean {
 export function getRuntimeCapabilities(): PromptHubRuntimeCapabilities {
   if (isWebRuntime()) {
     return {
+      agentManagement: true,
       appUpdate: false,
       dataRecovery: false,
       desktopWindowControls: false,
@@ -59,6 +61,7 @@ export function getRuntimeCapabilities(): PromptHubRuntimeCapabilities {
   }
 
   return {
+    agentManagement: true,
     appUpdate: true,
     dataRecovery: true,
     desktopWindowControls: true,

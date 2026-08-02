@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArchiveIcon,
   BotIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   Clock3Icon,
   CopyIcon,
   FolderIcon,
@@ -25,12 +27,14 @@ import type {
   ManagedAgentSummary,
   SkillProject,
 } from "@prompthub/shared/types";
+import { AgentConversationMarkdown } from "./AgentConversationMarkdown";
 import { AgentConversationActions } from "./AgentConversationActions";
 import { useAgentSessionIndex } from "./use-agent-session-index";
 import { Select } from "../ui/Select";
 
 const SESSION_PAGE_SIZE = 50;
-const TRANSCRIPT_PAGE_SIZE = 80;
+const TRANSCRIPT_FETCH_PAGE_SIZE = 80;
+const TRANSCRIPT_VIEW_PAGE_SIZE = 20;
 
 function formatTime(value: number | null): string {
   if (!value) return "";
@@ -83,8 +87,8 @@ export function AgentSessionsPanel({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isReading, setIsReading] = useState(false);
-  const [visibleEntryCount, setVisibleEntryCount] =
-    useState(TRANSCRIPT_PAGE_SIZE);
+  const [isLoadingMoreTranscript, setIsLoadingMoreTranscript] = useState(false);
+  const [transcriptPage, setTranscriptPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [metadataBySession, setMetadataBySession] = useState<
     Record<string, AgentConversationMetadata>
@@ -94,6 +98,7 @@ export function AgentSessionsPanel({
     "active" | "archived" | "deleted"
   >("active");
   const currentAgentId = useRef(agent.id);
+  const transcriptRef = useRef<HTMLDivElement>(null);
   currentAgentId.current = agent.id;
 
   useEffect(() => {
@@ -185,7 +190,8 @@ export function AgentSessionsPanel({
     }
     let active = true;
     setIsReading(true);
-    setVisibleEntryCount(TRANSCRIPT_PAGE_SIZE);
+    setIsLoadingMoreTranscript(false);
+    setTranscriptPage(0);
     setDetail(null);
     setError(null);
     window.api.agent
@@ -267,7 +273,62 @@ export function AgentSessionsPanel({
   ]);
   const selected =
     sessions.find((session) => session.id === selectedId) || null;
-  const visibleEntries = detail?.entries.slice(0, visibleEntryCount) || [];
+  const transcriptPageCount = Math.max(
+    1,
+    Math.ceil((detail?.entries.length || 0) / TRANSCRIPT_VIEW_PAGE_SIZE),
+  );
+  const visibleEntries =
+    detail?.entries.slice(
+      transcriptPage * TRANSCRIPT_VIEW_PAGE_SIZE,
+      (transcriptPage + 1) * TRANSCRIPT_VIEW_PAGE_SIZE,
+    ) || [];
+  const loadTranscriptPage = async (nextPage: number) => {
+    if (!detail || !selectedId || isLoadingMoreTranscript) return;
+    if (nextPage < 0) return;
+    if (nextPage < transcriptPageCount) {
+      setTranscriptPage(nextPage);
+      return;
+    }
+    if (nextPage !== transcriptPageCount || !detail.nextCursor) return;
+
+    const sessionId = selectedId;
+    const cursor = detail.nextCursor;
+    setIsLoadingMoreTranscript(true);
+    setError(null);
+    try {
+      const page = await window.api.agent.readSession(agent.id, sessionId, {
+        cursor,
+        limit: TRANSCRIPT_FETCH_PAGE_SIZE,
+      });
+      if (currentAgentId.current !== agent.id) return;
+      const known = new Set(detail.entries.map((entry) => entry.id));
+      const appended = page.entries.filter((entry) => !known.has(entry.id));
+      setDetail((current) => {
+        if (!current || current.sessionId !== sessionId) return current;
+        const entries = [...current.entries, ...appended];
+        return {
+          ...current,
+          entries,
+          parseErrors: current.parseErrors + page.parseErrors,
+          truncated: current.truncated || page.truncated,
+          nextCursor: page.nextCursor ?? null,
+        };
+      });
+      if (appended.length > 0) setTranscriptPage(nextPage);
+    } catch {
+      if (currentAgentId.current === agent.id) {
+        setError(t("agents.sessionReadFailed"));
+      }
+    } finally {
+      if (currentAgentId.current === agent.id) {
+        setIsLoadingMoreTranscript(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    transcriptRef.current?.scrollTo?.({ top: 0, behavior: "auto" });
+  }, [transcriptPage]);
   const projectFilterOptions = useMemo(
     () => [
       {
@@ -603,14 +664,32 @@ export function AgentSessionsPanel({
                 </button>
               ) : null}
             </header>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-6">
+            {!isReading &&
+            detail &&
+            (detail.entries.length > TRANSCRIPT_VIEW_PAGE_SIZE ||
+              Boolean(detail.nextCursor)) ? (
+              <TranscriptPagination
+                currentPage={transcriptPage}
+                pageCount={transcriptPageCount}
+                hasMore={Boolean(detail.nextCursor)}
+                isLoading={isLoadingMoreTranscript}
+                onPageChange={(page) => void loadTranscriptPage(page)}
+              />
+            ) : null}
+            <div
+              ref={transcriptRef}
+              data-testid="conversation-transcript"
+              className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-5 py-4"
+            >
               {isReading ? (
                 <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
                   <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
                   {t("agents.loadingTranscript")}
                 </div>
               ) : null}
-              {!isReading && detail?.entries.length === 0 ? (
+              {!isReading &&
+              detail?.entries.length === 0 &&
+              !detail.nextCursor ? (
                 <p className="py-16 text-center text-sm text-muted-foreground">
                   {t("agents.noTranscriptEntries")}
                 </p>
@@ -624,24 +703,6 @@ export function AgentSessionsPanel({
                     />
                   ))
                 : null}
-              {!isReading &&
-              detail &&
-              visibleEntryCount < detail.entries.length ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setVisibleEntryCount((count) =>
-                      Math.min(
-                        count + TRANSCRIPT_PAGE_SIZE,
-                        detail.entries.length,
-                      ),
-                    )
-                  }
-                  className="inline-flex h-9 w-full items-center justify-center rounded-md border border-border bg-card px-3 text-xs font-semibold text-foreground hover:bg-accent"
-                >
-                  {t("agents.showMoreMessages")}
-                </button>
-              ) : null}
               {detail?.truncated ? (
                 <p className="rounded-md border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2 text-xs text-muted-foreground">
                   {t("agents.transcriptTruncated")}
@@ -664,6 +725,89 @@ export function AgentSessionsPanel({
   );
 }
 
+function transcriptPageNumbers(currentPage: number, pageCount: number) {
+  if (pageCount <= 5)
+    return Array.from({ length: pageCount }, (_, index) => index);
+  const start = Math.min(Math.max(currentPage - 2, 0), pageCount - 5);
+  return Array.from({ length: 5 }, (_, index) => start + index);
+}
+
+function TranscriptPagination({
+  currentPage,
+  pageCount,
+  hasMore,
+  isLoading,
+  onPageChange,
+}: {
+  currentPage: number;
+  pageCount: number;
+  hasMore: boolean;
+  isLoading: boolean;
+  onPageChange(page: number): void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <nav
+      data-testid="conversation-transcript-pagination"
+      aria-label={t("agents.transcriptPagination", "Message pages")}
+      className="flex h-12 shrink-0 items-center justify-center gap-1 border-b border-border/70 bg-white px-4 dark:bg-background"
+    >
+      <button
+        type="button"
+        aria-label={t("agents.transcriptPreviousPage", "Previous message page")}
+        disabled={currentPage === 0 || isLoading}
+        onClick={() => onPageChange(currentPage - 1)}
+        className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+      >
+        <ChevronLeftIcon className="h-4 w-4" />
+      </button>
+      <div className="flex items-center gap-1">
+        {transcriptPageNumbers(currentPage, pageCount).map((page) => (
+          <button
+            key={page}
+            type="button"
+            aria-label={t(
+              "agents.transcriptPageButton",
+              "Message page {{page}}",
+              {
+                page: page + 1,
+              },
+            )}
+            aria-current={page === currentPage ? "page" : undefined}
+            onClick={() => onPageChange(page)}
+            className={`grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-semibold transition-colors ${
+              page === currentPage
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
+          >
+            {page + 1}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        aria-label={t("agents.transcriptNextPage", "Next message page")}
+        disabled={(!hasMore && currentPage >= pageCount - 1) || isLoading}
+        onClick={() => onPageChange(currentPage + 1)}
+        className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+      >
+        {isLoading ? (
+          <Loader2Icon className="h-4 w-4 animate-spin" />
+        ) : (
+          <ChevronRightIcon className="h-4 w-4" />
+        )}
+      </button>
+      <span className="ml-2 text-[11px] font-medium text-muted-foreground">
+        {t("agents.transcriptPageStatus", "Page {{page}} of {{total}}", {
+          page: currentPage + 1,
+          total: `${pageCount}${hasMore ? "+" : ""}`,
+        })}
+      </span>
+    </nav>
+  );
+}
+
 function FilterLabel({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -683,7 +827,7 @@ function ConversationMessage({
   roleLabel: string;
 }) {
   const baseClass =
-    "max-w-[88%] rounded-2xl px-4 py-3 shadow-sm ring-1 ring-black/[0.025]";
+    "max-w-[88%] rounded-2xl px-3.5 py-2.5 shadow-sm ring-1 ring-black/[0.025]";
   const sharedProps = {
     "data-testid": `conversation-message-${entry.id}`,
     style: {
@@ -696,30 +840,45 @@ function ConversationMessage({
     return (
       <article
         {...sharedProps}
-        className={`${baseClass} ml-auto rounded-br-md bg-primary text-primary-foreground shadow-primary/15`}
+        className="flex w-full flex-row-reverse items-start gap-2.5"
       >
-        <MessageRole
-          icon={<UserIcon className="h-3.5 w-3.5" />}
-          label={roleLabel}
-          className="justify-end text-primary-foreground/75"
-        />
-        <MessageText className="text-primary-foreground" text={entry.text} />
+        <span
+          role="img"
+          aria-label={roleLabel}
+          title={roleLabel}
+          data-testid={`conversation-avatar-${entry.id}`}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-primary/20 bg-primary/10 text-primary shadow-sm"
+        >
+          <UserIcon className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div
+          data-testid={`conversation-bubble-${entry.id}`}
+          className="max-w-[82%] rounded-2xl rounded-tr-md bg-primary px-3.5 py-2.5 text-primary-foreground shadow-sm shadow-primary/15 ring-1 ring-primary/10"
+        >
+          <AgentConversationMarkdown content={entry.text} />
+        </div>
       </article>
     );
   }
 
   if (entry.role === "assistant") {
     return (
-      <article
-        {...sharedProps}
-        className={`${baseClass} mr-auto rounded-bl-md border border-border/70 bg-white dark:bg-card`}
-      >
-        <MessageRole
-          icon={<BotIcon className="h-3.5 w-3.5" />}
-          label={roleLabel}
-          className="text-primary"
-        />
-        <MessageText className="text-foreground" text={entry.text} />
+      <article {...sharedProps} className="flex w-full items-start gap-2.5">
+        <span
+          role="img"
+          aria-label={roleLabel}
+          title={roleLabel}
+          data-testid={`conversation-avatar-${entry.id}`}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-white text-primary shadow-sm dark:bg-card"
+        >
+          <BotIcon className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div
+          data-testid={`conversation-bubble-${entry.id}`}
+          className="max-w-[82%] rounded-2xl rounded-tl-md border border-border/70 bg-white px-3.5 py-2.5 text-foreground shadow-sm ring-1 ring-black/[0.025] dark:bg-card"
+        >
+          <AgentConversationMarkdown content={entry.text} />
+        </div>
       </article>
     );
   }
@@ -741,7 +900,9 @@ function ConversationMessage({
         label={roleLabel}
         className={isTool ? "text-sky-600" : "text-amber-600"}
       />
-      <MessageText className="text-foreground" text={entry.text} />
+      <div className="text-foreground">
+        <AgentConversationMarkdown content={entry.text} />
+      </div>
     </article>
   );
 }
@@ -762,15 +923,5 @@ function MessageRole({
       {icon}
       <span>{label}</span>
     </div>
-  );
-}
-
-function MessageText({ text, className }: { text: string; className: string }) {
-  return (
-    <pre
-      className={`mt-2 whitespace-pre-wrap break-words font-sans text-sm leading-6 ${className}`}
-    >
-      {text}
-    </pre>
   );
 }

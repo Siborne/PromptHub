@@ -413,6 +413,36 @@
     }
   },
   "agents": {
+    "webService": {
+      "title": "Agent-Dienste",
+      "description": "Die Dienste laufen auf diesem selbst gehosteten PromptHub-Server.",
+      "available": "Verfügbar",
+      "partial": "Teilweise",
+      "unavailable": "Nicht verfügbar",
+      "actionAvailable": "Im selbst gehosteten Web verfügbar",
+      "actionUnavailable": "Im Browser nicht verfügbar",
+      "empty": "Noch keine Einträge.",
+      "reason": {
+        "self-hosted-adapter-pending": "Der Dienst ist vorhanden, aber sein Serveradapter ist noch unvollständig."
+      },
+      "action": {
+        "activate": "Aktivieren",
+        "apply": "Anwenden",
+        "browse": "Durchsuchen",
+        "distribute": "Verteilen",
+        "edit": "Bearbeiten",
+        "inspect": "Prüfen",
+        "install": "Installieren",
+        "manage": "Verwalten"
+      },
+      "state": {
+        "available": "Verfügbar",
+        "blocked": "Blockiert",
+        "missing": "Fehlt",
+        "theme": "Theme",
+        "pet": "Begleiter"
+      }
+    },
     "cliDiagnostics": {
       "title": "CLI-Diagnose",
       "checking": "Lokale CLI wird geprüft...",
@@ -526,6 +556,23 @@
       }
     },
     "providerProfiles": {
+      "sourceImport": {
+        "open": "Aus PromptHub importieren",
+        "title": "PromptHub-Anbieter importieren",
+        "hint": "Erstellt ein unabhaengiges Agent-Profil aus einem in PromptHub konfigurierten Anbieter. Die Aktivierung bleibt ein separater Pruefschritt.",
+        "loading": "Anbieter werden geladen...",
+        "empty": "In PromptHub sind noch keine Anbieter konfiguriert.",
+        "model": "Modell",
+        "confirm": "Importieren",
+        "credentialReady": "Zugangsdaten koennen sicher kopiert werden",
+        "credentialMissing": "Zugangsdaten muessen nach dem Import ergaenzt werden",
+        "incompatibility": {
+          "platform-unsupported": "Dieser Agent unterstuetzt keinen Anbieterimport",
+          "protocol-unsupported": "Das Protokoll wird nicht unterstuetzt",
+          "no-chat-model": "Kein Chat-Modell konfiguriert",
+          "invalid-endpoint": "Endpunkt ist ungueltig"
+        }
+      },
       "deepLink": {
         "title": "Import des Provider-Profils prüfen",
         "platform": "Agent-Plattform",
@@ -549,14 +596,43 @@
       "listLabel": "Provider-Profile",
       "loading": "Provider-Profile werden geladen...",
       "empty": "Noch keine Profile. Importiere die aktuelle native Konfiguration oder erstelle ein Profil.",
+      "webEmpty": "Noch keine Profile. Erstelle eines, um diesen Agent zu verwalten.",
       "emptyTitle": "Kein Provider-Profil ausgewählt",
       "emptyHint": "Erstelle ein Modellprofil oder importiere die aktuelle native Konfiguration vor der Aktivierung.",
+      "webEmptyHint": "Erstelle ein Provider-Profil, um Modelleinstellungen und nur schreibbare Zugangsdaten sicher auf diesem Server zu speichern.",
       "add": "Profil hinzufügen",
       "activate": "Aktivieren",
       "current": "Aktiv",
       "currentState": {
         "stale": "Native Konfiguration wurde geändert",
         "unavailable": "Aktives Profil konnte nicht verifiziert werden"
+      },
+      "currentNative": {
+        "title": "Aktuelle native Konfiguration",
+        "details": "Erkannte Konfiguration",
+        "classification": {
+          "official": "Offizieller Anbieter",
+          "custom": "Benutzerdefinierter Anbieter",
+          "unknown": "Unbekannter Anbieter"
+        },
+        "provider": "Anbieter",
+        "protocol": "Protokoll",
+        "endpoint": "Endpunkt",
+        "model": "Modell",
+        "credential": "Zugangsdaten",
+        "noEndpoint": "Offizieller Plattform-Endpunkt",
+        "noModel": "Kein Modell erkannt",
+        "save": "Als Profil speichern",
+        "restoreOfficial": "Offizielle Konfiguration wiederherstellen",
+        "securityHint": "Nur Typ und Verfügbarkeit der Zugangsdaten werden angezeigt. PromptHub liest den Wert nicht in diese Seite ein.",
+        "credentialStatus": {
+          "platform-managed": "Von der Plattform verwaltet",
+          "configured-api-key": "API-Schlüssel konfiguriert",
+          "configured-auth-token": "Authentifizierungstoken konfiguriert",
+          "environment": "Von der Umgebung bereitgestellt",
+          "missing": "Keine Zugangsdaten erkannt",
+          "unknown": "Typ der Zugangsdaten unbekannt"
+        }
       },
       "connection": {
         "title": "Verbindungsprüfung",
@@ -641,6 +717,19 @@
       "form": {
         "addTitle": "Provider-Profil hinzufügen",
         "editTitle": "Provider-Profil bearbeiten",
+        "inlineHint": "Prüfen Sie hier die nativen Agent-Einstellungen. Sie werden erst nach Speichern und Aktivieren des Profils geschrieben.",
+        "sections": {
+          "identity": "Identität",
+          "connection": "Verbindung und Protokoll",
+          "models": "Modelle",
+          "authentication": "Authentifizierung"
+        },
+        "authenticationSource": "Authentifizierungsquelle",
+        "authenticationSources": {
+          "managed": "Von PromptHub verwalteter Zugang",
+          "environment": "Umgebungsvariable"
+        },
+        "platformCredentialHint": "Die Authentifizierung wird von der Agent-Plattform oder der konfigurierten Umgebungsvariable verwaltet; PromptHub speichert für dieses Profil keinen Zugang.",
         "name": "Name",
         "providerKind": "Provider-Typ",
         "providerId": "Provider-ID",
@@ -928,6 +1017,11 @@
     "loadMoreSessions": "Weitere Sitzungen laden",
     "loadingMoreSessions": "Weitere Sitzungen werden geladen...",
     "showMoreMessages": "Weitere Nachrichten anzeigen",
+    "transcriptPagination": "Nachrichtenseiten",
+    "transcriptPreviousPage": "Vorherige Nachrichtenseite",
+    "transcriptNextPage": "Nächste Nachrichtenseite",
+    "transcriptPageButton": "Nachrichtenseite {{page}}",
+    "transcriptPageStatus": "Seite {{page}} von {{total}}",
     "copyResumeCommand": "Fortsetzungsbefehl kopieren",
     "loadingTranscript": "Unterhaltung wird geladen...",
     "noTranscriptEntries": "Keine lesbaren Einträge gefunden.",
@@ -972,6 +1066,11 @@
     "conversationActionFailed": "Conversation action failed.",
     "continuationProjectRequired": "Choose a project before continuing this conversation.",
     "resumeConversation": "Fortsetzen",
+    "continueInCurrentAgent": "In {{agent}} fortsetzen",
+    "handoffConversation": "Anderswo fortsetzen",
+    "handoffDialogTitle": "In einem anderen Agent fortsetzen",
+    "handoffDialogHint": "Wählen Sie einen erkannten Agent und ein Projekt und prüfen Sie die Kontextübergabe.",
+    "moreConversationActions": "Weitere Konversationsaktionen",
     "continueWithAgent": "Mit Agent fortsetzen",
     "continuationProject": "Projekt für Fortsetzung",
     "currentSessionProject": "Aktuelles Sitzungsverzeichnis",
@@ -983,16 +1082,14 @@
     "restoreConversation": "Wiederherstellen",
     "deleteConversation": "Aus Verlauf entfernen",
     "reviewHandoff": "Übergabekontext prüfen",
-    "handoffDirectHint": "A new target session will open with this portable context.",
-    "handoffCopyHint": "Direct launch is unavailable. The context will be copied.",
-    "handoffCopiedLaunchFailed": "Der Kontext wurde kopiert, aber der Ziel-Agent konnte nicht geöffnet werden.",
-    "handoffCliTransport": "CLI-Übergabe",
-    "handoffCopyTransport": "Öffnen + kopieren",
-    "resumeStarted": "Der native Fortsetzungsablauf wurde in {{agent}} geöffnet.",
+    "handoffDirectHint": "PromptHub kann {{agent}} im gewählten Projekt mit diesem geprüften Kontext starten.",
+    "handoffLaunchHint": "PromptHub kopiert den Kontext und öffnet {{agent}}. Fügen Sie ihn ein, um im gewählten Projekt fortzufahren.",
+    "handoffLaunchFailed": "Der Ziel-Agent konnte nicht geöffnet werden.",
+    "resumeStarted": "{{agent}} wurde im Terminal geöffnet.",
     "handoffStarted": "Eine neue Unterhaltung wurde in {{agent}} gestartet.",
-    "handoffCopied": "{{agent}} wurde geöffnet und der geprüfte Kontext kopiert.",
+    "handoffOpened": "Kontext kopiert und {{agent}} geöffnet.",
     "conversationExported": "Unterhaltung exportiert.",
-    "continueInAgent": "Continue in {{agent}}",
+    "continueInAgent": "In {{agent}} fortsetzen",
     "conversationSaveFailed": "Could not save conversation details.",
     "conversationTitle": "Title",
     "conversationProject": "Project",
@@ -1006,7 +1103,21 @@
     "conversationStatus": "Unterhaltungsstatus",
     "activeConversations": "Aktiv",
     "archivedConversations": "Archiviert",
-    "deletedConversations": "Entfernt"
+    "deletedConversations": "Entfernt",
+    "exportConversation": "Unterhaltung exportieren",
+    "handoffCliHint": "Setzen Sie über die CLI des Ziel-Agents fort. Kopieren Sie den Befehl oder öffnen Sie ihn direkt im Terminal.",
+    "copyCliCommand": "CLI-Befehl kopieren",
+    "cliCommandCopied": "CLI-Befehl kopiert.",
+    "handoffCliUnavailableHint": "PromptHub konnte diese CLI nicht finden. Kopieren Sie den Befehl und führen Sie ihn in Ihrem Terminal aus.",
+    "handoffDirect": "Direkte Übergabe",
+    "handoffOpenAndCopy": "Öffnen + Kontext",
+    "handoffCopyOnly": "Kontext kopieren",
+    "handoffCopyOnlyHint": "PromptHub kann {{agent}} nicht automatisch öffnen. Kopieren Sie den Kontext und fügen Sie ihn manuell ein.",
+    "handoffCopyFailed": "Der Übergabekontext konnte nicht kopiert werden.",
+    "handoffLaunchFailedAfterCopy": "Der Ziel-Agent konnte nicht geöffnet werden. Der Kontext bleibt für die manuelle Fortsetzung kopiert.",
+    "copyHandoffContext": "Übergabekontext kopieren",
+    "handoffContextCopied": "Übergabekontext kopiert.",
+    "copyAndOpenAgent": "Kontext kopieren und {{agent}} öffnen"
   },
   "folder": {
     "new": "Neuer Ordner",

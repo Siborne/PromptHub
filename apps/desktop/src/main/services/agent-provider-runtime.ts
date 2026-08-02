@@ -149,6 +149,7 @@ export function createAgentProviderRuntime({
     activate: activationService.activate.bind(activationService),
     getLatestVerifiedSnapshot: (platformId) =>
       profileDb.getLatestVerifiedSnapshot(platformId),
+    importCurrent: activationService.importCurrent.bind(activationService),
     listProfiles: () => profileService.list(),
     preview: activationService.preview.bind(activationService),
     resolveContext: resolveAgentProviderContext,

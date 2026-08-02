@@ -18,6 +18,7 @@ import { AgentConversationService } from "../services/agent-conversation-service
 import { createAgentTerminalLauncher } from "../services/agent-terminal-launcher";
 import { createNativeCommandRunner } from "../services/native-command";
 import { registerAgentProviderProfileIPC } from "./agent-provider-profile.ipc";
+import { registerAgentProviderSourceIPC } from "./agent-provider-source.ipc";
 import { registerAgentManagementBackupIPC } from "./agent-management-backup.ipc";
 import { registerAgentProviderActivationIPC } from "./agent-provider-activation.ipc";
 import { registerAgentProviderCurrentStateIPC } from "./agent-provider-current-state.ipc";
@@ -42,6 +43,9 @@ import { registerCloudIPC } from "./cloud.ipc";
 import { registerGenerationIPC } from "./generation.ipc";
 import { SkillInstaller } from "../services/skill-installer";
 import { launchAgentPlatform } from "../services/agent-launch-service";
+import { createAgentProviderSourceService } from "../services/agent-provider-source-service";
+import { createAgentProviderOfficialProfileService } from "../services/agent-provider-official-profile-service";
+import { coreAIConfigService } from "@prompthub/core";
 
 const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.PROMPT_CREATE,
@@ -171,6 +175,8 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.AGENT_PROVIDER_PROFILES_DUPLICATE,
   IPC_CHANNELS.AGENT_PROVIDER_PROFILES_EXPORT,
   IPC_CHANNELS.AGENT_PROVIDER_PROFILES_DELETE,
+  IPC_CHANNELS.AGENT_PROVIDER_SOURCES_LIST,
+  IPC_CHANNELS.AGENT_PROVIDER_SOURCE_IMPORT,
   IPC_CHANNELS.AGENT_PROVIDER_MIGRATION_PREVIEW,
   IPC_CHANNELS.AGENT_PROVIDER_MIGRATION_APPLY,
   IPC_CHANNELS.AGENT_PROVIDER_IMPORT_CURRENT,
@@ -343,14 +349,23 @@ export function registerAllIPC(
             runtime.sessionIndexDb,
             agentId,
           ).list(agentId, input),
-        read: (agentId, sessionId) =>
+        read: (agentId, sessionId, input) =>
           createAgentSessionIndexOperations(
             runtime.sessionIndexDb,
             agentId,
-          ).read(agentId, sessionId),
+          ).read(agentId, sessionId, input),
       },
       resolveExecutable: commandRunner.resolve,
       launch: (command) => terminal.launch(command),
+      copyText: (text) => clipboard.writeText(text),
+      canLaunchAgent: async (agentId) => {
+        const platform = SkillInstaller.getSupportedPlatforms().find(
+          (candidate) => candidate.id === agentId,
+        );
+        if (!platform) return false;
+        const platformKey = process.platform as "darwin" | "linux" | "win32";
+        return Boolean(platform.launchPaths?.[platformKey]?.length);
+      },
       launchAgent: async (agentId) => {
         const platform = SkillInstaller.getSupportedPlatforms().find(
           (candidate) => candidate.id === agentId,
@@ -372,7 +387,6 @@ export function registerAllIPC(
         });
         return result.success;
       },
-      copyText: (text) => clipboard.writeText(text),
       homeDir: app.getPath("home"),
       supportsInteractiveLaunch: process.platform === "darwin",
     });
@@ -393,6 +407,21 @@ export function registerAllIPC(
       },
     });
     registerAgentProviderProfileIPC(runtime.profileService);
+    const providerSourceService = createAgentProviderSourceService({
+      readConfig: () => coreAIConfigService.read(),
+      createProfile: (request) => runtime.profileService.create(request),
+    });
+    const officialProfileService = createAgentProviderOfficialProfileService({
+      createProfile: (request) => runtime.profileService.create(request),
+      importCurrent: (input) => runtime.activationService.importCurrent(input),
+      listProfiles: (options) => runtime.profileService.list(options),
+      resolveContext: resolveAgentProviderContext,
+    });
+    registerAgentProviderSourceIPC({
+      list: providerSourceService.list,
+      importSource: providerSourceService.importSource,
+      ensureOfficial: officialProfileService.ensure,
+    });
     registerAgentManagementBackupIPC(runtime.backupService);
     registerAgentProviderMigrationIPC(
       createAgentCodexProviderMigrationService({

@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentSessionsPanel } from "../../../src/renderer/components/agent/AgentSessionsPanel";
+import { copyTextToClipboard } from "../../../src/renderer/utils/clipboard";
 import type {
   AgentSessionEntry,
   AgentSessionListResult,
@@ -10,6 +11,10 @@ import type {
 } from "@prompthub/shared/types";
 import { renderWithI18n } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
+
+vi.mock("../../../src/renderer/utils/clipboard", () => ({
+  copyTextToClipboard: vi.fn().mockResolvedValue(undefined),
+}));
 
 const agent = {
   id: "codex",
@@ -52,9 +57,10 @@ function entry(index: number): AgentSessionEntry {
 describe("AgentSessionsPanel", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(copyTextToClipboard).mockClear();
   });
 
-  it("pages metadata and progressively mounts a long transcript", async () => {
+  it("pages metadata and provides fast transcript pagination", async () => {
     const allSessions = Array.from({ length: 120 }, (_, index) =>
       metadata(index),
     );
@@ -67,18 +73,28 @@ describe("AgentSessionsPanel", () => {
         hasMore: offset + limit < allSessions.length,
       }),
     );
+    const readSession = vi.fn(
+      async (
+        _agentId: string,
+        _sessionId: string,
+        options?: { cursor?: string },
+      ) => ({
+        agentId: "codex",
+        adapter: "codex-rollout-jsonl-v1",
+        sessionId: "session-0",
+        entries: options?.cursor
+          ? Array.from({ length: 40 }, (_, index) => entry(index + 80))
+          : Array.from({ length: 80 }, (_, index) => entry(index)),
+        parseErrors: 0,
+        truncated: false,
+        nextCursor: options?.cursor ? null : "cursor-page-2",
+      }),
+    );
     installWindowMocks({
       api: {
         agent: {
           listSessions,
-          readSession: vi.fn().mockResolvedValue({
-            agentId: "codex",
-            adapter: "codex-rollout-jsonl-v1",
-            sessionId: "session-0",
-            entries: Array.from({ length: 120 }, (_, index) => entry(index)),
-            parseErrors: 0,
-            truncated: true,
-          }),
+          readSession,
         },
       },
     });
@@ -93,15 +109,27 @@ describe("AgentSessionsPanel", () => {
     ).toBeVisible();
     expect(listSessions).toHaveBeenNthCalledWith(1, "codex", 50, 0);
     expect(screen.getByText("50 / 120")).toBeVisible();
-    expect(await screen.findByText("Message 79")).toBeVisible();
-    expect(screen.queryByText("Message 80")).not.toBeInTheDocument();
-    expect(screen.getByText(/bounded preview/i)).toBeVisible();
+    expect(await screen.findByText("Message 19")).toBeVisible();
+    expect(screen.queryByText("Message 20")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-transcript-pagination"),
+    ).toHaveTextContent("Page 1 of 4+");
+    expect(screen.queryByText(/bounded preview/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Session 0/ })).toHaveStyle({
       contentVisibility: "auto",
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Show more messages" }));
-    expect(await screen.findByText("Message 119")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Message page 4" }));
+    expect(await screen.findByText("Message 79")).toBeVisible();
+    expect(screen.queryByText("Message 59")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next message page" }));
+    expect(await screen.findByText("Message 99")).toBeVisible();
+    expect(screen.queryByText("Message 100")).not.toBeInTheDocument();
+    expect(readSession).toHaveBeenLastCalledWith("codex", "session-0", {
+      cursor: "cursor-page-2",
+      limit: 80,
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Load more sessions" }));
     await waitFor(() =>
@@ -124,7 +152,7 @@ describe("AgentSessionsPanel", () => {
       status: "launched",
       mode: "native-resume",
     });
-    const previewConversationHandoff = vi.fn().mockResolvedValue({
+    const handoffPreview = {
       sourceAgentId: "codex",
       sourceSessionId: "session-1",
       sourceTitle: "Session 1",
@@ -134,7 +162,12 @@ describe("AgentSessionsPanel", () => {
       payload: "# Portable handoff\n\nContinue the updater fix.",
       payloadDigest: `sha256:${"a".repeat(64)}`,
       transport: "direct",
-    });
+      cliCommand:
+        "cd '/workspace/PromptHub' && claude '# Portable handoff\n\nContinue the updater fix.'",
+    };
+    const previewConversationHandoff = vi
+      .fn()
+      .mockResolvedValue(handoffPreview);
     const continueConversationInAgent = vi.fn().mockResolvedValue({
       status: "launched",
       mode: "cross-agent",
@@ -179,11 +212,23 @@ describe("AgentSessionsPanel", () => {
       id: "claude",
       name: "Claude Code",
     } as ManagedAgentSummary;
+    const antigravity = {
+      ...agent,
+      id: "antigravity",
+      name: "Antigravity",
+      launchable: true,
+    } as ManagedAgentSummary;
+    const copilot = {
+      ...agent,
+      id: "copilot",
+      name: "GitHub Copilot",
+      launchable: false,
+    } as ManagedAgentSummary;
 
     await renderWithI18n(
       <AgentSessionsPanel
         agent={agent}
-        agents={[agent, claude]}
+        agents={[agent, claude, antigravity, copilot]}
         projects={[
           {
             id: "project-1",
@@ -212,14 +257,46 @@ describe("AgentSessionsPanel", () => {
     expect(
       document.querySelector('select[aria-label="Conversation status"]'),
     ).toBeNull();
-    expect(screen.getByTestId("conversation-continuation-toolbar")).toHaveClass(
-      "grid",
-    );
+    const primaryActions = screen.getByTestId("conversation-primary-actions");
+    expect(primaryActions.querySelectorAll("button")).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: "Continue in ChatGPT" }),
+    ).toHaveClass("h-9", "bg-primary");
+    expect(
+      screen
+        .getByRole("button", { name: "Continue in ChatGPT" })
+        .querySelector(".lucide-square-terminal"),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Continue elsewhere" }),
+    ).toHaveClass("h-9");
+    expect(
+      screen.getByRole("button", { name: "Export conversation" }),
+    ).toHaveClass("h-9", "w-9");
+    expect(
+      screen.queryByLabelText("Continue with Agent"),
+    ).not.toBeInTheDocument();
     expect(
       await screen.findByTestId("conversation-message-entry-0"),
-    ).toHaveClass("ml-auto", "rounded-2xl", "bg-primary");
+    ).toHaveClass("flex", "flex-row-reverse");
+    expect(screen.getByTestId("conversation-transcript")).toHaveClass(
+      "space-y-2.5",
+      "py-4",
+    );
+    expect(screen.getByTestId("conversation-avatar-entry-0")).toHaveClass(
+      "rounded-full",
+    );
+    expect(screen.getByTestId("conversation-bubble-entry-0")).toHaveClass(
+      "rounded-2xl",
+      "bg-primary",
+    );
     expect(screen.getByTestId("conversation-message-entry-1")).toHaveClass(
-      "mr-auto",
+      "flex",
+    );
+    expect(screen.getByTestId("conversation-avatar-entry-1")).toHaveClass(
+      "rounded-full",
+    );
+    expect(screen.getByTestId("conversation-bubble-entry-1")).toHaveClass(
       "rounded-2xl",
       "bg-white",
     );
@@ -234,7 +311,9 @@ describe("AgentSessionsPanel", () => {
       "bg-white",
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue in ChatGPT" }),
+    );
     await waitFor(() =>
       expect(resumeConversation).toHaveBeenCalledWith({
         agentId: "codex",
@@ -242,12 +321,20 @@ describe("AgentSessionsPanel", () => {
       }),
     );
     expect(
-      await screen.findByText("Opened the native resume flow in ChatGPT."),
+      await screen.findByText("Opened ChatGPT in Terminal."),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Continue elsewhere" }));
+    expect(
+      await screen.findByText("Continue in another Agent"),
     ).toBeVisible();
     fireEvent.click(screen.getByLabelText("Continue with Agent"));
-    fireEvent.click(
-      screen.getByRole("option", { name: "Claude Code, CLI handoff" }),
-    );
+    expect(
+      screen.getByRole("option", { name: "Antigravity" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "GitHub Copilot" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "Claude Code" }));
     fireEvent.click(screen.getByLabelText("Project for continuation"));
     fireEvent.click(
       screen
@@ -261,6 +348,12 @@ describe("AgentSessionsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview handoff" }));
     expect(await screen.findByText("Review handoff context")).toBeVisible();
     expect(screen.getByText(/Continue the updater fix/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Copy CLI command" }));
+    await waitFor(() =>
+      expect(copyTextToClipboard).toHaveBeenCalledWith(
+        "cd '/workspace/PromptHub' && claude '# Portable handoff\n\nContinue the updater fix.'",
+      ),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Continue in Claude Code" }),
     );
@@ -276,7 +369,46 @@ describe("AgentSessionsPanel", () => {
       await screen.findByText("Started a new conversation in Claude Code."),
     ).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Export Markdown" }));
+    previewConversationHandoff.mockResolvedValueOnce({
+      ...handoffPreview,
+      targetAgentId: "antigravity",
+      transport: "launch",
+      cliCommand: null,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue elsewhere" }));
+    fireEvent.click(screen.getByLabelText("Continue with Agent"));
+    fireEvent.click(screen.getByRole("option", { name: "Antigravity" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview handoff" }));
+    expect(
+      await screen.findByText(
+        "PromptHub will copy the handoff context and open Antigravity. Paste it to continue in the selected project.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Copy handoff context" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Copy context and open Antigravity" }),
+    ).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Copy handoff context" }));
+    await waitFor(() =>
+      expect(copyTextToClipboard).toHaveBeenLastCalledWith(
+        handoffPreview.payload,
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Copy context and open Antigravity" }),
+    );
+    await waitFor(() =>
+      expect(continueConversationInAgent).toHaveBeenLastCalledWith(
+        expect.objectContaining({ targetAgentId: "antigravity" }),
+      ),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Export conversation" }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Export Markdown" }));
     await waitFor(() =>
       expect(exportConversation).toHaveBeenCalledWith({
         agentId: "codex",
@@ -286,7 +418,7 @@ describe("AgentSessionsPanel", () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Export Markdown" }),
+        screen.getByRole("button", { name: "Export conversation" }),
       ).toBeEnabled(),
     );
     expect(await screen.findByText("Conversation exported.")).toBeVisible();
@@ -346,8 +478,11 @@ describe("AgentSessionsPanel", () => {
       settleAsyncEffects: true,
     });
     fireEvent.click(
-      await screen.findByRole("button", { name: "Edit details" }),
+      await screen.findByRole("button", {
+        name: "More conversation actions",
+      }),
     );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit details" }));
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Renamed conversation" },
     });
@@ -369,7 +504,10 @@ describe("AgentSessionsPanel", () => {
     );
     expect((await screen.findAllByText("Renamed conversation")).length).toBe(2);
     fireEvent.click(
-      screen.getByRole("button", { name: "Remove from history" }),
+      screen.getByRole("button", { name: "More conversation actions" }),
+    );
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Remove from history" }),
     );
     await waitFor(() =>
       expect(deleteConversation).toHaveBeenCalledWith({

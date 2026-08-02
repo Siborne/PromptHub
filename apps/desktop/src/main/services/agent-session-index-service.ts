@@ -3,6 +3,7 @@ import path from "node:path";
 import { AgentSessionIndexDB } from "@prompthub/db";
 import type {
   AgentSessionDetail,
+  AgentSessionDetailPageInput,
   AgentSessionIndexRecord,
   AgentSessionListResult,
   AgentSessionMetadata,
@@ -139,7 +140,15 @@ function filterLiveResult(
     !query ||
     result.adapter === "copilot-session-store-v1" ||
     result.adapter === "cline-session-snapshot-v1" ||
-    result.adapter === "cursor-agent-transcript-v1"
+    result.adapter === "cursor-agent-transcript-v1" ||
+    result.adapter === "cherry-agent-session-db-v2" ||
+    result.adapter === "cherry-agent-session-db-v1" ||
+    result.adapter === "kilo-session-json-v1" ||
+    result.adapter === "hermes-state-db-v1" ||
+    result.adapter === "reasonix-events-v1" ||
+    result.adapter === "nanoclaw-v2-sqlite" ||
+    result.adapter === "copaw-safe-json-session-v2" ||
+    result.adapter === "qoder-transcript-jsonl-v1"
   ) {
     return result;
   }
@@ -278,7 +287,11 @@ export function createAgentSessionIndexService(
     setEnabled,
     refresh,
     list,
-    read: (agentId: string, sessionId: string): Promise<AgentSessionDetail> =>
-      options.reader.read(agentId, sessionId),
+    read: (
+      agentId: string,
+      sessionId: string,
+      input?: AgentSessionDetailPageInput,
+    ): Promise<AgentSessionDetail> =>
+      options.reader.read(agentId, sessionId, input),
   };
 }

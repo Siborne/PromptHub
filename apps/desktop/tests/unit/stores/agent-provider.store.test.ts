@@ -506,6 +506,48 @@ describe("Agent Provider renderer store", () => {
     ).not.toContain("secretRef");
   });
 
+  it("creates or reuses the official Profile and opens activation review", async () => {
+    const official = {
+      ...profile,
+      id: "official-1",
+      name: "OpenAI Official",
+      providerKind: "openai",
+      config: { providerId: "openai" },
+    };
+    const officialPlan = {
+      ...activationPlan,
+      profileId: "official-1",
+      status: "apply" as const,
+      canApply: true,
+      requiresReview: false,
+    };
+    window.api.agent.ensureOfficialProviderProfile = vi
+      .fn()
+      .mockResolvedValue(official);
+    window.api.agent.previewProviderActivation = vi
+      .fn()
+      .mockResolvedValue(officialPlan);
+    useAgentProviderStore.setState({ platformId: "codex" });
+
+    await expect(
+      useAgentProviderStore.getState().restoreOfficial("codex"),
+    ).resolves.toEqual(officialPlan);
+
+    expect(window.api.agent.ensureOfficialProviderProfile).toHaveBeenCalledWith(
+      "codex",
+    );
+    expect(window.api.agent.previewProviderActivation).toHaveBeenCalledWith({
+      agentId: "codex",
+      profileId: "official-1",
+    });
+    expect(useAgentProviderStore.getState()).toMatchObject({
+      selectedProfileId: "official-1",
+      activationPlan: { profileId: "official-1" },
+      busyAction: null,
+      errorCode: null,
+    });
+  });
+
   it("exports only the public portable profile envelope", async () => {
     const exported = {
       version: 1 as const,

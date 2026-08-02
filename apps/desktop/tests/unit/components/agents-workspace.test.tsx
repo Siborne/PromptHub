@@ -9,6 +9,7 @@ import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentsSidebarPanel } from "../../../src/renderer/components/agent/AgentsSidebarPanel";
+import { AgentConfigFilesPanel } from "../../../src/renderer/components/agent/AgentConfigFilesPanel";
 import { AgentsWorkspace } from "../../../src/renderer/components/agent/AgentsWorkspace";
 import { useAgentStore } from "../../../src/renderer/stores/agent.store";
 import { useMcpStore } from "../../../src/renderer/stores/mcp.store";
@@ -29,12 +30,14 @@ vi.mock("../../../src/renderer/components/skill/SkillFileEditor", () => ({
     fileSource,
     initialFilePath,
     localPath,
+    showFileManagerActions,
     visibleFilePaths,
   }: {
     allowStructuralMutations?: boolean;
     fileSource?: { key: string };
     initialFilePath?: string;
     localPath?: string;
+    showFileManagerActions?: boolean;
     visibleFilePaths?: string[];
   }) => (
     <div
@@ -42,6 +45,7 @@ vi.mock("../../../src/renderer/components/skill/SkillFileEditor", () => ({
       data-local-path={localPath}
       data-source-key={fileSource?.key}
       data-structural-mutations={String(allowStructuralMutations)}
+      data-file-manager-actions={String(showFileManagerActions)}
     >
       {visibleFilePaths?.join(",") || initialFilePath}
     </div>
@@ -136,6 +140,8 @@ async function renderWorkspaceAndSettleOverview(
 
 describe("Agent workspace shell", () => {
   beforeEach(() => {
+    delete (window as Window & { __PROMPTHUB_WEB__?: boolean })
+      .__PROMPTHUB_WEB__;
     installWindowMocks();
     useAgentStore.setState({
       agents,
@@ -1130,6 +1136,21 @@ describe("Agent workspace shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /open agent folder/i }));
     expect(window.electron.openPath).toHaveBeenCalledWith("~/.claude");
+  });
+
+  it("hides desktop file-manager actions in the self-hosted Web config editor", async () => {
+    (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__ =
+      true;
+
+    await renderWithI18n(<AgentConfigFilesPanel agent={agents[0]} />);
+
+    expect(
+      screen.queryByRole("button", { name: /open agent folder/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-config-editor")).toHaveAttribute(
+      "data-file-manager-actions",
+      "false",
+    );
   });
 
   it("keeps Config Files disabled when no native path is verified", async () => {

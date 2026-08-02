@@ -211,6 +211,7 @@ describe("Agent workspace resilience", () => {
       platformId: agent.id,
       status: "verified",
       currentProfileId: "profile-119",
+      nativeConfig: null,
       checkedAt: 1,
     });
 

@@ -9,7 +9,9 @@ import type {
   AgentProviderModelTestResult,
   AgentProviderProfileExport,
   AgentProviderProfilePublic,
+  AgentProviderSourceCandidate,
   CreateAgentProviderProfileRequest,
+  ImportAgentProviderSourceRequest,
   UpdateAgentProviderProfileRequest,
 } from "@prompthub/shared";
 
@@ -23,6 +25,9 @@ type AgentProviderAction =
   | "delete"
   | "import"
   | "adopt-import"
+  | "load-sources"
+  | "import-source"
+  | "restore-official"
   | "test-connection"
   | "test-model"
   | "preview"
@@ -31,6 +36,7 @@ type AgentProviderAction =
 interface AgentProviderState {
   platformId: string | null;
   profiles: AgentProviderProfilePublic[];
+  sourceCandidates: AgentProviderSourceCandidate[];
   currentState: AgentProviderCurrentState | null;
   selectedProfileId: string | null;
   importPreview: AgentProviderImportPreview | null;
@@ -59,6 +65,13 @@ interface AgentProviderState {
   ) => Promise<AgentProviderProfilePublic | null>;
   exportProfile: (id: string) => Promise<AgentProviderProfileExport | null>;
   deleteProfile: (id: string) => Promise<boolean>;
+  loadSources: (platformId: string) => Promise<AgentProviderSourceCandidate[]>;
+  importSource: (
+    request: ImportAgentProviderSourceRequest,
+  ) => Promise<AgentProviderProfilePublic | null>;
+  restoreOfficial: (
+    agentId: string,
+  ) => Promise<AgentProviderActivationPlan | null>;
   importCurrent: (
     agentId: string,
   ) => Promise<AgentProviderImportPreview | null>;
@@ -143,6 +156,7 @@ async function readCurrentState(
 export const useAgentProviderStore = create<AgentProviderState>((set, get) => ({
   platformId: null,
   profiles: [],
+  sourceCandidates: [],
   currentState: null,
   selectedProfileId: null,
   importPreview: null,
@@ -160,6 +174,7 @@ export const useAgentProviderStore = create<AgentProviderState>((set, get) => ({
     set({
       platformId,
       profiles: [],
+      sourceCandidates: [],
       currentState: null,
       selectedProfileId: null,
       importPreview: null,
@@ -331,6 +346,62 @@ export const useAgentProviderStore = create<AgentProviderState>((set, get) => ({
     } catch (error) {
       set({ busyAction: null, errorCode: publicErrorCode(error) });
       return false;
+    }
+  },
+  loadSources: async (platformId) => {
+    set({ busyAction: "load-sources", errorCode: null, sourceCandidates: [] });
+    try {
+      const sourceCandidates =
+        await window.api.agent.listProviderSources(platformId);
+      if (get().platformId !== platformId) return [];
+      set({ busyAction: null, sourceCandidates });
+      return sourceCandidates;
+    } catch (error) {
+      set({ busyAction: null, errorCode: publicErrorCode(error) });
+      return [];
+    }
+  },
+  importSource: async (request) => {
+    set({ busyAction: "import-source", errorCode: null });
+    try {
+      const profile = await window.api.agent.importProviderSource(request);
+      if (get().platformId !== request.platformId) return profile;
+      set((state) => ({
+        profiles: upsertProfile(state.profiles, profile),
+        selectedProfileId: profile.id,
+        busyAction: null,
+      }));
+      return profile;
+    } catch (error) {
+      set({ busyAction: null, errorCode: publicErrorCode(error) });
+      return null;
+    }
+  },
+  restoreOfficial: async (agentId) => {
+    set({
+      busyAction: "restore-official",
+      errorCode: null,
+      activationPlan: null,
+      activationResult: null,
+    });
+    try {
+      const profile =
+        await window.api.agent.ensureOfficialProviderProfile(agentId);
+      const plan = await window.api.agent.previewProviderActivation({
+        agentId,
+        profileId: profile.id,
+      });
+      if (get().platformId !== agentId) return plan;
+      set((state) => ({
+        profiles: upsertProfile(state.profiles, profile),
+        selectedProfileId: profile.id,
+        activationPlan: plan,
+        busyAction: null,
+      }));
+      return plan;
+    } catch (error) {
+      set({ busyAction: null, errorCode: publicErrorCode(error) });
+      return null;
     }
   },
   importCurrent: async (agentId) => {

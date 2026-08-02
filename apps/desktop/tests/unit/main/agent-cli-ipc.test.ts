@@ -8,6 +8,11 @@ const runMock = vi.fn();
 vi.mock("electron", () => ({
   app: { getPath: vi.fn(() => "/tmp/prompthub") },
   ipcMain: { handle: handleMock },
+  safeStorage: {
+    isEncryptionAvailable: vi.fn(() => true),
+    encryptString: vi.fn((value: string) => Buffer.from(value)),
+    decryptString: vi.fn((value: Buffer) => value.toString("utf8")),
+  },
   shell: { openPath: vi.fn() },
 }));
 

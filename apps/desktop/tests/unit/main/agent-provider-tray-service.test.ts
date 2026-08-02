@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   AgentProviderActivationExecutionResult,
   AgentProviderActivationPlan,
+  AgentProviderImportPreview,
   AgentProviderProfilePublic,
   AgentProviderSnapshot,
 } from "@prompthub/shared";
@@ -103,6 +104,52 @@ function verifiedResult(
   };
 }
 
+function importedCurrent(
+  platformId: string,
+  options: {
+    providerKind?: string;
+    protocol?: string;
+    endpoint?: string | null;
+    model?: string | null;
+    credentialStatus?: string;
+    credentialKind?: string;
+  } = {},
+): AgentProviderImportPreview {
+  const providerKind = options.providerKind ?? "platform-default";
+  const protocol = options.protocol ?? "platform-native";
+  const endpoint = options.endpoint ?? null;
+  const model = options.model ?? `${platformId}-model`;
+  return {
+    state: {
+      platformId,
+      adapterVersion: "v1",
+      nativeDigest: `${platformId}-native-digest`,
+      values: {
+        provider: providerKind,
+        protocol,
+        endpoint,
+        model,
+        credentialStatus: options.credentialStatus ?? "platform-managed",
+        credentialKind: options.credentialKind ?? "none",
+      },
+    },
+    profile: {
+      platformId,
+      name: `${platformId} current`,
+      providerKind,
+      protocol,
+      endpoint,
+      config: {},
+      secretRef: null,
+      source: "native-import",
+    },
+    modelMappings: model
+      ? [{ routeKey: "primary", modelId: model, parameters: {} }]
+      : [],
+    warnings: [],
+  };
+}
+
 function createHarness() {
   const profiles = [
     profile("profile-1", "claude"),
@@ -121,6 +168,20 @@ function createHarness() {
       : plan(),
   );
   const activate = vi.fn(async (input) => verifiedResult(await preview(input)));
+  const importCurrent = vi.fn(async ({ context }) =>
+    context.platformId === "claude"
+      ? importedCurrent("claude", {
+          providerKind: "custom-gateway",
+          protocol: "anthropic-messages",
+          endpoint: "https://gateway.example.com",
+          model: "claude-work",
+          credentialStatus: "configured",
+          credentialKind: "api-key",
+        })
+      : importedCurrent(context.platformId, {
+          providerKind: "qwen-oauth",
+        }),
+  );
   const service = createAgentProviderTrayService({
     activate,
     getLatestVerifiedSnapshot: vi.fn((platformId: string) =>
@@ -129,6 +190,7 @@ function createHarness() {
         : snapshot(platformId, null),
     ),
     listProfiles: vi.fn(async () => profiles),
+    importCurrent,
     preview,
     resolveContext: (agentId) => ({
       agentId,
@@ -139,7 +201,7 @@ function createHarness() {
       ({ claude: "Claude Code", qwen: "Qwen Code" })[platformId] ?? null,
     supportedPlatformIds: ["claude", "qwen"],
   });
-  return { activate, preview, profiles, service };
+  return { activate, importCurrent, preview, profiles, service };
 }
 
 describe("agent provider tray service", () => {
@@ -150,18 +212,38 @@ describe("agent provider tray service", () => {
       platformId: "claude",
       status: "verified",
       currentProfileId: "profile-1",
+      nativeConfig: {
+        classification: "custom",
+        name: "claude current",
+        providerKind: "custom-gateway",
+        protocol: "anthropic-messages",
+        endpoint: "https://gateway.example.com",
+        model: "claude-work",
+        credential: "configured-api-key",
+        officialRestoreAvailable: true,
+      },
       checkedAt: expect.any(Number),
     });
     await expect(service.getCurrentState("qwen")).resolves.toEqual({
       platformId: "qwen",
       status: "none",
       currentProfileId: null,
+      nativeConfig: {
+        classification: "official",
+        name: "qwen current",
+        providerKind: "qwen-oauth",
+        protocol: "platform-native",
+        endpoint: null,
+        model: "qwen-model",
+        credential: "platform-managed",
+        officialRestoreAvailable: false,
+      },
       checkedAt: expect.any(Number),
     });
   });
 
   it("distinguishes stale and unreadable native state without a current marker", async () => {
-    const { preview, service } = createHarness();
+    const { importCurrent, preview, service } = createHarness();
     preview.mockResolvedValueOnce(
       plan({
         profileId: "profile-1",
@@ -182,6 +264,57 @@ describe("agent provider tray service", () => {
       platformId: "claude",
       status: "unavailable",
       currentProfileId: null,
+    });
+
+    importCurrent.mockRejectedValueOnce(
+      new Error("native file contained token=secret"),
+    );
+    await expect(service.getCurrentState("claude")).resolves.toEqual({
+      platformId: "claude",
+      status: "unavailable",
+      currentProfileId: null,
+      nativeConfig: null,
+      checkedAt: expect.any(Number),
+    });
+  });
+
+  it("recognizes platform-managed Claude channels and Codex bearer credentials", async () => {
+    const { importCurrent, service } = createHarness();
+    importCurrent.mockResolvedValueOnce(
+      importedCurrent("claude", {
+        providerKind: "amazon-bedrock",
+        model: "claude-sonnet-4",
+      }),
+    );
+    await expect(service.getCurrentState("claude")).resolves.toMatchObject({
+      nativeConfig: {
+        classification: "official",
+        credential: "platform-managed",
+        officialRestoreAvailable: false,
+      },
+    });
+
+    const codexHarness = createAgentProviderTrayService({
+      activate: vi.fn(),
+      getLatestVerifiedSnapshot: vi.fn(() => null),
+      importCurrent: vi.fn(async () =>
+        importedCurrent("codex", {
+          providerKind: "custom-openai",
+          credentialStatus: "configured",
+        }),
+      ),
+      listProfiles: vi.fn(async () => []),
+      preview: vi.fn(),
+      resolveContext: () => ({
+        agentId: "codex",
+        platformId: "codex",
+        rootPath: "/tmp/codex",
+      }),
+      resolvePlatformName: () => "Codex",
+      supportedPlatformIds: ["codex"],
+    });
+    await expect(codexHarness.getCurrentState("codex")).resolves.toMatchObject({
+      nativeConfig: { credential: "configured-auth-token" },
     });
   });
 

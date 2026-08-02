@@ -498,6 +498,55 @@ export function initDatabase(
       markMigration("agent_conversation_projection_v1");
     }
 
+    if (!hasMigration("agent_conversation_handoff_launch_v2")) {
+      const handoffTable = db!.get(
+        `SELECT sql FROM sqlite_master
+         WHERE type = 'table' AND name = 'agent_conversation_handoffs'`,
+      ) as { sql?: string } | undefined;
+      if (handoffTable?.sql?.includes("launch-and-copy")) {
+        db!.exec(`
+          ALTER TABLE agent_conversation_handoffs
+            RENAME TO agent_conversation_handoffs_legacy;
+          CREATE TABLE agent_conversation_handoffs (
+            id TEXT PRIMARY KEY,
+            source_agent_id TEXT NOT NULL,
+            source_session_id TEXT NOT NULL,
+            target_agent_id TEXT NOT NULL,
+            project_id TEXT,
+            project_path TEXT,
+            transport TEXT NOT NULL
+              CHECK(transport IN ('direct', 'launch', 'unavailable')),
+            payload_digest TEXT NOT NULL,
+            status TEXT NOT NULL
+              CHECK(status IN ('planned', 'launched', 'failed')),
+            target_session_id TEXT,
+            error_code TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          INSERT INTO agent_conversation_handoffs (
+            id, source_agent_id, source_session_id, target_agent_id,
+            project_id, project_path, transport, payload_digest, status,
+            target_session_id, error_code, created_at, updated_at
+          )
+          SELECT
+            id, source_agent_id, source_session_id, target_agent_id,
+            project_id, project_path,
+            CASE WHEN transport = 'launch-and-copy' THEN 'launch' ELSE transport END,
+            payload_digest,
+            CASE
+              WHEN status = 'copied' AND error_code IS NOT NULL THEN 'failed'
+              WHEN status = 'copied' THEN 'launched'
+              ELSE status
+            END,
+            target_session_id, error_code, created_at, updated_at
+          FROM agent_conversation_handoffs_legacy;
+          DROP TABLE agent_conversation_handoffs_legacy;
+        `);
+      }
+      markMigration("agent_conversation_handoff_launch_v2");
+    }
+
     // Migrations: prompts table (query column list once)
     const promptCols = (
       db!.pragma("table_info(prompts)") as PragmaColumnInfo[]

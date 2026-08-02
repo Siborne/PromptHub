@@ -142,7 +142,7 @@ function continueRequest(value: unknown): ContinueAgentConversationRequest {
     !DIGEST_PATTERN.test(payloadDigest) ||
     !DIGEST_PATTERN.test(confirmedPayloadDigest) ||
     (request.transport !== "direct" &&
-      request.transport !== "launch-and-copy" &&
+      request.transport !== "launch" &&
       request.transport !== "unavailable")
   ) {
     throw invalidRequest();
@@ -154,6 +154,10 @@ function continueRequest(value: unknown): ContinueAgentConversationRequest {
     payloadDigest,
     confirmedPayloadDigest,
     transport: request.transport,
+    cliCommand:
+      request.cliCommand === null
+        ? null
+        : requireText(request.cliCommand, 600_000),
   };
 }
 

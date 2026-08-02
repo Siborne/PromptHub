@@ -238,7 +238,7 @@
 - Agent 详情头部 ⋯ 菜单的“打开 Agent 设置”改为工作台内“编辑 Agent”弹窗，不再切换到应用设置页。弹窗复用 `BuiltinAgentEditor` 与现有 settings actions：内置 Agent 编辑 root/Skills/MCP/Rules/Agents/Config/可用 Plugin 路径及 Codex 身份，自定义 Agent 同时编辑名称和启用状态；Reset 只重置草稿，Save 后沿原同步链路刷新 managed Agent projection。
 - 移除 Agent 详情头部重复的“管理 Skills”主按钮；右上角仅保留启动 Agent、刷新和更多操作，Skills 统一从 Overview 卡片或顶部 Skills 页签进入。
 - 补齐常用 Agent 的只读历史会话：`codex` 同时索引 active/archived rollout JSONL 并按 session id 去重，ChatGPT 展示身份继续复用同一稳定 id 和 `~/.codex`；Grok Build 读取限定的 summary/chat history；OpenClaw 从每个 Agent 的 `sessions.json` 定位受控 transcript；Qwen Code 使用原生有界 JSON 列表后只读取 runtime root 内的 realpath。四个 adapter 均限制扫描数、metadata/detail bytes 和单条文本长度，隔离畸形记录，不编辑或同步平台 transcript。
-- Sessions capability 现在对 Claude、Codex、Gemini、Grok Build、Kimi Code、OpenClaw、OpenCode、Qwen Code、Oh My Pi 启用；Windsurf、Copilot、Cline 和 Cursor 对各自有证据的本地 transcript/store 提供 partial、只读浏览；Antigravity 等格式未确认的平台继续保持 planned/disabled。OpenCode 原生命令在当前工作区没有会话并返回空 stdout 时按空列表处理，不再误报解析失败。
+- Sessions capability 现在对 Claude、Codex、Gemini、Grok Build、Kimi Code、OpenClaw、OpenCode、Qwen Code、Oh My Pi 启用；Windsurf、Copilot、Cline、Cursor 和 Antigravity CLI 对各自有证据的本地 transcript/store 提供 partial、只读浏览。Antigravity 只读取当前 CLI `.db` identity、cache 项目映射和 generated transcript projection；legacy desktop `.pb` 与 SQLite protobuf body 保持排除。OpenCode 原生命令在当前工作区没有会话并返回空 stdout 时按空列表处理，不再误报解析失败。
 - Sessions capability 现在也对 Oh My Pi 启用；其 JSONL adapter 使用固定上限和直接项目目录扫描，nested subagent transcripts 保持排除。Oh My Pi 不会因为具备 Sessions 而自动获得 provider、usage 或 plugin installation 能力。
 
 ## Native Config Evidence
@@ -1769,9 +1769,9 @@
   payload contains only bounded visible user/assistant turns, replaces the
   home directory, redacts token-like values and excludes system/tool records.
   Claude Code and Codex use direct CLI handoff on supported macOS desktops;
-  unsupported targets/platforms open the existing Agent application and copy
-  the reviewed payload. Launch failure preserves the copied payload and is
-  reported in the UI.
+  unsupported targets/platforms open the existing Agent application without
+  mutating the clipboard. Launch failure is reported in the UI without a false
+  continuation-success state.
 - Handoff persistence stores source/target identity, project, transport,
   digest and apply status only. The reviewed payload and native transcript are
   not persisted or synchronized.
@@ -1779,19 +1779,27 @@
   turns only, versioned JSON, path/secret redaction and a main-process save
   dialog. Export cancellation does not write a file.
 - The target and project controls use the shared styled Select component. The
-  target row distinguishes CLI handoff from open-and-copy, and Resume,
-  continuation and export report visible completion/fallback status. All new
-  copy is present in the seven desktop locales.
+  target picker now shows only each Agent icon and full display name; transport
+  details no longer crowd or truncate the option. Resume, continuation and
+  export report visible completion/fallback status in all seven desktop locales.
 - The History toolbar no longer uses native operating-system selects. Project
   and status filters, continuation target and project selection, and metadata
   project editing now share the styled listbox control. The conversation title
-  occupies its own row, while native resume, target, project and preview actions
-  use a separate aligned control grid with a bounded narrow-window fallback.
-- Transcript rendering now uses role-aware chat bubbles instead of full-width
-  gray rows: users are right-aligned in the primary color, assistants are
-  left-aligned on white, and system/tool records use centered white notice
-  bubbles with distinct accents. The light theme uses white surfaces for the
+  occupies its own row, while native resume, target, project, preview, edit,
+  export and removal actions use one compact wrapping toolbar. Mutating and
+  export actions are icon-only with accessible names and styled hover/focus
+  tooltips, leaving more vertical space for the session list and transcript.
+- Transcript rendering now uses role-aware chat bubbles with a separate round
+  avatar for every user and assistant message instead of placing role labels
+  inside full-width gray rows. Users are right-aligned in the primary color,
+  assistants are left-aligned on white, and system/tool records use centered
+  white notice bubbles with distinct accents. The light theme uses white surfaces for the
   history rail, detail header and continuation toolbar over a restrained canvas.
+- Conversation bodies use a dedicated compact GFM renderer with 13px body
+  text, bounded heading/list/table/code styles, sanitized HTML, allowlisted
+  external links and non-fetching image placeholders. Raw transcript text
+  remains the source for handoff and export; Markdown rendering is presentation
+  only.
 - UI verification passes the 10-test Agent Sessions component suite, the
   4-test shared Select suite, renderer i18n hardcode/smoke checks, affected
   ESLint, desktop TypeScript checking and the full desktop production build.
@@ -1799,6 +1807,11 @@
   migration and CRUD, service redaction/continuation/export, secure launcher,
   IPC validation, preload forwarding and renderer interaction. Shared, DB and
   desktop TypeScript checks pass.
+- The avatar and launch-only follow-up adds regression coverage for separate
+  round user/assistant avatars, uncluttered Agent options, clipboard-free
+  fallback launch, launch failure, strict IPC transport validation and legacy
+  handoff migration. Focused verification passes 5 files / 30 tests; shared,
+  DB and desktop typechecks, desktop lint and the production build pass.
 - Remaining scope stays tracked under `T-AGENT-136`, `T-AGENT-137`,
   `T-AGENT-139` through `T-AGENT-143`: a global cross-Agent project catalog,
   adapter-owned native deletion, selectable handoff context policies, retry
@@ -1827,6 +1840,323 @@
 - Undetected detail state keeps only Overview enabled. The overview mounts only the not-installed guidance and does not mount usage, asset inventory, provider, appearance, session, path or config components. Launch, diagnostics and edit actions are absent, and the Config Files panel has an independent no-read guard.
 - Updated the seven locale descriptions so an undetected target is no longer described as manageable. The full platform registry and Settings path definitions remain available for detection and configuration ownership; no platform, schema, IPC or filesystem contract was removed.
 - Verification: 4 focused Vitest files pass with 57 tests; desktop typecheck, affected ESLint, traceability validation, diff check and desktop production build pass. A real Electron development window showed 15 detected Agents instead of the prior 35 registry entries; CodeBuddy and WorkBuddy were absent, searching for `CodeBuddy` returned no match, and clearing the search restored the installed list.
+
+## Antigravity CLI Conversation History
+
+- Completed `FR-AGENT-076` / `DES-AGENT-091` / `TEST-AGENT-111` / `T-AGENT-148`: the main process now discovers current Antigravity CLI conversation identities from regular UUID-named files below `~/.gemini/antigravity-cli/conversations`, adds project ownership from bounded CLI cache maps and reads only known visible rows from the matching generated transcript projection.
+- Database-only conversations remain listable and resumable through typed `agy --conversation <id>` metadata, but their detail is intentionally empty. PromptHub does not decode SQLite protobuf blobs or legacy Antigravity desktop `.pb` files and does not index, mutate, delete, back up or synchronize native conversation data.
+- Search, metadata and detail reads are byte-bounded; unsafe ids, path traversal, symlinks, malformed cache/transcript records, unknown event types and private code/tool payloads fail closed or remain hidden. The capability is `partial` because not every valid database conversation has a generated readable projection.
+- Verification: the focused Antigravity adapter suite passes 3 tests; the combined session/service/renderer regression passes 4 files / 39 tests; the focused capability assertion, desktop TypeScript checking, affected ESLint, Prettier, diff check and production build pass. The complete capability test file was also attempted and has 10 passing assertions plus 3 stale failures that still expect pre-existing Cursor, Cherry Studio and Windsurf Config/Session states; those assertions belong to parallel capability work and were not weakened here. A read-only probe against the current local CLI root found 7 real database conversations, all 7 natively resumable, one project association and 3 readable generated projections without reading message contents into the verification record.
+
+## Unified Agent Asset Cards
+
+- Completed `FR-AGENT-077` / `DES-AGENT-092` / `TEST-AGENT-112` / `T-AGENT-149`: Skills, MCP and Plugins now render identity, status, description, source and metadata through `AgentAssetCardContent`, while their existing shared shell and owning-domain action buttons remain unchanged.
+- Skills use the existing `SkillIcon` name fallback, MCP keeps `ServerIcon`, Agent-discovered Plugins keep `PlugIcon`, and managed Plugins retain `PluginAvatar` artwork. All three domains reserve the same content regions and aligned footer dimensions without adding stores, IPC, persistence or unsupported mutations.
+- The Agent taxonomy key now renders `Plugins` in Simplified Chinese, Traditional Chinese and Japanese as well as the four locales that already used the term. Other Plugin copy remains localized.
+- Verification: the two focused workspace suites pass 53 tests, including shared anatomy, 1,000-card pagination, existing action behavior and three locale assertions; desktop TypeScript and affected ESLint pass. A real Simplified Chinese Electron session verified Skills, MCP and Plugins at 1200x740 with consistent two-column cards, loaded identity artwork, visible source/chips and non-overlapping icon action footers.
+
+## Agent Workspace Leading-Edge Alignment
+
+- Completed `FR-AGENT-078` / `DES-AGENT-093` / `TEST-AGENT-113` / `T-AGENT-150`: the Agent detail header now uses the asset workspace's `px-5` inset, aligning identity, primary tabs, toolbar controls and inventory cards.
+- `AgentAssetManagementSurface` no longer accepts a toolbar title. Skills, MCP and Plugins all start with search because their selected top-level tab already names the domain. Filters, paths, refresh, primary actions, cards and owning-domain behavior remain unchanged.
+- Verification: the two focused workspace suites pass 54 tests. A real Simplified Chinese Electron development window confirmed the Codex identity/tabs align with the asset toolbar and card grid, Skills and MCP start directly with search, and the remaining controls fit without overlap. Desktop TypeScript checking is currently blocked by an unrelated parallel session-index edit at `agent-session-index-service.ts:287` that passes three arguments to a two-argument function.
+
+## Paginated Conversation Bodies And Augment History
+
+- Completed `FR-AGENT-079` / `DES-AGENT-094` / `TEST-AGENT-114` /
+  `T-AGENT-151`: session detail now accepts a validated optional visible-message
+  limit and opaque main-owned cursor through shared types, IPC and preload.
+  Codex rollout reading streams complete JSONL lines, scans at most 16 MiB per
+  page, hides runtime/tool records without charging the visible page size, and
+  returns a continuation cursor instead of treating content after the former
+  2 MiB prefix as missing.
+- History keeps already loaded message bubbles and requests the next native
+  page on demand. Empty scan-budget pages remain loadable. Selection changes
+  cannot append a stale page. JSON/Markdown export and cross-Agent handoff walk
+  the same cursor chain, so those actions do not silently export only the first
+  80 visible entries.
+- Added an evidence-backed Augment adapter for native
+  `~/.augment/sessions/*.json`: list/search metadata, project/model projection,
+  user/assistant-only body pagination and documented
+  `auggie --resume <id> --workspace-root <path>` continuation. Account state,
+  identity, tool nodes, agent state and task storage are excluded. Augment
+  Sessions is now `supported`; platforms without a verified readable store or
+  non-interactive identity contract remain planned rather than being guessed.
+- Verification: the combined pagination/IPC/preload/conversation/UI/Augment
+  suites pass 6 files / 33 tests, including a 17 MiB hidden-record prefix that
+  crosses the per-page scan budget and rejection of a stale source cursor. The complete
+  capability file still has three unrelated stale expectations for Cursor,
+  Cherry Studio and Windsurf while 10 assertions pass; those parallel changes
+  were not reverted or weakened.
+
+## Evidence-Backed Read-Only Conversation Breadth
+
+- Completed `FR-AGENT-081` / `DES-AGENT-096` / `TEST-AGENT-116` /
+  `T-AGENT-153`. Cherry Studio now prefers the current official
+  `Data/cherrystudio.sqlite` Agent schema and extracts only visible text parts
+  from user/assistant messages. The locally verified older `Data/agents.db`
+  schema remains a read-only fallback. Both paths use schema validation,
+  parameterized search, opaque source-bound cursors and fail-closed path checks;
+  normal chats, reasoning, tool payloads, memory and credentials remain outside
+  the adapter.
+- Kilo Code now reads the verified local `storage/session`, `storage/message`
+  and `storage/part` trees, projects only user/assistant text parts and exposes
+  typed `kilo --session <id>` native continuation metadata. Catalog scans fail
+  explicitly at 50,000 records rather than truncating silently, and bounded
+  worker pools prevent large histories from creating unbounded file reads.
+- The built-in platform matrix now has readable history for 19 of 35 Agents:
+  12 `supported`, 7 evidence-limited `partial`, and 16 still `planned` because
+  their durable local transcript contracts are not verified. Read-only delivery
+  does not wait for editing or native resume support.
+- Verification passed 6 focused files / 40 tests, including current and legacy
+  Cherry schemas, body-only search through the unified index service, hidden
+  reasoning/tool exclusion, malformed and escaped sources, stale cursors, Kilo
+  native resume metadata and pagination across 2,001 sessions. Desktop
+  typecheck and affected ESLint passed.
+
+## Full-Workspace Agent Asset Details
+
+- Completed `FR-AGENT-080` / `DES-AGENT-095` / `TEST-AGENT-115` /
+  `T-AGENT-152`. In Agent management, the shared product term `Agent assets`
+  means the Skills, MCP and Plugins card domains; Rules remains a separate
+  editor workspace.
+- Skills, MCP and Plugins keep their owning-domain selection and detail
+  components, and report only transient detail-open state to
+  `AgentsWorkspace`. While a detail is open, the shell omits the Agent identity
+  header and tab list so the owning detail fills the complete workspace to the
+  right of the Agent list. Back restores the same Agent, tab and list state.
+- Fixed the development white screen caused by the renderer facade broadly
+  re-exporting `@prompthub/core/agent-management`, which pulled the
+  main-process `agent-inventory` dependency on `fs/promises` into Vite's
+  browser bundle. The facade now exports only the browser-safe
+  `agent-root-config` module, with a source-boundary regression test.
+- Focused verification passed 3 files / 72 tests: the shared Agent asset
+  workspace, Agent shell navigation and renderer root-path boundary suites.
+  Desktop typecheck, affected lint and production build passed. A real
+  Simplified Chinese Electron development run opened and returned from Codex
+  Skill, MCP and Plugin details; all three removed the Agent header/tabs while
+  open and restored them on Back.
+
+## Shared Agent MCP Entry Detail
+
+- Completed `FR-AGENT-082` / `DES-AGENT-097` / `TEST-AGENT-117` /
+  `T-AGENT-154`. The main MCP workspace and the Agents workspace now render
+  Agent MCP entries through the same `AgentMcpEntryDetail` composition.
+- The shared detail preserves the rich source metadata, transport-specific
+  fields, serialized configuration, managed/external status, Agent source
+  sidebar and existing actions. Each caller continues to own selection, Back
+  navigation, import and removal orchestration.
+- Focused component verification passed 3 files / 43 tests. Desktop typecheck,
+  affected ESLint, file-size, traceability and production build gates passed.
+  In a real Simplified Chinese Electron development run, opening Codex
+  `computer-use` from both Agents > MCP and MCP > Agent MCP rendered the same
+  source fields, serialized config, Agent source sidebar and actions; each
+  Back path remained scoped to its owning workspace.
+
+## Shared Skill And Plugin Agent Detail Adapters
+
+- Completed `FR-AGENT-083` / `DES-AGENT-098` / `TEST-AGENT-118` /
+  `T-AGENT-155`. Skill and Plugin asset details already reused their canonical
+  full detail components, but their Agent context and action adapters were
+  duplicated between the owning management workspace and Agents management.
+- Added `AgentSkillDetailPage` and `AgentPluginDetailPage` as the single adapter
+  for each domain. This removes the entry-point drift that exposed uninstall
+  for read-only discovered Skills and replaces the main Plugin Agent view's
+  no-op store action with its real owning-store callback.
+- Real Electron verification found that opening Agents before the Skills module
+  left the canonical Skill library unloaded, so managed Codex Skills were
+  reported as external. The shared `useEnsureSkillLibraryLoaded` readiness hook
+  now initializes that store for both Agent overview aggregation and the Skill
+  workspace before either derives managed status; both cold-start regressions
+  are covered separately. The hook also observes the store's loading state so a
+  rapid tab transition cannot duplicate an in-flight library read.
+- Target-installed Plugins now share one adapter while the distinct
+  PromptHub-library Plugin flow continues to use `PluginFullDetailPage`
+  directly. No durable state, IPC, filesystem or route ownership changed.
+- Focused verification passed 8 component suites / 89 tests covering Skills,
+  MCP and Plugins across owning and Agents workspaces. Desktop typecheck,
+  affected ESLint, file-size, traceability, formatting, production build and a
+  fresh Electron cold-start were also run; the cold-start overview and Skills
+  toolbar both resolved the installed Codex inventory as 2 managed and 2
+  external assets.
+
+## Current-Format Read-Only Session Expansion
+
+- Completed `FR-AGENT-085` / `DES-AGENT-100` / `TEST-AGENT-120` /
+  `T-AGENT-157`. The live session service now exposes verified readers for
+  Hermes, Reasonix, NanoClaw, CoPaw/QwenPaw and Qoder without persisting native
+  transcript bodies.
+- Qoder reads only its officially documented
+  `~/.qoder/projects/<project>/transcript/<session-id>.jsonl` contract. It
+  requires source identity consistency, projects only string user questions
+  and assistant text parts, provides full visible-body search, offset list
+  pagination and revision-bound cursor detail pagination, and filters progress,
+  Hooks, tool calls and tool results. JSONL records larger than 1 MiB are
+  skipped before parsing without preventing later visible messages from loading.
+- Qoder remains read-only with `resume: null`: current official CLI
+  documentation exposes `/resume` as an interactive TUI action but does not
+  establish a stable direct process argument. QoderWork remains planned because
+  its official Hook docs expose session events without a transcript storage
+  path or file schema.
+- Capability status now reports 17 fully verified session adapters and 7
+  partial readers, for 24 readable built-in Agents out of 35. The remaining 11
+  stay planned until a current safe local format is verified. TRAE's current
+  local settings database exposes session ids, but the message body is held in
+  a non-standard private `ModularData/ai-agent/database.db`; it therefore
+  remains planned instead of showing metadata-only empty conversations.
+- Focused Qoder and capability verification passed 2 files / 23 tests, and the
+  desktop TypeScript check passed. The complete current-format adapter batch
+  passed 7 files / 51 tests across its platform-specific suites and shared
+  capability/index regressions. Affected ESLint, traceability, diff check and
+  the desktop production build also passed.
+
+## PromptHub Provider Import Projection
+
+- Completed `FR-AGENT-084` / `DES-AGENT-099` / `TEST-AGENT-119` /
+  `T-AGENT-156`. The Agent Provider & Model workspace can now list global
+  PromptHub providers and import one selected chat model as an independent
+  per-Agent Provider Profile.
+- The main-process source service re-reads the current global AI configuration
+  for both list and import, joins only chat models whose provider, protocol and
+  normalized endpoint still agree, and applies explicit Codex, Claude Code,
+  Gemini, OpenCode and Qwen Code projections. Unsupported combinations remain
+  visible with a stable incompatibility reason and cannot create a Profile.
+- Renderer and preload payloads contain only redacted source metadata and a
+  credential-readiness boolean. Credential values are copied main-side into
+  the existing Agent secret store during explicit import; global providers,
+  Agent native configuration and activation state remain unchanged until the
+  existing preview/confirm activation flow runs separately.
+- Focused Provider verification passed 23 files / 161 tests across service,
+  IPC, preload, stores, components, persistence, activation and rollback. The
+  7-locale smoke suite passed 5 files / 36 tests; desktop/shared typecheck,
+  desktop lint, file-size, traceability and production build gates passed.
+  A real Simplified Chinese Electron development run opened Codex Provider &
+  Model, loaded a configured global provider and model, showed no API key or
+  secret reference, and closed without importing or changing user data.
+
+## Claude Project-Scoped Resume And Compact History
+
+- Completed `FR-AGENT-087` / `DES-AGENT-102` / `TEST-AGENT-122` /
+  `T-AGENT-159`. Claude list metadata now extracts the validated embedded
+  session id and first safe absolute `cwd` from the same bounded JSONL prefix
+  used for the title. Native resume therefore launches
+  `claude --resume <session-id>` from the conversation's real project rather
+  than the user's home directory. Unsafe relative paths and malformed ids are
+  ignored, while the source filename remains PromptHub's stable list identity.
+- The History transcript now uses a 10px message-stack gap and 16px vertical
+  viewport padding. The current-Agent action remains bound to the verified
+  native terminal resume contract; its final two-action hierarchy is recorded
+  under `FR-AGENT-088` / `DES-AGENT-103` below.
+- Verification passed 2 focused files / 21 tests, desktop typecheck, affected
+  ESLint, Prettier, diff check, file-size, traceability and the production
+  renderer/main/preload build.
+
+## Two-Step Continuation And Message Pagination
+
+- Completed `FR-AGENT-088` / `DES-AGENT-103` / `TEST-AGENT-123` /
+  `T-AGENT-160`. Conversation actions now expose two labeled primary choices:
+  the verified native CLI terminal resume for the current Agent and a
+  cross-Agent CLI continuation entry. Target Agent/project configuration opens
+  only after the second choice and lists only verified CLI handoff targets.
+  Markdown/JSON export has its own compact icon; metadata edit and soft
+  delete/restore remain in the custom overflow menu.
+- The main process now returns the exact shell-quoted CLI command with each
+  reviewed handoff preview. Copy and direct Terminal launch therefore share the
+  same target executable, working directory and digest-verified payload. When
+  the target CLI cannot be resolved from the app environment, the preview
+  keeps manual command copy available and disables direct Terminal launch.
+- Transcript source batches remain bounded at 80 entries while the renderer
+  mounts 20 messages per page. A fixed page bar supports direct loaded-page
+  navigation, scroll reset and on-demand cursor reads past the loaded boundary,
+  preserving existing entries and parser diagnostics.
+- Component, IPC, preload and service verification covers the complete
+  two-stage action flow, CLI-only target filtering, copied command shell
+  quoting, independent export, secondary actions, direct page selection and
+  cursor-backed next-page loading. Seven locale catalogs include the new labels
+  and accessible pagination names.
+- Final focused verification passed 6 files / 32 tests, desktop typecheck,
+  affected ESLint, Prettier, diff check, traceability and the complete
+  renderer/main/preload production build. The repository-wide file-size gate
+  remains blocked by the parallel Provider workbench test file exceeding its
+  preferred 1,500-line limit; no continuation module exceeds its file limit.
+
+## Current Native Provider Identity And Official Restore
+
+- Completed `FR-AGENT-086` / `DES-AGENT-101` / `TEST-AGENT-121` /
+  `T-AGENT-158`. Provider & Model now treats the current native Agent
+  configuration as a first-class entry even when PromptHub has no saved
+  Provider Profile or activation snapshot.
+- The main process derives a redacted native summary from each platform
+  adapter's current-config import contract. The renderer receives provider,
+  protocol, endpoint, model, official/custom classification and credential
+  type/status only; credential values and secret references do not cross IPC.
+- Claude Code and Codex have explicit, verified official Provider templates.
+  A custom native configuration can be saved as a Profile or restored through
+  the existing activation preview and confirmation flow. Unsupported platforms
+  remain readable but do not receive an invented official restore action.
+- Focused verification passed 8 files / 88 tests across Claude/Codex adapters,
+  native summary, official Profile creation, IPC/preload, store and workbench.
+  Current-state IPC and workspace resilience passed 2 files / 6 tests, while
+  the 7-locale smoke suite passed 5 files / 36 tests. Desktop/shared typecheck
+  and affected desktop lint passed. A real Simplified Chinese Electron run
+  identified Claude Code's Kimi endpoint/model and configured auth-token state
+  as custom without revealing a credential, and identified Codex's OpenAI
+  platform-managed configuration as official.
+
+## Inline Provider Profile Editor
+
+- Completed `FR-AGENT-089` / `DES-AGENT-104` / `TEST-AGENT-124` /
+  `T-AGENT-161`. Creating or editing a Provider Profile now replaces the
+  right detail pane with a non-persistent editor instead of opening a modal.
+  Cancel discards the renderer-local draft without creating or updating a
+  Profile; save still uses the existing main-process Profile and secret
+  boundaries, and activation remains a separate reviewed operation.
+- The editor groups identity, protocol/endpoint, model and authentication
+  fields and renders only values accepted by the selected Agent adapter.
+  OpenCode keeps its supported secondary model; Claude, Codex and Gemini no
+  longer offer a mapping their adapters reject. Codex direct profiles support
+  either a write-only PromptHub-managed credential or an environment-variable
+  reference. Official platform-native credentials remain platform-managed.
+- CC Switch's proxy-only model catalog, request conversion, custom user-agent,
+  pricing and failover controls were reviewed but not exposed because the
+  current PromptHub direct adapters cannot persist or execute them.
+- Verification passed the focused Provider UI suites (4 files / 37 tests),
+  Provider service, persistence, IPC, preload, connectivity and store suites
+  (9 files / 80 tests), the seven-locale smoke suite (5 files / 36 tests),
+  desktop typecheck, affected ESLint, diff check and the complete desktop
+  production build. A real Simplified Chinese Electron development run opened
+  Codex Provider & Model and confirmed that Add renders the four-section editor
+  in the right pane without a dialog or an immediate persisted Profile. Focused
+  V8 coverage for the two touched renderer modules reached 96.59% statements
+  and lines, 92.87% branches and 86.2% functions; the remaining misses are
+  pre-existing defensive and unrelated platform branches, while the added
+  draft, environment-key validation and credential-source branches are covered.
+
+## Capability-Aware Cross-Agent Continuation
+
+- Refined `FR-AGENT-088` / `DES-AGENT-103` / `TEST-AGENT-123` /
+  `T-AGENT-160` so cross-Agent continuation no longer filters the target list
+  to Claude Code and Codex or labels every handoff as CLI-native resume.
+- The target selector now includes every detected Agent other than the source
+  Agent and shows its expected handoff tier. The main-process preview remains
+  authoritative: verified Claude/Codex executable contracts use direct prompt
+  injection, allowlisted desktop applications use copy-before-open, and other
+  detected targets retain a copy-only portable-context fallback.
+- Application handoff writes the bounded, redacted, digest-reviewed payload to
+  the operating-system clipboard before opening the target. Clipboard failure
+  prevents launch; application launch failure preserves the copied payload and
+  returns a stable manual-continuation error instead of claiming success.
+- Native source resume remains separate and continues to use the adapter-owned
+  command, source session id and project directory. Cross-Agent handoff never
+  passes the source session id to another product as though session identity
+  were portable.
+- Fixed desktop service wiring to forward the session detail cursor while
+  assembling large handoff payloads, preventing repeated first-page reads for
+  paginated histories.
+- Verification passed desktop typecheck, affected ESLint, production renderer/
+  main/preload build, and 7 focused files / 36 tests covering service transport
+  selection, clipboard and launch failures, UI target visibility and actions,
+  IPC validation, DB lineage, Markdown rendering and seven-locale alignment.
 
 ## Converge
 

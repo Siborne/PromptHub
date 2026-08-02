@@ -33,7 +33,6 @@ import {
   getErrorMessage,
   groupSkillSafetyFindings,
   getSafetyScanAIConfig,
-  renderImmersiveSegments,
   resolveSkillExternalUrl,
   resolveSkillDescription,
   stripFrontmatter,
@@ -56,7 +55,7 @@ import {
   getSkillSafetyMethodDescription,
   getSkillSafetySummary,
 } from "./safety-i18n";
-import { SkillMarkdown } from "./SkillMarkdown";
+import { SkillStoreDetailMarkdown } from "./SkillStoreDetailMarkdown";
 import { SkillVariantBadgeList } from "./SkillVariantBadgeList";
 import { CloudStoreEngagement } from "./CloudStoreEngagement";
 import { SkillStoreDetailOverlays } from "./SkillStoreDetailOverlays";
@@ -1071,67 +1070,14 @@ export function SkillStoreDetail({
               {t("skill.loadingCloudPackage", "Loading the latest package...")}
             </div>
           )}
-          {(() => {
-            if (showTranslation && translatedRenderedContent) {
-              // Immersive mode: interleaved original + translation
-              if (translationMode === "immersive") {
-                const segments = renderImmersiveSegments(
-                  translatedRenderedContent,
-                );
-                return (
-                  <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-h1:text-base prose-h1:font-bold prose-h2:text-sm prose-h2:font-semibold prose-h3:text-xs prose-h3:font-semibold prose-p:text-foreground/80 prose-p:text-[13px] prose-strong:text-foreground prose-li:text-foreground/80 prose-li:text-[13px] prose-code:text-primary prose-pre:bg-muted prose-pre:border prose-pre:border-border text-[13px]">
-                    <div className="markdown-body">
-                      {segments.map((seg, i) =>
-                        seg.type === "translation" ? (
-                          <div
-                            key={i}
-                            className="border-l-2 border-primary/40 pl-3 my-1 text-primary/70 text-[12px] italic"
-                          >
-                            <SkillMarkdown
-                              content={seg.text}
-                              sourceUrl={skill.source_url}
-                              contentUrl={skill.content_url}
-                            />
-                          </div>
-                        ) : (
-                          <SkillMarkdown
-                            key={i}
-                            content={seg.text}
-                            sourceUrl={skill.source_url}
-                            contentUrl={skill.content_url}
-                          />
-                        ),
-                      )}
-                    </div>
-                  </div>
-                );
-              }
-              // Full mode: show translated text only
-              return (
-                <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-h1:text-base prose-h1:font-bold prose-h2:text-sm prose-h2:font-semibold prose-h3:text-xs prose-h3:font-semibold prose-p:text-foreground/80 prose-p:text-[13px] prose-strong:text-foreground prose-li:text-foreground/80 prose-li:text-[13px] prose-code:text-primary prose-pre:bg-muted prose-pre:border prose-pre:border-border text-[13px]">
-                  <div className="markdown-body">
-                    <SkillMarkdown
-                      content={translatedRenderedContent}
-                      sourceUrl={skill.source_url}
-                      contentUrl={skill.content_url}
-                    />
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-h1:text-base prose-h1:font-bold prose-h2:text-sm prose-h2:font-semibold prose-h3:text-xs prose-h3:font-semibold prose-p:text-foreground/80 prose-p:text-[13px] prose-strong:text-foreground prose-li:text-foreground/80 prose-li:text-[13px] prose-code:text-primary prose-pre:bg-muted prose-pre:border prose-pre:border-border text-[13px]">
-                <div className="markdown-body">
-                  <SkillMarkdown
-                    content={effectiveRenderedContent}
-                    sourceUrl={skill.source_url}
-                    contentUrl={skill.content_url}
-                  />
-                </div>
-              </div>
-            );
-          })()}
+          <SkillStoreDetailMarkdown
+            contentUrl={skill.content_url}
+            effectiveContent={effectiveRenderedContent}
+            showTranslation={showTranslation}
+            sourceUrl={skill.source_url}
+            translatedContent={translatedRenderedContent}
+            translationMode={translationMode}
+          />
 
           {/* Prerequisites */}
           {skill.prerequisites && skill.prerequisites.length > 0 && (

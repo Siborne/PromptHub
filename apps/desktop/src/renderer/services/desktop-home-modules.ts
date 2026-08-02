@@ -4,6 +4,7 @@ import type { DesktopHomeModule } from "../stores/settings/settings-types";
 const WEB_DESKTOP_HOME_MODULES: readonly DesktopHomeModule[] = [
   "prompt",
   "skill",
+  "agents",
   "rules",
 ];
 

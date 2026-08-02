@@ -305,7 +305,10 @@ describe("managed Agent projection", () => {
     });
     expect(
       agents.find((agent) => agent.id === "antigravity")?.capabilities.sessions,
-    ).toEqual({ status: "planned", reason: "adapter-pending" });
+    ).toEqual({
+      status: "partial",
+      reason: "verified-antigravity-cli-transcripts",
+    });
   });
 
   it("enables user-root config discovery with declared paths as preferences", () => {

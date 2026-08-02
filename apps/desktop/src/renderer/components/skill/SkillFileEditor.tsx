@@ -12,13 +12,8 @@ import {
   XIcon,
   FileTextIcon,
   FileIcon,
-  FolderPlusIcon,
-  FilePlusIcon,
-  Trash2Icon,
-  ExternalLinkIcon,
   SaveIcon,
   Loader2Icon,
-  ChevronRightIcon,
   PencilIcon,
   RotateCcwIcon,
 } from "lucide-react";
@@ -43,6 +38,7 @@ import {
   type SkillFileContextMenuAction,
 } from "./SkillFileContextMenu";
 import { SkillFileMutationDialogs } from "./SkillFileMutationDialogs";
+import { SkillFileTree } from "./SkillFileTree";
 import {
   MAX_RESOURCE_ZOOM,
   MIN_RESOURCE_ZOOM,
@@ -58,7 +54,6 @@ import {
   type ContextMenuState,
   type FileEntry,
   type FileTreeEntry,
-  type TreeNode,
 } from "./skill-file-editor-utils";
 import "./SkillFileEditor.css";
 
@@ -106,6 +101,8 @@ interface SkillFileEditorProps {
   includeMissingVisibleFiles?: boolean;
   /** Content-only mode keeps Edit/Save while hiding create, rename and delete. */
   allowStructuralMutations?: boolean;
+  /** Hides host-native file manager affordances for browser runtimes. */
+  showFileManagerActions?: boolean;
   surfaceLabels?: SkillFileEditorSurfaceLabels;
 }
 
@@ -140,6 +137,7 @@ export function SkillFileEditor({
   initialFilePath,
   includeMissingVisibleFiles = false,
   allowStructuralMutations = true,
+  showFileManagerActions = true,
   surfaceLabels,
 }: SkillFileEditorProps) {
   const { t } = useTranslation();
@@ -546,6 +544,16 @@ export function SkillFileEditor({
 
   // Build tree
   const tree = useMemo(() => buildTree(files), [files]);
+  const fileCount = useMemo(
+    () => files.filter((file) => !file.isDirectory).length,
+    [files],
+  );
+  const modifiedFilePathsKey = Object.keys(modifiedFiles).sort().join("\u0000");
+  const modifiedFilePaths = useMemo(
+    () =>
+      new Set(modifiedFilePathsKey ? modifiedFilePathsKey.split("\u0000") : []),
+    [modifiedFilePathsKey],
+  );
 
   // Current file data
   const currentFile = useMemo(() => {
@@ -932,6 +940,18 @@ export function SkillFileEditor({
     }
   }, [fileSource, localPath, skillId, showToast, t]);
 
+  const handleCreateFileFromRoot = useCallback(() => {
+    setDialogInput("");
+    setCreateParentPath(null);
+    setNewFileDialogOpen(true);
+  }, []);
+
+  const handleCreateFolderFromRoot = useCallback(() => {
+    setDialogInput("");
+    setCreateParentPath(null);
+    setNewFolderDialogOpen(true);
+  }, []);
+
   const handleContextMenuAction = (action: SkillFileContextMenuAction) => {
     if (action.type === "rename") {
       setDialogInput(action.path.split("/").pop() || action.path);
@@ -950,107 +970,6 @@ export function SkillFileEditor({
   // ─── Render ──────────────────────────────────────────
 
   if (!isOpen) return null;
-
-  // Render tree node recursively
-  const renderTreeNode = (node: TreeNode): React.ReactNode => {
-    const isExpanded = expandedDirs.has(node.path);
-    const isActive = selectedFile === node.path;
-    const modified = !node.isDirectory && isModified(node.path);
-    const depthClass =
-      node.depth <= 4
-        ? `skill-file-editor__tree-item--depth-${node.depth}`
-        : "";
-
-    if (node.isDirectory) {
-      return (
-        <div key={node.path}>
-          <button
-            type="button"
-            aria-expanded={isExpanded}
-            className={`skill-file-editor__tree-item skill-file-editor__tree-item--directory ${depthClass}`}
-            onClick={() => toggleDir(node.path)}
-            onContextMenu={(event) => {
-              if (!canMutateStructure) {
-                return;
-              }
-              event.preventDefault();
-              event.stopPropagation();
-              setContextMenu({
-                x: event.clientX,
-                y: event.clientY,
-                path: node.path,
-                isDirectory: true,
-              });
-            }}
-          >
-            <ChevronRightIcon
-              aria-hidden="true"
-              className="skill-file-editor__tree-item-icon"
-              style={{
-                transform: isExpanded ? "rotate(90deg)" : "none",
-                transition: "transform 0.15s",
-              }}
-            />
-            {getFileIcon(node.name, true, isExpanded)}
-            <span className="skill-file-editor__tree-item-name">
-              {node.name}
-            </span>
-          </button>
-          {isExpanded && node.children.map((child) => renderTreeNode(child))}
-        </div>
-      );
-    }
-
-    return (
-      <div
-        key={node.path}
-        className="skill-file-editor__tree-file-row"
-        onContextMenu={(event) => {
-          if (!canMutateStructure) {
-            return;
-          }
-          event.preventDefault();
-          event.stopPropagation();
-          setContextMenu({
-            x: event.clientX,
-            y: event.clientY,
-            path: node.path,
-            isDirectory: false,
-          });
-        }}
-      >
-        <button
-          type="button"
-          className={`skill-file-editor__tree-item ${depthClass} ${
-            isActive ? "skill-file-editor__tree-item--active" : ""
-          }`}
-          onClick={() => {
-            requestSelectFile(node.path);
-          }}
-        >
-          {getFileIcon(node.name, false, false)}
-          <span className="skill-file-editor__tree-item-name">{node.name}</span>
-          {modified && <span className="skill-file-editor__tree-item-dot" />}
-        </button>
-        {canMutateStructure ? (
-          <button
-            type="button"
-            className="skill-file-editor__tree-item-delete"
-            onClick={() => {
-              setDeleteDialogFile(node.path);
-            }}
-            title={t("skill.deleteFile", "Delete File")}
-            aria-label={t("skill.deleteFile", "Delete File")}
-          >
-            <Trash2Icon
-              aria-hidden="true"
-              style={{ width: "0.75rem", height: "0.75rem" }}
-            />
-          </button>
-        ) : null}
-      </div>
-    );
-  };
 
   const fullscreenPreview = (
     <ResourceImageFullscreenPreview
@@ -1074,96 +993,24 @@ export function SkillFileEditor({
   const editorBody = (
     <>
       <div className="skill-file-editor__body">
-        {/* Left: file tree */}
-        <div className="skill-file-editor__tree">
-          <div className="skill-file-editor__tree-header">
-            <span className="skill-file-editor__tree-title">
-              {t("skill.fileEditor", "Files")}
-            </span>
-            {canMutateStructure ? (
-              <div className="skill-file-editor__tree-actions">
-                <button
-                  type="button"
-                  className="skill-file-editor__tree-btn"
-                  onClick={() => {
-                    setDialogInput("");
-                    setCreateParentPath(null);
-                    setNewFileDialogOpen(true);
-                  }}
-                  title={t("skill.newFile", "New File")}
-                >
-                  <FilePlusIcon
-                    aria-hidden="true"
-                    style={{ width: "0.875rem", height: "0.875rem" }}
-                  />
-                </button>
-                <button
-                  type="button"
-                  className="skill-file-editor__tree-btn"
-                  onClick={() => {
-                    setDialogInput("");
-                    setCreateParentPath(null);
-                    setNewFolderDialogOpen(true);
-                  }}
-                  title={t("skill.newFolder", "New Folder")}
-                >
-                  <FolderPlusIcon
-                    aria-hidden="true"
-                    style={{ width: "0.875rem", height: "0.875rem" }}
-                  />
-                </button>
-              </div>
-            ) : null}
-          </div>
-
-          <div
-            className="skill-file-editor__tree-list"
-            onContextMenu={(event) => {
-              if (!canMutateStructure) {
-                return;
-              }
-              if (event.target !== event.currentTarget) {
-                return;
-              }
-              event.preventDefault();
-              setContextMenu({
-                x: event.clientX,
-                y: event.clientY,
-                path: null,
-                isDirectory: true,
-              });
-            }}
-          >
-            {isLoading ? (
-              <div className="skill-file-editor__loading">
-                <Loader2Icon style={{ width: "1rem", height: "1rem" }} />
-              </div>
-            ) : tree.length === 0 ? (
-              <div className="skill-file-editor__tree-empty">
-                <FileIcon
-                  style={{ width: "1.5rem", height: "1.5rem", opacity: 0.4 }}
-                />
-                <span>{noFilesLabel}</span>
-              </div>
-            ) : (
-              tree.map((node) => renderTreeNode(node))
-            )}
-          </div>
-
-          <div className="skill-file-editor__tree-footer">
-            <button
-              type="button"
-              className="skill-file-editor__open-explorer-btn"
-              onClick={handleOpenInExplorer}
-            >
-              <ExternalLinkIcon
-                aria-hidden="true"
-                style={{ width: "0.75rem", height: "0.75rem" }}
-              />
-              {t("skill.openInExplorer", "Open in File Manager")}
-            </button>
-          </div>
-        </div>
+        <SkillFileTree
+          canMutateStructure={canMutateStructure}
+          expandedDirs={expandedDirs}
+          isLoading={isLoading}
+          modifiedFilePaths={modifiedFilePaths}
+          noFilesLabel={noFilesLabel}
+          onContextMenuChange={setContextMenu}
+          onCreateFile={handleCreateFileFromRoot}
+          onCreateFolder={handleCreateFolderFromRoot}
+          onDeleteFile={setDeleteDialogFile}
+          onOpenInExplorer={handleOpenInExplorer}
+          onRequestSelectFile={requestSelectFile}
+          onToggleDir={toggleDir}
+          selectedFile={selectedFile}
+          showFileManagerActions={showFileManagerActions}
+          t={t}
+          tree={tree}
+        />
 
         {/* Right: editor */}
         <div className="skill-file-editor__editor">
@@ -1173,7 +1020,7 @@ export function SkillFileEditor({
                 style={{ width: "2rem", height: "2rem", opacity: 0.3 }}
               />
               <span>
-                {files.filter((f) => !f.isDirectory).length > 0
+                {fileCount > 0
                   ? t("skill.noContent", "Select a file to edit")
                   : noFilesLabel}
               </span>

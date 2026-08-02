@@ -154,8 +154,21 @@ describe("Agent session index IPC", () => {
       offset: 0,
     });
     await expect(
-      handlers[IPC_CHANNELS.AGENT_SESSION_READ](event, "claude", "session-1"),
+      handlers[IPC_CHANNELS.AGENT_SESSION_READ](event, "claude", "session-1", {
+        cursor: "page-2",
+        limit: 80,
+      }),
     ).resolves.toMatchObject({ sessionId: "session-1" });
+    expect(service.read).toHaveBeenCalledWith("claude", "session-1", {
+      cursor: "page-2",
+      limit: 80,
+    });
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_SESSION_READ](event, "claude", "session-1", {
+        cursor: "x".repeat(513),
+        limit: 0,
+      }),
+    ).rejects.toThrow("AGENT_SESSION_DETAIL_REQUEST_INVALID");
   });
 
   it("scopes progress and cancellation to one renderer request", async () => {

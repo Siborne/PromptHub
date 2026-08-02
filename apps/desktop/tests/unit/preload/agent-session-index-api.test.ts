@@ -32,7 +32,10 @@ describe("Agent session index preload API", () => {
     await agentApi.refreshSessionIndex(refreshRequest);
     await agentApi.cancelSessionIndex(cancelRequest);
     await agentApi.listSessions("claude", 25, 50, "review");
-    await agentApi.readSession("claude", "session-1");
+    await agentApi.readSession("claude", "session-1", {
+      cursor: "page-2",
+      limit: 80,
+    });
 
     expect(mocks.invoke.mock.calls).toEqual([
       [IPC_CHANNELS.AGENT_SESSION_INDEX_GET_STATE, "claude"],
@@ -40,7 +43,12 @@ describe("Agent session index preload API", () => {
       [IPC_CHANNELS.AGENT_SESSION_INDEX_REFRESH, refreshRequest],
       [IPC_CHANNELS.AGENT_SESSION_INDEX_CANCEL, cancelRequest],
       [IPC_CHANNELS.AGENT_SESSIONS_LIST, "claude", 25, 50, "review"],
-      [IPC_CHANNELS.AGENT_SESSION_READ, "claude", "session-1"],
+      [
+        IPC_CHANNELS.AGENT_SESSION_READ,
+        "claude",
+        "session-1",
+        { cursor: "page-2", limit: 80 },
+      ],
     ]);
   });
 
@@ -85,6 +93,7 @@ describe("Agent session index preload API", () => {
       payloadDigest: `sha256:${"a".repeat(64)}`,
       confirmedPayloadDigest: `sha256:${"a".repeat(64)}`,
       transport: "direct" as const,
+      cliCommand: "cd '/workspace/project' && codex 'portable context'",
     };
 
     await agentApi.listConversationMetadata("claude", ["session-1"]);

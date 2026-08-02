@@ -94,6 +94,69 @@ describe("sync-snapshot agent assets", () => {
     expect(snapshot.outputFormatItems?.[0]?.id).toBe("output-1");
   });
 
+  it("preserves portable Agent settings from Desktop-format snapshots", () => {
+    const snapshot = parseSyncSnapshot({
+      version: "desktop-backup-v1",
+      exportedAt: "2026-08-01T00:00:00.000Z",
+      prompts: [],
+      folders: [],
+      skills: [],
+      skillVersions: [],
+      settings: {
+        state: {
+          themeMode: "system",
+          language: "zh",
+          autoSave: true,
+          builtinAgentOverrides: {
+            claude: {
+              rootPath: "/srv/agents/claude",
+              mcpRelativePath: "mcp.json",
+              pluginsRelativePath: "plugins",
+            },
+          },
+          customAgents: [
+            {
+              id: "team-agent",
+              name: "Team Agent",
+              rootPath: "/srv/agents/team",
+              enabled: false,
+              mcpRelativePath: "mcp.json",
+              pluginsRelativePath: "plugins",
+            },
+          ],
+          customAgentRootPaths: ["/srv/agents/legacy"],
+          disabledPlatformIds: ["claude"],
+          agentIdentityPreferences: {
+            codex: { name: "chatgpt", icon: "chatgpt" },
+          },
+        },
+      },
+    });
+
+    expect(snapshot.settings).toMatchObject({
+      builtinAgentOverrides: {
+        claude: {
+          rootPath: "/srv/agents/claude",
+          mcpRelativePath: "mcp.json",
+          pluginsRelativePath: "plugins",
+        },
+      },
+      customAgents: [
+        {
+          id: "team-agent",
+          enabled: false,
+          mcpRelativePath: "mcp.json",
+          pluginsRelativePath: "plugins",
+        },
+      ],
+      customAgentRootPaths: ["/srv/agents/legacy"],
+      disabledPlatformIds: ["claude"],
+      agentIdentityPreferences: {
+        codex: { name: "chatgpt", icon: "chatgpt" },
+      },
+    });
+  });
+
   it("preserves portable Skill source metadata across desktop sync payloads", () => {
     const snapshot = parseSyncSnapshot({
       version: "desktop-backup-v1",

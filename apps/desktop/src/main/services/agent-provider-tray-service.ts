@@ -3,6 +3,8 @@ import type {
   AgentProviderActivationPlan,
   AgentProviderAdapterContext,
   AgentProviderCurrentState,
+  AgentProviderImportPreview,
+  AgentProviderNativeConfigSummary,
   AgentProviderProfilePublic,
   AgentProviderSnapshot,
 } from "@prompthub/shared";
@@ -48,6 +50,9 @@ interface AgentProviderTrayServiceOptions {
     expectedCurrentDigest: string;
   }): Promise<AgentProviderActivationExecutionResult>;
   getLatestVerifiedSnapshot(platformId: string): AgentProviderSnapshot | null;
+  importCurrent(input: {
+    context: AgentProviderAdapterContext;
+  }): Promise<AgentProviderImportPreview>;
   listProfiles(): Promise<AgentProviderProfilePublic[]>;
   preview(input: {
     context: AgentProviderAdapterContext;
@@ -76,6 +81,75 @@ function primaryModel(profile: AgentProviderProfilePublic): string | null {
   );
 }
 
+const OFFICIAL_PROVIDER_KINDS: Record<string, ReadonlySet<string>> = {
+  claude: new Set([
+    "anthropic",
+    "amazon-bedrock",
+    "google-vertex",
+    "microsoft-foundry",
+  ]),
+  codex: new Set(["openai"]),
+  gemini: new Set(["google-gemini", "oauth-personal"]),
+  kimi: new Set(["kimi"]),
+  qwen: new Set(["qwen-oauth"]),
+};
+
+function comparableText(
+  preview: AgentProviderImportPreview,
+  field: string,
+): string | null {
+  const value = preview.state.values[field];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function nativeCredential(
+  platformId: string,
+  preview: AgentProviderImportPreview,
+): AgentProviderNativeConfigSummary["credential"] {
+  const status = comparableText(preview, "credentialStatus");
+  const kind = comparableText(preview, "credentialKind");
+  if (status === "platform-managed") return "platform-managed";
+  if (status === "environment") return "environment";
+  if (status === "missing") return "missing";
+  if (status === "configured") {
+    return kind === "auth-token" || platformId === "codex"
+      ? "configured-auth-token"
+      : "configured-api-key";
+  }
+  return "unknown";
+}
+
+function summarizeNativeConfig(
+  platformId: string,
+  preview: AgentProviderImportPreview,
+): AgentProviderNativeConfigSummary {
+  const model =
+    preview.modelMappings.find((mapping) => mapping.routeKey === "primary")
+      ?.modelId ?? null;
+  const official =
+    preview.profile.providerKind === "platform-default" ||
+    OFFICIAL_PROVIDER_KINDS[platformId]?.has(preview.profile.providerKind) ===
+      true;
+  const classification = official
+    ? "official"
+    : preview.profile.endpoint || preview.profile.providerKind
+      ? "custom"
+      : "unknown";
+  return {
+    classification,
+    name: preview.profile.name,
+    providerKind: preview.profile.providerKind,
+    protocol: preview.profile.protocol,
+    endpoint: preview.profile.endpoint ?? null,
+    model,
+    credential: nativeCredential(platformId, preview),
+    officialRestoreAvailable:
+      classification !== "official" &&
+      model !== null &&
+      (platformId === "claude" || platformId === "codex"),
+  };
+}
+
 export function createAgentProviderTrayService(
   options: AgentProviderTrayServiceOptions,
 ): AgentProviderTrayService {
@@ -91,12 +165,30 @@ export function createAgentProviderTrayService(
     profiles: AgentProviderProfilePublic[],
   ): Promise<AgentProviderCurrentState> => {
     const checkedAt = Date.now();
+    let nativeConfig: AgentProviderNativeConfigSummary;
+    try {
+      nativeConfig = summarizeNativeConfig(
+        platformId,
+        await options.importCurrent({
+          context: options.resolveContext(platformId),
+        }),
+      );
+    } catch {
+      return {
+        platformId,
+        status: "unavailable",
+        currentProfileId: null,
+        nativeConfig: null,
+        checkedAt,
+      };
+    }
     const latest = options.getLatestVerifiedSnapshot(platformId);
     if (!latest?.providerProfileId) {
       return {
         platformId,
         status: "none",
         currentProfileId: null,
+        nativeConfig,
         checkedAt,
       };
     }
@@ -105,6 +197,7 @@ export function createAgentProviderTrayService(
         platformId,
         status: "stale",
         currentProfileId: null,
+        nativeConfig,
         checkedAt,
       };
     }
@@ -123,6 +216,7 @@ export function createAgentProviderTrayService(
         platformId,
         status: verified ? "verified" : "stale",
         currentProfileId: verified ? latest.providerProfileId : null,
+        nativeConfig,
         checkedAt,
       };
     } catch {
@@ -130,6 +224,7 @@ export function createAgentProviderTrayService(
         platformId,
         status: "unavailable",
         currentProfileId: null,
+        nativeConfig,
         checkedAt,
       };
     }

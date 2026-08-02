@@ -19,8 +19,8 @@ PromptHub 当前稳定架构事实主要保存在：
 
 | ID  | Title | Status | Path | Related change/issue | Updated |
 | --- | ----- | ------ | ---- | -------------------- | ------- |
-
-当前没有独立 ADR；已接受的稳定设计仍由 `spec/knowledge/structure/` 承担。
+| ADR-20260801-001 | Web Agent server-host inventory boundary | Superseded | `spec/adr/ADR-20260801-001-web-agent-server-host-inventory.md` | `web-agent-management` | 2026-08-02 |
+| ADR-20260802-001 | Self-hosted Web Agent service parity | Accepted | `spec/adr/ADR-20260802-001-web-agent-service-parity.md` | `web-agent-service-parity` | 2026-08-02 |
 
 ## Routing Rule
 

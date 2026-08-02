@@ -19,3 +19,4 @@ services:
       - ./data:/app/data
       - ./config:/app/config
       - ./logs:/app/logs
+      - ./backups:/app/backups

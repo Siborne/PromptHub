@@ -108,7 +108,7 @@ enabled Agents with their exact continuation capability:
 
 - `direct`: installed and has a verified project launch plus prompt injection
   contract;
-- `launch-and-copy`: can open the project but cannot safely inject context;
+- `launch`: can open the Agent but cannot safely inject context;
 - `unavailable`: missing installation, unsupported launch or incompatible
   project state, with a reason.
 
@@ -132,9 +132,8 @@ only, review the exact payload, and cancel without side effects.
 Apply delegates to a target-specific main/core adapter. Direct adapters may use
 bounded stdin, a `0600` temporary prompt file or documented argument input;
 they MUST NOT interpolate a shell command. Temporary payloads are deleted after
-launch and are never synced. `launch-and-copy` opens the target Agent in the
-project and copies the reviewed payload, clearly reporting that automatic
-injection was unavailable.
+launch and are never synced. `launch` opens the target Agent without mutating
+the clipboard and clearly reports that automatic injection was unavailable.
 
 Cross-Agent success creates a new target session or a pending target launch; it
 never mutates the source transcript. Partial failure records no false target
@@ -153,7 +152,7 @@ interface AgentConversationHandoff {
   sourceSessionId: string;
   targetAgentId: string;
   targetSessionId: string | null;
-  mode: "direct" | "launch-and-copy";
+  mode: "direct" | "launch";
   status: "planned" | "launched" | "linked" | "failed" | "cancelled";
   payloadDigest: string;
   createdAt: number;
@@ -241,7 +240,7 @@ not compete with ordinary browsing.
   missing source/executable and launch failure without shell construction.
 - `TEST-AGENT-102`: target capability matrix and handoff preview for full,
   recent-turn and summary-only modes, including Unicode and oversized input.
-- `TEST-AGENT-103`: direct and launch-and-copy apply, temporary-file cleanup,
+- `TEST-AGENT-103`: direct and launch-only apply, temporary-file cleanup,
   cancellation and partial-failure rollback.
 - `TEST-AGENT-104`: lineage creation, exact linking, retry, missing endpoints
   and no time-only silent correlation.

@@ -29,7 +29,7 @@ describe("Grok Build Provider Profile form", () => {
   it("rejects credential-bearing endpoints before submitting", async () => {
     const view = renderDialog();
     await view.render;
-    const dialog = screen.getByRole("dialog", {
+    const dialog = screen.getByRole("region", {
       name: "Add provider profile",
     });
 
@@ -61,7 +61,7 @@ describe("Grok Build Provider Profile form", () => {
   it("creates an environment-owned profile without a managed credential", async () => {
     const view = renderDialog();
     await view.render;
-    const dialog = screen.getByRole("dialog", {
+    const dialog = screen.getByRole("region", {
       name: "Add provider profile",
     });
 
@@ -152,7 +152,7 @@ describe("Grok Build Provider Profile form", () => {
     };
     const view = renderDialog(imported);
     await view.render;
-    const dialog = screen.getByRole("dialog", {
+    const dialog = screen.getByRole("region", {
       name: "Edit provider profile",
     });
 

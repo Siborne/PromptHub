@@ -274,6 +274,14 @@ Each asset-domain page contains:
 - A scoped refresh action that reloads the owning store and selected Agent aggregate.
 - A domain-specific semantic accent: cyan for Skills, blue for MCP, amber for Rules, and violet for Plugins. The accent identifies the active domain without replacing standard PromptHub tokens.
 
+Skills, MCP and Plugins use one shared card anatomy derived from the accepted
+Plugins presentation: a fixed 40px identity slot, title/status row, bounded
+two-line description, one-line source, wrapping metadata chips and a bottom
+divider with aligned 32px icon actions. Skill names provide the fallback icon,
+MCP uses the server icon, and Plugins preserve package artwork with a plug
+fallback. Domain actions may differ, but the card regions and spacing do not.
+The Agent tab label is the stable product term `Plugins` in every locale.
+
 The Agent workspace does not introduce an “Agent copy” editor or duplicate durable state. Canonical editing and mutation continue to use the owning Skill/MCP/Rules/Plugin services when inline actions are added.
 
 Cross-kind batch operations are not part of the first delivery. If a future domain needs deeper navigation, it may add navigation inside that domain without restoring a generic Assets parent page.
@@ -316,9 +324,10 @@ Primary commands:
 
 Secondary commands edit PromptHub metadata, archive, soft delete/restore, copy
 the native command, or request adapter-owned native deletion when supported.
-The target dropdown shows Agent icon, name, install state and direct,
-launch-and-copy or unavailable capability. Selecting an Agent never launches
-immediately. The local-index switch and source diagnostics live in History
+The target dropdown shows only the Agent icon and full display name so options
+remain readable in the compact toolbar. Selecting an Agent never launches
+immediately; capability resolution happens in the reviewed apply plan. The
+local-index switch and source diagnostics live in History
 Source Settings rather than the ordinary list header.
 
 On narrow layouts, project/filter, list, detail, handoff preview and target
@@ -632,6 +641,16 @@ content and owning-store actions:
 - Each adapter filters canonical store data by stable Agent id, refreshes the
   owning store after mutations, and keeps failures visible in the current
   workspace. No new persistence, IPC or Agent-owned asset records are added.
+- Agent overview and the Skill workspace share
+  `useEnsureSkillLibraryLoaded`; neither surface may classify scanned Skills
+  against an uninitialized My Skills library or depend on the user visiting the
+  top-level Skills module first. The shared readiness check also suppresses a
+  second load while the canonical library request is already in progress.
+- Detail composition follows the same ownership rule. MCP uses the shared
+  `AgentMcpEntryDetail`; Skill and Plugin use one domain-specific Agent adapter
+  around their canonical `SkillFullDetailPage` and `PluginFullDetailPage`.
+  Owning workspaces and Agents management MUST NOT introduce reduced detail
+  variants or independently map Agent status and actions.
 
 ### `DES-AGENT-075`: Agent Asset Management Adapters
 
@@ -686,6 +705,13 @@ OpenClaw fork or that its files are OpenClaw-compatible.
 - The selected Agent identity uses official high-resolution, theme-aware product artwork directly at a stable size; do not add a decorative border, background tile, or shadow around it.
 - Lifecycle and migration guidance is rendered as detail-page prose when needed; do not place compatibility badges beside Agent names in the list or detail title.
 - Every Agent opens the same detail shell.
+- Agent identity, primary tabs, asset toolbar and inventory use one shared
+  leading edge; Skills, MCP and Plugins toolbars start with search and do not
+  repeat the active tab name.
+- Skills, MCP and Plugins are the Agent asset card domains. Opening any of
+  their cards replaces the complete workspace to the right of the Agent list;
+  the Agent identity header and primary tabs stay hidden until Back restores
+  the previous asset list.
 - Capability state changes enablement without changing tab order.
 - Unsupported actions are visible, disabled, explained and never invoke IPC.
 - Provider activation cannot report success before verification.

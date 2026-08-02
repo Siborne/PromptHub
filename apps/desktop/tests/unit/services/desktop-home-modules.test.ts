@@ -18,12 +18,12 @@ describe("resolveVisibleDesktopHomeModules", () => {
     ).toEqual(["prompt", "rules"]);
   });
 
-  it("excludes Desktop-owned Agent, MCP, and Plugin modules in the Web runtime", () => {
+  it("keeps Web Agent management while excluding Desktop-owned MCP and Plugin modules", () => {
     expect(
       resolveVisibleDesktopHomeModules(
         ["prompt", "skill", "agents", "mcp", "plugin", "rules"],
         true,
       ),
-    ).toEqual(["prompt", "skill", "rules"]);
+    ).toEqual(["prompt", "skill", "agents", "rules"]);
   });
 });

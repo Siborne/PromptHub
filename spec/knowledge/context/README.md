@@ -40,6 +40,10 @@ PromptHub 中最基础的文本资产，支持变量、版本历史、多模型�
 
 PromptHub 用于集中管理的 AI 编程规则文件资产，包括全局规则与项目规则。它强调的是规则工作区，而不是单纯的平台检测视图。
 
+### Agent 资产
+
+在 Agent 管理工作区中，`Agent 资产` 统一指 Skills、MCP 与 Plugins 三类卡片资产。三者共享列表、卡片和全详情导航语义，但数据与动作仍分别由 Skill、MCP 和 Plugin 域拥有。Rules 是独立编辑工作区，不属于这组三类卡片详情导航。
+
 ### Project-Local Assets
 
 存在于单个项目目录中的 AI 资产，例如：

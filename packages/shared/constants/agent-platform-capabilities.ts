@@ -67,6 +67,10 @@ const VERIFIED_READONLY_AGENT_TRANSCRIPT_SESSION = declaration(
   "partial",
   "verified-readonly-agent-transcripts",
 );
+const VERIFIED_ANTIGRAVITY_CLI_SESSION = declaration(
+  "partial",
+  "verified-antigravity-cli-transcripts",
+);
 
 /**
  * Explicit deep-adapter declarations for every built-in platform.
@@ -88,7 +92,9 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
   cursor: depthCapabilities({
     sessions: VERIFIED_READONLY_AGENT_TRANSCRIPT_SESSION,
   }),
-  "cherry-studio": depthCapabilities(),
+  "cherry-studio": depthCapabilities({
+    sessions: declaration("partial", "verified-cherry-agent-session-db"),
+  }),
   windsurf: depthCapabilities({ sessions: VERIFIED_TRANSCRIPT_HOOK_SESSION }),
   kiro: depthCapabilities({
     providerModel: MODEL_CONFIG_ONLY,
@@ -99,7 +105,10 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
     sessions: VERIFIED_SESSION,
     usage: VERIFIED_USAGE,
   }),
-  antigravity: depthCapabilities({ usage: VERIFIED_USAGE }),
+  antigravity: depthCapabilities({
+    sessions: VERIFIED_ANTIGRAVITY_CLI_SESSION,
+    usage: VERIFIED_USAGE,
+  }),
   trae: depthCapabilities(),
   "trae-cn": depthCapabilities(),
   "trae-work": depthCapabilities(),
@@ -128,8 +137,12 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
     sessions: VERIFIED_SESSION,
     usage: VERIFIED_USAGE,
   }),
-  reasonix: depthCapabilities(),
-  augment: depthCapabilities(),
+  reasonix: depthCapabilities({
+    sessions: declaration("supported", "verified-reasonix-events-v1"),
+  }),
+  augment: depthCapabilities({
+    sessions: declaration("supported", "verified-augment-session-json"),
+  }),
   zcode: depthCapabilities(),
   grok: depthCapabilities({
     providerModel: declaration("supported", "verified-provider-adapter"),
@@ -139,7 +152,9 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
     providerModel: declaration("supported", "verified-provider-adapter"),
     sessions: VERIFIED_SESSION,
   }),
-  kilo: depthCapabilities(),
+  kilo: depthCapabilities({
+    sessions: declaration("supported", "verified-kilo-session-json"),
+  }),
   amp: depthCapabilities({
     providerModel: SERVICE_MANAGED_PROVIDER,
   }),
@@ -147,13 +162,21 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
     providerModel: MODEL_CONFIG_ONLY,
     sessions: VERIFIED_SESSION,
   }),
-  copaw: depthCapabilities(),
+  copaw: depthCapabilities({
+    sessions: declaration("supported", "verified-copaw-safe-json-session-v2"),
+  }),
   autoclaw: depthCapabilities(),
-  nanoclaw: depthCapabilities(),
+  nanoclaw: depthCapabilities({
+    sessions: declaration("supported", "verified-nanoclaw-v2-sqlite"),
+  }),
   qclaw: depthCapabilities(),
-  qoder: depthCapabilities(),
+  qoder: depthCapabilities({
+    sessions: declaration("supported", "verified-qoder-transcript-jsonl-v1"),
+  }),
   qoderwork: depthCapabilities(),
-  hermes: depthCapabilities(),
+  hermes: depthCapabilities({
+    sessions: declaration("supported", "verified-hermes-state-db"),
+  }),
   codebuddy: depthCapabilities(),
   workbuddy: depthCapabilities(),
 } satisfies Record<string, DepthCapabilityInventory>;

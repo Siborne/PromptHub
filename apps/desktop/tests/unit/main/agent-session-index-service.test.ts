@@ -68,6 +68,44 @@ async function writeGeminiSession(
   return filePath;
 }
 
+async function writeCherryCurrentSession(
+  root: string,
+  body: string,
+): Promise<void> {
+  const filePath = path.join(root, "Data", "cherrystudio.sqlite");
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const db = new Database(filePath);
+  db.exec(`
+    CREATE TABLE agent_workspace (id TEXT PRIMARY KEY, path TEXT);
+    CREATE TABLE agent_session (
+      id TEXT PRIMARY KEY, name TEXT, description TEXT, workspace_id TEXT,
+      created_at INTEGER, updated_at INTEGER
+    );
+    CREATE TABLE agent_session_message (
+      id TEXT PRIMARY KEY, session_id TEXT, role TEXT, data TEXT,
+      model_id TEXT, created_at INTEGER
+    );
+  `);
+  db.prepare(
+    `INSERT INTO agent_session
+      (id, name, description, workspace_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run("cherry-body-session", "Metadata title", "", null, 1, 2);
+  db.prepare(
+    `INSERT INTO agent_session_message
+      (id, session_id, role, data, model_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "cherry-body-message",
+    "cherry-body-session",
+    "assistant",
+    JSON.stringify({ parts: [{ type: "text", text: body }] }),
+    "model",
+    2,
+  );
+  db.close();
+}
+
 describe("Agent session index service", () => {
   let homeDir: string;
   let database: Database.Database;
@@ -228,6 +266,29 @@ describe("Agent session index service", () => {
       adapter: "cursor-agent-transcript-v1",
       total: 1,
       sessions: [expect.objectContaining({ id: "cursor-live" })],
+    });
+  });
+
+  it("preserves current Cherry matches found only in visible text parts", async () => {
+    const cherryRoot = path.join(homeDir, "CherryStudio");
+    await writeCherryCurrentSession(cherryRoot, "current cherry body phrase");
+    const cherryService = createAgentSessionIndexService({
+      index,
+      reader: createAgentSessionService({
+        homeDir,
+        cherryStudioRootDir: cherryRoot,
+      }),
+    });
+
+    const live = await cherryService.list("cherry-studio", {
+      limit: 10,
+      offset: 0,
+      search: "current cherry body phrase",
+    });
+    expect(live).toMatchObject({
+      adapter: "cherry-agent-session-db-v2",
+      total: 1,
+      sessions: [expect.objectContaining({ id: "cherry-body-session" })],
     });
   });
 

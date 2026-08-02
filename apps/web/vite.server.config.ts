@@ -11,6 +11,14 @@ export default defineConfig({
         currentDir,
         '../../packages/shared/utils',
       ),
+      '@prompthub/shared/constants': path.resolve(
+        currentDir,
+        '../../packages/shared/constants',
+      ),
+      '@prompthub/shared/types': path.resolve(
+        currentDir,
+        '../../packages/shared/types',
+      ),
       '@prompthub/shared': path.resolve(currentDir, '../../packages/shared/types/index.ts'),
       '@prompthub/db': path.resolve(currentDir, '../../packages/db/src/index.ts'),
     },

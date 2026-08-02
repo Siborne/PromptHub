@@ -12,12 +12,12 @@
 
 当前已被这条规则覆盖的场景：
 
-| 场景 | 文件 | 模式 |
-| --- | --- | --- |
-| 技能列表 | `apps/desktop/src/renderer/components/skill/SkillListView.tsx` | 行虚拟化 + measureElement |
-| Prompt 画廊 | `apps/desktop/src/renderer/components/prompt/PromptGalleryView.tsx` | 行虚拟化（grid，列数随 ResizeObserver 动态改变） |
-| Prompt 看板（unpinned） | `apps/desktop/src/renderer/components/prompt/PromptKanbanView.tsx` | 行虚拟化（pinned 仍保留 framer-motion 动画） |
-| Prompt 详情列表 | `apps/desktop/src/renderer/components/layout/MainContent.tsx` 中 `<VirtualizedPromptList>` | 行虚拟化 + measureElement |
+| 场景                    | 文件                                                                                       | 模式                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| 技能列表                | `apps/desktop/src/renderer/components/skill/SkillListView.tsx`                             | 行虚拟化 + measureElement                        |
+| Prompt 画廊             | `apps/desktop/src/renderer/components/prompt/PromptGalleryView.tsx`                        | 行虚拟化（grid，列数随 ResizeObserver 动态改变） |
+| Prompt 看板（unpinned） | `apps/desktop/src/renderer/components/prompt/PromptKanbanView.tsx`                         | 行虚拟化（pinned 仍保留 framer-motion 动画）     |
+| Prompt 详情列表         | `apps/desktop/src/renderer/components/layout/MainContent.tsx` 中 `<VirtualizedPromptList>` | 行虚拟化 + measureElement                        |
 
 新增长列表组件时，**默认套虚拟化**；如果出于产品交互（如拖拽、layout 动画）放弃虚拟化，必须在 `spec/issues/active/` 留一个明确的 follow-up 条目，列出"放弃的原因 + 何时重新评估"。
 
@@ -69,6 +69,16 @@ Renderer startup entry (`index-*.js`) 不应静态 import 与当前首屏无关�
 - E2E 专用 bridge 和其依赖只可在明确的 E2E preload profile 下暴露和加载。普通桌面启动不得仅因测试 API 存在而请求备份、fixture 或测试辅助模块；E2E runner 必须覆盖该 profile 的启动和 bridge 就绪时序。
 
 新增或修改启动路径 import 后，必须运行 `pnpm --filter @prompthub/desktop bundle:budget`。如果预算失败，先用 `pnpm --filter @prompthub/desktop build:analyze` 确认是否把 cold-path JSON、markdown、AI provider、modal 或设置页模块打进了主入口。
+
+### 7. 高频局部状态不得使昂贵子树失效
+
+编辑器输入、搜索草稿、按钮 loading 等高频局部状态不应让与其无关的递归树、虚拟化目录或 Markdown 内容重复渲染。
+
+- 先按职责拆分组件，再对输入稳定且渲染昂贵的边界使用 `memo`；不要用自定义比较器掩盖缺失依赖。
+- 父组件传给 memo 边界的集合、派生数组与回调必须保持稳定；只在可观察内容变化时创建新引用。
+- 纯分类、来源元数据和状态投影应放在纯 view-model helper 中，并由 `useMemo` 以真实输入缓存。
+- 组件拆分应为 1,500 行门禁留出余量；不能以移动空行或压缩格式作为通过手段。新文件继续以 1,000 行以内为默认目标。
+- 每个新增渲染隔离边界至少有一个可失败的测试，证明稳定输入不会重复执行昂贵子树。
 
 ## Stable Scenarios
 

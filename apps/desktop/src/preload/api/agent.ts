@@ -34,6 +34,7 @@ import type {
   AgentProviderPreviewRequest,
   AgentModelConfiguration,
   AgentSessionDetail,
+  AgentSessionDetailPageInput,
   AgentSessionIndexCancelRequest,
   AgentSessionIndexProgress,
   AgentSessionIndexPublicState,
@@ -55,6 +56,8 @@ import type {
   UpdateAgentModelResult,
   UpsertAgentConversationMetadataInput,
   CreateAgentProviderProfileRequest,
+  AgentProviderSourceCandidate,
+  ImportAgentProviderSourceRequest,
   UpdateAgentProviderProfileRequest,
 } from "@prompthub/shared/types";
 
@@ -121,8 +124,14 @@ export const agentApi = {
   readSession: (
     agentId: string,
     sessionId: string,
+    options?: AgentSessionDetailPageInput,
   ): Promise<AgentSessionDetail> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AGENT_SESSION_READ, agentId, sessionId),
+    ipcRenderer.invoke(
+      IPC_CHANNELS.AGENT_SESSION_READ,
+      agentId,
+      sessionId,
+      options,
+    ),
   listConversationMetadata: (
     agentId: string,
     sessionIds: string[],
@@ -200,6 +209,18 @@ export const agentApi = {
     includeArchived?: boolean;
   }): Promise<AgentProviderProfilePublic[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_PROFILES_LIST, options),
+  listProviderSources: (
+    platformId: string,
+  ): Promise<AgentProviderSourceCandidate[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_SOURCES_LIST, platformId),
+  importProviderSource: (
+    request: ImportAgentProviderSourceRequest,
+  ): Promise<AgentProviderProfilePublic> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_SOURCE_IMPORT, request),
+  ensureOfficialProviderProfile: (
+    platformId: string,
+  ): Promise<AgentProviderProfilePublic> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_OFFICIAL_ENSURE, platformId),
   getProviderCurrentState: (
     agentId: string,
   ): Promise<AgentProviderCurrentState> =>

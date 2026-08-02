@@ -182,6 +182,8 @@ describe("Agent session service", () => {
       [
         JSON.stringify({
           type: "user",
+          sessionId: "session-new",
+          cwd: "/Users/test/project",
           timestamp: "2026-07-15T10:00:00.000Z",
           message: { role: "user", content: "Fix the release workflow" },
         }),
@@ -195,7 +197,12 @@ describe("Agent session service", () => {
     );
     await fs.writeFile(
       path.join(projectDir, "session-old.jsonl"),
-      `${JSON.stringify({ type: "user", message: { content: "Older task" } })}\n`,
+      `${JSON.stringify({
+        type: "user",
+        sessionId: "../unsafe-session",
+        cwd: "relative/project",
+        message: { content: "Older task" },
+      })}\n`,
     );
     await fs.utimes(
       path.join(projectDir, "session-old.jsonl"),
@@ -213,9 +220,11 @@ describe("Agent session service", () => {
       id: "session-new",
       title: "Fix the release workflow",
       projectLabel: "-Users-test-project",
+      projectPath: "/Users/test/project",
       resume: {
         executable: "claude",
         args: ["--resume", "session-new"],
+        cwd: "/Users/test/project",
       },
     });
 
@@ -226,6 +235,17 @@ describe("Agent session service", () => {
     ]);
     expect(detail.parseErrors).toBe(1);
     expect(detail.truncated).toBe(false);
+
+    const legacy = await service.list("claude", { limit: 1, offset: 1 });
+    expect(legacy.sessions[0]).toMatchObject({
+      id: "session-old",
+      projectPath: null,
+      resume: {
+        executable: "claude",
+        args: ["--resume", "session-old"],
+      },
+    });
+    expect(legacy.sessions[0].resume).not.toHaveProperty("cwd");
   });
 
   it("uses OpenCode's bounded JSON CLI and sanitized export", async () => {
@@ -584,7 +604,7 @@ describe("Agent session service", () => {
       sessions: [],
       total: 0,
     });
-    await expect(service.list("cherry-studio", { limit: 20 })).rejects.toThrow(
+    await expect(service.list("trae", { limit: 20 })).rejects.toThrow(
       "AGENT_SESSION_UNSUPPORTED",
     );
     await expect(service.list("opencode", { limit: 20 })).rejects.toThrow(
@@ -600,7 +620,7 @@ describe("Agent session service", () => {
       service.list("claude", { limit: 20, offset: -1 }),
     ).rejects.toThrow("AGENT_SESSION_OFFSET_INVALID");
     await expect(
-      service.list("claude", { limit: 20, offset: 1_990 }),
+      service.list("claude", { limit: 20, offset: 49_990 }),
     ).rejects.toThrow("AGENT_SESSION_OFFSET_INVALID");
   });
 });

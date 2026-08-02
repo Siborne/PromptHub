@@ -283,6 +283,10 @@ prompt    list / get / create / update / delete / duplicate / search
 
 folder    list / get / create / update / delete / reorder
 
+agent     list / get / enable / disable
+          add / update / configure / reset / delete
+          identity get|set
+
 rules     list / scan / read / save / rewrite
           versions / version-read / version-restore / version-delete
           add-project / remove-project

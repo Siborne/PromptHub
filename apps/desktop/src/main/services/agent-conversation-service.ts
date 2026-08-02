@@ -11,6 +11,7 @@ import type {
   AgentConversationResumeRequest,
   AgentResumeCommand,
   AgentSessionDetail,
+  AgentSessionDetailPageInput,
   AgentSessionListResult,
   AgentSessionMetadata,
   ContinueAgentConversationRequest,
@@ -43,7 +44,11 @@ interface AgentConversationSessionReader {
     agentId: string,
     input: { limit: number; offset: number },
   ): Promise<AgentSessionListResult>;
-  read(agentId: string, sessionId: string): Promise<AgentSessionDetail>;
+  read(
+    agentId: string,
+    sessionId: string,
+    input?: AgentSessionDetailPageInput,
+  ): Promise<AgentSessionDetail>;
 }
 
 interface AgentConversationServiceOptions {
@@ -51,8 +56,9 @@ interface AgentConversationServiceOptions {
   sessions: AgentConversationSessionReader;
   resolveExecutable(command: string): Promise<string | null>;
   launch(command: AgentResumeCommand): Promise<unknown>;
-  launchAgent?(agentId: string): Promise<boolean>;
   copyText(text: string): void;
+  canLaunchAgent?(agentId: string): Promise<boolean>;
+  launchAgent?(agentId: string): Promise<boolean>;
   homeDir: string;
   supportsInteractiveLaunch?: boolean;
   now?: () => number;
@@ -62,6 +68,8 @@ const LOOKUP_PAGE_SIZE = 200;
 const MAX_LOOKUP_SESSIONS = 2_000;
 const MAX_HANDOFF_ENTRIES = 120;
 const MAX_HANDOFF_CHARS = 500_000;
+const TRANSCRIPT_PAGE_SIZE = 200;
+const MAX_TRANSCRIPT_PAGES = 10_000;
 
 export class AgentConversationService {
   private readonly now: () => number;
@@ -110,25 +118,32 @@ export class AgentConversationService {
     requireProjectPath(request.projectPath);
     const [session, detail] = await Promise.all([
       this.findSession(request.sourceAgentId, request.sourceSessionId),
-      this.options.sessions.read(
-        request.sourceAgentId,
-        request.sourceSessionId,
-      ),
+      this.readCompleteSession(request.sourceAgentId, request.sourceSessionId),
     ]);
     const payload = this.buildPortablePayload(request, session, detail);
     const executable = targetExecutable(request.targetAgentId);
     const resolved = executable
       ? await this.options.resolveExecutable(executable)
       : null;
+    const canLaunchDirectly = Boolean(
+      resolved && this.options.supportsInteractiveLaunch !== false,
+    );
+    const canOpenTarget =
+      !canLaunchDirectly &&
+      (await this.options.canLaunchAgent?.(request.targetAgentId)) === true;
     return {
       ...request,
       sourceTitle: session.title,
       payload,
       payloadDigest: digest(payload),
-      transport:
-        resolved && this.options.supportsInteractiveLaunch !== false
-          ? "direct"
-          : "launch-and-copy",
+      cliCommand: executable
+        ? buildCliCommand(executable, request.projectPath, payload)
+        : null,
+      transport: canLaunchDirectly
+        ? "direct"
+        : canOpenTarget
+          ? "launch"
+          : "unavailable",
     };
   }
 
@@ -160,7 +175,7 @@ export class AgentConversationService {
   ): Promise<AgentConversationExportResult> {
     const [session, detail] = await Promise.all([
       this.findSession(request.agentId, request.sessionId),
-      this.options.sessions.read(request.agentId, request.sessionId),
+      this.readCompleteSession(request.agentId, request.sessionId),
     ]);
     const entries = visibleEntries(detail, this.options.homeDir);
     const baseName = safeFileName(session.title || request.sessionId);
@@ -204,18 +219,44 @@ export class AgentConversationService {
     handoff: AgentConversationHandoffRecord,
     preview: AgentConversationHandoffPreview,
   ): Promise<AgentConversationActionResult> {
-    if (preview.transport !== "direct") {
-      this.options.copyText(preview.payload);
-      const opened = await this.options.launchAgent?.(preview.targetAgentId);
-      const errorCode =
-        opened === false
-          ? "AGENT_CONVERSATION_TARGET_LAUNCH_FAILED"
-          : undefined;
+    if (preview.transport === "unavailable") {
+      const errorCode = "AGENT_CONVERSATION_TARGET_UNAVAILABLE";
       this.options.repository.updateHandoff(handoff.id, {
-        status: "copied",
+        status: "failed",
         errorCode,
       });
-      return { status: "copied", mode: "cross-agent", errorCode };
+      return { status: "unavailable", mode: "cross-agent", errorCode };
+    }
+    if (preview.transport === "launch") {
+      try {
+        this.options.copyText(preview.payload);
+      } catch {
+        const errorCode = "AGENT_CONVERSATION_CONTEXT_COPY_FAILED";
+        this.options.repository.updateHandoff(handoff.id, {
+          status: "failed",
+          errorCode,
+        });
+        return { status: "unavailable", mode: "cross-agent", errorCode };
+      }
+      let opened = false;
+      try {
+        opened =
+          (await this.options.launchAgent?.(preview.targetAgentId)) === true;
+      } catch {
+        opened = false;
+      }
+      if (opened) {
+        this.options.repository.updateHandoff(handoff.id, {
+          status: "launched",
+        });
+        return { status: "launched", mode: "cross-agent" };
+      }
+      const errorCode = "AGENT_CONVERSATION_TARGET_LAUNCH_FAILED";
+      this.options.repository.updateHandoff(handoff.id, {
+        status: "failed",
+        errorCode,
+      });
+      return { status: "unavailable", mode: "cross-agent", errorCode };
     }
     const executableName = targetExecutable(preview.targetAgentId);
     const executable = executableName
@@ -247,6 +288,35 @@ export class AgentConversationService {
       });
       throw new Error("AGENT_CONVERSATION_LAUNCH_FAILED");
     }
+  }
+
+  private async readCompleteSession(
+    agentId: string,
+    sessionId: string,
+  ): Promise<AgentSessionDetail> {
+    let detail = await this.options.sessions.read(agentId, sessionId);
+    const seen = new Set<string>();
+    let pageCount = 1;
+    while (detail.nextCursor) {
+      if (seen.has(detail.nextCursor) || pageCount >= MAX_TRANSCRIPT_PAGES) {
+        throw new Error("AGENT_SESSION_PAGINATION_INVALID");
+      }
+      const cursor = detail.nextCursor;
+      seen.add(cursor);
+      const page = await this.options.sessions.read(agentId, sessionId, {
+        cursor,
+        limit: TRANSCRIPT_PAGE_SIZE,
+      });
+      detail = {
+        ...detail,
+        entries: [...detail.entries, ...page.entries],
+        parseErrors: detail.parseErrors + page.parseErrors,
+        truncated: detail.truncated || page.truncated,
+        nextCursor: page.nextCursor ?? null,
+      };
+      pageCount += 1;
+    }
+    return detail;
   }
 
   private async findSession(
@@ -324,6 +394,18 @@ function targetExecutable(agentId: string): string | null {
   if (agentId === "claude") return "claude";
   if (agentId === "codex") return "codex";
   return null;
+}
+
+function buildCliCommand(
+  executable: string,
+  projectPath: string,
+  payload: string,
+): string {
+  return `cd ${shellQuote(projectPath)} && ${executable} ${shellQuote(payload)}`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 function requireProjectPath(value: string): void {

@@ -28,6 +28,10 @@ export default defineConfig({
         __dirname,
         '../../packages/shared/constants',
       ),
+      '@prompthub/shared/types': path.resolve(
+        __dirname,
+        '../../packages/shared/types',
+      ),
       '@prompthub/shared': path.resolve(__dirname, '../../packages/shared/types'),
       '@prompthub/db': path.resolve(__dirname, '../../packages/db/src'),
       '@desktop-renderer-app': path.resolve(

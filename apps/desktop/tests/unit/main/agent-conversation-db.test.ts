@@ -137,6 +137,23 @@ describe("AgentConversationDB", () => {
     });
   });
 
+  it("records launch-only handoffs without a copied status", () => {
+    const handoff = conversations.createHandoff({
+      sourceAgentId: "codex",
+      sourceSessionId: "session-2",
+      targetAgentId: "antigravity",
+      projectPath: "/workspace/prompt-hub",
+      transport: "launch",
+      payloadDigest: "sha256:def456",
+      status: "planned",
+    });
+
+    expect(handoff.transport).toBe("launch");
+    expect(
+      conversations.updateHandoff(handoff.id, { status: "launched" }),
+    ).toMatchObject({ transport: "launch", status: "launched" });
+  });
+
   it("rejects malformed identities and oversized user metadata", () => {
     expect(() =>
       conversations.upsertMetadata({
@@ -176,7 +193,29 @@ describe("Agent conversation projection migration", () => {
     const dbPath = path.join(tempDir, "prompthub.db");
     const legacy = new Database(dbPath);
     legacy.exec(
-      "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+      `CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+       CREATE TABLE agent_conversation_handoffs (
+         id TEXT PRIMARY KEY,
+         source_agent_id TEXT NOT NULL,
+         source_session_id TEXT NOT NULL,
+         target_agent_id TEXT NOT NULL,
+         project_id TEXT,
+         project_path TEXT,
+         transport TEXT NOT NULL CHECK(transport IN ('direct', 'launch-and-copy', 'unavailable')),
+         payload_digest TEXT NOT NULL,
+         status TEXT NOT NULL CHECK(status IN ('planned', 'launched', 'copied', 'failed')),
+         target_session_id TEXT,
+         error_code TEXT,
+         created_at INTEGER NOT NULL,
+         updated_at INTEGER NOT NULL
+       );
+       INSERT INTO agent_conversation_handoffs (
+         id, source_agent_id, source_session_id, target_agent_id, project_path,
+         transport, payload_digest, status, created_at, updated_at
+       ) VALUES (
+         'legacy-handoff', 'claude', 'session-1', 'antigravity', '/workspace',
+         'launch-and-copy', 'sha256:legacy', 'copied', 1, 2
+       );`,
     );
     legacy
       .prepare("INSERT INTO settings (key, value) VALUES (?, ?)")
@@ -193,6 +232,18 @@ describe("Agent conversation projection migration", () => {
         "agent_conversation_projection_v1",
       ),
     ).toEqual({ name: "agent_conversation_projection_v1" });
+    expect(
+      migrated.get(
+        "SELECT name FROM schema_migrations WHERE name = ?",
+        "agent_conversation_handoff_launch_v2",
+      ),
+    ).toEqual({ name: "agent_conversation_handoff_launch_v2" });
+    expect(
+      migrated.get(
+        "SELECT transport, status FROM agent_conversation_handoffs WHERE id = ?",
+        "legacy-handoff",
+      ),
+    ).toEqual({ transport: "launch", status: "launched" });
     expect(
       migrated.get(
         `SELECT COUNT(*) AS count FROM sqlite_master

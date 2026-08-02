@@ -214,6 +214,27 @@ describe("useUIStore resizable columns (issue #119)", () => {
     expect(mod.useUIStore.getState().viewMode).toBe("prompt");
   });
 
+  it("restores the Agents module in the browser runtime", async () => {
+    Reflect.set(window, "__PROMPTHUB_WEB__", true);
+    localStorage.setItem(
+      "ui-storage",
+      JSON.stringify({
+        state: {
+          appModule: "agents",
+          viewMode: "prompt",
+          isSidebarCollapsed: false,
+        },
+        version: 0,
+      }),
+    );
+
+    const mod = await import("../../../src/renderer/stores/ui.store");
+    await Promise.resolve();
+
+    expect(mod.useUIStore.getState().appModule).toBe("agents");
+    expect(mod.useUIStore.getState().viewMode).toBe("prompt");
+  });
+
   it("falls back to prompt when the persisted app module is invalid", async () => {
     localStorage.setItem(
       "ui-storage",

@@ -3,6 +3,7 @@ import { FileCogIcon, FolderOpenIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { ManagedAgentSummary } from "@prompthub/shared/types";
+import { isWebRuntime } from "../../runtime";
 import { SkillFileEditor } from "../skill/SkillFileEditor";
 
 export function AgentConfigFilesPanel({
@@ -11,6 +12,7 @@ export function AgentConfigFilesPanel({
   agent: ManagedAgentSummary;
 }) {
   const { t } = useTranslation();
+  const webRuntime = isWebRuntime();
   const relativePaths = agent.paths.configFileRelativePaths;
   const [fileCount, setFileCount] = useState(relativePaths.length);
   const listFiles = useCallback(async () => {
@@ -43,14 +45,16 @@ export function AgentConfigFilesPanel({
         <span className="hidden min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground lg:block">
           {agent.paths.root}
         </span>
-        <button
-          type="button"
-          onClick={() => void window.electron?.openPath?.(agent.paths.root)}
-          className="ml-auto inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
-        >
-          <FolderOpenIcon aria-hidden="true" className="h-4 w-4" />
-          {t("agents.openAgentFolder", "Open Agent folder")}
-        </button>
+        {!webRuntime ? (
+          <button
+            type="button"
+            onClick={() => void window.electron?.openPath?.(agent.paths.root)}
+            className="ml-auto inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            <FolderOpenIcon aria-hidden="true" className="h-4 w-4" />
+            {t("agents.openAgentFolder", "Open Agent folder")}
+          </button>
+        ) : null}
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         <SkillFileEditor
@@ -77,6 +81,7 @@ export function AgentConfigFilesPanel({
           mode="inline"
           initialFilePath={relativePaths[0]}
           allowStructuralMutations={false}
+          showFileManagerActions={!webRuntime}
           surfaceLabels={{
             noFiles: t(
               "agents.noConfigFiles",

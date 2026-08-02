@@ -4,6 +4,7 @@ import {
   ArchiveIcon,
   CheckCircle2Icon,
   CopyIcon,
+  DatabaseIcon,
   DownloadIcon,
   FileInputIcon,
   FlaskConicalIcon,
@@ -26,6 +27,7 @@ import type {
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
 import { copyTextToClipboard } from "../../utils/clipboard";
+import { isWebRuntime } from "../../runtime";
 import { useAgentProviderStore } from "../../stores/agent-provider.store";
 import { Button, ConfirmDialog } from "../ui";
 import {
@@ -33,7 +35,12 @@ import {
   AgentProviderImportDialog,
 } from "./AgentProviderProfileDialogs";
 import { AgentProviderMigrationNotice } from "./AgentProviderMigrationNotice";
+import {
+  AgentProviderNativeDetail,
+  AgentProviderNativeListItem,
+} from "./AgentProviderNativeConfig";
 import { AgentProviderProfileFormDialog } from "./AgentProviderProfileFormDialog";
+import { AgentProviderSourceDialog } from "./AgentProviderSourceDialog";
 
 const PROFILE_ROW_HEIGHT = 68;
 
@@ -142,6 +149,7 @@ function ProfileDetail({
   connectionResult,
   modelTestResult,
   supportsConnectionTest,
+  supportsActivation,
   onEdit,
   onTestConnection,
   onTestModel,
@@ -162,6 +170,7 @@ function ProfileDetail({
   connectionResult: AgentProviderConnectionTestResult | null;
   modelTestResult: AgentProviderModelTestResult | null;
   supportsConnectionTest: boolean;
+  supportsActivation: boolean;
   onEdit: () => void;
   onTestConnection: () => void;
   onTestModel: () => void;
@@ -201,20 +210,22 @@ function ProfileDetail({
             <PencilIcon className="h-3.5 w-3.5" />
             {t("common.edit")}
           </Button>
-          <Button size="sm" onClick={onActivate} disabled={busy || isCurrent}>
-            {isCurrent ? (
-              <CheckCircle2Icon className="h-3.5 w-3.5" />
-            ) : activating ? (
-              <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCwIcon className="h-3.5 w-3.5" />
-            )}
-            {t(
-              isCurrent
-                ? "agents.providerProfiles.current"
-                : "agents.providerProfiles.activate",
-            )}
-          </Button>
+          {supportsActivation ? (
+            <Button size="sm" onClick={onActivate} disabled={busy || isCurrent}>
+              {isCurrent ? (
+                <CheckCircle2Icon className="h-3.5 w-3.5" />
+              ) : activating ? (
+                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCwIcon className="h-3.5 w-3.5" />
+              )}
+              {t(
+                isCurrent
+                  ? "agents.providerProfiles.current"
+                  : "agents.providerProfiles.activate",
+              )}
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -460,15 +471,18 @@ export function AgentProviderProfileWorkbench({
   agent: ManagedAgentSummary;
 }) {
   const { t } = useTranslation();
+  const webRuntime = isWebRuntime();
   const store = useAgentProviderStore();
   const [editing, setEditing] = useState<AgentProviderProfilePublic | null>();
   const [deleteTarget, setDeleteTarget] =
     useState<AgentProviderProfilePublic | null>(null);
   const [modelTestConfirmOpen, setModelTestConfirmOpen] = useState(false);
   const [copiedProfileId, setCopiedProfileId] = useState<string | null>(null);
+  const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const profileScrollRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    setEditing(undefined);
     void store.load(agent.id);
   }, [agent.id, store.load]);
 
@@ -520,41 +534,67 @@ export function AgentProviderProfileWorkbench({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {agent.id === "codex" ? (
+      {!webRuntime && agent.id === "codex" ? (
         <AgentProviderMigrationNotice onMigrated={() => store.load(agent.id)} />
       ) : null}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-56 shrink-0 flex-col border-r border-border sm:w-64 xl:w-72">
-          <div className="flex items-center gap-2 border-b border-border p-3">
-            <Button
-              size="sm"
-              className="min-w-0 flex-1"
-              onClick={() => setEditing(null)}
-              disabled={busy}
-            >
-              <PlusIcon className="h-4 w-4" />
-              {t("agents.providerProfiles.add")}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              aria-label={t("agents.providerProfiles.import.title")}
-              title={t("agents.providerProfiles.import.title")}
-              onClick={() => void store.importCurrent(agent.id)}
-              disabled={busy}
-            >
-              {store.busyAction === "import" ? (
-                <Loader2Icon className="h-4 w-4 animate-spin" />
-              ) : (
-                <FileInputIcon className="h-4 w-4" />
-              )}
-            </Button>
+          <div className="space-y-2 border-b border-border p-3">
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                className="min-w-0 flex-1"
+                onClick={() => setEditing(null)}
+                disabled={busy}
+              >
+                <PlusIcon className="h-4 w-4" />
+                {t("agents.providerProfiles.add")}
+              </Button>
+              {!webRuntime ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  aria-label={t("agents.providerProfiles.import.title")}
+                  title={t("agents.providerProfiles.import.title")}
+                  onClick={() => void store.importCurrent(agent.id)}
+                  disabled={busy}
+                >
+                  {store.busyAction === "import" ? (
+                    <Loader2Icon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileInputIcon className="h-4 w-4" />
+                  )}
+                </Button>
+              ) : null}
+            </div>
+            {!webRuntime ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                onClick={() => setSourceDialogOpen(true)}
+                disabled={busy}
+              >
+                <DatabaseIcon className="h-4 w-4" />
+                {t("agents.providerProfiles.sourceImport.open")}
+              </Button>
+            ) : null}
           </div>
           <nav
             ref={profileScrollRef}
             aria-label={t("agents.providerProfiles.listLabel")}
             className="min-h-0 flex-1 overflow-y-auto"
           >
+            {store.currentState?.nativeConfig ? (
+              <AgentProviderNativeListItem
+                summary={store.currentState.nativeConfig}
+                selected={selectedProfile === null}
+                onSelect={() => {
+                  setEditing(undefined);
+                  store.select(null);
+                }}
+              />
+            ) : null}
             {store.profiles.length > 0 ? (
               <ul
                 className="relative w-full"
@@ -568,7 +608,10 @@ export function AgentProviderProfileWorkbench({
                       profile={profile}
                       isCurrent={profile.id === verifiedCurrentProfileId}
                       selected={profile.id === store.selectedProfileId}
-                      onSelect={() => store.select(profile.id)}
+                      onSelect={() => {
+                        setEditing(undefined);
+                        store.select(profile.id);
+                      }}
                       virtualIndex={virtualRow.index}
                       virtualStart={virtualRow.start}
                       virtualSize={virtualRow.size}
@@ -582,9 +625,13 @@ export function AgentProviderProfileWorkbench({
                 <Loader2Icon className="h-4 w-4 animate-spin" />
                 {t("agents.providerProfiles.loading")}
               </div>
-            ) : (
+            ) : store.currentState?.nativeConfig ? null : (
               <p className="px-4 py-4 text-xs leading-5 text-muted-foreground">
-                {t("agents.providerProfiles.empty")}
+                {t(
+                  webRuntime
+                    ? "agents.providerProfiles.webEmpty"
+                    : "agents.providerProfiles.empty",
+                )}
               </p>
             )}
           </nav>
@@ -610,7 +657,19 @@ export function AgentProviderProfileWorkbench({
               )}
             </div>
           ) : null}
-          {selectedProfile ? (
+          {isFormOpen ? (
+            <AgentProviderProfileFormDialog
+              isOpen
+              platformId={agent.id}
+              profile={editing ?? null}
+              busy={
+                store.busyAction === "create" || store.busyAction === "update"
+              }
+              onClose={() => setEditing(undefined)}
+              onCreate={store.createProfile}
+              onUpdate={store.updateProfile}
+            />
+          ) : selectedProfile ? (
             <ProfileDetail
               profile={selectedProfile}
               isCurrent={selectedProfile.id === verifiedCurrentProfileId}
@@ -633,8 +692,10 @@ export function AgentProviderProfileWorkbench({
                   : null
               }
               supportsConnectionTest={
+                !webRuntime &&
                 agent.capabilities.provider.status === "supported"
               }
+              supportsActivation={!webRuntime}
               onEdit={() => setEditing(selectedProfile)}
               onTestConnection={() =>
                 void store.testConnection(agent.id, selectedProfile.id)
@@ -661,6 +722,13 @@ export function AgentProviderProfileWorkbench({
               }
               onDelete={() => setDeleteTarget(selectedProfile)}
             />
+          ) : store.currentState?.nativeConfig ? (
+            <AgentProviderNativeDetail
+              summary={store.currentState.nativeConfig}
+              busyAction={store.busyAction}
+              onImport={() => void store.importCurrent(agent.id)}
+              onRestoreOfficial={() => void store.restoreOfficial(agent.id)}
+            />
           ) : (
             <div className="flex h-full items-center justify-center px-8 text-center">
               <div className="max-w-sm">
@@ -669,7 +737,11 @@ export function AgentProviderProfileWorkbench({
                   {t("agents.providerProfiles.emptyTitle")}
                 </h2>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {t("agents.providerProfiles.emptyHint")}
+                  {t(
+                    webRuntime
+                      ? "agents.providerProfiles.webEmptyHint"
+                      : "agents.providerProfiles.emptyHint",
+                  )}
                 </p>
               </div>
             </div>
@@ -677,14 +749,15 @@ export function AgentProviderProfileWorkbench({
         </section>
       </div>
 
-      <AgentProviderProfileFormDialog
-        isOpen={isFormOpen}
+      <AgentProviderSourceDialog
+        isOpen={sourceDialogOpen}
         platformId={agent.id}
-        profile={editing ?? null}
-        busy={store.busyAction === "create" || store.busyAction === "update"}
-        onClose={() => setEditing(undefined)}
-        onCreate={store.createProfile}
-        onUpdate={store.updateProfile}
+        candidates={store.sourceCandidates}
+        loading={store.busyAction === "load-sources"}
+        importing={store.busyAction === "import-source"}
+        onLoad={store.loadSources}
+        onImport={store.importSource}
+        onClose={() => setSourceDialogOpen(false)}
       />
       <AgentProviderImportDialog
         preview={store.importPreview}

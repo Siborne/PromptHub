@@ -5,6 +5,7 @@ import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 
 import type {
   AgentSessionDetail,
+  AgentSessionDetailPageInput,
   AgentSessionEntry,
   AgentSessionIndexRecord,
   AgentSessionListResult,
@@ -29,6 +30,15 @@ import { createKiroSessionAdapter } from "./agent-session-kiro";
 import { createCopilotSessionAdapter } from "./agent-session-copilot";
 import { createClineSessionAdapter } from "./agent-session-cline";
 import { createCursorSessionAdapter } from "./agent-session-cursor";
+import { createAntigravitySessionAdapter } from "./agent-session-antigravity";
+import { createAugmentSessionAdapter } from "./agent-session-augment";
+import { createCherryStudioSessionAdapter } from "./agent-session-cherry-studio";
+import { createKiloSessionAdapter } from "./agent-session-kilo";
+import { createHermesSessionAdapter } from "./agent-session-hermes";
+import { createReasonixSessionAdapter } from "./agent-session-reasonix";
+import { createNanoClawSessionAdapter } from "./agent-session-nanoclaw";
+import { createCoPawSessionAdapter } from "./agent-session-copaw";
+import { createQoderSessionAdapter } from "./agent-session-qoder";
 
 interface AgentSessionServiceOptions {
   homeDir: string;
@@ -37,6 +47,15 @@ interface AgentSessionServiceOptions {
   copilotRootDir?: string;
   clineRootDir?: string;
   cursorRootDir?: string;
+  antigravityRootDir?: string;
+  augmentRootDir?: string;
+  cherryStudioRootDir?: string;
+  kiloStorageRootDir?: string;
+  hermesRootDir?: string;
+  reasonixStateRootDir?: string;
+  nanoclawRootDirs?: string[];
+  copawRootDirs?: string[];
+  qoderRootDir?: string;
   codexRootDir?: string;
   grokRootDir?: string;
   kimiRootDir?: string;
@@ -87,7 +106,7 @@ interface SessionFile {
 }
 
 const MAX_LIST_LIMIT = 200;
-const MAX_SCAN_FILES = 2_000;
+const MAX_SCAN_FILES = 50_000;
 const MAX_INDEX_SCAN_FILES = 10_000;
 const MAX_DETAIL_BYTES = 2 * 1024 * 1024;
 const MAX_METADATA_BYTES = 256 * 1024;
@@ -226,7 +245,6 @@ async function scanClaudeFiles(
       .catch(() => []);
     for (const entry of entries) {
       throwIfAborted(signal);
-      if (files.length >= maxFiles) return files;
       if (
         !entry.isFile() ||
         entry.isSymbolicLink() ||
@@ -237,6 +255,7 @@ async function scanClaudeFiles(
       const filePath = path.join(projectPath, entry.name);
       const stat = await fs.stat(filePath).catch(() => null);
       if (!stat?.isFile()) continue;
+      if (files.length >= maxFiles) throw new Error("AGENT_SESSION_SCAN_LIMIT");
       files.push({
         id: entry.name.slice(0, -".jsonl".length),
         path: filePath,
@@ -273,7 +292,6 @@ async function scanGeminiFiles(
       .catch(() => []);
     for (const entry of entries) {
       throwIfAborted(signal);
-      if (files.length >= maxFiles) return files;
       if (
         !entry.isFile() ||
         entry.isSymbolicLink() ||
@@ -284,6 +302,7 @@ async function scanGeminiFiles(
       const filePath = path.join(chatsPath, entry.name);
       const stat = await fs.lstat(filePath).catch(() => null);
       if (!stat?.isFile() || stat.isSymbolicLink()) continue;
+      if (files.length >= maxFiles) throw new Error("AGENT_SESSION_SCAN_LIMIT");
       files.push({
         id: entry.name.slice(0, -".json".length),
         path: filePath,
@@ -318,14 +337,70 @@ function parseClaudeLine(
   };
 }
 
-async function claudeTitle(filePath: string): Promise<string> {
-  const { raw } = await readPrefix(filePath, 128 * 1024);
+function parseClaudeMetadata(
+  raw: string,
+  fileId: string,
+): { title: string | null; projectPath: string | null; resumeId: string } {
+  let title: string | null = null;
+  let projectPath: string | null = null;
+  let resumeId = fileId;
+
   for (const [index, line] of raw.split(/\r?\n/).entries()) {
-    const entry = parseClaudeLine(line, index);
-    if (entry?.role === "user")
-      return entry.text.split("\n", 1)[0].slice(0, 160);
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isRecord(value)) continue;
+
+    const candidateId = stringValue(value.sessionId);
+    if (candidateId && /^[A-Za-z0-9_-]{1,160}$/.test(candidateId)) {
+      resumeId = candidateId;
+    }
+    const candidatePath = stringValue(value.cwd);
+    if (
+      !projectPath &&
+      candidatePath &&
+      path.isAbsolute(candidatePath) &&
+      !candidatePath.includes("\0")
+    ) {
+      projectPath = candidatePath;
+    }
+    if (!title) {
+      const entry = parseClaudeLine(line, index);
+      if (entry?.role === "user") {
+        title = entry.text.split("\n", 1)[0].slice(0, 160);
+      }
+    }
+    if (title && projectPath) break;
   }
-  return path.basename(filePath, ".jsonl");
+
+  return { title, projectPath, resumeId };
+}
+
+async function claudeMetadata(
+  file: SessionFile,
+): Promise<AgentSessionMetadata> {
+  const { raw } = await readPrefix(file.path, MAX_METADATA_BYTES);
+  const { title, projectPath, resumeId } = parseClaudeMetadata(raw, file.id);
+
+  return {
+    id: file.id,
+    title: title || file.id,
+    projectLabel: file.projectLabel,
+    projectPath,
+    createdAt: null,
+    updatedAt: file.updatedAt,
+    model: null,
+    messageCount: null,
+    sourcePath: file.path,
+    resume: {
+      executable: "claude",
+      args: ["--resume", resumeId],
+      ...(projectPath ? { cwd: projectPath } : {}),
+    },
+  };
 }
 
 function parseGeminiDocument(raw: string): {
@@ -701,6 +776,34 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
   const copilotAdapter = createCopilotSessionAdapter(copilotRoot);
   const clineAdapter = createClineSessionAdapter(clineRoot);
   const cursorAdapter = createCursorSessionAdapter(cursorRoot);
+  const antigravityAdapter = createAntigravitySessionAdapter(
+    options.antigravityRootDir ||
+      path.join(options.homeDir, ".gemini", "antigravity-cli"),
+  );
+  const augmentAdapter = createAugmentSessionAdapter(
+    options.augmentRootDir || path.join(options.homeDir, ".augment"),
+  );
+  const cherryStudioAdapter = createCherryStudioSessionAdapter(
+    options.cherryStudioRootDir || resolveCherryStudioRoot(options.homeDir),
+  );
+  const kiloAdapter = createKiloSessionAdapter(
+    options.kiloStorageRootDir || resolveKiloStorageRoot(options.homeDir),
+  );
+  const hermesAdapter = createHermesSessionAdapter(
+    options.hermesRootDir || resolveHermesRoot(options.homeDir),
+  );
+  const reasonixAdapter = createReasonixSessionAdapter(
+    options.reasonixStateRootDir || resolveReasonixStateRoot(options.homeDir),
+  );
+  const nanoclawAdapter = createNanoClawSessionAdapter(
+    options.nanoclawRootDirs || resolveNanoClawRoots(options.homeDir),
+  );
+  const copawAdapter = createCoPawSessionAdapter(
+    options.copawRootDirs || resolveCoPawRoots(options.homeDir),
+  );
+  const qoderAdapter = createQoderSessionAdapter(
+    options.qoderRootDir || path.join(options.homeDir, ".qoder"),
+  );
 
   return {
     getIndexSource(agentId: string): AgentSessionIndexSourceDescriptor | null {
@@ -756,25 +859,7 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
       if (agentId === "claude") {
         const files = await scanClaudeFiles(claudeProjectsRoot);
         const selected = files.slice(offset, offset + input.limit);
-        const sessions = await Promise.all(
-          selected.map(
-            async (file): Promise<AgentSessionMetadata> => ({
-              id: file.id,
-              title: await claudeTitle(file.path),
-              projectLabel: file.projectLabel,
-              projectPath: null,
-              createdAt: null,
-              updatedAt: file.updatedAt,
-              model: null,
-              messageCount: null,
-              sourcePath: file.path,
-              resume: {
-                executable: "claude",
-                args: ["--resume", file.id],
-              },
-            }),
-          ),
-        );
+        const sessions = await Promise.all(selected.map(claudeMetadata));
         return {
           agentId,
           adapter: "claude-jsonl-v1",
@@ -854,6 +939,42 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
         return cursorAdapter.list(input.limit, offset, input.search);
       }
 
+      if (agentId === "antigravity") {
+        return antigravityAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "augment") {
+        return augmentAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "cherry-studio") {
+        return cherryStudioAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "kilo") {
+        return kiloAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "hermes") {
+        return hermesAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "reasonix") {
+        return reasonixAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "nanoclaw") {
+        return nanoclawAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "copaw") {
+        return copawAdapter.list(input.limit, offset, input.search);
+      }
+
+      if (agentId === "qoder") {
+        return qoderAdapter.list(input.limit, offset, input.search);
+      }
+
       if (agentId === "kimi") {
         return kimiAdapter.list(input.limit, offset);
       }
@@ -896,6 +1017,7 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
     async read(
       agentId: string,
       sessionId: string,
+      input: AgentSessionDetailPageInput = {},
     ): Promise<AgentSessionDetail> {
       assertSessionId(sessionId);
       if (agentId === "claude") {
@@ -972,12 +1094,48 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
         return cursorAdapter.read(sessionId);
       }
 
+      if (agentId === "antigravity") {
+        return antigravityAdapter.read(sessionId);
+      }
+
+      if (agentId === "augment") {
+        return augmentAdapter.read(sessionId, input);
+      }
+
+      if (agentId === "cherry-studio") {
+        return cherryStudioAdapter.read(sessionId, input);
+      }
+
+      if (agentId === "kilo") {
+        return kiloAdapter.read(sessionId, input);
+      }
+
+      if (agentId === "hermes") {
+        return hermesAdapter.read(sessionId, input);
+      }
+
+      if (agentId === "reasonix") {
+        return reasonixAdapter.read(sessionId, input);
+      }
+
+      if (agentId === "nanoclaw") {
+        return nanoclawAdapter.read(sessionId, input);
+      }
+
+      if (agentId === "copaw") {
+        return copawAdapter.read(sessionId, input);
+      }
+
+      if (agentId === "qoder") {
+        return qoderAdapter.read(sessionId, input);
+      }
+
       if (agentId === "kimi") {
         return kimiAdapter.read(sessionId);
       }
 
       if (agentId === "codex") {
-        return codexAdapter.read(sessionId);
+        return codexAdapter.read(sessionId, input);
       }
 
       if (agentId === "grok") {
@@ -1036,4 +1194,73 @@ function resolveQwenRuntimeRoot(options: AgentSessionServiceOptions): string {
   if (configured.includes("\0")) return path.join(options.homeDir, ".qwen");
   const expanded = configured.replace(/^~(?=$|[\\/])/, options.homeDir);
   return path.resolve(expanded);
+}
+
+function resolveCherryStudioRoot(homeDir: string): string {
+  if (process.platform === "darwin") {
+    return path.join(homeDir, "Library", "Application Support", "CherryStudio");
+  }
+  if (process.platform === "win32") {
+    return resolveEnvironmentRoot(
+      process.env.APPDATA,
+      homeDir,
+      path.join("AppData", "Roaming", "CherryStudio"),
+    );
+  }
+  return resolveEnvironmentRoot(
+    process.env.XDG_CONFIG_HOME,
+    homeDir,
+    path.join(".config", "CherryStudio"),
+  );
+}
+
+function resolveKiloStorageRoot(homeDir: string): string {
+  const dataRoot = resolveEnvironmentRoot(
+    process.env.XDG_DATA_HOME,
+    homeDir,
+    path.join(".local", "share"),
+  );
+  return path.join(dataRoot, "kilo", "storage");
+}
+
+function resolveHermesRoot(homeDir: string): string {
+  if (process.env.HERMES_HOME?.trim()) {
+    return resolveEnvironmentRoot(
+      process.env.HERMES_HOME,
+      homeDir,
+      path.join(homeDir, ".hermes"),
+    );
+  }
+  if (process.platform === "win32") {
+    const localAppData = resolveEnvironmentRoot(
+      process.env.LOCALAPPDATA,
+      homeDir,
+      path.join("AppData", "Local"),
+    );
+    return path.join(localAppData, "hermes");
+  }
+  return path.join(homeDir, ".hermes");
+}
+
+function resolveReasonixStateRoot(homeDir: string): string {
+  return resolveEnvironmentRoot(
+    process.env.REASONIX_STATE_HOME || process.env.REASONIX_HOME,
+    homeDir,
+    ".reasonix",
+  );
+}
+
+function resolveNanoClawRoots(homeDir: string): string[] {
+  return [".nanoclaw", "nanoclaw", "nanoclaw-v2"].map((name) =>
+    path.join(homeDir, name),
+  );
+}
+
+function resolveCoPawRoots(homeDir: string): string[] {
+  const explicit =
+    process.env.QWENPAW_WORKING_DIR || process.env.COPAW_WORKING_DIR;
+  if (explicit?.trim()) {
+    return [resolveEnvironmentRoot(explicit, homeDir, ".qwenpaw")];
+  }
+  return [path.join(homeDir, ".qwenpaw"), path.join(homeDir, ".copaw")];
 }

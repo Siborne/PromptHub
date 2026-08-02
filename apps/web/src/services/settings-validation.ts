@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SKILL_PLATFORMS } from '@prompthub/shared/constants/platforms';
 import { syncSettingsPatchSchema, syncSettingsSchema } from './sync-settings-validation.js';
 
 const MAX_PROMPT_TAG_CATALOG_ITEMS = 200;
@@ -103,6 +104,8 @@ const platformIdArraySchema = z
 const agentAssetConfigSchema = z.object({
   rootPath: platformPathSchema.optional(),
   skillsRelativePath: agentAssetRelativePathSchema.optional(),
+  mcpRelativePath: agentAssetRelativePathSchema.optional(),
+  pluginsRelativePath: agentAssetRelativePathSchema.optional(),
   rulesRelativePath: agentAssetRelativePathSchema.optional(),
   agentsRelativePath: agentAssetRelativePathSchema.optional(),
   commandsRelativePath: agentAssetRelativePathSchema.optional(),
@@ -128,6 +131,8 @@ const customAgentConfigSchema = z.object({
   rootPath: boundedTrimmedStringSchema('custom agent rootPath', MAX_CUSTOM_AGENT_PATH_LENGTH),
   enabled: z.boolean().optional(),
   skillsRelativePath: customAgentRelativePathSchema.optional(),
+  mcpRelativePath: customAgentRelativePathSchema.optional(),
+  pluginsRelativePath: customAgentRelativePathSchema.optional(),
   rulesRelativePath: customAgentRelativePathSchema.optional(),
   agentsRelativePath: customAgentRelativePathSchema.optional(),
   commandsRelativePath: customAgentRelativePathSchema.optional(),
@@ -139,6 +144,56 @@ const customAgentConfigSchema = z.object({
     )
     .optional(),
 });
+
+function validateCustomAgentUniqueness(
+  agents: Array<z.infer<typeof customAgentConfigSchema>>,
+  ctx: z.RefinementCtx,
+): void {
+  const builtinIds = new Set(
+    SKILL_PLATFORMS.map((platform) => platform.id.toLowerCase()),
+  );
+  const seenIds = new Set<string>();
+  const seenRoots = new Set<string>();
+  agents.forEach((agent, index) => {
+    const id = agent.id.toLowerCase();
+    const root = agent.rootPath.toLowerCase();
+    if (builtinIds.has(id) || seenIds.has(id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [index, 'id'],
+        message: 'custom agent id must be unique and must not replace a built-in Agent',
+      });
+    }
+    if (seenRoots.has(root)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [index, 'rootPath'],
+        message: 'custom agent rootPath must be unique',
+      });
+    }
+    seenIds.add(id);
+    seenRoots.add(root);
+  });
+}
+
+const customAgentsSchema = z
+  .array(customAgentConfigSchema)
+  .max(MAX_CUSTOM_AGENTS, `customAgents must contain at most ${MAX_CUSTOM_AGENTS} agents`)
+  .superRefine(validateCustomAgentUniqueness);
+
+const agentIdentityChoiceSchema = z.enum(['codex', 'chatgpt']);
+
+const agentIdentityPreferencesSchema = z
+  .object({
+    codex: z
+      .object({
+        name: agentIdentityChoiceSchema,
+        icon: agentIdentityChoiceSchema,
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
 
 const skillProjectPathSchema = boundedTrimmedStringSchema('skill project path', MAX_SKILL_PROJECT_PATH_LENGTH);
 
@@ -183,11 +238,9 @@ export const settingsPreferenceSchema = z.object({
     .max(MAX_BACKGROUND_IMAGE_BLUR, `backgroundImageBlur must be at most ${MAX_BACKGROUND_IMAGE_BLUR}`)
     .optional(),
   builtinAgentOverrides: agentAssetConfigRecordSchema.optional(),
+  agentIdentityPreferences: agentIdentityPreferencesSchema.optional(),
   customPlatformRootPaths: platformPathRecordSchema.optional(),
-  customAgents: z
-    .array(customAgentConfigSchema)
-    .max(MAX_CUSTOM_AGENTS, `customAgents must contain at most ${MAX_CUSTOM_AGENTS} agents`)
-    .optional(),
+  customAgents: customAgentsSchema.optional(),
   customAgentRootPaths: z
     .array(platformPathSchema)
     .max(

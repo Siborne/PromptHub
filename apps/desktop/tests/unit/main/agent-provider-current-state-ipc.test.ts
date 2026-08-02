@@ -24,6 +24,16 @@ describe("Agent Provider current-state IPC", () => {
       platformId: "claude",
       status: "verified",
       currentProfileId: "profile-1",
+      nativeConfig: {
+        classification: "custom",
+        name: "Claude custom provider",
+        providerKind: "anthropic-compatible",
+        protocol: "anthropic-messages",
+        endpoint: "https://gateway.example.com",
+        model: "claude-sonnet-4",
+        credential: "configured-auth-token",
+        officialRestoreAvailable: true,
+      },
       checkedAt: 1_700_000_000_000,
     });
     registerAgentProviderCurrentStateIPC({ getCurrentState });
@@ -37,10 +47,23 @@ describe("Agent Provider current-state IPC", () => {
       platformId: "claude",
       status: "verified",
       currentProfileId: "profile-1",
+      nativeConfig: {
+        classification: "custom",
+        name: "Claude custom provider",
+        providerKind: "anthropic-compatible",
+        protocol: "anthropic-messages",
+        endpoint: "https://gateway.example.com",
+        model: "claude-sonnet-4",
+        credential: "configured-auth-token",
+        officialRestoreAvailable: true,
+      },
       checkedAt: 1_700_000_000_000,
     });
     expect(getCurrentState).toHaveBeenCalledWith("claude");
     expect(JSON.stringify(handleMock.mock.calls)).not.toContain("digest");
+    expect(JSON.stringify(handleMock.mock.calls)).not.toMatch(
+      /api[_-]?key|auth[_-]?token.*secret|sk-/i,
+    );
 
     await expect(
       handlers[IPC_CHANNELS.AGENT_PROVIDER_CURRENT_STATE](null, ""),

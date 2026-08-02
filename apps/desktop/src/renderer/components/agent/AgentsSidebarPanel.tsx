@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 
 import { filterManagedAgents } from "../../services/managed-agents";
 import { useAgentStore } from "../../stores/agent.store";
+import { isWebRuntime } from "../../runtime";
 import { PlatformIcon } from "../ui/PlatformIcon";
 
 const AGENT_ROW_HEIGHT = 80;
@@ -40,9 +41,10 @@ export function AgentsSidebarPanel() {
     () => filterManagedAgents(agents, "", "installed"),
     [agents],
   );
+  const listedAgents = isWebRuntime() ? agents : installedAgents;
   const visibleAgents = useMemo(
-    () => filterManagedAgents(installedAgents, searchQuery, "all"),
-    [installedAgents, searchQuery],
+    () => filterManagedAgents(listedAgents, searchQuery, "all"),
+    [listedAgents, searchQuery],
   );
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
@@ -64,7 +66,7 @@ export function AgentsSidebarPanel() {
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {t("agents.agentCount", "{{count}} available", {
-                count: installedAgents.length,
+                count: listedAgents.length,
               })}
             </p>
           </div>

@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ExternalLinkIcon,
+  ArrowRightLeftIcon,
+  CopyIcon,
+  DownloadIcon,
   FileJsonIcon,
   FileTextIcon,
   FolderIcon,
+  MoreHorizontalIcon,
   PencilIcon,
   RotateCcwIcon,
+  SquareTerminalIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -19,7 +23,10 @@ import type {
   SkillProject,
 } from "@prompthub/shared/types";
 import { PlatformIcon } from "../ui/PlatformIcon";
-import { Select } from "../ui/Select";
+import { Select, type SelectOption } from "../ui/Select";
+import { copyTextToClipboard } from "../../utils/clipboard";
+
+const DIRECT_HANDOFF_AGENT_IDS = new Set(["claude", "codex"]);
 
 interface AgentConversationActionsProps {
   agent: ManagedAgentSummary;
@@ -64,36 +71,37 @@ export function AgentConversationActions({
     useState<AgentConversationHandoffPreview | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isChoosingHandoff, setIsChoosingHandoff] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const targetOptions = useMemo(
     () =>
-      targets.map((candidate) => {
-        const transport =
-          candidate.id === "claude" || candidate.id === "codex"
-            ? t("agents.handoffCliTransport", "CLI handoff")
-            : t("agents.handoffCopyTransport", "Open + copy");
-        return {
-          value: candidate.id,
-          labelText: `${candidate.name}, ${transport}`,
-          label: (
-            <span className="flex min-w-0 items-center gap-2.5">
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-border/70 bg-background shadow-sm">
-                <PlatformIcon
-                  platformId={candidate.displayIconId || candidate.id}
-                  size={18}
-                />
-              </span>
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {candidate.name}
-              </span>
-              <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                {transport}
-              </span>
+      targets.map((candidate) => ({
+        value: candidate.id,
+        labelText: candidate.name,
+        label: (
+          <span className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-border/70 bg-background shadow-sm">
+              <PlatformIcon
+                platformId={candidate.displayIconId || candidate.id}
+                size={18}
+              />
             </span>
-          ),
-        };
-      }),
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {candidate.name}
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">
+              {DIRECT_HANDOFF_AGENT_IDS.has(candidate.id)
+                ? t("agents.handoffDirect", "Direct handoff")
+                : candidate.launchable
+                  ? t("agents.handoffOpenAndCopy", "Open + context")
+                  : t("agents.handoffCopyOnly", "Copy context")}
+            </span>
+          </span>
+        ),
+      })),
     [t, targets],
   );
   const projectOptions = useMemo(
@@ -174,6 +182,7 @@ export function AgentConversationActions({
         projectId: project?.id || metadata?.projectId || null,
         projectPath,
       });
+      setIsChoosingHandoff(false);
       setPreview(next);
     });
 
@@ -186,20 +195,21 @@ export function AgentConversationActions({
       });
       if (result.errorCode) {
         onError(
-          t(
-            "agents.handoffCopiedLaunchFailed",
-            "Context copied, but the target Agent could not be opened.",
-          ),
+          result.errorCode === "AGENT_CONVERSATION_CONTEXT_COPY_FAILED"
+            ? t(
+                "agents.handoffCopyFailed",
+                "The handoff context could not be copied.",
+              )
+            : t(
+                "agents.handoffLaunchFailedAfterCopy",
+                "The target Agent could not be opened. The handoff context is still copied for manual continuation.",
+              ),
         );
-      } else if (result.status === "copied") {
+      } else if (preview.transport === "launch") {
         setNotice(
-          t(
-            "agents.handoffCopied",
-            "Opened {{agent}} and copied the reviewed context.",
-            {
-              agent: target?.name || preview.targetAgentId,
-            },
-          ),
+          t("agents.handoffOpened", "Copied context and opened {{agent}}.", {
+            agent: target?.name || preview.targetAgentId,
+          }),
         );
       } else {
         setNotice(
@@ -215,17 +225,38 @@ export function AgentConversationActions({
       setPreview(null);
     });
 
+  const exportConversation = (format: "markdown" | "json") =>
+    run(async () => {
+      const result = await window.api.agent.exportConversation({
+        agentId: agent.id,
+        sessionId: session.id,
+        format,
+      });
+      if (!result.canceled) {
+        setNotice(t("agents.conversationExported", "Conversation exported."));
+      }
+    });
+
   return (
     <>
-      <section className="mt-4 rounded-xl border border-border/70 bg-white p-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:bg-card">
+      <section className="mt-2 rounded-xl border border-border/70 bg-white p-1.5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] dark:bg-card">
         <div
           data-testid="conversation-continuation-toolbar"
-          className="grid grid-cols-2 items-center gap-2 xl:grid-cols-[auto_15rem_14rem_auto]"
+          className="flex items-center gap-2"
         >
-          {session.resume ? (
-            <button
-              type="button"
-              disabled={isWorking}
+          <div
+            data-testid="conversation-primary-actions"
+            className="flex min-w-0 flex-1 items-center gap-2"
+          >
+            <PrimaryActionButton
+              label={t(
+                "agents.continueInCurrentAgent",
+                "Continue in {{agent}}",
+                { agent: agent.name },
+              )}
+              icon={<SquareTerminalIcon className="h-4 w-4" />}
+              primary
+              disabled={isWorking || !session.resume}
               onClick={() =>
                 void run(async () => {
                   await window.api.agent.resumeConversation({
@@ -233,145 +264,132 @@ export function AgentConversationActions({
                     sessionId: session.id,
                   });
                   setNotice(
-                    t(
-                      "agents.resumeStarted",
-                      "Opened the native resume flow in {{agent}}.",
-                      { agent: agent.name },
-                    ),
+                    t("agents.resumeStarted", "Opened {{agent}} in Terminal.", {
+                      agent: agent.name,
+                    }),
                   );
                 })
               }
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-60"
+            />
+            <PrimaryActionButton
+              label={t("agents.handoffConversation", "Continue elsewhere")}
+              icon={<ArrowRightLeftIcon className="h-4 w-4" />}
+              disabled={isWorking || targets.length === 0}
+              onClick={() => setIsChoosingHandoff(true)}
+            />
+          </div>
+          <div className="relative">
+            <IconActionButton
+              label={t("agents.exportConversation", "Export conversation")}
+              icon={<DownloadIcon className="h-4 w-4" />}
+              expanded={isExportOpen}
+              onClick={() => {
+                setIsMoreOpen(false);
+                setIsExportOpen((open) => !open);
+              }}
+            />
+            {isExportOpen ? (
+              <ExportActionsMenu
+                onClose={() => setIsExportOpen(false)}
+                onExport={(format) => void exportConversation(format)}
+              />
+            ) : null}
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              aria-label={t(
+                "agents.moreConversationActions",
+                "More conversation actions",
+              )}
+              aria-haspopup="menu"
+              aria-expanded={isMoreOpen}
+              title={t(
+                "agents.moreConversationActions",
+                "More conversation actions",
+              )}
+              onClick={() => {
+                setIsExportOpen(false);
+                setIsMoreOpen((open) => !open);
+              }}
+              className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              <ExternalLinkIcon className="h-4 w-4" />
-              {t("agents.resumeConversation", "Resume")}
+              <MoreHorizontalIcon className="h-4 w-4" />
             </button>
-          ) : null}
-          {targets.length > 0 ? (
-            <>
-              <Select
-                ariaLabel={t("agents.continueWithAgent", "Continue with Agent")}
-                value={targetAgentId}
-                onChange={setTargetAgentId}
-                options={targetOptions}
-                className="min-w-0"
-                triggerClassName="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border/80 bg-background px-2.5 text-left text-xs text-foreground shadow-sm outline-none transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-primary/20"
+            {isMoreOpen ? (
+              <ConversationActionsMenu
+                deleted={Boolean(metadata?.deletedAt)}
+                onClose={() => setIsMoreOpen(false)}
+                onEdit={() => setIsEditing(true)}
+                onRestore={() =>
+                  void run(async () => {
+                    onMetadataChange(
+                      await window.api.agent.restoreConversation({
+                        agentId: agent.id,
+                        sessionId: session.id,
+                      }),
+                    );
+                  })
+                }
+                onDelete={() =>
+                  void run(async () => {
+                    onMetadataChange(
+                      await window.api.agent.deleteConversation({
+                        agentId: agent.id,
+                        sessionId: session.id,
+                      }),
+                    );
+                  })
+                }
               />
-              <Select
-                ariaLabel={t(
-                  "agents.continuationProject",
-                  "Project for continuation",
-                )}
-                value={projectId}
-                onChange={setProjectId}
-                options={projectOptions}
-                className="min-w-0"
-                triggerClassName="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border/80 bg-background px-2.5 text-left text-xs text-foreground shadow-sm outline-none transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-primary/20"
-              />
-              <button
-                type="button"
-                disabled={isWorking || !targetAgentId || !projectPath}
-                onClick={() => void requestPreview()}
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-primary/35 bg-primary/10 px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
-              >
-                {t("agents.previewHandoff", "Preview handoff")}
-              </button>
-            </>
-          ) : null}
+            ) : null}
+          </div>
         </div>
 
         {notice ? (
           <p
             role="status"
-            className="mt-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+            className="mt-1 rounded-lg bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
           >
             {notice}
           </p>
         ) : null}
-
-        <div className="mt-2.5 flex flex-wrap items-center gap-1 border-t border-border/60 pt-2.5">
-          <ActionButton
-            label={t("agents.editConversation", "Edit details")}
-            icon={<PencilIcon className="h-3.5 w-3.5" />}
-            onClick={() => setIsEditing(true)}
-          />
-          <ActionButton
-            label={t("agents.exportMarkdown", "Export Markdown")}
-            icon={<FileTextIcon className="h-3.5 w-3.5" />}
-            onClick={() =>
-              void run(async () => {
-                const result = await window.api.agent.exportConversation({
-                  agentId: agent.id,
-                  sessionId: session.id,
-                  format: "markdown",
-                });
-                if (!result.canceled) {
-                  setNotice(
-                    t("agents.conversationExported", "Conversation exported."),
-                  );
-                }
-              })
-            }
-          />
-          <ActionButton
-            label={t("agents.exportJson", "Export JSON")}
-            icon={<FileJsonIcon className="h-3.5 w-3.5" />}
-            onClick={() =>
-              void run(async () => {
-                const result = await window.api.agent.exportConversation({
-                  agentId: agent.id,
-                  sessionId: session.id,
-                  format: "json",
-                });
-                if (!result.canceled) {
-                  setNotice(
-                    t("agents.conversationExported", "Conversation exported."),
-                  );
-                }
-              })
-            }
-          />
-          {metadata?.deletedAt ? (
-            <ActionButton
-              label={t("agents.restoreConversation", "Restore")}
-              icon={<RotateCcwIcon className="h-3.5 w-3.5" />}
-              onClick={() =>
-                void run(async () => {
-                  onMetadataChange(
-                    await window.api.agent.restoreConversation({
-                      agentId: agent.id,
-                      sessionId: session.id,
-                    }),
-                  );
-                })
-              }
-            />
-          ) : (
-            <ActionButton
-              label={t("agents.deleteConversation", "Remove from history")}
-              icon={<Trash2Icon className="h-3.5 w-3.5" />}
-              destructive
-              onClick={() =>
-                void run(async () => {
-                  onMetadataChange(
-                    await window.api.agent.deleteConversation({
-                      agentId: agent.id,
-                      sessionId: session.id,
-                    }),
-                  );
-                })
-              }
-            />
-          )}
-        </div>
       </section>
 
+      {isChoosingHandoff ? (
+        <HandoffTargetDialog
+          targetAgentId={targetAgentId}
+          projectId={projectId}
+          targetOptions={targetOptions}
+          projectOptions={projectOptions}
+          canContinue={Boolean(targetAgentId && projectPath)}
+          isWorking={isWorking}
+          onTargetChange={setTargetAgentId}
+          onProjectChange={setProjectId}
+          onCancel={() => setIsChoosingHandoff(false)}
+          onContinue={() => void requestPreview()}
+        />
+      ) : null}
       {preview ? (
         <HandoffDialog
           preview={preview}
           targetName={target?.name || preview.targetAgentId}
           isWorking={isWorking}
           onCancel={() => setPreview(null)}
+          onCopy={() =>
+            void run(async () => {
+              const copyValue =
+                preview.transport === "direct" && preview.cliCommand
+                  ? preview.cliCommand
+                  : preview.payload;
+              await copyTextToClipboard(copyValue);
+              setNotice(
+                preview.transport === "direct"
+                  ? t("agents.cliCommandCopied", "CLI command copied.")
+                  : t("agents.handoffContextCopied", "Handoff context copied."),
+              );
+            })
+          }
           onConfirm={() => void confirmHandoff()}
         />
       ) : null}
@@ -393,7 +411,143 @@ export function AgentConversationActions({
   );
 }
 
-function ActionButton({
+function IconActionButton({
+  label,
+  icon,
+  expanded,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  expanded: boolean;
+  onClick(): void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-haspopup="menu"
+      aria-expanded={expanded}
+      title={label}
+      onClick={onClick}
+      className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      {icon}
+    </button>
+  );
+}
+
+function PrimaryActionButton({
+  label,
+  icon,
+  onClick,
+  primary = false,
+  disabled = false,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onClick(): void;
+  primary?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex h-9 min-w-0 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+        primary
+          ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90"
+          : "border border-border/80 bg-background text-foreground hover:border-primary/30 hover:bg-accent"
+      }`}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function ConversationActionsMenu({
+  deleted,
+  onClose,
+  onEdit,
+  onRestore,
+  onDelete,
+}: {
+  deleted: boolean;
+  onClose(): void;
+  onEdit(): void;
+  onRestore(): void;
+  onDelete(): void;
+}) {
+  const { t } = useTranslation();
+  const run = (action: () => void) => {
+    onClose();
+    action();
+  };
+  return (
+    <div
+      role="menu"
+      className="absolute right-0 top-11 z-30 w-52 rounded-xl border border-border/80 bg-popover p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.16)]"
+    >
+      <MenuAction
+        label={t("agents.editConversation", "Edit details")}
+        icon={<PencilIcon className="h-4 w-4" />}
+        onClick={() => run(onEdit)}
+      />
+      <div className="my-1 h-px bg-border/70" />
+      <MenuAction
+        label={t(
+          deleted ? "agents.restoreConversation" : "agents.deleteConversation",
+          deleted ? "Restore" : "Remove from history",
+        )}
+        icon={
+          deleted ? (
+            <RotateCcwIcon className="h-4 w-4" />
+          ) : (
+            <Trash2Icon className="h-4 w-4" />
+          )
+        }
+        destructive={!deleted}
+        onClick={() => run(deleted ? onRestore : onDelete)}
+      />
+    </div>
+  );
+}
+
+function ExportActionsMenu({
+  onClose,
+  onExport,
+}: {
+  onClose(): void;
+  onExport(format: "markdown" | "json"): void;
+}) {
+  const { t } = useTranslation();
+  const exportAs = (format: "markdown" | "json") => {
+    onClose();
+    onExport(format);
+  };
+  return (
+    <div
+      role="menu"
+      className="absolute right-0 top-11 z-30 w-48 rounded-xl border border-border/80 bg-popover p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.16)]"
+    >
+      <MenuAction
+        label={t("agents.exportMarkdown", "Export Markdown")}
+        icon={<FileTextIcon className="h-4 w-4" />}
+        onClick={() => exportAs("markdown")}
+      />
+      <MenuAction
+        label={t("agents.exportJson", "Export JSON")}
+        icon={<FileJsonIcon className="h-4 w-4" />}
+        onClick={() => exportAs("json")}
+      />
+    </div>
+  );
+}
+
+function MenuAction({
   label,
   icon,
   onClick,
@@ -407,12 +561,118 @@ function ActionButton({
   return (
     <button
       type="button"
+      role="menuitem"
+      aria-label={label}
       onClick={onClick}
-      className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium hover:bg-accent ${destructive ? "text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+      className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-xs font-medium transition-colors ${
+        destructive
+          ? "text-destructive hover:bg-destructive/10"
+          : "text-foreground hover:bg-accent"
+      }`}
     >
-      {icon}
-      {label}
+      <span className="text-muted-foreground">{icon}</span>
+      <span>{label}</span>
     </button>
+  );
+}
+
+function HandoffTargetDialog({
+  targetAgentId,
+  projectId,
+  targetOptions,
+  projectOptions,
+  canContinue,
+  isWorking,
+  onTargetChange,
+  onProjectChange,
+  onCancel,
+  onContinue,
+}: {
+  targetAgentId: string;
+  projectId: string;
+  targetOptions: SelectOption[];
+  projectOptions: SelectOption[];
+  canContinue: boolean;
+  isWorking: boolean;
+  onTargetChange(value: string): void;
+  onProjectChange(value: string): void;
+  onCancel(): void;
+  onContinue(): void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-6 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="handoff-target-title"
+        className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl"
+      >
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+            <ArrowRightLeftIcon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2
+              id="handoff-target-title"
+              className="text-base font-semibold text-foreground"
+            >
+              {t("agents.handoffDialogTitle", "Continue in another Agent")}
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {t(
+                "agents.handoffDialogHint",
+                "Choose a target Agent and working directory, then review the context before continuing.",
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label={t("common.close", "Close")}
+            onClick={onCancel}
+            className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-5 space-y-3">
+          <Select
+            ariaLabel={t("agents.continueWithAgent", "Continue with Agent")}
+            value={targetAgentId}
+            onChange={onTargetChange}
+            options={targetOptions}
+            triggerClassName="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-border bg-background px-3 text-left text-sm text-foreground outline-none hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20"
+          />
+          <Select
+            ariaLabel={t(
+              "agents.continuationProject",
+              "Project for continuation",
+            )}
+            value={projectId}
+            onChange={onProjectChange}
+            options={projectOptions}
+            triggerClassName="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-border bg-background px-3 text-left text-sm text-foreground outline-none hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20"
+          />
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-9 rounded-lg border border-border px-4 text-xs font-semibold text-foreground hover:bg-accent"
+          >
+            {t("common.cancel", "Cancel")}
+          </button>
+          <button
+            type="button"
+            disabled={!canContinue || isWorking}
+            onClick={onContinue}
+            className="h-9 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t("agents.previewHandoff", "Preview handoff")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -421,12 +681,14 @@ function HandoffDialog({
   targetName,
   isWorking,
   onCancel,
+  onCopy,
   onConfirm,
 }: {
   preview: AgentConversationHandoffPreview;
   targetName: string;
   isWorking: boolean;
   onCancel(): void;
+  onCopy(): void;
   onConfirm(): void;
 }) {
   const { t } = useTranslation();
@@ -446,12 +708,20 @@ function HandoffDialog({
               {preview.transport === "direct"
                 ? t(
                     "agents.handoffDirectHint",
-                    "A new target session will open with this portable context.",
+                    "PromptHub can start {{agent}} with this reviewed context in the selected project.",
+                    { agent: targetName },
                   )
-                : t(
-                    "agents.handoffCopyHint",
-                    "Direct launch is unavailable. The context will be copied.",
-                  )}
+                : preview.transport === "launch"
+                  ? t(
+                      "agents.handoffLaunchHint",
+                      "PromptHub will copy the handoff context and open {{agent}}. Paste it to continue in the selected project.",
+                      { agent: targetName },
+                    )
+                  : t(
+                      "agents.handoffCopyOnlyHint",
+                      "PromptHub cannot open {{agent}} automatically, but you can copy this context and paste it into the Agent manually.",
+                      { agent: targetName },
+                    )}
             </p>
           </div>
           <button
@@ -477,13 +747,33 @@ function HandoffDialog({
           <button
             type="button"
             disabled={isWorking}
-            onClick={onConfirm}
-            className="h-9 rounded-md bg-primary px-4 text-xs font-semibold text-primary-foreground disabled:opacity-60"
+            onClick={onCopy}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-4 text-xs font-semibold text-foreground hover:bg-accent disabled:opacity-50"
           >
-            {t("agents.continueInAgent", "Continue in {{agent}}", {
-              agent: targetName,
-            })}
+            <CopyIcon className="h-4 w-4" />
+            {preview.transport === "direct"
+              ? t("agents.copyCliCommand", "Copy CLI command")
+              : t("agents.copyHandoffContext", "Copy handoff context")}
           </button>
+          {preview.transport !== "unavailable" ? (
+            <button
+              type="button"
+              disabled={isWorking}
+              onClick={onConfirm}
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-xs font-semibold text-primary-foreground disabled:opacity-60"
+            >
+              <SquareTerminalIcon className="h-4 w-4" />
+              {preview.transport === "direct"
+                ? t("agents.continueInAgent", "Continue in {{agent}}", {
+                    agent: targetName,
+                  })
+                : t(
+                    "agents.copyAndOpenAgent",
+                    "Copy context and open {{agent}}",
+                    { agent: targetName },
+                  )}
+            </button>
+          ) : null}
         </footer>
       </div>
     </div>

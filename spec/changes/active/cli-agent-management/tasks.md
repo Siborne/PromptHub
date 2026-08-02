@@ -1,0 +1,18 @@
+# Tasks
+
+- [x] `T-CLI-AGENT-001` Extract reusable Agent root/config normalization and build the settings-backed inventory (`FR-CLI-AGENT-001`, `003`; `DES-CLI-AGENT-001`..`003`; `TEST-CLI-AGENT-001`, `003`).
+- [x] `T-CLI-AGENT-002` Implement atomic visibility, custom CRUD, built-in override and identity mutations (`FR-CLI-AGENT-002`..`004`; `DES-CLI-AGENT-002`, `003`; `TEST-CLI-AGENT-002`, `003`).
+- [x] `T-CLI-AGENT-003` Add the `agent` CLI route, help, selectors and JSON/table presentation with tests first (`FR-CLI-AGENT-001`..`004`; `DES-CLI-AGENT-004`; `TEST-CLI-AGENT-001`..`003`).
+- [x] `T-CLI-AGENT-004` Run focused tests/coverage, Core and CLI typechecks, file-size/static scans, then converge implementation and stable documentation (`NFR-CLI-AGENT-001`; `TEST-CLI-AGENT-004`).
+
+## Analyze Result
+
+- All FRs have acceptance/verification coverage and map to design/tasks.
+- Data source remains SQLite `settings`; no competing store or migration is introduced.
+- Deep runtime adapters stay explicitly outside this slice; capability output remains truthful.
+- No blocking conflict or `[待确认]` remains.
+
+## Review Exit Condition
+
+- Maintainer review and an intentional commit remain. The change stays active while its worktree files are uncommitted.
+- Repository-wide file-size debt and concurrent Agent-workbench test failures are recorded in `implementation.md`; they do not change the scoped CLI acceptance result.

@@ -322,6 +322,15 @@ domain-owned quick actions (open detail, import/distribute, open location and
 remove with confirmation where supported). No Agent-owned asset store or
 duplicate IPC contract is introduced.
 
+## Scope Addendum 2026-08-01: Unified Asset Card Presentation
+
+The direct Agent Skills, MCP and Plugins inventories use the Plugins card as
+the accepted visual baseline. All three domains share one icon-led content
+anatomy and aligned icon-action footer while retaining their owning stores,
+detail routes and supported actions. `Plugins` is a stable English product term
+in the Agent tab bar, matching `Skills` and `MCP`; explanatory copy remains
+localized.
+
 ## Scope Addendum 2026-07-31: Hermes Claw Family Taxonomy
 
 The Agent display-order settings now classify Hermes with OpenClaw and QClaw
@@ -428,3 +437,12 @@ metadata edits, reversible PromptHub deletion, optional verified native
 deletion, and single/batch JSON or Markdown export. Native transcripts remain
 platform-owned and read-only. Export and handoff payloads exclude secrets,
 hidden tool data and absolute local paths by default.
+
+## Scope Addendum 2026-08-01: Agent Asset Detail Navigation
+
+Within Agent management, Skills, MCP and Plugins are collectively called
+Agent assets. Their card details should reuse the owning domain's normal full
+detail pages and replace the complete workspace to the right of the Agent
+list. They must not remain nested below the Agent identity header and tabs.
+Rules remains its own editor workflow. This is a presentation/navigation
+change only; asset ownership, storage and actions remain unchanged.

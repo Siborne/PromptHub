@@ -1,0 +1,235 @@
+import type {
+  CoreAIConfigFile,
+  CoreAIModelConfig,
+  CoreAIProviderConfig,
+} from "@prompthub/core";
+import type {
+  AgentProviderProfilePublic,
+  AgentProviderSourceCandidate,
+  CreateAgentProviderProfileRequest,
+  ImportAgentProviderSourceRequest,
+} from "@prompthub/shared";
+import { normalizeAgentProviderEndpoint } from "@prompthub/shared/utils/agent-provider-config";
+
+interface AgentProviderSourceServiceOptions {
+  readConfig: () => CoreAIConfigFile;
+  createProfile: (
+    request: CreateAgentProviderProfileRequest,
+  ) => Promise<AgentProviderProfilePublic>;
+}
+
+interface ProviderProjection {
+  providerKind: string;
+  protocol: string;
+  config: Record<string, unknown>;
+}
+
+const MAX_ID_LENGTH = 512;
+const IMPORT_PLATFORM_IDS = new Set([
+  "codex",
+  "claude",
+  "gemini",
+  "opencode",
+  "qwen",
+]);
+
+function requireRequestId(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !value.trim() ||
+    value.length > MAX_ID_LENGTH ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
+    throw new Error("AGENT_PROVIDER_SOURCE_INPUT_INVALID");
+  }
+  return value.trim();
+}
+
+function nativeProviderId(sourceId: string): string | null {
+  const normalized = sourceId
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "")
+    .slice(0, 64);
+  if (!normalized) return null;
+  return ["openai", "ollama", "lmstudio"].includes(normalized)
+    ? `${normalized}-prompthub`
+    : normalized;
+}
+
+function projectionFor(
+  platformId: string,
+  provider: CoreAIProviderConfig,
+): ProviderProjection | null {
+  if (!IMPORT_PLATFORM_IDS.has(platformId)) return null;
+  const providerId = nativeProviderId(provider.id);
+  if (
+    platformId === "codex" &&
+    provider.apiProtocol === "openai" &&
+    providerId
+  ) {
+    return {
+      providerKind: "openai-compatible",
+      protocol: "openai-chat",
+      config: { providerId },
+    };
+  }
+  if (platformId === "claude" && provider.apiProtocol === "anthropic") {
+    return {
+      providerKind: provider.provider,
+      protocol: "anthropic-messages",
+      config: { credentialEnvKey: "ANTHROPIC_API_KEY" },
+    };
+  }
+  if (platformId === "gemini" && provider.apiProtocol === "gemini") {
+    return {
+      providerKind: "google-gemini",
+      protocol: "google-generative-ai",
+      config: { credentialEnvKey: "GEMINI_API_KEY" },
+    };
+  }
+  if (
+    platformId === "opencode" &&
+    provider.apiProtocol === "openai" &&
+    providerId
+  ) {
+    return {
+      providerKind: "openai-compatible",
+      protocol: "openai-chat",
+      config: { providerId, package: "@ai-sdk/openai-compatible" },
+    };
+  }
+  return providerId ? qwenProjection(platformId, provider, providerId) : null;
+}
+
+function qwenProjection(
+  platformId: string,
+  provider: CoreAIProviderConfig,
+  providerId: string,
+): ProviderProjection | null {
+  if (platformId !== "qwen") return null;
+  const mappings = {
+    openai: ["openai", "openai-chat", "OPENAI_API_KEY"],
+    anthropic: ["anthropic", "anthropic-messages", "ANTHROPIC_API_KEY"],
+    gemini: ["gemini", "google-generative-ai", "GEMINI_API_KEY"],
+  } as const;
+  const mapping = mappings[provider.apiProtocol];
+  return {
+    providerKind: mapping[0],
+    protocol: mapping[1],
+    config: { providerId, envKey: mapping[2] },
+  };
+}
+
+function safeEndpoint(value: string): string | null {
+  try {
+    return normalizeAgentProviderEndpoint(value);
+  } catch {
+    return null;
+  }
+}
+
+function providerModels(
+  config: CoreAIConfigFile,
+  provider: CoreAIProviderConfig,
+): CoreAIModelConfig[] {
+  const endpoint = safeEndpoint(provider.apiUrl);
+  return config.models.filter(
+    (model) =>
+      model.type === "chat" &&
+      model.apiProtocol === provider.apiProtocol &&
+      safeEndpoint(model.apiUrl) === endpoint &&
+      (model.providerId === provider.id ||
+        (!model.providerId && model.provider === provider.provider)),
+  );
+}
+
+function candidateFor(
+  config: CoreAIConfigFile,
+  provider: CoreAIProviderConfig,
+  platformId: string,
+): AgentProviderSourceCandidate {
+  const models = providerModels(config, provider);
+  const endpoint = safeEndpoint(provider.apiUrl);
+  const projection = projectionFor(platformId, provider);
+  const incompatibility = !endpoint
+    ? "invalid-endpoint"
+    : models.length === 0
+      ? "no-chat-model"
+      : !IMPORT_PLATFORM_IDS.has(platformId)
+        ? "platform-unsupported"
+        : projection
+          ? null
+          : "protocol-unsupported";
+  return {
+    source: "prompthub",
+    sourceId: provider.id,
+    name: provider.name || provider.provider,
+    providerKind: provider.provider,
+    protocol: projection?.protocol ?? null,
+    endpoint: provider.apiUrl,
+    credentialReady: Boolean(
+      provider.apiKey || models.some((model) => model.apiKey),
+    ),
+    compatible: incompatibility === null,
+    incompatibility,
+    models: models.map((model) => ({
+      id: model.id,
+      name: model.name || model.model,
+      model: model.model,
+      isDefault: model.isDefault === true,
+    })),
+  };
+}
+
+export function createAgentProviderSourceService({
+  readConfig,
+  createProfile,
+}: AgentProviderSourceServiceOptions) {
+  function list(platformId: string): AgentProviderSourceCandidate[] {
+    const config = readConfig();
+    return config.providers.map((provider) =>
+      candidateFor(config, provider, platformId),
+    );
+  }
+
+  async function importSource(
+    request: ImportAgentProviderSourceRequest,
+  ): Promise<AgentProviderProfilePublic> {
+    const platformId = requireRequestId(request.platformId);
+    const sourceId = requireRequestId(request.sourceId);
+    const modelId = requireRequestId(request.modelId);
+    const config = readConfig();
+    const provider = config.providers.find((item) => item.id === sourceId);
+    if (!provider) throw new Error("AGENT_PROVIDER_SOURCE_NOT_FOUND");
+    const candidate = candidateFor(config, provider, platformId);
+    if (!candidate.compatible) {
+      throw new Error("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
+    }
+    const model = providerModels(config, provider).find(
+      (item) => item.id === modelId,
+    );
+    if (!model) throw new Error("AGENT_PROVIDER_SOURCE_MODEL_NOT_FOUND");
+    const projection = projectionFor(platformId, provider);
+    if (!projection) throw new Error("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
+    return createProfile({
+      profile: {
+        platformId,
+        name: provider.name || provider.provider,
+        providerKind: projection.providerKind,
+        protocol: projection.protocol,
+        endpoint: provider.apiUrl,
+        config: projection.config,
+        source: "import",
+      },
+      modelMappings: [
+        { routeKey: "primary", modelId: model.model, parameters: {} },
+      ],
+      ...((provider.apiKey || model.apiKey) && {
+        secret: provider.apiKey || model.apiKey,
+      }),
+    });
+  }
+
+  return { list, importSource };
+}

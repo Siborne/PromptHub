@@ -412,6 +412,36 @@
     }
   },
   "agents": {
+    "webService": {
+      "title": "Agent サービス",
+      "description": "サービスはこのセルフホスト PromptHub サーバーで実行されます。",
+      "available": "利用可能",
+      "partial": "一部利用可能",
+      "unavailable": "利用不可",
+      "actionAvailable": "セルフホスト Web で利用可能",
+      "actionUnavailable": "ブラウザーでは利用不可",
+      "empty": "項目はまだありません。",
+      "reason": {
+        "self-hosted-adapter-pending": "サービスは存在しますが、サーバーアダプターは未完成です。"
+      },
+      "action": {
+        "activate": "有効化",
+        "apply": "適用",
+        "browse": "参照",
+        "distribute": "配布",
+        "edit": "編集",
+        "inspect": "確認",
+        "install": "インストール",
+        "manage": "管理"
+      },
+      "state": {
+        "available": "利用可能",
+        "blocked": "ブロック済み",
+        "missing": "不足",
+        "theme": "テーマ",
+        "pet": "ペット"
+      }
+    },
     "cliDiagnostics": {
       "title": "CLI 診断",
       "checking": "ローカル CLI を確認しています...",
@@ -525,6 +555,23 @@
       }
     },
     "providerProfiles": {
+      "sourceImport": {
+        "open": "PromptHub からインポート",
+        "title": "PromptHub プロバイダーをインポート",
+        "hint": "PromptHub の既存プロバイダーから独立した Agent プロファイルを作成します。適用は別途確認が必要です。",
+        "loading": "プロバイダーを読み込み中...",
+        "empty": "PromptHub にプロバイダーが設定されていません。",
+        "model": "モデル",
+        "confirm": "インポート",
+        "credentialReady": "認証情報を安全にコピーできます",
+        "credentialMissing": "インポート後に認証情報が必要です",
+        "incompatibility": {
+          "platform-unsupported": "この Agent はプロバイダーのインポートに未対応です",
+          "protocol-unsupported": "このプロトコルはサポートされていません",
+          "no-chat-model": "チャットモデルが設定されていません",
+          "invalid-endpoint": "エンドポイントが無効です"
+        }
+      },
       "deepLink": {
         "title": "Provider Profile のインポートを確認",
         "platform": "Agent プラットフォーム",
@@ -548,14 +595,43 @@
       "listLabel": "Provider プロファイル",
       "loading": "Provider プロファイルを読み込み中...",
       "empty": "プロファイルはありません。現在のネイティブ設定を読み込むか、新規作成してください。",
+      "webEmpty": "プロファイルはありません。作成してこの Agent を管理できます。",
       "emptyTitle": "Provider プロファイルが選択されていません",
       "emptyHint": "有効化する前にモデルプロファイルを作成するか、現在のネイティブ設定を読み込んでください。",
+      "webEmptyHint": "Provider プロファイルを作成し、モデル設定と書き込み専用の認証情報をこのサーバーに安全に保存します。",
       "add": "プロファイルを追加",
       "activate": "有効化",
       "current": "使用中",
       "currentState": {
         "stale": "ネイティブ設定が変更されました",
         "unavailable": "現在のプロファイルを確認できません"
+      },
+      "currentNative": {
+        "title": "現在のネイティブ設定",
+        "details": "検出された設定",
+        "classification": {
+          "official": "公式プロバイダー",
+          "custom": "カスタムプロバイダー",
+          "unknown": "不明なプロバイダー"
+        },
+        "provider": "プロバイダー",
+        "protocol": "プロトコル",
+        "endpoint": "エンドポイント",
+        "model": "モデル",
+        "credential": "認証情報",
+        "noEndpoint": "公式プラットフォームのエンドポイント",
+        "noModel": "モデルが検出されませんでした",
+        "save": "プロファイルとして保存",
+        "restoreOfficial": "公式設定に戻す",
+        "securityHint": "認証情報の種類と利用可否のみを表示します。PromptHub は認証情報の値をこの画面に読み込みません。",
+        "credentialStatus": {
+          "platform-managed": "プラットフォームが管理",
+          "configured-api-key": "API キー設定済み",
+          "configured-auth-token": "認証トークン設定済み",
+          "environment": "環境変数から提供",
+          "missing": "認証情報が未検出",
+          "unknown": "認証情報の種類が不明"
+        }
       },
       "connection": {
         "title": "接続チェック",
@@ -640,6 +716,19 @@
       "form": {
         "addTitle": "Provider プロファイルを追加",
         "editTitle": "Provider プロファイルを編集",
+        "inlineHint": "Agent がネイティブ対応する設定をここで確認します。保存後、別途有効化するまで Agent には書き込まれません。",
+        "sections": {
+          "identity": "基本情報",
+          "connection": "接続とプロトコル",
+          "models": "モデル",
+          "authentication": "認証"
+        },
+        "authenticationSource": "認証元",
+        "authenticationSources": {
+          "managed": "PromptHub 管理の資格情報",
+          "environment": "環境変数"
+        },
+        "platformCredentialHint": "認証は Agent プラットフォームまたは設定済みの環境変数が管理し、PromptHub はこのプロファイルの資格情報を保存しません。",
         "name": "名前",
         "providerKind": "Provider 種別",
         "providerId": "Provider ID",
@@ -927,6 +1016,11 @@
     "loadMoreSessions": "さらにセッションを読み込む",
     "loadingMoreSessions": "セッションを読み込み中...",
     "showMoreMessages": "さらにメッセージを表示",
+    "transcriptPagination": "メッセージページ",
+    "transcriptPreviousPage": "前のメッセージページ",
+    "transcriptNextPage": "次のメッセージページ",
+    "transcriptPageButton": "メッセージページ {{page}}",
+    "transcriptPageStatus": "{{page}} / {{total}} ページ",
     "copyResumeCommand": "再開コマンドをコピー",
     "loadingTranscript": "会話を読み込み中...",
     "noTranscriptEntries": "読み取り可能な会話がありません。",
@@ -971,6 +1065,11 @@
     "conversationActionFailed": "Conversation action failed.",
     "continuationProjectRequired": "Choose a project before continuing this conversation.",
     "resumeConversation": "再開",
+    "continueInCurrentAgent": "{{agent}} で続行",
+    "handoffConversation": "別の Agent で続行",
+    "handoffDialogTitle": "別の Agent で続行",
+    "handoffDialogHint": "検出済みの Agent とプロジェクトを選び、コンテキストの渡し方を確認します。",
+    "moreConversationActions": "その他の会話操作",
     "continueWithAgent": "別の Agent で続行",
     "continuationProject": "続行するプロジェクト",
     "currentSessionProject": "現在のセッションディレクトリ",
@@ -982,16 +1081,14 @@
     "restoreConversation": "復元",
     "deleteConversation": "履歴から削除",
     "reviewHandoff": "引き継ぎ内容を確認",
-    "handoffDirectHint": "A new target session will open with this portable context.",
-    "handoffCopyHint": "Direct launch is unavailable. The context will be copied.",
-    "handoffCopiedLaunchFailed": "コンテキストはコピーされましたが、対象の Agent を開けませんでした。",
-    "handoffCliTransport": "CLI 引き継ぎ",
-    "handoffCopyTransport": "開いてコピー",
-    "resumeStarted": "{{agent}} でネイティブ再開フローを開きました。",
+    "handoffDirectHint": "選択したプロジェクトで、確認済みコンテキストを渡して {{agent}} を起動できます。",
+    "handoffLaunchHint": "コンテキストをコピーして {{agent}} を開きます。貼り付けて選択したプロジェクトで続行してください。",
+    "handoffLaunchFailed": "対象の Agent を開けませんでした。",
+    "resumeStarted": "ターミナルで {{agent}} を開きました。",
     "handoffStarted": "{{agent}} で新しい会話を開始しました。",
-    "handoffCopied": "{{agent}} を開き、確認済みコンテキストをコピーしました。",
+    "handoffOpened": "コンテキストをコピーして {{agent}} を開きました。",
     "conversationExported": "会話をエクスポートしました。",
-    "continueInAgent": "Continue in {{agent}}",
+    "continueInAgent": "{{agent}} で続行",
     "conversationSaveFailed": "Could not save conversation details.",
     "conversationTitle": "Title",
     "conversationProject": "Project",
@@ -1005,7 +1102,21 @@
     "conversationStatus": "会話の状態",
     "activeConversations": "進行中",
     "archivedConversations": "アーカイブ済み",
-    "deletedConversations": "削除済み"
+    "deletedConversations": "削除済み",
+    "exportConversation": "会話をエクスポート",
+    "handoffCliHint": "対象 Agent の CLI で続行します。コマンドをコピーするか、ターミナルで直接開けます。",
+    "copyCliCommand": "CLI コマンドをコピー",
+    "cliCommandCopied": "CLI コマンドをコピーしました。",
+    "handoffCliUnavailableHint": "PromptHub はこの CLI を検出できませんでした。コマンドをコピーしてターミナルで実行してください。",
+    "handoffDirect": "直接引き継ぐ",
+    "handoffOpenAndCopy": "開いて渡す",
+    "handoffCopyOnly": "コピーのみ",
+    "handoffCopyOnlyHint": "{{agent}} を自動で開けません。コンテキストをコピーして手動で貼り付けてください。",
+    "handoffCopyFailed": "引き継ぎコンテキストをコピーできませんでした。",
+    "handoffLaunchFailedAfterCopy": "対象 Agent を開けませんでした。コンテキストはコピー済みなので手動で続行できます。",
+    "copyHandoffContext": "引き継ぎ内容をコピー",
+    "handoffContextCopied": "引き継ぎ内容をコピーしました。",
+    "copyAndOpenAgent": "コピーして {{agent}} を開く"
   },
   "folder": {
     "new": "新規フォルダ",

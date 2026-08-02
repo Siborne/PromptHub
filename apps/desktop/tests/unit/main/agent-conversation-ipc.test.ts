@@ -31,6 +31,7 @@ async function setup() {
       payload: "portable context",
       payloadDigest: `sha256:${"a".repeat(64)}`,
       transport: "direct",
+      cliCommand: "cd '/workspace/project' && codex 'portable context'",
     })),
     continueInAgent: vi.fn(async () => ({
       status: "launched",
@@ -152,6 +153,45 @@ describe("Agent conversation IPC", () => {
         {},
         {
           sourceAgentId: "claude",
+        },
+      ),
+    ).rejects.toThrow("AGENT_CONVERSATION_REQUEST_INVALID");
+  });
+
+  it("accepts launch-only handoffs and rejects the removed copy transport", async () => {
+    const { handlers, IPC_CHANNELS, service } = await setup();
+    const digest = `sha256:${"b".repeat(64)}`;
+    const request = {
+      sourceAgentId: "codex",
+      sourceSessionId: "session-2",
+      targetAgentId: "antigravity",
+      projectPath: "/workspace/project",
+      sourceTitle: "Session 2",
+      payload: "Reviewed context",
+      payloadDigest: digest,
+      confirmedPayloadDigest: digest,
+      cliCommand: null,
+    };
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_CONTINUE](
+        {},
+        {
+          ...request,
+          transport: "launch",
+        },
+      ),
+    ).resolves.toEqual({ status: "launched", mode: "cross-agent" });
+    expect(service.continueInAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ transport: "launch" }),
+    );
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_CONTINUE](
+        {},
+        {
+          ...request,
+          transport: "launch-and-copy",
         },
       ),
     ).rejects.toThrow("AGENT_CONVERSATION_REQUEST_INVALID");

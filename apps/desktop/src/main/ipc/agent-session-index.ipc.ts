@@ -3,6 +3,7 @@ import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import type {
   AgentSessionDetail,
+  AgentSessionDetailPageInput,
   AgentSessionIndexPublicState,
   AgentSessionListResult,
 } from "@prompthub/shared/types";
@@ -23,7 +24,11 @@ export interface AgentSessionIndexOperations {
     agentId: string,
     options: AgentSessionIndexListOptions,
   ): Promise<AgentSessionListResult>;
-  read(agentId: string, sessionId: string): Promise<AgentSessionDetail>;
+  read(
+    agentId: string,
+    sessionId: string,
+    options?: AgentSessionDetailPageInput,
+  ): Promise<AgentSessionDetail>;
 }
 
 export interface AgentSessionIndexIpcOptions {
@@ -59,6 +64,36 @@ function requireRequestId(value: unknown): string {
     throw new Error("AGENT_SESSION_INDEX_REQUEST_INVALID");
   }
   return requestId;
+}
+
+function optionalDetailPageInput(
+  value: unknown,
+): AgentSessionDetailPageInput | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("AGENT_SESSION_DETAIL_REQUEST_INVALID");
+  }
+  const input = value as Record<string, unknown>;
+  const cursor = input.cursor;
+  const limit = input.limit;
+  if (
+    (cursor !== undefined &&
+      (typeof cursor !== "string" ||
+        !cursor.trim() ||
+        cursor.length > 512 ||
+        cursor.includes("\0"))) ||
+    (limit !== undefined &&
+      (typeof limit !== "number" ||
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > 200))
+  ) {
+    throw new Error("AGENT_SESSION_DETAIL_REQUEST_INVALID");
+  }
+  return {
+    ...(typeof cursor === "string" ? { cursor } : {}),
+    ...(typeof limit === "number" ? { limit } : {}),
+  };
 }
 
 function requireSender(event: unknown): Sender {
@@ -229,11 +264,19 @@ export function registerAgentSessionIndexIPC(
 
   ipcMain.handle(
     IPC_CHANNELS.AGENT_SESSION_READ,
-    async (_, agentIdValue: unknown, sessionIdValue: unknown) =>
+    async (
+      _,
+      agentIdValue: unknown,
+      sessionIdValue: unknown,
+      pageValue: unknown,
+    ) =>
       invoke(async () => {
         const agentId = requireText(agentIdValue);
         const sessionId = requireText(sessionIdValue);
-        return options.createService(agentId).read(agentId, sessionId);
+        const page = optionalDetailPageInput(pageValue);
+        return page
+          ? options.createService(agentId).read(agentId, sessionId, page)
+          : options.createService(agentId).read(agentId, sessionId);
       }),
   );
 }

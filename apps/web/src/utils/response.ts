@@ -1,4 +1,4 @@
-import type { Context } from 'hono';
+import type { Context } from "hono";
 
 export interface Pagination {
   total: number;
@@ -11,7 +11,11 @@ export interface ApiError {
   message: string;
 }
 
-export function success<T>(c: Context, data: T, status: 200 | 201 = 200): Response {
+export function success<T>(
+  c: Context,
+  data: T,
+  status: 200 | 201 = 200,
+): Response {
   return c.json({ data }, status);
 }
 
@@ -25,7 +29,7 @@ export function paginated<T>(
 
 export function error(
   c: Context,
-  status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500,
+  status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 503,
   code: string,
   message: string,
 ): Response {
@@ -33,12 +37,13 @@ export function error(
 }
 
 export const ErrorCode = {
-  BAD_REQUEST: 'BAD_REQUEST',
-  UNAUTHORIZED: 'UNAUTHORIZED',
-  FORBIDDEN: 'FORBIDDEN',
-  NOT_FOUND: 'NOT_FOUND',
-  CONFLICT: 'CONFLICT',
-  VALIDATION_ERROR: 'VALIDATION_ERROR',
-  RATE_LIMITED: 'RATE_LIMITED',
-  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  BAD_REQUEST: "BAD_REQUEST",
+  UNAUTHORIZED: "UNAUTHORIZED",
+  FORBIDDEN: "FORBIDDEN",
+  NOT_FOUND: "NOT_FOUND",
+  CONFLICT: "CONFLICT",
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+  RATE_LIMITED: "RATE_LIMITED",
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+  SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
 } as const;

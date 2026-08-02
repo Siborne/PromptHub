@@ -78,6 +78,72 @@ export interface ManagedAgentSummary {
   capabilities: Record<AgentCapabilityKey, ManagedAgentCapability>;
 }
 
+export type AgentInventoryTarget = "server-host" | "logical-only";
+
+export interface AgentInventoryCapabilities {
+  inventory: true;
+  settings: true;
+  hostDetection: boolean;
+  filesystemMutation: false;
+  configFiles: boolean;
+  providers: boolean;
+  sessions: boolean;
+  launch: false;
+  maintenance: boolean;
+}
+
+export interface AgentInventoryItem extends ManagedAgentSummary {
+  enabled: boolean;
+}
+
+export interface AgentInventoryResponse {
+  target: AgentInventoryTarget;
+  agents: AgentInventoryItem[];
+  capabilities: AgentInventoryCapabilities;
+}
+
+export const AGENT_SERVICE_DOMAINS = [
+  "skills",
+  "mcp",
+  "plugins",
+  "rules",
+  "definitions",
+  "provider",
+  "appearance",
+  "configFiles",
+  "sessions",
+  "usage",
+  "maintenance",
+] as const;
+
+export type AgentServiceDomain = (typeof AGENT_SERVICE_DOMAINS)[number];
+export type AgentServiceStatus = "available" | "partial" | "unavailable";
+export type AgentServiceActionStatus = "available" | "unavailable";
+
+export interface AgentServiceItem {
+  id: string;
+  label: string;
+  description?: string;
+  state: string;
+}
+
+export interface AgentServiceManifestEntry {
+  domain: AgentServiceDomain;
+  serviceAvailable: true;
+  status: AgentServiceStatus;
+}
+
+export interface AgentServiceResult {
+  agentId: string;
+  domain: AgentServiceDomain;
+  status: AgentServiceStatus;
+  items: AgentServiceItem[];
+  total: number;
+  truncated: boolean;
+  actions: Record<string, AgentServiceActionStatus>;
+  reason?: string;
+}
+
 export type AgentLaunchResult =
   | { success: true }
   | {
@@ -428,6 +494,11 @@ export interface AgentSessionEntry {
   text: string;
 }
 
+export interface AgentSessionDetailPageInput {
+  cursor?: string;
+  limit?: number;
+}
+
 export interface AgentSessionDetail {
   agentId: string;
   adapter: string;
@@ -435,6 +506,7 @@ export interface AgentSessionDetail {
   entries: AgentSessionEntry[];
   parseErrors: number;
   truncated: boolean;
+  nextCursor?: string | null;
 }
 
 export interface AgentConversationMetadata {
@@ -467,14 +539,10 @@ export interface UpsertAgentConversationMetadataInput {
 
 export type AgentConversationHandoffTransport =
   | "direct"
-  | "launch-and-copy"
+  | "launch"
   | "unavailable";
 
-export type AgentConversationHandoffStatus =
-  | "planned"
-  | "launched"
-  | "copied"
-  | "failed";
+export type AgentConversationHandoffStatus = "planned" | "launched" | "failed";
 
 export interface AgentConversationHandoffRecord {
   id: string;
@@ -515,7 +583,7 @@ export interface AgentConversationResumeRequest {
 }
 
 export interface AgentConversationActionResult {
-  status: "launched" | "copied" | "unavailable";
+  status: "launched" | "unavailable";
   mode: "native-resume" | "cross-agent";
   errorCode?: string;
 }
@@ -533,6 +601,7 @@ export interface AgentConversationHandoffPreview extends AgentConversationHandof
   payload: string;
   payloadDigest: string;
   transport: AgentConversationHandoffTransport;
+  cliCommand: string | null;
 }
 
 export interface ContinueAgentConversationRequest extends AgentConversationHandoffPreview {
@@ -643,10 +712,35 @@ export type AgentProviderCurrentStateStatus =
   | "stale"
   | "unavailable";
 
+export type AgentProviderNativeClassification =
+  | "official"
+  | "custom"
+  | "unknown";
+
+export type AgentProviderNativeCredential =
+  | "platform-managed"
+  | "configured-api-key"
+  | "configured-auth-token"
+  | "environment"
+  | "missing"
+  | "unknown";
+
+export interface AgentProviderNativeConfigSummary {
+  classification: AgentProviderNativeClassification;
+  name: string;
+  providerKind: string;
+  protocol: string;
+  endpoint: string | null;
+  model: string | null;
+  credential: AgentProviderNativeCredential;
+  officialRestoreAvailable: boolean;
+}
+
 export interface AgentProviderCurrentState {
   platformId: string;
   status: AgentProviderCurrentStateStatus;
   currentProfileId: string | null;
+  nativeConfig: AgentProviderNativeConfigSummary | null;
   checkedAt: number;
 }
 
@@ -672,6 +766,38 @@ export interface AgentProviderProfileExport {
   profile: Omit<CreateAgentProviderProfileInput, "secretRef">;
   modelMappings: CreateAgentProviderModelMappingInput[];
   requiresSecret: boolean;
+}
+
+export type AgentProviderSourceIncompatibility =
+  | "platform-unsupported"
+  | "protocol-unsupported"
+  | "no-chat-model"
+  | "invalid-endpoint";
+
+export interface AgentProviderSourceModel {
+  id: string;
+  name: string;
+  model: string;
+  isDefault: boolean;
+}
+
+export interface AgentProviderSourceCandidate {
+  source: "prompthub";
+  sourceId: string;
+  name: string;
+  providerKind: string;
+  protocol: string | null;
+  endpoint: string;
+  credentialReady: boolean;
+  compatible: boolean;
+  incompatibility: AgentProviderSourceIncompatibility | null;
+  models: AgentProviderSourceModel[];
+}
+
+export interface ImportAgentProviderSourceRequest {
+  platformId: string;
+  sourceId: string;
+  modelId: string;
 }
 
 export type AgentProviderMigrationCredentialSource =

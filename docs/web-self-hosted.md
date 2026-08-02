@@ -111,6 +111,11 @@ pnpm install
 Important variables:
 
 - `JWT_SECRET`: required, at least 32 characters
+- `AGENT_SECRET_KEY`: optional 32-byte hex or base64 key. It is required before
+  the Web Agent workspace can store Provider credentials or edit native Agent
+  config files. Generate one with `openssl rand -hex 32`, keep it stable, and
+  back it up separately from `DATA_ROOT`; losing it makes existing encrypted
+  credentials and config rollback backups unreadable.
 - `DATA_ROOT`: root directory for all PromptHub data (default: `./`). The app writes `data/`, `config/`, `logs/`, and `backups/` under this path.
 - `ALLOW_REGISTRATION=false`: keep this disabled; the first admin is created only through `/setup`
 - `AUTH_CAPTCHA_ENABLED=true`: keep image captcha enabled by default. For trusted private/LAN personal deployments, set `AUTH_CAPTCHA_ENABLED=false` to remove setup/login captcha.
@@ -180,6 +185,7 @@ Then edit `.env` and set at least:
 
 ```env
 JWT_SECRET=replace-with-a-random-secret-at-least-32-chars
+AGENT_SECRET_KEY=replace-with-the-output-of-openssl-rand-hex-32
 ALLOW_REGISTRATION=false
 AUTH_CAPTCHA_ENABLED=true
 TRUST_PROXY_HEADERS=false
@@ -210,10 +216,13 @@ docker run -d \
   --name prompthub-web \
   -p 3871:3000 \
   -e JWT_SECRET='replace-with-a-random-secret-at-least-32-chars' \
+  -e AGENT_SECRET_KEY='replace-with-the-output-of-openssl-rand-hex-32' \
   -e ALLOW_REGISTRATION=false \
   -e AUTH_CAPTCHA_ENABLED=true \
   -e TRUST_PROXY_HEADERS=false \
   -v "$(pwd)/apps/web/data:/app/data" \
+  -v "$(pwd)/apps/web/config:/app/config" \
+  -v "$(pwd)/apps/web/backups:/app/backups" \
   ghcr.io/legeling/prompthub-web:latest
 ```
 

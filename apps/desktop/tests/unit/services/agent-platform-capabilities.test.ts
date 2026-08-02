@@ -26,16 +26,47 @@ const expectedProviderAdapters = [
 ];
 
 const expectedSessionAdapters = [
+  "augment",
   "claude",
   "codex",
+  "copaw",
   "gemini",
   "grok",
+  "hermes",
+  "kilo",
   "kimi",
+  "nanoclaw",
   "oh-my-pi",
   "openclaw",
   "opencode",
   "pi",
+  "qoder",
   "qwen",
+  "reasonix",
+];
+
+const expectedPartialSessionReaders = [
+  "antigravity",
+  "cherry-studio",
+  "cline",
+  "copilot",
+  "cursor",
+  "kiro",
+  "windsurf",
+];
+
+const expectedPlannedSessionAdapters = [
+  "amp",
+  "autoclaw",
+  "codebuddy",
+  "qclaw",
+  "qoderwork",
+  "trae",
+  "trae-cn",
+  "trae-work",
+  "trae-work-cn",
+  "workbuddy",
+  "zcode",
 ];
 
 const expectedUsageAdapters = [
@@ -68,7 +99,7 @@ describe("Agent platform capability inventory", () => {
     expect(inventoryIds).toEqual(registryIds);
   });
 
-  it("keeps the requested local Claw platforms as independent planned identities", () => {
+  it("keeps the requested local Claw platforms as independent identities", () => {
     const expectedRoots = {
       copaw: {
         primary: "~/.qwenpaw",
@@ -100,7 +131,11 @@ describe("Agent platform capability inventory", () => {
 
       const inventory = getAgentPlatformCapabilityInventory(platform!);
       expect(inventory.providerModel.status, platformId).toBe("planned");
-      expect(inventory.sessions.status, platformId).toBe("planned");
+      expect(inventory.sessions.status, platformId).toBe(
+        platformId === "nanoclaw" || platformId === "copaw"
+          ? "supported"
+          : "planned",
+      );
       expect(inventory.usage.status, platformId).toBe("planned");
       expect(inventory.maintenanceCli.status, platformId).toBe("planned");
       expect(inventory.skills.status, platformId).toBe("partial");
@@ -143,7 +178,33 @@ describe("Agent platform capability inventory", () => {
         .sort(),
     ).toEqual(expectedProviderAdapters);
     expect(supportedPlatformIds("sessions")).toEqual(expectedSessionAdapters);
+    expect(
+      SKILL_PLATFORMS.filter(
+        (platform) =>
+          getAgentPlatformCapabilityInventory(platform).sessions.status ===
+          "partial",
+      )
+        .map((platform) => platform.id)
+        .sort(),
+    ).toEqual(expectedPartialSessionReaders);
+    expect(
+      SKILL_PLATFORMS.filter(
+        (platform) =>
+          getAgentPlatformCapabilityInventory(platform).sessions.status ===
+          "planned",
+      )
+        .map((platform) => platform.id)
+        .sort(),
+    ).toEqual(expectedPlannedSessionAdapters);
     expect(supportedPlatformIds("usage")).toEqual(expectedUsageAdapters);
+    expect(
+      getAgentPlatformCapabilityInventory(
+        SKILL_PLATFORMS.find((platform) => platform.id === "antigravity")!,
+      ).sessions,
+    ).toEqual({
+      status: "partial",
+      evidence: "verified-antigravity-cli-transcripts",
+    });
   });
 
   it("keeps Grok Build rooted in its documented environment override", () => {
@@ -202,7 +263,7 @@ describe("Agent platform capability inventory", () => {
     });
   });
 
-  it("keeps Cursor depth adapters planned while exposing verified asset paths", () => {
+  it("exposes Cursor verified read-only Agent transcripts", () => {
     const cursor = SKILL_PLATFORMS.find((platform) => platform.id === "cursor");
     expect(cursor).toBeDefined();
 
@@ -232,12 +293,12 @@ describe("Agent platform capability inventory", () => {
         evidence: "plugins-relative-path",
       },
       configFiles: {
-        status: "planned",
-        evidence: "protocol-evidence-pending",
+        status: "partial",
+        evidence: "user-config-root-discovery",
       },
       sessions: {
-        status: "planned",
-        evidence: "adapter-evidence-pending",
+        status: "partial",
+        evidence: "verified-readonly-agent-transcripts",
       },
       usage: {
         status: "planned",
@@ -333,7 +394,7 @@ describe("Agent platform capability inventory", () => {
     });
   });
 
-  it("keeps Cherry Studio database-owned capabilities planned", () => {
+  it("keeps Cherry Studio depth bounded to the verified Agent session database", () => {
     const cherryStudio = SKILL_PLATFORMS.find(
       (platform) => platform.id === "cherry-studio",
     );
@@ -365,12 +426,12 @@ describe("Agent platform capability inventory", () => {
         evidence: "protocol-evidence-pending",
       },
       configFiles: {
-        status: "planned",
-        evidence: "protocol-evidence-pending",
+        status: "partial",
+        evidence: "user-config-root-discovery",
       },
       sessions: {
-        status: "planned",
-        evidence: "adapter-evidence-pending",
+        status: "partial",
+        evidence: "verified-cherry-agent-session-db",
       },
       usage: {
         status: "planned",
@@ -388,6 +449,64 @@ describe("Agent platform capability inventory", () => {
         status: "unsupported",
         evidence: "appearance-adapter-unavailable",
       },
+    });
+  });
+
+  it("reports Kilo history after verifying its native local JSON store", () => {
+    const kilo = SKILL_PLATFORMS.find((platform) => platform.id === "kilo");
+    expect(kilo).toBeDefined();
+    expect(getAgentPlatformCapabilityInventory(kilo!).sessions).toEqual({
+      status: "supported",
+      evidence: "verified-kilo-session-json",
+    });
+  });
+
+  it("reports Hermes history after verifying its official state database", () => {
+    const hermes = SKILL_PLATFORMS.find((platform) => platform.id === "hermes");
+    expect(hermes).toBeDefined();
+    expect(getAgentPlatformCapabilityInventory(hermes!).sessions).toEqual({
+      status: "supported",
+      evidence: "verified-hermes-state-db",
+    });
+  });
+
+  it("reports Reasonix history after verifying its current event-log store", () => {
+    const reasonix = SKILL_PLATFORMS.find(
+      (platform) => platform.id === "reasonix",
+    );
+    expect(reasonix).toBeDefined();
+    expect(getAgentPlatformCapabilityInventory(reasonix!).sessions).toEqual({
+      status: "supported",
+      evidence: "verified-reasonix-events-v1",
+    });
+  });
+
+  it("reports NanoClaw history from its current two-database session store", () => {
+    const nanoclaw = SKILL_PLATFORMS.find(
+      (platform) => platform.id === "nanoclaw",
+    );
+    expect(nanoclaw).toBeDefined();
+    expect(getAgentPlatformCapabilityInventory(nanoclaw!).sessions).toEqual({
+      status: "supported",
+      evidence: "verified-nanoclaw-v2-sqlite",
+    });
+  });
+
+  it("reports CoPaw history from its current SafeJSONSession workspaces", () => {
+    const copaw = SKILL_PLATFORMS.find((platform) => platform.id === "copaw");
+    expect(copaw).toBeDefined();
+    expect(getAgentPlatformCapabilityInventory(copaw!).sessions).toEqual({
+      status: "supported",
+      evidence: "verified-copaw-safe-json-session-v2",
+    });
+  });
+
+  it("reports Qoder history from its documented transcript JSONL store", () => {
+    const qoder = SKILL_PLATFORMS.find((platform) => platform.id === "qoder");
+    expect(qoder).toBeDefined();
+    expect(getAgentPlatformCapabilityInventory(qoder!).sessions).toEqual({
+      status: "supported",
+      evidence: "verified-qoder-transcript-jsonl-v1",
     });
   });
 
@@ -423,8 +542,8 @@ describe("Agent platform capability inventory", () => {
         evidence: "protocol-evidence-pending",
       },
       configFiles: {
-        status: "planned",
-        evidence: "protocol-evidence-pending",
+        status: "partial",
+        evidence: "user-config-root-discovery",
       },
       sessions: {
         status: "partial",

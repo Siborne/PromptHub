@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 38 |
-| Archived | 182 |
+| Active | 44 |
+| Archived | 183 |
 | Legacy | 1 |
 
 ## Active
@@ -17,6 +17,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | --- | --- | --- |
 | `agent-management-workbench` | active | `spec/changes/active/agent-management-workbench/` |
 | `app-shell-left-rail` | in progress | `spec/changes/active/app-shell-left-rail/` |
+| `cli-agent-management` | active | `spec/changes/active/cli-agent-management/` |
 | `cli-feature-completeness` | active | `spec/changes/active/cli-feature-completeness/` |
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
@@ -28,8 +29,10 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-issue-192-copy-action-parity` | active | `spec/changes/active/desktop-issue-192-copy-action-parity/` |
 | `desktop-prompt-context-move` | active | `spec/changes/active/desktop-prompt-context-move/` |
 | `desktop-renderer-ui-test-coverage` | active | `spec/changes/active/desktop-renderer-ui-test-coverage/` |
+| `desktop-skill-ui-size-performance` | active | `spec/changes/active/desktop-skill-ui-size-performance/` |
 | `desktop-update-dialog-polish` | active | `spec/changes/active/desktop-update-dialog-polish/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
+| `homebrew-update-routing` | missing implementation | `spec/changes/active/homebrew-update-routing/` |
 | `homepage-changelog-route-retirement` | active | `spec/changes/active/homepage-changelog-route-retirement/` |
 | `macos-developer-id-signing` | active | `spec/changes/active/macos-developer-id-signing/` |
 | `mobile-app-shell` | active | `spec/changes/active/mobile-app-shell/` |
@@ -38,9 +41,11 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `platform-workbench-prototype` | in progress | `spec/changes/active/platform-workbench-prototype/` |
 | `plugin-issue-190-multi-native-manifests` | active | `spec/changes/active/plugin-issue-190-multi-native-manifests/` |
 | `plugin-management` | active | `spec/changes/active/plugin-management/` |
+| `preview-update-channel` | missing implementation | `spec/changes/active/preview-update-channel/` |
 | `project-skill-management` | in progress | `spec/changes/active/project-skill-management/` |
 | `prompt-output-format-contribution` | active | `spec/changes/active/prompt-output-format-contribution/` |
 | `r2-direct-downloads` | active | `spec/changes/active/r2-direct-downloads/` |
+| `readme-contributor-refresh` | missing implementation | `spec/changes/active/readme-contributor-refresh/` |
 | `readme-screenshots-v0-5-6` | active | `spec/changes/active/readme-screenshots-v0-5-6/` |
 | `release-0-6-0-version-alignment` | active | `spec/changes/active/release-0-6-0-version-alignment/` |
 | `republish-0-5-9-20260714` | active | `spec/changes/active/republish-0-5-9-20260714/` |
@@ -52,6 +57,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `skills-issue-194-shared-global-target` | active | `spec/changes/active/skills-issue-194-shared-global-target/` |
 | `sync-issue-191-safety-report-contract` | active | `spec/changes/active/sync-issue-191-safety-report-contract/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
+| `web-agent-service-parity` | active | `spec/changes/active/web-agent-service-parity/` |
 | `web-sync-contract-completion` | active | `spec/changes/active/web-sync-contract-completion/` |
 
 ## Archived
@@ -240,6 +246,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-28-source-trust-and-mcp-market-updates` | archived | `spec/changes/archive/2026/07/2026-07-28-source-trust-and-mcp-market-updates/` |
 | `2026-07-28-unified-custom-store-sources` | archived | `spec/changes/archive/2026/07/2026-07-28-unified-custom-store-sources/` |
 | `2026-07-30-website-release-metadata-stable-boundary` | archived | `spec/changes/archive/2026/07/2026-07-30-website-release-metadata-stable-boundary/` |
+| `2026-08-01-web-agent-management` | archived | `spec/changes/archive/2026/08/2026-08-01-web-agent-management/` |
 
 ## Legacy
 

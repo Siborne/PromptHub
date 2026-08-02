@@ -20,12 +20,7 @@ import { normalizeSkillsShFilterKey } from "../../services/skills-sh-store";
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useToast } from "../ui/Toast";
-import type {
-  RegistrySkill,
-  SkillCategory,
-  SkillStoreSource,
-} from "@prompthub/shared/types";
-import { SKILL_CATEGORIES } from "@prompthub/shared/constants/skill-categories";
+import type { RegistrySkill, SkillStoreSource } from "@prompthub/shared/types";
 import {
   formatSkillInstallError,
   formatSkillPackageOperationError,
@@ -63,7 +58,10 @@ import {
   isCloudRegistrySkill,
   normalizeSkillStoreSourceIdForRuntime,
 } from "../../services/cloud-store";
-import { formatStoreSourceHint } from "./skill-store-presentation";
+import {
+  buildSkillStoreCategories,
+  resolveSkillStoreSourceMeta,
+} from "./skill-store-view-model";
 import {
   getSkillSafetyChannelForStore,
   resolveSkillSafetyScanMode,
@@ -917,131 +915,29 @@ export function SkillStore() {
     }
   };
 
-  const categories: { key: SkillCategory | "all"; label: string }[] = [
-    { key: "all", label: t("common.showAll", "All") },
-    ...Object.entries(SKILL_CATEGORIES).map(([key, value]) => ({
-      key: key as SkillCategory,
-      label: isZh ? value.label : value.labelEn,
-    })),
-  ];
-
-  const sourceMeta = useMemo(() => {
-    if (selectedStoreSourceId === "community") {
-      return {
-        title: t("skill.communityStore", "Community Store"),
-        hint: t(
-          "skill.communityStoreHint",
-          "This area will aggregate third-party community skill sources. The entry is ready for connecting a community registry next.",
-        ),
-        count: displayedStoreCount,
-        countLabel: displayedStoreCountLabel,
-        showCatalog: true,
-        canRefresh: true,
-      };
-    }
-
-    if (selectedStoreSourceId === "claude-code") {
-      return {
-        title: t("skill.claudeCodeStore", "Claude Code Store"),
-        hint: t(
-          "skill.claudeCodeStoreHint",
-          "Built-in Claude Code source with first-class support for the official skills repo and common marketplace.json indexes.",
-        ),
-        count: displayedStoreCount,
-        countLabel: displayedStoreCountLabel,
-        showCatalog: true,
-        canRefresh: true,
-      };
-    }
-
-    if (selectedStoreSourceId === "openai-codex") {
-      return {
-        title: t("skill.openaiCodexStore", "OpenAI Codex Store"),
-        hint: t(
-          "skill.openaiCodexStoreHint",
-          "Built-in OpenAI Codex source with first-class support for the curated openai/skills catalog.",
-        ),
-        count: displayedStoreCount,
-        countLabel: displayedStoreCountLabel,
-        showCatalog: true,
-        canRefresh: true,
-      };
-    }
-
-    if (selectedStoreSourceId === "clawhub") {
-      return {
-        title: t("skill.clawHubStore", "ClawHub Store"),
-        hint: t(
-          "skill.clawHubStoreHint",
-          "Built-in ClawHub source for browsing public community skills from clawhub.ai.",
-        ),
-        count: displayedStoreCount,
-        countLabel: displayedStoreCountLabel,
-        showCatalog: true,
-        canRefresh: true,
-      };
-    }
-
-    if (selectedStoreSourceId === "prompthub-cloud") {
-      return {
-        title: t("skill.promptHubCloudStore", "PromptHub Cloud"),
-        hint: t(
-          "skill.promptHubCloudStoreHint",
-          "Published PromptHub Cloud releases with package fingerprints, safety checks, and confirmation before installation.",
-        ),
-        count: displayedStoreCount,
-        countLabel: displayedStoreCountLabel,
-        showCatalog: true,
-        canRefresh: true,
-      };
-    }
-
-    if (selectedStoreSourceId === "new-custom") {
-      return {
-        title: t("skill.addStoreSource", "Add Store"),
-        hint: t(
-          "skill.customStoresHint",
-          "Add your own store endpoints here. A later step can connect remote manifests or registries.",
-        ),
-        count: customStoreSources.length,
-        countLabel: `${customStoreSources.length} ${t("skill.skillsCount", "skills")}`,
-        showCatalog: false,
-        canRefresh: false,
-      };
-    }
-
-    if (selectedCustomSource) {
-      return {
-        title: selectedCustomSource.name,
-        hint: formatStoreSourceHint(selectedCustomSource),
-        count: displayedStoreCount,
-        countLabel: displayedStoreCountLabel,
-        showCatalog: true,
-        canRefresh: true,
-      };
-    }
-
-    return {
-      title: t("skill.officialStore", "Official Store"),
-      hint: t(
-        "skill.officialStoreComingSoonHint",
-        "The official store is not open yet. You can import skills from Claude Code, OpenAI Codex, or a custom store for now.",
-      ),
-      count: 0,
-      countLabel: `0 ${t("skill.skillsCount", "skills")}`,
-      showCatalog: false,
-      canRefresh: false,
-    };
-  }, [
-    customStoreSources.length,
-    displayedStoreCount,
-    displayedStoreCountLabel,
-    selectedCustomSource,
-    selectedStoreSourceId,
-    selectedStoreTotalCount,
-    sourceRegistrySkills.length,
-    t,
-  ]);
+  const categories = useMemo(
+    () => buildSkillStoreCategories(isZh, t),
+    [isZh, t],
+  );
+  const sourceMeta = useMemo(
+    () =>
+      resolveSkillStoreSourceMeta({
+        customStoreSourcesCount: customStoreSources.length,
+        displayedStoreCount,
+        displayedStoreCountLabel,
+        selectedCustomSource,
+        selectedStoreSourceId,
+        t,
+      }),
+    [
+      customStoreSources.length,
+      displayedStoreCount,
+      displayedStoreCountLabel,
+      selectedCustomSource,
+      selectedStoreSourceId,
+      t,
+    ],
+  );
 
   const currentRemoteError = visibleRemoteEntry?.error || null;
   const shouldShowGenericCategoryFilter =

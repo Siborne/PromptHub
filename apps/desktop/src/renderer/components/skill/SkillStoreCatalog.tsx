@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import type { RegistrySkill } from "@prompthub/shared/types";
 import { SkillStoreCard } from "./SkillStoreCard";
@@ -322,7 +322,7 @@ function VirtualizedSkillStoreCatalog(props: VirtualCatalogProps) {
   );
 }
 
-export function SkillStoreCatalog(props: SkillStoreCatalogProps) {
+function SkillStoreCatalogView(props: SkillStoreCatalogProps) {
   const catalogRef = useRef<HTMLDivElement | null>(null);
   const { width, margin } = useCatalogMeasurements(props.scrollRef, catalogRef);
   const columns = useMemo(() => getStoreGridColumns(width || 1024), [width]);
@@ -352,3 +352,5 @@ export function SkillStoreCatalog(props: SkillStoreCatalogProps) {
     />
   );
 }
+
+export const SkillStoreCatalog = memo(SkillStoreCatalogView);

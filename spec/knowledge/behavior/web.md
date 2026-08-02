@@ -142,15 +142,46 @@
 - Prompt hierarchy moves, graph relations, and output-format sequences must
   use authenticated Web APIs backed by the existing SQLite contracts; browser
   code must not fall back to IndexedDB for these records.
-- MCP and Plugin libraries, packages, store sources, and asset files remain
-  opaque backup/sync data in Web. The browser must not present their managers
-  or mutate Desktop target configuration.
-- Local skill files, repository copy/symlink operations, local agent scans,
-  platform detection, and platform installation are Desktop-only. Web
-  capability flags must disable these surfaces and bridge calls must reject
-  rather than return fabricated success values.
-- A persisted browser UI module of `mcp` or `plugin` must resolve to Prompt so
-  a prior session cannot open an unsupported manager.
+- MCP and Plugin synchronized libraries are browseable from the self-hosted Web
+  Agent service pages. Browser actions must not project them into the viewer's
+  local Agent configuration or fabricate distribution success.
+- Local repository copy/symlink operations, installation into the viewer's
+  Agent, process launch, tray/window behavior, and native dialogs remain
+  Desktop-only. Self-hosted Web may inspect server-owned Agent paths only
+  through bounded, authenticated server adapters.
+- The browser Agents workspace uses the authenticated `GET /api/agents`
+  contract. Administrators receive bounded, read-only, shallow existence checks
+  for roots on the self-hosted server process account. Other users receive a
+  per-user logical inventory and must not trigger server filesystem probes.
+- Agent inventory is bounded to canonical built-ins plus at most 32 validated
+  custom Agents. Root existence checks run concurrently through a five-second,
+  256-entry cache and must not traverse Agent subtrees.
+- Agent service discovery uses `GET /api/agents/:agentId/services`; individual
+  domains use `GET /api/agents/:agentId/services/:domain`. Service results are
+  capped at 200 items and report native action availability separately from
+  the owning service.
+- Administrators manage server-owned Provider profiles through Agent-scoped
+  authenticated routes. Provider secrets stay in the encrypted server secret
+  store and never appear in list, export, or mutation responses.
+- Native Agent config read/write uses the shared bounded config-file service:
+  reads redact secrets, writes require an expected revision, structured formats
+  are validated, and atomic replacement is preceded by an encrypted rollback
+  backup. Writes remain unavailable until the deployment provides a stable
+  32-byte `AGENT_SECRET_KEY`; no JWT-derived or plaintext fallback is allowed.
+- Session browsing uses the shared SQLite session index with bounded source and
+  page limits. The browser may show only indexed redacted previews; native
+  transcript parsing and resume/launch actions remain platform adapters rather
+  than arbitrary server file reads.
+- Config declarations use a fixed concurrency cap, and Appearance/Definition
+  directories use bounded visits without following symbolic links. Initial
+  Agent inventory performs no recursive service scan.
+- Per-user Web settings remain the source of truth for built-in Agent
+  overrides, custom Agent definitions, disabled IDs, legacy custom roots, and
+  identity preferences. Desktop snapshot normalization must preserve those
+  portable fields.
+- A persisted browser UI module of `mcp` or `plugin` must resolve to Prompt;
+  their Agent-scoped service pages remain available inside the persisted
+  `agents` module and load only server-declared capabilities.
 
 ## Stable Scenarios
 

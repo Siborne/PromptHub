@@ -690,14 +690,84 @@ describe('web settings routes', () => {
       expect(tooManyConfigPathsBody.error.code).toBe('VALIDATION_ERROR');
       expect(tooManyConfigPathsBody.error.message).toContain('customAgents');
 
+      const conflictingAgents = await app.request(
+        new Request('http://local/api/settings', {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            customAgents: [
+              { ...validAgent, id: 'claude' },
+              { ...validAgent, id: 'other-agent' },
+            ],
+          }),
+        }),
+      );
+      expect(conflictingAgents.status).toBe(422);
+
+      const caseVariantBuiltin = await app.request(
+        new Request('http://local/api/settings', {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            customAgents: [{ ...validAgent, id: 'CLAUDE' }],
+          }),
+        }),
+      );
+      expect(caseVariantBuiltin.status).toBe(422);
+
+      const validIdentity = await app.request(
+        new Request('http://local/api/settings', {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            agentIdentityPreferences: {
+              codex: { name: 'chatgpt', icon: 'codex' },
+            },
+            customAgents: [{
+              ...validAgent,
+              mcpRelativePath: 'mcp.json',
+              pluginsRelativePath: 'plugins',
+            }],
+          }),
+        }),
+      );
+      expect(validIdentity.status).toBe(200);
+
+      const invalidIdentity = await app.request(
+        new Request('http://local/api/settings', {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            agentIdentityPreferences: {
+              codex: { name: 'future-name', icon: 'codex' },
+            },
+          }),
+        }),
+      );
+      expect(invalidIdentity.status).toBe(422);
+
       const settingsResponse = await app.request(
         new Request('http://local/api/settings', {
           headers: { Authorization: `Bearer ${token}` },
         }),
       );
       expect(settingsResponse.status).toBe(200);
-      const settingsBody = await settingsResponse.json() as { data: { customAgents: unknown[] } };
-      expect(settingsBody.data.customAgents).toEqual([]);
+      const settingsBody = await settingsResponse.json() as {
+        data: {
+          agentIdentityPreferences: unknown;
+          customAgents: unknown[];
+        };
+      };
+      expect(settingsBody.data.customAgents).toEqual([
+        expect.objectContaining({
+          id: 'custom-agent-1',
+          mcpRelativePath: 'mcp.json',
+          pluginsRelativePath: 'plugins',
+        }),
+      ]);
+      expect(settingsBody.data.agentIdentityPreferences).toEqual({
+        codex: { name: 'chatgpt', icon: 'codex' },
+      });
     } finally {
       fs.rmSync(dataDir, { recursive: true, force: true });
     }

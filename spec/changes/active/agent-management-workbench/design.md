@@ -789,6 +789,20 @@ inputs only and are not generic asset distribution targets.
 | `FR-AGENT-073`                                                                                                        | `DES-AGENT-088`                                                                                                                                        | `TEST-AGENT-108`                                                                                                                                                                                     | `T-AGENT-145`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-074`                                                                                                        | `DES-AGENT-089`                                                                                                                                        | `TEST-AGENT-109`                                                                                                                                                                                     | `T-AGENT-146`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-075`                                                                                                        | `DES-AGENT-090`                                                                                                                                        | `TEST-AGENT-110`                                                                                                                                                                                     | `T-AGENT-147`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-076`                                                                                                        | `DES-AGENT-091`                                                                                                                                        | `TEST-AGENT-111`                                                                                                                                                                                     | `T-AGENT-148`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-077`                                                                                                        | `DES-AGENT-092`                                                                                                                                        | `TEST-AGENT-112`                                                                                                                                                                                     | `T-AGENT-149`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-078`                                                                                                        | `DES-AGENT-093`                                                                                                                                        | `TEST-AGENT-113`                                                                                                                                                                                     | `T-AGENT-150`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-079`                                                                                                        | `DES-AGENT-094`                                                                                                                                        | `TEST-AGENT-114`                                                                                                                                                                                     | `T-AGENT-151`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-080`                                                                                                        | `DES-AGENT-095`                                                                                                                                        | `TEST-AGENT-115`                                                                                                                                                                                     | `T-AGENT-152`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-081`                                                                                                        | `DES-AGENT-096`                                                                                                                                        | `TEST-AGENT-116`                                                                                                                                                                                     | `T-AGENT-153`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-082`                                                                                                        | `DES-AGENT-097`                                                                                                                                        | `TEST-AGENT-117`                                                                                                                                                                                     | `T-AGENT-154`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-083`                                                                                                        | `DES-AGENT-098`                                                                                                                                        | `TEST-AGENT-118`                                                                                                                                                                                     | `T-AGENT-155`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-084`                                                                                                        | `DES-AGENT-099`                                                                                                                                        | `TEST-AGENT-119`                                                                                                                                                                                     | `T-AGENT-156`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-085`                                                                                                        | `DES-AGENT-100`                                                                                                                                        | `TEST-AGENT-120`                                                                                                                                                                                     | `T-AGENT-157`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-086`                                                                                                        | `DES-AGENT-101`                                                                                                                                        | `TEST-AGENT-121`                                                                                                                                                                                     | `T-AGENT-158`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-087`                                                                                                        | `DES-AGENT-102`                                                                                                                                        | `TEST-AGENT-122`                                                                                                                                                                                     | `T-AGENT-159`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-088`                                                                                                        | `DES-AGENT-103`                                                                                                                                        | `TEST-AGENT-123`                                                                                                                                                                                     | `T-AGENT-160`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-089`                                                                                                        | `DES-AGENT-104`                                                                                                                                        | `TEST-AGENT-124`                                                                                                                                                                                     | `T-AGENT-161`                                                                                                                                                                                                                                                                               |
 | `NFR-AGENT-001`, `NFR-AGENT-002`, `NFR-AGENT-003`, `NFR-AGENT-004`, `NFR-AGENT-005`, `NFR-AGENT-006`, `NFR-AGENT-007` | `DES-AGENT-005`, `DES-AGENT-008`, `DES-AGENT-009`, `DES-AGENT-014`, `DES-AGENT-015`, `DES-AGENT-060` in `ui-resilience-designs.md`                     | `TEST-AGENT-004`, `TEST-AGENT-007`, `TEST-AGENT-009`, `TEST-AGENT-011`, `TEST-AGENT-012`, `TEST-AGENT-015`, `TEST-AGENT-016`, `TEST-AGENT-017`, `TEST-AGENT-018`, `TEST-AGENT-047`, `TEST-AGENT-048` | `T-AGENT-025`, `T-AGENT-035`, `T-AGENT-036`, `T-AGENT-037`, `T-AGENT-038`, `T-AGENT-039`, `T-AGENT-082`, `T-AGENT-083`, `T-AGENT-115`                                                                                                                                                       |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-057` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-076`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-112`                                                                                                                                                                                                                                                                |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-058` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-077`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-113`                                                                                                                                                                                                                                                                |
@@ -1687,3 +1701,311 @@ only status guidance; it does not mount inventory, usage, provider, appearance,
 session, path or config components. Header launch, diagnostics and edit actions
 are unavailable. No schema, registry, detection, IPC or persistence contract is
 changed.
+
+## `DES-AGENT-091`: Antigravity CLI Read-Only Conversation Adapter
+
+The `antigravity` session adapter targets the current open-source Antigravity
+CLI contract rather than the proprietary desktop protobuf store. Its main-owned
+root defaults to `~/.gemini/antigravity-cli`; only an injected absolute root is
+accepted by tests or trusted platform resolution. Conversation candidates are
+regular, non-symlink `.db` files whose basename is a UUID-safe session id. The
+adapter never opens mutable SQLite handles and does not decode blob tables.
+
+Project association comes from the bounded CLI cache maps under `cache/`, where
+absolute project paths map to conversation ids. Generated visible messages come
+only from the matching bounded `brain/<id>/.system_generated/logs/transcript.jsonl`.
+The parser accepts known source/type pairs, caps line/body bytes, hides tool
+payloads and ignores unknown records. A missing projection produces an empty,
+non-error detail so the database identity can still be resumed without
+fabricating content. Search covers the bounded title, project metadata and
+visible projected turns.
+
+Native continuation resolves the allowlisted `agy` executable at apply time and
+uses typed arguments `--conversation <id>`, optional verified project cwd and
+`shell: false` through the existing resume service. Legacy desktop `.pb` files,
+SQLite protobuf blobs, credentials, implicit trajectories, browser recordings,
+tool payloads and full transcripts remain excluded. Capability is `partial`
+because generated transcript projections are not guaranteed for every valid
+database conversation.
+
+## `DES-AGENT-092`: Shared Icon-Led Asset Card Content
+
+`AgentAssetManagementSurface.tsx` owns both the existing card/action shell and
+a shared `AgentAssetCardContent` primitive. The content primitive fixes the
+icon slot, title/status row, two-line description, one-line source, metadata
+chips and optional supplementary metadata to the same dimensions. Skill, MCP
+and Plugin panels supply only domain identity, labels, metadata and canonical
+actions.
+
+Skills use `SkillIcon` with the scanned name fallback because the scan contract
+does not project library artwork. MCP keeps `ServerIcon`. Managed Plugins keep
+`PluginAvatar`, while Agent-discovered packages keep `PlugIcon`. Action buttons
+continue through `AgentAssetActionButton`; no action, store, IPC or persistence
+contract changes. The `agents.plugins` taxonomy key resolves to `Plugins` in
+all seven locales while unrelated descriptive Plugin strings stay localized.
+
+## `DES-AGENT-093`: Shared Agent Workspace Leading Edge
+
+The Agent detail header uses the same `px-5` horizontal inset as the asset
+toolbar and inventory viewport, so identity, tabs, controls and cards align to
+one workspace grid. `AgentAssetManagementSurface` does not accept or render a
+domain title because the active top-level Skills, MCP or Plugins tab already
+names the current workspace. No asset, action, store or IPC behavior changes.
+
+## `DES-AGENT-094`: Cursor-Paginated Native Transcript Reads
+
+`AgentSessionDetail` gains an optional opaque `nextCursor`; the existing detail
+fields remain stable. `agent:session:read` accepts an optional object containing
+`cursor` and a bounded visible-message `limit`. The preload forwards that
+object unchanged, while the main handler validates its shape, length and range
+before selecting an adapter. Cursors are source-bound main-process values, not
+paths or renderer-selected byte ranges.
+
+The first implementation replaces Codex's fixed 2 MiB prefix read with a
+bounded streaming JSONL scanner. It tracks complete-line byte offsets, rejects
+invalid or source-mismatched cursors, caps individual lines/text and scans at
+most 16 MiB per page, hides non-visible runtime/tool records, and keeps
+scanning until the visible page is full, the source ends or the scan budget is
+reached. A budget boundary returns a continuation cursor, including when the
+page has no visible entry, rather than claiming the conversation has no body.
+
+Augment uses the same public page contract over its native
+`~/.augment/sessions/*.json` documents. The adapter validates the session id,
+regular-file realpath and source revision, derives project ownership only from
+workspace folders embedded in request nodes, and projects only
+`request_message` / `response_text`. Native resume uses the documented
+`auggie --resume <id>` command with the verified workspace root. Agent state,
+authentication, user identity, tool nodes and task storage remain private.
+
+`AgentSessionsPanel` requests the first visible page lazily, appends subsequent
+pages by stable entry id and exposes one load-more control whenever either a
+server cursor or locally unmounted legacy entries remain. Selection changes
+invalidate in-flight pages. `truncated` remains reserved for data that cannot
+be recovered, such as bounded field text; a paginatable source uses
+`nextCursor` instead of the old permanent-preview warning.
+
+## `DES-AGENT-095`: Shell-Owned Agent Asset Detail Navigation
+
+`AgentsWorkspace` owns one transient `isAssetDetailOpen` presentation state.
+The Skills, MCP and Plugins detail owners keep their canonical selected-item
+state and full-detail components, but report open/close transitions through
+`AgentAssetsWorkspace`. While the state is open, the workspace shell omits the
+Agent identity header and tab list, allowing the existing panel to fill the
+complete area to the right of the Agent list. Back clears the domain-owned
+selection and restores the shell without changing the selected Agent or tab.
+
+The state resets when the selected Agent or top-level tab changes. Rules does
+not participate because it is a dedicated editor rather than one of the three
+Agent asset card domains. No route, store, IPC, persistence or owning-domain
+asset contract changes.
+
+## `DES-AGENT-096`: Verified Read-Only Cherry Studio And Kilo Sessions
+
+The existing main-owned session service gains two live-reader adapters without
+changing the IPC contract or persisting transcript bodies. Both adapters use
+the shared list/search/detail model and opaque, source-bound detail cursors.
+
+Cherry Studio first opens the current official
+`<root>/Data/cherrystudio.sqlite` with the SQLite read-only option after
+regular-file, realpath-containment and schema checks. Metadata comes from
+`agent_session` plus `agent_workspace`; visible rows come from
+`agent_session_message.data.parts`, restricted to `user` / `assistant` rows
+and `type: text` parts. Reasoning and tool parts are excluded. If the current
+database is absent, the adapter may read the locally verified older
+`<root>/Data/agents.db` `sessions` / `session_messages` schema. Search is
+parameterized and literal across metadata and visible text. The adapter is
+`partial` because it covers Cherry Agent sessions rather than every Cherry
+chat surface, and it advertises no native resume command.
+
+Kilo reads regular, non-symlink JSON files below
+`~/.local/share/kilo/storage/{session,message,part}`. Session and message ids
+must pass the shared safe-id policy, every resolved path must stay inside the
+storage root, and oversized or malformed records are rejected or counted as
+parse errors. Detail pages combine only `type: text` parts for `user` and
+`assistant` messages; reasoning, tool, snapshot and step records are excluded.
+An explicit scan ceiling fails with `AGENT_SESSION_SCAN_LIMIT` rather than
+silently truncating the catalog. Session metadata and transcript hydration use
+bounded worker pools so a large catalog does not create unbounded simultaneous
+filesystem reads. Native continuation is typed as
+`kilo --session <id>` with an absolute verified project cwd when available.
+
+`TEST-AGENT-116` covers list/search ordering, cursor pagination, missing roots,
+malformed schemas/JSON, symlinks, traversal ids, hidden record exclusion and
+resume metadata. Capability evidence changes only after these fixtures pass.
+
+### `DES-AGENT-102`: Claude Resume Metadata And Transcript Density
+
+The Claude JSONL list adapter reads at most `MAX_METADATA_BYTES` from each
+selected source and derives title, validated session id and the first absolute,
+null-byte-free `cwd` in one pass. The stable PromptHub list identity remains the
+source filename, while the typed native command uses the validated embedded id
+and carries `cwd` through the conversation service to the terminal launcher.
+Invalid or missing metadata is ignored rather than decoded from Claude's lossy
+project-directory folder name.
+
+The renderer keeps avatars and bubbles as separate elements, but reduces the
+transcript stack gap to 10px and vertical viewport padding to 16px. Native
+resume uses the current-Agent terminal contract; `DES-AGENT-103` supersedes the
+earlier compact glyph treatment with the explicit two-action hierarchy.
+
+### `DES-AGENT-103`: Continuation Intent Gate And View Pagination
+
+`AgentConversationActions` owns a two-stage continuation state. The default
+toolbar renders two labeled actions only: an action for the selected session's
+typed native `resume` contract and a cross-Agent handoff action. The handoff
+action opens a custom modal containing all detected target Agents and the
+project selector; preview generation remains the confirmation boundary before
+the existing digest-verified handoff. Export has a dedicated compact icon with
+Markdown/JSON choices. Edit and soft delete/restore remain in the custom
+overflow menu.
+
+`AgentConversationService.previewHandoff` is the single source of truth for the
+portable payload and transport tier. Verified Claude Code and Codex executable
+contracts use `direct` and expose a shell-quoted command using the same target,
+project directory and payload consumed by Terminal launch. Other detected
+Agents with an allowlisted application launch path use `launch`: the main
+process copies the reviewed payload before opening the target application.
+Targets without either capability use `unavailable` as a copy-only UI fallback;
+the payload remains reviewable and copyable, but no launch success is recorded.
+The renderer never reconstructs a command and derives only presentation copy
+from the returned transport.
+
+Cross-Agent continuation never reuses the source session id as if it were
+portable. Native resume remains owned by the source adapter and source Agent;
+handoff transports pass a bounded, redacted project-aware conversation payload
+to the selected target Agent.
+
+`AgentSessionsPanel` separates source fetching from DOM pagination. Adapters are
+read in bounded batches of 80 entries, while the renderer mounts 20 entries per
+view page. The fixed pagination bar selects any loaded page, resets the
+transcript scroll position on navigation and requests the next source cursor
+only when the user advances beyond the loaded page count. The merged detail
+deduplicates entry ids and preserves parse/truncation metadata.
+
+## `DES-AGENT-097`: Shared Agent MCP Entry Detail
+
+`AgentMcpEntryDetail` owns the complete Agent MCP detail composition: identity
+header, management status, transport-specific source fields, serialized config
+preview, detail actions and `AgentMcpPreviewSidebar`. `McpAgentsView` and
+`AgentMcpAssetPanel` both provide their selected preset, server and callbacks
+to this component instead of maintaining parallel detail JSX.
+
+Selection, import, removal and navigation remain owned by the invoking
+workspace. The shared component does not add durable state, IPC, routes or MCP
+storage behavior. Component tests in both entry points assert the shared
+split-sidebar layout and source sidebar so either surface cannot silently
+regress to a reduced detail.
+
+## `DES-AGENT-098`: Shared Skill And Plugin Agent Detail Adapters
+
+`AgentSkillDetailPage` is the only adapter from scanned/managed Agent Skill
+records into `SkillFullDetailPage`. `SkillAgentsView` and
+`AgentAssetsWorkspace` provide domain data and orchestration callbacks without
+constructing their own `agentContext` or `agentActions`. The adapter owns the
+read-only, external, copied, symlinked and managed action policy.
+`useEnsureSkillLibraryLoaded` is the shared readiness boundary for the overview
+aggregate and Skill workspace. It initializes the canonical Skill library when
+it is empty before either surface derives scan status, so cold-start navigation
+order cannot change managed counts or actions. Its `isLoading` guard prevents a
+rapid overview-to-Skills transition from issuing a duplicate library read while
+the first request is still in flight.
+
+`AgentPluginDetailPage` is the only adapter from a target-installed Plugin into
+`PluginFullDetailPage`. `PluginAgentViews` and `AgentPluginAssetPanel` provide
+the target, managed Plugin match and real import/open/store callbacks. A
+PromptHub-library Plugin opened directly from `AgentPluginAssetPanel` remains a
+separate managed-library scenario and still uses the canonical full detail
+page; it is not a duplicate target-installed adapter.
+
+Neither adapter owns durable state, IPC, routing or filesystem writes. Focused
+component tests assert the resulting canonical props and action availability so
+the two entry points cannot drift independently.
+
+## `DES-AGENT-099`: PromptHub Provider Import Projection
+
+Add a main-process provider source service between `CoreAIConfigService` and
+the existing `AgentProviderProfileService`. The source service reads
+`config/ai-models.json` on every list/import operation, joins chat models to
+their provider, applies an explicit platform/protocol compatibility matrix and
+returns only redacted candidate metadata. A confirmed import revalidates the
+candidate and selected model, constructs the platform-specific public Profile
+configuration, and delegates Profile plus write-only credential creation to
+the existing transactional service. This is a copy/projection boundary: global
+AI provider changes never mutate existing Agent Profiles, and Profile changes
+never mutate the global provider.
+
+The IPC contract exposes `list sources` and `import source` only. It never
+returns API keys or secret references. Codex, Claude Code, Gemini, Qwen Code and
+OpenCode are enabled only for protocol combinations their completed adapters
+can write and verify. Other combinations remain visible as incompatible until
+their adapter can represent all required fields without invented defaults.
+
+## `DES-AGENT-100`: Current-Format Read-Only Session Adapters
+
+The shared main-process session service owns five additional current-format
+readers: Hermes read-only SQLite, Reasonix replayable JSONL events, NanoClaw v2
+paired SQLite queues, CoPaw/QwenPaw SafeJSONSession workspaces and Qoder
+transcript JSONL. Each reader validates its own root, schema, source identity,
+symlink boundary and scan ceiling before projecting the shared metadata/detail
+contract. No transcript body is persisted in PromptHub's database or sync.
+
+The Qoder reader scans only regular files at
+`<root>/projects/*/transcript/*.jsonl`, requires every record's `sessionId` to
+match the filename, and derives a source-bound PromptHub id so equal native ids
+in different project roots cannot collide. The official record taxonomy is
+projected narrowly: user records require string `message.content`; assistant
+records contribute only `type: text` parts. `session_meta`, `progress`,
+`tool_use` and `tool_result` records remain hidden. Full visible text supports
+search, while each rendered message is capped and detail uses a revision-bound
+opaque cursor.
+
+Qoder JSONL records larger than 1 MiB are counted as malformed and skipped
+before JSON parsing; scanning continues so an oversized runtime/tool payload
+cannot hide later visible messages. The capability gate is transcript-body
+based: a session index alone is insufficient, and undocumented encrypted stores
+are not decrypted or inferred. Network-backed history readers require a
+separate opt-in design because they change the local-only privacy boundary.
+
+Qoder's documented `/resume` command is interactive rather than a verified
+direct process argument, so metadata keeps `resume: null`. QoderWork is not
+mapped to this reader because its public Hook schema does not document a local
+transcript path or body format. Capability evidence therefore flips only the
+five exact platform ids whose fixtures pass.
+
+## `DES-AGENT-101`: Native Provider Summary And Official Profile Source
+
+Extend the shared current-state projection with a redacted native Provider
+summary derived from each adapter's validated `importCurrent` result. The tray
+service reads this summary independently of activation snapshots, so a real
+native configuration remains visible before PromptHub owns any Profile. The
+summary reduces credential data to a bounded ownership/status enum and reduces
+provider identity to public name, kind, protocol, sanitized endpoint and model.
+
+Add a main-process official Profile source with an explicit platform matrix.
+Claude Code maps to Anthropic platform-native authentication and Codex maps to
+OpenAI platform-native authentication. It reuses the current primary model,
+creates no secret, reuses a matching active Profile when present and delegates
+creation to the existing transactional Profile service. The renderer can then
+request the existing activation preview; native writes, backup, verification
+and rollback remain exclusively owned by the activation service. Other
+platforms advertise no official restore until their default provider and model
+write contract is independently verified.
+
+## `DES-AGENT-104`: Right-Pane Provider Draft Editor
+
+`AgentProviderProfileWorkbench` owns a renderer-local edit target with three
+states: closed, unsaved new draft, and an existing public Profile. Add and Edit
+replace the right detail surface with `AgentProviderProfileFormDialog` rendered
+as an inline labelled region; the component keeps its existing request shaping,
+validation and write-only credential contract but no longer owns a modal.
+Successful create/update closes the editor after the store selects the saved
+Profile. Cancel clears only renderer state and performs no IPC write.
+
+The editor is divided into identity, connection/protocol, model routing and
+authentication bands. Platform defaults and validation continue to derive from
+the completed Claude, Codex, Gemini, Kimi, Grok, Qwen and OpenCode adapters.
+Codex additionally exposes its already-supported `env_key` credential ownership
+as an alternative to a PromptHub-managed secret. The editor does not add model
+catalog, reasoning conversion, custom User-Agent, failover or proxy controls:
+those CC Switch surfaces depend on the separately gated proxy capability in
+`FR-AGENT-017` and are not accepted by the current direct adapters.

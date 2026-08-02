@@ -55,7 +55,7 @@ function normalizeAppModule(value: unknown): AppModule {
       : "prompt";
 
   return isWebRuntime() &&
-    (module === "agents" || module === "mcp" || module === "plugin")
+    (module === "mcp" || module === "plugin")
     ? "prompt"
     : module;
 }

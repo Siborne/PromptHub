@@ -8,6 +8,7 @@ describe('web desktop runtime capability parity', () => {
 
   it('does not advertise Desktop-owned skill surfaces in web runtime', () => {
     expect(getRuntimeCapabilities()).toMatchObject({
+      agentManagement: true,
       appUpdate: false,
       dataRecovery: false,
       desktopWindowControls: false,

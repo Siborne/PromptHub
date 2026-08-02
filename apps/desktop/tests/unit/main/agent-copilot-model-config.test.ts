@@ -113,7 +113,10 @@ describe("GitHub Copilot CLI native model boundary", () => {
         status: "partial",
         evidence: "model-config-adapter",
       },
-      sessions: { status: "planned" },
+      sessions: {
+        status: "partial",
+        evidence: "verified-readonly-session-store",
+      },
       usage: { status: "supported" },
     });
     expect(AGENT_MODEL_PROVIDER_PLATFORM_IDS).toContain("copilot");

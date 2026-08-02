@@ -1937,11 +1937,11 @@ MUST produce a stable actionable error and MUST NOT launch a fallback command.
 ### `FR-AGENT-069`: Continue In Another Agent
 
 PromptHub MUST offer **Continue in another Agent** with a target-Agent dropdown.
-The dropdown MUST show only enabled Agents and label each as direct,
-launch-and-copy or unavailable with a reason. Selecting an Agent MUST open a
+The dropdown MUST show only enabled Agents using their icon and full display
+name without exposing transport implementation labels. Selecting an Agent MUST open a
 preview of the exact bounded handoff context before any launch. Applying the
-plan MUST start a new target conversation in the same project or open the
-target and copy the reviewed context when direct injection is unsupported.
+plan MUST start a new target conversation in the same project when direct
+injection is supported, or open the target Agent without mutating the clipboard.
 
 #### Scenario: Directly continue in a different Agent
 
@@ -1951,12 +1951,12 @@ target and copy the reviewed context when direct injection is unsupported.
 - Then PromptHub launches Codex in that project with the reviewed context
 - And the Claude Code conversation remains unchanged
 
-#### Scenario: Degrade to launch and copy
+#### Scenario: Degrade to launch only
 
 - Given a selected Agent can open the project but cannot safely receive context
 - When the user confirms continuation
-- Then PromptHub opens that Agent in the project and copies the reviewed payload
-- And clearly reports that automatic context injection was unavailable
+- Then PromptHub opens that Agent directly without copying the reviewed payload
+- And clearly reports that automatic context injection was unavailable without claiming that a new conversation was created
 
 ### `FR-AGENT-070`: Handoff Context Control And Privacy
 
@@ -2089,6 +2089,252 @@ provider, appearance or usage data.
 - Then Overview is the only enabled tab
 - And no config, asset, session, provider, appearance or usage reader is called
 
+### `FR-AGENT-076`: Antigravity CLI Conversation History
+
+PromptHub MUST expose current Antigravity CLI conversations from the documented
+device-local `~/.gemini/antigravity-cli` runtime without parsing or mutating the
+legacy Antigravity desktop protobuf store. The adapter MUST discover bounded
+SQLite conversation identities, associate projects only from the CLI-owned
+cache, read visible user/assistant/system messages only from the CLI-generated
+`brain/<conversation-id>/.system_generated/logs/transcript.jsonl` projection,
+and expose `agy --conversation <id>` as the native resume contract. A valid
+conversation without a readable transcript projection MUST remain listable and
+resumable while its detail reports no fabricated body. Malformed, oversized,
+symlinked, traversal or unsupported legacy input MUST fail closed.
+
+#### Scenario: Browse and resume an Antigravity CLI conversation
+
+- Given the current Antigravity CLI stores a conversation database and a safe
+  generated transcript projection for the same UUID
+- When the user opens Antigravity History
+- Then PromptHub shows the project, bounded title and ordered visible messages
+- And Resume in original Agent launches `agy --conversation <uuid>` without a
+  renderer-built shell command
+
+#### Scenario: Keep a database-only conversation honest
+
+- Given a valid Antigravity CLI conversation database has no generated
+  transcript projection
+- When PromptHub lists and opens that conversation
+- Then the conversation remains visible and natively resumable
+- And the detail returns no inferred or protobuf-decoded messages
+- And the adapter reports the partial source without reading legacy desktop
+  `~/.gemini/antigravity/conversations/*.pb` files
+
+### `FR-AGENT-077`: Unified Agent Asset Card Anatomy
+
+The Agent Skills, MCP and Plugins inventories MUST render through one shared
+icon-led card anatomy. Every card MUST reserve the same regions for identity,
+status, description, source, metadata chips and a bottom action footer. Skills
+MUST show the existing Skill identity fallback, MCP MUST show the server icon,
+and Plugins MUST retain package artwork when available with the plug fallback.
+Domain-owned actions and state MUST remain unchanged; visual unification MUST
+NOT invent unsupported actions or create another asset state source.
+
+The Agent workspace product term MUST render as `Plugins` in every locale,
+matching the adjacent `Skills` and `MCP` taxonomy. Other descriptive Plugin
+copy may remain localized.
+
+#### Scenario: Compare distributable asset cards
+
+- Given an installed Agent exposes Skills, MCP and Plugins
+- When the user moves across the three inventory tabs
+- Then every asset card has an icon, title/status row, bounded description,
+  source row, metadata chips and an aligned icon-action footer
+- And the shared regions use the same dimensions and spacing across domains
+- And each action still invokes only its owning Skill, MCP or Plugin workflow
+
+#### Scenario: Keep Plugins as a stable product term
+
+- Given the application locale is Simplified Chinese, Traditional Chinese or
+  Japanese
+- When the Agent workspace tabs are rendered
+- Then the Plugin tab label is `Plugins`
+- And domain-specific explanatory text remains localized
+
+### `FR-AGENT-078`: Align Agent Workspace Leading Edges
+
+The Agent identity header and its primary tabs MUST use the same leading edge
+as the asset toolbar and inventory content. Skill, MCP and Plugin asset
+toolbars MUST NOT repeat their section name immediately before the search
+field because the selected top-level tab already provides that context.
+
+#### Scenario: Open an asset workspace
+
+- Given an installed Agent is selected
+- When the user opens its Skills, MCP or Plugins tab
+- Then the Agent identity, tabs, asset controls and cards share a consistent
+  left alignment
+- And the search field is the first asset toolbar control
+- And no second domain heading is rendered beside it
+
+### `FR-AGENT-079`: Lossless Paginated Conversation Bodies
+
+PromptHub MUST NOT treat a large native transcript as an unreadable or empty
+conversation merely because visible messages occur after an initial byte
+preview. Session detail reads MUST support bounded cursor pagination owned by
+the main process. Each page MUST scan native records until it collects the
+requested number of visible messages, reaches the true end of the source or
+reaches a bounded per-request scan budget. A continuation cursor MUST allow the
+renderer to request the next page without duplicating prior messages. Native
+tool/runtime records MAY remain hidden, but they MUST NOT consume the visible
+message page size.
+
+#### Scenario: Read visible messages after a large runtime prefix
+
+- Given a Codex rollout contains more than 2 MiB of hidden runtime records
+  before its first user message
+- When the user opens the conversation
+- Then PromptHub scans beyond the old prefix and renders the first visible page
+- And a main-owned cursor loads subsequent visible pages until the true end
+- And the UI does not present the conversation as empty or permanently
+  truncated
+
+#### Scenario: Keep paginated reads bounded and stable
+
+- Given the renderer requests a transcript page
+- When the cursor or limit is malformed, oversized or stale for the source
+- Then the main process rejects the request without reading an arbitrary path
+- And valid pages contain no duplicate visible entries
+- And changing the selected Agent or conversation discards stale page results
+
+#### Scenario: Browse and resume Augment CLI history
+
+- Given Auggie has saved native JSON sessions under `~/.augment/sessions`
+- When the user opens Augment History, searches a conversation or loads its
+  next body page
+- Then PromptHub projects only user and assistant text with native project,
+  model and timestamp metadata
+- And the original session resumes through `auggie --resume <id>` in its
+  workspace
+- And authentication state, user identity, tool payloads and task storage do
+  not enter the renderer, index, export or sync surfaces
+
+### `FR-AGENT-080`: Full-Workspace Agent Asset Details
+
+Within the Agent management workspace, `Agent assets` is the shared product
+term for the Skills, MCP and Plugins card domains. Rules remains a dedicated
+editor workspace and is not part of this card-detail navigation contract.
+
+Opening any Agent asset card MUST replace the entire detail area to the right
+of the Agent list. The Agent identity header and primary tabs MUST NOT remain
+above an open asset detail. Returning from the detail MUST restore the same
+Agent and asset tab without losing the domain list state.
+
+#### Scenario: Open and close an Agent asset
+
+- Given an installed Agent has a Skill, MCP server or Plugin card
+- When the user opens that card
+- Then the corresponding owning-domain full detail page fills the complete
+  workspace to the right of the Agent list
+- And the Agent identity header and primary tabs are not rendered above it
+- When the user chooses Back
+- Then the prior Agent asset tab, filters and list are restored
+
+#### Scenario: Keep all three Agent asset domains consistent
+
+- Given the user moves between Skills, MCP and Plugins
+- When any card opens or closes
+- Then every domain reports the same detail-navigation state to the Agent
+  workspace shell
+- And no domain embeds its detail only below the Agent tabs
+
+### `FR-AGENT-081`: Evidence-Backed Read-Only Session Breadth
+
+PromptHub MUST expose readable native history for every built-in Agent whose
+local session contract can be verified without guessing private formats. A
+read-only adapter MUST support bounded list, search and cursor-paginated detail
+reads. Native resume and editing are optional capabilities and MUST NOT block
+read-only delivery.
+
+Cherry Studio support is limited to Agent sessions stored in the current
+official `Data/cherrystudio.sqlite` `agent_session` /
+`agent_session_message` schema, with the locally verified older
+`Data/agents.db` `sessions` / `session_messages` schema retained as a read-only
+fallback. Normal chats, memory databases, credentials and private runtime
+state remain outside this contract. Kilo support reads its verified
+`storage/session`, `storage/message` and `storage/part` JSON trees and projects
+only user/assistant text parts; reasoning, tools, snapshots and step records
+remain hidden.
+
+#### Scenario: Browse Cherry Studio Agent sessions without mutating the store
+
+- Given Cherry Studio has a regular, non-symlink current Agent database or the
+  verified older Agent database
+- When the user lists, searches or pages an Agent session
+- Then PromptHub opens the database read-only and returns only user/assistant
+  visible text content
+- And the current database is preferred when both versions exist
+- And reasoning, tool payloads, memory and authentication state are not
+  returned, written or exported
+
+#### Scenario: Browse and resume Kilo sessions
+
+- Given Kilo has valid local session, message and text-part JSON records
+- When the user lists, searches or pages a session
+- Then PromptHub returns every requested visible page without a silent list or
+  body omission
+- And reasoning, tool, snapshot and step parts are excluded
+- And original-Agent continuation uses the typed `kilo --session <id>` command
+  when the session project directory is valid
+
+#### Scenario: Fail closed on unverified or unsafe sources
+
+- Given a source is missing, malformed, symlinked, outside its verified root or
+  exceeds an explicit scan boundary
+- When PromptHub reads the source
+- Then a missing root returns an honest empty list and unsafe/invalid sources
+  return a stable local error
+- And PromptHub does not infer a private format or report unsupported Agents as
+  adapted
+
+### `FR-AGENT-082`: Shared Agent MCP Detail Composition
+
+An Agent MCP entry MUST use the same full detail composition whether it is
+opened from the MCP management workspace or from an Agent's MCP asset tab. The
+composition MUST include source status, transport-specific fields, copyable
+configuration, the owning Agent source sidebar and the applicable import,
+open-config, open-managed-entry and removal actions.
+
+Each entry point MAY provide a different Back destination and action labels,
+but MUST NOT maintain a reduced or independently styled MCP detail page.
+
+#### Scenario: Open the same Agent MCP from either workspace
+
+- Given an Agent MCP entry is visible in MCP management and Agent management
+- When the user opens the entry from either location
+- Then both locations render the shared split content and Agent source sidebar
+- And managed versus external state is derived from the same entry data
+- And returning preserves the workspace from which the entry was opened
+
+### `FR-AGENT-083`: Shared Skill And Plugin Agent Detail Adapters
+
+Agent-owned Skill and Plugin assets MUST use their owning domain's canonical
+full detail page and one shared Agent-context adapter per asset domain,
+regardless of whether the asset is opened from the owning management workspace
+or from an Agent asset tab.
+
+The Skill adapter MUST derive managed, external, copied, symlinked, built-in and
+read-only states consistently and MUST NOT offer uninstall for read-only
+discovery entries. Opening Agent management directly MUST load the canonical My
+Skills library before classifying scanned Agent Skills and MUST NOT start a
+second library read while one is already in progress. The Plugin adapter MUST
+derive target-installed versus PromptHub-managed state consistently and MUST
+preserve working import, folder, managed-entry and store actions in every entry
+point.
+
+#### Scenario: Open the same Skill or Plugin from either workspace
+
+- Given a Skill or Plugin is visible in both its owning management workspace
+  and Agent management
+- When the user opens the asset from either location
+- Then both locations render the canonical full detail page through the same
+  domain-specific Agent adapter
+- And management status and available actions are identical for the same asset
+- And read-only or external assets never gain a destructive managed action
+- And entering Agents before Skills does not misclassify managed Skills as
+  external
+
 ## Non-Functional Requirements
 
 ### `NFR-AGENT-001`: Local-First And Privacy
@@ -2134,9 +2380,10 @@ The first production delivery is accepted only when:
   association before continuation.
 - Every adapter with a verified native resume contract can be launched through
   Resume in original Agent without renderer-built shell commands.
-- Every enabled target Agent appears in the cross-Agent picker with an honest
-  direct, launch-and-copy or unavailable state; at least Claude Code and Codex
-  pass the direct continuation contract when installed.
+- Every enabled target Agent appears in the cross-Agent picker by full display
+  name; its apply plan resolves to direct, launch or unavailable without
+  exposing transport labels in the compact picker. At least Claude Code and
+  Codex pass the direct continuation contract when installed.
 - Cross-Agent continuation preserves the source, records lineage, previews the
   exact bounded payload and never claims native session-state migration.
 - Single and batch JSON/Markdown exports preserve ordered visible messages,
@@ -2145,3 +2392,273 @@ The first production delivery is accepted only when:
 - Tray switching uses the same verified activation service.
 - Full backup and restore preserve non-secret Agent configuration and expose missing secrets for repair.
 - Existing release regression suites remain green.
+
+### `FR-AGENT-084`: Import PromptHub Providers Into Agent Profiles
+
+The Provider & Model workspace MUST list compatible PromptHub AI providers as
+redacted import sources. Import MUST create an independent per-Agent Provider
+Profile and model mapping; it MUST NOT alias or mutate the global AI provider
+record. Provider credentials MUST be resolved and copied only in the main
+process, and no credential value or secret reference may enter the renderer
+payload. Unsupported protocol/platform combinations MUST remain visible with a
+specific incompatibility reason and MUST NOT be importable.
+
+#### Scenario: Import a compatible global provider
+
+- Given PromptHub has a global OpenAI-compatible provider with chat models
+- When the user imports one model into Codex
+- Then PromptHub creates an independent Codex Provider Profile with source
+  `import`, the selected primary model and a main-owned credential reference
+- And the global provider record and Codex native configuration remain unchanged
+  until the user separately previews and confirms activation
+
+#### Scenario: Reject a lossy projection
+
+- Given a global provider protocol cannot be represented by the selected Agent
+- When the user opens the import source picker
+- Then the provider remains visible with its incompatibility reason
+- And the import action is disabled without creating a Profile or copying a
+  credential
+
+### `FR-AGENT-085`: Verified Current-Format Session Expansion
+
+PromptHub MUST promote a built-in Agent from planned history support only after
+its current local session contract is verified from first-party documentation
+or current upstream source. The promoted read-only surface MUST provide the
+complete discoverable catalog with offset pagination, visible-body search,
+opaque cursor-paginated detail and export-compatible user/assistant messages.
+Tool calls, tool results, reasoning, system/runtime records and credentials
+MUST remain excluded. Native resume is advertised only when a stable direct
+command is independently verified.
+
+Read-only qualification requires a real visible transcript body: list-only
+metadata, an opaque session id, or an encrypted/private store without a public
+reader contract does not qualify. PromptHub MUST keep such platforms planned
+rather than presenting an empty conversation as supported. Local sources MUST
+remain platform-owned and immutable; cloud-only history requires a separately
+approved authenticated adapter and explicit user opt-in.
+
+This batch covers Hermes `state.db`, Reasonix event logs, NanoClaw v2 inbound /
+outbound databases, CoPaw/QwenPaw SafeJSONSession workspaces and Qoder's
+documented transcript JSONL. QoderWork remains planned because its public Hook
+contract currently exposes a session id but no stable transcript path or file
+schema.
+
+#### Scenario: Read a Qoder transcript without private runtime records
+
+- Given Qoder generated a regular
+  `~/.qoder/projects/<project>/transcript/<session-id>.jsonl` file
+- When the user lists, searches, pages or exports that conversation
+- Then PromptHub includes only string user questions and assistant `text`
+  blocks whose session id matches the source file
+- And progress, Hook, tool-use and tool-result records do not enter metadata,
+  search, detail or export
+- And PromptHub does not claim direct Qoder resume while the documented CLI
+  exposes resume only as an interactive TUI command
+
+#### Scenario: Keep unverified sibling products honest
+
+- Given QoderWork exposes session Hook events but no public transcript storage
+  contract
+- When PromptHub reports QoderWork capabilities
+- Then Sessions remains planned instead of reusing the Qoder adapter or
+  guessing a private QoderWork path
+
+#### Scenario: Do not promote an opaque local session store
+
+- Given a platform exposes session ids in a public settings database but keeps
+  message bodies in an undocumented encrypted or private store
+- When PromptHub evaluates read-only History support
+- Then the platform remains planned until a first-party export, API or stable
+  local body schema is verified
+- And PromptHub does not display metadata-only sessions as empty conversations
+
+### `FR-AGENT-086`: Current Native Provider Identity And Official Restore
+
+The Provider & Model workspace MUST show the Agent's current native provider
+configuration even when PromptHub has never created or activated a Provider
+Profile for that Agent. The public projection MUST identify the provider as
+official, custom or unknown and MAY show its provider name, protocol, sanitized
+endpoint, selected model and credential ownership/status. It MUST NOT expose a
+credential value, authorization material or secret reference.
+
+The current native configuration MUST remain available as an explicit source
+for creating an independent Provider Profile. For platforms with a verified
+official-provider write contract, the workspace MUST also offer an official
+restore action. That action MUST create or reuse an independent official
+Profile and enter the existing activation preview/confirmation flow; it MUST
+NOT write native configuration before confirmation. Platforms without a
+verified official default MUST omit or disable restore instead of inventing a
+provider, model or credential contract. Manual custom Profile creation remains
+available independently.
+
+#### Scenario: Show a custom Claude configuration before any Profile exists
+
+- Given Claude Code is installed and its native settings configure a custom
+  Anthropic-compatible endpoint and credential
+- And PromptHub has no Claude Provider Profiles or verified activation snapshot
+- When the user opens Provider & Model
+- Then the current native configuration is shown as custom with its sanitized
+  endpoint, model and credential type/status
+- And no credential value or secret reference enters IPC or renderer state
+
+#### Scenario: Restore a verified official provider safely
+
+- Given Codex or Claude Code currently uses a custom provider and exposes a
+  usable current model
+- When the user chooses restore official configuration
+- Then PromptHub creates or reuses the platform's verified official Profile,
+  preserving the current model for review
+- And native configuration remains unchanged until the user confirms the
+  existing activation preview
+- And cancelling the preview leaves the Agent native configuration unchanged
+
+### `FR-AGENT-087`: Project-Scoped Native Resume And Dense Transcript Layout
+
+Claude Code history MUST derive the selected conversation's project directory
+from bounded, validated JSONL metadata and pass that absolute directory to the
+native resume command. A matching session id MUST be resumed with typed
+arguments from that directory; relative, null-byte or otherwise unsafe source
+values MUST NOT enter the launcher command.
+
+The history viewer MUST use a compact vertical rhythm for consecutive message
+bubbles. Native resume MUST be represented as a current-Agent terminal action
+rather than a share action. The continuation action hierarchy is defined by
+`FR-AGENT-088`.
+
+#### Scenario: Resume a Claude conversation from its owning project
+
+- Given a Claude JSONL conversation contains a valid absolute `cwd` and session
+  id
+- When the user invokes native resume from History
+- Then PromptHub launches `claude --resume <session-id>` with that `cwd`
+- And Claude resolves the selected project conversation instead of searching
+  from the user's home directory
+
+#### Scenario: Ignore unsafe resume metadata
+
+- Given an older or malformed Claude record contains a relative `cwd` or unsafe
+  session id
+- When PromptHub lists the conversation
+- Then the unsafe values are excluded from resume metadata
+- And the source filename remains the bounded local conversation identity
+
+### `FR-AGENT-088`: Two-Step Continuation And Transcript Pagination
+
+History MUST expose exactly two primary continuation choices: continue in the
+current Agent through its verified native resume contract, or hand the
+conversation to a different detected Agent. Target Agent and project selectors
+MUST remain hidden until the user chooses cross-Agent continuation. The target
+selector MUST NOT hide a detected Agent merely because it lacks a PromptHub-
+verified CLI prompt-injection contract. Metadata editing and removal
+MUST remain in the overflow menu, while export MUST have a distinct icon action
+with Markdown and JSON choices.
+
+The main-process continuation service MUST select one evidence-backed handoff
+transport for the target Agent. A verified interactive CLI target MAY receive
+the reviewed payload directly. A detected application with an allowlisted
+launch contract MUST receive the payload through the clipboard before the
+application opens. A target without either contract MUST remain available as a
+copy-only fallback so the user can paste the portable handoff context manually.
+The review surface MUST name the selected behavior before execution and MUST
+never describe a portable cross-Agent handoff as native session resume.
+
+For a direct CLI transport, the reviewed preview MUST expose the exact shell-
+quoted command derived by the main-process continuation service. For launch or
+copy-only transports, the copy action MUST copy the reviewed portable payload,
+not an unusable synthetic command. If application launch fails after copying,
+the user MUST be told that the context remains copied for manual continuation.
+
+The transcript viewer MUST render a bounded message page rather than mounting
+the complete loaded conversation or requiring repeated scroll-to-end actions.
+Users MUST be able to jump between loaded pages directly. Moving beyond the
+last loaded page MUST request the next source-bound cursor page without losing
+already loaded messages.
+
+#### Scenario: Choose the continuation mode before configuration
+
+- Given a readable conversation has a verified native resume command and at
+  least one detected target Agent
+- When the user opens the conversation
+- Then the action surface shows `Continue in <current Agent>` and `Continue
+elsewhere` as its two primary controls
+- And target Agent and project selectors are not visible until `Continue
+elsewhere` is selected
+
+#### Scenario: Continue directly in a verified target
+
+- Given the user selected a target with a verified interactive handoff and reviewed the
+  portable context
+- When the handoff preview opens
+- Then PromptHub offers the exact shell-quoted CLI command as a copy action
+- And the terminal action launches the same target, working directory and
+  reviewed payload when that CLI is resolvable
+- And unresolved CLI targets cannot report a successful terminal launch
+
+#### Scenario: Copy context before opening another Agent
+
+- Given the user selected a detected target application without a verified
+  prompt-injection CLI contract
+- When the user confirms the reviewed handoff
+- Then PromptHub copies the same reviewed payload to the clipboard before
+  opening the allowlisted target application
+- And if the application cannot be opened, the copied context remains available
+  and the failure message explains the manual paste fallback
+
+#### Scenario: Keep unsupported targets available as copy-only handoff
+
+- Given a detected target Agent has neither a verified direct handoff nor an
+  allowlisted application launch contract
+- When the user reviews cross-Agent continuation
+- Then the target remains selectable
+- And PromptHub offers the reviewed portable payload as a copy-only fallback
+- And PromptHub does not claim that the target session was resumed or launched
+
+#### Scenario: Jump through a large transcript
+
+- Given the reader has loaded 80 messages and exposes another source cursor
+- When the user opens the transcript
+- Then only the first 20 messages are mounted and pages 1 through 4 are
+  directly selectable
+- And advancing from page 4 reads the next cursor batch and displays page 5
+  without discarding pages 1 through 4
+
+### `FR-AGENT-089`: Inline Provider Profile Editing
+
+Provider & Model MUST create and edit Provider Profiles in the right-hand
+workspace instead of opening a modal. Choosing Add MUST open an unsaved draft
+with platform-aware defaults; no Profile, model mapping or credential may be
+persisted until Save succeeds. Cancel MUST discard the draft and return to the
+previous current-native or Profile detail.
+
+The editor MUST group the complete fields supported by the selected Agent's
+verified adapter into identity, connection/protocol, model routing and
+authentication sections. It MUST expose environment-owned credentials where
+the adapter supports them and write-only PromptHub-managed credentials where
+PromptHub owns them. Fields that require a separate local proxy, protocol
+conversion or unimplemented native projection MUST NOT be shown as effective
+configuration.
+
+#### Scenario: Add a custom Codex provider without a modal
+
+- Given Codex Provider management is supported
+- When the user chooses Add profile
+- Then the right workspace becomes an Add provider profile editor
+- And the editor shows provider identity, Responses/Chat protocol, endpoint,
+  primary model and PromptHub-managed or environment-owned authentication
+- And no dialog opens and no Profile is created before Save
+
+#### Scenario: Cancel an unsaved provider draft
+
+- Given the user changed fields in a new Provider draft
+- When the user cancels
+- Then PromptHub performs no Provider IPC write
+- And returns to the previously selected current-native or Profile detail
+
+#### Scenario: Do not emulate CC Switch proxy-only settings
+
+- Given CC Switch exposes model catalogs, reasoning conversion or request
+  routing through its local proxy
+- When PromptHub renders a direct Agent Provider editor without that proxy
+- Then those controls are omitted unless the selected Agent adapter can write
+  and verify the same native behavior independently

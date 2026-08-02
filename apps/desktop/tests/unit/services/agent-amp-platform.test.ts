@@ -199,7 +199,10 @@ describe("Amp current platform boundary", () => {
       evidence: "service-managed-provider-contract",
     });
     expect(inventory.plugins.status).toBe("planned");
-    expect(inventory.configFiles.status).toBe("planned");
+    expect(inventory.configFiles).toEqual({
+      status: "partial",
+      evidence: "user-config-root-discovery",
+    });
     expect(inventory.sessions.status).toBe("planned");
     expect(inventory.usage.status).toBe("planned");
     expect(inventory.launch.status).toBe("planned");

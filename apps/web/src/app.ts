@@ -12,6 +12,7 @@ import folderRoutes from "./routes/folders.js";
 import skillRoutes from "./routes/skills.js";
 import rulesRoutes from "./routes/rules.js";
 import settingsRoutes from "./routes/settings.js";
+import agentRoutes from "./routes/agents.js";
 import aiRoutes from "./routes/ai.js";
 import mediaRoutes from "./routes/media.js";
 import syncRoutes from "./routes/sync.js";
@@ -43,6 +44,7 @@ export function createApp(): Hono {
   protectedApi.route("/skills", skillRoutes);
   protectedApi.route("/rules", rulesRoutes);
   protectedApi.route("/settings", settingsRoutes);
+  protectedApi.route("/agents", agentRoutes);
   protectedApi.route("/ai", aiRoutes);
   protectedApi.route("/media", mediaRoutes);
   protectedApi.route("/sync", syncRoutes);

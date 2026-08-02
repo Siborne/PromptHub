@@ -60,7 +60,7 @@ describe("OpenCode Provider Profile form", () => {
   it("creates the documented OpenAI-compatible package contract", async () => {
     const view = renderDialog();
     await view.render;
-    const dialog = screen.getByRole("dialog", {
+    const dialog = screen.getByRole("region", {
       name: "Add provider profile",
     });
 
@@ -127,7 +127,7 @@ describe("OpenCode Provider Profile form", () => {
   it("maps the official Responses package without asking users for npm details", async () => {
     const view = renderDialog();
     await view.render;
-    const dialog = screen.getByRole("dialog", {
+    const dialog = screen.getByRole("region", {
       name: "Add provider profile",
     });
     fireEvent.change(within(dialog).getByLabelText("Provider kind"), {
@@ -171,7 +171,7 @@ describe("OpenCode Provider Profile form", () => {
   it("replaces a credential only after an explicit choice and reveals only the new draft", async () => {
     const view = renderDialog(managedProfile());
     await view.render;
-    const dialog = screen.getByRole("dialog", {
+    const dialog = screen.getByRole("region", {
       name: "Edit provider profile",
     });
 
@@ -220,7 +220,7 @@ describe("OpenCode Provider Profile form", () => {
   it("removes a managed credential without exposing or sending a secret value", async () => {
     const view = renderDialog(managedProfile());
     await view.render;
-    const dialog = screen.getByRole("dialog", {
+    const dialog = screen.getByRole("region", {
       name: "Edit provider profile",
     });
 
@@ -248,7 +248,7 @@ describe("OpenCode Provider Profile form", () => {
   it("rejects an empty explicit credential replacement before IPC", async () => {
     const view = renderDialog(managedProfile("missing"));
     await view.render;
-    const dialog = screen.getByRole("dialog", {
+    const dialog = screen.getByRole("region", {
       name: "Edit provider profile",
     });
 
@@ -295,7 +295,7 @@ describe("OpenCode Provider Profile form", () => {
     };
     const view = renderDialog(imported);
     await view.render;
-    const dialog = screen.getByRole("dialog", {
+    const dialog = screen.getByRole("region", {
       name: "Edit provider profile",
     });
 

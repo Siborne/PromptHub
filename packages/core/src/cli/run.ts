@@ -5,6 +5,7 @@ import { configureRuntimePaths, resetRuntimePaths } from "../runtime-paths";
 import { CoreMcpError } from "../mcp-library";
 import { coreCliSkillService, type CliSkillService } from "./skill";
 import { handleAIConfigCommand } from "./ai-config-command";
+import { handleAgentCommand } from "./agent-command";
 import { handlePluginCommand } from "./plugin-command";
 import { handlePromptCommand } from "./prompt-command";
 import { handleFolderCommand } from "./folder-command";
@@ -199,6 +200,10 @@ async function runCliOperation(
     }
     if (resource === "doctor") {
       await handleDoctorCommand(commandArgs, context);
+      return EXIT_CODES.OK;
+    }
+    if (resource === "agent") {
+      await handleAgentCommand(commandArgs, context, databaseHooks);
       return EXIT_CODES.OK;
     }
     if (resource === "rules") {

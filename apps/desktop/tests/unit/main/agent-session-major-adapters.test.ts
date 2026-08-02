@@ -120,12 +120,131 @@ describe("major Agent session adapters", () => {
     expect(detail).toMatchObject({
       adapter: "codex-rollout-jsonl-v1",
       parseErrors: 1,
-      truncated: true,
+      truncated: false,
+      nextCursor: null,
     });
     expect(detail.entries.map((entry) => [entry.role, entry.text])).toEqual([
       ["user", "Fix the Codex history"],
       ["assistant", "History is visible."],
     ]);
+  });
+
+  it("paginates visible Codex messages beyond a large hidden runtime prefix", async () => {
+    const homeDir = await createHome();
+    const codexRootDir = path.join(homeDir, ".codex");
+    const sessionDir = path.join(codexRootDir, "sessions", "2026", "08", "01");
+    const sessionId = "019f87f5-7cf6-7151-a7d2-226039ceda22";
+    const sessionPath = path.join(sessionDir, `rollout-${sessionId}.jsonl`);
+    await fs.mkdir(sessionDir, { recursive: true });
+    const hiddenRecord = `${JSON.stringify({
+      type: "response_item",
+      payload: { type: "custom_tool_call", name: "exec" },
+    })}\n`;
+    await fs.writeFile(
+      sessionPath,
+      [
+        `${JSON.stringify({
+          type: "session_meta",
+          timestamp: "2026-08-01T01:00:00.000Z",
+          payload: { id: sessionId, cwd: "/workspace/large" },
+        })}\n`,
+        hiddenRecord.repeat(40_000),
+        `${JSON.stringify({
+          type: "event_msg",
+          timestamp: "2026-08-01T01:01:00.000Z",
+          payload: { type: "user_message", message: "Visible after 2 MiB" },
+        })}\n`,
+        hiddenRecord.repeat(2_000),
+        `${JSON.stringify({
+          type: "event_msg",
+          timestamp: "2026-08-01T01:02:00.000Z",
+          payload: { type: "agent_message", message: "Second visible page" },
+        })}\n`,
+      ].join(""),
+    );
+    expect((await fs.stat(sessionPath)).size).toBeGreaterThan(2 * 1024 * 1024);
+
+    const service = createAgentSessionService({ homeDir, codexRootDir });
+    const first = await service.read("codex", sessionId, { limit: 1 });
+
+    expect(first).toMatchObject({
+      entries: [expect.objectContaining({ text: "Visible after 2 MiB" })],
+      truncated: false,
+    });
+    expect(first.nextCursor).toEqual(expect.any(String));
+
+    const second = await service.read("codex", sessionId, {
+      cursor: first.nextCursor!,
+      limit: 1,
+    });
+    expect(second).toMatchObject({
+      entries: [expect.objectContaining({ text: "Second visible page" })],
+      nextCursor: null,
+      truncated: false,
+    });
+    await expect(
+      service.read("codex", sessionId, { cursor: "not-a-cursor", limit: 1 }),
+    ).rejects.toThrow("AGENT_SESSION_CURSOR_INVALID");
+
+    await fs.truncate(sessionPath, 0);
+    await expect(
+      service.read("codex", sessionId, {
+        cursor: first.nextCursor!,
+        limit: 1,
+      }),
+    ).rejects.toThrow("AGENT_SESSION_CURSOR_STALE");
+  });
+
+  it("continues Codex detail pagination after the per-page scan budget", async () => {
+    const homeDir = await createHome();
+    const codexRootDir = path.join(homeDir, ".codex");
+    const sessionDir = path.join(codexRootDir, "sessions", "2026", "08", "01");
+    const sessionId = "019f87f5-7cf6-7151-a7d2-226039ceda33";
+    const sessionPath = path.join(sessionDir, `rollout-${sessionId}.jsonl`);
+    await fs.mkdir(sessionDir, { recursive: true });
+    const hiddenRecord = `${JSON.stringify({
+      type: "response_item",
+      payload: { type: "custom_tool_call", name: "exec" },
+    })}\n`;
+    const hiddenBytes = 17 * 1024 * 1024;
+    const hiddenCount = Math.ceil(
+      hiddenBytes / Buffer.byteLength(hiddenRecord),
+    );
+    await fs.writeFile(
+      sessionPath,
+      [
+        hiddenRecord.repeat(hiddenCount),
+        `${JSON.stringify({
+          type: "event_msg",
+          timestamp: "2026-08-01T02:00:00.000Z",
+          payload: {
+            type: "user_message",
+            message: "Visible after the scan budget",
+          },
+        })}\n`,
+      ].join(""),
+    );
+
+    const service = createAgentSessionService({ homeDir, codexRootDir });
+    const first = await service.read("codex", sessionId, { limit: 1 });
+
+    expect(first).toMatchObject({
+      entries: [],
+      truncated: false,
+    });
+    expect(first.nextCursor).toEqual(expect.any(String));
+
+    const second = await service.read("codex", sessionId, {
+      cursor: first.nextCursor!,
+      limit: 1,
+    });
+    expect(second).toMatchObject({
+      entries: [
+        expect.objectContaining({ text: "Visible after the scan budget" }),
+      ],
+      nextCursor: null,
+      truncated: false,
+    });
   });
 
   it("reads bounded Grok Build summary and chat history without runtime artifacts", async () => {

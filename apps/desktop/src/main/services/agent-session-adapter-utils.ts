@@ -5,7 +5,7 @@ import type { AgentSessionEntry } from "@prompthub/shared/types";
 
 export const MAX_SESSION_DETAIL_BYTES = 2 * 1024 * 1024;
 export const MAX_SESSION_ENTRY_TEXT = 64 * 1024;
-export const MAX_SESSION_SCAN_FILES = 2_000;
+export const MAX_SESSION_SCAN_FILES = 50_000;
 
 export interface ScannedSessionFile {
   path: string;
@@ -113,7 +113,7 @@ export async function scanSessionFiles(
   const queue: Array<{ dir: string; depth: number }> = [
     { dir: root, depth: 0 },
   ];
-  while (queue.length > 0 && files.length < MAX_SESSION_SCAN_FILES) {
+  while (queue.length > 0) {
     const current = queue.shift();
     if (!current) break;
     const entries = await fs
@@ -130,6 +130,9 @@ export async function scanSessionFiles(
       } else if (entry.isFile() && matches(entry.name)) {
         const stat = await fs.stat(candidate).catch(() => null);
         if (stat?.isFile()) {
+          if (files.length >= MAX_SESSION_SCAN_FILES) {
+            throw new Error("AGENT_SESSION_SCAN_LIMIT");
+          }
           files.push({
             path: candidate,
             size: stat.size,
@@ -137,7 +140,6 @@ export async function scanSessionFiles(
           });
         }
       }
-      if (files.length >= MAX_SESSION_SCAN_FILES) break;
     }
   }
   return files;

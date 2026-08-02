@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,6 +14,21 @@ import {
 } from "../../../src/renderer/services/agent-root-paths";
 
 describe("agent root paths", () => {
+  it("keeps the renderer facade scoped to the browser-safe root config module", () => {
+    const source = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        "../../../src/renderer/services/agent-root-paths.ts",
+      ),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      'from "@prompthub/core/agent-management/agent-root-config"',
+    );
+    expect(source).not.toContain('from "@prompthub/core/agent-management"');
+  });
+
   it("keeps Hermes Agent Windows Native rooted under local app data", () => {
     const platform = getPlatformById("hermes");
     expect(platform).toBeDefined();

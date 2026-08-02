@@ -413,6 +413,36 @@
     }
   },
   "agents": {
+    "webService": {
+      "title": "Agent services",
+      "description": "Services run on this self-hosted PromptHub server.",
+      "available": "Available",
+      "partial": "Partial",
+      "unavailable": "Unavailable",
+      "actionAvailable": "Available in self-hosted Web",
+      "actionUnavailable": "Unavailable in browser",
+      "empty": "No items yet.",
+      "reason": {
+        "self-hosted-adapter-pending": "This service is present, but its server adapter is still incomplete."
+      },
+      "action": {
+        "activate": "Activate",
+        "apply": "Apply",
+        "browse": "Browse",
+        "distribute": "Distribute",
+        "edit": "Edit",
+        "inspect": "Inspect",
+        "install": "Install",
+        "manage": "Manage"
+      },
+      "state": {
+        "available": "Available",
+        "blocked": "Blocked",
+        "missing": "Missing",
+        "theme": "Theme",
+        "pet": "Pet"
+      }
+    },
     "cliDiagnostics": {
       "title": "CLI diagnostics",
       "checking": "Checking the local CLI...",
@@ -526,6 +556,23 @@
       }
     },
     "providerProfiles": {
+      "sourceImport": {
+        "open": "Import from PromptHub",
+        "title": "Import PromptHub provider",
+        "hint": "Create an independent Agent profile from a provider already configured in PromptHub. Activation remains a separate review step.",
+        "loading": "Loading providers...",
+        "empty": "No PromptHub providers are configured yet.",
+        "model": "Model",
+        "confirm": "Import",
+        "credentialReady": "Credential is ready for secure copy",
+        "credentialMissing": "Credential must be added after import",
+        "incompatibility": {
+          "platform-unsupported": "This Agent does not support provider import",
+          "protocol-unsupported": "Protocol is not supported",
+          "no-chat-model": "No chat model is configured",
+          "invalid-endpoint": "Endpoint is invalid"
+        }
+      },
       "deepLink": {
         "title": "Review provider profile import",
         "platform": "Agent platform",
@@ -549,14 +596,43 @@
       "listLabel": "Provider profiles",
       "loading": "Loading provider profiles...",
       "empty": "No profiles yet. Import the current native configuration or create one.",
+      "webEmpty": "No profiles yet. Create one to manage this Agent.",
       "emptyTitle": "No provider profile selected",
       "emptyHint": "Create a model profile or import the current native configuration before activation.",
+      "webEmptyHint": "Create a provider profile to store model settings and write-only credentials on this server.",
       "add": "Add profile",
       "activate": "Activate",
       "current": "Current",
       "currentState": {
         "stale": "Native configuration changed",
         "unavailable": "Unable to verify the active profile"
+      },
+      "currentNative": {
+        "title": "Current native configuration",
+        "details": "Detected configuration",
+        "classification": {
+          "official": "Official provider",
+          "custom": "Custom provider",
+          "unknown": "Unknown provider"
+        },
+        "provider": "Provider",
+        "protocol": "Protocol",
+        "endpoint": "Endpoint",
+        "model": "Model",
+        "credential": "Credential",
+        "noEndpoint": "Official platform endpoint",
+        "noModel": "No model detected",
+        "save": "Save as profile",
+        "restoreOfficial": "Restore official configuration",
+        "securityHint": "Only the credential type and availability are shown. PromptHub never reads the credential value into this page.",
+        "credentialStatus": {
+          "platform-managed": "Managed by the platform",
+          "configured-api-key": "Configured API key",
+          "configured-auth-token": "Configured auth token",
+          "environment": "Provided by environment",
+          "missing": "Credential not detected",
+          "unknown": "Credential type unknown"
+        }
       },
       "connection": {
         "title": "Connection check",
@@ -641,6 +717,19 @@
       "form": {
         "addTitle": "Add provider profile",
         "editTitle": "Edit provider profile",
+        "inlineHint": "Review the Agent-native settings here. Changes are written only after you save and activate the profile.",
+        "sections": {
+          "identity": "Identity",
+          "connection": "Connection & protocol",
+          "models": "Models",
+          "authentication": "Authentication"
+        },
+        "authenticationSource": "Authentication source",
+        "authenticationSources": {
+          "managed": "PromptHub-managed credential",
+          "environment": "Environment variable"
+        },
+        "platformCredentialHint": "Authentication is owned by the Agent platform or the configured environment variable; PromptHub will not store a credential for this profile.",
         "name": "Name",
         "providerKind": "Provider kind",
         "providerId": "Provider ID",
@@ -928,6 +1017,11 @@
     "loadMoreSessions": "Load more sessions",
     "loadingMoreSessions": "Loading more sessions...",
     "showMoreMessages": "Show more messages",
+    "transcriptPagination": "Message pages",
+    "transcriptPreviousPage": "Previous message page",
+    "transcriptNextPage": "Next message page",
+    "transcriptPageButton": "Message page {{page}}",
+    "transcriptPageStatus": "Page {{page}} of {{total}}",
     "copyResumeCommand": "Copy resume command",
     "loadingTranscript": "Loading transcript...",
     "noTranscriptEntries": "No readable transcript entries were found.",
@@ -972,6 +1066,11 @@
     "conversationActionFailed": "Conversation action failed.",
     "continuationProjectRequired": "Choose a project before continuing this conversation.",
     "resumeConversation": "Resume",
+    "continueInCurrentAgent": "Continue in {{agent}}",
+    "handoffConversation": "Continue elsewhere",
+    "handoffDialogTitle": "Continue in another Agent",
+    "handoffDialogHint": "Choose any detected Agent and project, then review how PromptHub will pass the context.",
+    "moreConversationActions": "More conversation actions",
     "continueWithAgent": "Continue with Agent",
     "continuationProject": "Project for continuation",
     "currentSessionProject": "Current session directory",
@@ -983,14 +1082,12 @@
     "restoreConversation": "Restore",
     "deleteConversation": "Remove from history",
     "reviewHandoff": "Review handoff context",
-    "handoffDirectHint": "A new target session will open with this portable context.",
-    "handoffCopyHint": "Direct launch is unavailable. The context will be copied.",
-    "handoffCopiedLaunchFailed": "Context copied, but the target Agent could not be opened.",
-    "handoffCliTransport": "CLI handoff",
-    "handoffCopyTransport": "Open + copy",
-    "resumeStarted": "Opened the native resume flow in {{agent}}.",
+    "handoffDirectHint": "PromptHub can start {{agent}} with this reviewed context in the selected project.",
+    "handoffLaunchHint": "PromptHub will copy the handoff context and open {{agent}}. Paste it to continue in the selected project.",
+    "handoffLaunchFailed": "The target Agent could not be opened.",
+    "resumeStarted": "Opened {{agent}} in Terminal.",
     "handoffStarted": "Started a new conversation in {{agent}}.",
-    "handoffCopied": "Opened {{agent}} and copied the reviewed context.",
+    "handoffOpened": "Copied context and opened {{agent}}.",
     "conversationExported": "Conversation exported.",
     "continueInAgent": "Continue in {{agent}}",
     "conversationSaveFailed": "Could not save conversation details.",
@@ -1006,7 +1103,21 @@
     "conversationStatus": "Conversation status",
     "activeConversations": "Active",
     "archivedConversations": "Archived",
-    "deletedConversations": "Removed"
+    "deletedConversations": "Removed",
+    "exportConversation": "Export conversation",
+    "handoffCliHint": "Continue through the target Agent CLI. Copy the command or open it directly in Terminal.",
+    "copyCliCommand": "Copy CLI command",
+    "cliCommandCopied": "CLI command copied.",
+    "handoffCliUnavailableHint": "PromptHub could not locate this CLI. Copy the command and run it in your own Terminal.",
+    "handoffDirect": "Direct handoff",
+    "handoffOpenAndCopy": "Open + context",
+    "handoffCopyOnly": "Copy context",
+    "handoffCopyOnlyHint": "PromptHub cannot open {{agent}} automatically, but you can copy this context and paste it into the Agent manually.",
+    "handoffCopyFailed": "The handoff context could not be copied.",
+    "handoffLaunchFailedAfterCopy": "The target Agent could not be opened. The handoff context is still copied for manual continuation.",
+    "copyHandoffContext": "Copy handoff context",
+    "handoffContextCopied": "Handoff context copied.",
+    "copyAndOpenAgent": "Copy context and open {{agent}}"
   },
   "rules": {
     "title": "Rules",

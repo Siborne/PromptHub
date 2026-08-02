@@ -362,9 +362,9 @@ CREATE TABLE IF NOT EXISTS agent_conversation_handoffs (
   project_id TEXT,
   project_path TEXT,
   transport TEXT NOT NULL
-    CHECK(transport IN ('direct', 'launch-and-copy', 'unavailable')),
+    CHECK(transport IN ('direct', 'launch', 'unavailable')),
   payload_digest TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('planned', 'launched', 'copied', 'failed')),
+  status TEXT NOT NULL CHECK(status IN ('planned', 'launched', 'failed')),
   target_session_id TEXT,
   error_code TEXT,
   created_at INTEGER NOT NULL,

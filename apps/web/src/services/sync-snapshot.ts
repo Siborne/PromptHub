@@ -461,6 +461,35 @@ function assertSupportedSnapshotVersion(
   }
 }
 
+function normalizeStringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : undefined;
+}
+
+function normalizeDesktopAgentSettings(
+  state: Record<string, unknown>,
+): Pick<
+  Settings,
+  | "agentIdentityPreferences"
+  | "builtinAgentOverrides"
+  | "customAgentRootPaths"
+  | "customAgents"
+> {
+  return {
+    agentIdentityPreferences: isRecord(state.agentIdentityPreferences)
+      ? (state.agentIdentityPreferences as Settings["agentIdentityPreferences"])
+      : undefined,
+    builtinAgentOverrides: isRecord(state.builtinAgentOverrides)
+      ? (state.builtinAgentOverrides as Settings["builtinAgentOverrides"])
+      : undefined,
+    customAgentRootPaths: normalizeStringArray(state.customAgentRootPaths),
+    customAgents: Array.isArray(state.customAgents)
+      ? (state.customAgents as Settings["customAgents"])
+      : undefined,
+  };
+}
+
 function normalizeDesktopSettingsSnapshot(
   settings: unknown,
 ): Settings | undefined {
@@ -501,6 +530,7 @@ function normalizeDesktopSettingsSnapshot(
     theme: themeMode,
     language,
     autoSave,
+    ...normalizeDesktopAgentSettings(state),
     defaultFolderId:
       typeof state.defaultFolderId === "string"
         ? state.defaultFolderId

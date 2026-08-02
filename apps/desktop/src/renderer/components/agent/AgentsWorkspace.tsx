@@ -11,10 +11,12 @@ import {
 import { useTranslation } from "react-i18next";
 
 import type {
+  AgentServiceDomain,
   ManagedAgentSummary,
   SkillProject,
 } from "@prompthub/shared/types";
 import { useAgentStore } from "../../stores/agent.store";
+import { isWebRuntime } from "../../runtime";
 import { useSettingsStore } from "../../stores/settings.store";
 import { ContextMenu } from "../ui/ContextMenu";
 import { PlatformIcon } from "../ui/PlatformIcon";
@@ -27,6 +29,7 @@ import { AgentOverviewPanel } from "./AgentOverviewPanel";
 import { AgentProviderProfileWorkbench } from "./AgentProviderProfileWorkbench";
 import { AgentSessionsPanel } from "./AgentSessionsPanel";
 import { AgentSettingsDialog } from "./AgentSettingsDialog";
+import { WebAgentServicesWorkspace } from "./WebAgentServicesWorkspace";
 import {
   AGENT_WORKSPACE_TABS,
   getAgentWorkspaceTabs,
@@ -40,6 +43,13 @@ import {
 
 interface AgentWorkspaceTarget {
   tab: AgentWorkspaceTabKey;
+}
+
+function isWorkspaceTabEnabled(
+  agent: ManagedAgentSummary,
+  tab: (typeof AGENT_WORKSPACE_TABS)[number],
+): boolean {
+  return isWebRuntime() || isAgentTabEnabled(agent, tab);
 }
 
 function StatusBadge({ agent }: { agent: ManagedAgentSummary }) {
@@ -197,7 +207,7 @@ function AgentHeaderActions({
       >
         <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
       </button>
-      {agent.isDetected ? (
+      {agent.isDetected || isWebRuntime() ? (
         <AgentOverflowMenu
           diagnosticsEnabled={
             agent.capabilities.maintenance.status === "partial" ||
@@ -224,7 +234,7 @@ function AgentTabs({
   const { t } = useTranslation();
   const tabRefs = useRef(new Map<AgentWorkspaceTabKey, HTMLButtonElement>());
   const tabs = getAgentWorkspaceTabs(agent);
-  const enabledTabs = tabs.filter((tab) => isAgentTabEnabled(agent, tab));
+  const enabledTabs = tabs.filter((tab) => isWorkspaceTabEnabled(agent, tab));
 
   useEffect(() => {
     const focusedElement = document.activeElement;
@@ -270,11 +280,11 @@ function AgentTabs({
       className="flex gap-4 overflow-x-auto"
     >
       {tabs.map((tab) => {
-        const enabled = isAgentTabEnabled(agent, tab);
+        const enabled = isWorkspaceTabEnabled(agent, tab);
         const selected = activeTab === tab.key;
-        const guidance = getAgentCapabilityGuidance(
-          getAgentTabStatus(agent, tab),
-        );
+        const guidance = enabled
+          ? null
+          : getAgentCapabilityGuidance(getAgentTabStatus(agent, tab));
         return (
           <button
             key={tab.key}
@@ -321,6 +331,8 @@ function AgentWorkspacePanel({
   const meta =
     AGENT_WORKSPACE_TABS.find((tab) => tab.key === target.tab) ||
     AGENT_WORKSPACE_TABS[0];
+  const webDomain =
+    target.tab === "overview" ? undefined : (target.tab as AgentServiceDomain);
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <div
@@ -329,36 +341,55 @@ function AgentWorkspacePanel({
         aria-labelledby={`agent-tab-${meta.key}`}
         className="flex h-full min-h-0 flex-col"
       >
-        {target.tab === "overview" ? (
-          <AgentOverviewPanel agent={agent} onNavigate={onNavigate} />
-        ) : null}
-        {isAgentAssetDomain(target.tab) ? (
-          <AgentAssetsWorkspace
-            agent={agent}
-            domain={target.tab}
-            onDetailOpenChange={onAssetDetailOpenChange}
-          />
-        ) : null}
-        {target.tab === "definitions" ? (
-          <AgentDefinitionsPanel key={agent.id} agent={agent} />
-        ) : null}
-        {target.tab === "provider" ? (
-          <AgentProviderProfileWorkbench key={agent.id} agent={agent} />
-        ) : null}
-        {target.tab === "appearance" ? (
-          <AgentAppearancePanel key={agent.id} agent={agent} />
-        ) : null}
-        {target.tab === "configFiles" ? (
-          <AgentConfigFilesPanel agent={agent} />
-        ) : null}
-        {target.tab === "sessions" ? (
-          <AgentSessionsPanel
-            key={agent.id}
-            agent={agent}
-            agents={agents}
-            projects={projects}
-          />
-        ) : null}
+        {isWebRuntime() ? (
+          target.tab === "configFiles" ? (
+            <AgentConfigFilesPanel agent={agent} />
+          ) : target.tab === "provider" ? (
+            <AgentProviderProfileWorkbench key={agent.id} agent={agent} />
+          ) : target.tab === "sessions" ? (
+            <AgentSessionsPanel
+              key={agent.id}
+              agent={agent}
+              agents={agents}
+              projects={projects}
+            />
+          ) : (
+            <WebAgentServicesWorkspace agent={agent} domain={webDomain} />
+          )
+        ) : (
+          <>
+            {target.tab === "overview" ? (
+              <AgentOverviewPanel agent={agent} onNavigate={onNavigate} />
+            ) : null}
+            {isAgentAssetDomain(target.tab) ? (
+              <AgentAssetsWorkspace
+                agent={agent}
+                domain={target.tab}
+                onDetailOpenChange={onAssetDetailOpenChange}
+              />
+            ) : null}
+            {target.tab === "definitions" ? (
+              <AgentDefinitionsPanel key={agent.id} agent={agent} />
+            ) : null}
+            {target.tab === "provider" ? (
+              <AgentProviderProfileWorkbench key={agent.id} agent={agent} />
+            ) : null}
+            {target.tab === "appearance" ? (
+              <AgentAppearancePanel key={agent.id} agent={agent} />
+            ) : null}
+            {target.tab === "configFiles" ? (
+              <AgentConfigFilesPanel agent={agent} />
+            ) : null}
+            {target.tab === "sessions" ? (
+              <AgentSessionsPanel
+                key={agent.id}
+                agent={agent}
+                agents={agents}
+                projects={projects}
+              />
+            ) : null}
+          </>
+        )}
       </div>
     </main>
   );
@@ -388,7 +419,7 @@ export function AgentsWorkspace() {
 
   useEffect(() => {
     const tab = AGENT_WORKSPACE_TABS.find((item) => item.key === target.tab);
-    if (agent && tab && !isAgentTabEnabled(agent, tab))
+    if (agent && tab && !isWorkspaceTabEnabled(agent, tab))
       setTarget({ tab: "overview" });
   }, [target.tab, agent]);
 
