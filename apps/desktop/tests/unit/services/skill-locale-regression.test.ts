@@ -50,6 +50,7 @@ const requiredPaths = [
   "settings.skillSafetyImmutableChecks",
   "skill.batchDeploy",
   "skill.batchManage",
+  "skill.addSkillToAgent",
   "skill.distributionStats",
   "skill.invalidGitRepo",
   "skill.loadingCommunityStore",

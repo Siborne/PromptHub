@@ -29,6 +29,22 @@ function getPathValue(source: TranslationTree, path: string): unknown {
 }
 
 describe("plugin i18n smoke", () => {
+  it("defines the Agent add action in every supported locale", () => {
+    const locales = { en, ...NON_ENGLISH_LOCALES };
+
+    for (const [locale, messages] of Object.entries(locales)) {
+      const value = getPathValue(
+        messages as TranslationTree,
+        "plugin.addPluginToAgent",
+      );
+
+      expect(typeof value, `${locale} is missing plugin.addPluginToAgent`).toBe(
+        "string",
+      );
+      expect(String(value).trim().length).toBeGreaterThan(0);
+    }
+  });
+
   it("localizes Agent Plugin target status badges outside english", () => {
     const englishNative = getPathValue(en, "plugin.targetStatus.native");
     const englishAdapter = getPathValue(en, "plugin.targetStatus.adapter");
@@ -62,7 +78,7 @@ describe("plugin i18n smoke", () => {
     }
   });
 
-  it("localizes Chinese Agent Plugin count filters without English plural fallbacks", () => {
+  it("keeps the Plugin product term stable in Chinese Agent filters", () => {
     const chineseLocales = {
       zh,
       "zh-TW": zhTw,
@@ -83,14 +99,9 @@ describe("plugin i18n smoke", () => {
         expect(typeof value, `${locale} is missing plugin.${key}`).toBe(
           "string",
         );
-        expect(
-          value,
-          `${locale} plugin.${key} should not use Plugins`,
-        ).not.toContain("Plugins");
-        expect(
-          value,
-          `${locale} plugin.${key} should not use My Plugins`,
-        ).not.toContain("My Plugins");
+        expect(value, `${locale} plugin.${key} should use Plugin`).toContain(
+          "Plugin",
+        );
       }
     }
   });

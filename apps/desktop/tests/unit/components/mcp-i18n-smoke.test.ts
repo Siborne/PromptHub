@@ -32,6 +32,11 @@ const REQUIRED_MCP_KEYS = [
   "totalTargets",
   "deleteConfirmTitle",
   "deleteConfirmMessage",
+  "agentMcpFilterAll",
+  "agentMcpFilterManaged",
+  "agentMcpFilterExternal",
+  "agentMcpFilterEnabled",
+  "agentMcpFilterDisabled",
 ];
 
 function getPathValue(source: TranslationTree, path: string): unknown {
