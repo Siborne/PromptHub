@@ -6,7 +6,6 @@ import {
   DownloadIcon,
   FolderOpenIcon,
   Loader2Icon,
-  SendIcon,
   TrashIcon,
 } from "lucide-react";
 
@@ -30,6 +29,7 @@ import {
   AgentAssetCard,
   AgentAssetCardContent,
   AgentAssetManagementSurface,
+  AgentAssetPrimaryAction,
 } from "./AgentAssetManagementSurface";
 import { useBoundedPage } from "./BoundedListPager";
 
@@ -552,11 +552,9 @@ function AgentSkillAssetCard({
 }
 
 export function AgentSkillAssetPanel({
-  agent,
   assets,
   onOpenDetail,
 }: {
-  agent: ManagedAgentSummary;
   assets: AgentSkillAssetsController;
   onOpenDetail: (skill: AgentScannedSkill) => void;
 }) {
@@ -601,20 +599,15 @@ export function AgentSkillAssetPanel({
       onFilterChange={(filterKey) =>
         assets.setFilter(filterKey as AgentSkillAssetFilter)
       }
-      path={agent.paths.skills}
       refreshLabel={t("agents.refreshCurrentAsset", "Refresh current view")}
       onRefresh={() => void assets.refresh()}
       isRefreshing={assets.isScanning}
       primaryAction={
-        <button
-          type="button"
+        <AgentAssetPrimaryAction
           onClick={() => assets.setInstallModalOpen(true)}
           disabled={assets.librarySkills.length === 0}
-          className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
-        >
-          <SendIcon aria-hidden="true" className="h-3.5 w-3.5" />
-          {t("skill.installMySkillToAgent", "Install My Skill")}
-        </button>
+          label={t("skill.addSkillToAgent", "Add Skill")}
+        />
       }
       gridTestId="agent-skill-grid"
       isLoading={assets.isScanning}

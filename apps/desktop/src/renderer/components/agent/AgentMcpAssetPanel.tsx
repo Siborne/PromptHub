@@ -6,7 +6,6 @@ import {
   DownloadIcon,
   FileJsonIcon,
   Loader2Icon,
-  PlusIcon,
   ServerIcon,
   TrashIcon,
 } from "lucide-react";
@@ -32,6 +31,7 @@ import {
   AgentAssetCard,
   AgentAssetCardContent,
   AgentAssetManagementSurface,
+  AgentAssetPrimaryAction,
 } from "./AgentAssetManagementSurface";
 import { useBoundedPage } from "./BoundedListPager";
 
@@ -541,7 +541,6 @@ export function AgentMcpAssetPanel({
         }))}
         activeFilter={filter}
         onFilterChange={(filterKey) => setFilter(filterKey as AgentMcpFilter)}
-        path={agent.paths.mcp}
         refreshLabel={t("agents.refreshCurrentAsset", "Refresh current view")}
         onRefresh={() => void refresh()}
         isRefreshing={isLoading || isRefreshing}
@@ -556,19 +555,14 @@ export function AgentMcpAssetPanel({
           ) : null
         }
         primaryAction={
-          <button
-            type="button"
+          <AgentAssetPrimaryAction
             onClick={() => {
               setAppModule("mcp");
               setSelectedTab("targets");
               setSelectedTargetId(scopedPresets[0]?.id ?? null);
             }}
-            disabled={scopedPresets.length === 0}
-            className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
-          >
-            <PlusIcon aria-hidden="true" className="h-3.5 w-3.5" />
-            {t("mcp.addMcp", "Add MCP")}
-          </button>
+            label={t("mcp.addMcp", "Add MCP")}
+          />
         }
         listTestId="mcp-agent-server-list"
         gridTestId="mcp-agent-grid"

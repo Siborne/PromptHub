@@ -41,6 +41,7 @@ import {
   AgentAssetCard,
   AgentAssetCardContent,
   AgentAssetManagementSurface,
+  AgentAssetPrimaryAction,
 } from "./AgentAssetManagementSurface";
 import { useBoundedPage } from "./BoundedListPager";
 
@@ -836,7 +837,6 @@ export function AgentPluginAssetPanel({
         onFilterChange={(filterKey) =>
           setFilter(filterKey as AgentPluginFilter)
         }
-        path={agent.paths.plugins}
         refreshLabel={t("agents.refreshCurrentAsset", "Refresh current view")}
         onRefresh={() => void refresh()}
         isRefreshing={isLoading}
@@ -849,6 +849,12 @@ export function AgentPluginAssetPanel({
               {t("plugin.assetLoadFailed", "Plugins could not be loaded.")}
             </div>
           ) : null
+        }
+        primaryAction={
+          <AgentAssetPrimaryAction
+            onClick={openStore}
+            label={t("plugin.addPluginToAgent", "Add Plugin")}
+          />
         }
         gridTestId="agent-plugin-grid"
         isLoading={isLoading}

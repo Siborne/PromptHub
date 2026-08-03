@@ -545,19 +545,23 @@ describe("Agent workspace shell", () => {
   it("renders each asset domain directly from its top-level tab", async () => {
     await renderWorkspaceAndSettleOverview();
 
-    fireEvent.click(screen.getByRole("tab", { name: /^skills$/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: /^skills$/i }));
+    });
     expect(screen.getByRole("tabpanel", { name: /^skills$/i })).toBeVisible();
     expect(
       screen.queryByRole("navigation", { name: /^assets$/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("~/.claude/skills")).toBeVisible();
+    expect(screen.queryByText("~/.claude/skills")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: /^mcp$/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: /^mcp$/i }));
+    });
     expect(screen.getByRole("tabpanel", { name: /^mcp$/i })).toBeVisible();
     expect(
       screen.getByRole("textbox", { name: /search assets/i }),
     ).toBeVisible();
-    expect(screen.getByText("~/.claude.json")).toBeVisible();
+    expect(screen.queryByText("~/.claude.json")).not.toBeInTheDocument();
   });
 
   it("lets Agent asset details replace the entire right workspace", async () => {
@@ -1117,8 +1121,12 @@ describe("Agent workspace shell", () => {
     expect(screen.getByRole("tab", { name: /^rules$/i })).toBeDisabled();
     expect(screen.getByRole("tab", { name: /^plugins$/i })).toBeDisabled();
 
-    fireEvent.click(skillsTab);
-    expect(screen.getByRole("tabpanel", { name: /^skills$/i })).toBeVisible();
+    await act(async () => {
+      fireEvent.click(skillsTab);
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("tabpanel", { name: /^skills$/i })).toBeVisible(),
+    );
   });
 
   it("opens the allowlisted native config editor and the Agent root folder", async () => {

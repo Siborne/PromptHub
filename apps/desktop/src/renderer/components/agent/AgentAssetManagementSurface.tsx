@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { Loader2Icon, RefreshCwIcon, SearchIcon } from "lucide-react";
+import { Loader2Icon, PlusIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
 
 import { BoundedListPager, type BoundedPage } from "./BoundedListPager";
 
@@ -17,7 +17,6 @@ interface AgentAssetManagementSurfaceProps<T> {
   filters: AgentAssetFilterOption[];
   activeFilter: string;
   onFilterChange: (key: string) => void;
-  path?: string;
   refreshLabel: string;
   onRefresh: () => void;
   isRefreshing: boolean;
@@ -35,8 +34,26 @@ interface AgentAssetManagementSurfaceProps<T> {
 
 function filterChipClass(isActive: boolean): string {
   return isActive
-    ? "rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 font-medium text-primary shadow-sm"
-    : "rounded-full border border-border bg-background/60 px-2.5 py-1 text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary";
+    ? "shrink-0 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 font-medium text-primary shadow-sm"
+    : "shrink-0 whitespace-nowrap rounded-full border border-border bg-background/60 px-2.5 py-1 text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary";
+}
+
+export function AgentAssetPrimaryAction({
+  label,
+  ...buttonProps
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      {...buttonProps}
+      className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+    >
+      <PlusIcon aria-hidden="true" className="h-3.5 w-3.5" />
+      {label}
+    </button>
+  );
 }
 
 export function AgentAssetManagementSurface<T>({
@@ -47,7 +64,6 @@ export function AgentAssetManagementSurface<T>({
   filters,
   activeFilter,
   onFilterChange,
-  path,
   refreshLabel,
   onRefresh,
   isRefreshing,
@@ -69,8 +85,11 @@ export function AgentAssetManagementSurface<T>({
       className="relative flex min-h-0 flex-1 flex-col"
     >
       {alert}
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-5 py-3">
-        <label className="relative block min-w-40 flex-1 sm:max-w-72">
+      <div
+        data-testid="agent-asset-toolbar"
+        className="flex shrink-0 flex-nowrap items-center gap-3 border-b border-border px-5 py-3"
+      >
+        <label className="relative block w-44 shrink-0 sm:w-56 lg:w-64">
           <SearchIcon
             aria-hidden="true"
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -83,7 +102,10 @@ export function AgentAssetManagementSurface<T>({
             className="h-8 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
           />
         </label>
-        <div className="flex flex-wrap gap-1.5 text-xs">
+        <div
+          data-testid="agent-asset-toolbar-filters"
+          className="scrollbar-hide flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto text-xs"
+        >
           {filters.map((filter) => (
             <button
               key={filter.key}
@@ -97,13 +119,6 @@ export function AgentAssetManagementSurface<T>({
             </button>
           ))}
         </div>
-        {path ? (
-          <span className="hidden min-w-0 flex-1 truncate text-right font-mono text-xs text-muted-foreground lg:block">
-            {path}
-          </span>
-        ) : (
-          <span className="min-w-0 flex-1" />
-        )}
         <button
           type="button"
           onClick={onRefresh}

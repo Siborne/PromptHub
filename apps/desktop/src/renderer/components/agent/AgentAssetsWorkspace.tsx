@@ -157,7 +157,6 @@ function AgentSkillWorkspace({
           </div>
         ) : (
           <AgentSkillAssetPanel
-            agent={agent}
             assets={skillAssets}
             onOpenDetail={handleOpenSkillDetail}
           />

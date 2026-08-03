@@ -326,7 +326,7 @@ describe("AgentAssetsWorkspace", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText("write")).toBeVisible();
     expect(screen.getByText("ext-one")).toBeVisible();
-    expect(screen.getByText("~/.claude/skills")).toBeVisible();
+    expect(screen.queryByText("~/.claude/skills")).not.toBeInTheDocument();
     expect(
       screen.getByTestId("agent-asset-management-surface"),
     ).toHaveAttribute("data-domain", "skills");
@@ -359,7 +359,7 @@ describe("AgentAssetsWorkspace", () => {
       screen.queryByTestId("mcp-agent-target-row"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("ext-one")).not.toBeInTheDocument();
-    expect(screen.getAllByText("~/.claude.json").length).toBeGreaterThan(0);
+    expect(screen.queryByText("~/.claude.json")).not.toBeInTheDocument();
 
     view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="rules" />);
     expect(screen.getByText("CLAUDE.md")).toBeVisible();
@@ -392,6 +392,92 @@ describe("AgentAssetsWorkspace", () => {
     expect(
       screen.queryByTestId("agent-plugin-target-row"),
     ).not.toBeInTheDocument();
+  });
+
+  it("localizes MCP filters and keeps raw target paths out of the toolbar", async () => {
+    await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />,
+      { language: "zh" },
+    );
+
+    expect(screen.getByTestId("mcp-agent-filter-managed")).toHaveTextContent(
+      "0 个已管理",
+    );
+    expect(screen.getByTestId("mcp-agent-filter-external")).toHaveTextContent(
+      "2 个外部",
+    );
+    expect(screen.getByTestId("mcp-agent-filter-enabled")).toHaveTextContent(
+      "2 个已启用",
+    );
+    expect(screen.getByTestId("mcp-agent-filter-disabled")).toHaveTextContent(
+      "0 个已停用",
+    );
+
+    const toolbar = screen
+      .getByRole("textbox", { name: "搜索资产" })
+      .closest("div");
+    expect(toolbar).not.toBeNull();
+    expect(
+      within(toolbar as HTMLElement).queryByText("~/.claude.json"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses one localized add action across Skills, MCP, and Plugins", async () => {
+    const view = await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="skills" />,
+      { language: "zh" },
+    );
+
+    const skillAction = screen.getByRole("button", { name: "添加 Skill" });
+    fireEvent.click(skillAction);
+    expect(screen.getByTestId("skill-library-import-modal")).toBeVisible();
+
+    useMcpStore.setState({ targetPresets: [], targetStatus: [] });
+    view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />);
+    const mcpAction = screen.getByRole("button", { name: "添加 MCP" });
+    expect(mcpAction.className).toBe(skillAction.className);
+    expect(mcpAction).toBeEnabled();
+    fireEvent.click(mcpAction);
+    expect(useUIStore.getState().appModule).toBe("mcp");
+    expect(useMcpStore.getState().selectedTab).toBe("targets");
+
+    view.rerender(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
+    );
+    const pluginAction = screen.getByRole("button", { name: "添加 Plugin" });
+    expect(pluginAction.className).toBe(skillAction.className);
+    fireEvent.click(pluginAction);
+    expect(useUIStore.getState().appModule).toBe("plugin");
+    expect(usePluginStore.getState().selectedTab).toBe("market");
+  });
+
+  it("keeps every asset Add action on the fixed toolbar right edge", async () => {
+    const view = await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="skills" />,
+      { language: "zh" },
+    );
+    const search = screen.getByRole("textbox", { name: "搜索资产" });
+    fireEvent.change(search, { target: { value: "ext-one" } });
+    expect(search).toHaveValue("ext-one");
+
+    for (const [domain, actionName] of [
+      ["skills", "添加 Skill"],
+      ["mcp", "添加 MCP"],
+      ["plugins", "添加 Plugin"],
+    ] as const) {
+      view.rerender(
+        <AgentAssetsWorkspace agent={claudeAgent} domain={domain} />,
+      );
+
+      const toolbar = screen.getByTestId("agent-asset-toolbar");
+      const filters = screen.getByTestId("agent-asset-toolbar-filters");
+      const action = screen.getByRole("button", { name: actionName });
+
+      expect(toolbar).toHaveClass("flex-nowrap");
+      expect(filters).toHaveClass("min-w-0", "flex-1", "overflow-x-auto");
+      expect(action.parentElement).toBe(toolbar);
+      expect(toolbar.lastElementChild).toBe(action);
+    }
   });
 
   it("uses one icon-led card anatomy across Skills, MCP, and Plugins", async () => {
@@ -1161,9 +1247,7 @@ describe("AgentAssetsWorkspace", () => {
         screen.queryByTestId("skill-library-import-modal"),
       ).not.toBeInTheDocument();
 
-      fireEvent.click(
-        screen.getByRole("button", { name: /install my skill/i }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: /add skill/i }));
 
       expect(screen.getByTestId("skill-library-import-modal")).toBeVisible();
       expect(screen.getByTestId("import-modal-title")).toHaveTextContent(
