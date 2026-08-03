@@ -665,6 +665,20 @@ Agent detail
   -> AgentPluginAssetPanel (scoped Plugin store + target actions)
 ```
 
+The three adapters render their search, localized filters, refresh control and
+right-aligned Add action through the same management-surface primitives. The
+Add action uses one plus-icon button component and only its label and owning
+workflow vary: the Skill picker, MCP target management, or Plugin store. The
+toolbar never carries a raw filesystem path; actionable paths remain on cards,
+detail views and explicit open-folder controls. Add MCP remains enabled for an
+empty Agent inventory so the user can create its first target. `Plugin` remains
+a stable product term in Chinese and Traditional Chinese UI copy.
+
+The shared toolbar is a single non-wrapping row. Search and the right-side
+Refresh/Add controls keep stable dimensions, while only the middle filter strip
+may shrink and scroll horizontally. Localized filter length therefore cannot
+push Add Plugin, Add MCP or Add Skill beneath the search row.
+
 MCP target identity is matched by exact preset `platformId`, `target` or `id`;
 Plugin target identity is matched by exact target id (with the existing
 display-icon alias only when the platform registry declares it). Actions stay

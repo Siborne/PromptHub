@@ -1634,14 +1634,27 @@
     behavior through the owning Plugin store.
   - Skills, MCP and Plugins now literally reuse
     `AgentAssetManagementSurface`, `AgentAssetCard` and
-    `AgentAssetActionButton`; toolbar/search/filter/path/refresh, bounded grid,
+    `AgentAssetActionButton`; toolbar/search/filter/refresh, bounded grid,
     card shell/action footer, loading/empty state and pager are no longer three
     duplicated implementations. Rules continues to use its editor workspace.
     No new IPC channel, database table, filesystem layout, or network request
     was introduced.
-  - Focused `agent-assets-workspace.test.tsx` passes 19 tests, including the
+  - Follow-up on 2026-08-03 removed raw Agent asset paths from the shared list
+    toolbar while retaining actionable source paths on cards and detail views.
+    The five MCP counter/filter keys now exist in all seven locale bundles, and
+    the MCP locale parity test prevents future English fallback regressions.
+    Skills, MCP and Plugins also share `AgentAssetPrimaryAction`, placing one
+    localized plus-icon action at the same right edge: Add Skill opens the
+    Agent-scoped picker, Add MCP opens target management and Add Plugin opens
+    the Plugin store. Add MCP stays enabled for an empty Agent inventory so it
+    can create the first target. The Add labels exist in all seven locale
+    bundles, while Chinese and Traditional Chinese keep `Plugin` as the stable
+    product term.
+  - Focused `agent-assets-workspace.test.tsx` passes 23 tests, including the
     shared-surface contract for all three domains and MCP no-sidebar card-grid
-    regression. Desktop typecheck and affected ESLint pass.
+    regression. MCP and Plugin locale smoke tests plus the Skill locale
+    regression cover the changed translations. Desktop typecheck and affected
+    ESLint pass.
     Playwright was intentionally not run; manual UI verification remains the
     requested release gate. The changed renderer files remain below the
     repository's source-size limit.
@@ -2158,6 +2171,18 @@
   selection, clipboard and launch failures, UI target visibility and actions,
   IPC validation, DB lineage, Markdown rendering and seven-locale alignment.
 
+## Asset Toolbar Action Alignment
+
+- Refined `FR-AGENT-060` / `DES-AGENT-075` / `TEST-AGENT-093` /
+  `T-AGENT-130`: Skills, MCP and Plugins now keep search, localized filters,
+  refresh and the owning Add action on one shared toolbar row.
+- The middle filter strip owns bounded horizontal overflow. Refresh and Add
+  remain fixed at the right edge, so longer Plugin labels cannot move Add
+  Plugin below the search row. No store, route, IPC or persistence behavior
+  changed.
+- Focused component verification passes 24 tests, including all three domains,
+  right-edge DOM order, filter-strip overflow and the existing Add workflows.
+
 ## Converge
 
 - Stable knowledge reference synced in `spec/knowledge/reference/agent-platforms.md`;
@@ -2173,3 +2198,36 @@
   release gates before convergence.
 - Keep proxy, failover and OAuth work outside the Phase 1 implementation branch.
 - Run the first live Dream Skin compatibility apply as an explicit manual action before release. The pinned upstream runtime is last verified against Codex desktop `26.707.72221`, while the current development machine runs `26.715.21425`; successful start, landmark verification and restore on that version remain a manual release gate.
+
+## Config Editor Isolation And Inventory Enforcement
+
+- Completed `FR-AGENT-090` / `DES-AGENT-105` / `TEST-AGENT-125` /
+  `T-AGENT-162`. Existing config targets now require either an adapter
+  declaration or membership in the same bounded discovery inventory returned
+  by Config Files. The service keeps a 64-entry in-memory LRU inventory cache;
+  `list()` refreshes it, and arbitrary existing nested files remain rejected.
+- `SkillFileEditor` now clears per-path content when its source identity changes
+  and rejects stale list/read successes and failures by source generation.
+  Agent sidebar selection reuses the existing localized dirty-editor
+  confirmation instead of silently discarding edits.
+- Provider credential eye-button reveal behavior is unchanged. General raw
+  config files continue to use the existing embedded-secret redaction and
+  placeholder-preservation boundary.
+- Verification passed 5 focused files / 86 tests without React `act` warnings,
+  Core and Desktop typechecks, affected Desktop ESLint, Desktop production
+  build, the Agent Config Files Electron E2E, `git diff --check`, and the
+  `FR-AGENT-090 -> DES-AGENT-105 -> TEST-AGENT-125 -> T-AGENT-162`
+  traceability row. The quick release harness remains blocked by the pre-existing
+  stale `spec/changes/index.md`; it was not regenerated because that index also
+  contains unrelated active work.
+- Targeted V8 coverage passes 46 tests. The extracted dirty-navigation hook is
+  100% for statements, branches, functions and lines; the legacy 1,400-line
+  `SkillFileEditor` remains at 77.51% statements/lines, 85.43% branches and 60%
+  functions overall. Every new source-generation success, stale success, stale
+  failure and current failure path is exercised; the remaining uncovered lines
+  belong to pre-existing structural mutation and resource-preview flows outside
+  this batch.
+- Config creation for an undetected Agent remains unresolved because
+  `FR-AGENT-075` requires undetected Agents to stay absent and explicitly
+  forbids config reads or writes. No implementation silently weakens that
+  installed-only boundary.

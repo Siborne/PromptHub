@@ -51,7 +51,8 @@ Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加�
 ## User Config Files Boundary
 
 - Agent Config Files 管理的是 canonical registry 或用户覆盖解析出的用户级 Agent 根目录，不扫描项目级配置空间。
-- 主进程在该根目录内有界发现现有文本配置文件；平台声明的相对路径仍用于默认选中和创建缺失的已知配置文件，不再限制已存在的配置文件清单。
+- 主进程在该根目录内有界发现现有文本配置文件；平台声明的相对路径仍用于默认选中和创建缺失的已知配置文件。读写 IPC 只接受平台声明路径或同一有界发现清单内的现有文件，调用方不能用任意相对路径绕过清单。
+- Config Files 的 inventory、选中内容、缓存和异步响应按 Agent source identity 隔离；用户切换 Agent 前必须确认是否丢弃未保存修改。
 - `auth`、credential、token、secret 文件以及 session、history、log、cache、database、backup、generated content、Skill 和 Plugin 目录不得进入列表或读写 IPC。
 - 文件内容跨 IPC 前必须遮罩嵌入的敏感值。直接编辑只允许保留遮罩占位符，不允许通过通用配置编辑器新增、删除或修改凭据。
 - 保存必须校验 expected revision 与 JSON/JSONC/TOML/YAML 格式，并使用加密设备本地备份、原子替换、重读验证和失败回滚。结构性新建、重命名和删除不属于当前能力。

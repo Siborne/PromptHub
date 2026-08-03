@@ -803,6 +803,7 @@ inputs only and are not generic asset distribution targets.
 | `FR-AGENT-087`                                                                                                        | `DES-AGENT-102`                                                                                                                                        | `TEST-AGENT-122`                                                                                                                                                                                     | `T-AGENT-159`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-088`                                                                                                        | `DES-AGENT-103`                                                                                                                                        | `TEST-AGENT-123`                                                                                                                                                                                     | `T-AGENT-160`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-089`                                                                                                        | `DES-AGENT-104`                                                                                                                                        | `TEST-AGENT-124`                                                                                                                                                                                     | `T-AGENT-161`                                                                                                                                                                                                                                                                               |
+| `FR-AGENT-090`                                                                                                        | `DES-AGENT-105`                                                                                                                                        | `TEST-AGENT-125`                                                                                                                                                                                     | `T-AGENT-162`                                                                                                                                                                                                                                                                               |
 | `NFR-AGENT-001`, `NFR-AGENT-002`, `NFR-AGENT-003`, `NFR-AGENT-004`, `NFR-AGENT-005`, `NFR-AGENT-006`, `NFR-AGENT-007` | `DES-AGENT-005`, `DES-AGENT-008`, `DES-AGENT-009`, `DES-AGENT-014`, `DES-AGENT-015`, `DES-AGENT-060` in `ui-resilience-designs.md`                     | `TEST-AGENT-004`, `TEST-AGENT-007`, `TEST-AGENT-009`, `TEST-AGENT-011`, `TEST-AGENT-012`, `TEST-AGENT-015`, `TEST-AGENT-016`, `TEST-AGENT-017`, `TEST-AGENT-018`, `TEST-AGENT-047`, `TEST-AGENT-048` | `T-AGENT-025`, `T-AGENT-035`, `T-AGENT-036`, `T-AGENT-037`, `T-AGENT-038`, `T-AGENT-039`, `T-AGENT-082`, `T-AGENT-083`, `T-AGENT-115`                                                                                                                                                       |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-057` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-076`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-112`                                                                                                                                                                                                                                                                |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-058` in `ui-resilience-designs.md`                                                                                                          | `TEST-AGENT-077`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-113`                                                                                                                                                                                                                                                                |
@@ -920,7 +921,7 @@ Batch confirmed on 2026-07-20; implements `FR-AGENT-022` and `FR-AGENT-023`.
 - Skills/MCP/Rules/Plugins counts reuse the existing domain stores via `use-agent-asset-domain.ts` (skill scan cache, MCP target status, rules files, plugin target matrix).
 - Sessions total comes from `agent:sessions:list`; provider/model summary from `agent:modelConfig:get`; appearance state from `agent:appearance:get`; usage from the new `agent:usage:get`.
 - The Overview tab receives an `onNavigate(tab)` callback from `AgentsWorkspace`; there is no second navigation state store. Cells whose capability is `planned`/`unsupported` render disabled and never invoke IPC.
-- The flat paths panel is collapsed into a secondary region inside the Paths & capabilities card; raw paths remain visible in each tab header.
+- The flat paths panel is collapsed into a secondary region inside the Paths & capabilities card. Shared Skills/MCP/Plugins inventory toolbars omit raw paths so search, filters, refresh and the primary action remain compact; actionable paths stay on the relevant card, detail view and explicit open-folder control.
 
 ### Quota adapter contract
 
@@ -1129,7 +1130,7 @@ Batch confirmed on 2026-07-21; implements `FR-AGENT-028`.
 
 ### Composition (renderer-only, no new main-process surface)
 
-- The Skills domain of `AgentAssetsWorkspace` renders `AgentSkillAssetPanel`: toolbar (search, managed/unmanaged/symlink/copy filter chips, refresh, "Install My Skill") plus a responsive card grid. Skills, MCP and Plugins now render through the same `AgentAssetManagementSurface`, `AgentAssetCard` and `AgentAssetActionButton` primitives rather than duplicating visually similar toolbar, grid, card and action markup. Domain panels retain only scoped selectors, card body content, detail routes and owning-store actions; Rules retain their editor workspace.
+- The Skills domain of `AgentAssetsWorkspace` renders `AgentSkillAssetPanel`: toolbar (search, managed/unmanaged/symlink/copy filter chips, refresh, "Add Skill") plus a responsive card grid. Skills, MCP and Plugins now render through the same `AgentAssetManagementSurface`, `AgentAssetPrimaryAction`, `AgentAssetCard` and `AgentAssetActionButton` primitives rather than duplicating visually similar toolbar, primary action, grid, card and action markup. The shared toolbar never renders a raw asset path; locale-specific filter labels and Add labels come from each domain's seven-locale resource tree. It remains one non-wrapping row: the filter strip owns bounded horizontal overflow while refresh and the shared Add action remain fixed on the right. Add Skill opens the Agent-scoped picker, Add MCP routes to MCP target management even when no target exists, and Add Plugin routes to the Plugin store. Domain panels retain only scoped selectors, card body content, detail routes and owning-store actions; Rules retain their editor workspace.
 - Rows reuse `agentScanState[agent.id]` from the skill store and `getSkillScanStatus` for badge semantics — the same source of truth as `SkillAgentsView`; `AgentAssetItem` is not extended; the panel consumes `AgentScannedSkill` directly via a dedicated hook.
 - Actions map one-to-one to existing flows: open folder (`window.electron.openPath`), adopt (`useSkillStore.importScannedSkills` with the `handleImportAgentSkill` hydration pattern), open managed skill (jump to the Skills module my-skills view), install from library (`SkillLibraryImportModal` with the agent's skills dir as fixed target), uninstall (`skillApi.uninstallPlatformSkill` + `ConfirmDialog`, built-in blocked).
 - Card click opens `SkillFullDetailPage` with `overrideSkill` + `agentContext` + `agentActions` (the `buildProjectDetailSkill` adapter), replacing the right pane with a back action — the same drill-in contract as the Skills module, embedded in the workspace shell.
@@ -2009,3 +2010,30 @@ as an alternative to a PromptHub-managed secret. The editor does not add model
 catalog, reasoning conversion, custom User-Agent, failover or proxy controls:
 those CC Switch surfaces depend on the separately gated proxy capability in
 `FR-AGENT-017` and are not accepted by the current direct adapters.
+
+## `DES-AGENT-105`: Source-Bound Config Inventory And Editor State
+
+`AgentUserConfigFileService` keeps its existing bounded discovery policy
+(`MAX_CONFIG_ENTRIES`, `MAX_CONFIG_FILES`, `MAX_CONFIG_DEPTH`) as the single
+filesystem inventory boundary. Existing non-declared targets are authorized
+only when the same discovery policy returns their normalized path; missing
+targets remain limited to adapter declarations. This adds at most one bounded
+`O(E)` directory scan per uncached source context, where `E <= 2,000`, and the
+service keeps at most 64 source inventories in an in-memory LRU cache. `list()`
+refreshes that cache so external changes are observed without unbounded
+watchers, polling or durable state.
+
+`SkillFileEditor` attaches list and read requests to a monotonically increasing
+source generation. A source change clears inventory, selected content and
+per-path cache before loading the next source. Late results are ignored unless
+their generation and source key are still current. Same-source refreshes retain
+the existing content cache, avoiding redundant reads.
+
+The existing dirty-editor confirmation is extracted as a shared renderer hook
+and reused by both module navigation and Agent selection.
+
+Allowing an undetected Agent to create declared config files is intentionally
+not implemented in this design because it conflicts with `FR-AGENT-075`, which
+requires undetected Agents to remain absent and forbids config reads or writes.
+Changing that source-of-truth boundary requires an explicit product decision
+about whether configured-but-undetected Agents re-enter the sidebar.

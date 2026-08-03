@@ -446,3 +446,16 @@ detail pages and replace the complete workspace to the right of the Agent
 list. They must not remain nested below the Agent identity header and tabs.
 Rules remains its own editor workflow. This is a presentation/navigation
 change only; asset ownership, storage and actions remain unchanged.
+
+## Scope Addendum 2026-08-03: Config Editor Isolation
+
+Agent config file reads and writes must share the bounded discovered/declaration
+inventory, file editor state must be source-bound, and user-initiated Agent
+switches must protect unsaved changes. Provider credential reveal controls are
+unchanged.
+
+Config creation for an undetected Agent remains pending. `FR-AGENT-075`
+deliberately hides undetected Agents and forbids config reads or writes, while
+the proposed bootstrap behavior would make such an Agent manageable. The
+installed-only boundary remains authoritative until that product contract is
+explicitly changed.

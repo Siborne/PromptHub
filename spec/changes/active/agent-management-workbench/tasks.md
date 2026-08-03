@@ -209,8 +209,8 @@ UI screen structure, interaction states, responsive behavior and component bound
 - [x] `T-AGENT-128` 按 `FR-AGENT-058` / `DES-AGENT-073` 通过已有 shell boundary 精确 reveal 当前规则文件并补齐错误反馈；不得增加 IPC。
 - [x] `TEST-AGENT-092` Agent 资产视觉与顺序回归：覆盖 Skills/MCP/Plugins 连续排列、Qwen Definitions 不拆散资产组、MCP/Plugin 共用有界双列卡片网格，以及 Plugin 使用 `PlugIcon`。
 - [x] `T-AGENT-129` 按 `FR-AGENT-059` / `DES-AGENT-074` 统一 MCP/Plugin 与 Skill 的卡片语言并调整 tab 顺序；继续复用 owning-domain inventory，不增加 store、IPC、持久化或伪动作。
-- [x] `TEST-AGENT-093` Agent 资产管理回归：覆盖 Skills/MCP/Plugins 共用同一管理 surface、MCP/Plugin 卡片选择、详情、配置/导入/分发/打开目录/卸载快捷操作，目标按 Agent 隔离，刷新与失败状态可观察，且不回归 Skills 操作。
-- [x] `T-AGENT-130` 按 `FR-AGENT-060` / `DES-AGENT-075` 将 Agent MCP/Plugin 页接入现有管理工作台和 owning stores；删除只读泛化卡片路径，并抽取 Skills/MCP/Plugins 共用的 toolbar、筛选、双列 grid、card、action footer、空态与 pager 原语，三个域只保留自己的数据和动作，不新增持久化或 IPC。
+- [x] `TEST-AGENT-093` Agent 资产管理回归：覆盖 Skills/MCP/Plugins 共用同一管理 surface 与右侧加号主操作、长本地化筛选不把主操作换到第二行、各自主操作进入 Skill 选择/MCP 目标/Plugin 商店 owning workflow、无 MCP 目标时仍可添加首个目标、MCP/Plugin 卡片选择、详情、配置/导入/分发/打开目录/卸载快捷操作，目标按 Agent 隔离，刷新与失败状态可观察，新增文案覆盖七种语言，工具条不显示原始资产路径，且不回归 Skills 操作。
+- [x] `T-AGENT-130` 按 `FR-AGENT-060` / `DES-AGENT-075` 将 Agent MCP/Plugin 页接入现有管理工作台和 owning stores；删除只读泛化卡片路径，并抽取 Skills/MCP/Plugins 共用的 toolbar、筛选、右侧加号主操作、双列 grid、card、action footer、空态与 pager 原语。共享工具条保持单行，筛选区有界横向滚动，刷新和添加动作固定在右侧；工具条只保留本地化筛选、刷新与主操作而不展示原始路径，三个域只保留自己的数据和动作，不新增持久化或 IPC。
 - [x] `TEST-AGENT-094` Agent family 分组回归：验证 Hermes 与 OpenClaw/QClaw 同属 Claw 分组，Code / Work 平台仍保持独立，规则排序与设置页复用同一分类策略。
 - [x] `T-AGENT-131` 按 `FR-AGENT-061` / `DES-AGENT-076` 将 Hermes 加入显式 Claw family registry；保持独立 platform id、根目录、能力声明和规则文件路径，不引入产品别名或兼容性推断。
 - [x] `TEST-AGENT-095` 按 `FR-AGENT-062` 覆盖五个本地 Claw 平台的独立 registry id、Claw 分组、能力 planned/partial 状态、兼容根目录候选和真实品牌图标资产；先完成红测再接入实现。
@@ -298,6 +298,8 @@ Every batch must run its targeted failing tests first, then `pnpm typecheck`, af
 
 ## Phase 2: Coverage Breadth
 
+- [x] `T-AGENT-162` 先实现 `TEST-AGENT-125` 红测，再按 `FR-AGENT-090` / `DES-AGENT-105` 收紧配置文件 read/write inventory allowlist，隔离跨 Agent 文件缓存与异步结果并复用未保存确认；同步实现记录并运行针对性单测、类型检查和 lint。未检测 Agent 创建配置文件与 `FR-AGENT-075` 冲突，等待产品边界确认，不在本任务内静默改写。
+
 - [ ] `T-AGENT-026` 按常用度、安装量证据、格式稳定性和安全风险持续补齐全部预置平台 adapters；每个平台独立声明 provider/session/config/CLI 能力。
 - [x] `T-AGENT-026A` 升级 Kimi 到独立 Kimi Code：保留 `kimi` identity，增加 current/legacy root resolution、current config inventory、非敏感 model adapter、index-first read-only session adapter、7 locales 与稳定文档同步。
 - [x] `T-AGENT-026B` 增加 Appearance 一级能力和 Codex adapter：原生外观、固定上游提交的 Codex Dream Skin 注入/切换/恢复运行时及本地 Pet 管理；其他 Agent 按 capability 统一置灰。
@@ -378,4 +380,6 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 - [x] `TEST-AGENT-123` 覆盖会话操作区仅有原 Agent 继续与跨 Agent 续接两个主入口、续接选择按需打开、所有已检测目标可见、直接 CLI 交接、复制后打开应用、仅复制兜底、复制后启动失败、剪贴板失败阻止误启动、独立导出图标、次级 CRUD 菜单，以及 20 条消息分页、直接跳页和跨 cursor 增量读取。
 - [x] `T-AGENT-160` 按 `FR-AGENT-088` / `DES-AGENT-103` 收敛原 Agent 原生继续与跨 Agent 可移植续接的两阶段交互；由主进程选择直接交接、复制后打开或仅复制能力层级，并保持固定消息页码栏。
 - [x] `TEST-AGENT-124` Provider 右侧编辑回归：新增与编辑均使用右侧 labelled region、无 dialog；新增草稿取消零 IPC 写入；Codex 展示真实协议、端点、主模型及 PromptHub/环境变量凭据模式；保存继续满足 write-only secret 与平台适配请求。
+
+- [x] `TEST-AGENT-125` Agent 配置编辑回归：覆盖已存在但未声明/未发现文件的 read/write 拒绝与原文件不变、已声明和已发现文件继续可用、相同相对路径的跨 Agent 缓存隔离、乱序 list/read 结果丢弃，以及未保存切换取消/确认。
 - [x] `T-AGENT-161` 按 `FR-AGENT-089` / `DES-AGENT-104` 将 Provider 新增/编辑改为右侧草稿编辑器，按真实 adapter 能力分区并补齐 Codex 环境变量凭据，不伪装 CC Switch proxy-only 配置。

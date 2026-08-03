@@ -1686,6 +1686,22 @@ confirmation before destructive changes. The Agent workspace MUST NOT create a
 second asset store, invent mutations for unsupported platforms, or silently
 navigate away before an operation is complete.
 
+The shared inventory toolbar MUST localize every counter and filter in all
+supported locales. It MUST NOT display a raw Agent asset path beside the
+filters; filesystem paths remain available on the relevant asset card, detail
+view, or explicit open-folder action where they provide actionable context.
+Each Skills, MCP and Plugins toolbar MUST expose one right-aligned, plus-icon
+primary action using the same component anatomy. The labels MUST be localized
+as Add Skill, Add MCP and Add Plugin, while each action continues into its
+owning workflow rather than introducing a generic mutation path. Chinese and
+Traditional Chinese Plugin surfaces MUST retain `Plugin` as the stable product
+term instead of mixing it with a translated alias.
+
+The search field, filter strip, refresh control and Add action MUST remain on
+one toolbar row. A long localized filter strip MUST use bounded horizontal
+overflow instead of wrapping the Add action onto a second row; refresh and Add
+MUST remain fixed at the toolbar's right edge in every asset domain.
+
 #### Scenario: Manage MCP from an Agent
 
 - Given an Agent has configured MCP entries and PromptHub-managed MCP servers
@@ -1713,6 +1729,23 @@ navigate away before an operation is complete.
   card grid
 - And an action cannot mutate another Agent target unless the user explicitly
   chooses it in the owning domain's target picker
+
+#### Scenario: Localized compact asset toolbar
+
+- Given the user opens Skills, MCP, or Plugins in a non-English locale
+- When the shared asset toolbar renders its counts and filters
+- Then every label uses the active locale instead of an English fallback
+- And the toolbar does not expose the selected Agent's raw filesystem path
+- And its right edge contains the domain's localized Add action with the same
+  plus-icon button anatomy used by the other two asset domains
+- And long localized filters scroll within their own bounded strip instead of
+  moving Refresh or Add onto another row
+- And Add Skill opens the Agent-scoped My Skills picker, Add MCP opens MCP
+  target management, and Add Plugin opens the Plugin store
+- And Add MCP remains available when the current Agent has no existing target,
+  because creating the first target is the purpose of that action
+- And cards and detail views may still show a relevant source path for an
+  explicit inspect or open-folder workflow
 
 ### `FR-AGENT-061`: Explicit Claw Family Taxonomy
 
@@ -2662,3 +2695,41 @@ configuration.
 - When PromptHub renders a direct Agent Provider editor without that proxy
 - Then those controls are omitted unless the selected Agent adapter can write
   and verify the same native behavior independently
+
+### `FR-AGENT-090`: Agent Config Editor Isolation
+
+The native Config Files workspace MUST treat the bounded file inventory as its
+read/write allowlist. An existing file that is neither declared by the Agent
+adapter nor returned by bounded discovery MUST NOT become readable or writable
+through a caller-supplied relative path.
+
+Changing the selected Agent MUST isolate inventory, selected-file content and
+in-flight asynchronous results by source identity. PromptHub MUST ask for
+confirmation before a user-initiated Agent switch discards unsaved config
+changes.
+
+Provider Profile credentials remain governed by their existing credential
+ownership and reveal controls. This requirement does not remove the explicit
+eye-button reveal behavior from the Provider editor.
+
+#### Scenario: Reject an undiscovered existing file
+
+- Given an editable file exists below an Agent root but outside declared paths
+  and bounded discovery directories
+- When a caller addresses the file directly through config read or write IPC
+- Then PromptHub returns `AGENT_CONFIG_FILE_NOT_DISCOVERED`
+- And the existing file remains unchanged
+
+#### Scenario: Switch between equal relative paths safely
+
+- Given two Agents each expose `config.toml`
+- When the user switches Agents while either Agent has an in-flight list or read
+- Then only the newly selected Agent inventory and content can render
+- And an older completion cannot overwrite the new source state
+
+#### Scenario: Protect unsaved config edits
+
+- Given the active Agent config editor has unsaved changes
+- When the user selects another Agent
+- Then PromptHub asks whether to discard the changes
+- And cancellation keeps the current Agent and editor state
