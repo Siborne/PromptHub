@@ -120,6 +120,56 @@ function getFileIcon(name: string, isDirectory: boolean, isOpen: boolean) {
   );
 }
 
+function selectVisibleFileEntries(
+  result: SkillLocalFileTreeEntry[],
+  visiblePaths: string[],
+  hasAllowlist: boolean,
+  includeMissing: boolean,
+): FileTreeEntry[] {
+  const publicEntries = result
+    .map(normalizeFileTreeEntry)
+    .filter((entry) => !isHiddenSkillRepoEntry(entry.path));
+  if (!hasAllowlist) return publicEntries;
+  const allowlisted = publicEntries.filter(
+    (entry) => !entry.isDirectory && visiblePaths.includes(entry.path),
+  );
+  if (!includeMissing) return allowlisted;
+  const missing = visiblePaths
+    .filter((filePath) => !allowlisted.some((entry) => entry.path === filePath))
+    .map((filePath) => ({
+      path: filePath,
+      isDirectory: false,
+      size: 0,
+    }));
+  return [...allowlisted, ...missing];
+}
+
+function getInitialSelectedFile(
+  entries: FileTreeEntry[],
+  preferredPath?: string,
+): string | null {
+  return (
+    entries.find((entry) => !entry.isDirectory && entry.path === preferredPath)
+      ?.path ||
+    entries.find(
+      (entry) => !entry.isDirectory && entry.path.toLowerCase() === "skill.md",
+    )?.path ||
+    entries.find((entry) => !entry.isDirectory)?.path ||
+    null
+  );
+}
+
+function retainLoadedFiles(
+  entries: FileTreeEntry[],
+  loaded: Record<string, FileEntry>,
+): Record<string, FileEntry> {
+  return Object.fromEntries(
+    entries
+      .filter((entry) => !entry.isDirectory && loaded[entry.path])
+      .map((entry) => [entry.path, loaded[entry.path]]),
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────
 
 export function SkillFileEditor({
@@ -179,6 +229,8 @@ export function SkillFileEditor({
   >(null);
 
   const activeSourceKeyRef = useRef<string | null>(null);
+  const inventorySourceKeyRef = useRef<string | null>(null);
+  const sourceGenerationRef = useRef(0);
   const isPathMode = Boolean(localPath || fileSource);
   const normalizedVisibleFilePaths = useMemo(
     () =>
@@ -197,6 +249,12 @@ export function SkillFileEditor({
   const hasVisibleFileAllowlist = visibleFilePaths !== undefined;
   const canMutateStructure = !readOnly && allowStructuralMutations;
   const sourceKey = `${fileSource?.key ?? (localPath ? `path:${localPath}` : `skill:${skillId}`)}:visible:${normalizedVisibleFilePaths.join("|")}:initial:${normalizedInitialFilePath ?? ""}`;
+  const isCurrentSourceRequest = useCallback(
+    (expectedSourceKey: string | null, expectedGeneration: number) =>
+      activeSourceKeyRef.current === expectedSourceKey &&
+      sourceGenerationRef.current === expectedGeneration,
+    [],
+  );
 
   const listFiles = useCallback(async () => {
     if (fileSource) {
@@ -296,87 +354,67 @@ export function SkillFileEditor({
   );
 
   // Load files
-  const loadFiles = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const result = await listFiles();
-      const normalizedEntries = result.map(normalizeFileTreeEntry);
-      const publicEntries = normalizedEntries.filter(
-        (entry) => !isHiddenSkillRepoEntry(entry.path),
-      );
-      const allowlistedEntries = hasVisibleFileAllowlist
-        ? publicEntries.filter(
-            (entry) =>
-              !entry.isDirectory &&
-              normalizedVisibleFilePaths.includes(entry.path),
-          )
-        : publicEntries;
-      const visibleEntries =
-        hasVisibleFileAllowlist && includeMissingVisibleFiles
-          ? [
-              ...allowlistedEntries,
-              ...normalizedVisibleFilePaths
-                .filter(
-                  (path) =>
-                    !allowlistedEntries.some((entry) => entry.path === path),
-                )
-                .map((path) => ({
-                  path,
-                  isDirectory: false,
-                  size: 0,
-                })),
-            ]
-          : allowlistedEntries;
-      setFiles(visibleEntries);
-      const firstFile =
-        visibleEntries.find(
-          (entry) =>
-            !entry.isDirectory && entry.path === normalizedInitialFilePath,
-        )?.path ||
-        visibleEntries.find(
-          (entry) =>
-            !entry.isDirectory && entry.path.toLowerCase() === "skill.md",
-        )?.path ||
-        visibleEntries.find((entry) => !entry.isDirectory)?.path ||
-        null;
-      setSelectedFile((current) => {
-        if (current && visibleEntries.some((entry) => entry.path === current)) {
-          return current;
-        }
-        return firstFile;
-      });
-      setLoadedFiles((prev) => {
-        const next: Record<string, FileEntry> = {};
-        for (const entry of visibleEntries) {
-          if (!entry.isDirectory && prev[entry.path]) {
-            next[entry.path] = prev[entry.path];
+  const loadFiles = useCallback(
+    async (
+      expectedSourceKey = activeSourceKeyRef.current,
+      expectedGeneration = sourceGenerationRef.current,
+    ) => {
+      setIsLoading(true);
+      try {
+        const result = await listFiles();
+        if (!isCurrentSourceRequest(expectedSourceKey, expectedGeneration))
+          return;
+        const visibleEntries = selectVisibleFileEntries(
+          result,
+          normalizedVisibleFilePaths,
+          hasVisibleFileAllowlist,
+          includeMissingVisibleFiles,
+        );
+        inventorySourceKeyRef.current = expectedSourceKey;
+        setFiles(visibleEntries);
+        const firstFile = getInitialSelectedFile(
+          visibleEntries,
+          normalizedInitialFilePath,
+        );
+        setSelectedFile((current) => {
+          if (
+            current &&
+            visibleEntries.some((entry) => entry.path === current)
+          ) {
+            return current;
           }
+          return firstFile;
+        });
+        setLoadedFiles((prev) => retainLoadedFiles(visibleEntries, prev));
+        const dirs = visibleEntries
+          .filter((entry) => entry.isDirectory)
+          .map((entry) => entry.path);
+        setExpandedDirs(new Set(dirs));
+      } catch (error) {
+        if (!isCurrentSourceRequest(expectedSourceKey, expectedGeneration))
+          return;
+        console.error("Failed to load skill files:", error);
+        showToast(
+          `${t("skill.loadFailed", "Load failed")}: ${String(error)}`,
+          "error",
+        );
+      } finally {
+        if (isCurrentSourceRequest(expectedSourceKey, expectedGeneration)) {
+          setIsLoading(false);
         }
-        return next;
-      });
-      // Auto-expand all directories
-      const dirs = visibleEntries
-        .filter((entry) => entry.isDirectory)
-        .map((entry) => entry.path);
-      setExpandedDirs(new Set(dirs));
-    } catch (error) {
-      console.error("Failed to load skill files:", error);
-      showToast(
-        `${t("skill.loadFailed", "Load failed")}: ${String(error)}`,
-        "error",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [
-    hasVisibleFileAllowlist,
-    includeMissingVisibleFiles,
-    listFiles,
-    normalizedInitialFilePath,
-    normalizedVisibleFilePaths,
-    showToast,
-    t,
-  ]);
+      }
+    },
+    [
+      hasVisibleFileAllowlist,
+      includeMissingVisibleFiles,
+      isCurrentSourceRequest,
+      listFiles,
+      normalizedInitialFilePath,
+      normalizedVisibleFilePaths,
+      showToast,
+      t,
+    ],
+  );
 
   const hasAnyUnsaved = useMemo(
     () => Object.keys(modifiedFiles).length > 0,
@@ -386,6 +424,8 @@ export function SkillFileEditor({
   useEffect(() => {
     if (!isOpen) {
       activeSourceKeyRef.current = null;
+      inventorySourceKeyRef.current = null;
+      sourceGenerationRef.current += 1;
       return;
     }
 
@@ -396,9 +436,16 @@ export function SkillFileEditor({
       return;
     }
 
+    const generation = sourceGenerationRef.current + 1;
+    sourceGenerationRef.current = generation;
     activeSourceKeyRef.current = sourceKey;
-    void loadFiles();
+    inventorySourceKeyRef.current = null;
+    setFiles([]);
+    setLoadedFiles({});
+    setSelectedFile(null);
+    setLoadingFilePath(null);
     setModifiedFiles({});
+    void loadFiles(sourceKey, generation);
   }, [isOpen, loadFiles, sourceKey]);
 
   useEffect(() => {
@@ -495,12 +542,24 @@ export function SkillFileEditor({
 
   const loadSelectedFileContent = useCallback(
     async (path: string) => {
+      const expectedSourceKey = sourceKey;
+      const expectedGeneration = sourceGenerationRef.current;
+      if (inventorySourceKeyRef.current !== expectedSourceKey) {
+        return;
+      }
       if (path in modifiedFiles || loadedFiles[path]) {
         return;
       }
       setLoadingFilePath(path);
       try {
         const result = await readFile(path);
+        if (
+          activeSourceKeyRef.current !== expectedSourceKey ||
+          inventorySourceKeyRef.current !== expectedSourceKey ||
+          sourceGenerationRef.current !== expectedGeneration
+        ) {
+          return;
+        }
         if (result && !result.isDirectory) {
           setLoadedFiles((prev) => ({
             ...prev,
@@ -511,16 +570,27 @@ export function SkillFileEditor({
           }));
         }
       } catch (error) {
+        if (
+          activeSourceKeyRef.current !== expectedSourceKey ||
+          sourceGenerationRef.current !== expectedGeneration
+        ) {
+          return;
+        }
         console.error("Failed to read skill file:", error);
         showToast(
           `${t("skill.loadFailed", "Load failed")}: ${String(error)}`,
           "error",
         );
       } finally {
-        setLoadingFilePath((current) => (current === path ? null : current));
+        if (
+          activeSourceKeyRef.current === expectedSourceKey &&
+          sourceGenerationRef.current === expectedGeneration
+        ) {
+          setLoadingFilePath((current) => (current === path ? null : current));
+        }
       }
     },
-    [loadedFiles, modifiedFiles, readFile, showToast, t],
+    [loadedFiles, modifiedFiles, readFile, showToast, sourceKey, t],
   );
 
   useEffect(() => {

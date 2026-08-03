@@ -403,6 +403,77 @@ describe("Agent user config files", () => {
     }
   });
 
+  it("rejects existing files outside the declared and discovered inventory", async () => {
+    const hiddenDirectory = path.join(agentRoot, "third-party-package");
+    const hiddenTarget = path.join(hiddenDirectory, "package.json");
+    await fs.mkdir(hiddenDirectory);
+    await fs.writeFile(hiddenTarget, '{"private":true}', "utf8");
+    const configService = service();
+
+    await expect(configService.list(context())).resolves.not.toContainEqual(
+      expect.objectContaining({ path: "third-party-package/package.json" }),
+    );
+    await expect(
+      configService.read(context(), "third-party-package/package.json"),
+    ).rejects.toThrow("AGENT_CONFIG_FILE_NOT_DISCOVERED");
+    await expect(
+      configService.write(
+        context(),
+        "third-party-package/package.json",
+        '{"private":false}',
+        undefined,
+      ),
+    ).rejects.toThrow("AGENT_CONFIG_FILE_NOT_DISCOVERED");
+    await expect(fs.readFile(hiddenTarget, "utf8")).resolves.toBe(
+      '{"private":true}',
+    );
+  });
+
+  it("keeps bounded discovered files readable without declaring each path", async () => {
+    const discoveredTarget = path.join(agentRoot, "agents", "reviewer.md");
+    await fs.writeFile(discoveredTarget, "# Reviewer", "utf8");
+    const configService = service();
+
+    await expect(
+      configService.read(context(), "agents/reviewer.md"),
+    ).resolves.toMatchObject({
+      path: "agents/reviewer.md",
+      content: "# Reviewer",
+    });
+    await expect(configService.list(context())).resolves.toContainEqual({
+      path: "agents/reviewer.md",
+      isDirectory: false,
+      size: 10,
+    });
+  });
+
+  it("bounds cached source inventories and rediscovers an evicted root", async () => {
+    const configService = service();
+    await fs.writeFile(
+      path.join(agentRoot, "agents", "reviewer.md"),
+      "# Reviewer",
+      "utf8",
+    );
+    await configService.read(context(), "agents/reviewer.md");
+
+    for (let index = 0; index < 64; index += 1) {
+      await configService.list({
+        agentId: `agent-${index}`,
+        rootPath: path.join(tempRoot, `missing-${index}`),
+        relativePaths: [],
+      });
+    }
+
+    await fs.writeFile(
+      path.join(agentRoot, "agents", "new.md"),
+      "# New",
+      "utf8",
+    );
+    await expect(
+      configService.read(context(), "agents/new.md"),
+    ).resolves.toMatchObject({ content: "# New" });
+  });
+
   it("creates a declared missing file through the validated atomic path", async () => {
     await expect(
       service().read(context(), "keybindings.json"),
@@ -474,7 +545,9 @@ describe("Agent user config files", () => {
     ]);
     expect(
       results.find((result) => result.status === "rejected")?.reason,
-    ).toEqual(expect.objectContaining({ message: "AGENT_CONFIG_CONCURRENT_CHANGE" }));
+    ).toEqual(
+      expect.objectContaining({ message: "AGENT_CONFIG_CONCURRENT_CHANGE" }),
+    );
   });
 
   it("detects an external mutation between backup and atomic replacement", async () => {

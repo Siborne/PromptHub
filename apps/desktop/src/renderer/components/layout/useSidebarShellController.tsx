@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   BookOpenIcon,
@@ -15,6 +15,7 @@ import { getRuntimeCapabilities, isWebRuntime } from "../../runtime";
 import { resolveVisibleDesktopHomeModules } from "../../services/desktop-home-modules";
 import type { DesktopHomeModule } from "../../stores/settings.store";
 import type { SidebarLayout, PageType } from "./sidebar-controller-types";
+import { useConfirmLeaveDirtySkillEditor } from "../skill/useConfirmLeaveDirtySkillEditor";
 
 function useSidebarUiBindings() {
   const appModule = useUIStore((state) => state.appModule);
@@ -121,24 +122,6 @@ function getSidebarLayoutStyle(
     showRail: layout !== "panel",
     showPanel: layout !== "rail",
   };
-}
-
-function useConfirmLeaveDirtySkillEditor() {
-  const { t } = useTranslation();
-  return useCallback(() => {
-    const hasUnsaved = (
-      window as Window & { __PROMPTHUB_SKILL_EDITOR_DIRTY?: boolean }
-    ).__PROMPTHUB_SKILL_EDITOR_DIRTY;
-    return (
-      !hasUnsaved ||
-      window.confirm(
-        t(
-          "skill.unsavedChangesWarning",
-          "You have unsaved changes. Discard and close?",
-        ),
-      )
-    );
-  }, [t]);
 }
 
 function getRailItemLabel(

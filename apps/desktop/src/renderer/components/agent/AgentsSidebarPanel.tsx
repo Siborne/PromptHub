@@ -12,6 +12,7 @@ import { filterManagedAgents } from "../../services/managed-agents";
 import { useAgentStore } from "../../stores/agent.store";
 import { isWebRuntime } from "../../runtime";
 import { PlatformIcon } from "../ui/PlatformIcon";
+import { useConfirmLeaveDirtySkillEditor } from "../skill/useConfirmLeaveDirtySkillEditor";
 
 const AGENT_ROW_HEIGHT = 80;
 
@@ -32,6 +33,7 @@ export function AgentsSidebarPanel() {
   const selectAgent = useAgentStore((state) => state.selectAgent);
   const setSearchQuery = useAgentStore((state) => state.setSearchQuery);
   const togglePinned = useAgentStore((state) => state.togglePinned);
+  const confirmLeaveDirtySkillEditor = useConfirmLeaveDirtySkillEditor();
 
   useEffect(() => {
     void ensureLoaded();
@@ -136,7 +138,11 @@ export function AgentsSidebarPanel() {
                     <button
                       type="button"
                       aria-label={agent.name}
-                      onClick={() => selectAgent(agent.id)}
+                      onClick={() => {
+                        if (agent.id === selectedAgentId) return;
+                        if (!confirmLeaveDirtySkillEditor()) return;
+                        selectAgent(agent.id);
+                      }}
                       className="flex h-full w-full items-center gap-3 px-3 py-2.5 pr-14 text-left"
                     >
                       <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/60">

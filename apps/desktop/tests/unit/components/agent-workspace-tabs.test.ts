@@ -13,6 +13,7 @@ import {
 function agent(id: string): ManagedAgentSummary {
   return {
     id,
+    isDetected: true,
     paths: {},
     capabilities: {
       overview: { status: "supported" },

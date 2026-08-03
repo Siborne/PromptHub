@@ -116,6 +116,8 @@ describe("Agent workspace resilience", () => {
       busyAction: null,
       errorCode: null,
     });
+    delete (window as Window & { __PROMPTHUB_SKILL_EDITOR_DIRTY?: boolean })
+      .__PROMPTHUB_SKILL_EDITOR_DIRTY;
   });
 
   it("virtualizes 50+ Agents and preserves search and selection", async () => {
@@ -143,6 +145,26 @@ describe("Agent workspace resilience", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Agent 059" }));
     expect(useAgentStore.getState().selectedAgentId).toBe("custom-agent-059");
+  });
+
+  it("confirms before switching Agents with unsaved config changes", async () => {
+    const agents = [createAgent(1), createAgent(2)];
+    useAgentStore.setState({ agents, selectedAgentId: agents[0].id });
+    (
+      window as Window & { __PROMPTHUB_SKILL_EDITOR_DIRTY?: boolean }
+    ).__PROMPTHUB_SKILL_EDITOR_DIRTY = true;
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    await renderWithI18n(<AgentsSidebarPanel />);
+    fireEvent.click(screen.getByRole("button", { name: agents[1].name }));
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(useAgentStore.getState().selectedAgentId).toBe(agents[0].id);
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: agents[1].name }));
+    expect(useAgentStore.getState().selectedAgentId).toBe(agents[1].id);
+    confirm.mockRestore();
   });
 
   it("keeps long identity text bounded while retaining its accessible name", async () => {

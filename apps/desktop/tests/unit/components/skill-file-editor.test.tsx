@@ -1,4 +1,5 @@
 import {
+  act,
   createEvent,
   fireEvent,
   render,
@@ -10,6 +11,16 @@ import type { FormEvent } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const showToastMock = vi.fn();
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((next, fail) => {
+    resolve = next;
+    reject = fail;
+  });
+  return { promise, reject, resolve };
+}
 
 function hasHiddenSvgAncestor(element: Element): boolean {
   let current: Element | null = element;
@@ -247,6 +258,327 @@ describe("SkillFileEditor", () => {
       );
     });
     expect(scheduleAllSaveSync).not.toHaveBeenCalledWith("skill:file-save");
+  });
+
+  it("isolates cached content when two Agent sources use the same relative path", async () => {
+    const source = (key: string, content: string) => ({
+      key,
+      listFiles: vi
+        .fn()
+        .mockResolvedValue([
+          { path: "config.toml", isDirectory: false, size: content.length },
+        ]),
+      readFile: vi.fn().mockResolvedValue({
+        path: "config.toml",
+        isDirectory: false,
+        content,
+      }),
+    });
+    const first = source("agent-config:first", 'model = "first"');
+    const second = source("agent-config:second", 'model = "second"');
+    const view = await renderWithI18n(
+      <SkillFileEditor
+        skillId="agent:first"
+        skillName="First"
+        isOpen
+        mode="inline"
+        fileSource={first}
+      />,
+      { language: "en" },
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("skill-code-editor")).toHaveTextContent(
+        'model = "first"',
+      ),
+    );
+    view.rerender(
+      <SkillFileEditor
+        skillId="agent:second"
+        skillName="Second"
+        isOpen
+        mode="inline"
+        fileSource={second}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("skill-code-editor")).toHaveTextContent(
+        'model = "second"',
+      ),
+    );
+    expect(second.readFile).toHaveBeenCalledWith("config.toml");
+    expect(screen.getByTestId("skill-code-editor")).not.toHaveTextContent(
+      'model = "first"',
+    );
+  });
+
+  it("ignores a stale file read completed after the Agent source changes", async () => {
+    const staleRead = deferred<{
+      path: string;
+      isDirectory: false;
+      content: string;
+    }>();
+    const first = {
+      key: "agent-config:first",
+      listFiles: vi
+        .fn()
+        .mockResolvedValue([
+          { path: "config.toml", isDirectory: false, size: 1 },
+        ]),
+      readFile: vi.fn().mockReturnValue(staleRead.promise),
+    };
+    const second = {
+      key: "agent-config:second",
+      listFiles: vi
+        .fn()
+        .mockResolvedValue([
+          { path: "config.toml", isDirectory: false, size: 2 },
+        ]),
+      readFile: vi.fn().mockResolvedValue({
+        path: "config.toml",
+        isDirectory: false,
+        content: 'model = "second"',
+      }),
+    };
+    const view = await renderWithI18n(
+      <SkillFileEditor
+        skillId="agent:first"
+        skillName="First"
+        isOpen
+        mode="inline"
+        fileSource={first}
+      />,
+      { language: "en" },
+    );
+    await waitFor(() => expect(first.readFile).toHaveBeenCalledTimes(1));
+
+    view.rerender(
+      <SkillFileEditor
+        skillId="agent:second"
+        skillName="Second"
+        isOpen
+        mode="inline"
+        fileSource={second}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("skill-code-editor")).toHaveTextContent(
+        'model = "second"',
+      ),
+    );
+
+    await act(async () => {
+      staleRead.resolve({
+        path: "config.toml",
+        isDirectory: false,
+        content: 'model = "stale"',
+      });
+      await staleRead.promise;
+    });
+    expect(screen.getByTestId("skill-code-editor")).toHaveTextContent(
+      'model = "second"',
+    );
+    expect(screen.getByTestId("skill-code-editor")).not.toHaveTextContent(
+      'model = "stale"',
+    );
+  });
+
+  it("ignores a stale inventory completed after the Agent source changes", async () => {
+    const staleList =
+      deferred<Array<{ path: string; isDirectory: false; size: number }>>();
+    const first = {
+      key: "agent-config:first",
+      listFiles: vi.fn().mockReturnValue(staleList.promise),
+      readFile: vi.fn(),
+    };
+    const second = {
+      key: "agent-config:second",
+      listFiles: vi
+        .fn()
+        .mockResolvedValue([
+          { path: "second.toml", isDirectory: false, size: 2 },
+        ]),
+      readFile: vi.fn().mockResolvedValue({
+        path: "second.toml",
+        isDirectory: false,
+        content: 'model = "second"',
+      }),
+    };
+    const view = await renderWithI18n(
+      <SkillFileEditor
+        skillId="agent:first"
+        skillName="First"
+        isOpen
+        mode="inline"
+        fileSource={first}
+      />,
+      { language: "en" },
+    );
+    await waitFor(() => expect(first.listFiles).toHaveBeenCalledTimes(1));
+
+    view.rerender(
+      <SkillFileEditor
+        skillId="agent:second"
+        skillName="Second"
+        isOpen
+        mode="inline"
+        fileSource={second}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText("second.toml")).not.toHaveLength(0),
+    );
+
+    await act(async () => {
+      staleList.resolve([{ path: "stale.toml", isDirectory: false, size: 1 }]);
+      await staleList.promise;
+    });
+    expect(screen.queryByText("stale.toml")).not.toBeInTheDocument();
+    expect(screen.getAllByText("second.toml")).not.toHaveLength(0);
+  });
+
+  it("ignores stale list and read failures after the Agent source changes", async () => {
+    const staleList =
+      deferred<Array<{ path: string; isDirectory: false; size: number }>>();
+    const firstListSource = {
+      key: "agent-config:first-list",
+      listFiles: vi.fn().mockReturnValue(staleList.promise),
+      readFile: vi.fn(),
+    };
+    const currentSource = {
+      key: "agent-config:current",
+      listFiles: vi
+        .fn()
+        .mockResolvedValue([
+          { path: "current.toml", isDirectory: false, size: 2 },
+        ]),
+      readFile: vi.fn().mockResolvedValue({
+        path: "current.toml",
+        isDirectory: false,
+        content: 'model = "current"',
+      }),
+    };
+    const view = await renderWithI18n(
+      <SkillFileEditor
+        skillId="agent:first-list"
+        skillName="First list"
+        isOpen
+        mode="inline"
+        fileSource={firstListSource}
+      />,
+      { language: "en" },
+    );
+    await waitFor(() => expect(firstListSource.listFiles).toHaveBeenCalled());
+    view.rerender(
+      <SkillFileEditor
+        skillId="agent:current"
+        skillName="Current"
+        isOpen
+        mode="inline"
+        fileSource={currentSource}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("skill-code-editor")).toHaveTextContent(
+        'model = "current"',
+      ),
+    );
+    showToastMock.mockClear();
+    await act(async () => {
+      staleList.reject(new Error("stale list"));
+      await staleList.promise.catch(() => undefined);
+    });
+    expect(showToastMock).not.toHaveBeenCalled();
+
+    const staleRead = deferred<{
+      path: string;
+      isDirectory: false;
+      content: string;
+    }>();
+    const firstReadSource = {
+      key: "agent-config:first-read",
+      listFiles: vi
+        .fn()
+        .mockResolvedValue([
+          { path: "config.toml", isDirectory: false, size: 1 },
+        ]),
+      readFile: vi.fn().mockReturnValue(staleRead.promise),
+    };
+    view.rerender(
+      <SkillFileEditor
+        skillId="agent:first-read"
+        skillName="First read"
+        isOpen
+        mode="inline"
+        fileSource={firstReadSource}
+      />,
+    );
+    await waitFor(() => expect(firstReadSource.readFile).toHaveBeenCalled());
+    view.rerender(
+      <SkillFileEditor
+        skillId="agent:current"
+        skillName="Current"
+        isOpen
+        mode="inline"
+        fileSource={currentSource}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("skill-code-editor")).toHaveTextContent(
+        'model = "current"',
+      ),
+    );
+    showToastMock.mockClear();
+    await act(async () => {
+      staleRead.reject(new Error("stale read"));
+      await staleRead.promise.catch(() => undefined);
+    });
+    expect(showToastMock).not.toHaveBeenCalled();
+  });
+
+  it("reports list and read failures for the current Agent source", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const failedList = {
+      key: "agent-config:failed-list",
+      listFiles: vi.fn().mockRejectedValue(new Error("list failed")),
+      readFile: vi.fn(),
+    };
+    const view = await renderWithI18n(
+      <SkillFileEditor
+        skillId="agent:failed-list"
+        skillName="Failed list"
+        isOpen
+        mode="inline"
+        fileSource={failedList}
+      />,
+      { language: "en" },
+    );
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledTimes(1));
+
+    showToastMock.mockClear();
+    const failedRead = {
+      key: "agent-config:failed-read",
+      listFiles: vi
+        .fn()
+        .mockResolvedValue([
+          { path: "config.toml", isDirectory: false, size: 1 },
+        ]),
+      readFile: vi.fn().mockRejectedValue(new Error("read failed")),
+    };
+    view.rerender(
+      <SkillFileEditor
+        skillId="agent:failed-read"
+        skillName="Failed read"
+        isOpen
+        mode="inline"
+        fileSource={failedRead}
+      />,
+    );
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledTimes(1));
+    consoleError.mockRestore();
   });
 
   it("allows package-specific empty file labels for plugin reuse", async () => {

@@ -18,6 +18,7 @@ const MAX_CONFIG_DEPTH = 6;
 const MAX_CONFIG_ENTRIES = 2_000;
 const MAX_CONFIG_FILES = 500;
 const MAX_CONFIG_FILE_BYTES = 1024 * 1024;
+const MAX_DISCOVERY_CACHE_ENTRIES = 64;
 const SECRET_PLACEHOLDER_PREFIX = "__PROMPTHUB_REDACTED_SECRET_";
 
 const EDITABLE_EXTENSIONS = new Set([
@@ -343,10 +344,66 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
+function isDeclaredConfigPath(
+  context: AgentConfigContext,
+  normalized: string,
+): boolean {
+  return context.relativePaths.some((candidate) => {
+    try {
+      return normalizeRelativePath(candidate) === normalized;
+    } catch {
+      return false;
+    }
+  });
+}
+
+async function assertSafePathSegments(
+  rootPath: string,
+  segments: string[],
+): Promise<void> {
+  if (await pathExists(rootPath)) {
+    const rootStat = await fs.lstat(rootPath);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+      throw new Error("AGENT_CONFIG_ROOT_INVALID");
+    }
+  }
+  let current = rootPath;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    try {
+      const stat = await fs.lstat(current);
+      if (stat.isSymbolicLink()) {
+        throw new Error("AGENT_CONFIG_SYMLINK_REJECTED");
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+  }
+}
+
+async function assertExistingTarget(
+  rootPath: string,
+  targetPath: string,
+): Promise<void> {
+  const stat = await fs.stat(targetPath);
+  if (!stat.isFile() || stat.size > MAX_CONFIG_FILE_BYTES) {
+    throw new Error("AGENT_CONFIG_FILE_INVALID");
+  }
+  const [realRoot, realTarget] = await Promise.all([
+    fs.realpath(rootPath),
+    fs.realpath(targetPath),
+  ]);
+  if (!realTarget.startsWith(`${realRoot}${path.sep}`)) {
+    throw new Error("AGENT_CONFIG_PATH_INVALID");
+  }
+}
+
 async function assertSafeTarget(
   context: AgentConfigContext,
   relativePath: string,
   allowMissing: boolean,
+  isDiscovered?: (relativePath: string) => Promise<boolean>,
 ): Promise<{ relativePath: string; targetPath: string; exists: boolean }> {
   const normalized = normalizeRelativePath(relativePath);
   if (!isEditableConfigPath(normalized)) {
@@ -361,42 +418,15 @@ async function assertSafeTarget(
     throw new Error("AGENT_CONFIG_PATH_INVALID");
   }
   const exists = await pathExists(targetPath);
-  if (
-    !exists &&
-    (!allowMissing || !context.relativePaths.includes(normalized))
-  ) {
+  const declared = isDeclaredConfigPath(context, normalized);
+  if (!exists && (!allowMissing || !declared)) {
     throw new Error("AGENT_CONFIG_FILE_NOT_DISCOVERED");
   }
-  const segments = normalized.split("/");
-  if (await pathExists(rootPath)) {
-    const rootStat = await fs.lstat(rootPath);
-    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
-      throw new Error("AGENT_CONFIG_ROOT_INVALID");
-    }
-  }
-  let current = rootPath;
-  for (const segment of segments) {
-    current = path.join(current, segment);
-    try {
-      const stat = await fs.lstat(current);
-      if (stat.isSymbolicLink())
-        throw new Error("AGENT_CONFIG_SYMLINK_REJECTED");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
-      throw error;
-    }
-  }
+  await assertSafePathSegments(rootPath, normalized.split("/"));
   if (exists) {
-    const stat = await fs.stat(targetPath);
-    if (!stat.isFile() || stat.size > MAX_CONFIG_FILE_BYTES) {
-      throw new Error("AGENT_CONFIG_FILE_INVALID");
-    }
-    const [realRoot, realTarget] = await Promise.all([
-      fs.realpath(rootPath),
-      fs.realpath(targetPath),
-    ]);
-    if (!realTarget.startsWith(`${realRoot}${path.sep}`)) {
-      throw new Error("AGENT_CONFIG_PATH_INVALID");
+    await assertExistingTarget(rootPath, targetPath);
+    if (!declared && !(await isDiscovered?.(normalized))) {
+      throw new Error("AGENT_CONFIG_FILE_NOT_DISCOVERED");
     }
   }
   return { relativePath: normalized, targetPath, exists };
@@ -477,13 +507,71 @@ export function createAgentUserConfigFileService(options: {
   writeAtomically?: (targetPath: string, content: string) => Promise<void>;
 }): AgentUserConfigFileService {
   const mutationTails = new Map<string, Promise<void>>();
+  const discoveryCache = new Map<
+    string,
+    Promise<Array<{ path: string; size: number }>>
+  >();
   const writeAtomically = options.writeAtomically ?? atomicWrite;
+
+  function discoveryKey(context: AgentConfigContext): string {
+    return JSON.stringify([
+      context.agentId,
+      path.resolve(context.rootPath),
+      [...context.relativePaths].sort(),
+    ]);
+  }
+
+  async function discover(
+    context: AgentConfigContext,
+    refresh = false,
+  ): Promise<Array<{ path: string; size: number }>> {
+    const key = discoveryKey(context);
+    if (!refresh) {
+      const cached = discoveryCache.get(key);
+      if (cached) {
+        discoveryCache.delete(key);
+        discoveryCache.set(key, cached);
+        return cached;
+      }
+    }
+    const pending = discoverExistingFiles(
+      context.rootPath,
+      context.relativePaths,
+    );
+    discoveryCache.delete(key);
+    while (discoveryCache.size >= MAX_DISCOVERY_CACHE_ENTRIES) {
+      const oldestKey = discoveryCache.keys().next().value;
+      if (oldestKey === undefined) break;
+      discoveryCache.delete(oldestKey);
+    }
+    discoveryCache.set(key, pending);
+    try {
+      return await pending;
+    } catch (error) {
+      if (discoveryCache.get(key) === pending) discoveryCache.delete(key);
+      throw error;
+    }
+  }
+
+  function assertInventoryTarget(
+    context: AgentConfigContext,
+    relativePath: string,
+    allowMissing: boolean,
+  ) {
+    return assertSafeTarget(
+      context,
+      relativePath,
+      allowMissing,
+      async (normalized) =>
+        (await discover(context)).some((file) => file.path === normalized),
+    );
+  }
 
   async function read(
     context: AgentConfigContext,
     relativePath: string,
   ): Promise<SkillLocalFileEntry | null> {
-    const target = await assertSafeTarget(context, relativePath, true);
+    const target = await assertInventoryTarget(context, relativePath, true);
     if (!target.exists) return null;
     const raw = await fs.readFile(target.targetPath, "utf8");
     const redacted = redactConfigContent(raw, target.relativePath);
@@ -506,7 +594,7 @@ export function createAgentUserConfigFileService(options: {
     if (Buffer.byteLength(content, "utf8") > MAX_CONFIG_FILE_BYTES) {
       throw new Error("AGENT_CONFIG_FILE_INVALID");
     }
-    const target = await assertSafeTarget(context, relativePath, true);
+    const target = await assertInventoryTarget(context, relativePath, true);
     const original = target.exists
       ? await fs.readFile(target.targetPath, "utf8")
       : null;
@@ -565,10 +653,7 @@ export function createAgentUserConfigFileService(options: {
 
   return {
     async list(context) {
-      const discovered = await discoverExistingFiles(
-        context.rootPath,
-        context.relativePaths,
-      );
+      const discovered = await discover(context, true);
       const files = new Map(discovered.map((file) => [file.path, file]));
       for (const declaredPath of context.relativePaths) {
         if (!isEditableConfigPath(declaredPath) || files.has(declaredPath))
