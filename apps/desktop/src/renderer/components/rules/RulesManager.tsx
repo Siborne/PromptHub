@@ -443,8 +443,11 @@ export function RulesManager() {
         }
       >
         {syncConflictFile ? (
-          <div className="-mx-6 -mb-6 -mt-2 flex max-h-[calc(85vh-5.5rem)] flex-col">
-            <div className="shrink-0 space-y-3 px-6">
+          <div
+            className="-mx-6 -mb-6 -mt-2 flex h-[calc(85vh-5.5rem)] min-h-0 flex-col overflow-hidden"
+            data-testid="rules-conflict-layout"
+          >
+            <div className="shrink-0 space-y-2.5 px-6 pb-3">
               <p
                 className="truncate font-mono text-[11px] text-muted-foreground"
                 title={syncConflictFile.path || undefined}
@@ -453,11 +456,11 @@ export function RulesManager() {
                   t("rules.pathUnknown", "Path unavailable")}
               </p>
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                 <div
                   role="tablist"
                   aria-label={t("rules.conflictViewMode", "Compare mode")}
-                  className="inline-flex rounded-lg border border-border bg-background p-0.5"
+                  className="inline-flex w-fit shrink-0 rounded-lg border border-border bg-background p-0.5"
                 >
                   <button
                     type="button"
@@ -486,25 +489,76 @@ export function RulesManager() {
                     {t("rules.conflictViewSideBySide", "Side by side")}
                   </button>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    +{conflictDiffStats.added}
-                  </span>
-                  <span className="text-destructive">
-                    -{conflictDiffStats.removed}
-                  </span>
+                <div
+                  className="flex min-w-0 flex-wrap items-center gap-2"
+                  data-testid="rules-conflict-source-key"
+                >
+                  <div
+                    className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-2.5 py-1 sm:w-[19rem]"
+                    data-testid="rules-conflict-managed-source"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="h-2.5 w-2.5 shrink-0 rounded-sm bg-destructive"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-semibold text-foreground">
+                        {t(
+                          "rules.conflictPromptHubVersion",
+                          "PromptHub managed version",
+                        )}
+                      </div>
+                      <div className="truncate text-[11px] text-muted-foreground">
+                        {t(
+                          "rules.conflictManagedSourceHint",
+                          "PromptHub internal copy",
+                        )}
+                      </div>
+                    </div>
+                    <span className="shrink-0 font-mono text-xs font-semibold text-destructive">
+                      −{conflictDiffStats.removed}
+                    </span>
+                  </div>
+                  <div
+                    className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-2.5 py-1 sm:w-[19rem]"
+                    data-testid="rules-conflict-external-source"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="h-2.5 w-2.5 shrink-0 rounded-sm bg-emerald-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-semibold text-foreground">
+                        {t(
+                          "rules.conflictExternalVersion",
+                          "External file version",
+                        )}
+                      </div>
+                      <div className="truncate text-[11px] text-muted-foreground">
+                        {t("rules.conflictExternalSourceHint", "File on disk")}
+                      </div>
+                    </div>
+                    <span className="shrink-0 font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      +{conflictDiffStats.added}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-hidden px-6 py-3">
+            <div
+              role="region"
+              aria-label={t("rules.conflictTitle", "Rule conflict")}
+              tabIndex={0}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            >
               {conflictViewMode === "diff" && conflictDiff ? (
-                <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background">
+                <div className="overflow-hidden rounded-xl border border-border bg-background">
                   <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
                     <span>
                       {t(
                         "rules.conflictDiffLegend",
-                        "− PromptHub · + External file",
+                        "− PromptHub managed version · + External file version",
                       )}
                     </span>
                     <span>
@@ -521,10 +575,7 @@ export function RulesManager() {
                           )}
                     </span>
                   </div>
-                  <div
-                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
-                    data-testid="rules-conflict-diff-scroll"
-                  >
+                  <div data-testid="rules-conflict-diff-content">
                     <div className="font-mono text-xs leading-relaxed">
                       {conflictDiff.map((line, idx) => (
                         <div
@@ -538,19 +589,19 @@ export function RulesManager() {
                           }`}
                         >
                           <div className="flex shrink-0 select-none border-r border-border/40 text-muted-foreground/50">
-                            <span className="w-10 px-2 py-0.5 text-right">
+                            <span className="w-10 px-2 py-1 text-right">
                               {line.type !== "add"
                                 ? (line.oldLineNum ?? "")
                                 : ""}
                             </span>
-                            <span className="w-10 px-2 py-0.5 text-right">
+                            <span className="w-10 px-2 py-1 text-right">
                               {line.type !== "remove"
                                 ? (line.newLineNum ?? "")
                                 : ""}
                             </span>
                           </div>
                           <span
-                            className={`w-5 shrink-0 py-0.5 text-center font-bold select-none ${
+                            className={`w-5 shrink-0 py-1 text-center font-bold select-none ${
                               line.type === "add"
                                 ? "text-emerald-600 dark:text-emerald-400"
                                 : line.type === "remove"
@@ -565,7 +616,7 @@ export function RulesManager() {
                                 : " "}
                           </span>
                           <span
-                            className={`min-w-0 flex-1 whitespace-pre-wrap break-all py-0.5 pr-3 ${
+                            className={`min-w-0 flex-1 whitespace-pre-wrap break-words py-1 pr-3 ${
                               line.type === "add"
                                 ? "text-emerald-700 dark:text-emerald-300"
                                 : line.type === "remove"
@@ -581,8 +632,8 @@ export function RulesManager() {
                   </div>
                 </div>
               ) : (
-                <div className="grid h-full gap-3 overflow-hidden md:grid-cols-2">
-                  <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
                     <div className="flex shrink-0 items-center justify-between border-b border-border/70 bg-muted/20 px-3 py-2">
                       <span className="text-xs font-medium text-foreground">
                         {t("rules.conflictPromptHubVersion", "PromptHub")}
@@ -593,14 +644,14 @@ export function RulesManager() {
                       </span>
                     </div>
                     <pre
-                      className="min-h-0 flex-1 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words p-3 font-mono text-xs leading-relaxed text-muted-foreground"
-                      data-testid="rules-conflict-managed-scroll"
+                      className="flex-1 whitespace-pre-wrap break-words p-3 font-mono text-xs leading-relaxed text-muted-foreground"
+                      data-testid="rules-conflict-managed-content"
                     >
                       {syncConflictFile.content ||
                         t("rules.emptyHint", "Rule content will appear here.")}
                     </pre>
                   </div>
-                  <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+                  <div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
                     <div className="flex shrink-0 items-center justify-between border-b border-border/70 bg-muted/20 px-3 py-2">
                       <span className="text-xs font-medium text-foreground">
                         {t("rules.conflictExternalVersion", "External file")}
@@ -614,8 +665,8 @@ export function RulesManager() {
                       </span>
                     </div>
                     <pre
-                      className="min-h-0 flex-1 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words p-3 font-mono text-xs leading-relaxed text-muted-foreground"
-                      data-testid="rules-conflict-external-scroll"
+                      className="flex-1 whitespace-pre-wrap break-words p-3 font-mono text-xs leading-relaxed text-muted-foreground"
+                      data-testid="rules-conflict-external-content"
                     >
                       {syncConflictFile.targetContent ||
                         t("rules.emptyHint", "Rule content will appear here.")}
@@ -640,7 +691,7 @@ export function RulesManager() {
                 disabled={isResolvingConflict}
                 onClick={() => setPendingConflictStrategy("use-managed")}
               >
-                {t("rules.conflictUseManaged", "Keep PromptHub")}
+                {t("rules.conflictUseManaged", "Keep PromptHub version")}
               </Button>
               <Button
                 type="button"
@@ -650,7 +701,7 @@ export function RulesManager() {
               >
                 {isResolvingConflict
                   ? t("common.saving", "Saving...")
-                  : t("rules.conflictUseTarget", "Keep external")}
+                  : t("rules.conflictUseTarget", "Keep external file version")}
               </Button>
             </div>
           </div>

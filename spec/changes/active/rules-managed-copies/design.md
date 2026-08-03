@@ -113,6 +113,38 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
    - `use-target`: 将外部目标文件导入 PromptHub 托管正文，并追加一条版本快照。
 4. 解决完成后重新计算 `sync_status`，更新 `_rule.json` 与数据库索引。
 
+## `DES-RULESCROLL-001` Single Scroll Owner
+
+冲突比较弹窗采用单一纵向滚动所有者：
+
+- 弹窗标题、比较模式与底部解决操作保持在滚动区之外。
+- 差异视图和并排视图共享中间的可聚焦滚动区，避免外层、卡片和代码块同时争抢滚轮。
+- 中间 flex 区域必须具有确定高度和 `min-height: 0`，否则只有 `max-height` 时浏览器无法给后代滚动容器分配可滚动高度。
+- 长规则仍按现有 diff 结果一次渲染，时间与空间复杂度保持 `O(n)`；本次不增加文件扫描、网络请求或持久化 I/O。若后续出现超大规则性能证据，再单独引入虚拟化，不为当前布局缺陷增加复杂度。
+
+## `DES-RULESCROLL-002` Persistent Source Key
+
+- 比较模式切换与来源标识组合为同一紧凑工具行，宽屏横排、窄屏换行，不使用横跨整行的分散统计。
+- PromptHub 托管版本使用红色减号语义，外部文件版本使用绿色加号语义；两侧同时显示完整版本名称、存储角色和变更计数。
+- 来源标识位于正文滚动区之外，滚动到底部后仍然可见。
+- 底部操作使用“保留 PromptHub 托管版本”和“保留外部文件版本”的完整名称；长差异行增加垂直内边距，避免内容与工具行、页脚贴合。
+
+## `DES-RULESCROLL-003` Bounded Source Blocks
+
+- 来源容器只占内容所需宽度，不参与剩余空间拉伸。
+- 两个来源状态块在桌面宽度下各自限制为 `19rem`，窄屏使用整行并自然换行。
+- 固定工具栏保留至少 `0.75rem` 的底部内边距，使滚动后的正文不会贴住来源状态块。
+
+## Traceability
+
+<!-- traceability: enforced -->
+
+| Requirement | Design | Verification | Task |
+| --- | --- | --- | --- |
+| `FR-RULESCROLL-001` | `DES-RULESCROLL-001` | `TEST-RULESCROLL-001` | `T-RULESCROLL-001` |
+| `FR-RULESCROLL-002` | `DES-RULESCROLL-002` | `TEST-RULESCROLL-002` | `T-RULESCROLL-002` |
+| `FR-RULESCROLL-003` | `DES-RULESCROLL-003` | `TEST-RULESCROLL-003` | `T-RULESCROLL-003` |
+
 ## Backup / Restore Model
 
 ### Backup

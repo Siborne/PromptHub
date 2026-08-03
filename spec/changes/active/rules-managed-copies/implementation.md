@@ -28,6 +28,26 @@ In progress.
 - 补齐旧版 `rule-history` 迁移：首次 materialize 规则时会读取旧版 user data 同级 `rule-history/*.json`，支持数组、`versions` 对象、按 rule id 分组的 map，以及声明 `ruleId` / `fileId` / `ruleFileId` 的散落 JSON；目标文件存在时合并为历史版本，目标文件缺失时用最新 legacy 版本恢复托管正文并保留 `target-missing`。
 - 收紧项目规则 id：新增和备份导入的 `project:<id>` 必须是安全单路径段，防止拼接 managed project 目录时路径逃逸。
 - 将 Rules 托管正文、元数据、版本正文和版本索引改为同目录临时文件 + rename 写入；备份导入替换版本目录时先写 staging，再发布，失败时保留旧版本目录。
+- 修复长规则冲突弹窗无法纵向滚动：根因是只有 `max-height` 的 flex 容器无法为内层滚动节点提供确定高度，同时中间层 `overflow-hidden` 裁掉了溢出内容。现在冲突布局使用确定高度与 `min-height: 0`，差异和并排视图共享一个可聚焦的纵向滚动区，标题、模式切换与底部决策按钮保持可见。
+- 新增真实 Electron E2E 回归，使用隔离用户目录创建 220 段 PromptHub/外部规则冲突，分别验证差异模式和并排模式的滚轮滚动，以及底部操作持续可见。
+- 重做冲突来源信息：工具行固定展示 PromptHub 托管内部副本与磁盘外部文件两个版本，分别关联红色减项和绿色增项计数；保留操作使用完整版本名称，长差异行和页脚之间增加可读间距。
+- 收紧冲突工具栏密度：来源容器不再使用 `flex-1` 拉伸，两个来源状态块在桌面宽度下各自限制为 `19rem`，窄屏自动换行；固定工具栏与滚动正文之间保留稳定间距。
+
+## `TEST-RULESCROLL-001` Conflict Scroll Verification
+
+- Component regression asserts the single focusable scroll owner in both comparison modes.
+- Electron E2E verifies actual wheel scrolling with long managed and external rule files and confirms the decision actions remain visible.
+
+## `TEST-RULESCROLL-002` Conflict Source Identity Verification
+
+- Component regression verifies both persistent source labels, storage-role labels, and the complete keep-action names.
+- Electron E2E verifies the source key remains visible after actual wheel scrolling and does not overlap the comparison region.
+- All seven locales define the managed/external source roles and complete keep-action labels.
+
+## `TEST-RULESCROLL-003` Compact Toolbar Verification
+
+- Component regression verifies the source key uses wrapping content-width layout rather than a stretching grid and that both source blocks have bounded desktop widths.
+- Electron E2E verifies the source key stays below 70% of the dialog width and leaves at least 8 pixels before the comparison region.
 
 ## Verification
 
@@ -44,6 +64,15 @@ In progress.
 - `pnpm lint` 通过。
 - 尝试运行 `pnpm --filter @prompthub/desktop exec vitest run`；Rules 相关测试通过，但完整套件当前被其他未合并 Skill/TopBar 变更导致的既有失败阻断（例如 `skill-ui.integration.test.tsx`、`skill-filter*.test.ts`、`skill-platform-sync.test.ts`、`skill-db-versioning.test.ts`）。
 - `pnpm build` 通过。
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/rules-manager.test.tsx --reporter=dot` 通过（10/10）。
+- `pnpm --filter @prompthub/desktop typecheck` 通过。
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/rules/RulesManager.tsx tests/unit/components/rules-manager.test.tsx tests/e2e/rules-conflict-scroll.spec.ts --report-unused-disable-directives --max-warnings 0` 通过。
+- `pnpm --filter @prompthub/desktop build` 通过；仅保留既有 Vite chunk size 与 `fflate` dynamic/static import 警告。
+- `pnpm --filter @prompthub/desktop exec playwright test tests/e2e/rules-conflict-scroll.spec.ts --reporter=list` 通过（1/1），隔离测试目录已由 harness 清理。
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/renderer-i18n-smoke.test.tsx --reporter=dot` 通过（2/2）。
+- 第二轮 `pnpm --filter @prompthub/desktop exec playwright test tests/e2e/rules-conflict-scroll.spec.ts --reporter=list` 通过（1/1），同时验证来源标识与正文区域无重叠。
+- 使用隔离 Electron 数据目录对长规则冲突页进行实际截图检查：模式切换、两个来源卡片和正文区互不重叠，红/绿差异行具有稳定间距，两个完整版本操作在页脚中持续可见；临时截图已在验收后清理。
+- 紧凑工具栏回归再次通过组件测试、typecheck、定向 ESLint、生产构建和 Electron E2E（1/1）；实际截图确认两个来源状态块按内容宽度左对齐，不再横跨整行，临时截图与 Playwright 结果目录均已清理。
 
 ## Synced Docs
 

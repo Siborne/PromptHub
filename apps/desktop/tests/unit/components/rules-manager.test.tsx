@@ -216,10 +216,44 @@ describe("RulesManager", () => {
         "aria-selected",
         "true",
       );
-      expect(
-        screen.getByText("− PromptHub · + External file"),
-      ).toBeInTheDocument();
     });
+
+    const conflictLayout = screen.getByTestId("rules-conflict-layout");
+    const sourceKey = screen.getByTestId("rules-conflict-source-key");
+    const comparisonRegion = screen.getByRole("region", {
+      name: "Rule conflict",
+    });
+
+    expect(conflictLayout).toHaveClass(
+      "h-[calc(85vh-5.5rem)]",
+      "min-h-0",
+      "overflow-hidden",
+    );
+    expect(comparisonRegion).toHaveClass(
+      "min-h-0",
+      "overflow-y-auto",
+      "overscroll-contain",
+    );
+    expect(comparisonRegion).toHaveAttribute("tabindex", "0");
+    expect(
+      within(sourceKey).getByText("PromptHub managed version"),
+    ).toBeVisible();
+    expect(
+      within(sourceKey).getByText("PromptHub internal copy"),
+    ).toBeVisible();
+    expect(within(sourceKey).getByText("External file version")).toBeVisible();
+    expect(within(sourceKey).getByText("File on disk")).toBeVisible();
+    expect(sourceKey).toHaveClass("flex", "flex-wrap", "items-center");
+    expect(sourceKey).not.toHaveClass("grid", "flex-1");
+    expect(
+      screen.getByTestId("rules-conflict-managed-source"),
+    ).toHaveClass("w-full", "sm:w-[19rem]");
+    expect(
+      screen.getByTestId("rules-conflict-external-source"),
+    ).toHaveClass("w-full", "sm:w-[19rem]");
+    expect(comparisonRegion).toContainElement(
+      screen.getByTestId("rules-conflict-diff-content"),
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: "Side by side" }));
     expect(screen.getByRole("tab", { name: "Side by side" })).toHaveAttribute(
@@ -228,7 +262,19 @@ describe("RulesManager", () => {
     );
     expect(screen.getAllByText("# PromptHub copy").length).toBeGreaterThan(0);
     expect(screen.getAllByText("# External edit").length).toBeGreaterThan(0);
+    expect(comparisonRegion).toContainElement(
+      screen.getByTestId("rules-conflict-managed-content"),
+    );
+    expect(comparisonRegion).toContainElement(
+      screen.getByTestId("rules-conflict-external-content"),
+    );
 
+    expect(
+      screen.getByRole("button", { name: "Keep PromptHub version" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Keep external file version" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
 
@@ -312,7 +358,9 @@ describe("RulesManager", () => {
       expect(screen.getByText("Rule conflict")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Keep external" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep external file version" }),
+    );
 
     expect(api.rules.resolveConflict).not.toHaveBeenCalled();
     expect(screen.getByText("Keep external version?")).toBeInTheDocument();
