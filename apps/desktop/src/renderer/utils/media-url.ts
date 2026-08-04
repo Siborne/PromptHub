@@ -44,7 +44,16 @@ export function resolveLocalGenerationImageSrc(src: string): string {
   if (!src || isExternalMediaSrc(src)) return src;
   const prefix = "local-generation-image://";
   const encodedPath = src.startsWith(prefix) ? src.slice(prefix.length) : src;
-  return `${prefix}${encodeURIComponent(decodeURIComponent(encodedPath))}`;
+  let decodedPath = encodedPath;
+  try {
+    decodedPath = decodeURIComponent(encodedPath);
+  } catch {
+    // Treat malformed escapes as literal filename text; main still validates paths.
+  }
+  return `${prefix}${decodedPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")}`;
 }
 
 export function resolveLocalVideoSrc(src: string): string {

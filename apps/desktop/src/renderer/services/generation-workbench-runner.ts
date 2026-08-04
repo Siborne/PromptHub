@@ -49,6 +49,10 @@ export function supportsGenerationReferenceImages(
   return isGeminiImageModel(config);
 }
 
+export function getMaxGenerationReferenceImages(config: AIModelConfig): number {
+  return supportsGenerationReferenceImages(config) ? 2 : 0;
+}
+
 export function getSupportedGenerationAspectRatios(
   config: AIModelConfig,
 ): string[] {
@@ -72,9 +76,15 @@ async function loadReferenceAttachments(
   if (!supportsGenerationReferenceImages(config)) {
     throw new Error("The selected model does not support reference images");
   }
+  const maxReferences = getMaxGenerationReferenceImages(config);
+  if (references.length > maxReferences) {
+    throw new Error(
+      `The selected model supports at most ${maxReferences} reference images`,
+    );
+  }
   return Promise.all(
     references.map(async (reference) => {
-      if (reference.source !== "prompt") {
+      if (reference.source === "generation") {
         throw new Error("This reference image source is not supported yet");
       }
       const base64 = await window.electron?.readImageBase64?.(

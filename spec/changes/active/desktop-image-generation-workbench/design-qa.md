@@ -2,7 +2,7 @@
 
 ## Reference
 
-- Accepted concept: `assets/workbench-ui-concept-v2.png`
+- Accepted concept: `assets/workbench-ui-concept-v3.png`
 - Target hierarchy: dominant left result canvas, fixed right generation inspector,
   on-demand batch drawer, and bright card surfaces with restrained neutral controls.
 
@@ -83,3 +83,26 @@
 - Remaining P3: capture a deterministic populated gallery fixture before final change
   convergence; this does not block the accepted structure and empty-state visual pass.
 - Final result: passed.
+
+## 2026-08-03 Focused Review Layout
+
+- The accepted v3 reference is `assets/workbench-ui-concept-v3.png`; the populated
+  Electron implementation capture is `assets/workbench-ui-implementation-v3.png`.
+- Generation mode now collapses the standalone Prompts panel and retains only the global
+  module rail. The initial capture exposed that the app mounts rail and panel as separate
+  Sidebar instances; the panel-specific regression test failed before the controller was
+  corrected.
+- The current batch uses one `object-contain` review image, a fixed 80 x 96 px thumbnail
+  strip, and compact icon actions. Pending and unsuccessful slots no longer allocate
+  full gallery-height destructive cards.
+- The fixed inspector exposes Generation settings and a bounded History works tab. The
+  history tab mounts at most 100 batch rows and reports when additional history exists.
+- The populated Playwright Electron run used an isolated temporary user-data directory.
+  At a `1586 x 740` renderer viewport it measured a 389 px inspector, a 1084 x 400 px
+  primary review area, four thumbnails, and no document-level horizontal overflow.
+- Visual QA also exposed invalid encoded-slash URLs for nested generated assets. The
+  renderer now preserves `/` path separators while encoding each segment, allowing the
+  main-process allowlisted protocol handler to load the image without weakening traversal
+  checks.
+- Final result: passed for populated review, thumbnail switching, settings/history tabs,
+  rail-only navigation, local generated-image rendering, and horizontal overflow.

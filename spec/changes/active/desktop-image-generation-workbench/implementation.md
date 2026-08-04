@@ -183,3 +183,179 @@
   failure states at the accepted concept viewport.
 - Complete stress, backup/recovery, remote-payload exclusion, coverage, and release
   harness verification before convergence.
+
+## Explicit Reference Selection Follow-Up (2026-08-03, `T-IGW-020`)
+
+- Removed the implicit first-two-images behavior when a source Prompt is selected.
+  Reference images are now independent draft state and are sent only after an explicit
+  user selection.
+- Added native file selection, file drop, Prompt-media selection, removal and native drag
+  ordering. The Prompt-media chooser filters to PNG/JPEG/WebP and mounts 24 thumbnails at
+  a time. Prompt deletion leaves an existing reference visibly identified as Prompt media.
+- Local picker files are filtered before copying and capped to the remaining adapter
+  capacity. Dropped files are capped at 20 MiB each, imported sequentially to bound peak
+  memory, byte-sniffed in the main process, and stored under a generated managed-media
+  filename. Absolute external paths never enter the batch manifest.
+- The current provider capability boundary remains conservative: supported Gemini image
+  adapters accept at most two ordered references; other adapters expose zero and reject
+  references before batch creation. Managed Prompt and local references share the safe
+  `readImageBase64` bridge at execution time.
+- Test-first evidence: the original explicit-selection suite failed 7 cases before the
+  implementation; the unsupported-picker-copy regression also failed before filtering,
+  and the 25-image bounded-gallery regression failed before pagination. The focused
+  component, locale, runner and image-IPC suites now pass 57 tests. The extracted
+  reference picker reaches 100% lines, functions and branches. Desktop typecheck,
+  focused ESLint, file-size guard and production build pass. The build retains the
+  existing large-chunk and mixed static/dynamic `fflate` warnings.
+- Visual Computer Use verification was attempted against PromptHub, but the local native
+  Computer Use pipe did not start. No duplicate Electron process or development server
+  was started; component interaction tests cover the picker, drop target, limit, removal,
+  ordering, paging and unsupported-model states.
+
+## Conservative Default Count Follow-Up (2026-08-03, `T-IGW-021`)
+
+- Changed a new generation draft from eight outputs to one. The count remains editable
+  within `1..100`, but the application no longer commits eight provider requests by
+  default.
+- Creating a new batch also resets a previously edited count to one. Existing historical
+  batches retain their persisted target and tiles; this change does not rewrite history.
+- Test-first evidence: the default-count and clean-draft assertions both failed with the
+  previous value of eight, then passed after the shared default was applied to initial
+  state and draft reset.
+
+## Labeled Count Configuration Follow-Up (2026-08-03, `T-IGW-022`)
+
+- Moved the image-count stepper from the fixed footer into the persistent configuration
+  flow and added the visible existing `generation.count` label. Ratio, quality and count
+  now read as explicit basic generation parameters rather than leaving a bare number beside
+  the primary action.
+- Reduced the footer to one full-width Generate button, preserving a stable primary action
+  while the configuration content scrolls independently.
+- Test-first evidence: the focused component test failed because no visible count label
+  existed and the input was nested in the footer, then passed after the field was moved.
+  The full 28-case workbench suite, Desktop typecheck, focused ESLint, file-size gate,
+  production build, spec index/traceability checks and `git diff --check` passed. The build
+  retains the existing large-chunk and mixed static/dynamic `fflate` warnings. Focused
+  composer coverage is 100% statements/functions/lines and 95.23% branches; the two
+  uncovered branches are the pre-existing empty variable and resolved-Prompt fallbacks.
+
+## Progressive-Disclosure Layout Follow-Up (2026-08-03, `T-IGW-017`)
+
+- Removed the permanent batch rail. The gallery and compact right composer are now the
+  only persistent workbench regions; batch history lives in the header switcher and a
+  separate icon action creates a new draft.
+- Kept current-batch, all-output, favorite, and failed filters visible. Sort direction
+  and gallery density moved into one dismissible gallery-options menu.
+- Kept source Prompt, model, execution Prompt, required variables, image count, and the
+  primary generate action visible. Ratio, quality, and reference images moved into an
+  explicit, collapsed secondary-settings section with a value summary.
+- Split the gallery toolbar and composer sections by responsibility instead of adding
+  more workbench conditionals. Updated the seven supported locales and added a locale
+  contract test for the new copy.
+- Test-first evidence: the revised component contract initially failed 4 cases and
+  passed 14; after implementation, the workbench suite passed 22 cases and the seven
+  locale contracts passed 7 cases. Focused coverage reached 100% lines/branches for the
+  extracted gallery toolbar and 100% lines/functions plus 96.22% branches for the
+  composer; its two uncovered branches are the pre-existing empty variable/resolved-Prompt
+  fallbacks. The legacy workbench remains at 94.72% lines and 82.10% branches. Desktop
+  typecheck, focused ESLint, production build, file-size gate, and `git diff --check`
+  passed.
+- Visual QA used the existing user-owned Electron development instance without starting
+  or stopping another service. The populated failed/cancelled batch, compact gallery
+  options menu, and collapsed/expanded secondary settings passed at `1200x740`; the same
+  layout passed at the supported compact `800x740` window without horizontal overflow or
+  control overlap. The original window width and collapsed settings state were restored.
+- The production build retained the existing `>500 kB` chunk warning and the existing
+  mixed static/dynamic `fflate` import warning. The workbench chunk was 36.05 kB
+  (10.17 kB gzip).
+
+## Clean Draft Follow-Up (2026-08-03, `T-IGW-018`)
+
+- Corrected the new-batch action so it enters an explicit draft state instead of being
+  immediately overridden by the newest-batch fallback.
+- The current-batch gallery now becomes empty, Prompt/draft/selection state is reset,
+  and the composer expands. Historical batches remain reachable through a neutral
+  history switcher and selecting one restores its outputs. The empty-state copy now
+  describes starting a new batch instead of incorrectly calling it the first batch;
+  all seven locales carry the new message.
+- Test-first evidence: the new regression initially failed because the previous batch
+  image remained visible after “New batch”; the focused workbench suite passed 22 cases
+  after implementation. The combined workbench and locale suites passed 29 cases;
+  Desktop typecheck, focused ESLint, file-size, traceability, `git diff --check`, and the
+  production build also passed.
+- Visual QA in the existing user-owned Electron instance confirmed that “New batch”
+  removes all failed historical tiles, shows the operational empty state, expands a
+  blank composer, and leaves the neutral batch-history control available. Selecting a
+  prior batch restored its historical state. No additional process or port was started.
+- Focused coverage reported 94.84% lines / 82.38% branches for the legacy workbench and
+  89.10% lines / 90% branches for the existing batch switcher; the new draft/no-selection
+  branches are covered. Remaining uncovered branches predate this follow-up. The final
+  workbench chunk is 36.38 kB (10.26 kB gzip); the build retains the existing large-chunk
+  and mixed static/dynamic `fflate` import warnings.
+
+## Persistent Basic Parameters Follow-Up (2026-08-03, `T-IGW-019`)
+
+- Promoted aspect ratio and quality from the optional disclosure into the persistent
+  composer flow so the core generation parameters remain visible while drafting.
+- Narrowed the disclosure to optional reference images, renamed it to the concrete
+  “Reference images” action, and retained the collapsed reference-count summary.
+- Test-first evidence: the revised contract initially failed because ratio and quality
+  were absent until “More settings” opened. The workbench and seven-locale suites passed
+  29 cases after implementation.
+- Desktop TypeScript, focused ESLint, and the file-size gate passed. The production build
+  passed with the pre-existing large-chunk and mixed static/dynamic `fflate` import
+  warnings; the workbench chunk is 36.22 kB (10.21 kB gzip).
+- Visual QA in the existing user-owned Electron instance confirmed that ratio and quality
+  remain visible as a compact two-column row while reference images remain collapsed with
+  a zero-count summary. No additional process or port was started.
+
+## Focused Review Workbench Follow-Up (2026-08-03, `T-IGW-023`)
+
+- Implemented the confirmed v3 hierarchy: generation mode keeps only the global module
+  rail, the center surface focuses one selected output with a fixed thumbnail strip, and
+  the fixed right inspector switches between generation settings and bounded history.
+- Ratio, quality, and count remain visible basic parameters. Reference images remain a
+  concrete disclosure, and the fixed footer contains only the primary Generate action.
+- Plain thumbnail clicks change focus; modifier clicks and the hover checkbox preserve
+  existing multi-selection. The main image opens the existing keyboard-capable lightbox,
+  and favorite, download, prompt-copy, and attach actions reuse existing handlers.
+- Failed, interrupted, running, and pending states use compact neutral tiles instead of
+  filling the review surface with repeated destructive cards.
+- Visual QA found two integration bugs that component-only checks did not expose. The app
+  mounts its module rail and secondary panel separately, so the panel layout now collapses
+  explicitly during generation mode. Generated-image URLs now encode path segments while
+  preserving separators, which keeps Chromium's custom-scheme URL valid and still relies
+  on the main-process extension, traversal, and root allowlist.
+- Test-first evidence: the v3 component contract initially failed eight cases. A second
+  targeted red run reproduced the standalone panel and encoded-slash image failures before
+  their fixes. The final seven-file focused suite passes 92 tests; Desktop typecheck,
+  focused ESLint, file-size guard, and the production build pass. Focused coverage for the
+  new inspector and review stage plus the changed sidebar controller and media URL helper is
+  100% statements, branches, functions, and lines. The build retains the existing
+  large-chunk and mixed static/dynamic `fflate` warnings.
+- Populated Electron Playwright QA passed with an isolated temporary profile at a
+  `1586 x 740` renderer viewport: four generated assets rendered, the inspector measured
+  389 px, the focused review area measured 1084 x 400 px, and the document had no
+  horizontal overflow. All Electron processes and the temporary profile were cleaned up.
+
+## Reference Drop Surface Polish (2026-08-03)
+
+- Replaced the expanded reference section's small target, disabled action row, impossible
+  `0 / 0` selection count, and destructive warning treatment with a full-width dashed drop
+  surface. Compatible models expose a 112 px click-or-drop target; unsupported models keep
+  the same clear spatial affordance but present it as a neutral non-interactive capability
+  explanation.
+- Local file selection now shares the drop surface instead of competing with it as a small
+  secondary button. Prompt-library selection remains a separate explicit action.
+- The collapsed summary now states that references are unavailable for the selected model,
+  while compatible models retain the reference count, local upload, drag-and-drop, Prompt
+  library, ordering, and removal workflow.
+- Corrected the seven-locale guidance so it points to selecting a reference-capable image
+  model; switching to a temporary Prompt does not change model capability.
+- Test-first evidence: the focused regressions failed while the drop target remained only
+  48 px tall and the unsupported state lacked the dashed reference surface. The final
+  workbench and locale suites pass
+  39 tests; Desktop typecheck, focused ESLint, production build, Prettier, and
+  `git diff --check` pass. The changed reference picker reports 100% statements, branches,
+  functions, and lines. The build retains the existing large-chunk and mixed
+  static/dynamic `fflate` warnings.

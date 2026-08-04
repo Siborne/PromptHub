@@ -11,10 +11,10 @@
 
 ## Selected UI Concept
 
-The user replaced the original top-composer direction and accepted the following
-two-column visual direction on 2026-07-22:
+The user replaced the earlier dense result-grid direction and accepted the following
+review-first visual direction on 2026-08-03:
 
-![PromptHub 生图工作台 UI concept v2](./assets/workbench-ui-concept-v2.png)
+![PromptHub 生图工作台 UI concept v3](./assets/workbench-ui-concept-v3.png)
 
 The concept is normative for information architecture and interaction hierarchy, not
 pixel-perfect production copy. All shipped labels remain subject to the existing i18n
@@ -57,7 +57,8 @@ Detailed plan artifacts:
 ### Primary Interaction Flow
 
 1. 用户从 Prompts 二级导航直接进入，或从 image Prompt 详情携带预填草稿进入。
-2. 用户确认源 Prompt/版本、变量解析、参考图、模型能力和目标数量。
+2. 用户确认源 Prompt/版本、变量解析、参考图、模型能力和目标数量；新草稿默认只生成
+   1 张，新建批次时数量恢复为 1。
 3. 提交后结果墙立即建立稳定占位并渐进填充成功输出；顶部状态可按需打开批次抽屉。
 4. 用户不必等待整个批次结束即可收藏、筛选、设为参考或导出已完成输出。
 5. 用户选中单图时，右侧切换为 provenance 详情，并可调整后生成或回到所属批次。
@@ -188,15 +189,19 @@ Desktop 能力不能因为 renderer 复用到 Web 而默认宣称 Web 支持本�
 
 ## Affected Areas
 
-## `DES-IGW-010`: Desktop-Native Workbench Layout (2026-07-22)
+## `DES-IGW-010`: Progressive-Disclosure Desktop Workbench (revised 2026-08-03)
 
 Batch confirmed with the maintainer; implements `FR-IGW-016`.
 
 ### Information architecture
 
-- The workbench becomes a three-pane desktop layout: a permanent left batch rail (reusing the `ImageGenerationBatchQueue` list: thumbnails, progress bars, status, plus a "New batch" action), a center gallery, and a right configuration panel that is collapsible. The modal queue drawer and its backdrop are removed entirely.
-- The gallery header shows the current batch identity (title + counts) with a dropdown to switch batches directly; a slim live progress bar renders under the header while the selected batch is running or queued.
-- The composer panel defaults to expanded for an empty/new draft and collapses after a successful submit; the user can toggle it at any time. Batch detail metadata (previously in the drawer) moves into the gallery header area or the right panel — no third overlay surface.
+- The workbench uses two persistent regions only: the dominant review canvas and a fixed right inspector. The inspector switches between generation settings and a bounded batch-history view, so history never reserves a third column. The existing header switcher remains a fast batch switcher; separate icon buttons start a draft or reveal history.
+- While the Prompt module is in generation mode, the global module rail remains visible and the Prompts secondary panel is suppressed. This state is derived from `promptViewMode`; it is not persisted as a second sidebar preference and automatically reverses when the user leaves the workbench.
+- The header has one stable identity row and one gallery toolbar row. Primary gallery filters remain visible as tabs; sort order and density are grouped in one dismissible options menu. A slim live progress bar renders below the identity row while the selected batch is queued or running.
+- The settings inspector remains visible before and after submission. Source Prompt, model, execution Prompt, required variables, aspect ratio, quality and output count remain immediately available. Output count is a visibly labeled field in the scrollable configuration flow; the fixed footer contains only the primary generation action. Only optional reference previews live in a collapsed-by-default disclosure with a compact count summary.
+- The current-batch view promotes the first successful output into a large `object-contain` review surface and renders all slots in a horizontally scrollable, fixed-size thumbnail strip. Thumbnail selection only changes the focused output; the large preview opens the existing lightbox. All/favorite/failed filters keep the existing grid/list modes. Unsuccessful slots use compact neutral cards with status text and icons instead of destructive full-card fills.
+- A new draft is an explicit transient UI state, not a missing batch ID that falls back to the newest batch. In this state the current-batch filter resolves to an empty result set, while the header history switcher remains available. Selecting history or successfully submitting exits draft mode.
+- Popovers close on outside pointer interaction and Escape, expose `aria-expanded`/menu semantics, and do not add a backdrop that blocks the gallery.
 
 ### Lightbox
 
@@ -205,7 +210,9 @@ Batch confirmed with the maintainer; implements `FR-IGW-016`.
 ### Selection and cleanup
 
 - Desktop selection semantics replace the multi-select mode toggle: single click on the checkbox toggles selection, Shift/Ctrl+click on a tile adds to the selection set; the checkbox affordance is visible on hover or when selected, not permanently.
-- The empty "Advanced" toggle is removed; the variable inputs and resolved-preview remain visible whenever a source prompt with variables is selected.
+- Required variable inputs and resolved-preview remain visible whenever a source prompt with variables is selected. The reference disclosure contains only optional reference media and is not a generic "Advanced" placeholder.
+- Reference selection is explicit draft state owned by `ImageGenerationWorkbench`; selecting a source Prompt does not mutate it. The disclosure exposes a native picker/drop target plus an on-demand Prompt media chooser. Local files are copied through the existing main-process image boundary, selected references are deduplicated by managed file name, and native drag ordering updates the immutable request order. The renderer never persists or sends an external absolute path. The Prompt media chooser scans metadata once per Prompt-list change and mounts thumbnails in pages of 24, avoiding an unbounded image DOM for large libraries.
+- Until the shared capability object is implemented, the current Gemini image adapter retains the existing conservative maximum of two references. Other adapters expose a maximum of zero and disable reference input before submission.
 - All surfaces follow the existing neutral design tokens; no new dependencies.
 
 ## Affected Areas (original)
@@ -260,6 +267,10 @@ Batch confirmed with the maintainer; implements `FR-IGW-016`.
   capability contract tests prove existing users upgrade safely, WebDAV/S3/self-hosted
   uploads contain no generation records or originals, and unsupported Web surfaces do
   not fabricate success.
+- `TEST-IGW-010`: Desktop component and visual regression tests prove rail-only Prompt
+  navigation in generation mode, the focused review stage, thumbnail focus switching,
+  fixed inspector tabs, bounded history rendering, compact failure states and the
+  accepted wide/compact viewport geometry.
 
 ## Analyze Result
 
@@ -292,5 +303,6 @@ Batch confirmed with the maintainer; implements `FR-IGW-016`.
 | `FR-IGW-009`, `FR-IGW-012`               | `DES-IGW-006`, `DES-IGW-007`                | `TEST-IGW-004`, `TEST-IGW-007`, `TEST-IGW-008` | `T-IGW-004`, `T-IGW-006`              |
 | `FR-IGW-013`, `FR-IGW-014`               | `DES-IGW-003`, `DES-IGW-006`, `DES-IGW-008` | `TEST-IGW-004`, `TEST-IGW-005`, `TEST-IGW-009` | `T-IGW-004`, `T-IGW-005`              |
 | `FR-IGW-015`                             | `DES-IGW-006`, `DES-IGW-009`                | `TEST-IGW-006`, `TEST-IGW-009`                 | `T-IGW-004`, `T-IGW-007`              |
+| `FR-IGW-016`                             | `DES-IGW-010`                               | `TEST-IGW-008`, `TEST-IGW-010`                 | `T-IGW-016`..`T-IGW-023`              |
 | `NFR-IGW-001`..`NFR-IGW-008`             | `DES-IGW-002`..`DES-IGW-009`                | `TEST-IGW-003`..`TEST-IGW-009`                 | `T-IGW-004`..`T-IGW-008`              |
 | `NFR-IGW-SYNC-001`                       | `DES-IGW-009`                               | `TEST-IGW-009`                                 | `T-IGW-007`, `T-IGW-012`              |

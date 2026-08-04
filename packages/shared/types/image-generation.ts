@@ -65,6 +65,7 @@ export interface GenerationOutputRecord {
 export interface GenerationReferenceImage {
   source: "prompt" | "local" | "generation";
   fileName: string;
+  promptId?: string;
 }
 
 export interface GenerationSlotRecord {

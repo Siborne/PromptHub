@@ -61,6 +61,10 @@ export function useSidebarController({
     setResourceTagsSectionHeight: resources.setResourceTagsSectionHeight,
   });
   const sidebarRef = useRef<HTMLElement>(null);
+  const workbenchActive =
+    shell.activeModule === "prompt" && prompt.promptViewMode === "generation";
+  const workbenchRailOnly = layout === "combined" && workbenchActive;
+  const workbenchPanelHidden = layout === "panel" && workbenchActive;
   return {
     currentPage,
     onNavigate,
@@ -71,5 +75,14 @@ export function useSidebarController({
     ...resources,
     ...shell,
     ...resize,
+    asideClassName: workbenchRailOnly
+      ? "w-20 border-r border-sidebar-border/60 bg-sidebar-accent/25"
+      : workbenchPanelHidden
+        ? "w-0 border-r-0 opacity-0 pointer-events-none"
+        : shell.asideClassName,
+    panelStyle:
+      workbenchRailOnly || workbenchPanelHidden ? undefined : shell.panelStyle,
+    showPanel:
+      workbenchRailOnly || workbenchPanelHidden ? false : shell.showPanel,
   };
 }

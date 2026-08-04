@@ -569,18 +569,43 @@ describe("Sidebar", () => {
     useFolderStore.setState({ selectedFolderId: "favorites" });
     const onNavigate = vi.fn();
 
+    let container!: HTMLElement;
     await act(async () => {
-      await renderWithI18n(
+      ({ container } = await renderWithI18n(
         <Sidebar currentPage="settings" onNavigate={onNavigate} />,
         { language: "en" },
-      );
+      ));
     });
 
+    expect(screen.getByRole("button", { name: "Favorites" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Image Workbench" }));
 
     expect(usePromptStore.getState().viewMode).toBe("generation");
     expect(useFolderStore.getState().selectedFolderId).toBeNull();
     expect(onNavigate).toHaveBeenCalledWith("home");
+    expect(screen.queryByRole("button", { name: "Favorites" })).toBeNull();
+    expect(container.querySelector("aside")).toHaveClass("w-20");
+    expect(screen.getByRole("button", { name: "Prompts" })).toBeVisible();
+  });
+
+  it("hides the standalone Prompt panel while the image workbench is active", async () => {
+    useUIStore.setState({
+      appModule: "prompt",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+    });
+    usePromptStore.setState({ viewMode: "generation" });
+
+    let container!: HTMLElement;
+    await act(async () => {
+      ({ container } = await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} layout="panel" />,
+        { language: "en" },
+      ));
+    });
+
+    expect(container.querySelector("aside")).toHaveClass("w-0");
+    expect(screen.queryByRole("button", { name: "Favorites" })).toBeNull();
   });
 
   it("returns to card mode when opening ordinary prompt collections", async () => {

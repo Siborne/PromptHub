@@ -181,6 +181,56 @@ describe("generation workbench runner", () => {
     );
   });
 
+  it("loads managed local references through the same safe media bridge", async () => {
+    const initial = batch(["pending"]);
+    vi.mocked(window.api.generation.create).mockImplementation(
+      async (input) => ({
+        ...initial,
+        referenceImages: input.referenceImages,
+      }),
+    );
+    vi.mocked(window.electron!.readImageBase64!).mockResolvedValue("bG9jYWw=");
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+    const config = {
+      id: "gemini-image",
+      type: "image" as const,
+      provider: "google",
+      apiProtocol: "gemini" as const,
+      apiKey: "key",
+      apiUrl: "https://generativelanguage.googleapis.com/v1beta",
+      model: "gemini-2.5-flash-image",
+    };
+
+    await startGenerationBatch(
+      {
+        prompt: "A poster",
+        model: {
+          id: config.id,
+          provider: config.provider,
+          model: config.model,
+        },
+        targetCount: 1,
+        referenceImages: [
+          { source: "local", fileName: "managed-reference.png" },
+        ],
+      },
+      config,
+    );
+
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalled());
+    expect(window.electron!.readImageBase64).toHaveBeenCalledWith(
+      "managed-reference.png",
+    );
+    expect(generateImage).toHaveBeenCalledWith(
+      config,
+      "A poster",
+      expect.objectContaining({
+        referenceImages: [{ base64: "bG9jYWw=", mimeType: "image/png" }],
+      }),
+    );
+  });
+
   it("rejects unsupported references before creating a batch", async () => {
     const { startGenerationBatch } =
       await import("../../../src/renderer/services/generation-workbench-runner");
@@ -210,6 +260,41 @@ describe("generation workbench runner", () => {
       ),
     ).rejects.toThrow(/reference images/i);
     expect(window.api.generation.create).not.toHaveBeenCalled();
+  });
+
+  it("enforces the provider reference limit before creating a batch", async () => {
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+    const config = {
+      id: "gemini-image",
+      type: "image" as const,
+      provider: "google",
+      apiProtocol: "gemini" as const,
+      apiKey: "key",
+      apiUrl: "https://generativelanguage.googleapis.com/v1beta",
+      model: "gemini-2.5-flash-image",
+    };
+
+    await expect(
+      startGenerationBatch(
+        {
+          prompt: "A poster",
+          model: {
+            id: config.id,
+            provider: config.provider,
+            model: config.model,
+          },
+          targetCount: 1,
+          referenceImages: ["a.png", "b.png", "c.png"].map((fileName) => ({
+            source: "prompt" as const,
+            fileName,
+          })),
+        },
+        config,
+      ),
+    ).rejects.toThrow(/at most 2 reference images/i);
+    expect(window.api.generation.create).not.toHaveBeenCalled();
+    expect(window.electron!.readImageBase64).not.toHaveBeenCalled();
   });
 
   it("commits remote outputs without writing temporary Prompt media", async () => {

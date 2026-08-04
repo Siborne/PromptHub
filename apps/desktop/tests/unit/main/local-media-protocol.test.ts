@@ -33,6 +33,13 @@ describe("resolveLocalMediaProtocolPath", () => {
     ).toBe(path.join(baseDir, "batch-id", "output.webp"));
     expect(
       resolveLocalMediaProtocolPath(
+        "local-generation-image://batch-id/output.webp",
+        "local-generation-image",
+        baseDir,
+      ),
+    ).toBe(path.join(baseDir, "batch-id", "output.webp"));
+    expect(
+      resolveLocalMediaProtocolPath(
         "local-video://clips/intro.mp4",
         "local-video",
         baseDir,

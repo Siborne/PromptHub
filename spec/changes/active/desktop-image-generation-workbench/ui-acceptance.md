@@ -3,19 +3,19 @@
 ## Selected Direction
 
 The accepted visual reference is
-[`assets/workbench-ui-concept-v2.png`](./assets/workbench-ui-concept-v2.png). It defines the
+[`assets/workbench-ui-concept-v3.png`](./assets/workbench-ui-concept-v3.png). It defines the
 information architecture and relative visual hierarchy; production implementation must
 reuse the current PromptHub tokens and components rather than rasterizing the mock.
 
 ## Navigation And Entry
 
-| Case                          | Acceptance                                                                               |
-| ----------------------------- | ---------------------------------------------------------------------------------------- |
-| Direct entry                  | Prompts remains selected in the global rail; “生图工作台” is selected beside “关系图谱”. |
-| Existing Prompt entry         | Current Prompt ID/version, resolved content and references prefill a draft.              |
-| Top Prompt type filters       | “全部 / 文本 / 绘图” remain Prompt list filters and do not select the workbench.         |
-| Navigate away during a batch  | Generation continues; returning restores current counts and selected batch.              |
-| Browser-style back navigation | Returning to Prompt view does not discard a submitted batch or mutate Prompt.            |
+| Case                          | Acceptance                                                                          |
+| ----------------------------- | ----------------------------------------------------------------------------------- |
+| Direct entry                  | Prompts remains selected in the global rail; the Prompts secondary panel is hidden. |
+| Existing Prompt entry         | Current Prompt ID/version, resolved content and references prefill a draft.         |
+| Top Prompt type filters       | “全部 / 文本 / 绘图” remain Prompt list filters and do not select the workbench.    |
+| Navigate away during a batch  | Generation continues; returning restores current counts and selected batch.         |
+| Browser-style back navigation | Returning to Prompt view does not discard a submitted batch or mutate Prompt.       |
 
 The Prompt store gains a distinct `generation` view mode rather than a new global app
 module. Folder/tag selection is preserved but does not filter the workbench. Selecting a
@@ -25,13 +25,12 @@ folder, Prompt filter or relationship graph exits generation view explicitly.
 
 At widths `>= 1440px`:
 
-- Existing global rail and Prompts secondary navigation retain their current widths.
+- Existing global rail retains its width; Prompts secondary navigation is suppressed.
 - The workbench replaces normal Prompt list/detail columns with one continuous surface.
-- Result wall occupies the dominant left region and uses four or five stable columns
-  according to available content width.
-- The right inspector remains visible at approximately 320-360 px. Generation controls
-  occupy the full region. Batch history and selected-output provenance open in an
-  on-demand drawer from the active-batch status control.
+- Current-batch results use one dominant `object-contain` preview and a fixed thumbnail
+  strip. All/favorite/failed filters retain stable result-grid density modes.
+- The right inspector remains visible at approximately 340-390 px and switches between
+  generation settings and bounded history. History never reserves a permanent column.
 - Generation controls must not span the top of the result canvas.
 - The bottom selection bar stays inside the result region and never covers the right
   panel.
@@ -40,11 +39,11 @@ At widths `>= 1440px`:
 
 The Desktop minimum remains `800x600`.
 
-| Width          | Required behavior                                                                  |
-| -------------- | ---------------------------------------------------------------------------------- |
-| `1100..1439px` | Three-column result wall with the fixed right inspector always visible.            |
-| `800..1099px`  | Existing secondary nav may collapse; result wall narrows; inspector stays visible. |
-| Any supported  | No horizontal page scrolling; only result/content regions scroll.                  |
+| Width          | Required behavior                                                       |
+| -------------- | ----------------------------------------------------------------------- |
+| `1100..1439px` | Three-column result wall with the fixed right inspector always visible. |
+| `800..1099px`  | Global rail remains; result review narrows; inspector stays visible.    |
+| Any supported  | No horizontal page scrolling; only result/content regions scroll.       |
 
 At compact widths, model/ratio/quality/count controls keep stable hit targets. The right
 inspector must not collapse behind a trigger or move into a modal sheet. Secondary
@@ -61,26 +60,37 @@ visible. Text does not scale with viewport width.
 | Unsupported model parameter   | Control is disabled/hidden from capability data; no silent request downgrade.    |
 | Reference image limit reached | Additional selection is blocked with the model-specific maximum.                 |
 | Count invalid                 | Only integer `1..100` is accepted; Generate remains disabled.                    |
+| New draft count               | Defaults to one image and resets to one when a new batch is created.             |
 | Valid submission              | Button press creates visible queued batch immediately and clears no source data. |
 
-Source Prompt/version, model, count, ratio/size, quality and reference summary remain
-visible without opening advanced settings. Seed, style and provider-specific allowlisted
-parameters live in advanced settings only when supported.
+Source Prompt/version, model, execution Prompt, required variables, ratio/size, quality
+and count remain visible without opening another section. Count has a visible field label
+inside the configuration flow rather than appearing as an unlabeled footer stepper; the
+footer contains only the primary Generate action. Reference images live in an explicit
+disclosure whose collapsed summary exposes the current count. Seed, style and provider-
+specific allowlisted parameters remain secondary and appear only when supported.
+
+Reference selection is always explicit: choosing a source Prompt does not silently add
+its media. The disclosure supports the native file picker, file drop, Prompt-media
+selection, removal and drag ordering. Each selected item identifies its source, and the
+Prompt-media grid reveals thumbnails in bounded pages rather than mounting the complete
+library at once.
 
 ## Batch And Result States
 
-| State               | Result wall                                          | Right panel / actions                                                     |
-| ------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------- |
-| Empty library       | Operational creation empty state, not marketing.     | Recent source suggestions only when real.                                 |
-| Queued              | Stable slot placeholders.                            | Position/status and Cancel remaining.                                     |
-| Running             | Completed images appear progressively.               | Accurate total counts and bounded progress.                               |
-| Partially succeeded | Successes remain fully actionable.                   | Failed filter, Retry failed, Cancel remaining.                            |
-| Succeeded           | All available outputs shown.                         | Export batch and duplicate/adjust actions.                                |
-| Failed with zero    | Failure reason and retry path, no fake image.        | Correct model/settings recovery action.                                   |
-| Cancelling          | Pending and in-flight local slots visibly cancelled. | Explain provider-side compute may continue, but late output is discarded. |
-| Cancelled           | Earlier successful outputs remain visible.           | Duplicate the batch to regenerate cancelled targets.                      |
-| Interrupted         | Durable successes remain; unknown slots marked.      | Resume polling only when supported, otherwise retry.                      |
-| Missing local file  | Broken output isolated with recovery indicator.      | Never claim downloadable success.                                         |
+| State               | Result wall                                           | Right panel / actions                                                     |
+| ------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
+| Empty library       | Operational creation empty state, not marketing.      | Recent source suggestions only when real.                                 |
+| New draft           | Current-batch view is empty; history is not rendered. | Settings remain visible and history is reachable from the inspector.      |
+| Queued              | Stable slot placeholders.                             | Position/status and Cancel remaining.                                     |
+| Running             | Completed images appear progressively.                | Accurate total counts and bounded progress.                               |
+| Partially succeeded | Successes remain fully actionable.                    | Failed filter, Retry failed, Cancel remaining.                            |
+| Succeeded           | All available outputs shown.                          | Export batch and duplicate/adjust actions.                                |
+| Failed with zero    | Compact neutral failure states, no fake image.        | Correct model/settings recovery action.                                   |
+| Cancelling          | Pending and in-flight local slots visibly cancelled.  | Explain provider-side compute may continue, but late output is discarded. |
+| Cancelled           | Earlier successful outputs remain visible.            | Duplicate the batch to regenerate cancelled targets.                      |
+| Interrupted         | Durable successes remain; unknown slots marked.       | Resume polling only when supported, otherwise retry.                      |
+| Missing local file  | Broken output isolated with recovery indicator.       | Never claim downloadable success.                                         |
 
 Progress text includes succeeded, failed, cancelled/interrupted and total counts. Color
 is supplementary; icons and text communicate every non-success state.
@@ -92,8 +102,8 @@ is supplementary; icons and text communicate every non-success state.
 - The selected tile uses border plus check state, not color alone.
 - No selection: right panel remains dedicated to generation settings; no persistent queue
   or empty queue placeholder is shown.
-- One selection: the batch drawer can show large preview, source Prompt snapshot, resolved
-  Prompt excerpt, model, parameters, references, seed when available, batch and timestamp.
+- One selection: the lightbox shows a large preview and direct image actions; provenance
+  remains associated with the selected output and batch without occupying a third column.
 - Multiple selection: the contextual action bar shows aggregate count and applicable bulk
   actions, not misleading single-output provenance.
 - Bottom contextual bar exposes favorite, set as reference, download, export selected

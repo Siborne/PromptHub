@@ -371,20 +371,37 @@ describe("image IPC", () => {
     ).resolves.toBe("/tmp/prompthub-videos/safe-video.mp4");
   });
 
-  it("normalizes image ArrayBuffer saves and rejects oversized media content", async () => {
+  it("detects dropped image bytes and rejects invalid or oversized media content", async () => {
     const { handlers, IPC_CHANNELS } = await setupImageIpc();
     uuidMock.mockReturnValue("buffer-image");
 
-    const imageBytes = new Uint8Array([1, 2, 3]).buffer;
+    const imageBytes = Buffer.from("89504e470d0a1a0a00000000", "hex");
     await expect(
       handlers[IPC_CHANNELS.IMAGE_SAVE_BUFFER](null, imageBytes),
     ).resolves.toBe("buffer-image.png");
     expect(writeFileMock).toHaveBeenCalledWith(
       "/tmp/prompthub-images/buffer-image.png",
-      Buffer.from([1, 2, 3]),
+      imageBytes,
     );
 
     writeFileMock.mockClear();
+    await expect(
+      handlers[IPC_CHANNELS.IMAGE_SAVE_BUFFER](
+        null,
+        Buffer.from([0xff, 0xd8, 0xff, 0x00]),
+      ),
+    ).resolves.toBe("buffer-image.jpg");
+    expect(writeFileMock).toHaveBeenCalledWith(
+      "/tmp/prompthub-images/buffer-image.jpg",
+      Buffer.from([0xff, 0xd8, 0xff, 0x00]),
+    );
+
+    writeFileMock.mockClear();
+    await expect(
+      handlers[IPC_CHANNELS.IMAGE_SAVE_BUFFER](null, new Uint8Array([1, 2, 3])),
+    ).resolves.toBeNull();
+    expect(writeFileMock).not.toHaveBeenCalled();
+
     await expect(
       handlers[IPC_CHANNELS.IMAGE_SAVE_BUFFER](
         null,

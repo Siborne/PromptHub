@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, HistoryIcon } from "lucide-react";
 import type { GenerationBatchManifest } from "@prompthub/shared/types";
 import { useTranslation } from "react-i18next";
 
 interface ImageGenerationBatchSwitcherProps {
   batches: GenerationBatchManifest[];
-  selectedBatch: GenerationBatchManifest;
+  selectedBatch?: GenerationBatchManifest;
   onSelectBatch: (id: string) => void;
 }
 
@@ -58,19 +58,28 @@ export function ImageGenerationBatchSwitcher({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={t("generation.switchBatch")}
-        title={selectedBatch.title}
+        title={selectedBatch?.title ?? t("generation.batches")}
         className="flex h-8 min-w-0 max-w-72 items-center gap-2 rounded-md border border-border px-2.5 text-sm hover:bg-muted"
       >
-        <span
-          className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass(selectedBatch.status)}`}
-          aria-hidden="true"
-        />
+        {selectedBatch ? (
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass(selectedBatch.status)}`}
+            aria-hidden="true"
+          />
+        ) : (
+          <HistoryIcon
+            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+        )}
         <span className="min-w-0 truncate font-medium">
-          {selectedBatch.title}
+          {selectedBatch?.title ?? t("generation.batches")}
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {selectedBatch.counts.succeeded}/{selectedBatch.targetCount}
-        </span>
+        {selectedBatch && (
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {selectedBatch.counts.succeeded}/{selectedBatch.targetCount}
+          </span>
+        )}
         <ChevronDownIcon
           className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
           aria-hidden="true"
@@ -86,7 +95,7 @@ export function ImageGenerationBatchSwitcher({
             <li
               key={batch.id}
               role="option"
-              aria-selected={batch.id === selectedBatch.id}
+              aria-selected={batch.id === selectedBatch?.id}
             >
               <button
                 type="button"

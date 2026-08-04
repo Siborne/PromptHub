@@ -84,6 +84,33 @@ function inferImageExtension(url: string, contentType?: string): string | null {
   }
 }
 
+function detectImageBufferExtension(buffer: Buffer): string | null {
+  if (buffer.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
+    return ".png";
+  }
+  if (
+    buffer.length >= 3 &&
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[2] === 0xff
+  ) {
+    return ".jpg";
+  }
+  if (
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return ".webp";
+  }
+  if (
+    buffer.subarray(0, 6).toString("ascii") === "GIF87a" ||
+    buffer.subarray(0, 6).toString("ascii") === "GIF89a"
+  ) {
+    return ".gif";
+  }
+  return null;
+}
+
 async function downloadImageBuffer(
   targetUrl: string,
   redirectCount = 0,
@@ -438,7 +465,9 @@ export function registerImageIPC(): void {
       try {
         const buffer = toMediaBuffer(bufferInput);
         assertBufferWithinMediaLimit(buffer);
-        const fileName = `${uuidv4()}.png`;
+        const extension = detectImageBufferExtension(buffer);
+        if (!extension) throw new Error("Unsupported image bytes");
+        const fileName = `${uuidv4()}${extension}`;
         const destPath = path.join(imagesDir, fileName);
         await fs.writeFile(destPath, buffer);
         return fileName;

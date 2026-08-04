@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckIcon,
-  ChevronDownIcon,
   CopyIcon,
   DownloadIcon,
-  Grid2X2Icon,
   HardDriveIcon,
+  HistoryIcon,
   ImageIcon,
-  LayoutGridIcon,
-  ListIcon,
   LoaderCircleIcon,
-  RefreshCwIcon,
-  SlidersHorizontalIcon,
-  SquareIcon,
+  PlusIcon,
   StarIcon,
   XCircleIcon,
   XIcon,
@@ -21,6 +16,7 @@ import { resolveGenerationPrompt } from "@prompthub/core/image-generation-workbe
 import type {
   GenerationBatchManifest,
   GenerationOutputRecord,
+  GenerationReferenceImage,
 } from "@prompthub/shared/types";
 import { useTranslation } from "react-i18next";
 import { usePromptStore } from "../../stores/prompt.store";
@@ -28,6 +24,7 @@ import { useSettingsStore } from "../../stores/settings.store";
 import {
   cancelGenerationBatch,
   copyGenerationOutputToPromptMedia,
+  getMaxGenerationReferenceImages,
   getSupportedGenerationAspectRatios,
   loadGenerationBatches,
   retryGenerationBatch,
@@ -38,16 +35,18 @@ import {
 } from "../../services/generation-workbench-runner";
 import { resolveLocalGenerationImageSrc } from "../../utils/media-url";
 import { useToast } from "../ui/Toast";
-import { ImageGenerationComposer } from "./ImageGenerationComposer";
-import {
-  getGenerationBatchProgress,
-  ImageGenerationBatchRail,
-} from "./ImageGenerationBatchRail";
 import { ImageGenerationBatchSwitcher } from "./ImageGenerationBatchSwitcher";
+import {
+  type GenerationGalleryDensity,
+  type GenerationGalleryFilter,
+  ImageGenerationGalleryToolbar,
+} from "./ImageGenerationGalleryToolbar";
 import { ImageGenerationLightbox } from "./ImageGenerationLightbox";
-
-type GalleryFilter = "current" | "all" | "favorite" | "failed";
-type GalleryDensity = "compact" | "large" | "list";
+import {
+  ImageGenerationInspector,
+  type GenerationInspectorTab,
+} from "./ImageGenerationInspector";
+import { ImageGenerationReviewStage } from "./ImageGenerationReviewStage";
 
 interface SelectedOutput {
   batchId: string;
@@ -59,10 +58,24 @@ interface GalleryOutputEntry {
   output: GenerationOutputRecord;
 }
 
+const MAX_REFERENCE_FILE_BYTES = 20 * 1024 * 1024;
+const REFERENCE_FILE_PATTERN = /\.(?:jpe?g|png|webp)$/iu;
+const DEFAULT_GENERATION_COUNT = 1;
+
+function getBatchProgress(batch: GenerationBatchManifest): number {
+  if (batch.targetCount <= 0) return 0;
+  const settled =
+    batch.counts.succeeded +
+    batch.counts.failed +
+    batch.counts.cancelled +
+    batch.counts.interrupted;
+  return Math.round((settled / batch.targetCount) * 100);
+}
+
 interface OutputTileProps {
   batch: GenerationBatchManifest;
   slotIndex: number;
-  density: GalleryDensity;
+  density: GenerationGalleryDensity;
   selected: boolean;
   onOpen: (selection: SelectedOutput) => void;
   onToggleSelect: (selection: SelectedOutput) => void;
@@ -149,13 +162,14 @@ function OutputTile({
   const failed = slot.status === "failed";
   const running = slot.status === "running";
   const stateClass = failed
-    ? "border-destructive/35 bg-destructive/[0.035] text-destructive"
+    ? "border-border bg-muted/20 text-destructive"
     : running
-      ? "border-primary/30 bg-primary/[0.025] text-muted-foreground"
-      : "border-dashed border-border bg-card text-muted-foreground";
+      ? "border-border bg-muted/20 text-muted-foreground"
+      : "border-dashed border-border bg-muted/20 text-muted-foreground";
   return (
     <div
-      className={`flex flex-col items-center justify-center gap-3 rounded-md border ${density === "list" ? "h-24" : "aspect-[4/5]"} ${stateClass}`}
+      data-testid={`generation-output-state-${slotIndex}`}
+      className={`flex min-h-28 flex-col items-center justify-center gap-2 rounded-md border px-3 py-4 ${density === "list" ? "h-24" : ""} ${stateClass}`}
     >
       {failed ? (
         <XCircleIcon className="h-7 w-7" aria-hidden="true" />
@@ -195,15 +209,17 @@ export function ImageGenerationWorkbench() {
   );
   const [batches, setBatches] = useState<GenerationBatchManifest[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [draftMode, setDraftMode] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [modelId, setModelId] = useState(models[0]?.id ?? "");
   const [prompt, setPrompt] = useState("");
   const [variableValues, setVariableValues] = useState<Record<string, string>>(
     {},
   );
-  const [count, setCount] = useState(8);
+  const [count, setCount] = useState(DEFAULT_GENERATION_COUNT);
   const [ratio, setRatio] = useState("1:1");
   const [quality, setQuality] = useState<"standard" | "hd">("standard");
+  const [references, setReferences] = useState<GenerationReferenceImage[]>([]);
   const [selectedOutputKeys, setSelectedOutputKeys] = useState<Set<string>>(
     () => new Set(),
   );
@@ -211,11 +227,14 @@ export function ImageGenerationWorkbench() {
   const [lightboxKey, setLightboxKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [galleryFilter, setGalleryFilter] = useState<GalleryFilter>("current");
+  const [galleryFilter, setGalleryFilter] =
+    useState<GenerationGalleryFilter>("current");
   const [galleryDensity, setGalleryDensity] =
-    useState<GalleryDensity>("compact");
+    useState<GenerationGalleryDensity>("compact");
   const [sortNewest, setSortNewest] = useState(true);
-  const [composerCollapsed, setComposerCollapsed] = useState(false);
+  const [inspectorTab, setInspectorTab] =
+    useState<GenerationInspectorTab>("settings");
+  const [focusedOutputId, setFocusedOutputId] = useState<string | null>(null);
 
   useEffect(
     () => subscribeGenerationBatches((next) => setBatches([...next])),
@@ -231,12 +250,17 @@ export function ImageGenerationWorkbench() {
     if (!modelId && firstModelId) setModelId(firstModelId);
   }, [firstModelId, modelId]);
   const selectedBatch = useMemo(
-    () => batches.find((batch) => batch.id === selectedBatchId) ?? batches[0],
-    [batches, selectedBatchId],
+    () =>
+      draftMode
+        ? undefined
+        : (batches.find((batch) => batch.id === selectedBatchId) ?? batches[0]),
+    [batches, draftMode, selectedBatchId],
   );
   const selectedModel = models.find((model) => model.id === modelId);
   const sourcePrompt = prompts.find((item) => item.id === selectedPromptId);
-  const references = sourcePrompt?.images?.slice(0, 2) ?? [];
+  const maxReferences = selectedModel
+    ? getMaxGenerationReferenceImages(selectedModel)
+    : 0;
   const supportedRatios = useMemo(
     () =>
       selectedModel
@@ -244,9 +268,9 @@ export function ImageGenerationWorkbench() {
         : ["1:1"],
     [selectedModel],
   );
-  const referencesSupported =
-    references.length === 0 ||
-    Boolean(selectedModel && supportsGenerationReferenceImages(selectedModel));
+  const referencesSupported = Boolean(
+    selectedModel && supportsGenerationReferenceImages(selectedModel),
+  );
   useEffect(() => {
     if (!supportedRatios.includes(ratio)) {
       setRatio(supportedRatios[0] ?? "1:1");
@@ -260,7 +284,7 @@ export function ImageGenerationWorkbench() {
   const valid = Boolean(
     resolvedPrompt.trim() &&
     selectedModel &&
-    referencesSupported &&
+    (references.length === 0 || referencesSupported) &&
     requiredVariablesReady &&
     Number.isInteger(count) &&
     count >= 1 &&
@@ -269,7 +293,11 @@ export function ImageGenerationWorkbench() {
 
   const visibleTiles = useMemo(() => {
     const source =
-      galleryFilter === "current" && selectedBatch ? [selectedBatch] : batches;
+      galleryFilter === "current"
+        ? selectedBatch
+          ? [selectedBatch]
+          : []
+        : batches;
     return source
       .flatMap((batch) =>
         batch.slots
@@ -299,6 +327,20 @@ export function ImageGenerationWorkbench() {
       }),
     [visibleTiles],
   );
+  const selectedBatchOutputIds = useMemo(
+    () =>
+      selectedBatch?.slots.flatMap((slot) =>
+        slot.output ? [slot.output.id] : [],
+      ) ?? [],
+    [selectedBatch],
+  );
+  useEffect(() => {
+    setFocusedOutputId((current) =>
+      current && selectedBatchOutputIds.includes(current)
+        ? current
+        : (selectedBatchOutputIds[0] ?? null),
+    );
+  }, [selectedBatchOutputIds]);
   const selectedOutputs = useMemo(
     () =>
       batches.flatMap((batch) =>
@@ -341,9 +383,96 @@ export function ImageGenerationWorkbench() {
     setSelectedPromptId("");
     setPrompt("");
     setVariableValues({});
+    setCount(DEFAULT_GENERATION_COUNT);
+    setReferences([]);
     setSelectedOutputKeys(new Set());
     setPrimaryOutputKey(null);
     setSubmitError("");
+  };
+
+  const appendReferences = (incoming: GenerationReferenceImage[]) => {
+    if (!referencesSupported || maxReferences <= 0) return;
+    setReferences((current) => {
+      const known = new Set(current.map((item) => item.fileName));
+      const unique = incoming.filter((item) => {
+        if (known.has(item.fileName)) return false;
+        known.add(item.fileName);
+        return true;
+      });
+      return [...current, ...unique].slice(0, maxReferences);
+    });
+  };
+
+  const addLocalReferences = async () => {
+    try {
+      const paths = await window.electron?.selectImage?.();
+      if (!paths?.length) return;
+      const remaining = Math.max(0, maxReferences - references.length);
+      const supportedPaths = paths
+        .filter((filePath) => REFERENCE_FILE_PATTERN.test(filePath))
+        .slice(0, remaining);
+      if (supportedPaths.length === 0) {
+        throw new Error("No supported image selected");
+      }
+      const saved = await window.electron?.saveImage?.(supportedPaths);
+      const supported = (saved ?? []).filter((fileName) =>
+        REFERENCE_FILE_PATTERN.test(fileName),
+      );
+      if (supported.length === 0) throw new Error("No supported image saved");
+      appendReferences(
+        supported.map((fileName) => ({ source: "local", fileName })),
+      );
+    } catch (error) {
+      console.error("Failed to add generation references:", error);
+      showToast(t("generation.referenceUploadFailed"), "error");
+    }
+  };
+
+  const dropLocalReferences = async (files: File[]) => {
+    const remaining = Math.max(0, maxReferences - references.length);
+    const accepted = files
+      .filter(
+        (file) =>
+          file.size <= MAX_REFERENCE_FILE_BYTES &&
+          (["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
+            REFERENCE_FILE_PATTERN.test(file.name)),
+      )
+      .slice(0, remaining);
+    if (accepted.length === 0) {
+      showToast(t("generation.referenceUploadFailed"), "error");
+      return;
+    }
+    try {
+      const imported: GenerationReferenceImage[] = [];
+      for (const file of accepted) {
+        const fileName = await window.electron?.saveImageBuffer?.(
+          await file.arrayBuffer(),
+        );
+        if (fileName) imported.push({ source: "local", fileName });
+      }
+      if (imported.length === 0) throw new Error("No image imported");
+      appendReferences(imported);
+    } catch (error) {
+      console.error("Failed to import dropped generation references:", error);
+      showToast(t("generation.referenceUploadFailed"), "error");
+    }
+  };
+
+  const moveReference = (fromIndex: number, toIndex: number) => {
+    setReferences((current) => {
+      if (
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= current.length ||
+        toIndex >= current.length
+      ) {
+        return current;
+      }
+      const next = [...current];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
   };
 
   const submit = async () => {
@@ -358,10 +487,7 @@ export function ImageGenerationWorkbench() {
           sourcePromptVersion: sourcePrompt?.currentVersion,
           prompt: resolvedPrompt,
           variableValues,
-          referenceImages: references.map((fileName) => ({
-            source: "prompt" as const,
-            fileName,
-          })),
+          referenceImages: references,
           model: {
             id: selectedModel.id,
             provider: selectedModel.provider,
@@ -374,9 +500,10 @@ export function ImageGenerationWorkbench() {
         },
         selectedModel,
       );
+      setDraftMode(false);
       setSelectedBatchId(batch.id);
       setGalleryFilter("current");
-      setComposerCollapsed(true);
+      setInspectorTab("settings");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : t("common.error");
@@ -461,6 +588,7 @@ export function ImageGenerationWorkbench() {
   const clearSelection = () => {
     setSelectedOutputKeys(new Set());
     setPrimaryOutputKey(null);
+    setFocusedOutputId(null);
   };
 
   const openLightbox = (selection: SelectedOutput) => {
@@ -477,6 +605,7 @@ export function ImageGenerationWorkbench() {
   };
 
   const selectBatch = (id: string) => {
+    setDraftMode(false);
     setSelectedBatchId(id);
     setGalleryFilter("current");
     setSelectedOutputKeys(new Set());
@@ -484,8 +613,12 @@ export function ImageGenerationWorkbench() {
   };
 
   const startNewBatch = () => {
+    setDraftMode(true);
+    setSelectedBatchId(null);
+    setGalleryFilter("current");
+    setLightboxKey(null);
     resetDraft();
-    setComposerCollapsed(false);
+    setInspectorTab("settings");
   };
 
   const composerProps = {
@@ -511,6 +644,16 @@ export function ImageGenerationWorkbench() {
     resolvedPrompt,
     references,
     referencesSupported,
+    maxReferences,
+    onAddLocalReferences: addLocalReferences,
+    onDropLocalReferences: dropLocalReferences,
+    onAddPromptReference: (reference: GenerationReferenceImage) =>
+      appendReferences([reference]),
+    onRemoveReference: (index: number) =>
+      setReferences((current) =>
+        current.filter((_, itemIndex) => itemIndex !== index),
+      ),
+    onMoveReference: moveReference,
     valid,
     submitting,
     submitError,
@@ -519,28 +662,16 @@ export function ImageGenerationWorkbench() {
 
   return (
     <div className="relative flex h-full min-h-0 overflow-hidden bg-card">
-      <aside
-        data-testid="generation-batch-rail"
-        className="flex w-64 shrink-0 flex-col border-r border-border bg-card"
-      >
-        <ImageGenerationBatchRail
-          batches={batches}
-          selectedBatch={selectedBatch}
-          onSelectBatch={selectBatch}
-          onNewBatch={startNewBatch}
-        />
-      </aside>
-
       <main
         data-testid="generation-gallery"
         className="flex min-w-0 flex-1 flex-col overflow-hidden bg-card"
       >
-        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border px-5">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
           <div className="flex min-w-0 items-center gap-3">
             <h1 className="shrink-0 text-lg font-semibold">
               {t("generation.workbench")}
             </h1>
-            {selectedBatch && (
+            {batches.length > 0 && (
               <ImageGenerationBatchSwitcher
                 batches={batches}
                 selectedBatch={selectedBatch}
@@ -548,46 +679,26 @@ export function ImageGenerationWorkbench() {
               />
             )}
           </div>
-          <nav
-            className="flex h-full min-w-0 shrink-0 items-center gap-6 overflow-hidden text-sm max-[1199px]:gap-4 max-[1199px]:text-xs"
-            aria-label={t("generation.workbench")}
-          >
-            {(
-              [
-                [
-                  "current",
-                  t("generation.currentBatchTab", {
-                    done: selectedBatch?.counts.succeeded ?? 0,
-                    total: selectedBatch?.targetCount ?? 0,
-                  }),
-                ],
-                ["all", t("generation.allWorks")],
-                ["favorite", t("generation.favorite")],
-                [
-                  "failed",
-                  t("generation.failedCount", {
-                    count: batches.reduce(
-                      (sum, batch) =>
-                        sum + batch.counts.failed + batch.counts.interrupted,
-                      0,
-                    ),
-                  }),
-                ],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                type="button"
-                key={value}
-                onClick={() => setGalleryFilter(value)}
-                className={`relative h-full whitespace-nowrap ${galleryFilter === value ? "font-medium text-primary" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {label}
-                {galleryFilter === value && (
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
-                )}
-              </button>
-            ))}
-          </nav>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={startNewBatch}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label={t("generation.newBatch")}
+              title={t("generation.newBatch")}
+            >
+              <PlusIcon className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setInspectorTab("history")}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label={t("generation.historyWorks")}
+              title={t("generation.historyWorks")}
+            >
+              <HistoryIcon className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
         {selectedBatch &&
@@ -598,97 +709,65 @@ export function ImageGenerationWorkbench() {
               aria-label={t("generation.batchProgress")}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={getGenerationBatchProgress(selectedBatch)}
+              aria-valuenow={getBatchProgress(selectedBatch)}
             >
               <div
                 className="h-full bg-primary"
                 style={{
-                  width: `${getGenerationBatchProgress(selectedBatch)}%`,
+                  width: `${getBatchProgress(selectedBatch)}%`,
                 }}
               />
             </div>
           )}
 
-        <section
-          data-testid="generation-gallery-toolbar"
-          className="flex h-12 shrink-0 items-center justify-end gap-2 border-b border-border bg-card px-5"
-        >
-          {selectedBatch &&
-            ["queued", "running"].includes(selectedBatch.status) && (
-              <button
-                type="button"
-                onClick={() => void cancelGenerationBatch(selectedBatch.id)}
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                title={t("generation.cancel")}
-                aria-label={t("generation.cancel")}
-              >
-                <SquareIcon className="h-3.5 w-3.5" />
-              </button>
-            )}
-          {selectedBatch &&
-            !["queued", "running"].includes(selectedBatch.status) &&
-            selectedBatch.counts.failed + selectedBatch.counts.interrupted >
-              0 && (
-              <button
-                type="button"
-                onClick={() => void retryFailed()}
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                title={t("generation.retryFailed")}
-                aria-label={t("generation.retryFailed")}
-              >
-                <RefreshCwIcon className="h-3.5 w-3.5" />
-              </button>
-            )}
-          <button
-            type="button"
-            onClick={() => setSortNewest((value) => !value)}
-            className="flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs"
-            aria-label={
-              sortNewest
-                ? t("generation.latestFirst")
-                : t("generation.oldestFirst")
-            }
-          >
-            {sortNewest
-              ? t("generation.latestFirst")
-              : t("generation.oldestFirst")}
-            <ChevronDownIcon className="h-3.5 w-3.5" />
-          </button>
-          <div className="flex h-8 overflow-hidden rounded-md border border-border">
-            <button
-              type="button"
-              onClick={() => setGalleryDensity("compact")}
-              className={`flex w-8 items-center justify-center ${galleryDensity === "compact" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
-              aria-label={t("generation.compactGrid")}
-              aria-pressed={galleryDensity === "compact"}
-            >
-              <Grid2X2Icon className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setGalleryDensity("large")}
-              className={`flex w-8 items-center justify-center border-l border-border ${galleryDensity === "large" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
-              aria-label={t("generation.largeGrid")}
-              aria-pressed={galleryDensity === "large"}
-            >
-              <LayoutGridIcon className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setGalleryDensity("list")}
-              className={`flex w-8 items-center justify-center border-l border-border ${galleryDensity === "list" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
-              aria-label={t("generation.listView")}
-              aria-pressed={galleryDensity === "list"}
-            >
-              <ListIcon className="h-4 w-4" />
-            </button>
-          </div>
-        </section>
+        <ImageGenerationGalleryToolbar
+          filter={galleryFilter}
+          onFilterChange={setGalleryFilter}
+          selectedBatch={selectedBatch}
+          failedCount={batches.reduce(
+            (sum, batch) =>
+              sum + batch.counts.failed + batch.counts.interrupted,
+            0,
+          )}
+          sortNewest={sortNewest}
+          onSortNewestChange={setSortNewest}
+          density={galleryDensity}
+          onDensityChange={setGalleryDensity}
+          onCancelBatch={() =>
+            selectedBatch && void cancelGenerationBatch(selectedBatch.id)
+          }
+          onRetryFailed={() => void retryFailed()}
+        />
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-card p-4">
-          {visibleTiles.length > 0 ? (
+        <div className="min-h-0 flex-1 overflow-hidden bg-card">
+          {galleryFilter === "current" && selectedBatch && focusedOutputId ? (
+            <ImageGenerationReviewStage
+              batch={selectedBatch}
+              focusedOutputId={focusedOutputId}
+              selectedOutputKeys={selectedOutputKeys}
+              canAttach={Boolean(
+                selectedBatch.sourcePromptId &&
+                prompts.some(
+                  (item) => item.id === selectedBatch.sourcePromptId,
+                ),
+              )}
+              onFocus={setFocusedOutputId}
+              onOpen={openLightbox}
+              onToggleSelect={toggleOutputSelection}
+              onToggleFavorite={(output) =>
+                void toggleFavorites([{ batch: selectedBatch, output }])
+              }
+              onDownload={(output) =>
+                downloadOutputs([{ batch: selectedBatch, output }])
+              }
+              onCopyPrompt={() => void copyExecutionPrompt(selectedBatch)}
+              onAttach={(output) =>
+                void attachOutputs([{ batch: selectedBatch, output }])
+              }
+            />
+          ) : visibleTiles.length > 0 ? (
             <div
-              className={`grid gap-3 ${galleryDensity === "compact" ? "grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" : galleryDensity === "large" ? "grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3" : "grid-cols-1"}`}
+              className={`grid min-h-full content-start gap-3 overflow-y-auto p-4 ${galleryDensity === "compact" ? "grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" : galleryDensity === "large" ? "grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3" : "grid-cols-1"}`}
             >
               {visibleTiles.map(({ batch, slotIndex }) => (
                 <OutputTile
@@ -714,7 +793,9 @@ export function ImageGenerationWorkbench() {
               </span>
               <div className="max-w-sm space-y-1.5">
                 <p className="text-sm font-medium text-foreground">
-                  {t("generation.empty")}
+                  {t(
+                    draftMode ? "generation.newDraftEmpty" : "generation.empty",
+                  )}
                 </p>
                 <p className="flex items-center justify-center gap-1.5 text-xs">
                   <HardDriveIcon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -794,32 +875,19 @@ export function ImageGenerationWorkbench() {
         )}
       </main>
 
-      {composerCollapsed ? (
-        <aside
-          data-testid="generation-config-panel"
-          className="flex w-10 shrink-0 flex-col items-center border-l border-border bg-card py-3"
-        >
-          <button
-            type="button"
-            onClick={() => setComposerCollapsed(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label={t("generation.expandSettings")}
-            title={t("generation.expandSettings")}
-          >
-            <SlidersHorizontalIcon className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </aside>
-      ) : (
-        <aside
-          data-testid="generation-config-panel"
-          className="flex w-[clamp(300px,32vw,352px)] min-w-[300px] shrink-0 flex-col border-l border-border bg-card"
-        >
-          <ImageGenerationComposer
-            {...composerProps}
-            onClose={() => setComposerCollapsed(true)}
-          />
-        </aside>
-      )}
+      <aside
+        data-testid="generation-config-panel"
+        className="flex w-[clamp(340px,28vw,390px)] min-w-[340px] shrink-0 flex-col border-l border-border bg-card"
+      >
+        <ImageGenerationInspector
+          activeTab={inspectorTab}
+          onTabChange={setInspectorTab}
+          batches={batches}
+          selectedBatchId={selectedBatch?.id}
+          onSelectBatch={selectBatch}
+          composerProps={composerProps}
+        />
+      </aside>
 
       {lightboxEntry && (
         <ImageGenerationLightbox
