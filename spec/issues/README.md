@@ -22,6 +22,7 @@
 | ID                 | Title                | Status | Path                                                          | Related change/issue                      | Updated    |
 | ------------------ | -------------------- | ------ | ------------------------------------------------------------- | ----------------------------------------- | ---------- |
 | `ISS-20260710-001` | Spec Governance Debt | open   | `spec/issues/active/ISS-20260710-001-spec-governance-debt.md` | `2026-07-10-spec-init-upstream-alignment` | 2026-07-10 |
+| `ISS-20260806-001` | MCP Issues 200-202 Triage | open | `spec/issues/active/ISS-20260806-001-mcp-issue-triage.md` | `spec/changes/archive/2026/08/2026-08-06-mcp-issues-200-202-analysis/` | 2026-08-06 |
 
 ## GitHub vs Local State
 
@@ -37,7 +38,8 @@ This prevents the project from closing user-reported issues before users can dow
 ## Sync Note
 
 - 当前 GitHub issue 清单通过 GitHub CLI 手工同步到仓库。
-- 本轮同步时间：`2026-07-30`。
+- 本轮同步时间：`2026-08-06`。
+- MCP issue triage 记录见 `active/ISS-20260806-001-mcp-issue-triage.md`，覆盖 #200、#201、#202 的当前边界和后续门禁。
 - 如果 GitHub issue 状态发生明显变化，或某个 active change 依赖 issue 上下文，应优先刷新这里的快照。
 - 如果只是本地实现状态变化，更新 `active/local-github-status.md`，不要手改 GitHub 快照文件。
 

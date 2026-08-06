@@ -88,18 +88,20 @@ installation source and all installation workflows remain diagnostic-only.
 
 PromptHub MCP 管理第一版建模为“配置库 + 目标文件投影”，不运行 MCP 网关、代理或统一 endpoint。
 
-| Target      | PromptHub Target ID | Default Scope Paths                                                | Config Shape                        | Evidence / Notes                                   |
-| ----------- | ------------------- | ------------------------------------------------------------------ | ----------------------------------- | -------------------------------------------------- |
-| Codex       | `codex`             | `~/.codex/config.toml`; project `.codex/config.toml`               | TOML `[mcp_servers.<name>]`         | Officially documented                              |
-| Claude Code | `claude`            | `~/.claude.json`; project `.mcp.json`                              | JSON `mcpServers`                   | Officially documented; scopes include user/project |
-| Cursor      | `cursor`            | `~/.cursor/mcp.json`; project `.cursor/mcp.json`                   | JSON `mcpServers`                   | Officially documented                              |
-| VS Code     | `vscode`            | project `.vscode/mcp.json`; user profile path varies by VS Code UI | JSON `servers`                      | Officially documented                              |
-| Cline       | `cline`             | `~/.cline/data/settings/cline_mcp_settings.json`                   | JSON `mcpServers`-style settings    | Officially documented                              |
-| WorkBuddy   | `workbuddy`         | `~/.workbuddy/mcp.json`; project `.workbuddy/mcp.json`             | JSON `mcpServers`                   | Officially documented                              |
-| CodeBuddy   | `codebuddy`         | `~/.codebuddy/.mcp.json`; project `.mcp.json`                      | JSON / JSONC `mcpServers`           | Officially documented                              |
-| ZCode Agent | `zcode`             | `~/.zcode/cli/config.json`; project `.zcode/config.json`           | JSON `mcp.servers`                  | Officially documented                              |
-| Custom JSON | `custom-json`       | user-selected file path                                            | JSON `mcpServers`                   | PromptHub generic projection                       |
-| Custom TOML | `custom-toml`       | user-selected file path                                            | Codex-compatible managed TOML block | PromptHub generic projection                       |
+| Target      | PromptHub Target ID | Default Scope Paths                                                  | Config Shape                        | Evidence / Notes                                    |
+| ----------- | ------------------- | -------------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------- |
+| Codex       | `codex`             | `~/.codex/config.toml`; project `.codex/config.toml`                 | TOML `[mcp_servers.<name>]`         | Officially documented                               |
+| Claude Code | `claude`            | `~/.claude.json`; project `.mcp.json`                                | JSON `mcpServers`                   | Officially documented; scopes include user/project  |
+| Cursor      | `cursor`            | `~/.cursor/mcp.json`; project `.cursor/mcp.json`                     | JSON `mcpServers`                   | Officially documented                               |
+| VS Code     | `vscode`            | project `.vscode/mcp.json`; user profile path varies by VS Code UI   | JSON `servers`                      | Officially documented                               |
+| Cline       | `cline`             | `~/.cline/data/settings/cline_mcp_settings.json`                     | JSON `mcpServers`-style settings    | Officially documented                               |
+| WorkBuddy   | `workbuddy`         | `~/.workbuddy/mcp.json`; project `.workbuddy/mcp.json`               | JSON `mcpServers`                   | Officially documented                               |
+| CodeBuddy   | `codebuddy`         | `~/.codebuddy/.mcp.json`; project `.mcp.json`                        | JSON / JSONC `mcpServers`           | Officially documented                               |
+| ZCode Agent | `zcode`             | `~/.zcode/cli/config.json`; project `.zcode/config.json`             | JSON `mcp.servers`                  | Officially documented                               |
+| Oh My Pi    | `oh-my-pi`          | `~/.omp/agent/mcp.json`; project `.omp/mcp.json`                     | JSON `mcpServers`                   | Officially documented; native Oh My Pi target       |
+| Pi          | `pi`                | `~/.pi/agent/mcp.json`; project `.pi/mcp.json`; adapter shared files | JSON `mcpServers`                   | Compatible writer; runtime/adapter remains Pi-owned |
+| Custom JSON | `custom-json`       | user-selected file path                                              | JSON `mcpServers`                   | PromptHub generic projection                        |
+| Custom TOML | `custom-toml`       | user-selected file path                                              | Codex-compatible managed TOML block | PromptHub generic projection                        |
 
 Stable product rule:
 
@@ -114,6 +116,37 @@ Stable product rule:
 - MCP entries are configuration records, not Skill directory packages; they do not participate in Skill versioning, safety scanning, or rating flows.
 - Roo Code remains documented below as an external Agent asset, but PromptHub no longer exposes it as a built-in MCP target preset.
 - Qwen Code uses user/project `settings.json` `mcpServers`; PromptHub now exposes distinct global and project `qwen` MCP targets through structured JSON merge. Secret-bearing environment values remain main-process-only, and the remaining `TEST-AGENT-036` gate covers broader UI/E2E behavior rather than the existence of the target.
+- Oh My Pi and Pi remain separate targets. Pi uses `mcp`/`mcpServers` JSON
+  projections for the native `<root>/mcp.json` candidate and the compatible
+  adapter candidates `~/.config/mcp/mcp.json`, `~/.agents/mcp.json`, and
+  `~/.agents/mcp/mcp.json`; project targets are `<project>/.mcp.json` and
+  `<project>/.pi/mcp.json`. PromptHub exposes each candidate independently so
+  users can choose the file that their installed adapter/runtime actually
+  reads. It writes compatible configuration; it does not embed or execute
+  `pi-mcp-adapter`.
+- The adapter's documented precedence is low to high: `~/.config/mcp/mcp.json`,
+  `~/.agents/mcp.json`, `~/.agents/mcp/mcp.json`, `<Pi agent dir>/mcp.json`,
+  `.mcp.json`, then `.pi/mcp.json`. PromptHub keeps those layers as separate
+  selectable targets rather than merging them in the library or owning Pi's
+  effective-runtime resolution.
+- My MCP detail, distribution counts, quick deploy, batch deploy, and target
+  dialogs use one merged global/project target projection. Agent and Project
+  workspaces remain separately navigable, while registered project files can
+  be selected directly from My MCP.
+- MCP environment references are additive `envRefs`/`headerRefs` maps. Legacy
+  `${VAR}`, `${env:VAR}`, `$VAR`, and `$env:VAR` values are normalized without resolving
+  them. Cursor, VS Code, and Windsurf receive `${env:VAR}`; Claude, Codex, Pi,
+  Oh My Pi, and other supported targets receive `${VAR}`. `${VAR:-default}` is
+  rejected for targets that do not document default-value interpolation.
+- Health checks inspect only whether a referenced variable is present in the
+  current PromptHub process environment; missing required references produce a
+  warning without exposing the value. An explicit `.env` import converts a
+  selected reference to a local literal value.
+- Direct values remain local compatibility data, while reference fields are
+  portable non-secret templates. UI previews, apply/remove results, renderer
+  library snapshots, backup/export payloads, and CLI workspace bundles redact
+  direct environment/header values. Restore merges redaction markers with the
+  current local value and never writes the marker as a credential.
 
 ## Evidence Levels
 
@@ -664,9 +697,13 @@ Current support boundary:
   fork retains the same environment-variable name.
 - Assets: native user Skills are `<root>/skills`, extensions are
   `<root>/extensions`, and global instructions are `<root>/AGENTS.md`.
-  PromptHub does not advertise native MCP support because upstream Pi exposes
-  MCP through optional extensions rather than a built-in MCP configuration
-  contract.
+- MCP: PromptHub exposes a compatible config-writer target rather than claiming
+  to be Pi's runtime or a bundled adapter. Native global/project candidates are
+  `~/.pi/agent/mcp.json` and `<project>/.pi/mcp.json`; adapter/shared candidates
+  are `~/.config/mcp/mcp.json`, `~/.agents/mcp.json`, `~/.agents/mcp/mcp.json`,
+  and `<project>/.mcp.json`. All use top-level `mcpServers`. The target list
+  keeps candidates separate because the installed adapter/runtime owns final
+  discovery and precedence.
 - Config: the raw-editor allowlist is `settings.json`, `models.json`, and
   `AGENTS.md`; authentication files, sessions, caches and installed package
   state are excluded. The model projection reads `defaultProvider` and
@@ -1365,6 +1402,10 @@ Current support boundary:
   `https://pi.dev/docs/latest/environment-variables`
 - Session format:
   `https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/session.md`
+- MCP adapter package and supported config discovery:
+  `https://pi.dev/packages/pi-mcp-adapter`
+- Oh My Pi MCP configuration and precedence:
+  `https://github.com/can1357/oh-my-pi/blob/main/docs/mcp-config.md`
 
 ## Canonical Sources
 

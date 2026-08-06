@@ -9,7 +9,9 @@ until it is included in a published release.
 
 - Added Pi as built-in Agent `pi` without aliasing or replacing `oh-my-pi`.
 - Registered the Pi root, Skills, extensions, rules, non-secret config files
-  and read-only CLI diagnostic while leaving native MCP unsupported.
+  and read-only CLI diagnostic while leaving native MCP unsupported. The
+  separate MCP manager compatibility writer does not alter this Agent
+  capability boundary.
 - Reused one bounded Pi-family JSONL parser behind separate roots, adapter ids,
   result identities and resume commands.
 - Added Pi `settings.json` model inspection, JSONC-preserving updates, backup,

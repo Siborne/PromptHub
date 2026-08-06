@@ -18,8 +18,11 @@ products hides installed Pi assets and conversations.
   generic icon fallback.
 - Bundle Oh My Pi's official plugin-connected mark with a theme-safe backing so
   it remains legible on the Agent workbench.
-- Keep MCP unsupported for Pi until a native built-in MCP contract exists;
-  extension-provided MCP remains owned by Pi packages.
+- Keep native MCP capability unsupported for the Pi Agent until a native
+  built-in contract exists; extension-provided MCP remains owned by Pi
+  packages. The separate MCP manager may write explicitly selected compatible
+  `mcpServers` files, but that writer is not exposed as Pi's native Agent
+  capability and does not execute or install an adapter.
 
 ## Risk And Rollback
 

@@ -28,7 +28,9 @@ Pi derives:
 
 `auth.json`, sessions and package caches are excluded from editable config.
 Pi receives no `mcpRelativePath` because MCP is extension-provided rather than
-a native built-in configuration contract.
+a native built-in configuration contract. The MCP manager's separate `pi`
+target is an explicit compatibility writer for selected `mcpServers` files;
+it does not change this Agent capability boundary or execute `pi-mcp-adapter`.
 
 ## `DES-PI-003`: Parameterized Pi-Family Session Reader
 

@@ -3,22 +3,31 @@
 ## Source
 
 - Repository: `legeling/PromptHub`
-- Snapshot date: `2026-07-30`
+- Snapshot date: `2026-08-06`
 - Capture method: `GitHub CLI gh issue list --state open --limit 1000`
-- Open issues captured: `26`
+- Open issues captured: `34`
 
 ## Notes
 
 - This file is a repository-level issue snapshot, not a replacement for domain specs or active change folders.
 - Use this file to understand what is currently open on GitHub before deciding whether a problem already has a public report.
+- Local delivery state is recorded separately in `local-github-status.md`.
 
 ## Current Open Issues
 
 | #    | 标题                                                                                 | 标签                               | 创建时间   | 最近更新   | 链接                                             |
 | ---- | ------------------------------------------------------------------------------------ | ---------------------------------- | ---------- | ---------- | ------------------------------------------------ |
+| #202 | [Feature]: 适配不同智能体的 MCP 请求头环境变量写法                                  | enhancement                        | 2026-08-06 | 2026-08-06 | https://github.com/legeling/PromptHub/issues/202 |
+| #201 | [Question]: Pi MCP 适配是否基于 pi-mcp-adapter，是否支持项目级配置？                | question                           | 2026-08-06 | 2026-08-06 | https://github.com/legeling/PromptHub/issues/201 |
+| #200 | [Feature]: 参考项目Skill，希望项目MCP也支持从【我的MCP】中导入或同步，目前只能全局同步 | enhancement, version: 0.5.9        | 2026-08-04 | 2026-08-04 | https://github.com/legeling/PromptHub/issues/200 |
+| #199 | [Feature]: 希望可以加一个手动刷新的按钮                                          | enhancement, version: 0.5.8        | 2026-08-04 | 2026-08-04 | https://github.com/legeling/PromptHub/issues/199 |
+| #198 | [Feature]: 增加手动刷新工作区数据功能                                            | enhancement                        | 2026-08-04 | 2026-08-04 | https://github.com/legeling/PromptHub/issues/198 |
+| #197 | [Feature]: 评估并纳入各 AI Agent 的 Rules / rule 目录扫描与管理                   | enhancement                        | 2026-08-04 | 2026-08-04 | https://github.com/legeling/PromptHub/issues/197 |
+| #196 | [Bug]: 无法识别 ~/.claude/rules 目录中的 Rules                                      | bug, version: 0.5.10              | 2026-08-03 | 2026-08-03 | https://github.com/legeling/PromptHub/issues/196 |
+| #195 | [Feature]: 生图提示词里面，上传的每个图片，是否可以再下载/导出？                    | enhancement, version: 0.5.9        | 2026-08-01 | 2026-08-01 | https://github.com/legeling/PromptHub/issues/195 |
 | #194 | [Feature]: 增加通用 ~/.agents/skills 全局安装目录（需兼容性验证）                    | enhancement                        | 2026-07-29 | 2026-07-29 | https://github.com/legeling/PromptHub/issues/194 |
 | #193 | [Bug]: 规则文件删除后重新扫描仍保留失效记录                                          | bug                                | 2026-07-29 | 2026-07-29 | https://github.com/legeling/PromptHub/issues/193 |
-| #192 | [Bug]: 自定义输出启用后两个“复制 Prompt”入口结果不一致                               | bug, version: 未知（截图中未显示） | 2026-07-29 | 2026-07-29 | https://github.com/legeling/PromptHub/issues/192 |
+| #192 | [Bug]: 自定义输出启用后两个“复制 Prompt”入口结果不一致                           | bug, version: 未知（截图中未显示） | 2026-07-29 | 2026-07-29 | https://github.com/legeling/PromptHub/issues/192 |
 | #191 | [Bug]: safetyReport.scanMethod 校验失败导致无法备份到远程                            | bug, version: 未知（截图中未显示） | 2026-07-29 | 2026-07-29 | https://github.com/legeling/PromptHub/issues/191 |
 | #190 | [Bug]: GitHub部分插件项目，提供了codex和claude原生支持，但通过hub扫描原生的只有codex | bug, version: 0.5.9                | 2026-07-28 | 2026-07-28 | https://github.com/legeling/PromptHub/issues/190 |
 | #188 | [Feature]: 可以在我的skill 里面加一个标签搜索吗                                      | enhancement, version: 0.5.10       | 2026-07-23 | 2026-07-23 | https://github.com/legeling/PromptHub/issues/188 |

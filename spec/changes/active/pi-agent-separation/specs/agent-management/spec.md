@@ -18,7 +18,9 @@ The Pi Agent MUST derive Skills, extensions, global instructions and editable
 non-secret configuration from `~/.pi/agent` or its resolved override.
 
 The Pi Agent MUST NOT claim native MCP support solely because an optional Pi
-extension can provide MCP.
+extension can provide MCP. A separate MCP manager target may write an
+explicitly selected compatible `mcpServers` file, but that target MUST NOT be
+reported as a native Pi Agent capability or execute/install the adapter.
 
 ## `FR-PI-003`: Bounded Read-Only Sessions
 
