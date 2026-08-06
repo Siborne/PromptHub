@@ -8,6 +8,11 @@ import {
 } from "@prompthub/core";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import { isMcpTargetKind } from "@prompthub/shared/types/mcp";
+import {
+  mergeMcpLibraryFromTransport,
+  redactMcpLibraryForTransport,
+  redactMcpServerConfig,
+} from "@prompthub/shared/utils/mcp-config";
 import { SkillInstaller } from "../services/skill-installer";
 import {
   authorizeMcpMarketFetch,
@@ -21,16 +26,21 @@ import {
 import type {
   McpApplyTarget,
   McpCreateFromSourceRequest,
+  McpCreateFromSourceResult,
   McpLibraryFile,
+  McpEnvImportResult,
+  McpImportResult,
   McpMarketTemplate,
   McpMarketFetchRequest,
   McpMarketSource,
+  McpMarketUpdateResult,
   McpRemoveTargetNames,
   McpServerDraft,
   McpTargetSyncOptions,
   McpTargetKind,
   McpTargetScope,
 } from "@prompthub/shared/types/mcp";
+import type { AgentAssetFileSnapshot } from "@prompthub/shared/types/sync";
 
 const MCP_TARGET_SCOPES = new Set<McpTargetScope>([
   "global",
@@ -112,22 +122,116 @@ function assertNonEmptyIdentifier(
   return identifier.trim();
 }
 
+function encodeMcpLibrarySnapshot(
+  library: McpLibraryFile,
+  original: AgentAssetFileSnapshot,
+  redactValues = true,
+): AgentAssetFileSnapshot {
+  const content = Buffer.from(
+    `${JSON.stringify(
+      redactValues ? redactMcpLibraryForTransport(library) : library,
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return {
+    ...original,
+    contentBase64: content.toString("base64"),
+    size: content.length,
+  };
+}
+
+function redactMcpAssetFiles(
+  files: AgentAssetFileSnapshot[],
+): AgentAssetFileSnapshot[] {
+  return files.map((file) => {
+    if (file.relativePath !== "library.json") return file;
+    try {
+      const library = JSON.parse(
+        Buffer.from(file.contentBase64, "base64").toString("utf8"),
+      ) as McpLibraryFile;
+      return encodeMcpLibrarySnapshot(library, file);
+    } catch {
+      return file;
+    }
+  });
+}
+
+function mergeMcpAssetFiles(
+  files: AgentAssetFileSnapshot[],
+  local: McpLibraryFile,
+): AgentAssetFileSnapshot[] {
+  return files.map((file) => {
+    if (file.relativePath !== "library.json") return file;
+    try {
+      const incoming = JSON.parse(
+        Buffer.from(file.contentBase64, "base64").toString("utf8"),
+      ) as McpLibraryFile;
+      return encodeMcpLibrarySnapshot(
+        mergeMcpLibraryFromTransport(local, incoming),
+        file,
+        false,
+      );
+    } catch {
+      return file;
+    }
+  });
+}
+
+function redactMcpImportResult(result: McpImportResult): McpImportResult {
+  return {
+    ...result,
+    imported: result.imported.map(redactMcpServerConfig),
+  };
+}
+
+function redactMcpCreateFromSourceResult(
+  result: McpCreateFromSourceResult,
+): McpCreateFromSourceResult {
+  return {
+    ...result,
+    imported: result.imported.map(redactMcpServerConfig),
+  };
+}
+
+function redactMcpEnvImportResult(
+  result: McpEnvImportResult,
+): McpEnvImportResult {
+  return { ...result, server: redactMcpServerConfig(result.server) };
+}
+
+function redactMcpMarketUpdateResult(
+  result: McpMarketUpdateResult,
+): McpMarketUpdateResult {
+  return { ...result, server: redactMcpServerConfig(result.server) };
+}
+
 export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
-  ipcMain.handle(IPC_CHANNELS.MCP_LIBRARY_GET, async () => service.read());
+  ipcMain.handle(IPC_CHANNELS.MCP_LIBRARY_GET, async () =>
+    redactMcpLibraryForTransport(service.read()),
+  );
   ipcMain.handle(
     IPC_CHANNELS.MCP_LIBRARY_REPLACE,
-    async (_event, library: McpLibraryFile) => service.write(library),
+    async (_event, library: McpLibraryFile) =>
+      redactMcpLibraryForTransport(
+        service.write(mergeMcpLibraryFromTransport(service.read(), library)),
+      ),
   );
   ipcMain.handle(IPC_CHANNELS.MCP_LIBRARY_EXPORT_FILES, async () =>
-    exportAgentAssetDirectorySnapshot(path.dirname(getMcpLibraryFilePath())),
+    redactMcpAssetFiles(
+      exportAgentAssetDirectorySnapshot(path.dirname(getMcpLibraryFilePath())),
+    ),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_LIBRARY_RESTORE_FILES,
-    async (_event, files) =>
+    async (_event, files) => {
+      const current = service.read();
       restoreAgentAssetDirectorySnapshot(
         path.dirname(getMcpLibraryFilePath()),
-        Array.isArray(files) ? files : [],
-      ),
+        mergeMcpAssetFiles(Array.isArray(files) ? files : [], current),
+      );
+    },
   );
   ipcMain.handle(IPC_CHANNELS.MCP_MARKET_LIST, async () =>
     service.getMarketTemplates(),
@@ -145,29 +249,31 @@ export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_SERVER_CREATE,
-    async (_event, draft: McpServerDraft) => service.createServer(draft),
+    async (_event, draft: McpServerDraft) =>
+      redactMcpServerConfig(service.createServer(draft)),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_SERVER_CREATE_FROM_SOURCE,
     async (_event, request: McpCreateFromSourceRequest) =>
-      service.createFromSource(request),
+      redactMcpCreateFromSourceResult(service.createFromSource(request)),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_SERVER_UPDATE,
     async (_event, id: string, draft: McpServerDraft) =>
-      service.updateServer(id, draft),
+      redactMcpServerConfig(service.updateServer(id, draft)),
   );
   ipcMain.handle(IPC_CHANNELS.MCP_SERVER_DELETE, async (_event, id: string) =>
-    service.deleteServer(id),
+    redactMcpLibraryForTransport(service.deleteServer(id)),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_TEMPLATE_INSTALL,
-    async (_event, templateId: string) => service.installTemplate(templateId),
+    async (_event, templateId: string) =>
+      redactMcpServerConfig(service.installTemplate(templateId)),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_MARKET_INSTALL_TEMPLATE,
     async (_event, template: McpMarketTemplate) =>
-      service.installMarketTemplate(template),
+      redactMcpServerConfig(service.installMarketTemplate(template)),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_MARKET_CHECK_UPDATE,
@@ -181,7 +287,10 @@ export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
       identifier: string,
       template: McpMarketTemplate,
       force?: boolean,
-    ) => service.updateFromMarketTemplate(identifier, template, force === true),
+    ) =>
+      redactMcpMarketUpdateResult(
+        service.updateFromMarketTemplate(identifier, template, force === true),
+      ),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_FETCH_REMOTE_CONTENT,
@@ -228,7 +337,8 @@ export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_IMPORT_FILE,
-    async (_event, filePath: string) => service.importFromFile(filePath),
+    async (_event, filePath: string) =>
+      redactMcpImportResult(service.importFromFile(filePath)),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_HEALTH_CHECK,
@@ -244,7 +354,10 @@ export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
       identifier: string,
       envFilePath: string,
       selectedKeys?: string[],
-    ) => service.importEnvForServer(identifier, envFilePath, selectedKeys),
+    ) =>
+      redactMcpEnvImportResult(
+        service.importEnvForServer(identifier, envFilePath, selectedKeys),
+      ),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_TARGET_SYNC_CHECK,

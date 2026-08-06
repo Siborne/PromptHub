@@ -24,7 +24,7 @@ function getMcpDialogDataProps(model: McpManagerViewModel) {
     showBatchDeployDialog: model.showBatchDeployDialog,
     showBatchTagDialog: model.showBatchTagDialog,
     t: model.t,
-    targetPresets: model.visibleAgentTargetPresets,
+    targetPresets: model.visibleTargetPresets,
     targetStatus: model.visibleTargetStatus,
   } satisfies Partial<ComponentProps<typeof McpManagerDialogs>>;
 }

@@ -1,6 +1,7 @@
 import type {
   McpEnvRequirement,
   McpMarketTemplate,
+  McpLibraryFile,
   McpPlaceholderRequirement,
   McpRuntimeDetails,
   McpServerConfig,
@@ -9,6 +10,7 @@ import type {
   McpTargetKind,
   McpTransport,
 } from "../types/mcp";
+import { redactMcpTomlConfigContent } from "./mcp-config-redaction";
 
 export class McpConfigError extends Error {
   code: string;
@@ -35,10 +37,201 @@ export const MCP_JSON_TARGETS: McpTargetKind[] = [
   "augment",
   "amp",
   "qwen",
+  "pi",
   "oh-my-pi",
   "zcode",
   "custom-json",
 ];
+
+export const MCP_REDACTED_VALUE = "[REDACTED]";
+
+export type McpEnvReferenceSyntax = "braced" | "env-prefix";
+
+export interface McpEnvReference {
+  name: string;
+  hasDefault: boolean;
+}
+
+const MCP_ENV_REFERENCE_PATTERN =
+  /\$\{(?:env:)?([A-Za-z_][A-Za-z0-9_]*)(?::-(.*?))?\}|\$env:([A-Za-z_][A-Za-z0-9_]*)|\$([A-Za-z_][A-Za-z0-9_]*)/g;
+const MCP_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Return the syntax understood by the target for environment references.
+ * The table is deliberately explicit so adding a target cannot silently turn
+ * a reference into a literal secret.
+ */
+export function getMcpEnvReferenceSyntax(
+  target: McpTargetKind,
+): McpEnvReferenceSyntax {
+  return target === "cursor" || target === "vscode" || target === "windsurf"
+    ? "env-prefix"
+    : "braced";
+}
+
+function hasMcpEnvReference(value: string): boolean {
+  return getMcpEnvReferences(value).length > 0;
+}
+
+export function getMcpEnvReferences(value: string): McpEnvReference[] {
+  const references: McpEnvReference[] = [];
+  MCP_ENV_REFERENCE_PATTERN.lastIndex = 0;
+  let match = MCP_ENV_REFERENCE_PATTERN.exec(value);
+  while (match) {
+    const name = match[1] ?? match[3] ?? match[4];
+    if (name) {
+      references.push({ name, hasDefault: match[2] !== undefined });
+    }
+    match = MCP_ENV_REFERENCE_PATTERN.exec(value);
+  }
+  return references;
+}
+
+/** Normalize `${env:VAR}`, `$VAR`, and `${VAR}` to canonical templates. */
+export function normalizeMcpReferenceTemplate(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new McpConfigError("INVALID_ENV_REFERENCE", "环境变量引用不能为空");
+  }
+
+  let found = false;
+  MCP_ENV_REFERENCE_PATTERN.lastIndex = 0;
+  const normalized = trimmed.replace(
+    MCP_ENV_REFERENCE_PATTERN,
+    (
+      _match,
+      bracedName: string | undefined,
+      defaultValue: string | undefined,
+      envDollarName: string | undefined,
+      dollarName: string | undefined,
+    ) => {
+      found = true;
+      const name = bracedName ?? envDollarName ?? dollarName ?? "";
+      if (!MCP_ENV_NAME_PATTERN.test(name)) {
+        throw new McpConfigError(
+          "INVALID_ENV_REFERENCE",
+          `环境变量名无效: ${name}`,
+        );
+      }
+      return defaultValue === undefined
+        ? `\${${name}}`
+        : `\${${name}:-${defaultValue}}`;
+    },
+  );
+
+  if (!found) {
+    if (!MCP_ENV_NAME_PATTERN.test(trimmed)) {
+      throw new McpConfigError(
+        "INVALID_ENV_REFERENCE",
+        `环境变量引用无效: ${trimmed}`,
+      );
+    }
+    return `\${${trimmed}}`;
+  }
+  return normalized;
+}
+
+function renderMcpReferenceTemplate(
+  value: string,
+  target: McpTargetKind,
+): string {
+  const syntax = getMcpEnvReferenceSyntax(target);
+  MCP_ENV_REFERENCE_PATTERN.lastIndex = 0;
+  return value.replace(
+    MCP_ENV_REFERENCE_PATTERN,
+    (
+      _match,
+      bracedName: string | undefined,
+      defaultValue: string | undefined,
+      envDollarName: string | undefined,
+      dollarName: string | undefined,
+    ) => {
+      const name = bracedName ?? envDollarName ?? dollarName ?? "";
+      if (syntax === "env-prefix") {
+        if (defaultValue !== undefined) {
+          throw new McpConfigError(
+            "UNSUPPORTED_ENV_REFERENCE",
+            `目标 ${target} 不支持带默认值的环境变量引用: ${name}`,
+          );
+        }
+        return `\${env:${name}}`;
+      }
+      return defaultValue === undefined
+        ? `\${${name}}`
+        : `\${${name}:-${defaultValue}}`;
+    },
+  );
+}
+
+function parseMcpReferenceMap(
+  value: string | Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!value) return undefined;
+  const source =
+    typeof value === "string" ? parseMcpKeyValueLines(value) : value;
+  if (!source) return undefined;
+  const entries = Object.entries(source).flatMap(([key, entryValue]) => {
+    const normalizedKey = key.trim();
+    if (!normalizedKey) return [];
+    return [
+      [normalizedKey, normalizeMcpReferenceTemplate(String(entryValue))],
+    ] as const;
+  });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function splitMcpValueMaps(
+  literalValue: string | Record<string, string> | undefined,
+  referenceValue: string | Record<string, string> | undefined,
+): { literal?: Record<string, string>; references?: Record<string, string> } {
+  const literalSource = parseMcpKeyValueLines(literalValue) ?? {};
+  const references: Record<string, string> = {};
+  const literal: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(literalSource)) {
+    if (hasMcpEnvReference(value)) {
+      references[key] = normalizeMcpReferenceTemplate(value);
+    } else if (value !== MCP_REDACTED_VALUE) {
+      literal[key] = value;
+    } else {
+      literal[key] = "";
+    }
+  }
+
+  for (const [key, value] of Object.entries(
+    parseMcpReferenceMap(referenceValue) ?? {},
+  )) {
+    delete literal[key];
+    references[key] = value;
+  }
+
+  return {
+    literal: Object.keys(literal).length > 0 ? literal : undefined,
+    references: Object.keys(references).length > 0 ? references : undefined,
+  };
+}
+
+function projectMcpValues(
+  server: McpServerConfig,
+  target: McpTargetKind,
+  field: "env" | "headers",
+  redactValues = false,
+): Record<string, string> | undefined {
+  const literal = server[field] === undefined ? {} : { ...server[field] };
+  const references = field === "env" ? server.envRefs : server.headerRefs;
+  const values: Record<string, string> = {};
+  for (const [key, value] of Object.entries(literal)) {
+    values[key] = hasMcpEnvReference(value)
+      ? renderMcpReferenceTemplate(value, target)
+      : redactValues
+        ? MCP_REDACTED_VALUE
+        : value;
+  }
+  for (const [key, value] of Object.entries(references ?? {})) {
+    values[key] = renderMcpReferenceTemplate(value, target);
+  }
+  return Object.keys(values).length > 0 ? values : undefined;
+}
 
 /**
  * Resolve the JSON root key holding server entries for a target.
@@ -257,17 +450,27 @@ function inferPackageOrScript(args?: string[]): string | undefined {
 }
 
 export function inferMcpEnvRequirements(
-  config: Pick<McpServerConfig, "env" | "args" | "url" | "headers">,
+  config: Pick<
+    McpServerConfig,
+    "env" | "envRefs" | "args" | "url" | "headers" | "headerRefs"
+  >,
 ): McpEnvRequirement[] {
   const requirements = new Map<string, McpEnvRequirement>();
 
   for (const [name, value] of Object.entries(config.env ?? {})) {
-    requirements.set(name, {
-      name,
-      required: value.trim() === "" || isPlaceholder(value),
-      placeholder: isPlaceholder(value) ? value : undefined,
-      source: "env",
-    });
+    if (hasMcpEnvReference(value)) {
+      addVariableReferences(requirements, value, "env");
+    } else {
+      requirements.set(name, {
+        name,
+        required: value.trim() === "" || isPlaceholder(value),
+        placeholder: isPlaceholder(value) ? value : undefined,
+        source: "env",
+      });
+    }
+  }
+  for (const value of Object.values(config.envRefs ?? {})) {
+    addVariableReferences(requirements, value, "env");
   }
 
   for (const value of config.args ?? []) {
@@ -277,6 +480,9 @@ export function inferMcpEnvRequirements(
     addVariableReferences(requirements, config.url, "url");
   }
   for (const value of Object.values(config.headers ?? {})) {
+    addVariableReferences(requirements, value, "headers");
+  }
+  for (const value of Object.values(config.headerRefs ?? {})) {
     addVariableReferences(requirements, value, "headers");
   }
 
@@ -306,14 +512,13 @@ function addVariableReferences(
   value: string,
   source: McpEnvRequirement["source"],
 ): void {
-  const pattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
-  let match = pattern.exec(value);
-  while (match) {
-    const name = match[1];
-    if (!requirements.has(name)) {
-      requirements.set(name, { name, required: true, source });
-    }
-    match = pattern.exec(value);
+  for (const reference of getMcpEnvReferences(value)) {
+    const current = requirements.get(reference.name);
+    requirements.set(reference.name, {
+      name: reference.name,
+      required: current?.required === true ? true : !reference.hasDefault,
+      source: current?.source ?? source,
+    });
   }
 }
 
@@ -342,8 +547,8 @@ export function normalizeMcpServerDraft(
   const displayName = (draft.displayName || name).trim();
   const command = draft.command?.trim();
   const url = draft.url?.trim();
-  const env = parseMcpKeyValueLines(draft.env);
-  const headers = parseMcpKeyValueLines(draft.headers);
+  const envValues = splitMcpValueMaps(draft.env, draft.envRefs);
+  const headerValues = splitMcpValueMaps(draft.headers, draft.headerRefs);
   const args = parseMcpArgs(draft.args);
 
   if (transport === "stdio" && !command) {
@@ -366,9 +571,11 @@ export function normalizeMcpServerDraft(
     command,
     args: args.length > 0 ? args : undefined,
     cwd: draft.cwd?.trim() || undefined,
-    env,
+    env: envValues.literal,
+    envRefs: envValues.references,
     url,
-    headers,
+    headers: headerValues.literal,
+    headerRefs: headerValues.references,
     enabled: draft.enabled !== false,
     isFavorite: draft.isFavorite === true,
     tags: Array.from(
@@ -378,6 +585,82 @@ export function normalizeMcpServerDraft(
     createdAt: draft.createdAt ?? now,
     updatedAt: draft.updatedAt ?? now,
   };
+}
+
+export function redactMcpServerConfig(
+  server: McpServerConfig,
+): McpServerConfig {
+  return {
+    ...server,
+    env: redactMcpValueMap(server.env),
+    headers: redactMcpValueMap(server.headers),
+  };
+}
+
+export function redactMcpLibraryForTransport(
+  library: McpLibraryFile,
+): McpLibraryFile {
+  return {
+    ...library,
+    servers: library.servers.map(redactMcpServerConfig),
+    bindings: library.bindings.map((binding) => ({ ...binding })),
+  };
+}
+
+/**
+ * Merge a redacted snapshot without replacing a locally retained literal.
+ * A snapshot with no local value becomes an empty value so health checks can
+ * report it as missing instead of treating the marker as a credential.
+ */
+export function mergeMcpLibraryFromTransport(
+  local: McpLibraryFile,
+  incoming: McpLibraryFile,
+): McpLibraryFile {
+  const localByIdentity = new Map(
+    local.servers.map((server) => [`${server.id}\0${server.name}`, server]),
+  );
+  const localByName = new Map(
+    local.servers.map((server) => [server.name, server]),
+  );
+  return {
+    ...incoming,
+    servers: incoming.servers.map((server) => {
+      const existing =
+        localByIdentity.get(`${server.id}\0${server.name}`) ??
+        localByName.get(server.name);
+      return {
+        ...server,
+        env: restoreMcpValueMap(existing?.env, server.env),
+        headers: restoreMcpValueMap(existing?.headers, server.headers),
+      };
+    }),
+  };
+}
+
+function redactMcpValueMap(
+  value: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!value || Object.keys(value).length === 0) return undefined;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entryValue]) => [
+      key,
+      hasMcpEnvReference(entryValue) ? entryValue : MCP_REDACTED_VALUE,
+    ]),
+  );
+}
+
+function restoreMcpValueMap(
+  local: Record<string, string> | undefined,
+  incoming: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!incoming || Object.keys(incoming).length === 0) return undefined;
+  const restored = Object.fromEntries(
+    Object.entries(incoming).map(([key, value]) => [
+      key,
+      value === MCP_REDACTED_VALUE ? (local?.[key] ?? "") : value,
+    ]),
+  );
+  return Object.keys(restored).length > 0 ? restored : undefined;
 }
 
 export function installMcpTemplate(
@@ -404,20 +687,22 @@ export function installMcpTemplate(
 
 export function toMcpServerEntry(
   server: McpServerConfig,
+  target: McpTargetKind = "custom-json",
+  options: { redactValues?: boolean } = {},
 ): Record<string, unknown> {
   if (server.transport === "stdio") {
     return stripUndefined({
       command: server.command,
       args: server.args,
       cwd: server.cwd,
-      env: server.env,
+      env: projectMcpValues(server, target, "env", options.redactValues),
     });
   }
 
   return stripUndefined({
     type: server.transport === "sse" ? "sse" : "http",
     url: server.url,
-    headers: server.headers,
+    headers: projectMcpValues(server, target, "headers", options.redactValues),
   });
 }
 
@@ -432,15 +717,19 @@ export function toMcpServerEntry(
  */
 export function toOpenCodeMcpEntry(
   server: McpServerConfig,
+  target: McpTargetKind = "opencode",
+  options: { redactValues?: boolean } = {},
 ): Record<string, unknown> {
   if (server.transport === "stdio") {
     return stripUndefined({
       type: "local",
       command: [server.command ?? "", ...(server.args ?? [])].filter(Boolean),
-      environment:
-        server.env && Object.keys(server.env).length > 0
-          ? server.env
-          : undefined,
+      environment: projectMcpValues(
+        server,
+        target,
+        "env",
+        options.redactValues,
+      ),
       enabled: true,
     });
   }
@@ -448,44 +737,48 @@ export function toOpenCodeMcpEntry(
   return stripUndefined({
     type: "remote",
     url: server.url,
-    headers:
-      server.headers && Object.keys(server.headers).length > 0
-        ? server.headers
-        : undefined,
+    headers: projectMcpValues(server, target, "headers", options.redactValues),
     enabled: true,
   });
 }
 
-function toCodexTomlMcpEntry(server: McpServerConfig): Record<string, unknown> {
+function toCodexTomlMcpEntry(
+  server: McpServerConfig,
+  target: McpTargetKind,
+  options: { redactValues?: boolean } = {},
+): Record<string, unknown> {
   if (server.transport === "stdio") {
     return stripUndefined({
       command: server.command,
       args: server.args,
       cwd: server.cwd,
-      env: server.env,
+      env: projectMcpValues(server, target, "env", options.redactValues),
     });
   }
 
   return stripUndefined({
     url: server.url,
-    http_headers:
-      server.headers && Object.keys(server.headers).length > 0
-        ? server.headers
-        : undefined,
+    http_headers: projectMcpValues(
+      server,
+      target,
+      "headers",
+      options.redactValues,
+    ),
   });
 }
 
 export function getMcpTargetEntryObject(
   target: McpTargetKind,
   server: McpServerConfig,
+  options: { redactValues?: boolean } = {},
 ): Record<string, unknown> {
   if (target === "opencode" || target === "kilo") {
-    return toOpenCodeMcpEntry(server);
+    return toOpenCodeMcpEntry(server, target, options);
   }
   if (target === "codex" || target === "custom-toml") {
-    return toCodexTomlMcpEntry(server);
+    return toCodexTomlMcpEntry(server, target, options);
   }
-  return toMcpServerEntry(server);
+  return toMcpServerEntry(server, target, options);
 }
 
 type CanonicalJsonValue =
@@ -667,7 +960,7 @@ export function buildMcpServersJson(servers: McpServerConfig[]): {
     mcpServers: Object.fromEntries(
       servers
         .filter((server) => server.enabled)
-        .map((server) => [server.name, toMcpServerEntry(server)]),
+        .map((server) => [server.name, toMcpServerEntry(server, "claude")]),
     ),
   };
 }
@@ -679,7 +972,7 @@ export function buildVsCodeMcpJson(servers: McpServerConfig[]): {
     servers: Object.fromEntries(
       servers
         .filter((server) => server.enabled)
-        .map((server) => [server.name, toMcpServerEntry(server)]),
+        .map((server) => [server.name, toMcpServerEntry(server, "vscode")]),
     ),
   };
 }
@@ -687,6 +980,7 @@ export function buildVsCodeMcpJson(servers: McpServerConfig[]): {
 export function buildMcpTargetJson(
   target: McpTargetKind,
   servers: McpServerConfig[],
+  options: { redactValues?: boolean } = {},
 ): Record<string, unknown> {
   return setMcpJsonServerEntries(
     {},
@@ -696,13 +990,16 @@ export function buildMcpTargetJson(
         .filter((server) => server.enabled)
         .map((server) => [
           server.name,
-          getMcpTargetEntryObject(target, server),
+          getMcpTargetEntryObject(target, server, options),
         ]),
     ),
   );
 }
 
-export function buildCodexMcpToml(servers: McpServerConfig[]): string {
+export function buildCodexMcpToml(
+  servers: McpServerConfig[],
+  options: { redactValues?: boolean } = {},
+): string {
   return servers
     .filter((server) => server.enabled)
     .map((server) => {
@@ -715,13 +1012,25 @@ export function buildCodexMcpToml(servers: McpServerConfig[]): string {
         if (server.cwd) {
           lines.push(`cwd = ${tomlString(server.cwd)}`);
         }
-        if (server.env && Object.keys(server.env).length > 0) {
-          lines.push(`env = ${tomlInlineTable(server.env)}`);
+        const env = projectMcpValues(
+          server,
+          "codex",
+          "env",
+          options.redactValues,
+        );
+        if (env && Object.keys(env).length > 0) {
+          lines.push(`env = ${tomlInlineTable(env)}`);
         }
       } else if (server.url) {
         lines.push(`url = ${tomlString(server.url)}`);
-        if (server.headers && Object.keys(server.headers).length > 0) {
-          lines.push(`http_headers = ${tomlInlineTable(server.headers)}`);
+        const headers = projectMcpValues(
+          server,
+          "codex",
+          "headers",
+          options.redactValues,
+        );
+        if (headers && Object.keys(headers).length > 0) {
+          lines.push(`http_headers = ${tomlInlineTable(headers)}`);
         }
       }
       return lines.join("\n");
@@ -734,9 +1043,72 @@ export function buildMcpConfigPreview(
   servers: McpServerConfig[],
 ): string {
   if (target === "codex" || target === "custom-toml") {
-    return `${buildCodexMcpToml(servers)}\n`;
+    return `${buildCodexMcpToml(servers, { redactValues: true })}\n`;
   }
-  return `${JSON.stringify(buildMcpTargetJson(target, servers), null, 2)}\n`;
+  return `${JSON.stringify(
+    buildMcpTargetJson(target, servers, { redactValues: true }),
+    null,
+    2,
+  )}\n`;
+}
+
+/** Redact literal values from a target file before returning it to a caller. */
+export function redactMcpConfigContent(
+  target: McpTargetKind,
+  content: string,
+): string {
+  if (!content.trim()) return content;
+  if (target === "codex" || target === "custom-toml") {
+    return redactMcpTomlConfigContent(content, {
+      redactedValue: MCP_REDACTED_VALUE,
+      isReference: hasMcpEnvReference,
+    });
+  }
+
+  try {
+    const parsed = parseMcpJsonConfigContent(content);
+    return `${JSON.stringify(redactMcpJsonValue(parsed), null, 2)}\n`;
+  } catch {
+    return "[MCP content redacted]";
+  }
+}
+
+function redactMcpJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactMcpJsonValue);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
+      if (
+        key === "env" ||
+        key === "environment" ||
+        key === "headers" ||
+        key === "http_headers"
+      ) {
+        return [
+          key,
+          entry && typeof entry === "object" && !Array.isArray(entry)
+            ? Object.fromEntries(
+                Object.entries(entry as Record<string, unknown>).map(
+                  ([name, value]) => [
+                    name,
+                    typeof value === "string" &&
+                    getMcpEnvReferences(value).length > 0
+                      ? value
+                      : MCP_REDACTED_VALUE,
+                  ],
+                ),
+              )
+            : entry,
+        ];
+      }
+      return [key, redactMcpJsonValue(entry)];
+    }),
+  );
 }
 
 export function mergeMcpServersJson(

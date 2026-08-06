@@ -26,12 +26,17 @@ export function buildMcpEnvImportResult(
   const skippedKeys = Array.from(allowedKeys).filter(
     (key) => !Object.prototype.hasOwnProperty.call(parsedEnv, key),
   );
+  const nextEnvRefs = { ...(server.envRefs ?? {}) };
+  for (const key of importedKeys) {
+    delete nextEnvRefs[key];
+  }
   const nextServer = normalizeMcpServerDraft({
     ...server,
     env: {
       ...(server.env ?? {}),
       ...Object.fromEntries(importedEntries),
     },
+    envRefs: Object.keys(nextEnvRefs).length > 0 ? nextEnvRefs : undefined,
     updatedAt,
   });
   const missingKeys = inferMcpEnvRequirements(nextServer)

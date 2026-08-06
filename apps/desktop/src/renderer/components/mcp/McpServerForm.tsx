@@ -14,6 +14,7 @@ import type {
   McpServerDraft,
   McpTransport,
 } from "@prompthub/shared/types/mcp";
+import { MCP_REDACTED_VALUE } from "@prompthub/shared/utils/mcp-config";
 import {
   formToDraft,
   serverToForm,
@@ -72,7 +73,10 @@ function formatCommand(server: McpServerConfig): string {
 
 function formatRecord(record?: Record<string, string>): string {
   return Object.entries(record ?? {})
-    .map(([key, value]) => `${key}=${value}`)
+    .map(
+      ([key, value]) =>
+        `${key}=${value === MCP_REDACTED_VALUE ? "********" : value}`,
+    )
     .join("\n");
 }
 
@@ -320,9 +324,19 @@ export function McpServerForm({
                   value={formatRecord(selectedServer.env)}
                 />
                 <DetailItem
+                  label={t("mcp.envRefs", "Environment references")}
+                  multiline
+                  value={formatRecord(selectedServer.envRefs)}
+                />
+                <DetailItem
                   label={t("mcp.headers", "Headers")}
                   multiline
                   value={formatRecord(selectedServer.headers)}
+                />
+                <DetailItem
+                  label={t("mcp.headerRefs", "Header references")}
+                  multiline
+                  value={formatRecord(selectedServer.headerRefs)}
                 />
                 <DetailItem
                   label={t("mcp.createdAt", "Created")}
@@ -411,11 +425,18 @@ export function McpServerForm({
                   onChange={(event) => update({ args: event.target.value })}
                 />
               </Field>
-              <Field label={t("mcp.env", "Environment")}>
+              <Field label={t("mcp.envDirect", "Environment values")}>
                 <textarea
                   className={textAreaClass()}
                   value={form.env}
                   onChange={(event) => update({ env: event.target.value })}
+                />
+              </Field>
+              <Field label={t("mcp.envRefs", "Environment references")}>
+                <textarea
+                  className={textAreaClass()}
+                  value={form.envRefs}
+                  onChange={(event) => update({ envRefs: event.target.value })}
                 />
               </Field>
             </>
@@ -428,11 +449,20 @@ export function McpServerForm({
                   onChange={(event) => update({ url: event.target.value })}
                 />
               </Field>
-              <Field label={t("mcp.headers", "Headers")}>
+              <Field label={t("mcp.headersDirect", "Header values")}>
                 <textarea
                   className={textAreaClass()}
                   value={form.headers}
                   onChange={(event) => update({ headers: event.target.value })}
+                />
+              </Field>
+              <Field label={t("mcp.headerRefs", "Header references")}>
+                <textarea
+                  className={textAreaClass()}
+                  value={form.headerRefs}
+                  onChange={(event) =>
+                    update({ headerRefs: event.target.value })
+                  }
                 />
               </Field>
             </>

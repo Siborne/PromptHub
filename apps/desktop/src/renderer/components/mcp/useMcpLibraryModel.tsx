@@ -27,7 +27,7 @@ interface McpLibraryModelOptions {
 function useMcpServerDetails(options: McpLibraryModelOptions) {
   const { mcpStore } = options.bindings;
   const { detailServerId } = options.state;
-  const { visibleAgentTargetPresets, visibleTargetStatus } = options.targets;
+  const { visibleTargetPresets, visibleTargetStatus } = options.targets;
   const servers = useMemo(
     () => mcpStore.library?.servers ?? [],
     [mcpStore.library],
@@ -39,11 +39,11 @@ function useMcpServerDetails(options: McpLibraryModelOptions) {
   const selectedServerTargetCount = useMemo(
     () =>
       detailServer
-        ? visibleAgentTargetPresets.filter((preset) =>
+        ? visibleTargetPresets.filter((preset) =>
             isServerOnPreset(visibleTargetStatus, preset.id, detailServer.name),
           ).length
         : 0,
-    [detailServer, visibleAgentTargetPresets, visibleTargetStatus],
+    [detailServer, visibleTargetPresets, visibleTargetStatus],
   );
   const selectedServerHealth = useMemo(
     () =>
@@ -199,13 +199,13 @@ function useMcpDistributionModel(
   const serverDistributionById = useMemo(() => {
     const next = new Map<string, number>();
     for (const server of servers) {
-      const count = targets.visibleAgentTargetPresets.filter((preset) =>
+      const count = targets.visibleTargetPresets.filter((preset) =>
         isServerOnPreset(targets.visibleTargetStatus, preset.id, server.name),
       ).length;
       next.set(server.id, count);
     }
     return next;
-  }, [servers, targets.visibleAgentTargetPresets, targets.visibleTargetStatus]);
+  }, [servers, targets.visibleTargetPresets, targets.visibleTargetStatus]);
   const libraryCounts = useMemo(
     () => countMcpLibraryServers(servers, serverDistributionById),
     [serverDistributionById, servers],

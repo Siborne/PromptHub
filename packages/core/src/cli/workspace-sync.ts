@@ -28,6 +28,11 @@ import type {
   PromptVersion,
   SkillFileSnapshot,
 } from "@prompthub/shared/types";
+import type { McpLibraryFile } from "@prompthub/shared/types/mcp";
+import {
+  mergeMcpLibraryFromTransport,
+  redactMcpLibraryForTransport,
+} from "@prompthub/shared/utils/mcp-config";
 import { coreCliSkillService, type CliSkillService } from "./skill";
 
 const WORKSPACE_BUNDLE_KIND = "prompthub-cli-workspace";
@@ -226,8 +231,8 @@ function writeMediaDirectory(
 }
 
 function createAgentAssetFilesSnapshot(): AgentAssetFilesSnapshot | undefined {
-  const mcp = exportAgentAssetDirectorySnapshot(
-    path.dirname(getMcpLibraryFilePath()),
+  const mcp = redactMcpAssetFiles(
+    exportAgentAssetDirectorySnapshot(path.dirname(getMcpLibraryFilePath())),
   );
   const plugins = exportAgentAssetDirectorySnapshot(
     path.dirname(getPluginLibraryFilePath()),
@@ -236,6 +241,63 @@ function createAgentAssetFilesSnapshot(): AgentAssetFilesSnapshot | undefined {
   if (mcp.length > 0) snapshot.mcp = mcp;
   if (plugins.length > 0) snapshot.plugins = plugins;
   return Object.keys(snapshot).length > 0 ? snapshot : undefined;
+}
+
+function encodeMcpLibraryAssetSnapshot(
+  library: McpLibraryFile,
+  original: AgentAssetFileSnapshot,
+  redactValues = true,
+): AgentAssetFileSnapshot {
+  const content = Buffer.from(
+    `${JSON.stringify(
+      redactValues ? redactMcpLibraryForTransport(library) : library,
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return {
+    ...original,
+    contentBase64: content.toString("base64"),
+    size: content.length,
+  };
+}
+
+function redactMcpAssetFiles(
+  files: AgentAssetFileSnapshot[],
+): AgentAssetFileSnapshot[] {
+  return files.map((file) => {
+    if (file.relativePath !== "library.json") return file;
+    try {
+      const library = JSON.parse(
+        Buffer.from(file.contentBase64, "base64").toString("utf8"),
+      ) as McpLibraryFile;
+      return encodeMcpLibraryAssetSnapshot(library, file);
+    } catch {
+      return file;
+    }
+  });
+}
+
+function mergeMcpAssetFiles(
+  files: AgentAssetFileSnapshot[],
+  local: McpLibraryFile,
+): AgentAssetFileSnapshot[] {
+  return files.map((file) => {
+    if (file.relativePath !== "library.json") return file;
+    try {
+      const incoming = JSON.parse(
+        Buffer.from(file.contentBase64, "base64").toString("utf8"),
+      ) as McpLibraryFile;
+      return encodeMcpLibraryAssetSnapshot(
+        mergeMcpLibraryFromTransport(local, incoming),
+        file,
+        false,
+      );
+    } catch {
+      return file;
+    }
+  });
 }
 
 export function createCliWorkspaceSummary(
@@ -319,7 +381,9 @@ export async function createCliWorkspaceBundle(
     ...(skillFiles && { skillFiles }),
     ...(promptRelations.length > 0 && { promptRelations }),
     ...(outputFormatItems.length > 0 && { outputFormatItems }),
-    mcpLibrary: new CoreMcpLibraryService().read(),
+    mcpLibrary: redactMcpLibraryForTransport(
+      new CoreMcpLibraryService().read(),
+    ),
     pluginLibrary: pluginSnapshot.library,
     pluginPackages: pluginSnapshot.packages,
     agentAssetFiles: createAgentAssetFilesSnapshot(),
@@ -587,10 +651,11 @@ export async function restoreCliWorkspaceSnapshot(
     });
   }
 
+  const currentMcpLibrary = new CoreMcpLibraryService().read();
   if (snapshot.agentAssetFiles?.mcp) {
     restoreAgentAssetDirectorySnapshot(
       path.dirname(getMcpLibraryFilePath()),
-      snapshot.agentAssetFiles.mcp,
+      mergeMcpAssetFiles(snapshot.agentAssetFiles.mcp, currentMcpLibrary),
     );
   }
   if (snapshot.agentAssetFiles?.plugins) {
@@ -600,7 +665,9 @@ export async function restoreCliWorkspaceSnapshot(
     );
   }
   if (snapshot.mcpLibrary) {
-    new CoreMcpLibraryService().write(snapshot.mcpLibrary);
+    new CoreMcpLibraryService().write(
+      mergeMcpLibraryFromTransport(currentMcpLibrary, snapshot.mcpLibrary),
+    );
   }
   if (snapshot.pluginLibrary) {
     new CorePluginLibraryService().restoreSnapshot({

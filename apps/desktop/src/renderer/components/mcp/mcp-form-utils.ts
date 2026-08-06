@@ -15,8 +15,10 @@ export interface McpFormState {
   args: string;
   cwd: string;
   env: string;
+  envRefs: string;
   url: string;
   headers: string;
+  headerRefs: string;
   tags: string;
   enabled: boolean;
 }
@@ -30,8 +32,10 @@ export const emptyMcpForm: McpFormState = {
   args: "",
   cwd: "",
   env: "",
+  envRefs: "",
   url: "",
   headers: "",
+  headerRefs: "",
   tags: "",
   enabled: true,
 };
@@ -70,8 +74,10 @@ export function serverToForm(server: McpServerConfig | null): McpFormState {
     args: (server.args ?? []).join("\n"),
     cwd: server.cwd ?? "",
     env: recordToLines(server.env),
+    envRefs: recordToLines(server.envRefs),
     url: server.url ?? "",
     headers: recordToLines(server.headers),
+    headerRefs: recordToLines(server.headerRefs),
     tags: (server.tags ?? []).join(", "),
     enabled: server.enabled,
   };
@@ -87,8 +93,10 @@ export function formToDraft(form: McpFormState): McpServerDraft {
     args: form.args.split(/\r?\n/).filter(Boolean),
     cwd: form.cwd,
     env: linesToRecord(form.env),
+    envRefs: linesToRecord(form.envRefs),
     url: form.url,
     headers: linesToRecord(form.headers),
+    headerRefs: linesToRecord(form.headerRefs),
     tags: form.tags
       .split(",")
       .map((tag) => tag.trim())

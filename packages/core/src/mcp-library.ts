@@ -7,6 +7,10 @@ import {
 } from "@prompthub/shared/constants/mcp-market";
 import {
   isMcpTargetKind,
+  type McpServerConfig,
+} from "@prompthub/shared/types/mcp";
+import { MCP_REDACTED_VALUE } from "@prompthub/shared/utils/mcp-config";
+import {
   type McpEnvImportResult,
   type McpCreateFromSourceRequest,
   type McpCreateFromSourceResult,
@@ -23,7 +27,6 @@ import {
   type McpMarketUpdateResult,
   type McpRemoveResult,
   type McpRemoveTargetNames,
-  type McpServerConfig,
   type McpServerDraft,
   type McpTargetBinding,
   type McpTargetEntryDigest,
@@ -39,6 +42,7 @@ import {
   computeMcpTargetEntryDigest,
   getMcpTargetEntryObject,
   getMcpJsonServerEntries,
+  getMcpEnvReferences,
   inferMcpEnvRequirements,
   inferMcpPlaceholderRequirements,
   inferMcpRuntimeDetails,
@@ -49,6 +53,8 @@ import {
   mergeMcpServersJson,
   normalizeMcpServerDraft,
   parseMcpJsonConfigContent,
+  redactMcpConfigContent,
+  redactMcpServerConfig,
   removeCodexMcpTomlServers,
   removeMcpServersFromJson,
   sanitizeMcpServerName,
@@ -213,6 +219,21 @@ function assertUniqueName(
   if (duplicate) {
     throw new CoreMcpError("DUPLICATE_NAME", `MCP 服务名已存在: ${name}`);
   }
+}
+
+function restoreRedactedDraftValues(
+  local: Record<string, string> | undefined,
+  incoming: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (incoming === undefined) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(incoming).map(([key, value]) => [
+      key,
+      value === MCP_REDACTED_VALUE ? (local?.[key] ?? "") : value,
+    ]),
+  );
 }
 
 function selectServers(
@@ -569,8 +590,57 @@ function createHealthResult(server: McpServerConfig): McpHealthCheckResult {
     }
   }
 
+  const referenceDetails = new Map<string, { hasDefault: boolean }>();
+  const referenceValues = [
+    ...Object.values(server.env ?? {}),
+    ...Object.values(server.envRefs ?? {}),
+    ...(server.args ?? []),
+    ...(server.url ? [server.url] : []),
+    ...Object.values(server.headers ?? {}),
+    ...Object.values(server.headerRefs ?? {}),
+  ];
+  for (const value of referenceValues) {
+    for (const reference of getMcpEnvReferences(value)) {
+      const current = referenceDetails.get(reference.name);
+      referenceDetails.set(reference.name, {
+        hasDefault: (current?.hasDefault ?? false) || reference.hasDefault,
+      });
+    }
+  }
+
   for (const requirement of inferMcpEnvRequirements(server)) {
-    const value = server.env?.[requirement.name];
+    const reference = referenceDetails.get(requirement.name);
+    const directValue = server.env?.[requirement.name];
+    const hasMissingDirectValue =
+      Object.prototype.hasOwnProperty.call(
+        server.env ?? {},
+        requirement.name,
+      ) &&
+      (!directValue || /^<[^>]+>$/.test(directValue.trim()));
+    if (reference) {
+      if (hasMissingDirectValue) {
+        issues.push({
+          code: "MISSING_ENV",
+          severity: "error",
+          field: requirement.name,
+          message: `缺少环境变量: ${requirement.name}`,
+        });
+        continue;
+      }
+      const resolvedInCurrentProcess = Boolean(
+        process.env[requirement.name]?.trim(),
+      );
+      if (!reference.hasDefault && !resolvedInCurrentProcess) {
+        issues.push({
+          code: "UNRESOLVED_ENV_REFERENCE",
+          severity: "warning",
+          field: requirement.name,
+          message: `当前进程未设置环境变量引用: ${requirement.name}`,
+        });
+      }
+      continue;
+    }
+    const value = directValue;
     if (requirement.required && (!value || /^<[^>]+>$/.test(value.trim()))) {
       issues.push({
         code: "MISSING_ENV",
@@ -999,6 +1069,12 @@ export class CoreMcpLibraryService {
     const nextServer = normalizeMcpServerDraft({
       ...current,
       ...draft,
+      ...(draft.env !== undefined && {
+        env: restoreRedactedDraftValues(current.env, draft.env),
+      }),
+      ...(draft.headers !== undefined && {
+        headers: restoreRedactedDraftValues(current.headers, draft.headers),
+      }),
       id,
       createdAt: current.createdAt,
       updatedAt: nowMs(),
@@ -1228,7 +1304,9 @@ export class CoreMcpLibraryService {
       target: target.target,
       appliedServerNames: servers.map((server) => server.name),
       overwrittenServerNames,
-      content,
+      // The file on disk contains the explicitly selected literal values;
+      // callers only receive a redacted view.
+      content: redactMcpConfigContent(target.target, content),
     };
   }
 
@@ -1297,7 +1375,7 @@ export class CoreMcpLibraryService {
       backupPath,
       target: target.target,
       removedServerNames: serverNames,
-      content,
+      content: redactMcpConfigContent(target.target, content),
     };
   }
 
@@ -1371,7 +1449,7 @@ export class CoreMcpLibraryService {
       backupPath,
       target: target.target,
       removedServerNames: target.serverNames,
-      content,
+      content: redactMcpConfigContent(target.target, content),
     };
   }
 
@@ -1603,7 +1681,7 @@ export class CoreMcpLibraryService {
           exists: true,
           serverNames,
           servers: servers.map((server) => ({
-            ...server,
+            ...redactMcpServerConfig(server),
             source: { type: "import", id: preset.id, label: preset.label },
           })),
         };

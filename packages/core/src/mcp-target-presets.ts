@@ -21,10 +21,8 @@ export interface McpTargetPreset {
 
 /**
  * Global MCP config targets for every supported agent platform.
- * Workspace/project-level files are handled through the custom-path target
- * because a packaged desktop app has no meaningful working directory.
- * 各支持平台的全局 MCP 配置目标。项目级文件通过自定义路径目标处理，
- * 因为打包后的桌面应用没有有意义的工作目录。
+ * Project-level files are derived by the renderer from registered projects.
+ * 各支持平台的全局 MCP 配置目标。项目级文件由渲染端根据已登记项目推导。
  */
 export function getMcpTargetPresets(
   homeDir = os.homedir(),
@@ -116,6 +114,38 @@ export function getMcpTargetPresets(
       label: "Qwen Code",
       path: path.join(qwenHome, "settings.json"),
       platformId: "qwen",
+    },
+    {
+      id: "pi-shared",
+      target: "pi",
+      scope: "global",
+      label: "Pi (shared MCP)",
+      path: path.join(homeDir, ".config", "mcp", "mcp.json"),
+      platformId: "pi",
+    },
+    {
+      id: "pi-agents",
+      target: "pi",
+      scope: "global",
+      label: "Pi (.agents)",
+      path: path.join(homeDir, ".agents", "mcp.json"),
+      platformId: "pi",
+    },
+    {
+      id: "pi-agents-nested",
+      target: "pi",
+      scope: "global",
+      label: "Pi (.agents nested)",
+      path: path.join(homeDir, ".agents", "mcp", "mcp.json"),
+      platformId: "pi",
+    },
+    {
+      id: "pi",
+      target: "pi",
+      scope: "global",
+      label: "Pi",
+      path: path.join(homeDir, ".pi", "agent", "mcp.json"),
+      platformId: "pi",
     },
     {
       id: "oh-my-pi",

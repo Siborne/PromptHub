@@ -6,6 +6,7 @@ import type {
   RuleBackupRecord,
   StoreSourceSnapshot,
 } from "@prompthub/shared/types";
+import { redactMcpLibraryForTransport } from "@prompthub/shared/utils/mcp-config";
 import type {
   Skill,
   SkillFileSnapshot,
@@ -561,7 +562,7 @@ async function collectMcpLibrary(): Promise<DatabaseBackup["mcpLibrary"]> {
   if (!library) {
     return undefined;
   }
-  return library;
+  return redactMcpLibraryForTransport(library);
 }
 
 async function collectPluginSnapshot(): Promise<

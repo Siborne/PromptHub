@@ -37,6 +37,8 @@ function templateSignature(template: McpMarketTemplate) {
     url: template.url ?? "",
     envKeys: sortedKeys(template.env),
     headerKeys: sortedKeys(template.headers),
+    envRefKeys: sortedKeys(template.envRefs),
+    headerRefKeys: sortedKeys(template.headerRefs),
   };
 }
 
@@ -52,6 +54,8 @@ function serverSignature(server: McpServerConfig) {
     url: server.url ?? "",
     envKeys: sortedKeys(server.env),
     headerKeys: sortedKeys(server.headers),
+    envRefKeys: sortedKeys(server.envRefs),
+    headerRefKeys: sortedKeys(server.headerRefs),
   };
 }
 
@@ -157,7 +161,9 @@ export function applyMcpMarketTemplate(
     args: template.args,
     url: template.url,
     env: mergeSecretValues(template.env, server.env),
+    envRefs: mergeSecretValues(template.envRefs, server.envRefs),
     headers: mergeSecretValues(template.headers, server.headers),
+    headerRefs: mergeSecretValues(template.headerRefs, server.headerRefs),
     source: {
       ...server.source,
       type: "market",

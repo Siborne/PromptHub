@@ -34,7 +34,12 @@ import type {
   McpTargetSyncApplyResult,
   McpTargetSyncCheck,
 } from "@prompthub/shared/types/mcp";
-import { inferMcpEnvRequirements } from "@prompthub/shared/utils/mcp-config";
+import {
+  getMcpEnvReferences,
+  MCP_REDACTED_VALUE,
+  inferMcpEnvRequirements,
+  toMcpServerEntry,
+} from "@prompthub/shared/utils/mcp-config";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import {
   DETAIL_PAGE_CONTENT_CLASS,
@@ -114,7 +119,10 @@ function getRuntimeDetails(server: McpServerConfig): {
 
 function formatRecord(record?: Record<string, string>): string {
   return Object.entries(record ?? {})
-    .map(([key, value]) => `${key}=${value}`)
+    .map(
+      ([key, value]) =>
+        `${key}=${value === MCP_REDACTED_VALUE ? "********" : value}`,
+    )
     .join("\n");
 }
 
@@ -191,33 +199,12 @@ function getSourceSummary(
 }
 
 function buildMcpConfigContent(server: McpServerConfig): string {
-  const config =
-    server.transport === "stdio"
-      ? {
-          command: server.command ?? "",
-          args: server.args ?? [],
-          cwd: server.cwd || undefined,
-          env: server.env,
-        }
-      : {
-          type: server.transport,
-          url: server.url ?? "",
-          headers: server.headers,
-        };
-
   return JSON.stringify(
     {
       mcpServers: {
-        [server.name]: Object.fromEntries(
-          Object.entries(config).filter(
-            ([, value]) =>
-              value !== undefined &&
-              (!Array.isArray(value) || value.length > 0) &&
-              (typeof value !== "object" ||
-                value === null ||
-                Object.keys(value).length > 0),
-          ),
-        ),
+        [server.name]: toMcpServerEntry(server, "custom-json", {
+          redactValues: true,
+        }),
       },
     },
     null,
@@ -318,9 +305,27 @@ export function McpFullDetailPage({
   const sourceSummary = useMemo(() => getSourceSummary(server, t), [server, t]);
   const configContent = useMemo(() => buildMcpConfigContent(server), [server]);
   const runtimeDetails = useMemo(() => getRuntimeDetails(server), [server]);
+  const referencedEnvNames = useMemo(() => {
+    const values = [
+      ...Object.values(server.env ?? {}),
+      ...Object.values(server.envRefs ?? {}),
+      ...(server.args ?? []),
+      ...(server.url ? [server.url] : []),
+      ...Object.values(server.headers ?? {}),
+      ...Object.values(server.headerRefs ?? {}),
+    ];
+    return new Set(
+      values.flatMap((value) =>
+        getMcpEnvReferences(value).map((reference) => reference.name),
+      ),
+    );
+  }, [server]);
   const envRequirements = useMemo(
-    () => inferMcpEnvRequirements(server),
-    [server],
+    () =>
+      inferMcpEnvRequirements(server).filter(
+        (requirement) => !referencedEnvNames.has(requirement.name),
+      ),
+    [referencedEnvNames, server],
   );
   const envIssueByField = useMemo(
     () =>
@@ -952,9 +957,19 @@ export function McpFullDetailPage({
                       value={formatRecord(server.env)}
                     />
                     <DetailItem
+                      label={t("mcp.envRefs", "Environment references")}
+                      multiline
+                      value={formatRecord(server.envRefs)}
+                    />
+                    <DetailItem
                       label={t("mcp.headers", "Headers")}
                       multiline
                       value={formatRecord(server.headers)}
+                    />
+                    <DetailItem
+                      label={t("mcp.headerRefs", "Header references")}
+                      multiline
+                      value={formatRecord(server.headerRefs)}
                     />
                     <DetailItem
                       label={t("mcp.createdAt", "Created")}

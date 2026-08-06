@@ -17,7 +17,7 @@ function McpDetailRoute({ model }: McpManagerRouteProps) {
       healthCheck={model.selectedServerHealth}
       distributedTargetCount={model.selectedServerTargetCount}
       targetSyncChecks={model.selectedServerTargetSyncChecks}
-      targetPresets={model.visibleAgentTargetPresets}
+      targetPresets={model.visibleTargetPresets}
       targetStatus={model.visibleTargetStatus}
       onApply={(presets) =>
         model.handleApplyPresets(presets, [model.detailServer!.id])
@@ -138,7 +138,7 @@ function getMcpLibraryDataProps(model: McpManagerViewModel) {
     servers: model.servers,
     sourceFilterOptions: model.sourceFilterOptions,
     t: model.t,
-    targetPresets: model.visibleAgentTargetPresets,
+    targetPresets: model.visibleTargetPresets,
     targetStatus: model.visibleTargetStatus,
     totalPages: model.totalPages,
     viewMode: model.viewMode,

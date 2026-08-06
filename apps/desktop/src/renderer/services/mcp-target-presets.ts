@@ -109,6 +109,22 @@ export function deriveProjectMcpTargetPresets(
         path: joinProjectPath(rootPath, ".omp/mcp.json"),
         platformId: "oh-my-pi",
       },
+      {
+        id: `project:${project.id}:pi-shared`,
+        target: "pi",
+        scope: "workspace",
+        label: `${project.name} / Pi (shared)`,
+        path: joinProjectPath(rootPath, ".mcp.json"),
+        platformId: "pi",
+      },
+      {
+        id: `project:${project.id}:pi`,
+        target: "pi",
+        scope: "workspace",
+        label: `${project.name} / Pi`,
+        path: joinProjectPath(rootPath, ".pi/mcp.json"),
+        platformId: "pi",
+      },
     ];
   });
 }
