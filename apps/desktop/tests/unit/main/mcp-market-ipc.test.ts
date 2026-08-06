@@ -27,12 +27,14 @@ vi.mock("../../../src/main/services/skill-installer", () => ({
 
 type IpcHandler = (...args: unknown[]) => Promise<unknown>;
 
-async function setupHandlers(): Promise<Record<string, IpcHandler>> {
+async function setupHandlers(
+  service: unknown = {},
+): Promise<Record<string, IpcHandler>> {
   const [{ registerMcpIPC }, { IPC_CHANNELS }] = await Promise.all([
     import("../../../src/main/ipc/mcp.ipc"),
     import("@prompthub/shared/constants/ipc-channels"),
   ]);
-  registerMcpIPC({} as never);
+  registerMcpIPC(service as never);
   return Object.fromEntries(
     mocks.handle.mock.calls.map(([channel, handler]) => [channel, handler]),
   ) as Record<string, IpcHandler> & { IPC_CHANNELS?: typeof IPC_CHANNELS };
@@ -94,5 +96,40 @@ describe("MCP market IPC", () => {
     ).rejects.toThrow(/non-empty url/i);
     expect(mocks.authorize).not.toHaveBeenCalled();
     expect(mocks.fetchRemoteContent).not.toHaveBeenCalled();
+  });
+
+  it("redacts MCP library values at the IPC transport boundary", async () => {
+    const service = {
+      read: vi.fn(() => ({
+        kind: "prompthub-mcp-library",
+        version: 1,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        servers: [
+          {
+            id: "mcp-private",
+            name: "private",
+            displayName: "Private",
+            transport: "stdio",
+            command: "node",
+            env: { API_TOKEN: "ipc-secret" },
+            enabled: true,
+            source: { type: "manual" },
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+        bindings: [],
+      })),
+    };
+    const handlers = await setupHandlers(service);
+    const { IPC_CHANNELS } =
+      await import("@prompthub/shared/constants/ipc-channels");
+
+    const library = await handlers[IPC_CHANNELS.MCP_LIBRARY_GET](null);
+
+    expect(JSON.stringify(library)).not.toContain("ipc-secret");
+    expect((library as any).servers[0].env).toEqual({
+      API_TOKEN: "[REDACTED]",
+    });
   });
 });

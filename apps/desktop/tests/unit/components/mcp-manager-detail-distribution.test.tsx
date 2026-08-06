@@ -761,6 +761,69 @@ describe("McpManager", () => {
     });
   });
 
+  it("counts and applies a project target from My MCP", async () => {
+    const user = userEvent.setup();
+    const projectTarget = {
+      presetId: "project:project_docs:pi-shared",
+      path: "/workspace/docs/.mcp.json",
+      exists: true,
+      serverNames: ["filesystem"],
+    };
+    const projectNativeTarget = {
+      presetId: "project:project_docs:pi",
+      path: "/workspace/docs/.pi/mcp.json",
+      exists: false,
+      serverNames: [],
+    };
+    const { api } = installMcpMocks({
+      targetStatus: [projectTarget, projectNativeTarget],
+    });
+    useSettingsStore.setState({
+      skillProjects: [
+        {
+          id: "project_docs",
+          name: "Docs",
+          rootPath: "/workspace/docs",
+          scanPaths: [],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<McpManager />, { language: "en" });
+    });
+
+    const detailPage = await openFilesystemDetail(user);
+    await waitFor(() => {
+      expect(
+        within(detailPage).getAllByText("1 target(s) distributed").length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(detailPage).getByText("Docs / Pi (shared)"),
+      ).toBeInTheDocument();
+    });
+
+    await user.click(
+      within(detailPage).getByRole("button", { name: "Docs / Pi" }),
+    );
+    await user.click(
+      within(detailPage).getByRole("button", {
+        name: "Apply to 1 platform(s)",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(api.mcp.apply).toHaveBeenCalledWith({
+        target: "pi",
+        scope: "workspace",
+        path: "/workspace/docs/.pi/mcp.json",
+        serverIds: ["mcp_filesystem"],
+      });
+    });
+  });
+
   it("selects an MCP distribution target when clicking the whole platform card", async () => {
     const user = userEvent.setup();
     const { api } = installMcpMocks();

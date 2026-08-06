@@ -23,4 +23,21 @@ describe("Oh My Pi MCP target", () => {
     expect(MCP_JSON_TARGETS).toContain("oh-my-pi");
     expect(getMcpServersJsonKey("oh-my-pi")).toBe("mcpServers");
   });
+
+  it("exposes Pi adapter global paths without conflating them with Oh My Pi", () => {
+    const presets = getMcpTargetPresets("/Users/test", "darwin", {});
+
+    expect(
+      presets
+        .filter((preset) => preset.target === "pi")
+        .map((preset) => [preset.id, preset.path]),
+    ).toEqual([
+      ["pi-shared", "/Users/test/.config/mcp/mcp.json"],
+      ["pi-agents", "/Users/test/.agents/mcp.json"],
+      ["pi-agents-nested", "/Users/test/.agents/mcp/mcp.json"],
+      ["pi", "/Users/test/.pi/agent/mcp.json"],
+    ]);
+    expect(getMcpServersJsonKey("pi")).toBe("mcpServers");
+    expect(MCP_JSON_TARGETS).toContain("pi");
+  });
 });

@@ -101,6 +101,22 @@ describe("mcp target presets", () => {
         path: "/workspace/docs/.omp/mcp.json",
         platformId: "oh-my-pi",
       },
+      {
+        id: "project:project_docs:pi-shared",
+        target: "pi",
+        scope: "workspace",
+        label: "Docs / Pi (shared)",
+        path: "/workspace/docs/.mcp.json",
+        platformId: "pi",
+      },
+      {
+        id: "project:project_docs:pi",
+        target: "pi",
+        scope: "workspace",
+        label: "Docs / Pi",
+        path: "/workspace/docs/.pi/mcp.json",
+        platformId: "pi",
+      },
     ]);
   });
 

@@ -66,4 +66,22 @@ describe("MCP env import", () => {
     expect(absentEnv.skippedKeys).toEqual(["MISSING"]);
     expect(placeholder.missingKeys).toEqual(["API_KEY"]);
   });
+
+  it("converts an imported value from a reference to a local literal", () => {
+    const result = buildMcpEnvImportResult(
+      {
+        ...server,
+        env: undefined,
+        envRefs: { API_KEY: "${API_KEY}" },
+      },
+      "API_KEY=imported-secret\n",
+      undefined,
+      5,
+    );
+
+    expect(result.importedKeys).toEqual(["API_KEY"]);
+    expect(result.server.env).toEqual({ API_KEY: "imported-secret" });
+    expect(result.server.envRefs).toBeUndefined();
+    expect(result.missingKeys).toEqual([]);
+  });
 });

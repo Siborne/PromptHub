@@ -11,6 +11,7 @@ import {
   inferMcpEnvRequirements,
   inferMcpPlaceholderRequirements,
   inferMcpRuntimeDetails,
+  getMcpEnvReferenceSyntax,
   MCP_TARGET_ENTRY_DIGEST_ALGORITHM,
   listMcpServerNamesInJson,
   listMcpServerNamesInToml,
@@ -19,6 +20,9 @@ import {
   normalizeMcpServerDraft,
   parseMcpJsonConfigContent,
   parseMcpDotEnv,
+  redactMcpLibraryForTransport,
+  redactMcpConfigContent,
+  mergeMcpLibraryFromTransport,
   removeCodexMcpTomlServers,
   removeMcpServersFromJson,
   toOpenCodeMcpEntry,
@@ -55,6 +59,171 @@ describe("mcp-config", () => {
     expect(() =>
       normalizeMcpServerDraft({ name: "bad", transport: "stdio" }),
     ).toThrow(/command/);
+  });
+
+  it("normalizes legacy environment reference syntax into additive reference maps", () => {
+    const normalized = normalizeMcpServerDraft({
+      name: "remote",
+      transport: "streamable-http",
+      url: "https://example.test/mcp",
+      env: {
+        API_TOKEN: "${env:API_TOKEN}",
+        HOME_DIR: "$HOME_DIR",
+        PI_TOKEN: "$env:PI_TOKEN",
+        LITERAL: "keep-me",
+      },
+      headers: {
+        Authorization: "Bearer ${TOKEN}",
+        "X-Trace": "${TRACE_ID:-local}",
+      },
+    });
+
+    expect(normalized.env).toEqual({ LITERAL: "keep-me" });
+    expect(normalized.headers).toBeUndefined();
+    expect(normalized.envRefs).toEqual({
+      API_TOKEN: "${API_TOKEN}",
+      HOME_DIR: "${HOME_DIR}",
+      PI_TOKEN: "${PI_TOKEN}",
+    });
+    expect(normalized.headerRefs).toEqual({
+      Authorization: "Bearer ${TOKEN}",
+      "X-Trace": "${TRACE_ID:-local}",
+    });
+  });
+
+  it("renders reference syntax per target without resolving secret values", () => {
+    const server = normalizeMcpServerDraft({
+      name: "remote",
+      transport: "streamable-http",
+      url: "https://example.test/mcp",
+      headerRefs: { Authorization: "Bearer ${TOKEN}" },
+    });
+
+    expect(getMcpEnvReferenceSyntax("cursor")).toBe("env-prefix");
+    expect(getMcpEnvReferenceSyntax("claude")).toBe("braced");
+    expect(buildMcpTargetJson("cursor", [server])).toMatchObject({
+      mcpServers: {
+        remote: { headers: { Authorization: "Bearer ${env:TOKEN}" } },
+      },
+    });
+    expect(buildMcpTargetJson("claude", [server])).toMatchObject({
+      mcpServers: {
+        remote: { headers: { Authorization: "Bearer ${TOKEN}" } },
+      },
+    });
+    expect(buildMcpTargetJson("claude", [server])).not.toContain(
+      "example-secret",
+    );
+    expect(() =>
+      buildMcpTargetJson("cursor", [
+        normalizeMcpServerDraft({
+          name: "with-default",
+          transport: "streamable-http",
+          url: "https://example.test/mcp",
+          headerRefs: { Authorization: "Bearer ${TOKEN:-fallback}" },
+        }),
+      ]),
+    ).toThrow(/不支持带默认值/);
+    expect(
+      redactMcpConfigContent(
+        "claude",
+        JSON.stringify({
+          mcpServers: {
+            remote: {
+              headers: { Authorization: "Bearer ${TOKEN}" },
+            },
+          },
+        }),
+      ),
+    ).toContain("Bearer ${TOKEN}");
+  });
+
+  it("redacts direct values in transport snapshots and preserves local values on restore", () => {
+    const local = {
+      kind: "prompthub-mcp-library" as const,
+      version: 1 as const,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      servers: [
+        {
+          ...baseServer,
+          env: { API_TOKEN: "local-secret" },
+          headers: { Authorization: "Bearer local-secret" },
+        },
+      ],
+      bindings: [],
+    };
+    const exported = redactMcpLibraryForTransport(local);
+    expect(JSON.stringify(exported)).not.toContain("local-secret");
+    expect(exported.servers[0].env).toEqual({ API_TOKEN: "[REDACTED]" });
+    expect(exported.servers[0].headers).toEqual({
+      Authorization: "[REDACTED]",
+    });
+
+    const restored = mergeMcpLibraryFromTransport(local, exported);
+    expect(restored.servers[0].env).toEqual({ API_TOKEN: "local-secret" });
+    expect(restored.servers[0].headers).toEqual({
+      Authorization: "Bearer local-secret",
+    });
+  });
+
+  it("keeps legacy references visible while redacting legacy literals", () => {
+    const legacy: McpServerConfig = {
+      ...baseServer,
+      env: {
+        API_TOKEN: "${API_TOKEN}",
+        LOCAL_TOKEN: "local-secret",
+      },
+      headers: {
+        Authorization: "Bearer ${API_TOKEN}",
+        "X-Local": "local-secret",
+      },
+    };
+
+    const redacted = redactMcpLibraryForTransport({
+      kind: "prompthub-mcp-library",
+      version: 1,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      servers: [legacy],
+      bindings: [],
+    });
+
+    expect(redacted.servers[0].env).toEqual({
+      API_TOKEN: "${API_TOKEN}",
+      LOCAL_TOKEN: "[REDACTED]",
+    });
+    expect(redacted.servers[0].headers).toEqual({
+      Authorization: "Bearer ${API_TOKEN}",
+      "X-Local": "[REDACTED]",
+    });
+    expect(
+      buildMcpTargetJson("cursor", [legacy], { redactValues: true }),
+    ).toEqual({
+      mcpServers: {
+        playwright: {
+          command: "npx",
+          args: ["@playwright/mcp@latest", "--headless"],
+          env: {
+            API_TOKEN: "${env:API_TOKEN}",
+            LOCAL_TOKEN: "[REDACTED]",
+          },
+        },
+      },
+    });
+  });
+
+  it("redacts TOML values without redacting quoted map keys", () => {
+    const content = [
+      "[mcp_servers.playwright]",
+      'env = { "API-TOKEN" = "local-secret", MODE = "${MODE}" }',
+      'http_headers = { "X-Trace-Id" = "trace-secret" }',
+    ].join("\\n");
+
+    const redacted = redactMcpConfigContent("codex", content);
+
+    expect(redacted).toContain('"API-TOKEN" = "[REDACTED]"');
+    expect(redacted).toContain('MODE = "${MODE}"');
+    expect(redacted).toContain('"X-Trace-Id" = "[REDACTED]"');
+    expect(redacted).not.toContain('"[REDACTED]" =');
   });
 
   it("projects generic and VS Code MCP JSON with different root keys", () => {
@@ -153,6 +322,7 @@ describe("mcp-config", () => {
     expect(getMcpServersJsonKey("kiro")).toBe("mcpServers");
     expect(getMcpServersJsonKey("workbuddy")).toBe("mcpServers");
     expect(getMcpServersJsonKey("codebuddy")).toBe("mcpServers");
+    expect(getMcpServersJsonKey("pi")).toBe("mcpServers");
     expect(getMcpServersJsonKey("claude-desktop")).toBe("mcpServers");
     expect(getMcpServersJsonKey("vscode")).toBe("servers");
     expect(getMcpServersJsonKey("opencode")).toBe("mcp");
