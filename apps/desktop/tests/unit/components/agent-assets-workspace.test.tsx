@@ -486,6 +486,7 @@ describe("AgentAssetsWorkspace", () => {
     );
 
     const readAnatomy = (card: HTMLElement) => ({
+      cardClass: card.className,
       contentClass: within(card).getByTestId("agent-asset-card-content")
         .className,
       avatarClass: within(card).getByTestId("agent-asset-card-avatar")
@@ -504,6 +505,14 @@ describe("AgentAssetsWorkspace", () => {
 
     const skillCard = screen.getAllByTestId("agent-skill-asset-card")[0];
     const skillAnatomy = readAnatomy(skillCard);
+    expect(skillCard).toHaveClass("h-[232px]");
+    expect(skillAnatomy.contentClass).toContain("h-full");
+    expect(skillAnatomy.titleClass).toContain("h-6");
+    expect(skillAnatomy.titleClass).toContain("overflow-hidden");
+    expect(skillAnatomy.descriptionClass).toContain("h-10");
+    expect(skillAnatomy.sourceClass).toContain("h-4");
+    expect(skillAnatomy.metadataClass).toContain("h-10");
+    expect(skillAnatomy.metadataClass).toContain("overflow-hidden");
     expect(
       within(skillCard).getByTestId("agent-skill-asset-icon"),
     ).toBeVisible();
@@ -739,6 +748,140 @@ describe("AgentAssetsWorkspace", () => {
         "plugin-distributed",
         ["claude"],
       );
+    });
+  });
+
+  it("offers confirmed removal on a target card backed by a managed distribution", async () => {
+    const removePluginDistribution = vi.fn().mockResolvedValue(undefined);
+    const managedPlugin: PluginLibraryEntry = {
+      id: "plugin-formatter-managed",
+      name: "formatter",
+      displayName: "Formatter",
+      description: "Managed Formatter Plugin",
+      trustLevel: "custom",
+      inventory: {
+        skills: 0,
+        mcpServers: 0,
+        apps: 0,
+        commands: 0,
+        hooks: 0,
+        agents: 0,
+        assets: 0,
+        docs: 0,
+        lspServers: 0,
+        scripts: 0,
+      },
+      classification: "bundle",
+      source: {
+        kind: "local",
+        localPackagePath: "/Users/demo/formatter",
+      },
+      distributedTargetIds: ["claude"],
+      installedAt: 1,
+      updatedAt: 1,
+    };
+    usePluginStore.setState({
+      library: {
+        kind: "prompthub-plugin-library",
+        version: 1,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        plugins: [managedPlugin],
+      },
+      removePluginDistribution,
+    });
+
+    await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
+    );
+
+    const targetCard = screen.getByTestId("agent-plugin-target-card");
+    fireEvent.click(
+      within(targetCard).getByRole("button", {
+        name: /remove formatter from claude code/i,
+      }),
+    );
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Remove Plugin from Agent",
+    });
+    expect(removePluginDistribution).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Remove from Agent" }),
+    );
+    await waitFor(() => {
+      expect(removePluginDistribution).toHaveBeenCalledWith(
+        "plugin-formatter-managed",
+        ["claude"],
+      );
+    });
+  });
+
+  it("confirms deleting a managed Plugin and does not invent deletion for an external target", async () => {
+    const deletePlugin = vi.fn().mockResolvedValue(undefined);
+    const managedPlugin: PluginLibraryEntry = {
+      id: "plugin-local",
+      name: "local-plugin",
+      displayName: "Local Plugin",
+      description: "A locally managed Plugin",
+      trustLevel: "custom",
+      inventory: {
+        skills: 0,
+        mcpServers: 0,
+        apps: 0,
+        commands: 0,
+        hooks: 0,
+        agents: 0,
+        assets: 0,
+        docs: 0,
+        lspServers: 0,
+        scripts: 0,
+      },
+      classification: "bundle",
+      source: {
+        kind: "local",
+        localPackagePath: "/Users/demo/local-plugin",
+      },
+      installedAt: 1,
+      updatedAt: 1,
+    };
+    usePluginStore.setState({
+      library: {
+        kind: "prompthub-plugin-library",
+        version: 1,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        plugins: [managedPlugin],
+      },
+      deletePlugin,
+    });
+
+    await renderWithI18n(
+      <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
+    );
+
+    const targetCard = screen.getByTestId("agent-plugin-target-card");
+    expect(
+      within(targetCard).queryByRole("button", { name: /delete/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(targetCard).queryByRole("button", { name: /remove .* from/i }),
+    ).not.toBeInTheDocument();
+
+    const libraryCard = screen.getByTestId("agent-plugin-library-card");
+    fireEvent.click(
+      within(libraryCard).getByRole("button", { name: "Delete Plugin" }),
+    );
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Delete Plugin",
+    });
+    expect(deletePlugin).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => {
+      expect(deletePlugin).toHaveBeenCalledWith("plugin-local", {
+        removeDistributedTargets: true,
+      });
     });
   });
 

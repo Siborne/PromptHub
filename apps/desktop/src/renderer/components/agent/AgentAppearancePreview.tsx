@@ -9,6 +9,7 @@ interface AgentAppearancePreviewProps {
   kind: "theme" | "pet";
   alt: string;
   spriteVersionNumber?: 1 | 2;
+  className?: string;
 }
 
 function usePrefersReducedMotion(): boolean {
@@ -72,6 +73,7 @@ export function AgentAppearancePreview({
   kind,
   alt,
   spriteVersionNumber = 1,
+  className = "",
 }: AgentAppearancePreviewProps) {
   const [src, setSrc] = useState<string | null>(null);
 
@@ -95,7 +97,7 @@ export function AgentAppearancePreview({
 
   return (
     <div
-      className={`flex items-center justify-center overflow-hidden border-b border-border/70 bg-muted/30 ${kind === "pet" ? "aspect-[4/3]" : "aspect-[16/9]"}`}
+      className={`flex items-center justify-center overflow-hidden border-b border-border/70 bg-muted/30 ${kind === "pet" ? "aspect-[4/3]" : "aspect-[16/9]"} ${className}`}
     >
       {src ? (
         kind === "pet" ? (

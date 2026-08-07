@@ -3,6 +3,7 @@ import path from "node:path";
 
 import type {
   AgentSessionDetail,
+  AgentSessionDetailPageInput,
   AgentSessionEntry,
   AgentSessionListResult,
   AgentSessionMetadata,
@@ -11,8 +12,6 @@ import {
   boundedSessionText,
   isSafeSessionId,
   isSessionRecord,
-  MAX_SESSION_DETAIL_BYTES,
-  parseVisibleJsonLines,
   readSessionPrefix,
   safeSessionFile,
   scanSessionFiles,
@@ -22,6 +21,17 @@ import {
 
 const MAX_HEADER_BYTES = 16 * 1024;
 const MAX_METADATA_BYTES = 256 * 1024;
+const DEFAULT_DETAIL_PAGE_SIZE = 80;
+const MAX_DETAIL_PAGE_SIZE = 200;
+const READ_CHUNK_BYTES = 64 * 1024;
+const MAX_PAGE_SCAN_BYTES = 16 * 1024 * 1024;
+const MAX_JSONL_LINE_BYTES = 8 * 1024 * 1024;
+
+interface PiFamilyDetailCursor {
+  v: 1;
+  offset: number;
+  inode: string;
+}
 
 interface PiFamilySessionAdapterOptions {
   agentId: "pi" | "oh-my-pi";
@@ -84,6 +94,47 @@ function visiblePiFamilyEntry(
     timestamp: sessionTimestamp(message.timestamp ?? value.timestamp),
     text,
   };
+}
+
+function encodeDetailCursor(offset: number, inode: string): string {
+  const cursor: PiFamilyDetailCursor = { v: 1, offset, inode };
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeDetailCursor(
+  cursor: string | undefined,
+  inode: string,
+  fileSize: number,
+): number {
+  if (!cursor) return 0;
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+  } catch {
+    throw new Error("AGENT_SESSION_CURSOR_INVALID");
+  }
+  if (
+    !isSessionRecord(value) ||
+    value.v !== 1 ||
+    typeof value.offset !== "number" ||
+    !Number.isSafeInteger(value.offset) ||
+    value.offset < 0 ||
+    typeof value.inode !== "string"
+  ) {
+    throw new Error("AGENT_SESSION_CURSOR_INVALID");
+  }
+  if (value.inode !== inode || value.offset > fileSize) {
+    throw new Error("AGENT_SESSION_CURSOR_STALE");
+  }
+  return value.offset;
+}
+
+function detailPageSize(input: AgentSessionDetailPageInput): number {
+  const limit = input.limit ?? DEFAULT_DETAIL_PAGE_SIZE;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_DETAIL_PAGE_SIZE) {
+    throw new Error("AGENT_SESSION_DETAIL_REQUEST_INVALID");
+  }
+  return limit;
 }
 
 function parseJsonLine(line: string): Record<string, unknown> | null {
@@ -209,6 +260,74 @@ async function readMetadata(
   };
 }
 
+async function readDetailPage(
+  filePath: string,
+  input: AgentSessionDetailPageInput,
+): Promise<Pick<AgentSessionDetail, "entries" | "parseErrors" | "nextCursor">> {
+  const handle = await fs.open(filePath, "r");
+  try {
+    const stat = await handle.stat();
+    const inode = String(stat.ino);
+    const startOffset = decodeDetailCursor(input.cursor, inode, stat.size);
+    const limit = detailPageSize(input);
+    let readOffset = startOffset;
+    let lineOffset = startOffset;
+    let pending = Buffer.alloc(0);
+    let parseErrors = 0;
+    const entries: AgentSessionEntry[] = [];
+
+    const consumeLine = (line: Buffer, nextOffset: number): string | null => {
+      const value = parseJsonLine(line.toString("utf8"));
+      if (!value && line.toString("utf8").trim()) parseErrors += 1;
+      const entry = value ? visiblePiFamilyEntry(value, lineOffset) : null;
+      if (entry) entries.push(entry);
+      lineOffset = nextOffset;
+      return entries.length >= limit && nextOffset < stat.size
+        ? encodeDetailCursor(nextOffset, inode)
+        : null;
+    };
+
+    while (readOffset < stat.size) {
+      const size = Math.min(READ_CHUNK_BYTES, stat.size - readOffset);
+      const chunk = Buffer.allocUnsafe(size);
+      const { bytesRead } = await handle.read(chunk, 0, size, readOffset);
+      if (bytesRead === 0) break;
+      readOffset += bytesRead;
+      pending = Buffer.concat([pending, chunk.subarray(0, bytesRead)]);
+      if (pending.length > MAX_JSONL_LINE_BYTES) {
+        throw new Error("AGENT_SESSION_LINE_TOO_LARGE");
+      }
+      let newline = pending.indexOf(0x0a);
+      while (newline >= 0) {
+        const nextOffset = lineOffset + newline + 1;
+        const nextCursor = consumeLine(
+          pending.subarray(0, newline),
+          nextOffset,
+        );
+        pending = pending.subarray(newline + 1);
+        if (nextCursor) return { entries, parseErrors, nextCursor };
+        newline = pending.indexOf(0x0a);
+      }
+      if (
+        readOffset - startOffset >= MAX_PAGE_SCAN_BYTES &&
+        lineOffset > startOffset
+      ) {
+        return {
+          entries,
+          parseErrors,
+          nextCursor: encodeDetailCursor(lineOffset, inode),
+        };
+      }
+    }
+    if (pending.length > 0 && entries.length < limit) {
+      consumeLine(pending, stat.size);
+    }
+    return { entries, parseErrors, nextCursor: null };
+  } finally {
+    await handle.close();
+  }
+}
+
 function createPiFamilySessionAdapter(
   rootPath: string,
   options: PiFamilySessionAdapterOptions,
@@ -230,25 +349,25 @@ function createPiFamilySessionAdapter(
         hasMore: candidates.length > offset + limit,
       };
     },
-    async read(sessionId: string): Promise<AgentSessionDetail> {
+    async read(
+      sessionId: string,
+      input: AgentSessionDetailPageInput = {},
+    ): Promise<AgentSessionDetail> {
       const candidate = (await scanPiFamilySessions(sessionsRoot)).find(
         (item) => item.id === sessionId,
       );
       if (!candidate) throw new Error("AGENT_SESSION_NOT_FOUND");
       const transcript = await safeSessionFile(sessionsRoot, candidate.path);
       if (!transcript) throw new Error("AGENT_SESSION_NOT_FOUND");
-      const { raw, truncated } = await readSessionPrefix(
-        transcript,
-        MAX_SESSION_DETAIL_BYTES,
-      );
-      const parsed = parseVisibleJsonLines(raw, visiblePiFamilyEntry);
+      const page = await readDetailPage(transcript, input);
       return {
         agentId: options.agentId,
         adapter: options.adapter,
         sessionId,
-        entries: parsed.entries,
-        parseErrors: parsed.parseErrors,
-        truncated,
+        entries: page.entries,
+        parseErrors: page.parseErrors,
+        truncated: false,
+        nextCursor: page.nextCursor,
       };
     },
   };

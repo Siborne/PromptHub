@@ -773,7 +773,7 @@ describe("Agent workspace shell", () => {
     );
   });
 
-  it("enables the shared Appearance tab for Codex skins and Pets", async () => {
+  it("keeps skins and Pets in focused Appearance workspaces", async () => {
     const codexAgent = {
       ...agents[0],
       id: "codex",
@@ -789,42 +789,47 @@ describe("Agent workspace shell", () => {
       },
     };
     useAgentStore.setState({ agents: [codexAgent], selectedAgentId: "codex" });
+    const getAppearance = vi.fn().mockResolvedValue({
+      agentId: "codex",
+      supported: true,
+      engineVersion: "1.2.0",
+      adapterLastVerifiedVersion: "26.707.72221",
+      activeThemeId: "midnight",
+      themeDirectoryPath: "/tmp/themes",
+      petDirectoryPath: "/tmp/pets",
+      invalidThemeCount: 0,
+      invalidPetCount: 0,
+      themes: [
+        {
+          id: "midnight",
+          name: "Midnight",
+          version: "1",
+          directoryPath: "/tmp/themes/midnight",
+          compatibleTarget: true,
+          lintWarningCount: 0,
+        },
+      ],
+      pets: [
+        {
+          id: "orbit",
+          name: "Orbit",
+          description: "Tiny astronaut",
+          directoryPath: "/tmp/pets/orbit",
+          spritesheetName: "spritesheet.webp",
+          spritesheetBytes: 1024,
+        },
+      ],
+    });
+    const importAppearanceTheme = vi.fn().mockResolvedValue(null);
+    const importAgentPet = vi.fn().mockResolvedValue(null);
     installWindowMocks({
       api: {
         agent: {
-          getAppearance: vi.fn().mockResolvedValue({
-            agentId: "codex",
-            supported: true,
-            engineVersion: "1.2.0",
-            adapterLastVerifiedVersion: "26.707.72221",
-            activeThemeId: "midnight",
-            themeDirectoryPath: "/tmp/themes",
-            petDirectoryPath: "/tmp/pets",
-            invalidThemeCount: 0,
-            invalidPetCount: 0,
-            themes: [
-              {
-                id: "midnight",
-                name: "Midnight",
-                version: "1",
-                directoryPath: "/tmp/themes/midnight",
-                compatibleTarget: true,
-                lintWarningCount: 0,
-              },
-            ],
-            pets: [
-              {
-                id: "orbit",
-                name: "Orbit",
-                description: "Tiny astronaut",
-                directoryPath: "/tmp/pets/orbit",
-                spritesheetName: "spritesheet.webp",
-                spritesheetBytes: 1024,
-              },
-            ],
-          }),
+          getAppearance,
           getAppearanceThemePreview: vi.fn().mockResolvedValue(null),
           getAgentPetPreview: vi.fn().mockResolvedValue(null),
+          importAppearanceTheme,
+          importAgentPet,
         },
       },
     });
@@ -837,12 +842,57 @@ describe("Agent workspace shell", () => {
     expect(
       await screen.findByRole("heading", { name: /codex appearance/i }),
     ).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: /desktop skins/i }),
-    ).toBeVisible();
-    expect(screen.getByRole("heading", { name: /^pets$/i })).toBeVisible();
+    const skinsButton = screen.getByRole("button", {
+      name: /desktop skins/i,
+    });
+    const petsButton = screen.getByRole("button", { name: /^pets/i });
+    const appearanceNavigation = petsButton.closest("aside");
+    expect(appearanceNavigation).not.toBeNull();
+    const appearanceButtons = within(appearanceNavigation!).getAllByRole(
+      "button",
+    );
+    expect(appearanceButtons.indexOf(petsButton)).toBeLessThan(
+      appearanceButtons.indexOf(skinsButton),
+    );
+    expect(skinsButton).toHaveAttribute("aria-pressed", "true");
+    expect(petsButton).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("Midnight")).toBeVisible();
+    expect(screen.queryByText("Orbit")).not.toBeInTheDocument();
+    const importSkinButton = screen.getByRole("button", {
+      name: /import skin/i,
+    });
+    expect(importSkinButton).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /import pet/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /open skin folder/i }),
+    ).toBeVisible();
+    fireEvent.click(importSkinButton);
+    await waitFor(() =>
+      expect(importAppearanceTheme).toHaveBeenCalledWith("codex"),
+    );
+    const requestCountBeforeSwitch = getAppearance.mock.calls.length;
+
+    fireEvent.click(petsButton);
+
+    expect(petsButton).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Orbit")).toBeVisible();
+    expect(screen.queryByText("Midnight")).not.toBeInTheDocument();
+    const importPetButton = screen.getByRole("button", { name: /import pet/i });
+    expect(importPetButton).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /import skin/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /open pet folder/i }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: /native appearance/i }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(importPetButton);
+    await waitFor(() => expect(importAgentPet).toHaveBeenCalledWith("codex"));
+    expect(getAppearance).toHaveBeenCalledTimes(requestCountBeforeSwitch);
   });
 
   it("routes non-Codex Provider management through public Profile data", async () => {

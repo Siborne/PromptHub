@@ -10,6 +10,8 @@ type AppearanceAction =
   | "restore-theme"
   | "delete-theme"
   | "import-pet"
+  | "update-pet"
+  | "install-store-pet"
   | "export-pet"
   | "delete-pet";
 

@@ -88,6 +88,7 @@ describe("Agent session index preload API", () => {
     };
     const continuation = {
       ...handoff,
+      previewToken: "00000000-0000-4000-8000-000000000001",
       sourceTitle: "Release fix",
       payload: "portable context",
       payloadDigest: `sha256:${"a".repeat(64)}`,

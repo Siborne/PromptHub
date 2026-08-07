@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import type {
   AgentConversationActionResult,
@@ -64,15 +64,26 @@ interface AgentConversationServiceOptions {
   now?: () => number;
 }
 
+interface PendingHandoffPreview {
+  preview: AgentConversationHandoffPreview;
+  expiresAt: number;
+}
+
 const LOOKUP_PAGE_SIZE = 200;
 const MAX_LOOKUP_SESSIONS = 2_000;
 const MAX_HANDOFF_ENTRIES = 120;
 const MAX_HANDOFF_CHARS = 500_000;
 const TRANSCRIPT_PAGE_SIZE = 200;
 const MAX_TRANSCRIPT_PAGES = 10_000;
+const HANDOFF_PREVIEW_TTL_MS = 5 * 60 * 1_000;
+const MAX_PENDING_HANDOFF_PREVIEWS = 64;
 
 export class AgentConversationService {
   private readonly now: () => number;
+  private readonly pendingHandoffPreviews = new Map<
+    string,
+    PendingHandoffPreview
+  >();
 
   constructor(private readonly options: AgentConversationServiceOptions) {
     this.now = options.now ?? Date.now;
@@ -115,6 +126,7 @@ export class AgentConversationService {
   async previewHandoff(
     request: AgentConversationHandoffRequest,
   ): Promise<AgentConversationHandoffPreview> {
+    this.pruneExpiredHandoffPreviews();
     requireProjectPath(request.projectPath);
     const [session, detail] = await Promise.all([
       this.findSession(request.sourceAgentId, request.sourceSessionId),
@@ -131,8 +143,9 @@ export class AgentConversationService {
     const canOpenTarget =
       !canLaunchDirectly &&
       (await this.options.canLaunchAgent?.(request.targetAgentId)) === true;
-    return {
+    const preview: AgentConversationHandoffPreview = {
       ...request,
+      previewToken: randomUUID(),
       sourceTitle: session.title,
       payload,
       payloadDigest: digest(payload),
@@ -145,18 +158,14 @@ export class AgentConversationService {
           ? "launch"
           : "unavailable",
     };
+    this.cacheHandoffPreview(preview);
+    return preview;
   }
 
   async continueInAgent(
     request: ContinueAgentConversationRequest,
   ): Promise<AgentConversationActionResult> {
-    const preview = await this.previewHandoff(request);
-    if (
-      preview.payloadDigest !== request.confirmedPayloadDigest ||
-      digest(request.payload) !== request.confirmedPayloadDigest
-    ) {
-      throw new Error("HANDOFF_PREVIEW_STALE");
-    }
+    const preview = this.getConfirmedHandoffPreview(request);
     const handoff = this.options.repository.createHandoff({
       sourceAgentId: preview.sourceAgentId,
       sourceSessionId: preview.sourceSessionId,
@@ -167,7 +176,46 @@ export class AgentConversationService {
       payloadDigest: preview.payloadDigest,
       status: "planned",
     });
-    return this.executeHandoff(handoff, preview);
+    const result = await this.executeHandoff(handoff, preview);
+    if (result.status === "launched") {
+      this.pendingHandoffPreviews.delete(preview.previewToken);
+    }
+    return result;
+  }
+
+  private cacheHandoffPreview(preview: AgentConversationHandoffPreview): void {
+    while (this.pendingHandoffPreviews.size >= MAX_PENDING_HANDOFF_PREVIEWS) {
+      const oldest = this.pendingHandoffPreviews.keys().next().value;
+      if (!oldest) break;
+      this.pendingHandoffPreviews.delete(oldest);
+    }
+    this.pendingHandoffPreviews.set(preview.previewToken, {
+      preview,
+      expiresAt: this.now() + HANDOFF_PREVIEW_TTL_MS,
+    });
+  }
+
+  private pruneExpiredHandoffPreviews(): void {
+    const now = this.now();
+    for (const [token, entry] of this.pendingHandoffPreviews) {
+      if (entry.expiresAt <= now) this.pendingHandoffPreviews.delete(token);
+    }
+  }
+
+  private getConfirmedHandoffPreview(
+    request: ContinueAgentConversationRequest,
+  ): AgentConversationHandoffPreview {
+    this.pruneExpiredHandoffPreviews();
+    const pending = this.pendingHandoffPreviews.get(request.previewToken);
+    if (!pending) throw new Error("HANDOFF_PREVIEW_EXPIRED");
+    if (
+      !matchesHandoffPreview(request, pending.preview) ||
+      request.confirmedPayloadDigest !== pending.preview.payloadDigest ||
+      digest(request.payload) !== pending.preview.payloadDigest
+    ) {
+      throw new Error("HANDOFF_PREVIEW_STALE");
+    }
+    return pending.preview;
   }
 
   async exportConversation(
@@ -416,6 +464,24 @@ function requireProjectPath(value: string): void {
 
 function digest(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function matchesHandoffPreview(
+  request: ContinueAgentConversationRequest,
+  preview: AgentConversationHandoffPreview,
+): boolean {
+  return (
+    request.sourceAgentId === preview.sourceAgentId &&
+    request.sourceSessionId === preview.sourceSessionId &&
+    request.targetAgentId === preview.targetAgentId &&
+    request.projectId === preview.projectId &&
+    request.projectPath === preview.projectPath &&
+    request.sourceTitle === preview.sourceTitle &&
+    request.payloadDigest === preview.payloadDigest &&
+    request.payload === preview.payload &&
+    request.transport === preview.transport &&
+    request.cliCommand === preview.cliCommand
+  );
 }
 
 function safeFileName(value: string): string {

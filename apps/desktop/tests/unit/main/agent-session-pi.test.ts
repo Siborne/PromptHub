@@ -119,6 +119,67 @@ describe("Pi session adapter", () => {
     });
   });
 
+  it("cursor-pages the complete Pi transcript instead of stopping at a bounded preview", async () => {
+    const homeDir = await createHome();
+    const piRootDir = path.join(homeDir, ".pi", "agent");
+    const sessionsDir = path.join(piRootDir, "sessions", "-workspace-pi");
+    const sessionId = "complete-pi-history";
+    await fs.mkdir(sessionsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(sessionsDir, `${sessionId}.jsonl`),
+      [
+        JSON.stringify({ type: "session", id: sessionId }),
+        ...Array.from({ length: 5 }, (_, index) => [
+          ...(index === 2
+            ? [
+                JSON.stringify({
+                  type: "runtime_record",
+                  payload: "x".repeat(2 * 1024 * 1024 + 1),
+                }),
+              ]
+            : []),
+          JSON.stringify({
+            type: "message",
+            id: `message-${index}`,
+            message: { role: "user", content: `Pi message ${index}` },
+          }),
+        ]).flat(),
+      ].join("\n"),
+    );
+
+    const service = createAgentSessionService({ homeDir, piRootDir });
+    const first = await service.read("pi", sessionId, { limit: 2 });
+    expect(first.entries).toHaveLength(2);
+    expect(first.nextCursor).toEqual(expect.any(String));
+
+    const second = await service.read("pi", sessionId, {
+      limit: 2,
+      cursor: first.nextCursor,
+    });
+    expect(second.entries).toHaveLength(2);
+    expect(second.nextCursor).toEqual(expect.any(String));
+
+    const final = await service.read("pi", sessionId, {
+      limit: 2,
+      cursor: second.nextCursor,
+    });
+    expect(final.entries).toHaveLength(1);
+    expect(final.nextCursor).toBeNull();
+    expect(first.truncated || second.truncated || final.truncated).toBe(false);
+
+    expect(
+      [...first.entries, ...second.entries, ...final.entries].map(
+        (item) => item.text,
+      ),
+    ).toEqual([
+      "Pi message 0",
+      "Pi message 1",
+      "Pi message 2",
+      "Pi message 3",
+      "Pi message 4",
+    ]);
+  });
+
   it("rejects unsafe Pi session ids", async () => {
     const homeDir = await createHome();
     const service = createAgentSessionService({ homeDir });

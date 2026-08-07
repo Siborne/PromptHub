@@ -2,23 +2,222 @@ import path from "node:path";
 import { access } from "node:fs/promises";
 import { app, ipcMain, safeStorage, shell } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
-import type { AgentUsageQuota } from "@prompthub/shared/types";
+import type {
+  AgentPiCustomModelInput,
+  AgentPiCustomModelUpdateInput,
+  AgentPiCustomProviderInput,
+  AgentPiCustomProviderUpdateInput,
+  AgentUsageQueryOptions,
+  AgentUsageQuota,
+} from "@prompthub/shared/types";
 import { SkillInstaller } from "../services/skill-installer";
 import { getAgentConfigContext } from "../services/agent-platform-context";
+import {
+  addPiCustomModel,
+  addPiCustomProvider,
+  removePiCustomModel,
+  removePiCustomProvider,
+  setPiCredential,
+  updatePiCustomModel,
+  updatePiCustomProvider,
+} from "../services/agent-pi-model-writes";
 import { createAgentUserConfigFileService } from "../services/agent-user-config-files";
+import { testPiModel } from "../services/agent-pi-model-test";
 import {
   inspectAgentModelConfig,
   updateAgentModelConfig,
 } from "../services/agent-model-config";
-import { createAgentUsageService } from "../services/agent-usage-service";
+import { type AgentUsageService } from "../services/agent-usage-service";
+import { agentUsageService as defaultAgentUsageService } from "../services/agent-usage-runtime";
 import { validateKimiConfigFile } from "../services/agent-kimi-config-validator";
 import { launchAgentPlatform } from "../services/agent-launch-service";
 import { createNativeCommandRunner } from "../services/native-command";
 import { diagnoseAgentCli } from "../services/agent-cli-diagnostic-service";
 import { registerAgentCliLifecycleIPC } from "./agent-cli-lifecycle.ipc";
 
-export function registerAgentIPC(): void {
-  const usageService = createAgentUsageService();
+interface RegisterAgentIPCOptions {
+  usageService?: AgentUsageService;
+}
+
+function piBackupRoot(): string {
+  return path.join(app.getPath("userData"), "agent-config-backups");
+}
+
+function requirePiAgentId(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Agent Pi write requires an object payload");
+  }
+  const agentId = Reflect.get(value, "agentId");
+  if (agentId !== "pi") {
+    throw new Error("Agent Pi writes only apply to the pi platform");
+  }
+  return agentId;
+}
+
+function requirePiProviderInput(value: unknown): AgentPiCustomProviderInput {
+  requirePiAgentId(value);
+  const payload = value as Record<string, unknown>;
+  if (
+    typeof payload.providerId !== "string" ||
+    typeof payload.baseUrl !== "string" ||
+    typeof payload.api !== "string" ||
+    !Array.isArray(payload.models)
+  ) {
+    throw new Error(
+      "Agent Pi provider requires providerId, baseUrl, api and models",
+    );
+  }
+  if (
+    payload.apiKeyRef !== undefined &&
+    typeof payload.apiKeyRef !== "string"
+  ) {
+    throw new Error("Agent Pi provider apiKeyRef must be a string");
+  }
+  return {
+    providerId: payload.providerId,
+    baseUrl: payload.baseUrl,
+    api: payload.api as AgentPiCustomProviderInput["api"],
+    apiKeyRef: payload.apiKeyRef as string | undefined,
+    models: payload.models as AgentPiCustomProviderInput["models"],
+  };
+}
+
+function requirePiProviderUpdate(
+  value: unknown,
+): AgentPiCustomProviderUpdateInput {
+  requirePiAgentId(value);
+  const payload = value as Record<string, unknown>;
+  if (
+    typeof payload.providerId !== "string" ||
+    typeof payload.baseUrl !== "string" ||
+    typeof payload.api !== "string"
+  ) {
+    throw new Error(
+      "Agent Pi provider update requires providerId, baseUrl and api",
+    );
+  }
+  return {
+    providerId: payload.providerId,
+    baseUrl: payload.baseUrl,
+    api: payload.api as AgentPiCustomProviderUpdateInput["api"],
+  };
+}
+
+function requirePiProviderTarget(value: unknown): {
+  agentId: string;
+  providerId: string;
+} {
+  requirePiAgentId(value);
+  const providerId = Reflect.get(value as object, "providerId");
+  if (typeof providerId !== "string" || !providerId.trim()) {
+    throw new Error("Agent Pi provider target requires a providerId");
+  }
+  return { agentId: "pi", providerId };
+}
+
+function requirePiModelTarget(
+  value: unknown,
+  requireModel: true,
+): { agentId: string; providerId: string; model: AgentPiCustomModelInput };
+function requirePiModelTarget(
+  value: unknown,
+  requireModel: false,
+): { agentId: string; providerId: string; modelId: string };
+function requirePiModelTarget(
+  value: unknown,
+  requireModel: boolean,
+): {
+  agentId: string;
+  providerId: string;
+  model?: AgentPiCustomModelInput;
+  modelId?: string;
+} {
+  requirePiAgentId(value);
+  const payload = value as Record<string, unknown>;
+  if (typeof payload.providerId !== "string" || !payload.providerId.trim()) {
+    throw new Error("Agent Pi model target requires a providerId");
+  }
+  if (requireModel) {
+    if (!payload.model || typeof payload.model !== "object") {
+      throw new Error("Agent Pi model add requires a model object");
+    }
+    return {
+      agentId: "pi",
+      providerId: payload.providerId,
+      model: payload.model as AgentPiCustomModelInput,
+    };
+  }
+  if (typeof payload.modelId !== "string" || !payload.modelId.trim()) {
+    throw new Error("Agent Pi model remove requires a modelId");
+  }
+  return {
+    agentId: "pi",
+    providerId: payload.providerId,
+    modelId: payload.modelId,
+  };
+}
+
+function requirePiModelUpdate(value: unknown): {
+  agentId: "pi";
+  providerId: string;
+  model: AgentPiCustomModelUpdateInput;
+} {
+  requirePiAgentId(value);
+  const payload = value as Record<string, unknown>;
+  if (
+    typeof payload.providerId !== "string" ||
+    !payload.providerId.trim() ||
+    !payload.model ||
+    typeof payload.model !== "object" ||
+    Array.isArray(payload.model) ||
+    typeof Reflect.get(payload.model, "originalId") !== "string"
+  ) {
+    throw new Error(
+      "Agent Pi model update requires providerId and a model with originalId",
+    );
+  }
+  return {
+    agentId: "pi",
+    providerId: payload.providerId,
+    model: payload.model as AgentPiCustomModelUpdateInput,
+  };
+}
+
+function requirePiCredentialInput(value: unknown): {
+  agentId: string;
+  providerId: string;
+  secret: string;
+} {
+  requirePiAgentId(value);
+  const payload = value as Record<string, unknown>;
+  if (
+    typeof payload.providerId !== "string" ||
+    !payload.providerId.trim() ||
+    typeof payload.secret !== "string"
+  ) {
+    throw new Error("Agent Pi credential requires providerId and secret");
+  }
+  return {
+    agentId: "pi",
+    providerId: payload.providerId,
+    secret: payload.secret,
+  };
+}
+
+function parseAgentUsageQueryOptions(value: unknown): AgentUsageQueryOptions {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Agent usage query options must be an object");
+  }
+  const forceRefresh = Reflect.get(value, "forceRefresh");
+  if (forceRefresh !== undefined && typeof forceRefresh !== "boolean") {
+    throw new Error("Agent usage query forceRefresh must be a boolean");
+  }
+  return forceRefresh === undefined ? {} : { forceRefresh };
+}
+
+export function registerAgentIPC(options: RegisterAgentIPCOptions = {}): void {
+  const usageService = options.usageService ?? defaultAgentUsageService;
   const configFileService = createAgentUserConfigFileService({
     backupRoot: path.join(app.getPath("userData"), "agent-config-backups"),
     encryption: safeStorage,
@@ -107,12 +306,7 @@ export function registerAgentIPC(): void {
       const revision =
         typeof expectedRevision === "string" ? expectedRevision : undefined;
       const context = getAgentConfigContext(agentId);
-      return configFileService.write(
-        context,
-        relativePath,
-        content,
-        revision,
-      );
+      return configFileService.write(context, relativePath, content, revision);
     },
   );
 
@@ -148,6 +342,23 @@ export function registerAgentIPC(): void {
           "Agent model update secondaryModel must be a string or null",
         );
       }
+      const thinkingLevels = [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+      ];
+      if (
+        payload.thinkingLevel !== undefined &&
+        (payload.agentId !== "pi" ||
+          typeof payload.thinkingLevel !== "string" ||
+          !thinkingLevels.includes(payload.thinkingLevel))
+      ) {
+        throw new Error("Agent model update thinkingLevel is invalid");
+      }
       const context = getAgentConfigContext(payload.agentId);
       return updateAgentModelConfig(
         {
@@ -155,6 +366,15 @@ export function registerAgentIPC(): void {
           rootPath: context.rootPath,
           model: payload.model,
           secondaryModel: payload.secondaryModel as string | null | undefined,
+          thinkingLevel: payload.thinkingLevel as
+            | "off"
+            | "minimal"
+            | "low"
+            | "medium"
+            | "high"
+            | "xhigh"
+            | "max"
+            | undefined,
         },
         {
           backupRoot: path.join(
@@ -172,28 +392,132 @@ export function registerAgentIPC(): void {
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.AGENT_USAGE_GET, async (_, agentId: unknown) => {
-    if (typeof agentId !== "string" || agentId.trim().length === 0) {
-      throw new Error("Agent usage query requires a non-empty agentId");
-    }
-    try {
-      return await usageService.getUsage(agentId);
-    } catch (error) {
-      console.error(
-        `Agent usage query failed for "${agentId}":`,
-        error instanceof Error ? error.message : error,
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PI_PROVIDER_ADD,
+    async (_, input: unknown) => {
+      const context = getAgentConfigContext(requirePiAgentId(input));
+      return addPiCustomProvider(
+        context.rootPath,
+        requirePiProviderInput(input),
+        { backupRoot: piBackupRoot() },
       );
-      const fallback: AgentUsageQuota = {
-        agentId,
-        adapter: "unknown",
-        status: "unavailable",
-        source: "provider",
-        metrics: [],
-        plan: null,
-        fetchedAt: Date.now(),
-        errorCode: "internal-error",
-      };
-      return fallback;
-    }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PI_PROVIDER_UPDATE,
+    async (_, input: unknown) => {
+      const payload = requirePiProviderUpdate(input);
+      const context = getAgentConfigContext("pi");
+      return updatePiCustomProvider(context.rootPath, payload, {
+        backupRoot: piBackupRoot(),
+      });
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PI_PROVIDER_REMOVE,
+    async (_, input: unknown) => {
+      const payload = requirePiProviderTarget(input);
+      const context = getAgentConfigContext(payload.agentId);
+      return removePiCustomProvider(context.rootPath, payload.providerId, {
+        backupRoot: piBackupRoot(),
+      });
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_PI_MODEL_ADD, async (_, input: unknown) => {
+    const payload = requirePiModelTarget(input, true);
+    const context = getAgentConfigContext(payload.agentId);
+    return addPiCustomModel(
+      context.rootPath,
+      payload.providerId,
+      payload.model,
+      { backupRoot: piBackupRoot() },
+    );
   });
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PI_MODEL_UPDATE,
+    async (_, input: unknown) => {
+      const payload = requirePiModelUpdate(input);
+      const context = getAgentConfigContext(payload.agentId);
+      return updatePiCustomModel(
+        context.rootPath,
+        payload.providerId,
+        payload.model,
+        { backupRoot: piBackupRoot() },
+      );
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PI_MODEL_REMOVE,
+    async (_, input: unknown) => {
+      const payload = requirePiModelTarget(input, false);
+      const context = getAgentConfigContext(payload.agentId);
+      return removePiCustomModel(
+        context.rootPath,
+        payload.providerId,
+        payload.modelId!,
+        { backupRoot: piBackupRoot() },
+      );
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PI_MODEL_TEST,
+    async (_, input: unknown) => {
+      const payload = requirePiModelTarget(input, false);
+      const context = getAgentConfigContext(payload.agentId);
+      return testPiModel(
+        context.rootPath,
+        { providerId: payload.providerId, modelId: payload.modelId },
+        new AbortController().signal,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PI_CREDENTIAL_SET,
+    async (_, input: unknown) => {
+      const payload = requirePiCredentialInput(input);
+      const context = getAgentConfigContext(payload.agentId);
+      return setPiCredential(
+        context.rootPath,
+        payload.providerId,
+        payload.secret,
+        { backupRoot: piBackupRoot() },
+      );
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_USAGE_GET,
+    async (_, agentId: unknown, query: unknown) => {
+      if (typeof agentId !== "string" || agentId.trim().length === 0) {
+        throw new Error("Agent usage query requires a non-empty agentId");
+      }
+      const queryOptions = parseAgentUsageQueryOptions(query);
+      try {
+        return await usageService.getUsage(agentId, queryOptions);
+      } catch (error) {
+        console.error(
+          `Agent usage query failed for "${agentId}":`,
+          error instanceof Error ? error.message : error,
+        );
+        const fallback: AgentUsageQuota = {
+          agentId,
+          adapter: "unknown",
+          status: "unavailable",
+          source: "provider",
+          metrics: [],
+          plan: null,
+          fetchedAt: Date.now(),
+          errorCode: "internal-error",
+        };
+        return fallback;
+      }
+    },
+  );
 }

@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+html[data-surface="agent-usage"],
+html[data-surface="agent-usage"] body,
+html[data-surface="agent-usage"] #root {
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
 @layer base {
   :root {
     /* Theme variables - Morandi palette */

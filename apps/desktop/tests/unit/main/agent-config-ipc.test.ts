@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentUsageService } from "../../../src/main/services/agent-usage-service";
 
 const handleMock = vi.fn();
 const readFileMock = vi.fn();
@@ -13,6 +14,8 @@ const updateAgentModelConfigMock = vi.fn();
 const resolveNativeCommandMock = vi.fn();
 const runNativeCommandMock = vi.fn();
 const launchAgentPlatformMock = vi.fn();
+const updatePiCustomProviderMock = vi.fn();
+const updatePiCustomModelMock = vi.fn();
 
 vi.mock("electron", () => ({
   app: { getPath: vi.fn(() => "/tmp/prompthub") },
@@ -40,6 +43,18 @@ vi.mock("../../../src/main/services/skill-installer", () => ({
         skillsRelativePath: "skills",
         configFiles: ["config.toml"],
         launchPaths: { darwin: ["/Applications/Codex.app"] },
+      },
+      {
+        id: "pi",
+        name: "Pi",
+        icon: "Terminal",
+        rootDir: {
+          darwin: "~/.pi/agent",
+          win32: "%USERPROFILE%\\.pi\\agent",
+          linux: "~/.pi/agent",
+        },
+        skillsRelativePath: "skills",
+        configFiles: ["settings.json", "models.json"],
       },
       {
         id: "kimi",
@@ -88,16 +103,26 @@ vi.mock("../../../src/main/services/agent-launch-service", () => ({
   launchAgentPlatform: launchAgentPlatformMock,
 }));
 
+vi.mock("../../../src/main/services/agent-pi-model-writes", () => ({
+  addPiCustomModel: vi.fn(),
+  addPiCustomProvider: vi.fn(),
+  removePiCustomModel: vi.fn(),
+  removePiCustomProvider: vi.fn(),
+  setPiCredential: vi.fn(),
+  updatePiCustomModel: updatePiCustomModelMock,
+  updatePiCustomProvider: updatePiCustomProviderMock,
+}));
+
 type Handler = (...args: unknown[]) => Promise<unknown>;
 
-async function setup() {
+async function setup(usageService?: AgentUsageService) {
   vi.resetModules();
   handleMock.mockReset();
   const [{ registerAgentIPC }, { IPC_CHANNELS }] = await Promise.all([
     import("../../../src/main/ipc/agent.ipc"),
     import("@prompthub/shared/constants/ipc-channels"),
   ]);
-  registerAgentIPC();
+  registerAgentIPC(usageService ? { usageService } : undefined);
   return {
     IPC_CHANNELS,
     handlers: Object.fromEntries(
@@ -120,9 +145,13 @@ describe("Agent config file IPC", () => {
     resolveNativeCommandMock.mockReset();
     runNativeCommandMock.mockReset();
     launchAgentPlatformMock.mockReset();
-    getPlatformRootDirMock.mockImplementation((platform: { id: string }) =>
-      platform.id === "kimi" ? "/Users/test/.kimi-code" : "/Users/test/.codex",
-    );
+    updatePiCustomProviderMock.mockReset();
+    updatePiCustomModelMock.mockReset();
+    getPlatformRootDirMock.mockImplementation((platform: { id: string }) => {
+      if (platform.id === "kimi") return "/Users/test/.kimi-code";
+      if (platform.id === "pi") return "/Users/test/.pi/agent";
+      return "/Users/test/.codex";
+    });
     listConfigFilesMock.mockImplementation(
       (context: { relativePaths: string[] }) =>
         Promise.resolve(
@@ -133,6 +162,33 @@ describe("Agent config file IPC", () => {
           })),
         ),
     );
+  });
+
+  it("uses an injected process-wide usage service", async () => {
+    const getUsage = vi.fn(async (agentId: string) => ({
+      agentId,
+      adapter: "test",
+      status: "ok" as const,
+      source: "provider" as const,
+      plan: "pro",
+      fetchedAt: 1,
+      metrics: [],
+    }));
+    const { handlers, IPC_CHANNELS } = await setup({ getUsage });
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_USAGE_GET](null, "codex", {
+        forceRefresh: true,
+      }),
+    ).resolves.toMatchObject({ agentId: "codex", status: "ok" });
+    expect(getUsage).toHaveBeenCalledWith("codex", { forceRefresh: true });
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_USAGE_GET](null, "codex", {
+        forceRefresh: "yes",
+      }),
+    ).rejects.toThrow("forceRefresh must be a boolean");
+    expect(getUsage).toHaveBeenCalledTimes(1);
   });
 
   it("launches only a known Agent through its platform allowlist", async () => {
@@ -305,6 +361,72 @@ describe("Agent config file IPC", () => {
       }),
     ).rejects.toThrow("secondaryModel");
     expect(updateAgentModelConfigMock).not.toHaveBeenCalled();
+  });
+
+  it("validates and routes Pi provider and model updates through main", async () => {
+    updatePiCustomProviderMock.mockResolvedValue({ backupPath: null });
+    updatePiCustomModelMock.mockResolvedValue({ backupPath: null });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await handlers[IPC_CHANNELS.AGENT_PI_PROVIDER_UPDATE](null, {
+      agentId: "pi",
+      providerId: "foxcode",
+      baseUrl: "https://new.example/v1",
+      api: "openai-responses",
+    });
+    await handlers[IPC_CHANNELS.AGENT_PI_MODEL_UPDATE](null, {
+      agentId: "pi",
+      providerId: "foxcode",
+      model: {
+        originalId: "gpt-old",
+        id: "gpt-new",
+        contextWindow: 400000,
+        maxTokens: 128000,
+        reasoning: true,
+      },
+    });
+
+    expect(updatePiCustomProviderMock).toHaveBeenCalledWith(
+      "/Users/test/.pi/agent",
+      {
+        providerId: "foxcode",
+        baseUrl: "https://new.example/v1",
+        api: "openai-responses",
+      },
+      { backupRoot: "/tmp/prompthub/agent-config-backups" },
+    );
+    expect(updatePiCustomModelMock).toHaveBeenCalledWith(
+      "/Users/test/.pi/agent",
+      "foxcode",
+      {
+        originalId: "gpt-old",
+        id: "gpt-new",
+        contextWindow: 400000,
+        maxTokens: 128000,
+        reasoning: true,
+      },
+      { backupRoot: "/tmp/prompthub/agent-config-backups" },
+    );
+  });
+
+  it("rejects malformed Pi updates before touching the write service", async () => {
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_PI_PROVIDER_UPDATE](null, {
+        agentId: "pi",
+        providerId: "foxcode",
+      }),
+    ).rejects.toThrow("provider update requires");
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_PI_MODEL_UPDATE](null, {
+        agentId: "pi",
+        providerId: "foxcode",
+        model: { id: "missing-original" },
+      }),
+    ).rejects.toThrow("model update requires");
+    expect(updatePiCustomProviderMock).not.toHaveBeenCalled();
+    expect(updatePiCustomModelMock).not.toHaveBeenCalled();
   });
 
   it("runs Kimi's native doctor against the written config when available", async () => {

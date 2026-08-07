@@ -3,15 +3,23 @@ import path from "node:path";
 import { app, dialog, ipcMain } from "electron";
 
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
-import type { ApplyAgentThemeInput } from "@prompthub/shared/types";
+import type {
+  AgentPetStoreQuery,
+  ApplyAgentThemeInput,
+  UpdateAgentPetInput,
+} from "@prompthub/shared/types";
 import { getDataDir } from "../runtime-paths";
 import { AgentAppearanceService } from "../services/agent-appearance-service";
+import { AgentPetStoreService } from "../services/agent-pet-store-service";
 import { CodexDreamSkinEngine } from "../services/codex-dream-skin-engine";
 import { SkillInstaller } from "../services/skill-installer";
 import { getPlatformRootDir } from "../services/skill-installer-utils";
 
 interface AgentAppearanceIpcOptions {
   createService?: () => AgentAppearanceService;
+  createPetStoreService?: (
+    appearanceService: AgentAppearanceService,
+  ) => AgentPetStoreService;
 }
 
 function requireCodexAgent(agentId: unknown): void {
@@ -66,10 +74,75 @@ function normalizeApplyInput(value: unknown): ApplyAgentThemeInput {
   };
 }
 
+function requireObject(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function normalizePetUpdate(value: unknown): UpdateAgentPetInput {
+  const raw = requireObject(value, "Pet update input");
+  requireCodexAgent(raw.agentId);
+  return {
+    agentId: "codex",
+    petId: requireString(raw.petId, "Pet id"),
+    name: requireString(raw.name, "Pet name"),
+    description:
+      raw.description === undefined
+        ? ""
+        : typeof raw.description === "string"
+          ? raw.description
+          : (() => {
+              throw new Error("Pet description must be a string");
+            })(),
+  };
+}
+
+function normalizeStoreQuery(value: unknown): AgentPetStoreQuery {
+  const raw = requireObject(value, "Pet store query");
+  requireCodexAgent(raw.agentId);
+  if (raw.search !== undefined && typeof raw.search !== "string") {
+    throw new Error("Pet store search must be a string");
+  }
+  if (raw.locale !== undefined && typeof raw.locale !== "string") {
+    throw new Error("Pet store locale must be a string");
+  }
+  for (const key of ["page", "pageSize"] as const) {
+    if (raw[key] !== undefined && !Number.isFinite(raw[key])) {
+      throw new Error(`Pet store ${key} must be a finite number`);
+    }
+  }
+  if (raw.refresh !== undefined && typeof raw.refresh !== "boolean") {
+    throw new Error("Pet store refresh must be a boolean");
+  }
+  return {
+    agentId: "codex",
+    search: raw.search as string | undefined,
+    locale: raw.locale as string | undefined,
+    page: raw.page as number | undefined,
+    pageSize: raw.pageSize as number | undefined,
+    refresh: raw.refresh as boolean | undefined,
+  };
+}
+
 export function registerAgentAppearanceIPC(
   options: AgentAppearanceIpcOptions = {},
 ): void {
   const createService = options.createService ?? createDefaultService;
+  let petStoreService: AgentPetStoreService | null = null;
+  const getPetStoreService = () => {
+    if (!petStoreService) {
+      const appearanceService = createService();
+      petStoreService = options.createPetStoreService
+        ? options.createPetStoreService(appearanceService)
+        : new AgentPetStoreService({
+            dataRoot: getDataDir(),
+            appearanceService,
+          });
+    }
+    return petStoreService;
+  };
 
   ipcMain.handle(IPC_CHANNELS.AGENT_APPEARANCE_GET, async (_, agentId) => {
     requireCodexAgent(agentId);
@@ -182,6 +255,37 @@ export function registerAgentAppearanceIPC(
     async (_, agentId, petId) => {
       requireCodexAgent(agentId);
       return createService().getPetPreview(requireString(petId, "Pet id"));
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_APPEARANCE_UPDATE_PET, async (_, input) => {
+    return createService().updatePetMetadata(normalizePetUpdate(input));
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_LIST,
+    async (_, query) => getPetStoreService().list(normalizeStoreQuery(query)),
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_INSTALL,
+    async (_, agentId, petId) => {
+      requireCodexAgent(agentId);
+      return getPetStoreService().install(
+        "codex",
+        requireString(petId, "Pet id"),
+      );
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_PREVIEW,
+    async (_, agentId, petId) => {
+      requireCodexAgent(agentId);
+      return getPetStoreService().getPreview(
+        "codex",
+        requireString(petId, "Pet id"),
+      );
     },
   );
 }

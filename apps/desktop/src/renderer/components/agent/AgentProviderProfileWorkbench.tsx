@@ -42,7 +42,7 @@ import {
 import { AgentProviderProfileFormDialog } from "./AgentProviderProfileFormDialog";
 import { AgentProviderSourceDialog } from "./AgentProviderSourceDialog";
 
-const PROFILE_ROW_HEIGHT = 68;
+const PROFILE_ROW_HEIGHT = 64;
 
 function secretStateClass(state: AgentProviderProfilePublic["secretState"]) {
   return state === "available"
@@ -84,7 +84,7 @@ function ProfileListItem({
       data-index={virtualIndex}
       aria-posinset={virtualIndex + 1}
       aria-setsize={virtualSetSize}
-      className="absolute left-0 top-0 w-full"
+      className="absolute left-0 top-0 w-full p-1"
       style={{
         height: `${virtualSize}px`,
         transform: `translateY(${virtualStart}px)`,
@@ -94,28 +94,28 @@ function ProfileListItem({
         type="button"
         onClick={onSelect}
         aria-current={selected}
-        className={`block h-full w-full overflow-hidden border-l-2 px-4 py-3 text-left transition-colors ${
+        className={`block h-full w-full overflow-hidden rounded-lg border px-3 py-2 text-left transition-all ${
           selected
-            ? "border-primary bg-accent"
-            : "border-transparent hover:bg-accent/60"
+            ? "border-primary/30 bg-card shadow-sm ring-1 ring-primary/10"
+            : "border-border/70 bg-card hover:border-primary/20 hover:shadow-sm"
         }`}
       >
         <span className="flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-sm font-semibold text-foreground">
             {profile.name}
           </span>
-          <span className="flex shrink-0 items-center gap-1">
+          <span className="flex shrink-0 items-center gap-2 text-[11px]">
             {isCurrent ? (
-              <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+              <span className="font-medium text-emerald-600 dark:text-emerald-400">
                 {t("agents.providerProfiles.current")}
               </span>
             ) : null}
-            <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            <span className="text-muted-foreground">
               {t(`agents.providerProfiles.source.${profile.source}`)}
             </span>
           </span>
         </span>
-        <span className="mt-1 block truncate text-xs text-muted-foreground">
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
           {primaryModel(profile) ?? t("agents.providerProfiles.noPrimaryModel")}
         </span>
       </button>
@@ -183,15 +183,15 @@ function ProfileDetail({
 }) {
   const { t } = useTranslation();
   return (
-    <>
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-5 py-3">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-muted/[0.12] px-5 py-5">
+      <header className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-4 py-4 shadow-sm">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-sm font-semibold text-foreground">
               {profile.name}
             </h2>
             {isCurrent ? (
-              <span className="shrink-0 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+              <span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                 {t("agents.providerProfiles.current")}
               </span>
             ) : null}
@@ -229,8 +229,8 @@ function ProfileDetail({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <section>
+      <div className="mt-4 space-y-4">
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-foreground">
             {t("agents.providerProfiles.details")}
           </h3>
@@ -270,7 +270,7 @@ function ProfileDetail({
         </section>
 
         {supportsConnectionTest ? (
-          <section className="mt-6 border-y border-border/60 py-4">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-semibold text-foreground">
@@ -394,7 +394,7 @@ function ProfileDetail({
           </section>
         ) : null}
 
-        <section className="mt-6">
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-foreground">
             {t("agents.providerProfiles.modelMappings")}
           </h3>
@@ -421,7 +421,7 @@ function ProfileDetail({
           )}
         </section>
 
-        <div className="mt-6 flex flex-wrap gap-2 border-t border-border/60 pt-4">
+        <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card p-4 shadow-sm">
           <Button
             size="sm"
             variant="secondary"
@@ -461,7 +461,7 @@ function ProfileDetail({
           </Button>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -538,18 +538,9 @@ export function AgentProviderProfileWorkbench({
         <AgentProviderMigrationNotice onMigrated={() => store.load(agent.id)} />
       ) : null}
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-56 shrink-0 flex-col border-r border-border sm:w-64 xl:w-72">
-          <div className="space-y-2 border-b border-border p-3">
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                className="min-w-0 flex-1"
-                onClick={() => setEditing(null)}
-                disabled={busy}
-              >
-                <PlusIcon className="h-4 w-4" />
-                {t("agents.providerProfiles.add")}
-              </Button>
+        <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-muted/20 sm:w-64 xl:w-72">
+          <div className="border-b border-border p-3">
+            <div className="flex items-center justify-end gap-2">
               {!webRuntime ? (
                 <Button
                   size="sm"
@@ -566,24 +557,24 @@ export function AgentProviderProfileWorkbench({
                   )}
                 </Button>
               ) : null}
+              {!webRuntime ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  aria-label={t("agents.providerProfiles.sourceImport.open")}
+                  title={t("agents.providerProfiles.sourceImport.open")}
+                  onClick={() => setSourceDialogOpen(true)}
+                  disabled={busy}
+                >
+                  <DatabaseIcon className="h-4 w-4" />
+                </Button>
+              ) : null}
             </div>
-            {!webRuntime ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                className="w-full"
-                onClick={() => setSourceDialogOpen(true)}
-                disabled={busy}
-              >
-                <DatabaseIcon className="h-4 w-4" />
-                {t("agents.providerProfiles.sourceImport.open")}
-              </Button>
-            ) : null}
           </div>
           <nav
             ref={profileScrollRef}
             aria-label={t("agents.providerProfiles.listLabel")}
-            className="min-h-0 flex-1 overflow-y-auto"
+            className="min-h-0 flex-1 overflow-y-auto p-1"
           >
             {store.currentState?.nativeConfig ? (
               <AgentProviderNativeListItem
@@ -635,6 +626,18 @@ export function AgentProviderProfileWorkbench({
               </p>
             )}
           </nav>
+          <div className="border-t border-border p-3">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="w-full bg-card"
+              onClick={() => setEditing(null)}
+              disabled={busy}
+            >
+              <PlusIcon className="h-4 w-4" />
+              {t("agents.providerProfiles.add")}
+            </Button>
+          </div>
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col">
@@ -763,7 +766,11 @@ export function AgentProviderProfileWorkbench({
         preview={store.importPreview}
         busy={store.busyAction === "adopt-import"}
         onClose={store.clearTransient}
-        onAdopt={store.adoptImport}
+        onAdopt={async () => {
+          const created = await store.adoptImport();
+          if (created) setEditing(created);
+          return created;
+        }}
       />
       <AgentProviderActivationDialog
         plan={store.activationPlan}

@@ -12,6 +12,7 @@ function createHarness(
     preferredEmpty?: boolean;
     alternateEmpty?: boolean;
     withoutProviderLoader?: boolean;
+    withoutUsageOpener?: boolean;
   } = {},
 ) {
   const handlers = new Map<string, () => void>();
@@ -47,6 +48,8 @@ function createHarness(
       handlers.set(event, listener);
       return tray;
     }),
+    getBounds: vi.fn(() => ({ x: 500, y: 0, width: 24, height: 24 })),
+    popUpContextMenu: vi.fn(),
     setContextMenu: vi.fn(),
     setToolTip: vi.fn(),
   };
@@ -56,6 +59,7 @@ function createHarness(
   const getStoredLanguage = vi.fn<() => string | null>(() => null);
   const onCommand = vi.fn();
   const onAgentProviderProfile = vi.fn();
+  const onOpenAgentUsage = vi.fn();
   const onQuit = vi.fn();
   const onToggleWindow = vi.fn();
   const loadAgentProviderGroups = vi.fn(async () => []);
@@ -74,6 +78,7 @@ function createHarness(
     ...(overrides.withoutProviderLoader ? {} : { loadAgentProviderGroups }),
     onAgentProviderProfile,
     onCommand,
+    ...(overrides.withoutUsageOpener ? {} : { onOpenAgentUsage }),
     onQuit,
     onToggleWindow,
     platform: overrides.platform ?? "darwin",
@@ -90,6 +95,7 @@ function createHarness(
     handlers,
     loadAgentProviderGroups,
     onAgentProviderProfile,
+    onOpenAgentUsage,
     onToggleWindow,
     preferredImage,
     tray,
@@ -97,7 +103,7 @@ function createHarness(
 }
 
 describe("tray controller", () => {
-  it("creates a macOS template tray and refreshes localization before opening", () => {
+  it("opens quotas directly on macOS and keeps actions on right click", () => {
     const harness = createHarness();
     harness.controller.create();
 
@@ -107,13 +113,23 @@ describe("tray controller", () => {
     expect(harness.preferredImage.setTemplateImage).toHaveBeenCalledWith(true);
     expect(harness.preferredImage.resize).not.toHaveBeenCalled();
     expect(harness.tray.setToolTip).toHaveBeenCalledWith("PromptHub");
-    expect(harness.handlers.has("mouse-down")).toBe(true);
-    expect(harness.handlers.has("click")).toBe(false);
+    expect(harness.handlers.has("click")).toBe(true);
+    expect(harness.handlers.has("right-click")).toBe(true);
+    expect(harness.tray.setContextMenu).not.toHaveBeenCalled();
+
+    harness.handlers.get("click")?.();
+    expect(harness.onOpenAgentUsage).toHaveBeenCalledOnce();
 
     harness.getStoredLanguage.mockReturnValue("zh");
-    harness.handlers.get("mouse-down")?.();
+    harness.handlers.get("right-click")?.();
     const latestTemplate = harness.buildMenu.mock.calls.at(-1)?.[0];
     expect(latestTemplate[0].label).toBe("添加 Agent 资产");
+    expect(
+      latestTemplate.some(
+        (item: { label?: string }) => item.label === "Agent 额度",
+      ),
+    ).toBe(false);
+    expect(harness.tray.popUpContextMenu).toHaveBeenCalledOnce();
   });
 
   it("uses the platform icon and left-click toggle outside macOS", () => {
@@ -209,6 +225,7 @@ describe("tray controller", () => {
     harness.controller.destroy();
     harness.controller.destroy();
     expect(harness.tray.destroy).toHaveBeenCalledOnce();
+    expect(harness.controller.getBounds()).toBeNull();
   });
 
   it("loads provider profiles into the existing Agent menu and routes switches", async () => {
@@ -255,6 +272,19 @@ describe("tray controller", () => {
     );
   });
 
+  it("falls back to the app window when a macOS quota surface is unavailable", () => {
+    const harness = createHarness({ withoutUsageOpener: true });
+    harness.controller.create();
+    harness.handlers.get("click")?.();
+    expect(harness.onToggleWindow).toHaveBeenCalledOnce();
+    expect(harness.controller.getBounds()).toEqual({
+      x: 500,
+      y: 0,
+      width: 24,
+      height: 24,
+    });
+  });
+
   it("ignores a late provider load after the tray is destroyed", async () => {
     let resolveGroups:
       | ((
@@ -287,7 +317,7 @@ describe("tray controller", () => {
     ]);
     await pending;
 
-    expect(harness.tray.setContextMenu).toHaveBeenCalledTimes(1);
+    expect(harness.tray.setContextMenu).not.toHaveBeenCalled();
   });
 
   it("keeps the current menu when provider refresh fails", async () => {

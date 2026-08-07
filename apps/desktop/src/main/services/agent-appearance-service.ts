@@ -7,6 +7,7 @@ import type {
   AgentAppearanceOverview,
   AgentDesktopThemeSummary,
   AgentPetSummary,
+  UpdateAgentPetInput,
 } from "@prompthub/shared/types";
 
 const DEFAULT_MAX_PET_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -413,6 +414,29 @@ export class AgentAppearanceService {
       throw error;
     }
     return targetDir;
+  }
+
+  async updatePetMetadata(
+    input: UpdateAgentPetInput,
+  ): Promise<AgentPetSummary> {
+    if (input.agentId !== "codex") {
+      throw new Error("Appearance is only supported for Codex");
+    }
+    assertSafeId(input.petId, "Pet");
+    const parsed = await this.requirePet(input.petId);
+    const manifestPath = path.join(parsed.summary.directoryPath, "pet.json");
+    const raw = JSON.parse(await fs.readFile(manifestPath, "utf8")) as unknown;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error("Pet manifest must be an object");
+    }
+    const updated = {
+      ...(raw as Record<string, unknown>),
+      displayName: input.name.trim(),
+      description: input.description.trim(),
+    };
+    normalizePetManifest(updated);
+    await writeJsonAtomic(manifestPath, updated);
+    return (await this.requirePet(input.petId)).summary;
   }
 
   async deletePet(petId: string): Promise<void> {

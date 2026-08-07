@@ -100,6 +100,23 @@ function isPluginDistributedToAgent(
   return (plugin.distributedTargetIds ?? []).some((id) => targetIds.has(id));
 }
 
+function findManagedPluginForTarget(
+  plugins: PluginLibraryEntry[],
+  target: PluginTargetCompatibility,
+  installedPlugin: PluginTargetInstalledPlugin,
+): PluginLibraryEntry | null {
+  const installedName = installedPlugin.name.trim().toLowerCase();
+  return (
+    plugins.find((plugin) => {
+      if (plugin.name.trim().toLowerCase() !== installedName) return false;
+      return (
+        (plugin.distributedTargetIds ?? []).includes(target.id) ||
+        plugin.source.sourceId === target.id
+      );
+    }) ?? null
+  );
+}
+
 function matchesPluginQuery(card: AgentPluginCard, query: string): boolean {
   if (!query) return true;
   const values =
@@ -127,17 +144,21 @@ function matchesPluginQuery(card: AgentPluginCard, query: string): boolean {
 function AgentPluginTargetCardView({
   card,
   isImporting,
+  isRemovingDistribution,
   onImport,
   onOpenDetail,
   onOpenFolder,
   onOpenManaged,
+  onRemoveDistribution,
 }: {
   card: AgentPluginTargetCard;
   isImporting: boolean;
+  isRemovingDistribution: boolean;
   onImport: () => void;
   onOpenDetail: () => void;
   onOpenFolder: () => void;
   onOpenManaged?: () => void;
+  onRemoveDistribution?: () => void;
 }) {
   const { t } = useTranslation();
   const { plugin, managedPlugin, target } = card;
@@ -189,6 +210,28 @@ function AgentPluginTargetCardView({
               )}
             </AgentAssetActionButton>
           )}
+          {onRemoveDistribution ? (
+            <AgentAssetActionButton
+              variant="destructive"
+              onClick={onRemoveDistribution}
+              disabled={isRemovingDistribution}
+              aria-label={t("plugin.removePluginFromAgent", {
+                agent: target.displayName,
+                defaultValue: "Remove {{name}} from {{agent}}",
+                name: plugin.displayName,
+              })}
+              title={t("plugin.removeFromAgent", "Remove from Agent")}
+            >
+              {isRemovingDistribution ? (
+                <Loader2Icon
+                  aria-hidden="true"
+                  className="h-4 w-4 animate-spin"
+                />
+              ) : (
+                <MinusCircleIcon aria-hidden="true" className="h-4 w-4" />
+              )}
+            </AgentAssetActionButton>
+          ) : null}
         </>
       }
     >
@@ -476,12 +519,11 @@ export function AgentPluginAssetPanel({
           key: `target:${target.id}:${plugin.id}`,
           target,
           plugin,
-          managedPlugin:
-            installedPlugins.find(
-              (entry) =>
-                entry.source.sourceId === target.id &&
-                entry.name.toLowerCase() === plugin.name.toLowerCase(),
-            ) ?? null,
+          managedPlugin: findManagedPluginForTarget(
+            installedPlugins,
+            target,
+            plugin,
+          ),
         })),
       ),
     [installedPlugins, scopedTargets],
@@ -671,6 +713,20 @@ export function AgentPluginAssetPanel({
     setSelectedTargetPlugin(null);
     setAppModule("plugin");
     setSelectedTab("market");
+  };
+
+  const requestTargetPluginRemoval = (card: AgentPluginTargetCard): void => {
+    const managedPlugin = card.managedPlugin;
+    if (
+      !managedPlugin ||
+      !(managedPlugin.distributedTargetIds ?? []).includes(card.target.id)
+    ) {
+      return;
+    }
+    setPendingRemoveDistribution({
+      plugin: managedPlugin,
+      target: card.target,
+    });
   };
 
   const filterLabels: Record<AgentPluginFilter, string> = {
@@ -888,6 +944,9 @@ export function AgentPluginAssetPanel({
               key={card.key}
               card={card}
               isImporting={importingTargetPluginId === card.plugin.id}
+              isRemovingDistribution={
+                removingLibraryPluginId === card.managedPlugin?.id
+              }
               onImport={() => void importTargetPlugin(card.target, card.plugin)}
               onOpenDetail={() => {
                 setSelectedPluginId(null);
@@ -900,6 +959,13 @@ export function AgentPluginAssetPanel({
                 void openPathWithError(card.plugin.sourcePath ?? "")
               }
               onOpenManaged={card.managedPlugin ? openPluginLibrary : undefined}
+              onRemoveDistribution={
+                card.managedPlugin?.distributedTargetIds?.includes(
+                  card.target.id,
+                )
+                  ? () => requestTargetPluginRemoval(card)
+                  : undefined
+              }
             />
           ) : (
             <AgentPluginLibraryCardView

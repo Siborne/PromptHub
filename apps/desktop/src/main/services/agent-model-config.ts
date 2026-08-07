@@ -12,8 +12,16 @@ import { parseDocument } from "yaml";
 import type {
   AgentCredentialStatus,
   AgentModelConfiguration,
+  AgentPiThinkingLevel,
   UpdateAgentModelResult,
 } from "@prompthub/shared/types";
+
+import { inspectPiModelCatalog } from "./agent-pi-model-catalog";
+import {
+  fileExists,
+  readTextConfig,
+  sanitizeEndpoint,
+} from "./agent-model-config-io";
 
 interface AgentModelContext {
   agentId: string;
@@ -23,6 +31,7 @@ interface AgentModelContext {
 interface UpdateAgentModelContext extends AgentModelContext {
   model: string;
   secondaryModel?: string | null;
+  thinkingLevel?: AgentPiThinkingLevel;
 }
 
 interface UpdateOptions {
@@ -45,7 +54,6 @@ const JSON_ADAPTER_PATHS: Record<string, string[]> = {
 const OH_MY_PI_MODEL_ADAPTER = "oh-my-pi-yaml-v1";
 const OH_MY_PI_CONFIG_PATHS = ["config.yml", "config.yaml"] as const;
 const OH_MY_PI_MODELS_PATH = "models.yml";
-const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
 const MAX_MODEL_LENGTH = 512;
 
 function emptyResult(
@@ -103,39 +111,8 @@ function providerFromModel(model: string | null): string | null {
   return model.split("/", 1)[0] || null;
 }
 
-export function sanitizeEndpoint(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const parsed = new URL(value);
-    parsed.username = "";
-    parsed.password = "";
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString().replace(/\/$/, "");
-  } catch {
-    return null;
-  }
-}
+export { fileExists, readTextConfig, sanitizeEndpoint };
 
-export async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function readTextConfig(filePath: string): Promise<string> {
-  const stat = await fs.lstat(filePath);
-  if (stat.isSymbolicLink()) {
-    throw new Error("AGENT_MODEL_CONFIG_SYMLINK_INVALID");
-  }
-  if (!stat.isFile() || stat.size > MAX_CONFIG_BYTES) {
-    throw new Error("AGENT_MODEL_CONFIG_SIZE_INVALID");
-  }
-  return fs.readFile(filePath, "utf8");
-}
 
 function normalizeModel(value: string): string {
   const model = value.trim();
@@ -386,6 +363,10 @@ function inspectPi(
 ): AgentModelConfiguration {
   const model = getString(data, "defaultModel");
   const provider = getString(data, "defaultProvider");
+  const rawThinkingLevel = getString(data, "defaultThinkingLevel");
+  const thinkingLevel = ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(rawThinkingLevel ?? "")
+    ? (rawThinkingLevel as AgentPiThinkingLevel)
+    : null;
   return emptyResult("pi", model ? "configured" : "not-configured", {
     adapter: "pi-settings-v1",
     model,
@@ -394,6 +375,7 @@ function inspectPi(
     credentialStatus: "platform-managed",
     sourceRelativePath: relativePath,
     canSetModel: true,
+    thinkingLevel,
   });
 }
 
@@ -680,7 +662,15 @@ export async function inspectAgentModelConfig(
   }
   try {
     const data = parseJsonRecord(await readTextConfig(resolved.absolutePath));
-    return inspectJsonAdapter(context.agentId, data, resolved.relativePath);
+    const result = inspectJsonAdapter(
+      context.agentId,
+      data,
+      resolved.relativePath,
+    );
+    if (context.agentId === "pi") {
+      result.modelCatalog = await inspectPiModelCatalog(context.rootPath);
+    }
+    return result;
   } catch {
     return emptyResult(context.agentId, "invalid", {
       adapter: jsonAdapterId(context.agentId),
@@ -762,6 +752,7 @@ function jsonModelEdits(
   raw: string,
   model: string,
   secondaryModel?: string | null,
+  thinkingLevel?: AgentPiThinkingLevel,
 ): string {
   const formatting = { insertSpaces: true, tabSize: 2, eol: "\n" };
   if (agentId === "pi") {
@@ -783,6 +774,14 @@ function jsonModelEdits(
         formattingOptions: formatting,
       }),
     );
+    if (thinkingLevel) {
+      next = applyEdits(
+        next,
+        modify(next, ["defaultThinkingLevel"], thinkingLevel, {
+          formattingOptions: formatting,
+        }),
+      );
+    }
     return next.endsWith("\n") ? next : `${next}\n`;
   }
   const modelPath =
@@ -900,7 +899,13 @@ export async function updateAgentModelConfig(
     options.backupRoot,
     context.agentId,
   );
-  const next = jsonModelEdits(context.agentId, raw, model, secondaryModel);
+  const next = jsonModelEdits(
+    context.agentId,
+    raw,
+    model,
+    secondaryModel,
+    context.thinkingLevel,
+  );
   parseJsonRecord(next);
   await assertConfigUnchanged(resolved.absolutePath, original);
   try {

@@ -19,6 +19,10 @@ import {
   createNativeCommandRunner,
   type NativeCommandRunner,
 } from "./native-command";
+import {
+  createKimiOAuthTokenService,
+  type KimiOAuthTokenService,
+} from "./kimi-oauth-token-service";
 
 export interface AgentUsageServiceOptions {
   resolveConfigRoot?: (agentId: string) => string;
@@ -30,6 +34,7 @@ export interface AgentUsageServiceOptions {
   homeDir?: string;
   platform?: NodeJS.Platform;
   antigravityLocalClient?: AntigravityLocalUsageClient;
+  kimiOAuthTokenService?: KimiOAuthTokenService;
 }
 
 export interface AgentUsageService {
@@ -558,6 +563,15 @@ export function createAgentUsageService(
   const antigravityLocalClient =
     options.antigravityLocalClient ??
     createAntigravityLocalUsageClient({ commandRunner, platform });
+  const kimiOAuthTokenService =
+    options.kimiOAuthTokenService ??
+    createKimiOAuthTokenService({
+      fetchImpl,
+      now,
+      platform,
+      readFile,
+      validateCredentialFile: options.readFile === undefined,
+    });
 
   const cache = new Map<string, { quota: AgentUsageQuota; storedAt: number }>();
 
@@ -823,13 +837,9 @@ export function createAgentUsageService(
     }
   }
 
-  async function readKimiCredentials(
+  async function readLegacyKimiCredentials(
     configRoot: string,
   ): Promise<TokenCredentials | null> {
-    const primary = await readKimiCredentialsFile(
-      path.join(configRoot, "credentials", "kimi-code.json"),
-    );
-    if (primary) return primary;
     // Older builds dropped token json files directly under <root>/oauth/.
     let entries: string[];
     try {
@@ -860,18 +870,46 @@ export function createAgentUsageService(
         ...overrides,
       });
 
-    const credentials = await readKimiCredentials(configRoot);
-    if (!credentials) {
-      return buildKimiQuota("no-credentials");
-    }
-    if (credentials.expiresAt !== null && credentials.expiresAt <= now()) {
+    const currentToken = await kimiOAuthTokenService.getAccessToken(configRoot);
+    let accessToken: string;
+    let currentCredential = false;
+    if (currentToken.kind === "ok") {
+      accessToken = currentToken.accessToken;
+      currentCredential = true;
+    } else if (currentToken.kind === "no-credentials") {
+      const legacy = await readLegacyKimiCredentials(configRoot);
+      if (!legacy) return buildKimiQuota("no-credentials");
+      if (legacy.expiresAt !== null && legacy.expiresAt <= now()) {
+        return buildKimiQuota("expired");
+      }
+      accessToken = legacy.accessToken;
+    } else if (currentToken.kind === "expired") {
       return buildKimiQuota("expired");
+    } else {
+      return buildKimiQuota("unavailable", {
+        errorCode: currentToken.errorCode,
+      });
     }
 
-    const result = await fetchJson(KIMI_USAGE_ENDPOINT, {
+    let result = await fetchJson(KIMI_USAGE_ENDPOINT, {
       method: "GET",
-      headers: { Authorization: `Bearer ${credentials.accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
+    if (result.kind === "expired" && currentCredential) {
+      const refreshed = await kimiOAuthTokenService.getAccessToken(configRoot, {
+        forceRefresh: true,
+      });
+      if (refreshed.kind === "ok") {
+        result = await fetchJson(KIMI_USAGE_ENDPOINT, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${refreshed.accessToken}` },
+        });
+      } else if (refreshed.kind === "unavailable") {
+        return buildKimiQuota("unavailable", {
+          errorCode: refreshed.errorCode,
+        });
+      }
+    }
     if (result.kind === "expired") {
       return buildKimiQuota("expired");
     }

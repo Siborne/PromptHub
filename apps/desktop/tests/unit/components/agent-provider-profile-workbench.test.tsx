@@ -122,6 +122,17 @@ describe("AgentProviderProfileWorkbench", () => {
     expect(screen.getAllByText("opus[1m]").length).toBeGreaterThan(0);
     expect(screen.getByText("Configured auth token")).toBeVisible();
     expect(screen.queryByText(/sk-|agent-provider:/i)).not.toBeInTheDocument();
+    const nativeRow = screen.getByTestId("provider-native-card");
+    expect(nativeRow).toHaveClass("rounded-lg", "border", "bg-card");
+    expect(nativeRow).not.toHaveClass("border-b");
+    expect(
+      screen.queryByText(
+        "This native configuration remains owned by the Agent and is read-only here.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create editable profile" }),
+    ).toBeVisible();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Restore official configuration" }),
@@ -444,7 +455,7 @@ describe("AgentProviderProfileWorkbench", () => {
     expect(within(dialog).getByText("null")).toBeVisible();
     expect(within(dialog).getByText('{"region":"global"}')).toBeVisible();
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Create profile" }),
+      within(dialog).getByRole("button", { name: "Create and edit" }),
     );
 
     await waitFor(() =>
@@ -468,6 +479,10 @@ describe("AgentProviderProfileWorkbench", () => {
         }),
       ).not.toBeInTheDocument(),
     );
+    expect(
+      await screen.findByRole("region", { name: "Edit provider profile" }),
+    ).toBeVisible();
+    expect(screen.getAllByDisplayValue("anthropic")).toHaveLength(2);
   });
 
   it("requires an explicit per-field conflict choice before activation", async () => {

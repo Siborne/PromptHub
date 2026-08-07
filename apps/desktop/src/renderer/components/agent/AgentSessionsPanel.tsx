@@ -35,6 +35,7 @@ import { Select } from "../ui/Select";
 const SESSION_PAGE_SIZE = 50;
 const TRANSCRIPT_FETCH_PAGE_SIZE = 80;
 const TRANSCRIPT_VIEW_PAGE_SIZE = 20;
+const MAX_TRANSCRIPT_CURSOR_HOPS = 8;
 
 function formatTime(value: number | null): string {
   if (!value) return "";
@@ -277,11 +278,21 @@ export function AgentSessionsPanel({
     1,
     Math.ceil((detail?.entries.length || 0) / TRANSCRIPT_VIEW_PAGE_SIZE),
   );
+  const safeTranscriptPage = Math.min(
+    transcriptPage,
+    Math.max(0, transcriptPageCount - 1),
+  );
   const visibleEntries =
     detail?.entries.slice(
-      transcriptPage * TRANSCRIPT_VIEW_PAGE_SIZE,
-      (transcriptPage + 1) * TRANSCRIPT_VIEW_PAGE_SIZE,
+      safeTranscriptPage * TRANSCRIPT_VIEW_PAGE_SIZE,
+      (safeTranscriptPage + 1) * TRANSCRIPT_VIEW_PAGE_SIZE,
     ) || [];
+
+  useEffect(() => {
+    const lastPage = Math.max(0, transcriptPageCount - 1);
+    setTranscriptPage((current) => Math.min(current, lastPage));
+  }, [transcriptPageCount]);
+
   const loadTranscriptPage = async (nextPage: number) => {
     if (!detail || !selectedId || isLoadingMoreTranscript) return;
     if (nextPage < 0) return;
@@ -292,29 +303,49 @@ export function AgentSessionsPanel({
     if (nextPage !== transcriptPageCount || !detail.nextCursor) return;
 
     const sessionId = selectedId;
-    const cursor = detail.nextCursor;
     setIsLoadingMoreTranscript(true);
     setError(null);
     try {
-      const page = await window.api.agent.readSession(agent.id, sessionId, {
-        cursor,
-        limit: TRANSCRIPT_FETCH_PAGE_SIZE,
-      });
-      if (currentAgentId.current !== agent.id) return;
-      const known = new Set(detail.entries.map((entry) => entry.id));
-      const appended = page.entries.filter((entry) => !known.has(entry.id));
+      let cursor: string | null = detail.nextCursor;
+      let entries = detail.entries;
+      let parseErrors = 0;
+      let truncated = detail.truncated;
+      let hops = 0;
+      while (
+        cursor &&
+        entries.length <= nextPage * TRANSCRIPT_VIEW_PAGE_SIZE &&
+        hops < MAX_TRANSCRIPT_CURSOR_HOPS
+      ) {
+        const page = await window.api.agent.readSession(agent.id, sessionId, {
+          cursor,
+          limit: TRANSCRIPT_FETCH_PAGE_SIZE,
+        });
+        if (currentAgentId.current !== agent.id) return;
+        const known = new Set(entries.map((entry) => entry.id));
+        const appended = page.entries.filter((entry) => !known.has(entry.id));
+        entries = [...entries, ...appended];
+        parseErrors += page.parseErrors;
+        truncated ||= page.truncated;
+        const nextCursor = page.nextCursor ?? null;
+        cursor = nextCursor === cursor ? null : nextCursor;
+        hops += 1;
+      }
+
       setDetail((current) => {
         if (!current || current.sessionId !== sessionId) return current;
-        const entries = [...current.entries, ...appended];
         return {
           ...current,
           entries,
-          parseErrors: current.parseErrors + page.parseErrors,
-          truncated: current.truncated || page.truncated,
-          nextCursor: page.nextCursor ?? null,
+          parseErrors: current.parseErrors + parseErrors,
+          truncated: current.truncated || truncated,
+          nextCursor: cursor,
         };
       });
-      if (appended.length > 0) setTranscriptPage(nextPage);
+      const lastPage = Math.max(
+        0,
+        Math.ceil(entries.length / TRANSCRIPT_VIEW_PAGE_SIZE) - 1,
+      );
+      setTranscriptPage(Math.min(nextPage, lastPage));
     } catch {
       if (currentAgentId.current === agent.id) {
         setError(t("agents.sessionReadFailed"));
@@ -487,6 +518,7 @@ export function AgentSessionsPanel({
                   type="button"
                   role="switch"
                   aria-label={t("agents.enableLocalSessionIndex")}
+                  aria-describedby="local-session-index-description"
                   aria-checked={sessionIndex.state.enabled}
                   disabled={sessionIndex.isChanging || sessionIndex.isIndexing}
                   onClick={() =>
@@ -518,6 +550,12 @@ export function AgentSessionsPanel({
                   </button>
                 ) : null}
               </div>
+              <p
+                id="local-session-index-description"
+                className="mt-1.5 pr-2 text-[11px] leading-4 text-muted-foreground"
+              >
+                {t("agents.localSessionIndexDescription")}
+              </p>
               {sessionIndex.isIndexing && sessionIndex.progress ? (
                 <div className="mt-2 flex items-center gap-2">
                   <div className="min-w-0 flex-1">
@@ -572,11 +610,12 @@ export function AgentSessionsPanel({
               key={session.id}
               type="button"
               onClick={() => setSelectedId(session.id)}
+              aria-current={selectedId === session.id ? "true" : undefined}
               style={{
                 contentVisibility: "auto",
                 containIntrinsicSize: "88px",
               }}
-              className={`mb-1 w-full rounded-md border px-3 py-3 text-left transition-colors ${selectedId === session.id ? "border-primary/50 bg-primary/[0.08]" : "border-transparent hover:bg-accent"}`}
+              className={`mb-1 w-full rounded-md border px-3 py-3 text-left text-foreground transition-colors ${selectedId === session.id ? "border-primary/40 bg-accent/70" : "border-transparent hover:bg-accent"}`}
             >
               <span className="line-clamp-2 text-sm font-medium text-foreground">
                 {metadataBySession[session.id]?.title || session.title}
@@ -625,15 +664,7 @@ export function AgentSessionsPanel({
       <section className="flex min-h-0 min-w-0 flex-col bg-slate-50/70 dark:bg-background">
         {selected ? (
           <>
-            <header className="shrink-0 border-b border-border/70 bg-white px-5 py-4 dark:bg-background">
-              <div className="min-w-0">
-                <h2 className="truncate text-base font-semibold text-foreground">
-                  {metadataBySession[selected.id]?.title || selected.title}
-                </h2>
-                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                  {selected.projectPath || selected.projectLabel || selected.id}
-                </p>
-              </div>
+            <header className="shrink-0 border-b border-border/70 bg-white px-5 py-2 dark:bg-background">
               {typeof window.api.agent.resumeConversation === "function" ? (
                 <AgentConversationActions
                   agent={agent}
@@ -657,7 +688,7 @@ export function AgentSessionsPanel({
                       displayResumeCommand(selected),
                     )
                   }
-                  className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground hover:bg-accent"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground hover:bg-accent"
                 >
                   <CopyIcon className="h-4 w-4" />
                   {t("agents.copyResumeCommand")}
@@ -669,7 +700,7 @@ export function AgentSessionsPanel({
             (detail.entries.length > TRANSCRIPT_VIEW_PAGE_SIZE ||
               Boolean(detail.nextCursor)) ? (
               <TranscriptPagination
-                currentPage={transcriptPage}
+                currentPage={safeTranscriptPage}
                 pageCount={transcriptPageCount}
                 hasMore={Boolean(detail.nextCursor)}
                 isLoading={isLoadingMoreTranscript}
@@ -703,11 +734,6 @@ export function AgentSessionsPanel({
                     />
                   ))
                 : null}
-              {detail?.truncated ? (
-                <p className="rounded-md border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2 text-xs text-muted-foreground">
-                  {t("agents.transcriptTruncated")}
-                </p>
-              ) : null}
             </div>
           </>
         ) : (
@@ -900,7 +926,7 @@ function ConversationMessage({
         label={roleLabel}
         className={isTool ? "text-sky-600" : "text-amber-600"}
       />
-      <div className="text-foreground">
+      <div className="mt-1 text-foreground">
         <AgentConversationMarkdown content={entry.text} />
       </div>
     </article>

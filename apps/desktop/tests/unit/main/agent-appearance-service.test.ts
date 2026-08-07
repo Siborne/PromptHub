@@ -332,6 +332,72 @@ describe("AgentAppearanceService", () => {
     ).rejects.toThrow();
   });
 
+  it("updates Pet display metadata atomically while preserving manifest extensions", async () => {
+    const petDir = path.join(codexRoot, "pets", "nova");
+    const manifestPath = path.join(petDir, "pet.json");
+    await fs.mkdir(petDir, { recursive: true });
+    await fs.writeFile(
+      manifestPath,
+      JSON.stringify({
+        id: "nova",
+        displayName: "Nova",
+        description: "Before",
+        spriteVersionNumber: 2,
+        spritesheetPath: "spritesheet.webp",
+        animationStates: { idle: [0, 7] },
+      }),
+    );
+    await fs.writeFile(path.join(petDir, "spritesheet.webp"), PNG_BYTES);
+    const service = new AgentAppearanceService({ dataRoot, codexRoot, engine });
+
+    await expect(
+      service.updatePetMetadata({
+        agentId: "codex",
+        petId: "nova",
+        name: "  Nova Two  ",
+        description: " Updated locally ",
+      }),
+    ).resolves.toMatchObject({
+      id: "nova",
+      name: "Nova Two",
+      description: "Updated locally",
+      spriteVersionNumber: 2,
+    });
+    expect(JSON.parse(await fs.readFile(manifestPath, "utf8"))).toMatchObject({
+      id: "nova",
+      displayName: "Nova Two",
+      description: "Updated locally",
+      animationStates: { idle: [0, 7] },
+    });
+    expect(
+      (await fs.readdir(petDir)).filter((name) => name.endsWith(".tmp")),
+    ).toEqual([]);
+  });
+
+  it("rejects invalid Pet metadata without modifying the manifest", async () => {
+    const petDir = path.join(codexRoot, "pets", "nova");
+    const manifestPath = path.join(petDir, "pet.json");
+    const original = JSON.stringify({
+      id: "nova",
+      displayName: "Nova",
+      spritesheetPath: "spritesheet.webp",
+    });
+    await fs.mkdir(petDir, { recursive: true });
+    await fs.writeFile(manifestPath, original);
+    await fs.writeFile(path.join(petDir, "spritesheet.webp"), PNG_BYTES);
+    const service = new AgentAppearanceService({ dataRoot, codexRoot, engine });
+
+    await expect(
+      service.updatePetMetadata({
+        agentId: "codex",
+        petId: "nova",
+        name: " ",
+        description: "unchanged",
+      }),
+    ).rejects.toThrow("displayName");
+    expect(await fs.readFile(manifestPath, "utf8")).toBe(original);
+  });
+
   it("rejects Pet manifests with traversal, unsupported media or symlinks", async () => {
     const source = path.join(root, "pet-source");
     await fs.mkdir(source, { recursive: true });

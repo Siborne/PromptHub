@@ -26,7 +26,7 @@ import { AgentConfigFilesPanel } from "./AgentConfigFilesPanel";
 import { AgentDefinitionsPanel } from "./AgentDefinitionsPanel";
 import { AgentCliDiagnosticDialog } from "./AgentCliDiagnosticDialog";
 import { AgentOverviewPanel } from "./AgentOverviewPanel";
-import { AgentProviderProfileWorkbench } from "./AgentProviderProfileWorkbench";
+import { AgentProviderModelWorkbench } from "./AgentProviderModelWorkbench";
 import { AgentSessionsPanel } from "./AgentSessionsPanel";
 import { AgentSettingsDialog } from "./AgentSettingsDialog";
 import { WebAgentServicesWorkspace } from "./WebAgentServicesWorkspace";
@@ -345,7 +345,7 @@ function AgentWorkspacePanel({
           target.tab === "configFiles" ? (
             <AgentConfigFilesPanel agent={agent} />
           ) : target.tab === "provider" ? (
-            <AgentProviderProfileWorkbench key={agent.id} agent={agent} />
+            <AgentProviderModelWorkbench key={agent.id} agent={agent} />
           ) : target.tab === "sessions" ? (
             <AgentSessionsPanel
               key={agent.id}
@@ -372,7 +372,7 @@ function AgentWorkspacePanel({
               <AgentDefinitionsPanel key={agent.id} agent={agent} />
             ) : null}
             {target.tab === "provider" ? (
-              <AgentProviderProfileWorkbench key={agent.id} agent={agent} />
+              <AgentProviderModelWorkbench key={agent.id} agent={agent} />
             ) : null}
             {target.tab === "appearance" ? (
               <AgentAppearancePanel key={agent.id} agent={agent} />

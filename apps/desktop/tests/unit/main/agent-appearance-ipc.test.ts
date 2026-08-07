@@ -13,6 +13,10 @@ const importPetMock = vi.fn();
 const exportPetMock = vi.fn();
 const deletePetMock = vi.fn();
 const getPetPreviewMock = vi.fn();
+const updatePetMetadataMock = vi.fn();
+const listPetStoreMock = vi.fn();
+const installPetStoreMock = vi.fn();
+const getPetStorePreviewMock = vi.fn();
 
 vi.mock("electron", () => ({
   app: { once: vi.fn() },
@@ -37,12 +41,21 @@ async function setup() {
     exportPet: exportPetMock,
     deletePet: deletePetMock,
     getPetPreview: getPetPreviewMock,
+    updatePetMetadata: updatePetMetadataMock,
+  };
+  const petStoreService = {
+    list: listPetStoreMock,
+    install: installPetStoreMock,
+    getPreview: getPetStorePreviewMock,
   };
   const [{ registerAgentAppearanceIPC }, { IPC_CHANNELS }] = await Promise.all([
     import("../../../src/main/ipc/agent-appearance.ipc"),
     import("@prompthub/shared/constants/ipc-channels"),
   ]);
-  registerAgentAppearanceIPC({ createService: () => service as never });
+  registerAgentAppearanceIPC({
+    createService: () => service as never,
+    createPetStoreService: () => petStoreService as never,
+  });
   return {
     IPC_CHANNELS,
     handlers: Object.fromEntries(
@@ -65,6 +78,10 @@ describe("Agent appearance IPC", () => {
     exportPetMock.mockReset();
     deletePetMock.mockReset();
     getPetPreviewMock.mockReset();
+    updatePetMetadataMock.mockReset();
+    listPetStoreMock.mockReset();
+    installPetStoreMock.mockReset();
+    getPetStorePreviewMock.mockReset();
   });
 
   it("exposes Codex overview and validates theme actions", async () => {
@@ -199,5 +216,65 @@ describe("Agent appearance IPC", () => {
     await expect(
       handlers[IPC_CHANNELS.AGENT_APPEARANCE_DELETE_PET](null, "codex", 42),
     ).rejects.toThrow("Pet id");
+  });
+
+  it("validates Pet metadata updates and official store operations", async () => {
+    listPetStoreMock.mockResolvedValue({ items: [], total: 0 });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_UPDATE_PET](null, {
+      agentId: "codex",
+      petId: "orbit",
+      name: "Orbit Prime",
+      description: "Updated locally",
+    });
+    expect(updatePetMetadataMock).toHaveBeenCalledWith({
+      agentId: "codex",
+      petId: "orbit",
+      name: "Orbit Prime",
+      description: "Updated locally",
+    });
+
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_LIST](null, {
+      agentId: "codex",
+      locale: "zh",
+      page: 2,
+      pageSize: 12,
+      refresh: true,
+    });
+    expect(listPetStoreMock).toHaveBeenCalledWith({
+      agentId: "codex",
+      locale: "zh",
+      page: 2,
+      pageSize: 12,
+      refresh: true,
+    });
+
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_INSTALL](
+      null,
+      "codex",
+      "orbit",
+    );
+    await handlers[IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_PREVIEW](
+      null,
+      "codex",
+      "orbit",
+    );
+    expect(installPetStoreMock).toHaveBeenCalledWith("codex", "orbit");
+    expect(getPetStorePreviewMock).toHaveBeenCalledWith("codex", "orbit");
+
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_UPDATE_PET](null, {
+        agentId: "codex",
+        petId: "orbit",
+        name: "",
+      }),
+    ).rejects.toThrow("Pet name");
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_LIST](null, {
+        agentId: "codex",
+        page: Number.POSITIVE_INFINITY,
+      }),
+    ).rejects.toThrow("finite number");
   });
 });

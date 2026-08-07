@@ -207,6 +207,102 @@ describe("AgentConversationService", () => {
     );
   });
 
+  it("uses the reviewed handoff snapshot when the source transcript changes before confirmation", async () => {
+    let currentDetail = detail();
+    const launch = vi.fn(async () => ({ launched: true }));
+    const { repository, service } = createService({
+      launch,
+      sessions: {
+        list: vi.fn(async () => sessionList()),
+        read: vi.fn(async () => currentDetail),
+      },
+    });
+    const preview = await service.previewHandoff({
+      sourceAgentId: "claude",
+      sourceSessionId: "session-1",
+      targetAgentId: "codex",
+      projectId: "project-1",
+      projectPath: "/workspace/project",
+    });
+    currentDetail = {
+      ...detail(),
+      entries: [
+        ...detail().entries,
+        {
+          id: "5",
+          role: "user",
+          timestamp: 5,
+          text: "A new message arrived while the preview was open.",
+        },
+      ],
+    };
+
+    await expect(
+      service.continueInAgent({
+        ...preview,
+        confirmedPayloadDigest: preview.payloadDigest,
+      }),
+    ).resolves.toEqual({ status: "launched", mode: "cross-agent" });
+    expect(launch).toHaveBeenCalledWith({
+      executable: "/codex",
+      args: [preview.payload],
+      cwd: "/workspace/project",
+    });
+    expect(repository.createHandoff).toHaveBeenCalledWith(
+      expect.objectContaining({ payloadDigest: preview.payloadDigest }),
+    );
+    expect(preview.payload).not.toContain(
+      "A new message arrived while the preview was open",
+    );
+  });
+
+  it("expires a preview token without rereading the source transcript", async () => {
+    let now = 100;
+    const read = vi.fn(async () => detail());
+    const { service } = createService({
+      now: () => now,
+      sessions: {
+        list: vi.fn(async () => sessionList()),
+        read,
+      },
+    });
+    const preview = await service.previewHandoff({
+      sourceAgentId: "claude",
+      sourceSessionId: "session-1",
+      targetAgentId: "codex",
+      projectId: "project-1",
+      projectPath: "/workspace/project",
+    });
+    now += 5 * 60 * 1_000;
+
+    await expect(
+      service.continueInAgent({
+        ...preview,
+        confirmedPayloadDigest: preview.payloadDigest,
+      }),
+    ).rejects.toThrow("HANDOFF_PREVIEW_EXPIRED");
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects confirmation when the reviewed target or transport is changed", async () => {
+    const { service } = createService();
+    const preview = await service.previewHandoff({
+      sourceAgentId: "claude",
+      sourceSessionId: "session-1",
+      targetAgentId: "codex",
+      projectId: "project-1",
+      projectPath: "/workspace/project",
+    });
+
+    await expect(
+      service.continueInAgent({
+        ...preview,
+        targetAgentId: "antigravity",
+        confirmedPayloadDigest: preview.payloadDigest,
+      }),
+    ).rejects.toThrow("HANDOFF_PREVIEW_STALE");
+  });
+
   it("rejects stale previews and plans a direct Agent launch when prompt injection is unavailable", async () => {
     const { service } = createService({
       resolveExecutable: vi.fn(async () => null),

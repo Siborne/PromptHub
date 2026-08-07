@@ -15,6 +15,8 @@ import type {
   AgentDefinitionOpenRequest,
   AgentDefinitionOpenResult,
   AgentPetSummary,
+  AgentPetStorePage,
+  AgentPetStoreQuery,
   AgentProviderProfileExport,
   AgentProviderProfilePublic,
   AgentProviderMigrationPreview,
@@ -33,6 +35,11 @@ import type {
   AgentProviderModelTestResult,
   AgentProviderPreviewRequest,
   AgentModelConfiguration,
+  AgentPiCustomModelInput,
+  AgentPiCustomModelUpdateInput,
+  AgentPiCustomProviderInput,
+  AgentPiCustomProviderUpdateInput,
+  AgentPiWriteResult,
   AgentSessionDetail,
   AgentSessionDetailPageInput,
   AgentSessionIndexCancelRequest,
@@ -50,9 +57,11 @@ import type {
   AgentConversationResumeRequest,
   ContinueAgentConversationRequest,
   AgentUsageQuota,
+  AgentUsageQueryOptions,
   SkillLocalFileEntry,
   SkillLocalFileTreeEntry,
   UpdateAgentModelInput,
+  UpdateAgentPetInput,
   UpdateAgentModelResult,
   UpsertAgentConversationMetadataInput,
   CreateAgentProviderProfileRequest,
@@ -108,6 +117,49 @@ export const agentApi = {
     input: UpdateAgentModelInput,
   ): Promise<UpdateAgentModelResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_MODEL_CONFIG_SET, input),
+  addPiProvider: (
+    input: AgentPiCustomProviderInput & { agentId: "pi" },
+  ): Promise<AgentPiWriteResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_PROVIDER_ADD, input),
+  updatePiProvider: (
+    input: AgentPiCustomProviderUpdateInput & { agentId: "pi" },
+  ): Promise<AgentPiWriteResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_PROVIDER_UPDATE, input),
+  removePiProvider: (input: {
+    agentId: "pi";
+    providerId: string;
+  }): Promise<AgentPiWriteResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_PROVIDER_REMOVE, input),
+  addPiModel: (input: {
+    agentId: "pi";
+    providerId: string;
+    model: AgentPiCustomModelInput;
+  }): Promise<AgentPiWriteResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_MODEL_ADD, input),
+  updatePiModel: (input: {
+    agentId: "pi";
+    providerId: string;
+    model: AgentPiCustomModelUpdateInput;
+  }): Promise<AgentPiWriteResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_MODEL_UPDATE, input),
+  removePiModel: (input: {
+    agentId: "pi";
+    providerId: string;
+    modelId: string;
+  }): Promise<AgentPiWriteResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_MODEL_REMOVE, input),
+  testPiModel: (input: {
+    agentId: "pi";
+    providerId: string;
+    modelId: string;
+  }): Promise<AgentProviderModelTestResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_MODEL_TEST, input),
+  setPiCredential: (input: {
+    agentId: "pi";
+    providerId: string;
+    secret: string;
+  }): Promise<AgentPiWriteResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_CREDENTIAL_SET, input),
   listSessions: (
     agentId: string,
     limit = 50,
@@ -202,8 +254,11 @@ export const agentApi = {
         handler,
       );
   },
-  getUsage: (agentId: string): Promise<AgentUsageQuota> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AGENT_USAGE_GET, agentId),
+  getUsage: (
+    agentId: string,
+    options?: AgentUsageQueryOptions,
+  ): Promise<AgentUsageQuota> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_USAGE_GET, agentId, options),
   listProviderProfiles: (options?: {
     platformId?: string;
     includeArchived?: boolean;
@@ -350,6 +405,30 @@ export const agentApi = {
   getAgentPetPreview: (agentId: string, petId: string): Promise<string> =>
     ipcRenderer.invoke(
       IPC_CHANNELS.AGENT_APPEARANCE_PET_PREVIEW,
+      agentId,
+      petId,
+    ),
+  updateAppearancePet: (input: UpdateAgentPetInput): Promise<AgentPetSummary> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_APPEARANCE_UPDATE_PET, input),
+  listAppearancePetStore: (
+    query: AgentPetStoreQuery,
+  ): Promise<AgentPetStorePage> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_LIST, query),
+  installAppearancePetFromStore: (
+    agentId: string,
+    petId: string,
+  ): Promise<AgentPetSummary> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_INSTALL,
+      agentId,
+      petId,
+    ),
+  getAppearancePetStorePreview: (
+    agentId: string,
+    petId: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.AGENT_APPEARANCE_PET_STORE_PREVIEW,
       agentId,
       petId,
     ),

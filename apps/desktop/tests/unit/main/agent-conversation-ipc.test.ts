@@ -27,6 +27,7 @@ async function setup() {
     })),
     previewHandoff: vi.fn(async (request) => ({
       ...request,
+      previewToken: "00000000-0000-4000-8000-000000000001",
       sourceTitle: "Session",
       payload: "portable context",
       payloadDigest: `sha256:${"a".repeat(64)}`,
@@ -167,6 +168,7 @@ describe("Agent conversation IPC", () => {
       targetAgentId: "antigravity",
       projectPath: "/workspace/project",
       sourceTitle: "Session 2",
+      previewToken: "00000000-0000-4000-8000-000000000002",
       payload: "Reviewed context",
       payloadDigest: digest,
       confirmedPayloadDigest: digest,

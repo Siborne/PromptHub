@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
+  AlertTriangleIcon,
   DownloadIcon,
   FolderOpenIcon,
+  ImageIcon,
   LoaderCircleIcon,
   Paintbrush2Icon,
   PawPrintIcon,
@@ -15,15 +17,127 @@ import {
 import { useTranslation } from "react-i18next";
 
 import type {
+  AgentAppearanceOverview,
   AgentDesktopThemeSummary,
-  AgentPetSummary,
   ManagedAgentSummary,
+  UpdateAgentPetInput,
 } from "@prompthub/shared/types";
 import { AgentAppearancePreview } from "./AgentAppearancePreview";
+import { AgentPetWorkspace } from "./AgentPetWorkspace";
 import { useAgentAppearance } from "./use-agent-appearance";
+
+type AppearanceSection = "skins" | "pets";
 
 const iconButton =
   "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45";
+
+function AppearanceNavigation({
+  section,
+  themeCount,
+  petCount,
+  onChange,
+}: {
+  section: AppearanceSection;
+  themeCount: number;
+  petCount: number;
+  onChange: (section: AppearanceSection) => void;
+}) {
+  const { t } = useTranslation();
+  const items = [
+    {
+      id: "pets" as const,
+      label: t("agents.appearance.petsTitle"),
+      count: petCount,
+      icon: <PawPrintIcon className="h-5 w-5" />,
+    },
+    {
+      id: "skins" as const,
+      label: t("agents.appearance.skinsTitle"),
+      count: themeCount,
+      icon: <Paintbrush2Icon className="h-5 w-5" />,
+    },
+  ];
+
+  return (
+    <aside className="flex w-[6.5rem] shrink-0 flex-col gap-2 border-r border-border bg-card p-3">
+      {items.map((item) => {
+        const selected = item.id === section;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={selected}
+            aria-label={`${item.label} ${item.count}`}
+            onClick={() => onChange(item.id)}
+            className={`relative flex h-[5.25rem] w-full flex-col items-center justify-center gap-2 rounded-md border text-xs font-medium transition-colors ${
+              selected
+                ? "border-primary/35 bg-primary/[0.09] text-primary"
+                : "border-transparent text-muted-foreground hover:border-border hover:bg-background hover:text-foreground"
+            }`}
+          >
+            {item.icon}
+            <span className="max-w-full truncate px-1">{item.label}</span>
+            <span className="absolute right-1.5 top-1.5 min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center text-[10px] font-semibold text-muted-foreground">
+              {item.count}
+            </span>
+          </button>
+        );
+      })}
+    </aside>
+  );
+}
+
+function AppearanceToolbar({
+  section,
+  busy,
+  activeThemeId,
+  onImport,
+  onRefresh,
+}: {
+  section: AppearanceSection;
+  busy: boolean;
+  activeThemeId: string | null;
+  onImport: () => void;
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const isSkins = section === "skins";
+  return (
+    <div className="flex min-h-[4.5rem] shrink-0 flex-wrap items-center gap-3 border-b border-border bg-card px-5 py-3">
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-semibold text-foreground">
+          {t("agents.appearance.title")}
+        </h2>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {isSkins
+            ? activeThemeId || t("agents.appearance.native")
+            : t("agents.appearance.petsDesc")}
+        </p>
+      </div>
+      {isSkins ? (
+        <button
+          type="button"
+          onClick={onImport}
+          disabled={busy}
+          className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-45"
+        >
+          <UploadIcon className="h-4 w-4" />
+          {t("agents.appearance.importSkin")}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={busy}
+        aria-label={t("agents.refresh")}
+        title={t("agents.refresh")}
+        className={iconButton}
+      >
+        <RefreshCwIcon className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />
+      </button>
+    </div>
+  );
+}
 
 function SectionHeading({
   icon,
@@ -31,10 +145,10 @@ function SectionHeading({
   description,
   action,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   description: string;
-  action?: React.ReactNode;
+  action?: ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -65,7 +179,7 @@ function NativeAppearanceSection({
 }) {
   const { t } = useTranslation();
   return (
-    <section>
+    <section className="rounded-md border border-border bg-card p-4">
       <SectionHeading
         icon={<Paintbrush2Icon className="h-4 w-4" />}
         title={t("agents.appearance.nativeTitle")}
@@ -82,7 +196,7 @@ function NativeAppearanceSection({
           </button>
         }
       />
-      <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-2 border border-border/70 bg-muted/15 px-4 py-3">
+      <div className="mt-4 grid gap-3 border-t border-border/70 pt-4 sm:grid-cols-3">
         <StatusMetric
           label={t("agents.appearance.runtime")}
           value={t("agents.appearance.loopbackRuntime")}
@@ -103,8 +217,10 @@ function NativeAppearanceSection({
 function StatusMetric({ label, value }: { label: string; value: string }) {
   return (
     <p className="min-w-0 text-xs">
-      <span className="font-medium text-muted-foreground">{label}</span>
-      <span className="ml-2 font-semibold text-foreground">{value}</span>
+      <span className="block font-medium text-muted-foreground">{label}</span>
+      <span className="mt-1 block truncate font-semibold text-foreground">
+        {value}
+      </span>
     </p>
   );
 }
@@ -128,14 +244,15 @@ function ThemeCard({
 }) {
   const { t } = useTranslation();
   return (
-    <article className="overflow-hidden rounded-md border border-border/80 bg-card shadow-sm transition-colors hover:border-primary/35">
+    <article className="overflow-hidden rounded-md border border-border/80 bg-card shadow-sm transition-colors hover:border-primary/35 md:flex">
       <AgentAppearancePreview
         agentId={agentId}
         assetId={theme.id}
         kind="theme"
         alt={theme.name}
+        className="md:w-72 md:shrink-0 md:border-b-0 md:border-r lg:w-80"
       />
-      <div className="p-4">
+      <div className="flex min-w-0 flex-1 flex-col justify-between p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="truncate text-sm font-semibold text-foreground">
@@ -153,18 +270,12 @@ function ThemeCard({
           ) : null}
         </div>
         <div className="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onExport}
+          <IconAction
+            label={t("agents.appearance.exportTheme", { name: theme.name })}
             disabled={busy}
-            aria-label={t("agents.appearance.exportTheme", {
-              name: theme.name,
-            })}
-            title={t("agents.appearance.exportTheme", { name: theme.name })}
-            className={iconButton}
-          >
-            <DownloadIcon className="h-4 w-4" />
-          </button>
+            onClick={onExport}
+            icon={<DownloadIcon className="h-4 w-4" />}
+          />
           <button
             type="button"
             onClick={onApply}
@@ -176,83 +287,180 @@ function ThemeCard({
               ? t("agents.appearance.applied")
               : t("agents.appearance.apply")}
           </button>
-          <button
-            type="button"
-            onClick={onDelete}
+          <IconAction
+            label={t("agents.appearance.deleteTheme", { name: theme.name })}
             disabled={busy || active}
-            aria-label={t("agents.appearance.deleteTheme", {
-              name: theme.name,
-            })}
-            title={t("agents.appearance.deleteTheme", { name: theme.name })}
-            className={iconButton}
-          >
-            <Trash2Icon className="h-4 w-4" />
-          </button>
+            onClick={onDelete}
+            icon={<Trash2Icon className="h-4 w-4" />}
+          />
         </div>
       </div>
     </article>
   );
 }
 
-function PetCard({
-  agentId,
-  pet,
-  busy,
-  onExport,
-  onDelete,
+function IconAction({
+  label,
+  disabled,
+  onClick,
+  icon,
 }: {
-  agentId: string;
-  pet: AgentPetSummary;
-  busy: boolean;
-  onExport: () => void;
-  onDelete: () => void;
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  icon: ReactNode;
 }) {
-  const { t } = useTranslation();
   return (
-    <article className="overflow-hidden rounded-md border border-border/80 bg-card shadow-sm transition-colors hover:border-primary/35">
-      <AgentAppearancePreview
-        agentId={agentId}
-        assetId={pet.id}
-        kind="pet"
-        alt={pet.name}
-        spriteVersionNumber={pet.spriteVersionNumber}
-      />
-      <div className="p-4">
-        <h3 className="truncate text-sm font-semibold text-foreground">
-          {pet.name}
-        </h3>
-        <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground">
-          {pet.description || pet.id}
-        </p>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-[11px] text-muted-foreground">
-            {(pet.spritesheetBytes / 1024 / 1024).toFixed(1)} MB
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onExport}
-              disabled={busy}
-              aria-label={t("agents.appearance.exportPet", { name: pet.name })}
-              title={t("agents.appearance.exportPet", { name: pet.name })}
-              className={iconButton}
-            >
-              <DownloadIcon className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={busy}
-              aria-label={t("agents.appearance.deletePet", { name: pet.name })}
-              title={t("agents.appearance.deletePet", { name: pet.name })}
-              className={iconButton}
-            >
-              <Trash2Icon className="h-4 w-4" />
-            </button>
-          </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={iconButton}
+    >
+      {icon}
+    </button>
+  );
+}
+
+function AppearanceNotice({ count }: { count: number }) {
+  const { t } = useTranslation();
+  if (!count) return null;
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300">
+        <AlertTriangleIcon className="h-4 w-4" />
+      </span>
+      <span className="font-medium">
+        {t("agents.appearance.invalidItems", { count })}
+      </span>
+    </div>
+  );
+}
+
+function RestartToggle({
+  checked,
+  disabled,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className="inline-flex h-10 items-center gap-2.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      <span
+        aria-hidden="true"
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+          checked ? "bg-primary" : "bg-muted-foreground/25"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+            checked ? "translate-x-[1.125rem]" : "translate-x-0.5"
+          }`}
+        />
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function OpenDirectoryButton({ path, label }: { path: string; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => void window.electron?.openPath?.(path)}
+      className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-accent"
+    >
+      <FolderOpenIcon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
+interface SkinsWorkspaceProps {
+  agentId: string;
+  overview: AgentAppearanceOverview;
+  busy: boolean;
+  restartExisting: boolean;
+  error: string | null;
+  onRestartChange: (value: boolean) => void;
+  onApply: (themeId: string) => void;
+  onExport: (themeId: string) => void;
+  onDelete: (themeId: string) => void;
+  onRestore: () => void;
+}
+
+function SkinsWorkspace(props: SkinsWorkspaceProps) {
+  const { t } = useTranslation();
+  const { overview } = props;
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+      <div className="mx-auto max-w-6xl space-y-5">
+        {props.error ? <AppearanceError message={props.error} /> : null}
+        <AppearanceNotice count={overview.invalidThemeCount} />
+        <NativeAppearanceSection
+          activeThemeId={overview.activeThemeId}
+          disabled={props.busy}
+          onRestore={props.onRestore}
+        />
+        <section>
+          <SectionHeading
+            icon={<SparklesIcon className="h-4 w-4" />}
+            title={t("agents.appearance.skinsTitle")}
+            description={t("agents.appearance.skinsDesc", {
+              version: overview.engineVersion || "-",
+            })}
+            action={
+              <RestartToggle
+                checked={props.restartExisting}
+                disabled={props.busy}
+                label={t("agents.appearance.allowRestart")}
+                onChange={props.onRestartChange}
+              />
+            }
+          />
+          {overview.themes.length ? (
+            <div className="mt-4 grid gap-4">
+              {overview.themes.map((theme) => (
+                <ThemeCard
+                  key={theme.id}
+                  agentId={props.agentId}
+                  theme={theme}
+                  active={overview.activeThemeId === theme.id}
+                  busy={props.busy}
+                  onApply={() => props.onApply(theme.id)}
+                  onExport={() => props.onExport(theme.id)}
+                  onDelete={() => props.onDelete(theme.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <AppearanceEmpty
+              icon={<ImageIcon className="h-7 w-7" />}
+              text={t("agents.appearance.noSkins")}
+            />
+          )}
+        </section>
+        <div className="border-t border-border/70 pt-4">
+          <OpenDirectoryButton
+            path={overview.themeDirectoryPath}
+            label={t("agents.appearance.openSkinFolder")}
+          />
         </div>
       </div>
-    </article>
+    </div>
   );
 }
 
@@ -265,220 +473,128 @@ export function AgentAppearancePanel({
   const { overview, activeAction, error, refresh, run } = useAgentAppearance(
     agent.id,
   );
+  const [section, setSection] = useState<AppearanceSection>("skins");
   const [restartExisting, setRestartExisting] = useState(false);
   const busy = activeAction !== null;
 
   if (!overview && activeAction === "refresh") {
-    return (
-      <div className="flex h-full min-h-64 items-center justify-center text-muted-foreground">
-        <LoaderCircleIcon className="h-6 w-6 animate-spin" />
-      </div>
-    );
+    return <AppearanceLoading />;
   }
-
   if (!overview) {
     return (
       <AppearanceError message={error || t("agents.appearance.loadFailed")} />
     );
   }
 
-  const applyTheme = (themeId: string) =>
-    run("apply-theme", () =>
-      window.api.agent.applyAppearanceTheme({
-        agentId: agent.id,
-        themeId,
-        restartExisting,
-      }),
-    );
+  const importSelected = () =>
+    section === "skins"
+      ? run("import-theme", () =>
+          window.api.agent.importAppearanceTheme(agent.id),
+        )
+      : run("import-pet", () => window.api.agent.importAgentPet(agent.id));
+  const confirmDelete = (
+    message: string,
+    operation: () => Promise<unknown>,
+  ) => {
+    if (!window.confirm(message)) return;
+    void operation();
+  };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-5 py-3">
-        <h2 className="text-sm font-semibold text-foreground">
-          {t("agents.appearance.title")}
-        </h2>
-        <span className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground md:block">
-          {t("agents.appearance.description")}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              void run("import-theme", () =>
-                window.api.agent.importAppearanceTheme(agent.id),
+    <div className="flex h-full min-h-0">
+      <AppearanceNavigation
+        section={section}
+        themeCount={overview.themes.length}
+        petCount={overview.pets.length}
+        onChange={setSection}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <AppearanceToolbar
+          section={section}
+          busy={busy}
+          activeThemeId={overview.activeThemeId}
+          onImport={() => void importSelected()}
+          onRefresh={() => void refresh()}
+        />
+        {section === "skins" ? (
+          <SkinsWorkspace
+            agentId={agent.id}
+            overview={overview}
+            busy={busy}
+            restartExisting={restartExisting}
+            error={error}
+            onRestartChange={setRestartExisting}
+            onApply={(themeId) =>
+              void run("apply-theme", () =>
+                window.api.agent.applyAppearanceTheme({
+                  agentId: agent.id,
+                  themeId,
+                  restartExisting,
+                }),
               )
             }
-            disabled={busy}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-45"
-          >
-            <UploadIcon className="h-4 w-4" />
-            {t("agents.appearance.importSkin")}
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              void run("import-pet", () =>
-                window.api.agent.importAgentPet(agent.id),
+            onExport={(themeId) =>
+              void run("export-theme", () =>
+                window.api.agent.exportAppearanceTheme(agent.id, themeId),
               )
             }
-            disabled={busy}
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-45"
-          >
-            <PawPrintIcon className="h-4 w-4" />
-            {t("agents.appearance.importPet")}
-          </button>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            disabled={busy}
-            aria-label={t("agents.refresh")}
-            title={t("agents.refresh")}
-            className={`${iconButton} h-8 w-8`}
-          >
-            <RefreshCwIcon
-              className={`h-4 w-4 ${busy ? "animate-spin" : ""}`}
-            />
-          </button>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <div className="space-y-6">
-          {error ? <AppearanceError message={error} /> : null}
-          {overview.invalidThemeCount + overview.invalidPetCount > 0 ? (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/[0.08] px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
-              {t("agents.appearance.invalidItems", {
-                count: overview.invalidThemeCount + overview.invalidPetCount,
-              })}
-            </div>
-          ) : null}
-          <NativeAppearanceSection
-            activeThemeId={overview.activeThemeId}
-            disabled={busy}
+            onDelete={(themeId) =>
+              confirmDelete(t("agents.appearance.deleteThemeConfirm"), () =>
+                run("delete-theme", () =>
+                  window.api.agent.deleteAppearanceTheme(agent.id, themeId),
+                ),
+              )
+            }
             onRestore={() =>
               void run("restore-theme", () =>
                 window.api.agent.restoreAppearanceTheme(agent.id),
               )
             }
           />
-          <section>
-            <SectionHeading
-              icon={<SparklesIcon className="h-4 w-4" />}
-              title={t("agents.appearance.skinsTitle")}
-              description={t("agents.appearance.skinsDesc", {
-                version: overview.engineVersion || "-",
-              })}
-              action={
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={restartExisting}
-                    onChange={(event) =>
-                      setRestartExisting(event.target.checked)
-                    }
-                    className="h-4 w-4 rounded border-border accent-primary"
-                  />
-                  {t("agents.appearance.allowRestart")}
-                </label>
-              }
-            />
-            {overview.themes.length ? (
-              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {overview.themes.map((theme) => (
-                  <ThemeCard
-                    key={theme.id}
-                    agentId={agent.id}
-                    theme={theme}
-                    active={overview.activeThemeId === theme.id}
-                    busy={busy}
-                    onApply={() => void applyTheme(theme.id)}
-                    onExport={() =>
-                      void run("export-theme", () =>
-                        window.api.agent.exportAppearanceTheme(
-                          agent.id,
-                          theme.id,
-                        ),
-                      )
-                    }
-                    onDelete={() => {
-                      if (
-                        !window.confirm(
-                          t("agents.appearance.deleteThemeConfirm"),
-                        )
-                      )
-                        return;
-                      void run("delete-theme", () =>
-                        window.api.agent.deleteAppearanceTheme(
-                          agent.id,
-                          theme.id,
-                        ),
-                      );
-                    }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <AppearanceEmpty text={t("agents.appearance.noSkins")} />
-            )}
-          </section>
-          <section>
-            <SectionHeading
-              icon={<PawPrintIcon className="h-4 w-4" />}
-              title={t("agents.appearance.petsTitle")}
-              description={t("agents.appearance.petsDesc")}
-            />
-            {overview.pets.length ? (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {overview.pets.map((pet) => (
-                  <PetCard
-                    key={pet.id}
-                    agentId={agent.id}
-                    pet={pet}
-                    busy={busy}
-                    onExport={() =>
-                      void run("export-pet", () =>
-                        window.api.agent.exportAgentPet(agent.id, pet.id),
-                      )
-                    }
-                    onDelete={() => {
-                      if (
-                        !window.confirm(t("agents.appearance.deletePetConfirm"))
-                      )
-                        return;
-                      void run("delete-pet", () =>
-                        window.api.agent.deleteAgentPet(agent.id, pet.id),
-                      );
-                    }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <AppearanceEmpty text={t("agents.appearance.noPets")} />
-            )}
-          </section>
-          <div className="flex flex-wrap items-center gap-4 border-t border-border/70 pt-4 text-xs text-muted-foreground">
-            <button
-              type="button"
-              onClick={() =>
-                void window.electron?.openPath?.(overview.themeDirectoryPath)
-              }
-              className="inline-flex items-center gap-1.5 hover:text-foreground"
-            >
-              <FolderOpenIcon className="h-3.5 w-3.5" />
-              {t("agents.appearance.openSkinFolder")}
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void window.electron?.openPath?.(overview.petDirectoryPath)
-              }
-              className="inline-flex items-center gap-1.5 hover:text-foreground"
-            >
-              <FolderOpenIcon className="h-3.5 w-3.5" />
-              {t("agents.appearance.openPetFolder")}
-            </button>
-          </div>
-        </div>
+        ) : (
+          <AgentPetWorkspace
+            agentId={agent.id}
+            overview={overview}
+            busy={busy}
+            error={error}
+            onImport={() =>
+              void run("import-pet", () =>
+                window.api.agent.importAgentPet(agent.id),
+              )
+            }
+            onUpdate={async (input: UpdateAgentPetInput) =>
+              (await run("update-pet", () =>
+                window.api.agent.updateAppearancePet(input),
+              )) !== null
+            }
+            onInstall={async (petId) =>
+              (await run("install-store-pet", () =>
+                window.api.agent.installAppearancePetFromStore(agent.id, petId),
+              )) !== null
+            }
+            onExport={(petId) =>
+              void run("export-pet", () =>
+                window.api.agent.exportAgentPet(agent.id, petId),
+              )
+            }
+            onDelete={(petId) =>
+              confirmDelete(t("agents.appearance.deletePetConfirm"), () =>
+                run("delete-pet", () =>
+                  window.api.agent.deleteAgentPet(agent.id, petId),
+                ),
+              )
+            }
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+function AppearanceLoading() {
+  return (
+    <div className="flex h-full min-h-64 items-center justify-center text-muted-foreground">
+      <LoaderCircleIcon className="h-6 w-6 animate-spin" />
     </div>
   );
 }
@@ -491,9 +607,10 @@ function AppearanceError({ message }: { message: string }) {
   );
 }
 
-function AppearanceEmpty({ text }: { text: string }) {
+function AppearanceEmpty({ icon, text }: { icon: ReactNode; text: string }) {
   return (
-    <div className="mt-5 flex min-h-28 items-center justify-center rounded-md border border-dashed border-border bg-muted/15 px-4 text-sm text-muted-foreground">
+    <div className="mt-5 flex min-h-36 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-muted/15 px-4 text-sm text-muted-foreground">
+      <span className="text-muted-foreground/55">{icon}</span>
       {text}
     </div>
   );

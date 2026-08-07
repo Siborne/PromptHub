@@ -180,13 +180,13 @@ export function AgentAssetCard({
   return (
     <article
       data-testid={testId}
-      className="group flex min-h-[220px] flex-col rounded-md border border-border/70 bg-card p-4 transition-colors hover:border-primary/40"
+      className="group flex h-[232px] flex-col rounded-md border border-border/70 bg-card p-4 transition-colors hover:border-primary/40"
     >
       <button
         type="button"
         onClick={onOpen}
         aria-label={openLabel}
-        className="min-w-0 flex-1 text-left"
+        className="min-h-0 min-w-0 flex-1 overflow-hidden text-left"
       >
         {children}
       </button>
@@ -224,42 +224,45 @@ export function AgentAssetCardContent({
   return (
     <div
       data-testid="agent-asset-card-content"
-      className="flex min-w-0 items-start gap-3"
+      className="flex h-full min-w-0 items-start gap-3 overflow-hidden"
     >
       <div data-testid="agent-asset-card-avatar" className="shrink-0">
-        <span data-testid={iconTestId} className="block">
+        <span
+          data-testid={iconTestId}
+          className="block h-10 w-10 overflow-hidden rounded-xl"
+        >
           {icon}
         </span>
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 overflow-hidden">
         <div
           data-testid="agent-asset-card-title-row"
-          className="flex min-w-0 flex-wrap items-center gap-2"
+          className="flex h-6 min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap"
         >
-          <span className="truncate text-base font-semibold text-foreground">
+          <span className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">
             {title}
           </span>
-          {status}
+          {status ? <span className="shrink-0">{status}</span> : null}
         </div>
         <div
           data-testid="agent-asset-card-description"
-          className="mt-1.5 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground"
+          className="mt-1 line-clamp-2 h-10 text-sm leading-5 text-muted-foreground"
         >
           {description}
         </div>
         <div
           data-testid="agent-asset-card-source"
-          className="mt-2 min-h-4 truncate font-mono text-[11px] text-muted-foreground"
+          className="mt-1.5 h-4 truncate font-mono text-[11px] text-muted-foreground"
         >
           {source}
         </div>
         <div
           data-testid="agent-asset-card-metadata"
-          className="mt-3 flex flex-wrap items-center gap-1.5"
+          className="mt-2 flex h-10 flex-wrap content-start items-start gap-1.5 overflow-hidden"
         >
           {metadata}
+          {supplementary}
         </div>
-        {supplementary ? <div className="mt-2">{supplementary}</div> : null}
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ export interface AgentUsageState {
 
 const CACHE_KEY_PREFIX = "prompthub.agent-usage.";
 
-function readCachedQuota(agentId: string): AgentUsageQuota | null {
+export function readCachedAgentUsage(agentId: string): AgentUsageQuota | null {
   try {
     const raw = window.localStorage.getItem(`${CACHE_KEY_PREFIX}${agentId}`);
     if (!raw) return null;
@@ -40,7 +40,7 @@ function readCachedQuota(agentId: string): AgentUsageQuota | null {
   }
 }
 
-function writeCachedQuota(quota: AgentUsageQuota): void {
+export function writeCachedAgentUsage(quota: AgentUsageQuota): void {
   try {
     if (quota.status === "ok") {
       window.localStorage.setItem(
@@ -55,7 +55,7 @@ function writeCachedQuota(quota: AgentUsageQuota): void {
 
 export function useAgentUsage(agentId: string): AgentUsageState {
   const [quota, setQuota] = useState<AgentUsageQuota | null>(() =>
-    readCachedQuota(agentId),
+    readCachedAgentUsage(agentId),
   );
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -66,7 +66,7 @@ export function useAgentUsage(agentId: string): AgentUsageState {
     setQuota((previous) =>
       previous && previous.agentId === agentId
         ? previous
-        : readCachedQuota(agentId),
+        : readCachedAgentUsage(agentId),
     );
     setHasError(false);
     setIsLoading(true);
@@ -75,7 +75,7 @@ export function useAgentUsage(agentId: string): AgentUsageState {
       .then((result) => {
         if (!active) return;
         setQuota(result);
-        writeCachedQuota(result);
+        writeCachedAgentUsage(result);
       })
       .catch(() => {
         if (active) setHasError(true);

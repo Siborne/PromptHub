@@ -16,6 +16,8 @@ interface AgentConversationIpcOptions {
 }
 
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
+const PREVIEW_TOKEN_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function registerAgentConversationIPC(
   options: AgentConversationIpcOptions,
@@ -138,9 +140,11 @@ function continueRequest(value: unknown): ContinueAgentConversationRequest {
     request.confirmedPayloadDigest,
     80,
   );
+  const previewToken = requireText(request.previewToken, 100);
   if (
     !DIGEST_PATTERN.test(payloadDigest) ||
     !DIGEST_PATTERN.test(confirmedPayloadDigest) ||
+    !PREVIEW_TOKEN_PATTERN.test(previewToken) ||
     (request.transport !== "direct" &&
       request.transport !== "launch" &&
       request.transport !== "unavailable")
@@ -150,6 +154,7 @@ function continueRequest(value: unknown): ContinueAgentConversationRequest {
   return {
     ...base,
     sourceTitle: requireText(request.sourceTitle, 500),
+    previewToken,
     payload: requireText(request.payload, 500_000),
     payloadDigest,
     confirmedPayloadDigest,

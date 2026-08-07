@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentSessionsPanel } from "../../../src/renderer/components/agent/AgentSessionsPanel";
+import { ToastProvider } from "../../../src/renderer/components/ui/Toast";
 import { copyTextToClipboard } from "../../../src/renderer/utils/clipboard";
 import type {
   AgentSessionEntry,
@@ -86,7 +87,7 @@ describe("AgentSessionsPanel", () => {
           ? Array.from({ length: 40 }, (_, index) => entry(index + 80))
           : Array.from({ length: 80 }, (_, index) => entry(index)),
         parseErrors: 0,
-        truncated: false,
+        truncated: !options?.cursor,
         nextCursor: options?.cursor ? null : "cursor-page-2",
       }),
     );
@@ -118,6 +119,14 @@ describe("AgentSessionsPanel", () => {
     expect(screen.getByRole("button", { name: /Session 0/ })).toHaveStyle({
       contentVisibility: "auto",
     });
+    const selectedSessionButton = screen.getByRole("button", {
+      name: /Session 0/,
+    });
+    expect(selectedSessionButton).toHaveClass("text-foreground");
+    expect(selectedSessionButton).not.toHaveClass(
+      "bg-primary",
+      "text-primary-foreground",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Message page 4" }));
     expect(await screen.findByText("Message 79")).toBeVisible();
@@ -137,6 +146,147 @@ describe("AgentSessionsPanel", () => {
     );
     expect(await screen.findByText("Session 99")).toBeVisible();
     expect(screen.getByText("100 / 120")).toBeVisible();
+  });
+
+  it("skips duplicate transcript cursor pages instead of showing an empty page", async () => {
+    const firstPageEntries = Array.from({ length: 80 }, (_, index) =>
+      entry(index),
+    );
+    const finalPageEntries = Array.from({ length: 20 }, (_, index) => ({
+      ...entry(index + 80),
+      role: "assistant" as const,
+    }));
+    const readSession = vi.fn(
+      async (
+        _agentId: string,
+        _sessionId: string,
+        options?: { cursor?: string },
+      ) => {
+        if (!options?.cursor) {
+          return {
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessionId: "session-0",
+            entries: firstPageEntries,
+            parseErrors: 0,
+            truncated: false,
+            nextCursor: "duplicate-page",
+          };
+        }
+        if (options.cursor === "duplicate-page") {
+          return {
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessionId: "session-0",
+            entries: firstPageEntries,
+            parseErrors: 0,
+            truncated: false,
+            nextCursor: "final-page",
+          };
+        }
+        return {
+          agentId: "codex",
+          adapter: "codex-rollout-jsonl-v1",
+          sessionId: "session-0",
+          entries: finalPageEntries,
+          parseErrors: 0,
+          truncated: false,
+          nextCursor: null,
+        };
+      },
+    );
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessions: [metadata(0)],
+            total: 1,
+            hasMore: false,
+          }),
+          readSession,
+        },
+      },
+    });
+
+    await renderWithI18n(<AgentSessionsPanel agent={agent} />, {
+      language: "en",
+      settleAsyncEffects: true,
+    });
+
+    await screen.findByText("Message 0");
+    fireEvent.click(screen.getByRole("button", { name: "Message page 4" }));
+    await screen.findByText("Message 79");
+    fireEvent.click(screen.getByRole("button", { name: "Next message page" }));
+
+    await waitFor(() => {
+      expect(readSession).toHaveBeenCalledWith("codex", "session-0", {
+        cursor: "duplicate-page",
+        limit: 80,
+      });
+      expect(readSession).toHaveBeenCalledWith("codex", "session-0", {
+        cursor: "final-page",
+        limit: 80,
+      });
+      expect(screen.getByTestId("conversation-transcript")).toHaveTextContent(
+        "Message 99",
+      );
+      expect(screen.getByText("Page 5 of 5")).toBeInTheDocument();
+    });
+  });
+
+  it("clamps pagination when a native cursor stops advancing", async () => {
+    const firstPageEntries = Array.from({ length: 80 }, (_, index) =>
+      entry(index),
+    );
+    const readSession = vi.fn(
+      async (
+        _agentId: string,
+        _sessionId: string,
+        _options?: { cursor?: string },
+      ) => ({
+        agentId: "codex",
+        adapter: "codex-rollout-jsonl-v1",
+        sessionId: "session-0",
+        entries: firstPageEntries,
+        parseErrors: 0,
+        truncated: false,
+        nextCursor: "stuck-page",
+      }),
+    );
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessions: [metadata(0)],
+            total: 1,
+            hasMore: false,
+          }),
+          readSession,
+        },
+      },
+    });
+
+    await renderWithI18n(<AgentSessionsPanel agent={agent} />, {
+      language: "en",
+      settleAsyncEffects: true,
+    });
+
+    await screen.findByText("Message 0");
+    fireEvent.click(screen.getByRole("button", { name: "Message page 4" }));
+    await screen.findByText("Message 79");
+    fireEvent.click(screen.getByRole("button", { name: "Next message page" }));
+
+    await waitFor(() => {
+      expect(readSession).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Page 4 of 4")).toBeInTheDocument();
+      expect(screen.getByTestId("conversation-transcript")).toHaveTextContent(
+        "Message 79",
+      );
+    });
   });
 
   it("resumes natively, previews cross-Agent continuation, and exports history", async () => {
@@ -159,6 +309,7 @@ describe("AgentSessionsPanel", () => {
       targetAgentId: "claude",
       projectId: "project-1",
       projectPath: "/workspace/PromptHub",
+      previewToken: "00000000-0000-4000-8000-000000000001",
       payload: "# Portable handoff\n\nContinue the updater fix.",
       payloadDigest: `sha256:${"a".repeat(64)}`,
       transport: "direct",
@@ -226,20 +377,22 @@ describe("AgentSessionsPanel", () => {
     } as ManagedAgentSummary;
 
     await renderWithI18n(
-      <AgentSessionsPanel
-        agent={agent}
-        agents={[agent, claude, antigravity, copilot]}
-        projects={[
-          {
-            id: "project-1",
-            name: "PromptHub",
-            rootPath: "/workspace/PromptHub",
-            scanPaths: [],
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ]}
-      />,
+      <ToastProvider>
+        <AgentSessionsPanel
+          agent={agent}
+          agents={[agent, claude, antigravity, copilot]}
+          projects={[
+            {
+              id: "project-1",
+              name: "PromptHub",
+              rootPath: "/workspace/PromptHub",
+              scanPaths: [],
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ]}
+        />
+      </ToastProvider>,
       { language: "en", settleAsyncEffects: true },
     );
 
@@ -273,6 +426,8 @@ describe("AgentSessionsPanel", () => {
     expect(
       screen.getByRole("button", { name: "Export conversation" }),
     ).toHaveClass("h-9", "w-9");
+    const toolbar = screen.getByTestId("conversation-continuation-toolbar");
+    expect(toolbar).not.toHaveClass("rounded-xl", "border");
     expect(
       screen.queryByLabelText("Continue with Agent"),
     ).not.toBeInTheDocument();
@@ -283,6 +438,7 @@ describe("AgentSessionsPanel", () => {
       "space-y-2.5",
       "py-4",
     );
+    expect(screen.queryByText("/workspace/PromptHub")).not.toBeInTheDocument();
     expect(screen.getByTestId("conversation-avatar-entry-0")).toHaveClass(
       "rounded-full",
     );
@@ -290,6 +446,11 @@ describe("AgentSessionsPanel", () => {
       "rounded-2xl",
       "bg-primary",
     );
+    expect(
+      screen
+        .getByTestId("conversation-bubble-entry-0")
+        .querySelector(".agent-conversation-markdown"),
+    ).not.toHaveClass("mt-2");
     expect(screen.getByTestId("conversation-message-entry-1")).toHaveClass(
       "flex",
     );
@@ -305,6 +466,14 @@ describe("AgentSessionsPanel", () => {
       "rounded-2xl",
       "bg-white",
     );
+    expect(
+      screen.getByTestId("conversation-message-entry-2").querySelector(".mt-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId("conversation-message-entry-2")
+        .querySelector(".agent-conversation-markdown"),
+    ).not.toHaveClass("mt-2");
     expect(screen.getByTestId("conversation-message-entry-3")).toHaveClass(
       "mx-auto",
       "rounded-2xl",
@@ -323,10 +492,11 @@ describe("AgentSessionsPanel", () => {
     expect(
       await screen.findByText("Opened ChatGPT in Terminal."),
     ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Continue elsewhere" }));
     expect(
-      await screen.findByText("Continue in another Agent"),
-    ).toBeVisible();
+      screen.getByText("Opened ChatGPT in Terminal.").closest("section"),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue elsewhere" }));
+    expect(await screen.findByText("Continue in another Agent")).toBeVisible();
     fireEvent.click(screen.getByLabelText("Continue with Agent"));
     expect(
       screen.getByRole("option", { name: "Antigravity" }),
@@ -390,7 +560,9 @@ describe("AgentSessionsPanel", () => {
     expect(
       screen.getByRole("button", { name: "Copy context and open Antigravity" }),
     ).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Copy handoff context" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Copy handoff context" }),
+    );
     await waitFor(() =>
       expect(copyTextToClipboard).toHaveBeenLastCalledWith(
         handoffPreview.payload,
@@ -473,16 +645,29 @@ describe("AgentSessionsPanel", () => {
       },
     });
 
-    await renderWithI18n(<AgentSessionsPanel agent={agent} />, {
-      language: "en",
-      settleAsyncEffects: true,
-    });
+    await renderWithI18n(
+      <ToastProvider>
+        <AgentSessionsPanel agent={agent} />
+      </ToastProvider>,
+      {
+        language: "en",
+        settleAsyncEffects: true,
+      },
+    );
     fireEvent.click(
       await screen.findByRole("button", {
         name: "More conversation actions",
       }),
     );
     fireEvent.click(screen.getByRole("menuitem", { name: "Edit details" }));
+    expect(screen.getByRole("dialog")).toHaveClass(
+      "app-wallpaper-panel-strong",
+    );
+    expect(
+      screen.getByText(
+        "Archiving hides this conversation from Active. The native transcript stays untouched and can be found in Archived.",
+      ),
+    ).toBeVisible();
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Renamed conversation" },
     });
@@ -492,6 +677,9 @@ describe("AgentSessionsPanel", () => {
     fireEvent.change(screen.getByLabelText("Note"), {
       target: { value: "Keep this context" },
     });
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Archive in PromptHub" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(updateConversationMetadata).toHaveBeenCalledWith(
@@ -499,10 +687,11 @@ describe("AgentSessionsPanel", () => {
           title: "Renamed conversation",
           tags: ["release"],
           note: "Keep this context",
+          archived: true,
         }),
       ),
     );
-    expect((await screen.findAllByText("Renamed conversation")).length).toBe(2);
+    expect((await screen.findAllByText("Renamed conversation")).length).toBe(1);
     fireEvent.click(
       screen.getByRole("button", { name: "More conversation actions" }),
     );
@@ -691,6 +880,11 @@ describe("AgentSessionsPanel", () => {
       name: "Enable local session indexing",
     });
     expect(toggle).not.toBeChecked();
+    expect(
+      screen.getByText(
+        "Caches redacted session metadata locally to make search and paging faster. Transcript text stays in the Agent's files and is read only when opened.",
+      ),
+    ).toBeVisible();
     fireEvent.click(toggle);
     await waitFor(() =>
       expect(setSessionIndexEnabled).toHaveBeenCalledWith({

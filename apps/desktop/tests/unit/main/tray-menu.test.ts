@@ -32,6 +32,45 @@ function clickItem(
 }
 
 describe("tray asset menu", () => {
+  it("opens the rendered Agent quota surface instead of appending percentages to native labels", () => {
+    const labels = getTrayMenuLabels("zh");
+    const onOpenAgentUsage = vi.fn();
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: true,
+      isWindowVisible: true,
+      labels,
+      onCommand: vi.fn(),
+      onOpenAgentUsage,
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+    });
+
+    const item = template.find((entry) => entry.label === labels.agentUsage);
+    expect(item?.submenu).toBeUndefined();
+    expect(item?.label).not.toMatch(/\d+%/);
+    clickItem(template, labels.agentUsage);
+    expect(onOpenAgentUsage).toHaveBeenCalledOnce();
+  });
+
+  it("can omit the redundant quota command from the macOS action menu", () => {
+    const labels = getTrayMenuLabels("zh");
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: true,
+      includeAgentUsage: false,
+      isWindowVisible: true,
+      labels,
+      onCommand: vi.fn(),
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+    });
+
+    expect(template.some((entry) => entry.label === labels.agentUsage)).toBe(
+      false,
+    );
+    expect(template.some((entry) => entry.label === labels.manageAgents)).toBe(
+      true,
+    );
+  });
   it("routes every current Agent asset through its product-correct command", () => {
     const labels = getTrayMenuLabels("zh");
     const onCommand = vi.fn<(command: AppCommand) => void>();
@@ -229,6 +268,7 @@ describe("tray asset menu", () => {
     const agentsMenu = getSubmenu(template, labels.agents);
     const claudeMenu = getSubmenu(agentsMenu, "Claude Code");
     expect(() => clickItem(claudeMenu, "Primary")).not.toThrow();
+    expect(() => clickItem(template, labels.agentUsage)).not.toThrow();
   });
 });
 
@@ -258,4 +298,24 @@ describe("tray menu localization", () => {
   ] as const)("normalizes %s to %s", (locale, expected) => {
     expect(normalizeTrayMenuLanguage(locale)).toBe(expected);
   });
+
+  it.each(SUPPORTED_TRAY_MENU_LANGUAGES)(
+    "projects rendered quota navigation through the %s native dictionary",
+    (language) => {
+      const labels = getTrayMenuLabels(language);
+      const onOpenAgentUsage = vi.fn();
+      const template = buildTrayMenuTemplate({
+        agentManagementEnabled: true,
+        isWindowVisible: true,
+        labels,
+        onCommand: vi.fn(),
+        onOpenAgentUsage,
+        onQuit: vi.fn(),
+        onToggleWindow: vi.fn(),
+      });
+
+      clickItem(template, labels.agentUsage);
+      expect(onOpenAgentUsage).toHaveBeenCalledOnce();
+    },
+  );
 });

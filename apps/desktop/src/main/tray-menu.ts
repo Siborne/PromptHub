@@ -25,6 +25,7 @@ export interface TrayMenuLabels {
   agents: string;
   openAgent: string;
   manageAgents: string;
+  agentUsage: string;
   confirmProviderSwitch: string;
   useProviderProfile: string;
   cancel: string;
@@ -52,6 +53,7 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     agents: "Agents",
     openAgent: "Open Agent Workspace…",
     manageAgents: "Manage Agents…",
+    agentUsage: "Agent Quotas",
     confirmProviderSwitch: "Switch provider profile?",
     useProviderProfile: "Switch",
     cancel: "Cancel",
@@ -77,6 +79,7 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     agents: "Agents",
     openAgent: "打开 Agent 工作区…",
     manageAgents: "Agent 管理…",
+    agentUsage: "Agent 额度",
     confirmProviderSwitch: "切换 Provider Profile？",
     useProviderProfile: "切换",
     cancel: "取消",
@@ -102,6 +105,7 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     agents: "Agents",
     openAgent: "開啟 Agent 工作區…",
     manageAgents: "Agent 管理…",
+    agentUsage: "Agent 額度",
     confirmProviderSwitch: "切換 Provider Profile？",
     useProviderProfile: "切換",
     cancel: "取消",
@@ -127,6 +131,7 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     agents: "Agents",
     openAgent: "Agent ワークスペースを開く…",
     manageAgents: "Agent を管理…",
+    agentUsage: "Agent クォータ",
     confirmProviderSwitch: "Provider Profile を切り替えますか？",
     useProviderProfile: "切り替え",
     cancel: "キャンセル",
@@ -152,6 +157,7 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     agents: "Agents",
     openAgent: "Ouvrir l’espace Agent…",
     manageAgents: "Gérer les Agents…",
+    agentUsage: "Quotas des Agents",
     confirmProviderSwitch: "Changer de profil Provider ?",
     useProviderProfile: "Changer",
     cancel: "Annuler",
@@ -177,6 +183,7 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     agents: "Agents",
     openAgent: "Agent-Arbeitsbereich öffnen…",
     manageAgents: "Agents verwalten…",
+    agentUsage: "Agent-Kontingente",
     confirmProviderSwitch: "Provider-Profil wechseln?",
     useProviderProfile: "Wechseln",
     cancel: "Abbrechen",
@@ -202,6 +209,7 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     agents: "Agents",
     openAgent: "Abrir espacio de Agent…",
     manageAgents: "Gestionar Agents…",
+    agentUsage: "Cuotas de Agents",
     confirmProviderSwitch: "¿Cambiar el perfil de Provider?",
     useProviderProfile: "Cambiar",
     cancel: "Cancelar",
@@ -240,10 +248,12 @@ export function getTrayMenuLabels(locale: string): TrayMenuLabels {
 interface BuildTrayMenuTemplateOptions {
   agentManagementEnabled: boolean;
   agentProviderGroups?: AgentProviderTrayGroup[];
+  includeAgentUsage?: boolean;
   isWindowVisible: boolean;
   labels: TrayMenuLabels;
   onAgentProviderProfile?: (agentId: string, profileId: string) => void;
   onCommand: (command: AppCommand) => void;
+  onOpenAgentUsage?: () => void;
   onQuit: () => void;
   onToggleWindow: () => void;
 }
@@ -251,10 +261,12 @@ interface BuildTrayMenuTemplateOptions {
 export function buildTrayMenuTemplate({
   agentManagementEnabled,
   agentProviderGroups = [],
+  includeAgentUsage = true,
   isWindowVisible,
   labels,
   onAgentProviderProfile = () => undefined,
   onCommand,
+  onOpenAgentUsage = () => undefined,
   onQuit,
   onToggleWindow,
 }: BuildTrayMenuTemplateOptions): MenuItemConstructorOptions[] {
@@ -302,6 +314,12 @@ export function buildTrayMenuTemplate({
   ];
 
   if (agentManagementEnabled) {
+    if (includeAgentUsage) {
+      template.push({
+        label: labels.agentUsage,
+        click: onOpenAgentUsage,
+      });
+    }
     if (agentProviderGroups.length > 0) {
       template.push({
         label: labels.agents,

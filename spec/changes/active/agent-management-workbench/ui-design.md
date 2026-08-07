@@ -177,17 +177,25 @@ Disabled tabs do not invoke IPC and do not navigate to empty pages. Hover/focus 
 
 ### Appearance Tab
 
-Appearance is one top-level page without secondary navigation. Supported
-sections are arranged directly in the page flow:
+Appearance remains one top-level Agent tab. Inside that tab, a narrow left icon
+rail separates the two independent asset types without creating more top-level
+tabs:
+
+- Desktop skins: selected by default, with installed count and the skin icon.
+- Pets: local Pet inventory, with installed count and the Pet icon.
+
+The selected rail item controls one focused right-hand workspace. Desktop skin
+controls and Pet controls are never mixed in the same scrolling page:
 
 - Native appearance: compact structured controls for adapter-owned appearance
-  settings and a restore action.
+  settings and a restore action, shown only in the desktop-skin workspace.
 - Desktop skins: installed theme grid with preview, compatibility state, source,
   apply, restore, import, export, open-folder and delete actions.
 - Pets: local Pet grid with preview, validation state, import, export,
   open-folder and delete actions.
 
-The page header exposes one refresh icon and one contextual import action. The
+The workspace header exposes one refresh icon and one contextual import action.
+Counts and invalid-item feedback are scoped to the selected destination. The
 last successfully applied skin uses a clear status treatment and keeps Restore
 visible without claiming that a later standalone Codex restart retained it.
 Compatibility warnings are operational messages, not decorative cards. Agents
@@ -282,6 +290,13 @@ MCP uses the server icon, and Plugins preserve package artwork with a plug
 fallback. Domain actions may differ, but the card regions and spacing do not.
 The Agent tab label is the stable product term `Plugins` in every locale.
 
+`DES-AGENT-092` fixes the shared card shell at 232px and assigns stable content
+slots: 24px for title/status, 40px for the two-line description, 16px for the
+source and 40px for metadata. Overflow is clipped within the owning slot and
+the action footer remains anchored by the shared card shell. Supplementary
+inventory chips share the bounded metadata region rather than adding another
+variable-height row.
+
 The Agent workspace does not introduce an “Agent copy” editor or duplicate durable state. Canonical editing and mutation continue to use the owning Skill/MCP/Rules/Plugin services when inline actions are added.
 
 Cross-kind batch operations are not part of the first delivery. If a future domain needs deeper navigation, it may add navigation inside that domain without restoring a generic Assets parent page.
@@ -330,6 +345,13 @@ immediately; capability resolution happens in the reviewed apply plan. The
 local-index switch and source diagnostics live in History
 Source Settings rather than the ordinary list header.
 
+The transcript action row is a lightweight header row rather than a card nested
+inside the detail pane. Selected conversation rows use a neutral accent surface
+and explicit foreground tokens in both themes. Message pagination keeps a fixed
+20-message viewport; duplicate or empty native cursor pages are skipped within a
+bounded hop limit and stale page state is clamped to the last page containing
+messages, so navigation cannot leave an empty transcript surface.
+
 On narrow layouts, project/filter, list, detail, handoff preview and target
 selection become explicit navigable steps with Back actions and restored focus.
 
@@ -338,6 +360,29 @@ selection become explicit navigable steps with Back actions and restored focus.
 - Add local tag or note.
 
 The transcript is read-only. Missing sources retain metadata and local notes with a clear source-missing state.
+
+## Menu Bar Quota Popover
+
+Primary-clicking the macOS menu-bar icon directly opens a 392 x 540
+tray-anchored quota popover. Secondary click keeps the native action menu, which
+does not repeat an `Agent Quotas` command. The surface uses one compact row per
+supported Agent. Following CodexBar's real usage-card hierarchy, product icon,
+name and plan form the header; the most constrained metric appears below with a
+small inline tabular remaining value, slim progress bar and reset time. Normal,
+warning and critical progress states remain visible without turning the
+percentage into the dominant visual element.
+
+Rows with multiple metrics expose a chevron-only details control. Expanded
+details show every metric and its bounded reset countdown without resizing the
+header or percentage columns. The inventory scrolls inside the popover while
+the title and refresh action remain fixed. Loading, missing credentials,
+expired credentials and unavailable providers use explicit text and an em dash
+or ellipsis rather than a misleading zero. A cached successful result remains
+visible when a refresh fails and is marked as cached.
+
+The popover follows the current light, dark or system theme and uses existing
+PromptHub tokens and platform artwork. It must remain readable at its fixed
+size without text overlap, horizontal scrolling or detached native submenus.
 
 ## Usage Tab
 
@@ -685,6 +730,13 @@ display-icon alias only when the platform registry declares it). Actions stay
 inside the owning store/service boundary. A missing target renders the
 owning view's scoped empty state, while store failures render a retryable
 diagnostic and never fall back to unrelated global targets.
+
+A target Plugin card resolves its PromptHub-managed package by normalized name
+and the selected target's `distributedTargetIds`. A confirmed remove action is
+shown only when PromptHub owns that distribution. My Plugins deletion remains
+a separate confirmed action and removes its managed package through the Plugin
+store. Externally installed packages do not receive an inferred filesystem
+delete action because their owning Agent may manage the package lifecycle.
 
 ### `DES-AGENT-076`: Explicit Claw Family Taxonomy
 

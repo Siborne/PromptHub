@@ -252,6 +252,43 @@ export interface AgentPetSummary {
   spritesheetBytes: number;
 }
 
+export interface UpdateAgentPetInput {
+  agentId: string;
+  petId: string;
+  name: string;
+  description: string;
+}
+
+export interface AgentPetStoreItem {
+  id: string;
+  name: string;
+  localizedName: string | null;
+  author: string;
+  authorHandle: string;
+  category: string;
+  license: string;
+  description: string;
+  spriteVersionNumber: 1 | 2;
+  installed: boolean;
+}
+
+export interface AgentPetStoreQuery {
+  agentId: string;
+  search?: string;
+  locale?: string;
+  page?: number;
+  pageSize?: number;
+  refresh?: boolean;
+}
+
+export interface AgentPetStorePage {
+  items: AgentPetStoreItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
 export interface AgentAppearanceOverview {
   agentId: string;
   supported: boolean;
@@ -299,6 +336,79 @@ export type AgentCredentialStatus =
   | "missing"
   | "unknown";
 
+export type AgentPiThinkingLevel =
+  | "off"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+
+export interface AgentPiCustomModelInput {
+  id: string;
+  name?: string;
+  reasoning?: boolean;
+  input?: string[];
+  contextWindow?: number;
+  maxTokens?: number;
+  thinkingLevelMap?: Partial<Record<AgentPiThinkingLevel, string | null>>;
+}
+
+export type AgentPiProviderApi =
+  | "openai-completions"
+  | "openai-responses"
+  | "anthropic-messages"
+  | "google-generative-ai";
+
+export interface AgentPiCustomProviderInput {
+  providerId: string;
+  baseUrl: string;
+  api: AgentPiProviderApi;
+  /** Optional environment reference such as "$GEMINI_API_KEY"; never a literal key. */
+  apiKeyRef?: string;
+  models: AgentPiCustomModelInput[];
+}
+
+export interface AgentPiCustomProviderUpdateInput {
+  providerId: string;
+  baseUrl: string;
+  api: AgentPiProviderApi;
+}
+
+export interface AgentPiCustomModelUpdateInput extends AgentPiCustomModelInput {
+  originalId: string;
+}
+
+export interface AgentPiWriteResult {
+  backupPath: string | null;
+}
+
+export interface AgentModelCatalogEntry {
+  id: string;
+  name?: string;
+  api?: string;
+  reasoning?: boolean;
+  input?: string[];
+  contextWindow?: number;
+  maxTokens?: number;
+  thinkingLevelMap?: Partial<Record<AgentPiThinkingLevel, string | null>>;
+  source: "built-in" | "custom";
+}
+
+export interface AgentModelCatalogProvider {
+  id: string;
+  models: AgentModelCatalogEntry[];
+  credentialReady: boolean;
+  source: "built-in" | "custom";
+  /** Provider API adapter from Pi's catalog; never contains credentials. */
+  api?: AgentPiProviderApi | null;
+  /** Sanitized endpoint (userinfo/query/fragment removed); null = platform default. */
+  endpoint?: string | null;
+  /** Credential mechanism only; the credential value never crosses IPC. */
+  credentialSource?: "auth" | "environment" | "provider-config" | "missing";
+}
+
 export interface AgentModelConfiguration {
   agentId: string;
   adapter: string | null;
@@ -314,12 +424,18 @@ export interface AgentModelConfiguration {
   canSetModel: boolean;
   formattingMayChange: boolean;
   errorCode?: string;
+  /** Full provider -> models catalog for platforms with a native model store. */
+  modelCatalog?: AgentModelCatalogProvider[];
+  /** Pi's persisted default thinking level from settings.json. */
+  thinkingLevel?: AgentPiThinkingLevel | null;
 }
 
 export interface UpdateAgentModelInput {
   agentId: string;
   model: string;
   secondaryModel?: string | null;
+  /** Pi-only default thinking level persisted to settings.json. */
+  thinkingLevel?: AgentPiThinkingLevel;
 }
 
 export interface UpdateAgentModelResult extends AgentModelConfiguration {
@@ -597,6 +713,7 @@ export interface AgentConversationHandoffRequest {
 }
 
 export interface AgentConversationHandoffPreview extends AgentConversationHandoffRequest {
+  previewToken: string;
   sourceTitle: string;
   payload: string;
   payloadDigest: string;
@@ -1194,4 +1311,8 @@ export interface AgentUsageQuota {
   fetchedAt: number;
   errorCode?: string;
   metrics: AgentUsageMetric[];
+}
+
+export interface AgentUsageQueryOptions {
+  forceRefresh?: boolean;
 }

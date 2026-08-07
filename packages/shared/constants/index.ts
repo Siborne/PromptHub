@@ -7,3 +7,4 @@ export * from "./skill-categories";
 export * from "./skill-registry";
 export * from "./skill-package";
 export * from "./mcp-market";
+export * from "./provider-presets";

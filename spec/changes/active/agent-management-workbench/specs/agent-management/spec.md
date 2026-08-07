@@ -799,6 +799,15 @@ The usage contract MUST describe provider quotas as an ordered list of metrics (
 - Then the banner shows the weekly quota and the rolling five-hour window as separate metrics
 - And the membership level is shown as the plan label
 
+#### Scenario: Refresh an expired Kimi access token
+
+- Given Kimi Code's current credential file contains an expired access token and a usable refresh token
+- When PromptHub requests Kimi quota
+- Then PromptHub uses Kimi Code's official OAuth refresh contract before querying usage
+- And serializes the refresh with Kimi Code's native lock path, re-reads credentials after acquiring the lock, and atomically persists a rotated token with private file permissions
+- And invalid refresh credentials remain an explicit expired state while transport or persistence failures remain unavailable
+- And no access token, refresh token, provider response body, or raw error enters renderer IPC, native menus, logs, or PromptHub persistence
+
 #### Scenario: Copilot credit quota
 
 - Given a GitHub OAuth token with Copilot access
@@ -1718,6 +1727,10 @@ MUST remain fixed at the toolbar's right edge in every asset domain.
 - Then target and library Plugin entries are selectable and show their detail
 - And the user can import a target package, distribute a library package,
   open its folder or remove a distribution through owning Plugin operations
+- And removing an Agent distribution or deleting a My Plugins package requires
+  an explicit destructive confirmation before the canonical mutation runs
+- And an externally installed target package without PromptHub distribution
+  ownership offers import/open actions but no unsafe filesystem delete action
 - And the view refreshes from the canonical Plugin store after a successful
   operation
 
@@ -1984,6 +1997,13 @@ injection is supported, or open the target Agent without mutating the clipboard.
 - Then PromptHub launches Codex in that project with the reviewed context
 - And the Claude Code conversation remains unchanged
 
+#### Scenario: Confirm the reviewed snapshot after a live transcript update
+
+- Given the source Agent receives another message while the handoff preview is open
+- When the user confirms the already reviewed preview
+- Then PromptHub launches the exact bounded payload shown in that preview
+- And it does not silently rebuild the payload from the newer live transcript
+
 #### Scenario: Degrade to launch only
 
 - Given a selected Agent can open the project but cannot safely receive context
@@ -2164,6 +2184,12 @@ and Plugins MUST retain package artwork when available with the plug fallback.
 Domain-owned actions and state MUST remain unchanged; visual unification MUST
 NOT invent unsupported actions or create another asset state source.
 
+Card height and footer position MUST remain identical when titles, descriptions,
+source labels, statuses or metadata counts differ. Each text region MUST be
+bounded by the shared anatomy: long values are truncated or clamped inside
+their own slot instead of increasing card height, while the complete asset
+remains available through the card detail or explicit open action.
+
 The Agent workspace product term MUST render as `Plugins` in every locale,
 matching the adjacent `Skills` and `MCP` taxonomy. Other descriptive Plugin
 copy may remain localized.
@@ -2175,6 +2201,8 @@ copy may remain localized.
 - Then every asset card has an icon, title/status row, bounded description,
   source row, metadata chips and an aligned icon-action footer
 - And the shared regions use the same dimensions and spacing across domains
+- And additional text or metadata cannot move the card footer or change the
+  card's outer height
 - And each action still invokes only its owning Skill, MCP or Plugin workflow
 
 #### Scenario: Keep Plugins as a stable product term
@@ -2222,6 +2250,13 @@ message page size.
 - And a main-owned cursor loads subsequent visible pages until the true end
 - And the UI does not present the conversation as empty or permanently
   truncated
+
+#### Scenario: Continue through a large Pi transcript
+
+- Given a Pi or Oh My Pi JSONL transcript extends beyond the initial bounded read
+- When the user advances beyond the currently loaded message pages
+- Then PromptHub requests source-bound cursor pages on demand until the native file ends
+- And the viewer does not show a permanent limited-preview notice for content that remains loadable
 
 #### Scenario: Keep paginated reads bounded and stable
 
@@ -2525,6 +2560,15 @@ verified official default MUST omit or disable restore instead of inventing a
 provider, model or credential contract. Manual custom Profile creation remains
 available independently.
 
+The native configuration MUST be presented as a normal selectable card rather
+than a rail-selected row, and its sanitized provider, protocol, endpoint,
+model, and credential-ownership fields MUST be visibly grouped. Because the
+native file remains owned by the Agent, this projection MUST stay read-only and
+MUST explain that boundary in the workspace. The primary management action
+MUST create an independent PromptHub Profile from the sanitized projection and
+open that Profile in the existing editable right-pane editor; it MUST NOT turn
+the Agent-owned file into a renderer-editable document or expose credentials.
+
 #### Scenario: Show a custom Claude configuration before any Profile exists
 
 - Given Claude Code is installed and its native settings configure a custom
@@ -2545,6 +2589,17 @@ available independently.
 - And native configuration remains unchanged until the user confirms the
   existing activation preview
 - And cancelling the preview leaves the Agent native configuration unchanged
+
+#### Scenario: Turn the native summary into an editable Profile
+
+- Given an Agent has a native provider configuration but no editable PromptHub
+  Profile for it
+- When the user chooses to manage the native configuration
+- Then the workspace previews the sanitized import and requires confirmation
+- And confirmation creates an independent Profile and opens it in the existing
+  right-pane editor
+- And the Agent-owned native configuration remains unchanged until a later
+  reviewed activation
 
 ### `FR-AGENT-087`: Project-Scoped Native Resume And Dense Transcript Layout
 
@@ -2733,3 +2788,163 @@ eye-button reveal behavior from the Provider editor.
 - When the user selects another Agent
 - Then PromptHub asks whether to discard the changes
 - And cancellation keeps the current Agent and editor state
+
+### `FR-AGENT-091`: Focused Appearance Sub-Workspaces
+
+The Appearance tab MUST separate desktop skins and Pets into two focused
+sub-workspaces selected from a compact left-side icon navigation rail. The rail
+MUST remain inside the Appearance tab and MUST NOT add more top-level Agent
+tabs. Pets MUST appear before desktop skins in this rail. Each destination MUST
+show its own item count and preserve a stable selection while Appearance
+remains mounted.
+
+The desktop-skin destination MUST be the default. It alone owns native
+appearance status, restore, restart permission, skin import, skin inventory and
+the skin directory action. The Pets destination alone owns Pet import, Pet
+inventory and the Pet directory action. A destination MUST NOT render the
+other destination's cards or actions, and invalid-item feedback MUST use only
+the selected destination's invalid count.
+
+#### Scenario: Switch from skins to Pets without mixed controls
+
+- Given Appearance has one installed skin and two valid Pets
+- When the user selects Pets from the Appearance navigation rail
+- Then the skin card, native appearance controls and skin import action are not rendered
+- And the two Pet cards, Pet import action and Pet directory action are rendered
+- And returning to desktop skins restores the skin workspace without reloading the Agent
+
+### `FR-AGENT-092`: Managed Pet Inventory And Allowlisted Catalog
+
+The Pets sub-workspace MUST provide a responsive installed inventory with at
+least three columns when the available content width permits. Every installed
+Pet MUST expose its v1 or v2 sprite contract, exact managed path, preview,
+metadata edit, export, path-open and delete actions. Metadata edits MUST
+preserve unknown manifest fields and MUST use atomic replacement. The preview
+MUST be the dominant card content rather than a small identity icon. The exact
+managed path MUST remain available to the path-open action but MUST NOT occupy
+the visible card body.
+
+The workspace MUST also provide a catalog sourced only from the hardcoded
+official `legeling/awesome-codex-pet` project and MUST identify that destination
+as `Awesome Codex Pet` in every supported locale. Catalog search and paging
+MUST be bounded. Editing the search field MUST NOT fetch or filter the catalog;
+only an explicit search-button action or Enter submission commits the query.
+A newer submitted query MUST be allowed to supersede an older in-flight query.
+Catalog cards MUST reuse the same Agent asset-card shell,
+spacing, typography and quick-action layout used by Skills, MCP and Plugins,
+while their Pet-specific content body MUST use a large bounded preview, MUST
+keep long titles, descriptions and metadata inside the card, and MUST NOT
+render the catalog identifier as source-path copy. Their image source MUST
+prefer the project's published
+`codexpet.top/assets/previews/<pet-id>/webp/idle.webp` preview and MUST fall back
+to the validated package spritesheet rather than a guessed repository path.
+Valid preview bytes MUST be reused from a bounded persistent cache across
+catalog refreshes and application restarts. Stale, invalid or excess cache
+entries MUST be removed without blocking catalog use.
+Catalog, manifest, sprite and preview responses MUST enforce timeouts and byte
+limits, MUST reject redirects or paths outside the two hardcoded official asset
+prefixes, and MUST NOT execute upstream installers or telemetry.
+Installing an item MUST stage and validate the package before reusing the
+existing Pet import transaction. Installed Pets remain filesystem-owned under
+the selected Codex root and remain outside PromptHub backup and sync.
+
+#### Scenario: Manage and install Pets without changing ownership
+
+- Given two installed Pets and one valid catalog Pet
+- When the user edits an installed Pet and installs the catalog Pet
+- Then the edited `pet.json` preserves its unknown fields and is atomically replaced
+- And the catalog package is validated before appearing in the installed inventory
+- And every card uses the shared Agent asset-card measurements, gives the Pet preview primary visual weight and shows the sprite contract version
+- And the catalog destination is labelled `Awesome Codex Pet` without card text overflow
+- And the catalog preview loads from the published gallery or the validated package fallback
+- And a valid cached preview is reused without another upstream image request
+- And every installed card can open its exact directory
+- And no Pet bytes are copied into PromptHub durable storage
+
+### `FR-AGENT-093`: Bounded Agent Quotas In The Menu Bar
+
+On macOS, the PromptHub menu bar MUST expose a tray-anchored rendered quota
+popover for every Agent whose usage adapter is verified and enabled. Each
+summary MUST identify the Agent with its existing product artwork, display the
+most constrained remaining percentage using tabular numerals and a progress
+indicator, and expose all returned metrics with localized labels, remaining
+percentages and reset times.
+Plan metadata and provider states such as missing credentials, expired access
+or unavailable usage MUST remain explicit rather than becoming fake zeroes.
+
+The popover MUST reuse the same main-process usage service as the Agent
+workspace. Opening the popover MUST render the current renderer cache
+immediately and MUST NOT wait on provider network calls. Refresh work MUST be deduplicated,
+bounded to at most two provider requests at once, timed out by the owning
+adapter, and isolated so one provider failure cannot remove other provider
+results. A failed refresh MUST preserve the last rendered snapshot, and
+rendered copy or logs MUST NOT expose credentials or raw provider errors.
+
+#### Scenario: Open a populated quota popover without blocking
+
+- Given cached quota snapshots exist for ChatGPT and Claude Code
+- When the user primary-clicks the PromptHub menu bar icon
+- Then a tray-anchored popover immediately shows both Agent summaries and their metric details
+- And no intermediate Agent Quotas menu item is required on macOS
+- And provider identity and plan precede a named metric, compact tabular remaining value, slim progress and reset time
+- And a background refresh may replace the snapshot after it completes
+- And no menu action waits synchronously for that refresh
+
+#### Scenario: Keep ordinary tray actions available
+
+- Given PromptHub is running on macOS
+- When the user secondary-clicks the PromptHub menu bar icon
+- Then the native action menu opens without a duplicate Agent Quotas command
+- And quick add, Agent management, settings, update and quit actions remain available
+
+#### Scenario: Open quotas before the first snapshot exists
+
+- Given PromptHub has started but one or more verified quota adapters have not completed their first request
+- When the user opens the Agent quota popover
+- Then every verified Agent remains visible in stable registry order with an explicit loading state
+- And each completed adapter replaces only its own loading row without waiting for slower providers
+- And the rendered surface never collapses the whole inventory into one anonymous loading row
+
+#### Scenario: Degrade one provider without losing the others
+
+- Given one Agent adapter rejects while another returns a valid quota snapshot
+- When PromptHub refreshes the quota popover
+- Then the failed Agent receives a bounded unavailable state
+- And the valid Agent remains visible with its metrics
+- And no rejected error text or credential material reaches the popover
+
+#### Scenario: Reuse and release the quota popover
+
+- Given the quota popover has already been created
+- When the user opens it again from the same tray icon
+- Then PromptHub repositions and reuses the existing renderer window rather than creating another process surface
+- And losing focus hides the popover without discarding cached quota presentation
+- And destroying the tray or quitting PromptHub closes the owned popover window
+
+### `FR-AGENT-094`: Dense And Safe Conversation Pagination
+
+The Agent conversation detail header MUST render continuation, export and
+metadata actions as a lightweight row without an additional rounded card shell.
+Selected session rows MUST retain an explicit readable foreground color in light
+and dark themes and MUST NOT rely on saturated primary text/background pairs.
+
+Transcript pagination MUST clamp a page request to loaded entries and MUST follow
+at most eight advancing native cursors when a page contains only duplicate or
+empty records. A cursor that does not advance MUST terminate loading. The detail
+view MUST never render a blank page solely because a cursor response was empty;
+it MUST show the nearest page containing loaded entries instead. Transcript
+bodies remain platform-owned and are never persisted by this renderer fix.
+
+#### Scenario: Skip duplicate cursor records
+
+- Given the current page ends at the loaded transcript boundary
+- When the next native cursor repeats known entries and supplies an advancing cursor
+- Then the renderer follows the cursor within the bounded hop limit
+- And the requested page shows the first newly loaded entry instead of an empty view
+
+#### Scenario: Prevent stale empty pages
+
+- Given a cursor returns no new entries and no advancing cursor
+- When the user requests the next message page
+- Then the renderer stays on or clamps to the last page containing entries
+- And the transcript never presents an empty page caused by pagination state

@@ -459,3 +459,71 @@ deliberately hides undetected Agents and forbids config reads or writes, while
 the proposed bootstrap behavior would make such an Agent manageable. The
 installed-only boundary remains authoritative until that product contract is
 explicitly changed.
+
+## Scope Addendum 2026-08-03: Pet Management And Official Catalog
+
+The Appearance Pet workspace becomes a complete filesystem-backed management
+surface rather than a preview-only gallery. Installed Pets remain owned by the
+selected Codex root and are never copied into PromptHub storage. Users can
+import, inspect, rename, describe, export, open and remove a Pet while seeing
+its sprite contract version.
+
+An optional catalog reads metadata and packages only from the allowlisted
+`legeling/awesome-codex-pet` repository. Catalog requests are paged, bounded,
+timed out and cached with a fixed capacity. Installation stages validated
+`pet.json` and sprite bytes before reusing the existing atomic Pet import path;
+upstream scripts and telemetry are never executed. The rollback path removes
+the catalog UI and service without migrating or deleting installed Pets.
+
+## Scope Addendum 2026-08-06: Provider 预设目录(Codex/ChatGPT 优先,官方配置聚焦)
+
+Confirmed with the maintainer on 2026-08-06:
+
+1. The Provider & Model page keeps the left/right split (provider list / config), and the
+   configuration experience borrows CC Switch's preset data and protocol mapping, not its
+   components, data model, or secret storage.
+2. The preset catalog does NOT absorb CC Switch sponsor/promotional presets. It only covers
+   each Agent's official configuration (Codex/ChatGPT, Claude, Kimi, OpenCode, Google,
+   Copilot) plus suppliers with verifiable official evidence (official docs, endpoints,
+   model names). Entries with affiliate links, promo codes, or inferred endpoints are
+   excluded.
+3. First platform: **Codex/ChatGPT**, then one platform at a time.
+4. Codex must support **additive mode**: the official ChatGPT login and built-in `openai`
+   provider stay intact while third-party providers are appended as `[model_providers.*]`
+   entries (managed `experimental_bearer_token` or `env_key`, mutually exclusive);
+   switching back to official cleans stale third-party auth residue.
+5. Reference checkout updated to CC Switch v3.19.2 at
+   `/Users/lingxiaotian/Programs/public/cc-switch` (`43eaf073`); evidence from
+   `src-tauri/src/codex_config.rs` and `src/config/codexProviderPresets.ts` is recorded in
+   `provider-preset-catalog-design.md`. Selective reference only, no runtime code copied.
+6. Detailed design: `provider-preset-catalog-design.md`.
+
+## Scope Addendum 2026-08-04: Menu Bar Agent Quotas
+
+The macOS PromptHub menu bar should surface the same provider-owned Agent quota
+snapshots already used by the Agent Overview, without introducing a second
+credential reader. The first delivery covers the six evidence-backed adapters:
+Claude Code, ChatGPT/Codex, Kimi Code, Antigravity, Gemini and GitHub Copilot.
+
+On macOS, a primary click on the PromptHub menu-bar icon opens the
+tray-anchored rendered popover directly, without an intermediate quota menu
+item. A secondary click preserves the native action menu; Windows and Linux
+retain the existing native-menu interaction. The popover reads the last renderer cache immediately,
+refreshes through the process-wide usage service and its 60-second cache, and
+bounds explicit refreshes to two provider operations. It retains the last
+successful presentation on refresh failure and never places credentials or raw
+provider errors in rendered copy or logs. PromptHub adapts CodexBar's actual
+usage-card hierarchy -- product identity and plan first, followed by a named
+metric, compact remaining value, slim progress and reset time -- to the existing
+React/Electron boundary without vendoring its SwiftUI implementation or branded
+assets.
+
+## Scope Addendum 2026-08-06: Conversation History Density And Cursor Safety
+
+The Agent conversation workspace keeps its actions as a lightweight header row
+instead of a nested card surface. Selected sessions use a neutral accent surface
+with explicit foreground tokens so titles remain readable in both themes.
+Transcript pagination must never expose an empty page when a native cursor
+returns duplicate or empty records. The renderer follows advancing cursors with
+a bounded hop count, clamps stale page state to the last loaded page, and keeps
+native transcript ownership and on-demand reading unchanged.

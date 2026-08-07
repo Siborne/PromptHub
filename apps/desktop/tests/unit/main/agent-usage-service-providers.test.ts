@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentUsageQuota } from "@prompthub/shared/types";
 import type { AntigravityLocalUsageResult } from "../../../src/main/services/agent-usage-antigravity-local";
 import { createAgentUsageService } from "../../../src/main/services/agent-usage-service";
+import type { KimiOAuthTokenService } from "../../../src/main/services/kimi-oauth-token-service";
 
 const HOME = "/Users/tester";
 const KIMI_ROOT = "/Users/tester/.kimi-code";
@@ -55,6 +56,7 @@ function createHarness(
   options: {
     platform?: NodeJS.Platform;
     antigravityLocalResult?: AntigravityLocalUsageResult;
+    kimiOAuthTokenService?: KimiOAuthTokenService;
   } = {},
 ): Harness {
   const files = new Map<string, string>();
@@ -99,6 +101,7 @@ function createHarness(
           options.antigravityLocalResult ?? { kind: "not-running" },
       ),
     },
+    kimiOAuthTokenService: options.kimiOAuthTokenService,
   });
   return {
     service,
@@ -161,6 +164,72 @@ function kimiUsagePayload(overrides: Record<string, unknown> = {}) {
 
 describe("Agent usage service (Kimi adapter)", () => {
   describe("credential resolution", () => {
+    it("queries quota with an access token renewed by the current Kimi credential service", async () => {
+      const getAccessToken = vi.fn().mockResolvedValue({
+        kind: "ok",
+        accessToken: "renewed-kimi-access-token",
+      });
+      const h = createHarness({
+        kimiOAuthTokenService: { getAccessToken },
+      });
+      h.fetchImpl.mockResolvedValue(fakeResponse(200, kimiUsagePayload()));
+
+      const quota = await h.service.getUsage("kimi");
+
+      expect(quota.status).toBe("ok");
+      expect(getAccessToken).toHaveBeenCalledWith(KIMI_ROOT);
+      expect(h.fetchImpl).toHaveBeenCalledWith(
+        "https://api.kimi.com/coding/v1/usages",
+        expect.objectContaining({
+          headers: { Authorization: "Bearer renewed-kimi-access-token" },
+        }),
+      );
+    });
+
+    it("keeps Kimi renewal failures explicit and sanitized", async () => {
+      const h = createHarness({
+        kimiOAuthTokenService: {
+          getAccessToken: vi.fn().mockResolvedValue({
+            kind: "unavailable",
+            errorCode: "credential-write-error",
+          }),
+        },
+      });
+
+      const quota = await h.service.getUsage("kimi");
+
+      expect(quota).toMatchObject({
+        status: "unavailable",
+        errorCode: "credential-write-error",
+      });
+      expect(h.fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("forces one token renewal and retries usage after an accepted token returns 401", async () => {
+      const getAccessToken = vi
+        .fn()
+        .mockResolvedValueOnce({ kind: "ok", accessToken: KIMI_TOKEN })
+        .mockResolvedValueOnce({
+          kind: "ok",
+          accessToken: "renewed-kimi-access-token",
+        });
+      const h = createHarness({
+        kimiOAuthTokenService: { getAccessToken },
+      });
+      h.fetchImpl
+        .mockResolvedValueOnce(fakeResponse(401, {}))
+        .mockResolvedValueOnce(fakeResponse(200, kimiUsagePayload()));
+
+      const quota = await h.service.getUsage("kimi");
+
+      expect(quota.status).toBe("ok");
+      expect(getAccessToken).toHaveBeenNthCalledWith(1, KIMI_ROOT);
+      expect(getAccessToken).toHaveBeenNthCalledWith(2, KIMI_ROOT, {
+        forceRefresh: true,
+      });
+      expect(h.fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
     it("returns no-credentials without a network call when no credential file exists", async () => {
       const h = createHarness();
 

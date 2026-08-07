@@ -22,8 +22,11 @@ import type {
   ManagedAgentSummary,
   SkillProject,
 } from "@prompthub/shared/types";
+import { Checkbox } from "../ui/Checkbox";
+import { Modal } from "../ui/Modal";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { Select, type SelectOption } from "../ui/Select";
+import { useToast } from "../ui/Toast";
 import { copyTextToClipboard } from "../../utils/clipboard";
 
 const DIRECT_HANDOFF_AGENT_IDS = new Set(["claude", "codex"]);
@@ -48,6 +51,7 @@ export function AgentConversationActions({
   onError,
 }: AgentConversationActionsProps) {
   const { t } = useTranslation();
+  const { showToast } = useToast();
   const targets = useMemo(
     () =>
       agents.filter(
@@ -74,7 +78,6 @@ export function AgentConversationActions({
   const [isChoosingHandoff, setIsChoosingHandoff] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const targetOptions = useMemo(
     () =>
@@ -151,13 +154,18 @@ export function AgentConversationActions({
 
   const run = async (operation: () => Promise<void>) => {
     setIsWorking(true);
-    setNotice(null);
     onError(null);
     try {
       await operation();
-    } catch {
+    } catch (error) {
+      const errorCode = error instanceof Error ? error.message : "";
       onError(
-        t("agents.conversationActionFailed", "Conversation action failed."),
+        /HANDOFF_PREVIEW_(?:EXPIRED|STALE)/.test(errorCode)
+          ? t(
+              "agents.handoffPreviewExpired",
+              "The handoff preview expired or changed. Generate a new preview and try again.",
+            )
+          : t("agents.conversationActionFailed", "Conversation action failed."),
       );
     } finally {
       setIsWorking(false);
@@ -206,13 +214,14 @@ export function AgentConversationActions({
               ),
         );
       } else if (preview.transport === "launch") {
-        setNotice(
+        showToast(
           t("agents.handoffOpened", "Copied context and opened {{agent}}.", {
             agent: target?.name || preview.targetAgentId,
           }),
+          "success",
         );
       } else {
-        setNotice(
+        showToast(
           t(
             "agents.handoffStarted",
             "Started a new conversation in {{agent}}.",
@@ -220,6 +229,7 @@ export function AgentConversationActions({
               agent: target?.name || preview.targetAgentId,
             },
           ),
+          "success",
         );
       }
       setPreview(null);
@@ -233,128 +243,119 @@ export function AgentConversationActions({
         format,
       });
       if (!result.canceled) {
-        setNotice(t("agents.conversationExported", "Conversation exported."));
+        showToast(
+          t("agents.conversationExported", "Conversation exported."),
+          "success",
+        );
       }
     });
 
   return (
     <>
-      <section className="mt-2 rounded-xl border border-border/70 bg-white p-1.5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] dark:bg-card">
+      <div
+        data-testid="conversation-continuation-toolbar"
+        className="flex min-h-9 items-center gap-2"
+      >
         <div
-          data-testid="conversation-continuation-toolbar"
-          className="flex items-center gap-2"
+          data-testid="conversation-primary-actions"
+          className="flex min-w-0 flex-1 items-center gap-2"
         >
-          <div
-            data-testid="conversation-primary-actions"
-            className="flex min-w-0 flex-1 items-center gap-2"
+          <PrimaryActionButton
+            label={t("agents.continueInCurrentAgent", "Continue in {{agent}}", {
+              agent: agent.name,
+            })}
+            icon={<SquareTerminalIcon className="h-4 w-4" />}
+            primary
+            disabled={isWorking || !session.resume}
+            onClick={() =>
+              void run(async () => {
+                await window.api.agent.resumeConversation({
+                  agentId: agent.id,
+                  sessionId: session.id,
+                });
+                showToast(
+                  t("agents.resumeStarted", "Opened {{agent}} in Terminal.", {
+                    agent: agent.name,
+                  }),
+                  "success",
+                );
+              })
+            }
+          />
+          <PrimaryActionButton
+            label={t("agents.handoffConversation", "Continue elsewhere")}
+            icon={<ArrowRightLeftIcon className="h-4 w-4" />}
+            disabled={isWorking || targets.length === 0}
+            onClick={() => setIsChoosingHandoff(true)}
+          />
+        </div>
+        <div className="relative">
+          <IconActionButton
+            label={t("agents.exportConversation", "Export conversation")}
+            icon={<DownloadIcon className="h-4 w-4" />}
+            expanded={isExportOpen}
+            onClick={() => {
+              setIsMoreOpen(false);
+              setIsExportOpen((open) => !open);
+            }}
+          />
+          {isExportOpen ? (
+            <ExportActionsMenu
+              onClose={() => setIsExportOpen(false)}
+              onExport={(format) => void exportConversation(format)}
+            />
+          ) : null}
+        </div>
+        <div className="relative">
+          <button
+            type="button"
+            aria-label={t(
+              "agents.moreConversationActions",
+              "More conversation actions",
+            )}
+            aria-haspopup="menu"
+            aria-expanded={isMoreOpen}
+            title={t(
+              "agents.moreConversationActions",
+              "More conversation actions",
+            )}
+            onClick={() => {
+              setIsExportOpen(false);
+              setIsMoreOpen((open) => !open);
+            }}
+            className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <PrimaryActionButton
-              label={t(
-                "agents.continueInCurrentAgent",
-                "Continue in {{agent}}",
-                { agent: agent.name },
-              )}
-              icon={<SquareTerminalIcon className="h-4 w-4" />}
-              primary
-              disabled={isWorking || !session.resume}
-              onClick={() =>
+            <MoreHorizontalIcon className="h-4 w-4" />
+          </button>
+          {isMoreOpen ? (
+            <ConversationActionsMenu
+              deleted={Boolean(metadata?.deletedAt)}
+              onClose={() => setIsMoreOpen(false)}
+              onEdit={() => setIsEditing(true)}
+              onRestore={() =>
                 void run(async () => {
-                  await window.api.agent.resumeConversation({
-                    agentId: agent.id,
-                    sessionId: session.id,
-                  });
-                  setNotice(
-                    t("agents.resumeStarted", "Opened {{agent}} in Terminal.", {
-                      agent: agent.name,
+                  onMetadataChange(
+                    await window.api.agent.restoreConversation({
+                      agentId: agent.id,
+                      sessionId: session.id,
+                    }),
+                  );
+                })
+              }
+              onDelete={() =>
+                void run(async () => {
+                  onMetadataChange(
+                    await window.api.agent.deleteConversation({
+                      agentId: agent.id,
+                      sessionId: session.id,
                     }),
                   );
                 })
               }
             />
-            <PrimaryActionButton
-              label={t("agents.handoffConversation", "Continue elsewhere")}
-              icon={<ArrowRightLeftIcon className="h-4 w-4" />}
-              disabled={isWorking || targets.length === 0}
-              onClick={() => setIsChoosingHandoff(true)}
-            />
-          </div>
-          <div className="relative">
-            <IconActionButton
-              label={t("agents.exportConversation", "Export conversation")}
-              icon={<DownloadIcon className="h-4 w-4" />}
-              expanded={isExportOpen}
-              onClick={() => {
-                setIsMoreOpen(false);
-                setIsExportOpen((open) => !open);
-              }}
-            />
-            {isExportOpen ? (
-              <ExportActionsMenu
-                onClose={() => setIsExportOpen(false)}
-                onExport={(format) => void exportConversation(format)}
-              />
-            ) : null}
-          </div>
-          <div className="relative">
-            <button
-              type="button"
-              aria-label={t(
-                "agents.moreConversationActions",
-                "More conversation actions",
-              )}
-              aria-haspopup="menu"
-              aria-expanded={isMoreOpen}
-              title={t(
-                "agents.moreConversationActions",
-                "More conversation actions",
-              )}
-              onClick={() => {
-                setIsExportOpen(false);
-                setIsMoreOpen((open) => !open);
-              }}
-              className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <MoreHorizontalIcon className="h-4 w-4" />
-            </button>
-            {isMoreOpen ? (
-              <ConversationActionsMenu
-                deleted={Boolean(metadata?.deletedAt)}
-                onClose={() => setIsMoreOpen(false)}
-                onEdit={() => setIsEditing(true)}
-                onRestore={() =>
-                  void run(async () => {
-                    onMetadataChange(
-                      await window.api.agent.restoreConversation({
-                        agentId: agent.id,
-                        sessionId: session.id,
-                      }),
-                    );
-                  })
-                }
-                onDelete={() =>
-                  void run(async () => {
-                    onMetadataChange(
-                      await window.api.agent.deleteConversation({
-                        agentId: agent.id,
-                        sessionId: session.id,
-                      }),
-                    );
-                  })
-                }
-              />
-            ) : null}
-          </div>
+          ) : null}
         </div>
-
-        {notice ? (
-          <p
-            role="status"
-            className="mt-1 rounded-lg bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
-          >
-            {notice}
-          </p>
-        ) : null}
-      </section>
+      </div>
 
       {isChoosingHandoff ? (
         <HandoffTargetDialog
@@ -383,10 +384,11 @@ export function AgentConversationActions({
                   ? preview.cliCommand
                   : preview.payload;
               await copyTextToClipboard(copyValue);
-              setNotice(
+              showToast(
                 preview.transport === "direct"
                   ? t("agents.cliCommandCopied", "CLI command copied.")
                   : t("agents.handoffContextCopied", "Handoff context copied."),
+                "success",
               );
             })
           }
@@ -835,21 +837,19 @@ function ConversationEditDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-2xl"
-      >
-        <h2 className="text-base font-semibold text-foreground">
-          {t("agents.editConversation", "Edit conversation")}
-        </h2>
-        <div className="mt-4 space-y-3">
+    <Modal
+      isOpen
+      onClose={onCancel}
+      title={t("agents.editConversation", "Edit conversation")}
+      size="md"
+    >
+      <div className="space-y-5">
+        <div className="space-y-4">
           <Field label={t("agents.conversationTitle", "Title")}>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+              className="h-10 w-full rounded-xl border-0 bg-muted/50 px-4 text-sm text-foreground outline-none transition-all duration-base placeholder:text-muted-foreground focus:bg-background focus:ring-2 focus:ring-primary/30"
             />
           </Field>
           <Field label={t("agents.conversationProject", "Project")}>
@@ -869,14 +869,14 @@ function ConversationEditDialog({
                   labelText: candidate.name,
                 })),
               ]}
-              triggerClassName="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 text-left text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+              triggerClassName="flex h-10 w-full items-center justify-between gap-2 rounded-xl border-0 bg-muted/50 px-4 text-left text-sm text-foreground outline-none transition-all duration-base hover:bg-muted/70 focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-primary/30"
             />
           </Field>
           <Field label={t("agents.conversationTags", "Tags (comma separated)")}>
             <input
               value={tags}
               onChange={(event) => setTags(event.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+              className="h-10 w-full rounded-xl border-0 bg-muted/50 px-4 text-sm text-foreground outline-none transition-all duration-base placeholder:text-muted-foreground focus:bg-background focus:ring-2 focus:ring-primary/30"
             />
           </Field>
           <Field label={t("agents.conversationNote", "Note")}>
@@ -884,46 +884,50 @@ function ConversationEditDialog({
               value={note}
               onChange={(event) => setNote(event.target.value)}
               rows={4}
-              className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm"
+              className="min-h-[120px] w-full resize-none rounded-xl border-0 bg-muted/50 px-4 py-3 text-sm text-foreground outline-none transition-all duration-base placeholder:text-muted-foreground focus:bg-background focus:ring-2 focus:ring-primary/30"
             />
           </Field>
-          <div className="flex gap-5 text-xs text-foreground">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={favorite}
-                onChange={(event) => setFavorite(event.target.checked)}
-              />
-              {t("agents.favoriteConversation", "Favorite")}
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={archived}
-                onChange={(event) => setArchived(event.target.checked)}
-              />
-              {t("agents.archiveConversation", "Archived")}
-            </label>
-          </div>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <Checkbox
+              checked={favorite}
+              onChange={setFavorite}
+              label={t("agents.favoriteConversation", "Favorite")}
+            />
+            <Checkbox
+              checked={archived}
+              onChange={setArchived}
+              label={t("agents.archiveConversation", "Archive in PromptHub")}
+            />
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {t(
+              "agents.archiveConversationHint",
+              "Archiving hides this conversation from Active. The native transcript stays untouched and can be found in Archived.",
+            )}
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-border/70 pt-4">
           <button
             type="button"
             onClick={onCancel}
-            className="h-9 rounded-md border border-border px-4 text-xs font-semibold"
+            className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted"
           >
             {t("common.cancel", "Cancel")}
           </button>
           <button
             type="button"
             onClick={() => void save()}
-            className="h-9 rounded-md bg-primary px-4 text-xs font-semibold text-primary-foreground"
+            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
           >
             {t("common.save", "Save")}
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -89,7 +89,7 @@ export function AgentConversationMarkdown({
   content,
 }: AgentConversationMarkdownProps) {
   return (
-    <div className="agent-conversation-markdown mt-2 break-words text-[13px] leading-5">
+    <div className="agent-conversation-markdown break-words text-[13px] leading-5">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeSanitize]}

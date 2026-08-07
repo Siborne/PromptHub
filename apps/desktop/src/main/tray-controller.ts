@@ -3,6 +3,7 @@ import type {
   Menu,
   MenuItemConstructorOptions,
   NativeImage,
+  Rectangle,
   Tray,
 } from "electron";
 import type { AppCommand } from "@prompthub/shared/types";
@@ -25,6 +26,7 @@ interface TrayControllerOptions {
   loadAgentProviderGroups?: () => Promise<AgentProviderTrayGroup[]>;
   onAgentProviderProfile?: (agentId: string, profileId: string) => void;
   onCommand: (command: AppCommand) => void;
+  onOpenAgentUsage?: () => void;
   onQuit: () => void;
   onToggleWindow: () => void;
   platform: NodeJS.Platform;
@@ -33,6 +35,7 @@ interface TrayControllerOptions {
 export interface TrayController {
   create: () => void;
   destroy: () => void;
+  getBounds: () => Rectangle | null;
   refresh: () => void;
   reloadAgentProviders: () => Promise<void>;
 }
@@ -79,6 +82,7 @@ export function createTrayController(
   options: TrayControllerOptions,
 ): TrayController {
   let tray: Tray | null = null;
+  let contextMenu: Menu | null = null;
   let agentProviderGroups: AgentProviderTrayGroup[] = [];
   let providerLoadGeneration = 0;
 
@@ -88,14 +92,19 @@ export function createTrayController(
     const template = buildTrayMenuTemplate({
       agentManagementEnabled: options.agentManagementEnabled,
       agentProviderGroups,
+      includeAgentUsage: options.platform !== "darwin",
       isWindowVisible: options.getWindowVisibility(),
       labels: getTrayMenuLabels(locale),
       onAgentProviderProfile: options.onAgentProviderProfile,
       onCommand: options.onCommand,
+      onOpenAgentUsage: options.onOpenAgentUsage,
       onQuit: options.onQuit,
       onToggleWindow: options.onToggleWindow,
     });
-    tray.setContextMenu(options.buildMenu(template));
+    contextMenu = options.buildMenu(template);
+    if (options.platform !== "darwin") {
+      tray.setContextMenu(contextMenu);
+    }
   };
 
   const reloadAgentProviders = async () => {
@@ -126,9 +135,11 @@ export function createTrayController(
     refresh();
     void reloadAgentProviders();
     if (options.platform === "darwin") {
-      tray.on("mouse-down", () => {
+      tray.on("click", options.onOpenAgentUsage ?? options.onToggleWindow);
+      tray.on("right-click", () => {
         refresh();
         void reloadAgentProviders();
+        if (tray && contextMenu) tray.popUpContextMenu(contextMenu);
       });
     } else {
       tray.on("click", options.onToggleWindow);
@@ -139,7 +150,14 @@ export function createTrayController(
     providerLoadGeneration += 1;
     tray?.destroy();
     tray = null;
+    contextMenu = null;
   };
 
-  return { create, destroy, refresh, reloadAgentProviders };
+  return {
+    create,
+    destroy,
+    getBounds: () => tray?.getBounds() ?? null,
+    refresh,
+    reloadAgentProviders,
+  };
 }

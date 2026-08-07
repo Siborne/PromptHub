@@ -1151,11 +1151,11 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
       }
 
       if (agentId === "pi") {
-        return piAdapter.read(sessionId);
+        return piAdapter.read(sessionId, input);
       }
 
       if (agentId === "oh-my-pi") {
-        return ohMyPiAdapter.read(sessionId);
+        return ohMyPiAdapter.read(sessionId, input);
       }
 
       if (agentId === "windsurf") {

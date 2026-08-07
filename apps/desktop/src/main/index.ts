@@ -105,6 +105,7 @@ import { handleLegacyDesktopCliInvocation } from "./legacy-cli-invocation";
 import { getTrayMenuLabels } from "./tray-menu";
 import type { AgentProviderRuntime } from "./services/agent-provider-runtime";
 import { handleAgentProviderTraySelection } from "./services/agent-provider-tray-handler";
+import { createDefaultAgentUsagePopoverWindowController } from "./agent-usage-popover-window";
 import { startAgentDeepLinkRouting } from "./agent-deep-link-router";
 
 let mainWindow: BrowserWindow | null = null;
@@ -247,6 +248,8 @@ const dispatchFromTray = (command: AppCommand) =>
     sendCommand: (pendingCommand) =>
       sendToMainWindow(IPC_CHANNELS.APP_COMMAND, pendingCommand),
   });
+const agentUsagePopoverController =
+  createDefaultAgentUsagePopoverWindowController(isDev);
 const trayController = createTrayController({
   agentManagementEnabled: true,
   buildMenu: (template) => Menu.buildFromTemplate(template),
@@ -278,6 +281,8 @@ const trayController = createTrayController({
     });
   },
   onCommand: dispatchFromTray,
+  onOpenAgentUsage: () =>
+    void agentUsagePopoverController.show(trayController.getBounds()),
   onQuit: () => {
     isQuitting = true;
     app.quit();
@@ -688,15 +693,12 @@ ipcMain.on("window:closeDialogCancel", () => {
   pendingCloseAction = false;
 });
 
-// Create system tray
-// 创建系统托盘
 function createTray() {
   trayController.create();
 }
 
-// Destroy tray
-// 销毁托盘
 function destroyTray() {
+  agentUsagePopoverController.destroy();
   trayController.destroy();
 }
 
@@ -1961,6 +1963,7 @@ app.on("window-all-closed", () => {
 // 应用退出前清理
 app.on("before-quit", () => {
   isQuitting = true;
+  agentUsagePopoverController.destroy();
   closeDatabase();
 });
 

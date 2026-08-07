@@ -209,8 +209,8 @@ UI screen structure, interaction states, responsive behavior and component bound
 - [x] `T-AGENT-128` 按 `FR-AGENT-058` / `DES-AGENT-073` 通过已有 shell boundary 精确 reveal 当前规则文件并补齐错误反馈；不得增加 IPC。
 - [x] `TEST-AGENT-092` Agent 资产视觉与顺序回归：覆盖 Skills/MCP/Plugins 连续排列、Qwen Definitions 不拆散资产组、MCP/Plugin 共用有界双列卡片网格，以及 Plugin 使用 `PlugIcon`。
 - [x] `T-AGENT-129` 按 `FR-AGENT-059` / `DES-AGENT-074` 统一 MCP/Plugin 与 Skill 的卡片语言并调整 tab 顺序；继续复用 owning-domain inventory，不增加 store、IPC、持久化或伪动作。
-- [x] `TEST-AGENT-093` Agent 资产管理回归：覆盖 Skills/MCP/Plugins 共用同一管理 surface 与右侧加号主操作、长本地化筛选不把主操作换到第二行、各自主操作进入 Skill 选择/MCP 目标/Plugin 商店 owning workflow、无 MCP 目标时仍可添加首个目标、MCP/Plugin 卡片选择、详情、配置/导入/分发/打开目录/卸载快捷操作，目标按 Agent 隔离，刷新与失败状态可观察，新增文案覆盖七种语言，工具条不显示原始资产路径，且不回归 Skills 操作。
-- [x] `T-AGENT-130` 按 `FR-AGENT-060` / `DES-AGENT-075` 将 Agent MCP/Plugin 页接入现有管理工作台和 owning stores；删除只读泛化卡片路径，并抽取 Skills/MCP/Plugins 共用的 toolbar、筛选、右侧加号主操作、双列 grid、card、action footer、空态与 pager 原语。共享工具条保持单行，筛选区有界横向滚动，刷新和添加动作固定在右侧；工具条只保留本地化筛选、刷新与主操作而不展示原始路径，三个域只保留自己的数据和动作，不新增持久化或 IPC。
+- [x] `TEST-AGENT-093` Agent 资产管理回归：覆盖 Skills/MCP/Plugins 共用同一管理 surface 与右侧加号主操作、长本地化筛选不把主操作换到第二行、各自主操作进入 Skill 选择/MCP 目标/Plugin 商店 owning workflow、无 MCP 目标时仍可添加首个目标、MCP/Plugin 卡片选择、详情、配置/导入/分发/打开目录/卸载快捷操作，PromptHub 管理的 Plugin 分发和 My Plugins 删除均需二次确认，外部 Plugin 不伪造删除动作；目标按 Agent 隔离，刷新与失败状态可观察，新增文案覆盖七种语言，工具条不显示原始资产路径，且不回归 Skills 操作。
+- [x] `T-AGENT-130` 按 `FR-AGENT-060` / `DES-AGENT-075` 将 Agent MCP/Plugin 页接入现有管理工作台和 owning stores；删除只读泛化卡片路径，并抽取 Skills/MCP/Plugins 共用的 toolbar、筛选、右侧加号主操作、双列 grid、card、action footer、空态与 pager 原语。共享工具条保持单行，筛选区有界横向滚动，刷新和添加动作固定在右侧；工具条只保留本地化筛选、刷新与主操作而不展示原始路径，三个域只保留自己的数据和动作。Plugin 目标卡通过已分发目标关联 My Plugins，并复用确认弹窗和 canonical remove/delete store 操作，不新增持久化、IPC 或外部目录删除。
 - [x] `TEST-AGENT-094` Agent family 分组回归：验证 Hermes 与 OpenClaw/QClaw 同属 Claw 分组，Code / Work 平台仍保持独立，规则排序与设置页复用同一分类策略。
 - [x] `T-AGENT-131` 按 `FR-AGENT-061` / `DES-AGENT-076` 将 Hermes 加入显式 Claw family registry；保持独立 platform id、根目录、能力声明和规则文件路径，不引入产品别名或兼容性推断。
 - [x] `TEST-AGENT-095` 按 `FR-AGENT-062` 覆盖五个本地 Claw 平台的独立 registry id、Claw 分组、能力 planned/partial 状态、兼容根目录候选和真实品牌图标资产；先完成红测再接入实现。
@@ -231,12 +231,12 @@ UI screen structure, interaction states, responsive behavior and component bound
 - [x] `T-AGENT-147` 将 Agent store 收敛为 installed-only workspace projection，并为详情标签、概览和编辑动作增加未检测防御门禁；保留完整 registry 与检测合同。
 - [x] `TEST-AGENT-111` 按 `FR-AGENT-076` 覆盖 Antigravity CLI `.db` conversation identity、CLI cache 项目关联、generated transcript 可见消息、database-only partial detail、搜索/分页、`agy --conversation`、missing/malformed/oversized/symlink/traversal 输入和 legacy desktop `.pb` 排除。
 - [x] `T-AGENT-148` 按 `FR-AGENT-076` / `DES-AGENT-091` 接入 Antigravity CLI 只读 History adapter、bounded live search、partial capability 和现有 History 工作台；不得解码/写入 SQLite protobuf blob 或 legacy desktop `.pb`，不得索引、备份、同步或删除原生会话。
-- [x] `TEST-AGENT-112` 按 `FR-AGENT-077` 覆盖 Skills/MCP/Plugins 共用 icon/title/status/description/source/chips/action footer 卡片骨架、每类身份图标、操作按钮保留，以及中日韩 locale 的 `Plugins` 稳定术语。
-- [x] `T-AGENT-149` 按 `FR-AGENT-077` / `DES-AGENT-092` 抽取共享 `AgentAssetCardContent`，迁移 Skills/MCP/Plugin 卡片内容并统一 Agent tab 的 `Plugins` 标签；不得改变 owning store、IPC、持久化或域动作。
+- [x] `TEST-AGENT-112` 按 `FR-AGENT-077` 覆盖 Skills/MCP/Plugins 共用 icon/title/status/description/source/chips/action footer 卡片骨架、固定外框和有界内容槽、跨域 class 一致性、每类身份图标、操作按钮保留，以及中日韩 locale 的 `Plugins` 稳定术语。
+- [x] `T-AGENT-149` 按 `FR-AGENT-077` / `DES-AGENT-092` 抽取共享 `AgentAssetCardContent`，迁移 Skills/MCP/Plugin 卡片内容并统一 Agent tab 的 `Plugins` 标签；将标题、描述、来源、metadata/supplementary 限制在固定槽位并锚定 action footer，不得改变 owning store、IPC、持久化或域动作。
 - [x] `TEST-AGENT-113` 覆盖 Agent 详情头部与资产区共用 `px-5` 左边界，以及 Skills/MCP/Plugins 工具栏均不再渲染搜索框前重复标题；真实 Electron 窗口复核搜索、筛选、路径、刷新和新增按钮布局。
 - [x] `T-AGENT-150` 完成 `FR-AGENT-078` / `DES-AGENT-093`：统一 Agent 头部与资产工作区左边界，从共享资产工具栏移除重复域标题，不改变 owning-domain 资产动作。
-- [x] `TEST-AGENT-114` 按 `FR-AGENT-079` 覆盖 Codex 超过 2 MiB 隐藏记录前缀后的可见消息、跨页无重复、source-bound cursor、扫描预算续游标、IPC/preload limit/cursor 校验、UI 追加页和 stale selection 隔离；补充 Augment native JSON、搜索、分页、恢复与私有字段排除回归。
-- [x] `T-AGENT-151` 按 `FR-AGENT-079` / `DES-AGENT-094` 将 Session detail 升级为 main-owned cursor 分页，接入 Codex streaming JSONL、Augment native JSON 和 History load-more，并让导出/交接收集完整页链；不得把 native transcript body、路径或字节偏移持久化到 DB/renderer/sync。
+- [x] `TEST-AGENT-114` 按 `FR-AGENT-079` 覆盖 Codex 超过 2 MiB 隐藏记录前缀后的可见消息、跨页无重复、source-bound cursor、扫描预算续游标、IPC/preload limit/cursor 校验、UI 追加页和 stale selection 隔离；补充 Augment native JSON、搜索、分页、恢复与私有字段排除回归；追加 Pi 超过旧 2 MiB 预览边界后的完整 cursor 页链和 UI 不显示永久有限预览提示回归。
+- [x] `T-AGENT-151` 按 `FR-AGENT-079` / `DES-AGENT-094` 将 Session detail 升级为 main-owned cursor 分页，接入 Codex streaming JSONL、Augment native JSON、Pi/Oh My Pi JSONL 和 History load-more，并让导出/交接收集完整页链；不得把 native transcript body、路径或字节偏移持久化到 DB/renderer/sync。
 - [x] `TEST-AGENT-115` 覆盖 Skills/MCP/Plugins 三类 Agent 资产打开与返回时的统一详情状态，以及打开 MCP 卡片后详情替换整个右侧工作区、隐藏 Agent 头部/页签并在返回后恢复；真实 Electron 逐类验证打开、返回和工作区恢复。
 - [x] `T-AGENT-152` 按 `FR-AGENT-080` / `DES-AGENT-095` 将三类 Agent 资产详情导航提升到 workspace shell；保留各 owning domain 的选中项、详情组件和动作，不增加路由、store 或持久化状态。
 - [x] `TEST-AGENT-116` 覆盖 Cherry Studio 当前/旧版 Agent DB 与 Kilo 本地 JSON 的列表、正文搜索、排序、cursor 分页、缺失源、非法 schema/JSON、symlink、路径越界、隐藏 runtime part 排除、2,001 会话分页和 Kilo 原生续接元数据。
@@ -324,6 +324,18 @@ Every batch must run its targeted failing tests first, then `pnpm typecheck`, af
 - [ ] `T-AGENT-033` 如需 OAuth reverse proxy/account management，先完成 legal/security review 再创建 active change。
 - [ ] `T-AGENT-034` 如需 Agent Profile/Persona 组合能力，基于已交付 Managed Agent 模型单独设计，不回退到重复平台记录。
 
+## Provider Preset Catalog (Codex/ChatGPT first, official-config focus)
+
+- [ ] `T-AGENT-170` 先实现 `TEST-AGENT-133` 红测,再按 `DES-AGENT-111`(provider-preset-catalog-design.md)在 `packages/shared` 落地版本化预设目录数据结构与校验器:结构、协议白名单、敏感键拒绝、平台过滤、URL 边界、容量限制;首批只含各 Agent 官方配置与有官方证据的供应商,不含赞助/推广条目。
+- [ ] `T-AGENT-171` 按 `FR-AGENT-094` 落地 Codex/ChatGPT 官方预制 + 添加模式数据:OpenAI Official(platform-native,内置 `openai` provider,ChatGPT 登录零改动);第三方以 `[model_providers.*]` 追加,managed `experimental_bearer_token` / `env_key` 互斥;切回官方清理 stale third-party auth 残渣。先红测后实现。
+- [ ] `T-AGENT-172` 将预设选择器接入 Provider & Model 右侧配置表单(新增时先选预设 → 自动填充表单);选择即填充、取消零写入、7 locales。
+- [ ] `T-AGENT-173` 逐个补齐 Claude / Kimi / OpenCode / Google / Copilot 官方预制数据与表单映射,每平台完成预设 → 表单填充 → 保存 → 激活 → 回滚回归。
+- [ ] `T-AGENT-174` 左侧列表视觉收敛:去彩色徽章/卡片阴影,统一轻量行样式;更新既有 workbench 测试与 7 locales。
+- [x] `T-AGENT-175` Provider & Model 页视觉收敛:左侧工具区单行化(新增 + 导入 + 源导入图标),Profile 行与原生配置行去卡片化,native detail 去灰底卡片与冗余“可编辑管理”说明,7 locales 清理无用 key,workbench 测试同步更新。
+- [x] `T-AGENT-176` Pi Model Catalog 读取层(`DES-AGENT-112` / pi-model-catalog-design.md):pi inspect 读取 settings.json + models-store.json + models.json + auth.json 就绪态,合并内置/自定义目录并脱敏;shared 契约增加可选 `modelCatalog` 字段;先红测后实现。修复上限阻止合并的边界 bug;新模块 100% 覆盖率;agent 主进程 853 tests 全绿。
+- [x] `T-AGENT-177` Pi 自定义模型写入层:添加/移除 models.json 的 provider/model,backup/atomic/verify/rollback,未知字段保留,凭据不外泄;先红测后实现。写入中修复两个真 bug:非数组 models 字段的追加崩溃(改为整体替换)、备份失败缺稳定错误码;并发竞态测试改为确定性 hook 注入。新模块 99.36% 行/93.1% 分支覆盖;剩余 315-316 为 jsonc-parser 内存结果 verify 的不可达防御分支,已记录。agent 主进程 870 tests 全绿。
+- [x] `T-AGENT-178` Pi Provider & Model UI:provider 列表 + 模型目录 + 添加自定义模型表单 + 设为默认;7 locales。新增 `AgentPiModelCatalogPanel`(左栏每供应商一行:内置+自定义,凭据就绪态/默认标记;右栏模型列表 + 设为默认 + 添加模型/供应商/凭据表单),IPC 五通道与校验,preload API;组件 100% 行 / 99.5% 分支覆盖(残留 finally 插桩标记已记录);i18n 七语言 piModels 文案;相关回归 951 tests 全绿,ESLint/typecheck 干净。
+
 ## Converge
 
 - [ ] `T-AGENT-035` 执行 affected unit/integration/E2E、`pnpm typecheck`、`pnpm test:run` 和 release regression。
@@ -373,13 +385,42 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 - [x] `T-AGENT-156` 按 `FR-AGENT-084` / `DES-AGENT-099` 接通全局供应商到独立 Agent Provider Profile 的脱敏列表与显式导入；复用既有 Profile、安全存储、激活预览和回滚链路，不建立共享可变记录。
 - [x] `TEST-AGENT-120` 覆盖 Hermes、Reasonix、NanoClaw、CoPaw 与 Qoder 当前格式的真实列表、正文搜索、完整 offset 分页、source-bound cursor 详情分页、超长消息、超大 JSONL 单行、损坏记录、schema/identity 不匹配、symlink、路径越界和隐藏 runtime/tool/reasoning 排除；验证 capability 精确区分 17 supported、7 partial 和 11 planned 平台。
 - [x] `T-AGENT-157` 按 `FR-AGENT-085` / `DES-AGENT-100` 接入五个 current-format 只读 reader；Qoder 只解析官方 transcript JSONL，QoderWork 在官方未公布 transcript 合同前继续 planned，不伪造原生命令续接。
-- [x] `TEST-AGENT-121` 当前原生 Provider 回归：覆盖无 Profile/无 snapshot 时的官方与自定义识别、endpoint/model/credential 状态脱敏、读取失败、外部修改刷新、当前配置导入、Claude/Codex 官方 Profile 创建与复用、无模型/不支持平台拒绝、取消激活零原生写入和工作台可见状态。
-- [x] `T-AGENT-158` 按 `FR-AGENT-086` / `DES-AGENT-101` 将 adapter `importCurrent` 的脱敏结果提升为当前配置一等视图，并为 Claude/Codex 接入显式官方 Profile 来源和既有激活预览流程；保留自定义 Profile 编辑，不向未验证平台伪造官方恢复。
-- [x] `TEST-AGENT-122` 覆盖 Claude JSONL 真实 cwd/session id 提取、原生续接命令、旧记录不安全 cwd/id 拒绝，以及历史消息紧凑间距。
-- [x] `T-AGENT-159` 按 `FR-AGENT-087` / `DES-AGENT-102` 修复 Claude 原生续接从用户主目录启动导致找不到会话的问题，并收紧消息气泡节奏和续接操作视觉层级。
-- [x] `TEST-AGENT-123` 覆盖会话操作区仅有原 Agent 继续与跨 Agent 续接两个主入口、续接选择按需打开、所有已检测目标可见、直接 CLI 交接、复制后打开应用、仅复制兜底、复制后启动失败、剪贴板失败阻止误启动、独立导出图标、次级 CRUD 菜单，以及 20 条消息分页、直接跳页和跨 cursor 增量读取。
-- [x] `T-AGENT-160` 按 `FR-AGENT-088` / `DES-AGENT-103` 收敛原 Agent 原生继续与跨 Agent 可移植续接的两阶段交互；由主进程选择直接交接、复制后打开或仅复制能力层级，并保持固定消息页码栏。
+- [x] `TEST-AGENT-121` 当前原生 Provider 回归：覆盖无 Profile/无 snapshot 时的官方与自定义识别、endpoint/model/credential 状态脱敏、读取失败、外部修改刷新、无竖线卡片与分组字段、当前配置确认导入后直接进入编辑器、Claude/Codex 官方 Profile 创建与复用、无模型/不支持平台拒绝、取消激活零原生写入和工作台可见状态。
+- [x] `T-AGENT-158` 按 `FR-AGENT-086` / `DES-AGENT-101` 将 adapter `importCurrent` 的脱敏结果提升为卡片式当前配置视图，明确 Agent-owned 只读边界，并将确认导入衔接到右侧 Profile 编辑器；为 Claude/Codex 接入显式官方 Profile 来源和既有激活预览流程，不向未验证平台伪造官方恢复。
+- [x] `TEST-AGENT-122` 覆盖 Claude JSONL 真实 cwd/session id 提取、原生续接命令、旧记录不安全 cwd/id 拒绝，以及历史消息紧凑间距和气泡正文不重复叠加顶部外边距。
+- [x] `T-AGENT-159` 按 `FR-AGENT-087` / `DES-AGENT-102` 修复 Claude 原生续接从用户主目录启动导致找不到会话的问题，并收紧消息气泡节奏和续接操作视觉层级；工具/系统提示仅保留角色到正文的最小间距。
+- [x] `TEST-AGENT-123` 覆盖会话操作区仅有原 Agent 继续与跨 Agent 续接两个主入口、续接选择按需打开、所有已检测目标可见、直接 CLI 交接、复制后打开应用、仅复制兜底、复制后启动失败、剪贴板失败阻止误启动、独立导出图标、次级 CRUD 菜单，以及 20 条消息分页、直接跳页、跨 cursor 增量读取和预览后源会话更新。
+- [x] `T-AGENT-160` 按 `FR-AGENT-088` / `DES-AGENT-103` 收敛原 Agent 原生继续与跨 Agent 可移植续接的两阶段交互；由主进程选择直接交接、复制后打开或仅复制能力层级，并保持固定消息页码栏；确认阶段使用有界、短期、不可持久化的已审阅快照，避免实时 transcript 变化导致误报 stale。
 - [x] `TEST-AGENT-124` Provider 右侧编辑回归：新增与编辑均使用右侧 labelled region、无 dialog；新增草稿取消零 IPC 写入；Codex 展示真实协议、端点、主模型及 PromptHub/环境变量凭据模式；保存继续满足 write-only secret 与平台适配请求。
 
 - [x] `TEST-AGENT-125` Agent 配置编辑回归：覆盖已存在但未声明/未发现文件的 read/write 拒绝与原文件不变、已声明和已发现文件继续可用、相同相对路径的跨 Agent 缓存隔离、乱序 list/read 结果丢弃，以及未保存切换取消/确认。
 - [x] `T-AGENT-161` 按 `FR-AGENT-089` / `DES-AGENT-104` 将 Provider 新增/编辑改为右侧草稿编辑器，按真实 adapter 能力分区并补齐 Codex 环境变量凭据，不伪装 CC Switch proxy-only 配置。
+- [x] `TEST-AGENT-126` Appearance 聚焦工作区回归：默认进入桌面皮肤；左侧图标导航按 Pets、skin 顺序显示独立数量；切换 Pets 后只展示 Pet 导入、卡片、无效计数与目录动作；切回皮肤不重复请求 overview，且只展示原生状态、皮肤动作和皮肤卡片。
+- [x] `T-AGENT-163` 按 `FR-AGENT-091` / `DES-AGENT-106` 将 Appearance 改为左侧图标导航与右侧聚焦工作区，复用现有 overview、预览、导入、应用、恢复、导出、删除和目录操作，不新增 IPC 或持久化状态。
+- [x] `TEST-AGENT-127` Pet 管理与官方目录回归：覆盖 v1/v2 展示、三列响应式 inventory、共享资产卡片尺寸、大预览主视觉、卡片正文隐藏路径/目录 ID、精确路径打开、元数据原子更新与未知字段保留、非法元数据零写入、官方 catalog 仅由按钮/回车提交搜索、输入零请求、搜索分页、发布预览优先与验证后 spritesheet fallback、stale 请求隔离、双前缀 allowlist/redirect/timeout/字节上限、安装 staging 清理和安装后 inventory 刷新。
+- [x] `T-AGENT-164` 按 `FR-AGENT-092` / `DES-AGENT-107` 实现 filesystem Pet CRUD 与 `Awesome Codex Pet` 有界官方目录；Pet inventory/store 复用 Agent 资产卡片外壳和操作栏，以大尺寸预览作为主视觉并保留包内 spritesheet fallback；统一 7 locales 品牌、约束变长文案、增加 7 天/96 项/192 MiB 持久预览缓存和 renderer 请求去重，并运行 targeted tests、typecheck 与 affected lint，不执行 Playwright。
+- [x] `TEST-AGENT-128` 菜单栏额度回归：覆盖六个 verified adapter 的稳定顺序、两路有界并发、force-refresh 透传、单 Provider 失败隔离、原始错误脱敏、最紧张额度摘要、全部指标/重置时间/plan/status 的七语言原生菜单投影、重复打开 single-flight、销毁后 late-result 隔离和共享 usage service 注入。
+- [x] `T-AGENT-165` 按 `FR-AGENT-093` / `DES-AGENT-108` 实现共享 Agent usage service、主进程有界 tray projection、缓存优先的 controller refresh 与七语言 native menu；运行 focused tests、coverage、typecheck、affected lint、file-size、spec traceability 和 `git diff --check`。
+- [x] `TEST-AGENT-129` 复现冷启动菜单只有匿名 loading 行的问题，覆盖六个具名 loading 行、逐项完成投影、稳定顺序、单项失败隔离和销毁后的 late-result 隔离。
+- [x] `T-AGENT-166` 按 `FR-AGENT-093` / `DES-AGENT-109` 实现具名冷启动额度行和两路并发队列的逐项 tray 更新。
+- [x] `TEST-AGENT-130` 复现 Kimi 短期 access token 过期后额度消失的问题，覆盖官方 refresh contract、锁后重读、原子持久化、同进程合并、401/网络/写入失败、锁超时和凭据不泄露。
+- [x] `T-AGENT-167` 按 `FR-AGENT-027` / `DES-AGENT-109` 实现 Kimi Code current credential 的安全续期；legacy credential 保持只读。
+- [x] `TEST-AGENT-131` 先复现原生菜单把 Agent 名称与百分比拼成一行的展示问题，再覆盖弹层定位/复用/失焦隐藏/销毁、缓存首屏、两路并发、逐项刷新、强制刷新校验、产品图标、tabular 数字、进度、展开指标和非零异常状态。
+- [x] `T-AGENT-168` 按 `FR-AGENT-093` / `DES-AGENT-110` 将 Agent 额度改为状态栏锚定的渲染弹层；其余托盘命令保持原生，复用 process-wide usage service，不增加凭据或持久化所有权。
+- [x] `TEST-AGENT-132` 先复现 macOS 额度仍需二次点击且弹层百分比视觉过重的问题，再覆盖 primary click 直达、secondary click 原生动作菜单、macOS 去重额度命令、macOS 原生 popover material 与透明渲染外壳、非 macOS 兼容行为、CodexBar 层级、plan 归一化和紧凑 inline remaining 展示。
+- [x] `T-AGENT-169` 按 `FR-AGENT-093` / `DES-AGENT-110` 将 macOS tray primary click 直连渲染额度面板，以 Electron `vibrancy: "popover"` 和透明 renderer shell 接入系统材质，再用现有 React 组件复现 CodexBar 使用卡片的信息层级；secondary click 保留原生命令，Windows/Linux 保持既有菜单语义与不透明 fallback。
+
+## Confirmed Unified Provider Design Follow-up
+
+- [ ] `T-AGENT-178` 将系统级模型服务配置确认为跨 Agent Provider Profile 层，补充 `agent_provider_bindings`、继承/独立副本、Agent target provider/model 映射和 projection digest 设计；禁止把同一 JSON 直接复制到不同 Agent。
+- [ ] `TEST-AGENT-133` 统一 Provider 来源与权限矩阵：官方目录只读、内置模型只读、内置 override、系统级配置、自定义 provider/model、imported provider；覆盖 UI 禁止编辑错误字段和允许编辑鉴权字段。
+- [ ] `T-AGENT-179` 实现系统级 Provider Profile 到 Agent 的 bind/clone/unbind/import 流程；bind 继承系统配置，clone 生成独立自定义配置，删除系统 Profile 前展示受影响 Agent。
+- [ ] `TEST-AGENT-134` 统一 Provider 投影回归：Pi/OpenCode/Codex 等不同 provider/model id 映射、协议转换、部分能力 unsupported、共享 credential reference、无明文 secret 跨边界。
+- [ ] `T-AGENT-180` 实现内置目录与用户配置的来源标识及 override 语义；内置模型写官方支持的 `modelOverrides`，自定义模型完整编辑/复制/删除，页面显示 `Built-in`、`Override`、`Custom`、`Imported`。
+- [ ] `TEST-AGENT-135` 外部原生配置 drift/conflict 回归：baseline/current/desired digest、导入外部修改、重新投影、查看差异、取消零写入和失败回滚。
+- [ ] `T-AGENT-181` 将官方供应商 preset 接入系统级 Provider Profile 创建和导入入口；preset 只提供非敏感官方元数据，不携带推广链接、明文 key 或赞助商配置。
+
+## Conversation History Follow-up
+
+- [x] `TEST-AGENT-175` 先复现会话操作栏卡片包裹、选中会话文字对比度不足，以及重复/空 cursor 导致翻页空白；覆盖 duplicate cursor skip、bounded cursor calls、page clamp 和轻量 toolbar class contract。
+- [x] `T-AGENT-176` 按 `FR-AGENT-094` / `DES-AGENT-112` 移除会话操作栏的嵌套卡片表面，统一选中行前景 token，并实现有界 cursor 追进、去重和安全页码钳制；不改变 transcript 存储、IPC 或原生 Agent 所有权。
