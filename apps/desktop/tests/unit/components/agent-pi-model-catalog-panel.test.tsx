@@ -115,8 +115,12 @@ describe("AgentPiModelCatalogPanel", () => {
         maxTokens: expect.any(String),
         sourceBuiltIn: expect.any(String),
         sourceCustom: expect.any(String),
+        providerSection: expect.any(String),
         modelsSection: expect.any(String),
         editModel: expect.any(String),
+        testModel: expect.any(String),
+        testModelConfirmTitle: expect.any(String),
+        testModelConfirmMessage: expect.any(String),
         form: expect.objectContaining({
           editProviderTitle: expect.any(String),
           editModelTitle: expect.any(String),
@@ -200,6 +204,61 @@ describe("AgentPiModelCatalogPanel", () => {
         model: "kimi-coding/kimi-for-coding",
       }),
     );
+  });
+
+  it("runs a confirmed model test through the Pi adapter", async () => {
+    const testPiModel = vi.fn().mockResolvedValue({
+      platformId: "pi",
+      profileId: "pi:foxcode",
+      protocol: "responses",
+      endpointOrigin: "https://api.example.com",
+      model: "gpt-old",
+      status: "ok",
+      startedAt: 1,
+      finishedAt: 5,
+      firstTokenMs: 2,
+      totalMs: 4,
+      retryCount: 0,
+      outputPreview: "ok",
+    });
+    installWindowMocks({
+      api: {
+        agent: {
+          getModelConfig: vi.fn().mockResolvedValue(
+            modelConfig({
+              provider: "foxcode",
+              model: "gpt-old",
+              modelCatalog: [
+                catalogProvider({
+                  id: "foxcode",
+                  source: "custom",
+                  models: [{ id: "gpt-old", source: "custom" }],
+                }),
+              ],
+            }),
+          ),
+          testPiModel,
+        },
+      },
+    });
+
+    await renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Test model" }));
+    const confirmation = await screen.findByRole("alertdialog", {
+      name: "Run model test",
+    });
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Test model" }),
+    );
+
+    await waitFor(() =>
+      expect(testPiModel).toHaveBeenCalledWith({
+        agentId: "pi",
+        providerId: "foxcode",
+        modelId: "gpt-old",
+      }),
+    );
+    expect(await screen.findByText("4 ms total")).toBeVisible();
   });
 
   it("edits a custom provider endpoint and protocol", async () => {

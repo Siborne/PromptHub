@@ -13,6 +13,7 @@ import type {
   AgentModelConfiguration,
   AgentPiProviderApi,
   AgentPiThinkingLevel,
+  AgentProviderModelTestResult,
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
 import { Button, ConfirmDialog, Input, Modal } from "../ui";
@@ -38,6 +39,7 @@ type DialogState =
   | { kind: "set-credential"; providerId: string }
   | { kind: "remove-provider"; providerId: string }
   | { kind: "remove-model"; providerId: string; modelId: string }
+  | { kind: "test-model"; providerId: string; modelId: string }
   | null;
 
 function formatContextWindow(value?: number): string | null {
@@ -60,6 +62,10 @@ export function AgentPiModelCatalogPanel({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [modelTestResult, setModelTestResult] = useState<{
+    modelId: string;
+    result: AgentProviderModelTestResult;
+  } | null>(null);
   const loadGenerationRef = useRef(0);
 
   const load = useCallback(async () => {
@@ -129,6 +135,24 @@ export function AgentPiModelCatalogPanel({
         thinkingLevel: config?.thinkingLevel ?? undefined,
       }),
     );
+  }
+
+  async function testModel(providerId: string, modelId: string) {
+    setBusyAction(`test-model:${modelId}`);
+    setErrorCode(null);
+    try {
+      const result = await window.api.agent.testPiModel({
+        agentId: "pi",
+        providerId,
+        modelId,
+      });
+      setModelTestResult({ modelId, result });
+      setDialog(null);
+    } catch {
+      setErrorCode("AGENT_PI_MODELS_OPERATION_FAILED");
+    } finally {
+      setBusyAction(null);
+    }
   }
 
   async function setThinkingLevel(level: AgentPiThinkingLevel) {
@@ -242,6 +266,7 @@ export function AgentPiModelCatalogPanel({
             thinkingLevel={config?.thinkingLevel ?? null}
             isDefaultProvider={selectedProvider.id === config?.provider}
             busyAction={busyAction}
+            modelTestResult={modelTestResult}
             onSetThinking={setThinkingLevel}
             onSetDefault={setDefault}
             onAddModel={() =>
@@ -255,6 +280,13 @@ export function AgentPiModelCatalogPanel({
             }
             onEditProvider={() =>
               setDialog({ kind: "edit-provider", provider: selectedProvider })
+            }
+            onTestModel={(modelId) =>
+              setDialog({
+                kind: "test-model",
+                providerId: selectedProvider.id,
+                modelId,
+              })
             }
             onEditModel={(model) =>
               setDialog({
@@ -377,6 +409,22 @@ export function AgentPiModelCatalogPanel({
             );
             if (succeeded) setDialog(null);
           }}
+        />
+      ) : null}
+      {dialog?.kind === "test-model" ? (
+        <ConfirmDialog
+          isOpen
+          onClose={() => setDialog(null)}
+          onConfirm={() => {
+            void testModel(dialog.providerId, dialog.modelId);
+          }}
+          title={t("agents.piModels.testModelConfirmTitle")}
+          message={t("agents.piModels.testModelConfirmMessage", {
+            model: dialog.modelId,
+          })}
+          confirmText={t("agents.piModels.testModel")}
+          cancelText={t("common.cancel")}
+          isLoading={busyAction === `test-model:${dialog.modelId}`}
         />
       ) : null}
       {dialog?.kind === "remove-provider" ? (

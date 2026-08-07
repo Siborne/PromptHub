@@ -5,6 +5,7 @@ import {
   PencilIcon,
   PlusIcon,
   ShieldCheckIcon,
+  TestTubeIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -12,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import type {
   AgentModelCatalogProvider,
   AgentPiThinkingLevel,
+  AgentProviderModelTestResult,
 } from "@prompthub/shared/types";
 import { Button } from "../ui";
 
@@ -42,8 +44,13 @@ interface AgentPiProviderDetailProps {
   onSetThinking: (level: AgentPiThinkingLevel) => void;
   onAddModel: () => void;
   onSetCredential: () => void;
+  modelTestResult: {
+    modelId: string;
+    result: AgentProviderModelTestResult;
+  } | null;
   onEditProvider: () => void;
   onEditModel: (model: AgentModelCatalogProvider["models"][number]) => void;
+  onTestModel: (modelId: string) => void;
   onRemoveProvider: () => void;
   onRemoveModel: (modelId: string) => void;
 }
@@ -58,8 +65,10 @@ export function AgentPiProviderDetail({
   onSetDefault,
   onAddModel,
   onSetCredential,
+  modelTestResult,
   onEditProvider,
   onEditModel,
+  onTestModel,
   onRemoveProvider,
   onRemoveModel,
 }: AgentPiProviderDetailProps) {
@@ -240,6 +249,19 @@ export function AgentPiProviderDetail({
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => onTestModel(model.id)}
+                        disabled={busy}
+                      >
+                        {busyAction === `test-model:${model.id}` ? (
+                          <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <TestTubeIcon className="h-3.5 w-3.5" />
+                        )}
+                        {t("agents.piModels.testModel")}
+                      </Button>
                       {!isCurrent ? (
                         <Button
                           size="sm"
@@ -279,6 +301,29 @@ export function AgentPiProviderDetail({
                       ) : null}
                     </div>
                   </div>
+                  {modelTestResult?.modelId === model.id ? (
+                    <div
+                      role="status"
+                      className="mt-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+                    >
+                      <span
+                        className={
+                          modelTestResult.result.status === "ok"
+                            ? "font-semibold text-emerald-600 dark:text-emerald-400"
+                            : "font-semibold text-amber-600 dark:text-amber-400"
+                        }
+                      >
+                        {t(
+                          `agents.providerProfiles.modelTest.status.${modelTestResult.result.status}`,
+                        )}
+                      </span>
+                      <span className="ml-3">
+                        {t("agents.providerProfiles.modelTest.total", {
+                          ms: modelTestResult.result.totalMs,
+                        })}
+                      </span>
+                    </div>
+                  ) : null}
                   {isCurrent ? (
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
                       <div className="flex items-center gap-2 text-xs font-medium text-foreground">
