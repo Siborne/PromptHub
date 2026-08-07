@@ -16,6 +16,7 @@ const runNativeCommandMock = vi.fn();
 const launchAgentPlatformMock = vi.fn();
 const updatePiCustomProviderMock = vi.fn();
 const updatePiCustomModelMock = vi.fn();
+const testPiModelMock = vi.fn();
 
 vi.mock("electron", () => ({
   app: { getPath: vi.fn(() => "/tmp/prompthub") },
@@ -103,6 +104,10 @@ vi.mock("../../../src/main/services/agent-launch-service", () => ({
   launchAgentPlatform: launchAgentPlatformMock,
 }));
 
+vi.mock("../../../src/main/services/agent-pi-model-test", () => ({
+  testPiModel: testPiModelMock,
+}));
+
 vi.mock("../../../src/main/services/agent-pi-model-writes", () => ({
   addPiCustomModel: vi.fn(),
   addPiCustomProvider: vi.fn(),
@@ -147,6 +152,7 @@ describe("Agent config file IPC", () => {
     launchAgentPlatformMock.mockReset();
     updatePiCustomProviderMock.mockReset();
     updatePiCustomModelMock.mockReset();
+    testPiModelMock.mockReset();
     getPlatformRootDirMock.mockImplementation((platform: { id: string }) => {
       if (platform.id === "kimi") return "/Users/test/.kimi-code";
       if (platform.id === "pi") return "/Users/test/.pi/agent";
@@ -406,6 +412,28 @@ describe("Agent config file IPC", () => {
         reasoning: true,
       },
       { backupRoot: "/tmp/prompthub/agent-config-backups" },
+    );
+  });
+
+  it("routes a validated Pi model test without exposing credentials", async () => {
+    testPiModelMock.mockResolvedValue({
+      platformId: "pi",
+      profileId: "pi:foxcode",
+      model: "gpt-custom",
+      status: "ok",
+    });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await handlers[IPC_CHANNELS.AGENT_PI_MODEL_TEST](null, {
+      agentId: "pi",
+      providerId: "foxcode",
+      modelId: "gpt-custom",
+    });
+
+    expect(testPiModelMock).toHaveBeenCalledWith(
+      "/Users/test/.pi/agent",
+      { providerId: "foxcode", modelId: "gpt-custom" },
+      expect.any(AbortSignal),
     );
   });
 
