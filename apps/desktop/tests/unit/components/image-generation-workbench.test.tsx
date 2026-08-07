@@ -117,24 +117,24 @@ describe("ImageGenerationWorkbench", () => {
     vi.mocked(window.electron!.selectImage!).mockResolvedValue([]);
     vi.mocked(window.electron!.saveImage!).mockResolvedValue([]);
     vi.mocked(window.electron!.saveImageBuffer!).mockResolvedValue(null);
+    const sourcePrompt = {
+      id: "image-prompt-1",
+      title: "Architecture poster",
+      promptType: "image" as const,
+      userPrompt: "Minimal white concrete house",
+      variables: [],
+      tags: [],
+      isFavorite: false,
+      isPinned: false,
+      version: 2,
+      currentVersion: 2,
+      usageCount: 0,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    };
     usePromptStore.setState({
-      prompts: [
-        {
-          id: "image-prompt-1",
-          title: "Architecture poster",
-          promptType: "image",
-          userPrompt: "Minimal white concrete house",
-          variables: [],
-          tags: [],
-          isFavorite: false,
-          isPinned: false,
-          version: 2,
-          currentVersion: 2,
-          usageCount: 0,
-          createdAt: "2026-07-01T00:00:00.000Z",
-          updatedAt: "2026-07-01T00:00:00.000Z",
-        },
-      ],
+      prompts: [sourcePrompt],
+      promptDetailCache: { [sourcePrompt.id]: sourcePrompt },
     });
     useSettingsStore.setState({
       aiModels: [
@@ -504,17 +504,17 @@ describe("ImageGenerationWorkbench", () => {
   });
 
   it("requires Prompt variables and submits the resolved snapshot without an Advanced toggle", async () => {
-    usePromptStore.setState({
-      prompts: [
-        {
-          ...usePromptStore.getState().prompts[0],
-          userPrompt: "A {{style}} poster for {{subject:PromptHub}}",
-          variables: [
-            { name: "style", type: "text", required: true },
-            { name: "subject", type: "text", required: false },
-          ],
-        },
+    const variablePrompt = {
+      ...usePromptStore.getState().promptDetailCache["image-prompt-1"],
+      userPrompt: "A {{style}} poster for {{subject:PromptHub}}",
+      variables: [
+        { name: "style", type: "text" as const, required: true },
+        { name: "subject", type: "text" as const, required: false },
       ],
+    };
+    usePromptStore.setState({
+      prompts: [variablePrompt],
+      promptDetailCache: { [variablePrompt.id]: variablePrompt },
     });
     await renderWithI18n(<ImageGenerationWorkbench />);
 

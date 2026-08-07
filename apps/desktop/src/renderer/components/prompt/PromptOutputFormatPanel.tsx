@@ -10,19 +10,19 @@ import { useTranslation } from "react-i18next";
 import type {
   CreateOutputFormatItemDTO,
   OutputFormatItem,
-  Prompt,
+  PromptSummary,
 } from "@prompthub/shared/types";
 
 type OutputFormatViewItem = {
   key: string;
   item: OutputFormatItem;
-  targetPrompt: Prompt | null;
+  targetPrompt: PromptSummary | null;
   isSelf: boolean;
 };
 
 export interface PromptOutputFormatPanelProps {
-  currentPrompt: Prompt;
-  prompts: Prompt[];
+  currentPrompt: PromptSummary;
+  prompts: PromptSummary[];
   outputFormatItems: OutputFormatItem[];
   onCreateOutputFormatItem: (
     data: CreateOutputFormatItemDTO,
@@ -39,8 +39,8 @@ export interface PromptOutputFormatPanelProps {
 }
 
 function createOutputFormatItems(
-  currentPrompt: Prompt,
-  prompts: Prompt[],
+  currentPrompt: PromptSummary,
+  prompts: PromptSummary[],
   outputFormatItems: OutputFormatItem[],
 ): OutputFormatViewItem[] {
   const promptById = new Map(prompts.map((prompt) => [prompt.id, prompt]));
@@ -262,7 +262,7 @@ function OutputFormatSearch({
   t,
 }: {
   query: string;
-  searchResults: Prompt[];
+  searchResults: PromptSummary[];
   savingTargetId: string | null;
   disabled: boolean;
   onQueryChange: (value: string) => void;

@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { Prompt, UpdatePromptDTO } from "@prompthub/shared/types";
+import type { PromptSummary, UpdatePromptDTO } from "@prompthub/shared/types";
 import type { TFunction } from "i18next";
 import type { useToast } from "../ui/Toast";
 
@@ -9,7 +9,7 @@ type ShowToast = ReturnType<typeof useToast>["showToast"];
 interface CollapsePromptTreeParams {
   setCollapsedPromptIds: Dispatch<SetStateAction<Set<string>>>;
   visibleHierarchyMeta: { childCountById: Map<string, number> };
-  visiblePrompts: Prompt[];
+  visiblePrompts: PromptSummary[];
 }
 
 export function useCollapsePromptTreeAction(params: CollapsePromptTreeParams) {
@@ -30,7 +30,7 @@ interface MovePromptTreeParams {
     newParentId: string | null,
     newOrder: number,
   ) => Promise<void>;
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   setCollapsedPromptIds: Dispatch<SetStateAction<Set<string>>>;
   showToast: ShowToast;
   t: TFunction;
@@ -38,7 +38,7 @@ interface MovePromptTreeParams {
 
 export function useMovePromptTreeActions(params: MovePromptTreeParams) {
   const handleMovePromptToNode = useCallback(
-    (prompt: Prompt, parentId: string | null) =>
+    (prompt: PromptSummary, parentId: string | null) =>
       movePromptToNode(prompt, parentId, params),
     [params],
   );
@@ -51,7 +51,7 @@ export function useMovePromptTreeActions(params: MovePromptTreeParams) {
 }
 
 async function movePromptToNode(
-  prompt: Prompt,
+  prompt: PromptSummary,
   parentId: string | null,
   params: MovePromptTreeParams,
 ) {
@@ -63,7 +63,7 @@ async function movePromptToNode(
     if (parentId)
       params.setCollapsedPromptIds((ids) => expandPromptParent(ids, parentId));
     params.showToast(
-      params.t("prompt.moveToNodeSuccess", "Prompt moved to node"),
+      params.t("prompt.moveToNodeSuccess", "PromptSummary moved to node"),
       "success",
     );
   } catch (error) {
@@ -100,7 +100,7 @@ async function movePromptInTree(
 
 interface BatchPromptParams {
   deletePrompt: (id: string) => Promise<void>;
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   showToast: ShowToast;
   t: TFunction;
   toggleFavorite: (id: string) => Promise<void>;

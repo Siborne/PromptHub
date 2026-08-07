@@ -4,11 +4,11 @@ import type {
   MouseEvent,
   SetStateAction,
 } from "react";
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import type { PromptDropPosition } from "../prompt/prompt-drag-utils";
 
 export interface PromptCardProps {
-  prompt: Prompt;
+  prompt: PromptSummary;
   depth: number;
   childCount: number;
   parentTitle?: string;
@@ -31,14 +31,14 @@ export interface PromptCardProps {
 }
 
 export interface VirtualizedPromptListProps {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   selectedPromptIdSet: Set<string>;
   highlightTerms: string[];
   collapsedPromptIds: Set<string>;
   onCollapsedPromptIdsChange: Dispatch<SetStateAction<Set<string>>>;
-  onSelect: (prompt: Prompt, event: MouseEvent) => void;
-  onDoubleClick: (prompt: Prompt, event: MouseEvent) => void;
-  onContextMenu: (event: MouseEvent, prompt: Prompt) => void;
+  onSelect: (prompt: PromptSummary, event: MouseEvent) => void;
+  onDoubleClick: (prompt: PromptSummary, event: MouseEvent) => void;
+  onContextMenu: (event: MouseEvent, prompt: PromptSummary) => void;
   onMovePrompt: (
     promptId: string,
     newParentId: string | null,

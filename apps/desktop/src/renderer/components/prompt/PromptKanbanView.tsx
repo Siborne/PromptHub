@@ -1,6 +1,6 @@
 import { useState, useCallback, memo, useEffect, useMemo, useRef, useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Prompt } from '@prompthub/shared/types';
+import { PromptSummary } from '@prompthub/shared/types';
 import {
   XIcon,
   StarIcon,
@@ -23,17 +23,17 @@ import { Reveal } from '../ui/motion';
 import { parsePromptVariables } from './prompt-modal-utils';
 
 interface PromptKanbanViewProps {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   highlightTerms?: string[];
   onSelect: (id: string) => void;
   onToggleFavorite: (id: string) => void;
-  onCopy: (prompt: Prompt) => void;
-  onEdit: (prompt: Prompt) => void;
-  onDelete: (prompt: Prompt) => void;
-  onAiTest: (prompt: Prompt) => void;
-  onVersionHistory: (prompt: Prompt) => void;
-  onViewDetail: (prompt: Prompt) => void;
-  onContextMenu: (e: React.MouseEvent, prompt: Prompt) => void;
+  onCopy: (prompt: PromptSummary) => void;
+  onEdit: (prompt: PromptSummary) => void;
+  onDelete: (prompt: PromptSummary) => void;
+  onAiTest: (prompt: PromptSummary) => void;
+  onVersionHistory: (prompt: PromptSummary) => void;
+  onViewDetail: (prompt: PromptSummary) => void;
+  onContextMenu: (e: React.MouseEvent, prompt: PromptSummary) => void;
 }
 
 interface PinnedCard {
@@ -57,7 +57,7 @@ const KanbanCard = memo(({
   onViewDetail,
   folderName,
 }: {
-  prompt: Prompt;
+  prompt: PromptSummary;
   isPinned: boolean;
   isExpanded: boolean;
   onPin: () => void;
@@ -72,6 +72,10 @@ const KanbanCard = memo(({
   folderName: string;
 }) => {
   const { t } = useTranslation();
+  // Content may not be present in the list projection; read from the detail
+  // cache (populated on demand by the parent / detail pane).
+  // 列表投影可能不含内容，从详情缓存读取。
+  const detail = usePromptStore((state) => state.promptDetailCache[prompt.id]);
   const expandLabel = isExpanded ? t('common.collapse', '收起') : t('common.expand', '展开');
   const pinLabel = t('prompt.pin', '固定');
   const unpinLabel = t('prompt.unpin', '取消固定');
@@ -84,8 +88,8 @@ const KanbanCard = memo(({
   const viewDetailLabel = t('prompt.viewDetail', '查看详情');
 
   const allVariables = [
-    ...parsePromptVariables(prompt.systemPrompt || ''),
-    ...parsePromptVariables(prompt.userPrompt),
+    ...parsePromptVariables(detail?.systemPrompt || ''),
+    ...parsePromptVariables(detail?.userPrompt || ''),
   ].map((variable) => variable.name)
     .filter((v, i, arr) => arr.indexOf(v) === i);
 
@@ -194,26 +198,26 @@ const KanbanCard = memo(({
           </div>
         )}
 
-        {/* System Prompt Preview */}
-        {prompt.systemPrompt && (
+        {/* System PromptSummary Preview */}
+        {detail?.systemPrompt && (
           <div className="space-y-1">
             <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
               <SparklesIcon className="w-3 h-3" />
-              System Prompt
+              System PromptSummary
             </div>
             <div className={`text-xs text-foreground/80 app-wallpaper-surface rounded-lg p-2 border border-border/70 ${isExpanded ? '' : 'line-clamp-4'}`}>
-              {prompt.systemPrompt}
+              {detail.systemPrompt}
             </div>
           </div>
         )}
 
-        {/* User Prompt Preview */}
+        {/* User PromptSummary Preview */}
         <div className="space-y-1">
           <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-            User Prompt
+            User PromptSummary
           </div>
           <div className={`text-xs text-foreground/80 app-wallpaper-surface rounded-lg p-2 border border-border/70 ${isExpanded ? '' : isPinned ? 'line-clamp-6' : 'line-clamp-3'}`}>
-            {prompt.userPrompt}
+            {detail?.userPrompt}
           </div>
         </div>
 
@@ -312,6 +316,19 @@ export function PromptKanbanView({
   const kanbanColumns = usePromptStore(state => state.kanbanColumns);
   const uncategorizedLabel = t('folder.uncategorized', '未分类');
 
+  // Prefetch full content for the kanban cards so the previews render.
+  // Only loads ids not already cached; repeat visits hit the cache.
+  // 预取看板卡片完整内容供预览渲染，缓存命中后不再发 IPC。
+  const promptDetailCache = usePromptStore((state) => state.promptDetailCache);
+  const getPromptDetail = usePromptStore((state) => state.getPromptDetail);
+  useEffect(() => {
+    const missing = prompts
+      .map((prompt) => prompt.id)
+      .filter((id) => !promptDetailCache[id]);
+    if (missing.length === 0) return;
+    void Promise.all(missing.map((id) => getPromptDetail(id)));
+  }, [prompts, getPromptDetail, promptDetailCache]);
+
   // State for pinned cards
   const [pinnedCards, setPinnedCards] = useState<PinnedCard[]>([]);
   // State for collapsing the entire pinned section
@@ -377,7 +394,7 @@ export function PromptKanbanView({
     () =>
       pinnedCards
         .map((card) => promptMap.get(card.promptId))
-        .filter(Boolean) as Prompt[],
+        .filter(Boolean) as PromptSummary[],
     [pinnedCards, promptMap],
   );
 
@@ -391,7 +408,7 @@ export function PromptKanbanView({
     () => pinnedCards.some((card) => card.isExpanded),
     [pinnedCards],
   );
-  const pinnedSectionLabel = t('prompt.pinnedPrompts', '固定的 Prompt');
+  const pinnedSectionLabel = t('prompt.pinnedPrompts', '固定的 PromptSummary');
   const expandAllLabel = t('prompt.expandAll', '全部展开');
   const collapseAllLabel = t('prompt.collapseAll', '全部收起');
   const unpinAllLabel = t('prompt.unpinAll', '全部取消固定');
@@ -400,7 +417,7 @@ export function PromptKanbanView({
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <SparklesIcon className="w-16 h-16 mb-4 opacity-20" />
-        <p>{t('prompt.noPrompts', '暂无 Prompt')}</p>
+        <p>{t('prompt.noPrompts', '暂无 PromptSummary')}</p>
       </div>
     );
   }
@@ -536,17 +553,17 @@ function getKanbanColumns(preference: 2 | 3 | 4, width: number): number {
 }
 
 interface UnpinnedKanbanGridProps {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   kanbanColumnPreference: 2 | 3 | 4;
   folderNameMap: Map<string, string>;
   uncategorizedLabel: string;
   onPin: (promptId: string) => void;
-  onCopy: (prompt: Prompt) => void;
-  onEdit: (prompt: Prompt) => void;
-  onAiTest: (prompt: Prompt) => void;
+  onCopy: (prompt: PromptSummary) => void;
+  onEdit: (prompt: PromptSummary) => void;
+  onAiTest: (prompt: PromptSummary) => void;
   onToggleFavorite: (promptId: string) => void;
-  onViewDetail: (prompt: Prompt) => void;
-  onContextMenu: (e: React.MouseEvent, prompt: Prompt) => void;
+  onViewDetail: (prompt: PromptSummary) => void;
+  onContextMenu: (e: React.MouseEvent, prompt: PromptSummary) => void;
 }
 
 /**

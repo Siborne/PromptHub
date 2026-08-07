@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import { GripVerticalIcon, ImagesIcon, UploadIcon, XIcon } from "lucide-react";
-import type { GenerationReferenceImage, Prompt } from "@prompthub/shared/types";
+import type {
+  GenerationReferenceImage,
+  PromptSummary,
+} from "@prompthub/shared/types";
 import { useTranslation } from "react-i18next";
 import { resolveLocalImageSrc } from "../../utils/media-url";
 
 interface ImageGenerationReferencePickerProps {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   references: GenerationReferenceImage[];
   supported: boolean;
   maxReferences: number;

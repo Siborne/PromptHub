@@ -1,6 +1,6 @@
 import { useRef, useState, type RefObject } from "react";
 import type { useTranslation } from "react-i18next";
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import {
   getActiveMentionQuery,
   insertPromptReference,
@@ -15,7 +15,7 @@ interface PromptDescriptionInputProps {
   /** Shared save/cancel key handler. */
   onEditKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   /** All prompts, for @-mention search. */
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   /** The prompt being edited, excluded from mention candidates. */
   currentPromptId: string;
   placeholder: string;

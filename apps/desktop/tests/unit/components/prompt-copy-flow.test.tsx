@@ -76,6 +76,7 @@ function createParams(source: Prompt, target: Prompt) {
       },
       incrementUsageCount,
       outputFormatItems: [mapping],
+      getPromptDetail: vi.fn().mockResolvedValue(null),
       promptById: new Map([
         [source.id, source],
         [target.id, target],

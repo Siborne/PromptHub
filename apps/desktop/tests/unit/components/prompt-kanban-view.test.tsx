@@ -10,9 +10,27 @@ vi.mock("../../../src/renderer/stores/folder.store", () => ({
     selector({ folders: [] }),
 }));
 
+// Tests populate this cache with full prompt content before rendering, since
+// the kanban card reads content from the detail cache (not the summary list).
+// 测试在渲染前把完整内容填入详情缓存，看板卡片从缓存读取内容。
+const mockDetailCache = vi.hoisted(() =>
+  ({} as Record<
+    string,
+    { systemPrompt?: string | null; userPrompt?: string }
+  >),
+);
+
 vi.mock("../../../src/renderer/stores/prompt.store", () => ({
-  usePromptStore: <T,>(selector: (state: { kanbanColumns: 3 }) => T) =>
-    selector({ kanbanColumns: 3 }),
+  usePromptStore: <T,>(
+    selector: (state: {
+      kanbanColumns: 3;
+      promptDetailCache: typeof mockDetailCache;
+    }) => T,
+  ) =>
+    selector({
+      kanbanColumns: 3,
+      promptDetailCache: mockDetailCache,
+    }),
 }));
 
 const prompt: Prompt = {
@@ -35,9 +53,16 @@ const prompt: Prompt = {
 };
 
 async function renderKanbanView(override: Partial<Prompt> = {}) {
+  const merged = { ...prompt, ...override };
+  // Populate the detail cache so the card renders content from the cache.
+  // 填充详情缓存，卡片从缓存渲染内容。
+  mockDetailCache[merged.id] = {
+    systemPrompt: merged.systemPrompt,
+    userPrompt: merged.userPrompt,
+  };
   const result = await renderWithI18n(
     <PromptKanbanView
-      prompts={[{ ...prompt, ...override }]}
+      prompts={[merged]}
       onSelect={vi.fn()}
       onToggleFavorite={vi.fn()}
       onCopy={vi.fn()}

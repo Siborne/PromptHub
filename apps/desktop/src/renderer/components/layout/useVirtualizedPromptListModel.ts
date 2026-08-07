@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import {
   flattenPromptTree,
   getPromptHierarchyMeta,
@@ -9,7 +9,7 @@ import {
 const PROMPT_CARD_ESTIMATED_HEIGHT = 76;
 
 export function useVirtualizedPromptListModel(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   effectiveCollapsedPromptIds: Set<string>,
 ) {
   const scrollRef = useRef<HTMLDivElement | null>(null);

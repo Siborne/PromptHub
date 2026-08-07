@@ -1,4 +1,4 @@
-import type { Prompt, PromptRelation } from "@prompthub/shared/types";
+import type { PromptSummary, PromptRelation } from "@prompthub/shared/types";
 
 export type GraphEdgeKind = PromptRelation["kind"] | "grouped_under";
 
@@ -8,7 +8,7 @@ export type GraphEdgeKind = PromptRelation["kind"] | "grouped_under";
 export interface PromptGraphNode {
   id: string;
   title: string;
-  promptType: Prompt["promptType"];
+  promptType: PromptSummary["promptType"];
   degree: number;
   hasHierarchy: boolean;
   hasSemanticRelation: boolean;
@@ -55,7 +55,7 @@ function linkEndpointId(endpoint: string | PromptGraphNode): string {
 }
 
 function createNodeMetrics(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   relations: PromptRelation[],
 ): Map<string, NodeMetrics> {
   const metrics = new Map<string, NodeMetrics>();
@@ -100,7 +100,7 @@ function createNodeMetrics(
 }
 
 export function createPromptGraphLinks(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   relations: PromptRelation[],
 ): PromptGraphLink[] {
   const promptIds = new Set(prompts.map((prompt) => prompt.id));
@@ -141,7 +141,7 @@ export function createPromptGraphLinks(
 }
 
 export function buildPromptGraphData(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   relations: PromptRelation[],
 ): PromptGraphData {
   if (prompts.length === 0) {

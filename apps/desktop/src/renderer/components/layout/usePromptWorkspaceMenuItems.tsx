@@ -14,7 +14,7 @@ import {
   StarIcon,
   TrashIcon,
 } from "lucide-react";
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import type { TFunction } from "i18next";
 import type { ContextMenuItem } from "../ui/ContextMenu";
 import { flattenPromptTree } from "../prompt/prompt-drag-utils";
@@ -23,33 +23,33 @@ import { getPromptDescendantIds } from "./PromptVirtualizedList";
 import { getFlattenedTree } from "./tree/utilities";
 
 interface PromptWorkspaceMenuParams {
-  contextMenu: { x: number; y: number; prompt: Prompt } | null;
+  contextMenu: { x: number; y: number; prompt: PromptSummary } | null;
   flattenedFolders: ReturnType<typeof getFlattenedTree>;
   folderPathById: Map<string, string>;
-  handleAiTest: (prompt: Prompt) => void;
+  handleAiTest: (prompt: PromptSummary) => void;
   handleCollapseAllPrompts: () => void;
-  handleCopyPrompt: (prompt: Prompt) => Promise<void>;
-  handleDeletePrompt: (prompt: Prompt) => void;
-  handleDuplicatePrompt: (prompt: Prompt) => Promise<void>;
+  handleCopyPrompt: (prompt: PromptSummary) => Promise<void>;
+  handleDeletePrompt: (prompt: PromptSummary) => void;
+  handleDuplicatePrompt: (prompt: PromptSummary) => Promise<void>;
   handleMovePrompt: (
-    prompt: Prompt,
+    prompt: PromptSummary,
     folderId: string | undefined,
   ) => Promise<void>;
   handleMovePromptToNode: (
-    prompt: Prompt,
+    prompt: PromptSummary,
     targetParentId: string | null,
   ) => Promise<void>;
-  handleSharePrompt: (prompt: Prompt) => Promise<void>;
-  handleVersionHistory: (prompt: Prompt) => void;
-  handleViewDetail: (prompt: Prompt) => void;
-  prompts: Prompt[];
-  setEditingPrompt: (prompt: Prompt) => void;
-  setQuickRewritePrompt: (prompt: Prompt) => void;
+  handleSharePrompt: (prompt: PromptSummary) => Promise<void>;
+  handleVersionHistory: (prompt: PromptSummary) => void;
+  handleViewDetail: (prompt: PromptSummary) => void;
+  prompts: PromptSummary[];
+  setEditingPrompt: (prompt: PromptSummary) => void;
+  setQuickRewritePrompt: (prompt: PromptSummary) => void;
   t: TFunction;
   toggleFavorite: (id: string) => Promise<void>;
   togglePinned: (id: string) => Promise<void>;
   visibleHierarchyMeta: { childCountById: Map<string, number> };
-  visiblePrompts: Prompt[];
+  visiblePrompts: PromptSummary[];
 }
 
 export function usePromptWorkspaceMenuItems(params: PromptWorkspaceMenuParams) {
@@ -68,7 +68,7 @@ export function usePromptWorkspaceMenuItems(params: PromptWorkspaceMenuParams) {
 }
 
 function createPromptOverviewItems(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem[] {
   return [
@@ -87,7 +87,7 @@ function createPromptOverviewItems(
 }
 
 function createPromptEditItems(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem[] {
   return [
@@ -120,7 +120,7 @@ function createPromptEditItems(
 }
 
 function createPromptBehaviorItems(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem[] {
   return [
@@ -140,7 +140,7 @@ function createPromptBehaviorItems(
 }
 
 function createFavoriteItem(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem {
   return {
@@ -157,7 +157,7 @@ function createFavoriteItem(
 }
 
 function createPinItem(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem {
   return {
@@ -172,7 +172,7 @@ function createPinItem(
 }
 
 function createPromptFolderMenu(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem {
   return {
@@ -184,7 +184,7 @@ function createPromptFolderMenu(
 }
 
 function createFolderMoveItems(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem[] {
   return [
@@ -205,7 +205,7 @@ function createFolderMoveItems(
 }
 
 function createPromptTreeMenu(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem {
   return {
@@ -217,7 +217,7 @@ function createPromptTreeMenu(
 }
 
 function createPromptTreeItems(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem[] {
   const descendantIds = getPromptDescendantIds(params.prompts, prompt.id);
@@ -246,7 +246,7 @@ function createPromptTreeItems(
 }
 
 function createPromptDeleteItem(
-  prompt: Prompt,
+  prompt: PromptSummary,
   params: PromptWorkspaceMenuParams,
 ): ContextMenuItem {
   return {

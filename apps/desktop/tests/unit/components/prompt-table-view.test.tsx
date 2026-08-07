@@ -5,6 +5,24 @@ import type { Prompt } from "@prompthub/shared/types";
 import { PromptTableView } from "../../../src/renderer/components/prompt/PromptTableView";
 import { renderWithI18n } from "../../helpers/i18n";
 
+// Table rows read content columns from the prompt detail cache; tests populate
+// it with full prompt content before rendering.
+// 表格行从详情缓存读取内容列，测试在渲染前填充完整内容。
+const mockDetailCache = vi.hoisted(() => ({} as Record<string, Prompt>));
+
+vi.mock("../../../src/renderer/stores/prompt.store", () => ({
+  usePromptStore: <T,>(
+    selector: (state: {
+      promptDetailCache: typeof mockDetailCache;
+      getPromptDetail: () => Promise<Prompt | null>;
+    }) => T,
+  ) =>
+    selector({
+      promptDetailCache: mockDetailCache,
+      getPromptDetail: () => Promise.resolve(null),
+    }),
+}));
+
 const prompt: Prompt = {
   id: "prompt-table-1",
   title: "Release notes",
@@ -56,6 +74,11 @@ function renderTableView({
   ) => Promise<void> | void;
   prompts?: Prompt[];
 } = {}) {
+  // Populate the detail cache so content columns render from the cache.
+  // 填充详情缓存，内容列从缓存渲染。
+  for (const item of prompts) {
+    mockDetailCache[item.id] = item;
+  }
   return renderWithI18n(
     <PromptTableView
       prompts={prompts}

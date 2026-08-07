@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Prompt } from '@prompthub/shared/types';
+import { PromptSummary } from '@prompthub/shared/types';
 import { ImageIcon, FolderIcon, StarIcon, PlayIcon, VideoIcon } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useFolderStore } from '../../stores/folder.store';
@@ -37,16 +37,16 @@ function renderHighlightedText(text: string, terms: string[], highlightClassName
 }
 
 interface PromptGalleryViewProps {
-    prompts: Prompt[];
+    prompts: PromptSummary[];
     highlightTerms?: string[];
     onSelect: (id: string) => void;
     onToggleFavorite: (id: string) => void;
-    onCopy: (prompt: Prompt) => void;
-    onEdit: (prompt: Prompt) => void;
-    onDelete: (prompt: Prompt) => void;
-    onAiTest: (prompt: Prompt) => void;
-    onVersionHistory: (prompt: Prompt) => void;
-    onViewDetail: (prompt: Prompt) => void;
+    onCopy: (prompt: PromptSummary) => void;
+    onEdit: (prompt: PromptSummary) => void;
+    onDelete: (prompt: PromptSummary) => void;
+    onAiTest: (prompt: PromptSummary) => void;
+    onVersionHistory: (prompt: PromptSummary) => void;
+    onViewDetail: (prompt: PromptSummary) => void;
 }
 
 const GalleryCard = memo(({
@@ -58,7 +58,7 @@ const GalleryCard = memo(({
     videoLabel,
     titleClassName,
 }: {
-    prompt: Prompt;
+    prompt: PromptSummary;
     onSelect: () => void;
     onToggleFavorite: (e: React.MouseEvent) => void;
     folderName?: string;
@@ -256,7 +256,7 @@ export function PromptGalleryView({
     onVersionHistory,
     onViewDetail,
     onContextMenu,
-}: PromptGalleryViewProps & { onContextMenu: (e: React.MouseEvent, prompt: Prompt) => void }) {
+}: PromptGalleryViewProps & { onContextMenu: (e: React.MouseEvent, prompt: PromptSummary) => void }) {
     const { t } = useTranslation();
     const folders = useFolderStore(state => state.folders);
     const galleryImageSize = (usePromptStore(state => state.galleryImageSize) ?? 'medium') as GallerySize;

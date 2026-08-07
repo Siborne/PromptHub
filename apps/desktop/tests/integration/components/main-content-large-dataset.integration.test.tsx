@@ -132,6 +132,8 @@ function createPrompt(index: number): Prompt {
 function createPromptState(prompts: Prompt[]) {
   return {
     prompts,
+    promptDetailCache: {},
+    getPromptDetail: vi.fn().mockResolvedValue(null),
     selectedId: null,
     selectedIds: [],
     selectPrompt: vi.fn(),

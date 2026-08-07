@@ -1,6 +1,10 @@
 import { useCallback, useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { OutputFormatItem, Prompt } from "@prompthub/shared/types";
+import type {
+  OutputFormatItem,
+  Prompt,
+  PromptSummary,
+} from "@prompthub/shared/types";
 import type { TFunction } from "i18next";
 import {
   buildPromptCopyText,
@@ -24,9 +28,10 @@ interface CopyState {
 
 interface PromptCopyFlowParams {
   copy: CopyState;
+  getPromptDetail: (id: string) => Promise<Prompt | null>;
   incrementUsageCount: (id: string) => Promise<void>;
   outputFormatItems: OutputFormatItem[];
-  promptById: Map<string, Prompt>;
+  promptById: Map<string, PromptSummary>;
   showCopyNotification: boolean;
   showEnglish: boolean;
   showToast: (
@@ -41,8 +46,8 @@ interface PromptCopyFlowParams {
 export function getPromptCopyPlan(
   prompt: Prompt,
   items: OutputFormatItem[],
-  promptById: Map<string, Prompt>,
-): { sourcePromptId: string; prompts: Prompt[] } {
+  promptById: Map<string, PromptSummary>,
+): { sourcePromptId: string; prompts: PromptSummary[] } {
   const configured = items
     .filter((item) => item.sourcePromptId === prompt.id)
     .sort(
@@ -59,7 +64,7 @@ export function getPromptCopyPlan(
         ? (promptById.get(item.targetPromptId) ?? null)
         : prompt,
     )
-    .filter((item): item is Prompt => item !== null);
+    .filter((item): item is PromptSummary => item !== null);
   return {
     sourcePromptId: prompt.id,
     prompts: queue.length > 0 ? queue : [prompt],
@@ -68,16 +73,40 @@ export function getPromptCopyPlan(
 
 function usePromptCopyHandler(params: PromptCopyFlowParams) {
   return useCallback(
-    async (prompt: Prompt) => {
+    async (prompt: PromptSummary) => {
+      // The list projection does not carry content; hydrate the full detail
+      // before building the copy plan (variable replacement needs userPrompt).
+      // 列表投影不含内容，先按需加载完整详情再构建复制计划。
+      const detail: Prompt =
+        "userPrompt" in prompt && prompt.userPrompt !== undefined
+          ? (prompt as Prompt)
+          : ((await params.getPromptDetail(prompt.id)) ?? (prompt as Prompt));
       const plan = getPromptCopyPlan(
-        prompt,
+        detail,
         params.outputFormatItems,
         params.promptById,
       );
       if (plan.prompts.length > 1) {
-        return startCopyQueue(plan.prompts, plan.sourcePromptId, params.copy);
+        // Hydrate every queue item so the variable dialog can resolve content.
+        // 逐项加载完整详情，供变量弹窗解析内容。
+        const hydrated: Prompt[] = await Promise.all(
+          plan.prompts.map(async (item) => {
+            if ("userPrompt" in item && item.userPrompt !== undefined)
+              return item as Prompt;
+            return (await params.getPromptDetail(item.id)) ?? (item as Prompt);
+          }),
+        );
+        return startCopyQueue(hydrated, plan.sourcePromptId, params.copy);
       }
-      await copySinglePrompt(plan.prompts[0], plan.sourcePromptId, params);
+      // Single-target copy: hydrate the target (source attribution stays the
+      // source prompt id).
+      // 单目标复制：按需加载目标内容，来源归属仍为源 prompt。
+      const single = plan.prompts[0];
+      const singleDetail: Prompt =
+        "userPrompt" in single && single.userPrompt !== undefined
+          ? (single as Prompt)
+          : ((await params.getPromptDetail(single.id)) ?? (single as Prompt));
+      await copySinglePrompt(singleDetail, plan.sourcePromptId, params);
     },
     [params],
   );

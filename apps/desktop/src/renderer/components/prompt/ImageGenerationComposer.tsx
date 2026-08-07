@@ -9,13 +9,17 @@ import {
   PlusIcon,
   XIcon,
 } from "lucide-react";
-import type { GenerationReferenceImage, Prompt } from "@prompthub/shared/types";
+import type {
+  GenerationReferenceImage,
+  Prompt,
+  PromptSummary,
+} from "@prompthub/shared/types";
 import { useTranslation } from "react-i18next";
 import type { AIModelConfig } from "../../stores/settings.store";
 import { ImageGenerationReferencePicker } from "./ImageGenerationReferencePicker";
 
 export interface ImageGenerationComposerProps {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   models: AIModelConfig[];
   selectedPromptId: string;
   onSelectPrompt: (id: string) => void;

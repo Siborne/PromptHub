@@ -4,7 +4,7 @@ import type {
   DragEvent as ReactDragEvent,
   SetStateAction,
 } from "react";
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import {
   getPromptDropPosition,
   getPromptMoveTarget,
@@ -145,7 +145,7 @@ function usePromptDragLeave(state: PromptDragState) {
 }
 
 function usePromptDropTarget(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   draggingId: string | null,
   setDropTargetId: Dispatch<SetStateAction<string | null>>,
   setDropPosition: Dispatch<SetStateAction<PromptDropPosition | null>>,
@@ -171,7 +171,7 @@ function usePromptDropTarget(
 }
 
 function usePromptDrop(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   draggingId: string | null,
   dropPosition: PromptDropPosition | null,
   onMovePrompt: VirtualizedPromptListProps["onMovePrompt"],

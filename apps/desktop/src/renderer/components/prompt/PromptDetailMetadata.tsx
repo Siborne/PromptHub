@@ -8,13 +8,13 @@ import {
   MessageSquareTextIcon,
 } from "lucide-react";
 import type { useTranslation } from "react-i18next";
-import type { Prompt } from "@prompthub/shared/types";
+import type { Prompt, PromptSummary } from "@prompthub/shared/types";
 import { Select, type SelectOption } from "../ui/Select";
 
 interface PromptDetailMetadataProps {
   prompt: Prompt;
-  parentPrompt: Prompt | null;
-  childPrompts: Prompt[];
+  parentPrompt: PromptSummary | null;
+  childPrompts: PromptSummary[];
   folderOptions: SelectOption[];
   relationshipCount?: number;
   outputFormatCount?: number;

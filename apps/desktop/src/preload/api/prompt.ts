@@ -24,6 +24,7 @@ export const promptApi = {
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_CREATE, data),
   get: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_GET, id),
   getAll: () => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_GET_ALL),
+  getAllMeta: () => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_GET_ALL_META),
   getAllTags: () => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_GET_ALL_TAGS),
   renameTag: (oldTag: string, newTag: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_RENAME_TAG, oldTag, newTag),

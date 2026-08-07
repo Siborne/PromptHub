@@ -1,9 +1,9 @@
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 
 export type PromptDropPosition = "before" | "after" | "inside";
 
 export interface FlattenedPromptNode {
-  prompt: Prompt;
+  prompt: PromptSummary;
   depth: number;
 }
 
@@ -41,7 +41,7 @@ export function getPromptDropPosition(
 }
 
 export function flattenPromptTree(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   collapsedPromptIds: ReadonlySet<string> = new Set(),
   options: FlattenPromptTreeOptions = {},
 ): FlattenedPromptNode[] {
@@ -58,7 +58,7 @@ export function flattenPromptTree(
   const result: FlattenedPromptNode[] = [];
   const attachedIds = new Set<string>();
 
-  const markDescendantsAttached = (prompt: Prompt, ancestors: Set<string>) => {
+  const markDescendantsAttached = (prompt: PromptSummary, ancestors: Set<string>) => {
     for (const child of childrenByParent.get(prompt.id) ?? []) {
       if (ancestors.has(child.id)) {
         continue;
@@ -69,7 +69,7 @@ export function flattenPromptTree(
     }
   };
 
-  const visit = (prompt: Prompt, depth: number, ancestors: Set<string>) => {
+  const visit = (prompt: PromptSummary, depth: number, ancestors: Set<string>) => {
     if (ancestors.has(prompt.id)) {
       return;
     }
@@ -102,7 +102,7 @@ export function flattenPromptTree(
 }
 
 export function getPromptMoveTarget(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   sourcePromptId: string,
   targetPromptId: string,
   dropPosition: PromptDropPosition,
@@ -152,12 +152,12 @@ export function getPromptMoveTarget(
   };
 }
 
-export function getPromptChildCount(prompts: Prompt[], promptId: string): number {
+export function getPromptChildCount(prompts: PromptSummary[], promptId: string): number {
   const promptById = new Map(prompts.map((prompt) => [prompt.id, prompt]));
   return prompts.filter((prompt) => getVisibleParentId(prompt, promptById) === promptId).length;
 }
 
-export function getPromptHierarchyMeta(prompts: Prompt[]): PromptHierarchyMeta {
+export function getPromptHierarchyMeta(prompts: PromptSummary[]): PromptHierarchyMeta {
   const promptById = new Map(prompts.map((prompt) => [prompt.id, prompt]));
   const childCountById = new Map<string, number>();
   const parentTitleById = new Map<string, string>();
@@ -179,12 +179,12 @@ export function getPromptHierarchyMeta(prompts: Prompt[]): PromptHierarchyMeta {
 }
 
 function buildChildrenByParent(
-  prompts: Prompt[],
-  promptById: Map<string, Prompt>,
+  prompts: PromptSummary[],
+  promptById: Map<string, PromptSummary>,
   inputIndexById: Map<string, number>,
   siblingOrder: PromptSiblingOrder = "stored",
-): Map<string | null, Prompt[]> {
-  const groups = new Map<string | null, Prompt[]>();
+): Map<string | null, PromptSummary[]> {
+  const groups = new Map<string | null, PromptSummary[]>();
 
   for (const prompt of prompts) {
     const parentId = getVisibleParentId(prompt, promptById);
@@ -204,10 +204,10 @@ function buildChildrenByParent(
 }
 
 function sortPromptSiblings(
-  siblings: Prompt[],
+  siblings: PromptSummary[],
   inputIndexById: Map<string, number>,
   siblingOrder: PromptSiblingOrder,
-): Prompt[] {
+): PromptSummary[] {
   if (siblingOrder === "input") {
     return [...siblings].sort((left, right) =>
       comparePromptInputIndex(left, right, inputIndexById),
@@ -229,16 +229,16 @@ function sortPromptSiblings(
 }
 
 function comparePromptInputIndex(
-  left: Prompt,
-  right: Prompt,
+  left: PromptSummary,
+  right: PromptSummary,
   inputIndexById: Map<string, number>,
 ): number {
   return (inputIndexById.get(left.id) ?? 0) - (inputIndexById.get(right.id) ?? 0);
 }
 
 function getVisibleParentId(
-  prompt: Prompt,
-  promptById: Map<string, Prompt>,
+  prompt: PromptSummary,
+  promptById: Map<string, PromptSummary>,
 ): string | null {
   if (!prompt.parentId || prompt.parentId === prompt.id) {
     return null;
@@ -248,7 +248,7 @@ function getVisibleParentId(
 }
 
 function canMoveToParent(
-  promptById: Map<string, Prompt>,
+  promptById: Map<string, PromptSummary>,
   promptId: string,
   parentId: string | null,
 ): boolean {

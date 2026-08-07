@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { flushSync } from "react-dom";
 import type { TFunction } from "i18next";
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import type {
   AIConfig,
   AITestResult,
@@ -43,7 +43,7 @@ function loadAIService() {
 }
 
 interface PromptAiRunnerInput {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   selectedId: string | null;
   inlineAiTestImages: VariableInputImageAttachment[];
   singleChatConfig: PromptAiConfig;
@@ -124,7 +124,7 @@ function getImageDisplayUrl(result: {
 async function saveGeneratedPromptImage(
   imageUrl: string | undefined,
   imageBase64: string | undefined,
-  prompt: Prompt,
+  prompt: PromptSummary,
   updatePrompt: PromptStoreState["updatePrompt"],
 ) {
   const savedFileName = imageUrl
@@ -211,7 +211,7 @@ function createStreamScheduler(
 
 async function runImagePromptTest(
   input: PromptAiRunnerInput,
-  currentPrompt: Prompt | undefined,
+  currentPrompt: PromptSummary | undefined,
   targetId: string | null | undefined,
   userPrompt: string,
 ) {
@@ -235,7 +235,7 @@ async function runImagePromptTest(
 
 async function persistGeneratedImage(
   input: PromptAiRunnerInput,
-  prompt: Prompt,
+  prompt: PromptSummary,
   display: NonNullable<ReturnType<typeof getImageDisplayUrl>>,
 ) {
   try {

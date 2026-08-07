@@ -9,6 +9,7 @@ import type {
   CreatePromptRelationDTO,
   Prompt,
   PromptRelation,
+  PromptSummary,
 } from "@prompthub/shared/types";
 import type { SelectOption } from "../ui/Select";
 import type {
@@ -24,7 +25,7 @@ export interface PromptWorkspaceDetailPaneProps {
   aiThinking: string | null;
   cancelDetailInlineEdit: () => void;
   canSaveDetailInlineEdit: boolean;
-  childPrompts: Prompt[];
+  childPrompts: PromptSummary[];
   copied: boolean;
   detailDescriptionInputRef: RefObject<HTMLInputElement>;
   detailInlineDraft: DetailInlineEditDraft;
@@ -66,7 +67,7 @@ export interface PromptWorkspaceDetailPaneProps {
   onDeleteRelation: (relationId: string) => Promise<void> | void;
   openDetailInlineEdit: (field?: DetailInlineEditField) => void;
   outputFormatCount: number;
-  parentPrompt: Prompt | null;
+  parentPrompt: PromptSummary | null;
   relations: PromptRelation[];
   relationshipCount: number;
   renderMarkdownEnabled: boolean;

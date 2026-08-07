@@ -1,10 +1,10 @@
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import { isSubsequence } from "../../services/prompt-filter";
 
 export type SuggestionReason = "same_tag" | "same_folder" | "similar_title";
 
 export interface RelationSuggestion {
-  prompt: Prompt;
+  prompt: PromptSummary;
   reason: SuggestionReason;
   /** Shared tag when reason is same_tag, used for the explanation chip. */
   sharedTag?: string;
@@ -41,8 +41,8 @@ function titlesAreSimilar(left: string, right: string): boolean {
  * tree relationship, surfaced separately).
  */
 export function buildRelationSuggestions(
-  currentPrompt: Prompt,
-  prompts: Prompt[],
+  currentPrompt: PromptSummary,
+  prompts: PromptSummary[],
   excludedIds: Set<string>,
 ): RelationSuggestion[] {
   const currentTags = new Set(currentPrompt.tags ?? []);
@@ -97,9 +97,9 @@ export function buildRelationSuggestions(
  */
 export function searchRelationCandidates(
   query: string,
-  candidates: Prompt[],
+  candidates: PromptSummary[],
   limit = 8,
-): Prompt[] {
+): PromptSummary[] {
   const normalized = normalize(query);
   if (!normalized) {
     return [];

@@ -11,7 +11,7 @@ import {
   StarIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import type { PromptCardProps } from "./prompt-list-types";
 import { renderHighlightedText } from "./prompt-list-highlight";
 
@@ -193,7 +193,7 @@ function PromptCardTitle({
   highlightTerms,
   isSelected,
 }: {
-  prompt: Prompt;
+  prompt: PromptSummary;
   depth: number;
   highlightClassName: string;
   highlightTerms: string[];

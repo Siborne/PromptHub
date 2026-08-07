@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   Prompt,
+  PromptSummary,
   CreatePromptDTO,
   CreatePromptRelationDTO,
   CreateOutputFormatItemDTO,
@@ -11,6 +12,7 @@ import type {
   UpdatePromptRelationDTO,
 } from "@prompthub/shared/types";
 import * as db from "../services/database";
+import { promptToSummary } from "../services/database";
 import { scheduleAllSaveSync } from "../services/webdav-save-sync";
 import {
   reconcileDescriptionRelations,
@@ -51,7 +53,15 @@ function isViewMode(value: unknown): value is ViewMode {
 }
 
 interface PromptState {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
+  /**
+   * On-demand cache of full Prompt objects, keyed by prompt id.
+   * Populated by getPromptDetail(); invalidated on update / delete.
+   *
+   * 按需加载的完整 Prompt 缓存（按 id），由 getPromptDetail() 填充，
+   * update / delete 时失效。
+   */
+  promptDetailCache: Record<string, Prompt>;
   relations: PromptRelation[];
   outputFormatItems: OutputFormatItem[];
   selectedId: string | null;
@@ -74,6 +84,7 @@ interface PromptState {
   // Actions
   // 操作
   fetchPrompts: () => Promise<void>;
+  getPromptDetail: (id: string) => Promise<Prompt | null>;
   createPrompt: (data: CreatePromptDTO) => Promise<Prompt>;
   updatePrompt: (id: string, data: UpdatePromptDTO) => Promise<void>;
   fetchRelations: () => Promise<void>;
@@ -120,6 +131,7 @@ export const usePromptStore = create<PromptState>()(
   persist(
     (set, get) => ({
       prompts: [],
+      promptDetailCache: {},
       relations: [],
       outputFormatItems: [],
       selectedId: null,
@@ -138,9 +150,8 @@ export const usePromptStore = create<PromptState>()(
       fetchPrompts: async () => {
         set({ isLoading: true });
         try {
-          // Get data from IndexedDB
           const [prompts, relations, outputFormatItems] = await Promise.all([
-            db.getAllPrompts(),
+            db.getAllPromptSummaries(),
             db.listPromptRelations(),
             db.listOutputFormatItems(),
           ]);
@@ -150,6 +161,17 @@ export const usePromptStore = create<PromptState>()(
         } finally {
           set({ isLoading: false });
         }
+      },
+
+      getPromptDetail: async (id) => {
+        const cached = get().promptDetailCache[id];
+        if (cached) return cached;
+        const detail = await db.getPromptById(id);
+        if (!detail) return null;
+        set((state) => ({
+          promptDetailCache: { ...state.promptDetailCache, [id]: detail },
+        }));
+        return detail;
       },
 
       createPrompt: async (data) => {
@@ -162,7 +184,9 @@ export const usePromptStore = create<PromptState>()(
           usageCount: 0,
           currentVersion: 1,
         });
-        set((state) => ({ prompts: [prompt, ...state.prompts] }));
+        set((state) => ({
+          prompts: [promptToSummary(prompt), ...state.prompts],
+        }));
         scheduleAllSaveSync("prompt:create");
         return prompt;
       },
@@ -170,7 +194,16 @@ export const usePromptStore = create<PromptState>()(
       updatePrompt: async (id, data) => {
         const updated = await db.updatePrompt(id, data);
         set((state) => ({
-          prompts: state.prompts.map((p) => (p.id === id ? updated : p)),
+          prompts: state.prompts.map((p) =>
+            p.id === id ? { ...p, ...promptToSummary(updated) } : p,
+          ),
+          // Keep the detail cache fresh so the detail pane never shows stale
+          // content after an edit (edit modal / inline editor / AI test).
+          // 保持详情缓存最新，避免编辑后详情面板展示脏数据。
+          promptDetailCache: {
+            ...state.promptDetailCache,
+            [id]: updated,
+          },
         }));
 
         // Derive related_to relations from [[id]] mentions in the description,
@@ -306,20 +339,25 @@ export const usePromptStore = create<PromptState>()(
 
       deletePrompt: async (id) => {
         await db.deletePrompt(id);
-        set((state) => ({
-          prompts: state.prompts.filter((p) => p.id !== id),
-          relations: state.relations.filter(
-            (relation) =>
-              relation.sourcePromptId !== id && relation.targetPromptId !== id,
-          ),
-          outputFormatItems: state.outputFormatItems.filter(
-            (item) => item.sourcePromptId !== id && item.targetPromptId !== id,
-          ),
-          selectedId: state.selectedId === id ? null : state.selectedId,
-          selectedIds: state.selectedIds.filter(
-            (selectedId) => selectedId !== id,
-          ),
-        }));
+        set((state) => {
+          const nextCache = { ...state.promptDetailCache };
+          delete nextCache[id];
+          return {
+            prompts: state.prompts.filter((p) => p.id !== id),
+            promptDetailCache: nextCache,
+            relations: state.relations.filter(
+              (relation) =>
+                relation.sourcePromptId !== id && relation.targetPromptId !== id,
+            ),
+            outputFormatItems: state.outputFormatItems.filter(
+              (item) => item.sourcePromptId !== id && item.targetPromptId !== id,
+            ),
+            selectedId: state.selectedId === id ? null : state.selectedId,
+            selectedIds: state.selectedIds.filter(
+              (selectedId) => selectedId !== id,
+            ),
+          };
+        });
         scheduleAllSaveSync("prompt:delete");
       },
 
@@ -369,7 +407,13 @@ export const usePromptStore = create<PromptState>()(
             isFavorite: !prompt.isFavorite,
           });
           set((state) => ({
-            prompts: state.prompts.map((p) => (p.id === id ? updated : p)),
+            prompts: state.prompts.map((p) =>
+              p.id === id ? { ...p, ...promptToSummary(updated) } : p,
+            ),
+            promptDetailCache: {
+              ...state.promptDetailCache,
+              [id]: updated,
+            },
           }));
         }
       },
@@ -381,7 +425,13 @@ export const usePromptStore = create<PromptState>()(
             isPinned: !prompt.isPinned,
           });
           set((state) => ({
-            prompts: state.prompts.map((p) => (p.id === id ? updated : p)),
+            prompts: state.prompts.map((p) =>
+              p.id === id ? { ...p, ...promptToSummary(updated) } : p,
+            ),
+            promptDetailCache: {
+              ...state.promptDetailCache,
+              [id]: updated,
+            },
           }));
         }
       },
@@ -402,7 +452,13 @@ export const usePromptStore = create<PromptState>()(
             usageCount: (prompt.usageCount || 0) + 1,
           });
           set((state) => ({
-            prompts: state.prompts.map((p) => (p.id === id ? updated : p)),
+            prompts: state.prompts.map((p) =>
+              p.id === id ? { ...p, ...promptToSummary(updated) } : p,
+            ),
+            promptDetailCache: {
+              ...state.promptDetailCache,
+              [id]: updated,
+            },
           }));
         }
       },

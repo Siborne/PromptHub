@@ -139,6 +139,8 @@ describe("MainContent context move integration", () => {
     usePromptStoreMock.mockImplementation((selector) =>
       selector({
         prompts: [prompt],
+        promptDetailCache: {},
+        getPromptDetail: vi.fn().mockResolvedValue(null),
         selectedId: prompt.id,
         selectedIds: [prompt.id],
         selectPrompt: vi.fn(),
@@ -203,6 +205,8 @@ describe("MainContent context move integration", () => {
       usePromptStoreMock.mockImplementation((selector) =>
         selector({
           prompts: [prompt],
+          promptDetailCache: {},
+          getPromptDetail: vi.fn().mockResolvedValue(null),
           selectedId: prompt.id,
           selectedIds: [prompt.id],
           selectPrompt: vi.fn(),
@@ -268,6 +272,8 @@ describe("MainContent context move integration", () => {
     usePromptStoreMock.mockImplementation((selector) =>
       selector({
         prompts: [prompt],
+        promptDetailCache: {},
+        getPromptDetail: vi.fn().mockResolvedValue(null),
         selectedId: prompt.id,
         selectedIds: [prompt.id],
         selectPrompt: vi.fn(),
@@ -346,6 +352,8 @@ describe("MainContent context move integration", () => {
     usePromptStoreMock.mockImplementation((selector) =>
       selector({
         prompts: [prompt],
+        promptDetailCache: {},
+        getPromptDetail: vi.fn().mockResolvedValue(null),
         selectedId: prompt.id,
         selectedIds: [prompt.id],
         selectPrompt,
@@ -418,6 +426,8 @@ describe("MainContent context move integration", () => {
       usePromptStoreMock.mockImplementation((selector) =>
         selector({
           prompts: [sourcePrompt, targetPrompt],
+          promptDetailCache: {},
+          getPromptDetail: vi.fn().mockResolvedValue(null),
           selectedId: sourcePrompt.id,
           selectedIds: [sourcePrompt.id],
           selectPrompt: vi.fn(),
@@ -479,6 +489,8 @@ describe("MainContent context move integration", () => {
       usePromptStoreMock.mockImplementation((selector) =>
         selector({
           prompts: [parentPrompt, childPrompt],
+          promptDetailCache: {},
+          getPromptDetail: vi.fn().mockResolvedValue(null),
           selectedId: parentPrompt.id,
           selectedIds: [parentPrompt.id],
           selectPrompt: vi.fn(),

@@ -97,6 +97,8 @@ function createPromptState(
 ) {
   return {
     prompts: [prompt],
+    promptDetailCache: { [prompt.id]: prompt },
+    getPromptDetail: vi.fn().mockResolvedValue(prompt),
     selectedId: prompt.id,
     selectedIds: [prompt.id],
     selectPrompt: vi.fn(),

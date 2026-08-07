@@ -5,9 +5,11 @@ import type {
   OutputFormatItem,
   Prompt,
   PromptRelation,
+  PromptSummary,
 } from "@prompthub/shared/types";
 import type { TFunction } from "i18next";
 import { FolderIcon } from "lucide-react";
+import { usePromptDetail } from "../../hooks/usePromptDetail";
 import {
   filterVisiblePrompts,
   sortVisiblePrompts,
@@ -43,7 +45,7 @@ interface PromptVisibilityParams {
   folders: Folder[];
   lastSelectedId: string | null;
   promptTypeFilter: "all" | "text" | "image";
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   searchQuery: string;
   selectedFolderId: string | null;
   selectedId: string | null;
@@ -110,7 +112,7 @@ function useFilteredPrompts(params: PromptVisibilityParams) {
 function usePromptSelectionRestore(
   selectedId: string | null,
   lastSelectedId: string | null,
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   selectPrompt: (id: string | null) => void,
 ) {
   useEffect(() => {
@@ -138,19 +140,23 @@ function useCollapsedPromptCleanup(
 }
 
 function useSelectedPromptData(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   selectedId: string | null,
   relations: PromptRelation[],
   outputFormatItems: OutputFormatItem[],
 ) {
-  const selectedPrompt = prompts.find((prompt) => prompt.id === selectedId);
   const promptById = useMemo(
     () => new Map(prompts.map((prompt) => [prompt.id, prompt])),
     [prompts],
   );
+  // Full content of the selected prompt is loaded on demand so the list
+  // projection stays light; the detail pane / edit modal need userPrompt &
+  // variables. The detail cache makes repeat opens instant.
+  // 选中 prompt 的完整内容按需加载，详情/编辑面板需要 userPrompt 与 variables。
+  const { prompt: selectedPrompt } = usePromptDetail(selectedId);
   const selectedPromptRelations = useMemo(
-    () => getSelectedRelations(relations, selectedPrompt?.id),
-    [relations, selectedPrompt?.id],
+    () => getSelectedRelations(relations, selectedId ?? undefined),
+    [relations, selectedId],
   );
   const selectedParentPrompt = useMemo(
     () =>
@@ -160,8 +166,8 @@ function useSelectedPromptData(
     [promptById, selectedPrompt?.parentId],
   );
   const selectedChildPrompts = useMemo(
-    () => getPromptChildren(prompts, selectedPrompt?.id),
-    [prompts, selectedPrompt?.id],
+    () => getPromptChildren(prompts, selectedId ?? undefined),
+    [prompts, selectedId],
   );
   const selectedOutputFormatCount = selectedPrompt
     ? outputFormatItems.filter(
@@ -195,7 +201,7 @@ function getSelectedRelations(
     : [];
 }
 
-function getPromptChildren(prompts: Prompt[], promptId: string | undefined) {
+function getPromptChildren(prompts: PromptSummary[], promptId: string | undefined) {
   if (!promptId) return [];
   return prompts
     .filter((prompt) => prompt.parentId === promptId)

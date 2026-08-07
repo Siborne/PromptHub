@@ -47,6 +47,40 @@ export interface Prompt {
   updatedAt: string; // ISO 8601 format / ISO 8601 格式
 }
 
+/**
+ * Lightweight list projection of a Prompt.
+ *
+ * Contains only the fields needed by list / search / kanban / gallery views.
+ * Deliberately EXCLUDES large text fields (userPrompt, systemPrompt, notes,
+ * lastAiResponse, variables) so the list main path does not serialize them
+ * across IPC / HTTP. Full content is loaded on demand via prompt:get.
+ *
+ * 列表投影：只含列表/搜索/看板/画廊需要的字段，刻意排除大文本字段，
+ * 完整内容通过 prompt:get 按需加载。
+ */
+export interface PromptSummary {
+  id: string;
+  ownerUserId?: string | null;
+  visibility?: ResourceVisibility;
+  title: string;
+  description?: string | null;
+  promptType?: PromptType;
+  tags: string[];
+  folderId?: string | null;
+  parentId?: string | null;
+  order?: number;
+  images?: string[];
+  videos?: string[];
+  isFavorite: boolean;
+  isPinned: boolean;
+  usageCount: number;
+  source?: string | null;
+  version: number;
+  currentVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Variable {
   name: string;
   type: VariableType;

@@ -36,7 +36,7 @@ function otherEndpoint(relation: PromptRelation, promptId: string): string | nul
 export function reconcileDescriptionRelations(
   promptId: string,
   newDescription: string | null | undefined,
-  allPrompts: Prompt[],
+  allPrompts: ReadonlyArray<Pick<Prompt, "id" | "description">>,
   relations: PromptRelation[],
 ): RelationReconcilePlan {
   const referencedIds = new Set(parsePromptReferences(newDescription));

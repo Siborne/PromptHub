@@ -6,14 +6,20 @@ function useGraphPromptSelection() {
   const { derived, state, stores } = usePromptWorkspaceContext();
   return useCallback(
     (promptId: string) => {
-      const prompt = derived.promptById.get(promptId);
       stores.promptActions.selectPrompt(promptId);
-      if (prompt) {
-        state.dialogs.setDetailPrompt(prompt);
-        state.dialogs.setIsDetailModalOpen(true);
-      }
+      // The list projection does not carry content; fetch the full detail
+      // before opening the detail modal.
+      // 列表投影不含内容，打开详情弹窗前按需加载完整详情。
+      void stores.promptActions
+        .getPromptDetail(promptId)
+        .then((prompt) => {
+          if (prompt) {
+            state.dialogs.setDetailPrompt(prompt);
+            state.dialogs.setIsDetailModalOpen(true);
+          }
+        });
     },
-    [derived.promptById, state.dialogs, stores.promptActions],
+    [state.dialogs, stores.promptActions],
   );
 }
 

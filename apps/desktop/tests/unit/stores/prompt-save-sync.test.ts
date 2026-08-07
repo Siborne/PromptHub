@@ -10,6 +10,26 @@ vi.mock("../../../src/renderer/services/database", () => ({
   movePrompts: vi.fn(),
   deletePrompt: vi.fn(),
   getAllPrompts: vi.fn().mockResolvedValue([]),
+  getAllPromptSummaries: vi.fn().mockResolvedValue([]),
+  // Keep the summary projection honest in tests: ids / titles flow through.
+  promptToSummary: (prompt: {
+    id: string;
+    title: string;
+    tags?: string[];
+    createdAt?: string;
+    updatedAt?: string;
+  }) => ({
+    id: prompt.id,
+    title: prompt.title,
+    tags: prompt.tags ?? [],
+    isFavorite: false,
+    isPinned: false,
+    usageCount: 0,
+    currentVersion: 1,
+    version: 1,
+    createdAt: prompt.createdAt ?? "",
+    updatedAt: prompt.updatedAt ?? "",
+  }),
 }));
 
 import { scheduleAllSaveSync } from "../../../src/renderer/services/webdav-save-sync";

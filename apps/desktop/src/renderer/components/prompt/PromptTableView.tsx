@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type DragEvent as ReactDragEvent, type MouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StarIcon, CopyIcon, PlayIcon, EditIcon, TrashIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, HistoryIcon, FolderIcon, Trash2Icon, GripVerticalIcon, CornerDownRightIcon, GitBranchIcon } from 'lucide-react';
-import type { Prompt } from '@prompthub/shared/types';
+import type { PromptSummary } from '@prompthub/shared/types';
 import { useFolderStore } from '../../stores/folder.store';
+import { usePromptStore } from '../../stores/prompt.store';
 import { useTableConfig, type ColumnConfig } from '../../hooks/useTableConfig';
 import { ResizableHeader } from './ResizableHeader';
 import { ColumnConfigMenu } from './ColumnConfigMenu';
@@ -86,16 +87,16 @@ function Checkbox({
 }
 
 interface PromptTableViewProps {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   highlightTerms?: string[];
   onSelect: (id: string) => void;
   onToggleFavorite: (id: string) => void;
-  onCopy: (prompt: Prompt) => void;
-  onEdit: (prompt: Prompt) => void;
-  onDelete: (prompt: Prompt) => void;
-  onAiTest: (prompt: Prompt) => void;
-  onVersionHistory: (prompt: Prompt) => void;
-  onViewDetail: (prompt: Prompt) => void;
+  onCopy: (prompt: PromptSummary) => void;
+  onEdit: (prompt: PromptSummary) => void;
+  onDelete: (prompt: PromptSummary) => void;
+  onAiTest: (prompt: PromptSummary) => void;
+  onVersionHistory: (prompt: PromptSummary) => void;
+  onViewDetail: (prompt: PromptSummary) => void;
   // aiResults: promptId -> AI response
   // aiResults：promptId -> AI 响应结果
   aiResults?: Record<string, string>; // promptId -> AI 响应结果
@@ -104,7 +105,7 @@ interface PromptTableViewProps {
   onBatchFavorite?: (ids: string[], favorite: boolean) => void;
   onBatchMove?: (ids: string[], folderId: string | undefined) => void;
   onBatchDelete?: (ids: string[]) => void;
-  onContextMenu: (e: React.MouseEvent, prompt: Prompt) => void;
+  onContextMenu: (e: React.MouseEvent, prompt: PromptSummary) => void;
   onMovePrompt?: (
     promptId: string,
     newParentId: string | null,
@@ -234,6 +235,27 @@ export function PromptTableView({
   const currentPrompts = tablePromptNodes
     .slice(startIndex, endIndex)
     .map((node) => node.prompt);
+
+  // Prefetch full content for the current page so the content columns
+  // (systemPrompt / userPrompt / aiResponse) can render. Only loads ids not
+  // already in the detail cache; repeat page visits hit the cache.
+  // 预取当前页完整内容，供内容列渲染；缓存命中后不再发 IPC。
+  const promptDetailCache = usePromptStore((state) => state.promptDetailCache);
+  const getPromptDetail = usePromptStore((state) => state.getPromptDetail);
+  useEffect(() => {
+    const missing = currentPrompts
+      .map((prompt) => prompt.id)
+      .filter((id) => !promptDetailCache[id]);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    void Promise.all(missing.map((id) => getPromptDetail(id))).then(() => {
+      if (cancelled) return;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPrompts, getPromptDetail, promptDetailCache]);
+
   const currentPageAllSelected =
     currentPrompts.length > 0 && currentPrompts.every((prompt) => selectedIds.has(prompt.id));
 
@@ -257,12 +279,13 @@ export function PromptTableView({
 
   // Extract variable count
   // 提取变量数量
-  const getVariableCount = (prompt: Prompt) => {
+  const getVariableCount = (prompt: PromptSummary) => {
+    const detail = promptDetailCache[prompt.id];
     const text =
-      (prompt.systemPrompt || '') +
-      prompt.userPrompt +
-      (prompt.systemPromptEn || '') +
-      (prompt.userPromptEn || '');
+      (detail?.systemPrompt || '') +
+      (detail?.userPrompt || '') +
+      (detail?.systemPromptEn || '') +
+      (detail?.userPromptEn || '');
     return new Set(parsePromptVariables(text).map((variable) => variable.name)).size;
   };
 
@@ -281,7 +304,7 @@ export function PromptTableView({
 
   // Handle copy
   // 处理复制
-  const handleCopy = async (prompt: Prompt) => {
+  const handleCopy = async (prompt: PromptSummary) => {
     await onCopy(prompt);
     if (!isMountedRef.current) {
       return;
@@ -603,7 +626,11 @@ export function PromptTableView({
             <tbody>
               {currentPrompts.map((prompt) => {
                 const isSelected = selectedIds.has(prompt.id);
-                const aiContent = prompt.lastAiResponse || aiResults[prompt.id] || '';
+                // Full content may still be loading for this row; fall back to
+                // summary-only display until the page prefetch resolves.
+                // 完整内容可能仍在加载，先按摘要字段渲染，预取完成后刷新。
+                const detail = promptDetailCache[prompt.id];
+                const aiContent = detail?.lastAiResponse || aiResults[prompt.id] || '';
                 const promptDepth = nodeDepthById.get(prompt.id) ?? 0;
                 const promptChildCount = hierarchyMeta.childCountById.get(prompt.id) ?? 0;
                 const promptParentTitle = hierarchyMeta.parentTitleById.get(prompt.id);
@@ -742,9 +769,9 @@ export function PromptTableView({
                           <span
                             className="text-xs text-muted-foreground truncate block"
                             style={{ maxWidth: column.width - 32 }}
-                            title={preferEnglish ? (prompt.systemPromptEn || prompt.systemPrompt) : prompt.systemPrompt}
+                            title={preferEnglish ? (detail?.systemPromptEn || detail?.systemPrompt || '') : (detail?.systemPrompt || '')}
                           >
-                            {renderTextPreview(preferEnglish ? (prompt.systemPromptEn || prompt.systemPrompt) : prompt.systemPrompt)}
+                            {renderTextPreview(preferEnglish ? (detail?.systemPromptEn || detail?.systemPrompt) : detail?.systemPrompt)}
                           </span>
                         </td>
                       );
@@ -755,9 +782,9 @@ export function PromptTableView({
                           <span
                             className="text-xs text-muted-foreground truncate block"
                             style={{ maxWidth: column.width - 32 }}
-                            title={preferEnglish ? (prompt.userPromptEn || prompt.userPrompt) : prompt.userPrompt}
+                            title={preferEnglish ? (detail?.userPromptEn || detail?.userPrompt || '') : (detail?.userPrompt || '')}
                           >
-                            {renderTextPreview(preferEnglish ? (prompt.userPromptEn || prompt.userPrompt) : prompt.userPrompt)}
+                            {renderTextPreview(preferEnglish ? (detail?.userPromptEn || detail?.userPrompt) : detail?.userPrompt)}
                           </span>
                         </td>
                       );

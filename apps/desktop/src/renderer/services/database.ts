@@ -13,6 +13,7 @@ import type {
   Prompt,
   PromptRelation,
   PromptRelationQuery,
+  PromptSummary,
   PromptVersion,
   UpdateOutputFormatItemDTO,
   UpdatePromptRelationDTO,
@@ -167,6 +168,50 @@ export async function resetDatabase(): Promise<void> {
 
 // ==================== Prompt 操作 ====================
 // ==================== Prompt Operations ====================
+
+/**
+ * Project a full Prompt into its lightweight list summary.
+ * Used by the legacy fallback path and by store mutations that receive a
+ * full Prompt (create / update) and must keep the summary list consistent.
+ *
+ * 把完整 Prompt 投影为轻量列表摘要；用于 legacy fallback 以及
+ * create/update 返回完整对象后同步 summary 列表。
+ */
+export function promptToSummary(prompt: Prompt): PromptSummary {
+  return {
+    id: prompt.id,
+    ownerUserId: prompt.ownerUserId,
+    visibility: prompt.visibility,
+    title: prompt.title,
+    description: prompt.description,
+    promptType: prompt.promptType,
+    tags: prompt.tags,
+    folderId: prompt.folderId,
+    parentId: prompt.parentId,
+    order: prompt.order,
+    images: prompt.images,
+    videos: prompt.videos,
+    isFavorite: prompt.isFavorite,
+    isPinned: prompt.isPinned,
+    usageCount: prompt.usageCount,
+    source: prompt.source,
+    version: prompt.version,
+    currentVersion: prompt.currentVersion,
+    createdAt: prompt.createdAt,
+    updatedAt: prompt.updatedAt,
+  };
+}
+
+export async function getAllPromptSummaries(): Promise<PromptSummary[]> {
+  if (window.api?.prompt?.getAllMeta) {
+    return (await window.api.prompt.getAllMeta()) ?? [];
+  }
+
+  // Legacy fallback: when the bridge does not expose getAllMeta (e.g. old
+  // web self-hosted runtime), fall back to full prompts and project locally.
+  const prompts = await getAllPrompts();
+  return prompts.map(promptToSummary);
+}
 
 export async function getAllPrompts(): Promise<Prompt[]> {
   if (window.api?.prompt?.getAll) {

@@ -223,6 +223,8 @@ describe("MainContent selection restore integration", () => {
     usePromptStoreMock.mockImplementation((selector) =>
       selector({
         prompts: [prompt],
+        promptDetailCache: {},
+        getPromptDetail: vi.fn().mockResolvedValue(null),
         selectedId: null,
         selectedIds: [],
         lastSelectedId: null,

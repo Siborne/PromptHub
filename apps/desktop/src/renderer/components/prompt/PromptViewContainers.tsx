@@ -1,7 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Spinner } from "../ui/Spinner";
 import { PromptListHeader } from "../prompt/PromptListHeader";
-import type { Prompt, PromptRelation } from "@prompthub/shared/types";
+import type { Prompt, PromptSummary, PromptRelation } from "@prompthub/shared/types";
 import type { ViewMode } from "../../stores/prompt.store";
 
 const PromptTableView = lazy(() =>
@@ -67,14 +67,14 @@ export interface PromptTableActions {
 interface PromptViewContainersProps {
   viewMode: ViewMode;
   getViewClass: (mode: ViewMode, layout?: "col" | "row") => string;
-  /** Full prompt list (graph view). */
-  prompts: Prompt[];
+  /** Prompt list projection (graph view). */
+  prompts: PromptSummary[];
   relations: PromptRelation[];
   selectedId: string | null;
   onGraphSelectPrompt: (promptId: string) => void;
   /** Sorted list for table; visible (filtered) list for gallery/kanban. */
-  sortedPrompts: Prompt[];
-  visiblePrompts: Prompt[];
+  sortedPrompts: PromptSummary[];
+  visiblePrompts: PromptSummary[];
   highlightTerms: string[];
   cardActions: PromptCardActions;
   tableActions: PromptTableActions;

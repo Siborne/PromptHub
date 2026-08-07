@@ -1,8 +1,8 @@
-import type { Folder, Prompt } from "@prompthub/shared/types";
+import type { Folder, Prompt, PromptSummary } from "@prompthub/shared/types";
 import type { SortBy, SortOrder } from "../stores/prompt.store";
 
 interface FilterVisiblePromptsOptions {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   selectedFolderId: string | null;
   folders: Folder[];
   unlockedFolderIds: Set<string>;
@@ -64,7 +64,7 @@ export function filterVisiblePrompts({
   searchQuery = "",
   filterTags = [],
   promptTypeFilter,
-}: FilterVisiblePromptsOptions): Prompt[] {
+}: FilterVisiblePromptsOptions): PromptSummary[] {
   let result = prompts;
 
   if (selectedFolderId === "favorites") {
@@ -119,10 +119,6 @@ export function filterVisiblePrompts({
         const searchableText = [
           prompt.title,
           prompt.description || "",
-          prompt.userPrompt,
-          prompt.userPromptEn || "",
-          prompt.systemPrompt || "",
-          prompt.systemPromptEn || "",
         ]
           .join(" ")
           .toLowerCase();
@@ -154,10 +150,10 @@ export function filterVisiblePrompts({
 }
 
 export function sortVisiblePrompts(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   sortBy: SortBy,
   sortOrder: SortOrder,
-): Prompt[] {
+): PromptSummary[] {
   const sorted = [...prompts];
   const childCountById =
     sortBy === "childCount" ? getDirectChildCountById(prompts) : new Map();
@@ -200,13 +196,13 @@ export function sortVisiblePrompts(
   return sorted;
 }
 
-function comparePinned(a: Prompt, b: Prompt): number {
+function comparePinned(a: PromptSummary, b: PromptSummary): number {
   if (a.isPinned && !b.isPinned) return -1;
   if (!a.isPinned && b.isPinned) return 1;
   return 0;
 }
 
-function getDirectChildCountById(prompts: Prompt[]): Map<string, number> {
+function getDirectChildCountById(prompts: PromptSummary[]): Map<string, number> {
   const promptIds = new Set(prompts.map((prompt) => prompt.id));
   const childCountById = new Map<string, number>();
 
@@ -222,7 +218,7 @@ function getDirectChildCountById(prompts: Prompt[]): Map<string, number> {
   return childCountById;
 }
 
-export function buildPromptStats(prompts: Prompt[]): PromptStats {
+export function buildPromptStats(prompts: PromptSummary[]): PromptStats {
   const tagSet = new Set<string>();
   let favoriteCount = 0;
   let textCount = 0;

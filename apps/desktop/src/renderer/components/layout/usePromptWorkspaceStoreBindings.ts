@@ -37,6 +37,7 @@ function usePromptWorkspacePromptData() {
 function usePromptWorkspacePromptActions() {
   const selectPrompt = usePromptStore((state) => state.selectPrompt);
   const setSelectedIds = usePromptStore((state) => state.setSelectedIds);
+  const getPromptDetail = usePromptStore((state) => state.getPromptDetail);
   const createPrompt = usePromptStore((state) => state.createPrompt);
   const createRelation = usePromptStore((state) => state.createRelation);
   const createOutputFormatItem = usePromptStore(
@@ -61,6 +62,7 @@ function usePromptWorkspacePromptActions() {
   return {
     selectPrompt,
     setSelectedIds,
+    getPromptDetail,
     createPrompt,
     createRelation,
     createOutputFormatItem,

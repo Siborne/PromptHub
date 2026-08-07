@@ -2,6 +2,7 @@ import Database from "./adapter";
 import { v4 as uuidv4 } from "uuid";
 import type {
   Prompt,
+  PromptSummary,
   CreatePromptDTO,
   UpdatePromptDTO,
   SearchQuery,
@@ -127,6 +128,50 @@ export class PromptDB {
     );
     const rows = stmt.all() as PromptRow[];
     return rows.map((row) => this.rowToPrompt(row));
+  }
+
+  /**
+   * Get all Prompts as lightweight list summaries.
+   *
+   * Projects only the fields needed by list / search / kanban / gallery views
+   * and deliberately avoids reading the large text columns
+   * (user_prompt, system_prompt, notes, last_ai_response) from the rows,
+   * keeping the IPC / HTTP list payload small.
+   *
+   * 获取所有 Prompt 的轻量列表投影：只读列表视图需要的字段，
+   * 刻意不读大文本列，缩小列表主路径的传输体积。
+   */
+  getAllMeta(): PromptSummary[] {
+    const stmt = this.db.prepare(
+      `SELECT
+        id, owner_user_id, visibility, title, description, prompt_type,
+        tags, folder_id, parent_id, sort_order, images, videos,
+        is_favorite, is_pinned, usage_count, source, current_version,
+        created_at, updated_at
+       FROM prompts ORDER BY updated_at DESC`,
+    );
+    const rows = stmt.all() as Array<{
+      id: string;
+      owner_user_id: string | null;
+      visibility: string;
+      title: string;
+      description: string | null;
+      prompt_type: PromptType | null;
+      tags: string | null;
+      folder_id: string | null;
+      parent_id: string | null;
+      sort_order: number;
+      images: string | null;
+      videos: string | null;
+      is_favorite: number;
+      is_pinned: number;
+      usage_count: number;
+      source: string | null;
+      current_version: number;
+      created_at: number;
+      updated_at: number;
+    }>;
+    return rows.map((row) => this.rowToPromptSummary(row));
   }
 
   /**
@@ -854,6 +899,55 @@ export class PromptDB {
       source: row.source,
       notes: row.notes,
       lastAiResponse: row.last_ai_response,
+      createdAt: new Date(row.created_at).toISOString(),
+      updatedAt: new Date(row.updated_at).toISOString(),
+    };
+  }
+
+  /**
+   * Convert database row to PromptSummary (list projection)
+   * 数据库行转 PromptSummary（列表投影）
+   */
+  private rowToPromptSummary(row: {
+    id: string;
+    owner_user_id: string | null;
+    visibility: string;
+    title: string;
+    description: string | null;
+    prompt_type: PromptType | null;
+    tags: string | null;
+    folder_id: string | null;
+    parent_id: string | null;
+    sort_order: number;
+    images: string | null;
+    videos: string | null;
+    is_favorite: number;
+    is_pinned: number;
+    usage_count: number;
+    source: string | null;
+    current_version: number;
+    created_at: number;
+    updated_at: number;
+  }): PromptSummary {
+    return {
+      id: row.id,
+      ownerUserId: row.owner_user_id ?? undefined,
+      visibility: (row.visibility as ResourceVisibility) ?? "private",
+      title: row.title,
+      description: row.description,
+      promptType: row.prompt_type || "text",
+      tags: JSON.parse(row.tags || "[]"),
+      folderId: row.folder_id,
+      parentId: row.parent_id,
+      order: row.sort_order,
+      images: JSON.parse(row.images || "[]"),
+      videos: JSON.parse(row.videos || "[]"),
+      isFavorite: row.is_favorite === 1,
+      isPinned: row.is_pinned === 1,
+      usageCount: row.usage_count,
+      source: row.source,
+      version: row.current_version,
+      currentVersion: row.current_version,
       createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(),
     };

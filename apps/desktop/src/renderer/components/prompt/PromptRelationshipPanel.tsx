@@ -12,7 +12,7 @@ import {
 import { useTranslation } from "react-i18next";
 import type {
   CreatePromptRelationDTO,
-  Prompt,
+  PromptSummary,
   PromptGraphRelationKind,
   PromptRelation,
 } from "@prompthub/shared/types";
@@ -25,7 +25,7 @@ import {
 type RelationViewItem = {
   key: string;
   relation: PromptRelation | null;
-  targetPrompt: Prompt;
+  targetPrompt: PromptSummary;
   labelKey: string;
   fallbackLabel: string;
   direction: "outgoing" | "incoming" | "neutral";
@@ -95,8 +95,8 @@ const DIRECTIONAL_RELATION_LABELS: Record<
 };
 
 export interface PromptRelationshipPanelProps {
-  currentPrompt: Prompt;
-  prompts: Prompt[];
+  currentPrompt: PromptSummary;
+  prompts: PromptSummary[];
   relations: PromptRelation[];
   relationshipCount?: number;
   onCreateRelation: (data: CreatePromptRelationDTO) => Promise<void> | void;
@@ -120,8 +120,8 @@ function getRelationLabel(
 }
 
 function createRelationItems(
-  currentPrompt: Prompt,
-  prompts: Prompt[],
+  currentPrompt: PromptSummary,
+  prompts: PromptSummary[],
   relations: PromptRelation[],
 ): RelationViewItem[] {
   const promptById = new Map(prompts.map((prompt) => [prompt.id, prompt]));
@@ -324,7 +324,7 @@ function RelationSearch({
   t,
 }: {
   query: string;
-  searchResults: Prompt[];
+  searchResults: PromptSummary[];
   savingTargetId: string | null;
   disabled: boolean;
   onQueryChange: (value: string) => void;

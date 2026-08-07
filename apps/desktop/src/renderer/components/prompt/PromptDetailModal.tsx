@@ -26,6 +26,7 @@ import type {
   CreatePromptRelationDTO,
   Prompt,
   PromptRelation,
+  PromptSummary,
 } from "@prompthub/shared/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -45,7 +46,7 @@ interface PromptDetailModalProps {
   onCopy?: (prompt: Prompt) => void | Promise<void>;
   onEdit?: (prompt: Prompt) => void;
   onQuickRewriteEdit?: (prompt: Prompt) => void;
-  prompts?: Prompt[];
+  prompts?: PromptSummary[];
   relations?: PromptRelation[];
   onCreateRelation?: (data: CreatePromptRelationDTO) => Promise<void> | void;
   onDeleteRelation?: (id: string) => Promise<void> | void;

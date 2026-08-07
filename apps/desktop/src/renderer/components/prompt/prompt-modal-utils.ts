@@ -1,6 +1,7 @@
 import type {
   CreatePromptDTO,
   Prompt,
+  PromptSummary,
   PromptType,
   UpdatePromptDTO,
 } from "@prompthub/shared/types";
@@ -176,14 +177,14 @@ export function hasPromptFormChanges(
   );
 }
 
-export function getExistingPromptTags(prompts: Prompt[]): string[] {
+export function getExistingPromptTags(prompts: PromptSummary[]): string[] {
   return [...new Set(prompts.flatMap((prompt) => prompt.tags))].sort((a, b) =>
     a.localeCompare(b),
   );
 }
 
 export function mergePromptTagCatalog(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   promptTagCatalog: string[],
 ): string[] {
   return Array.from(

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import { PromptVirtualizedRows } from "./PromptVirtualizedRows";
 import {
   useCollapsedPromptIds,
@@ -15,10 +15,10 @@ export {
 export { PromptCard } from "./PromptListCard";
 
 export function getPromptDescendantIds(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   promptId: string,
 ): Set<string> {
-  const childrenByParentId = new Map<string, Prompt[]>();
+  const childrenByParentId = new Map<string, PromptSummary[]>();
 
   for (const prompt of prompts) {
     if (!prompt.parentId || prompt.parentId === prompt.id) {

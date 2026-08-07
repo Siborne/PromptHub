@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckIcon,
   CopyIcon,
@@ -20,6 +20,7 @@ import type {
 } from "@prompthub/shared/types";
 import { useTranslation } from "react-i18next";
 import { usePromptStore } from "../../stores/prompt.store";
+import { usePromptDetail } from "../../hooks/usePromptDetail";
 import { useSettingsStore } from "../../stores/settings.store";
 import {
   cancelGenerationBatch,
@@ -257,7 +258,10 @@ export function ImageGenerationWorkbench() {
     [batches, draftMode, selectedBatchId],
   );
   const selectedModel = models.find((model) => model.id === modelId);
-  const sourcePrompt = prompts.find((item) => item.id === selectedPromptId);
+  // Full content (variables / userPrompt) is loaded on demand so the prompt
+  // list projection stays light. The list itself only needs id/title.
+  // 完整内容（variables/userPrompt）按需加载，保持列表投影轻量。
+  const { prompt: sourcePrompt } = usePromptDetail(selectedPromptId || null);
   const maxReferences = selectedModel
     ? getMaxGenerationReferenceImages(selectedModel)
     : 0;
@@ -280,6 +284,27 @@ export function ImageGenerationWorkbench() {
     sourcePrompt?.variables
       .filter((variable) => variable.required)
       .every((variable) => variableValues[variable.name]?.trim()) ?? true;
+
+  // When the on-demand detail for the selected prompt resolves, seed the
+  // composer with its content and variable defaults (only when the composer
+  // has not been manually edited since selection).
+  // 按需详情到达后，把内容与变量默认值填入创作区（仅当用户未手动修改过）。
+  const lastSelectedPromptIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedPromptId) return;
+    if (sourcePrompt && lastSelectedPromptIdRef.current !== selectedPromptId) {
+      lastSelectedPromptIdRef.current = selectedPromptId;
+      setPrompt(sourcePrompt.userPrompt ?? "");
+      setVariableValues(
+        Object.fromEntries(
+          (sourcePrompt.variables ?? []).map((variable) => [
+            variable.name,
+            variable.defaultValue ?? "",
+          ]),
+        ),
+      );
+    }
+  }, [selectedPromptId, sourcePrompt]);
   const resolvedPrompt = resolveGenerationPrompt(prompt, variableValues);
   const valid = Boolean(
     resolvedPrompt.trim() &&
@@ -367,11 +392,16 @@ export function ImageGenerationWorkbench() {
 
   const selectPrompt = (id: string) => {
     setSelectedPromptId(id);
-    const source = prompts.find((item) => item.id === id);
-    setPrompt(source?.userPrompt ?? "");
+    // Summary does not carry content; the detail hook populates sourcePrompt
+    // asynchronously. Seed from cached detail if already loaded, otherwise
+    // the detail effect will fill variables when the fetch resolves.
+    const cached = usePromptStore
+      .getState()
+      .promptDetailCache[id];
+    setPrompt(cached?.userPrompt ?? "");
     setVariableValues(
       Object.fromEntries(
-        source?.variables.map((variable) => [
+        (cached?.variables ?? []).map((variable) => [
           variable.name,
           variable.defaultValue ?? "",
         ]) ?? [],

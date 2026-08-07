@@ -96,6 +96,12 @@ export function registerPromptIPC(db: PromptDB, folderDb: FolderDB, rawDb: Datab
     return db.getAll();
   });
 
+  // Get all Prompts as lightweight list summaries (no large text fields)
+  // 获取所有 Prompt 的轻量列表投影（不含大文本字段）
+  ipcMain.handle(IPC_CHANNELS.PROMPT_GET_ALL_META, async () => {
+    return db.getAllMeta();
+  });
+
   ipcMain.handle(IPC_CHANNELS.PROMPT_GET_ALL_TAGS, async () => {
     return db.getAllTags();
   });

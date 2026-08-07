@@ -11,7 +11,7 @@ import ForceGraph2D, {
   type ForceGraphMethods,
   type NodeObject,
 } from "react-force-graph-2d";
-import type { Prompt, PromptRelation } from "@prompthub/shared/types";
+import type { PromptSummary, PromptRelation } from "@prompthub/shared/types";
 import { useSettingsStore } from "../../stores/settings.store";
 import {
   buildNeighborIndex,
@@ -24,7 +24,7 @@ import {
 } from "./prompt-graph-layout";
 
 interface PromptGraphViewProps {
-  prompts: Prompt[];
+  prompts: PromptSummary[];
   relations: PromptRelation[];
   selectedPromptId: string | null;
   onSelectPrompt: (promptId: string) => void;

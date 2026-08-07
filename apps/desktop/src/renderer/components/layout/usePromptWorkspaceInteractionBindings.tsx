@@ -89,6 +89,7 @@ export function usePromptWorkspaceInteractionBindings(
 function usePromptWorkspaceCopyBinding(inputs: WorkspaceActionInputs) {
   return usePromptWorkspaceCopyFlow({
     copy: inputs.state.copy,
+    getPromptDetail: inputs.stores.promptActions.getPromptDetail,
     incrementUsageCount: inputs.stores.promptActions.incrementUsageCount,
     outputFormatItems: inputs.stores.promptData.outputFormatItems,
     promptById: inputs.derived.promptById,
@@ -103,6 +104,7 @@ function usePromptWorkspaceCopyBinding(inputs: WorkspaceActionInputs) {
 function usePromptWorkspaceModalBindings(inputs: WorkspaceActionInputs) {
   const handleDuplicatePrompt = useDuplicatePromptAction({
     createPrompt: inputs.stores.promptActions.createPrompt,
+    getPromptDetail: inputs.stores.promptActions.getPromptDetail,
     selectPrompt: inputs.stores.promptActions.selectPrompt,
     showToast: inputs.showToast,
     t: inputs.t,
@@ -116,13 +118,17 @@ function usePromptWorkspaceModalBindings(inputs: WorkspaceActionInputs) {
   });
   const handleAiTestFromTable = useAiTestModalAction({
     canRunSingleAiTest: inputs.ai.canRunSingleAiTest,
+    getPromptDetail: inputs.stores.promptActions.getPromptDetail,
     setAiTestInitialMode: inputs.state.ai.setAiTestInitialMode,
     setAiTestPrompt: inputs.state.ai.setAiTestPrompt,
     setIsAiTestModalOpen: inputs.state.ai.setIsAiTestModalOpen,
     showToast: inputs.showToast,
     t: inputs.t,
   });
-  const promptModal = usePromptModalActions(inputs.state.dialogs);
+  const promptModal = usePromptModalActions({
+    ...inputs.state.dialogs,
+    getPromptDetail: inputs.stores.promptActions.getPromptDetail,
+  });
   const handleRestoreVersion = useRestoreVersionAction({
     ...inputs.state.dialogs,
     showToast: inputs.showToast,
@@ -298,8 +304,22 @@ function useWorkspaceMenuItems(
     handleVersionHistory: action.handleVersionHistory,
     handleViewDetail: action.handleViewDetail,
     prompts: inputs.stores.promptData.prompts,
-    setEditingPrompt: inputs.state.dialogs.setEditingPrompt,
-    setQuickRewritePrompt: inputs.state.dialogs.setQuickRewritePrompt,
+    // Hydrate full content before opening the edit / quick-rewrite dialogs.
+    // 打开编辑/快捷重写弹窗前按需加载完整内容。
+    setEditingPrompt: (prompt) => {
+      void inputs.stores.promptActions
+        .getPromptDetail(prompt.id)
+        .then((detail) => {
+          if (detail) inputs.state.dialogs.setEditingPrompt(detail);
+        });
+    },
+    setQuickRewritePrompt: (prompt) => {
+      void inputs.stores.promptActions
+        .getPromptDetail(prompt.id)
+        .then((detail) => {
+          if (detail) inputs.state.dialogs.setQuickRewritePrompt(detail);
+        });
+    },
     t: inputs.t,
     toggleFavorite: inputs.stores.promptActions.toggleFavorite,
     togglePinned: inputs.stores.promptActions.togglePinned,

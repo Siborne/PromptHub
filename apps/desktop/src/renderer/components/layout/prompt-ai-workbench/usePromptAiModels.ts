@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Prompt } from "@prompthub/shared/types";
+import type { PromptSummary } from "@prompthub/shared/types";
 import { resolveScenarioModel } from "../../../services/ai-defaults";
 import { useSettingsStore } from "../../../stores/settings.store";
 
@@ -65,7 +65,7 @@ function useScenarioModels(settings: ReturnType<typeof usePromptAiSettings>) {
 }
 
 function useCompareModels(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   selectedId: string | null,
   aiModels: ReturnType<typeof usePromptAiSettings>["aiModels"],
 ) {
@@ -107,7 +107,7 @@ function isConfiguredModel(
 }
 
 export function usePromptAiModels(
-  prompts: Prompt[],
+  prompts: PromptSummary[],
   selectedId: string | null,
 ) {
   const settings = usePromptAiSettings();
