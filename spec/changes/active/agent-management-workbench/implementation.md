@@ -6,6 +6,14 @@
 - Status: in-progress
 - Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
 
+## Shared polymorphic Provider & Model workbench (2026-08-01)
+
+- Replaced the `AgentsWorkspace` Pi-only branch with one `AgentProviderModelWorkbench` entry for every Agent. The entry selects the native catalog or unified Provider Profile adapter without creating separate product navigation or page ownership.
+- Applied the same card-based master/detail visual contract to Pi providers, Provider Profiles and current native provider state: left white provider cards, a right provider information card, model inventory below and bottom-aligned create actions.
+- Moved Pi `defaultThinkingLevel` out of provider metadata and into the current model row. The persisted Pi setting remains global because that is Pi's native contract, but the UI now presents it as model invocation configuration rather than provider identity.
+- Kept existing Profile connection/model tests for supported Agent adapters and added a real Pi model-test adapter. Pi resolves managed `auth.json` or `$ENV` credentials only in main memory, dispatches through the existing OpenAI/Responses/Anthropic/Google probe layer, requires quota confirmation and returns only redacted timing/status/output fields.
+- Focused verification: 123 tests passed across shared workspace, Provider Profile, Pi catalog/write/test and IPC paths; desktop typecheck and affected ESLint passed.
+
 ## Pi custom Provider and model editing (2026-08-01)
 
 - Added custom Pi Provider update for `baseUrl` and API protocol while preserving models, environment references and unknown provider fields.
