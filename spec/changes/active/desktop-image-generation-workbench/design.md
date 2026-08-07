@@ -196,7 +196,7 @@ Batch confirmed with the maintainer; implements `FR-IGW-016`.
 ### Information architecture
 
 - The workbench uses two persistent regions only: the dominant review canvas and a fixed right inspector. The inspector switches between generation settings and a bounded batch-history view, so history never reserves a third column. The existing header switcher remains a fast batch switcher; separate icon buttons start a draft or reveal history.
-- While the Prompt module is in generation mode, the global module rail remains visible and the Prompts secondary panel is suppressed. This state is derived from `promptViewMode`; it is not persisted as a second sidebar preference and automatically reverses when the user leaves the workbench.
+- While the Prompt module is in generation mode, the global module rail remains visible and the Prompts secondary panel is suppressed on entry. The global top-bar sidebar control toggles a transient workbench-only expansion state shared by the separate rail/panel mounts. That state is excluded from persisted UI storage, while the ordinary `isSidebarCollapsed` preference remains untouched and resumes when the user leaves the workbench.
 - The header has one stable identity row and one gallery toolbar row. Primary gallery filters remain visible as tabs; sort order and density are grouped in one dismissible options menu. A slim live progress bar renders below the identity row while the selected batch is queued or running.
 - The settings inspector remains visible before and after submission. Source Prompt, model, execution Prompt, required variables, aspect ratio, quality and output count remain immediately available. Output count is a visibly labeled field in the scrollable configuration flow; the fixed footer contains only the primary generation action. Only optional reference previews live in a collapsed-by-default disclosure with a compact count summary.
 - The current-batch view promotes the first successful output into a large `object-contain` review surface and renders all slots in a horizontally scrollable, fixed-size thumbnail strip. Thumbnail selection only changes the focused output; the large preview opens the existing lightbox. All/favorite/failed filters keep the existing grid/list modes. Unsuccessful slots use compact neutral cards with status text and icons instead of destructive full-card fills.
@@ -271,6 +271,9 @@ Batch confirmed with the maintainer; implements `FR-IGW-016`.
   navigation in generation mode, the focused review stage, thumbnail focus switching,
   fixed inspector tabs, bounded history rendering, compact failure states and the
   accepted wide/compact viewport geometry.
+- `TEST-IGW-011`: Desktop component and store regressions prove the global top-bar
+  control temporarily expands and collapses the Prompt secondary panel in generation
+  mode without mutating or persisting the ordinary sidebar preference.
 
 ## Analyze Result
 
@@ -303,6 +306,6 @@ Batch confirmed with the maintainer; implements `FR-IGW-016`.
 | `FR-IGW-009`, `FR-IGW-012`               | `DES-IGW-006`, `DES-IGW-007`                | `TEST-IGW-004`, `TEST-IGW-007`, `TEST-IGW-008` | `T-IGW-004`, `T-IGW-006`              |
 | `FR-IGW-013`, `FR-IGW-014`               | `DES-IGW-003`, `DES-IGW-006`, `DES-IGW-008` | `TEST-IGW-004`, `TEST-IGW-005`, `TEST-IGW-009` | `T-IGW-004`, `T-IGW-005`              |
 | `FR-IGW-015`                             | `DES-IGW-006`, `DES-IGW-009`                | `TEST-IGW-006`, `TEST-IGW-009`                 | `T-IGW-004`, `T-IGW-007`              |
-| `FR-IGW-016`                             | `DES-IGW-010`                               | `TEST-IGW-008`, `TEST-IGW-010`                 | `T-IGW-016`..`T-IGW-023`              |
+| `FR-IGW-016`                             | `DES-IGW-010`                               | `TEST-IGW-008`, `TEST-IGW-010`, `TEST-IGW-011` | `T-IGW-016`..`T-IGW-024`              |
 | `NFR-IGW-001`..`NFR-IGW-008`             | `DES-IGW-002`..`DES-IGW-009`                | `TEST-IGW-003`..`TEST-IGW-009`                 | `T-IGW-004`..`T-IGW-008`              |
 | `NFR-IGW-SYNC-001`                       | `DES-IGW-009`                               | `TEST-IGW-009`                                 | `T-IGW-007`, `T-IGW-012`              |

@@ -153,6 +153,49 @@ describe("useUIStore resizable columns (issue #119)", () => {
     expect(persisted.state.viewMode).toBe("skill");
   });
 
+  it("does not persist the image-workbench sidebar expansion", async () => {
+    const mod = await import("../../../src/renderer/stores/ui.store");
+
+    mod.useUIStore.getState().setWorkbenchSidebarExpanded(true);
+    await Promise.resolve();
+
+    const persisted = JSON.parse(localStorage.getItem("ui-storage") ?? "{}");
+    expect(mod.useUIStore.getState().isWorkbenchSidebarExpanded).toBe(true);
+    expect(persisted.state).not.toHaveProperty("isWorkbenchSidebarExpanded");
+  });
+
+  it("does not hydrate a stale image-workbench sidebar expansion", async () => {
+    localStorage.setItem(
+      "ui-storage",
+      JSON.stringify({
+        state: {
+          appModule: "prompt",
+          viewMode: "prompt",
+          isWorkbenchSidebarExpanded: true,
+        },
+        version: 0,
+      }),
+    );
+
+    const mod = await import("../../../src/renderer/stores/ui.store");
+    await Promise.resolve();
+
+    expect(mod.useUIStore.getState().isWorkbenchSidebarExpanded).toBe(false);
+  });
+
+  it("resets the workbench expansion when switching app modules", async () => {
+    const mod = await import("../../../src/renderer/stores/ui.store");
+    mod.useUIStore.setState({
+      isSidebarCollapsed: true,
+      isWorkbenchSidebarExpanded: true,
+    });
+
+    mod.useUIStore.getState().setAppModule("agents");
+
+    expect(mod.useUIStore.getState().isWorkbenchSidebarExpanded).toBe(false);
+    expect(mod.useUIStore.getState().isSidebarCollapsed).toBe(true);
+  });
+
   it("restores the rules module while keeping prompt as the compatible view mode", async () => {
     localStorage.setItem(
       "ui-storage",

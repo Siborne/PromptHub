@@ -359,3 +359,18 @@
   `git diff --check` pass. The changed reference picker reports 100% statements, branches,
   functions, and lines. The build retains the existing large-chunk and mixed
   static/dynamic `fflate` warnings.
+
+## Workbench Sidebar Toggle Correction (2026-08-04, `T-IGW-024`)
+
+- Fixed the global top-bar sidebar control in generation mode. Entering the workbench still
+  starts rail-only, but the control now visibly expands and collapses the Prompts secondary
+  panel instead of mutating an invisible global preference.
+- Added a transient `isWorkbenchSidebarExpanded` state shared by the top bar and the separate
+  sidebar panel mount. It is excluded from persisted storage and reset on workbench entry, so
+  the ordinary Prompt sidebar preference remains unchanged when the user leaves.
+- Test-first evidence reproduced four failures across top-bar interaction, standalone panel
+  visibility, entry reset, and persistence. The final focused suite passes 68 tests; Desktop
+  typecheck, focused ESLint, production build, Prettier, and `git diff --check` pass. Focused
+  coverage was 87.62% statements / 88.24% branches overall because the selected legacy files
+  contain unrelated paths; every new workbench-toggle branch is exercised. The build retains
+  the existing large-chunk and mixed static/dynamic `fflate` warnings.

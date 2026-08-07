@@ -67,6 +67,7 @@ describe("Sidebar", () => {
       appModule: "skill",
       viewMode: "skill",
       isSidebarCollapsed: false,
+      isWorkbenchSidebarExpanded: false,
     });
 
     usePromptStore.setState({
@@ -564,6 +565,7 @@ describe("Sidebar", () => {
       appModule: "prompt",
       viewMode: "prompt",
       isSidebarCollapsed: false,
+      isWorkbenchSidebarExpanded: true,
     });
     usePromptStore.setState({ viewMode: "card" });
     useFolderStore.setState({ selectedFolderId: "favorites" });
@@ -581,6 +583,7 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Image Workbench" }));
 
     expect(usePromptStore.getState().viewMode).toBe("generation");
+    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(false);
     expect(useFolderStore.getState().selectedFolderId).toBeNull();
     expect(onNavigate).toHaveBeenCalledWith("home");
     expect(screen.queryByRole("button", { name: "Favorites" })).toBeNull();
@@ -606,6 +609,30 @@ describe("Sidebar", () => {
 
     expect(container.querySelector("aside")).toHaveClass("w-0");
     expect(screen.queryByRole("button", { name: "Favorites" })).toBeNull();
+  });
+
+  it("shows the standalone Prompt panel when temporarily expanded in the image workbench", async () => {
+    useUIStore.setState({
+      appModule: "prompt",
+      viewMode: "prompt",
+      isSidebarCollapsed: true,
+      isWorkbenchSidebarExpanded: true,
+    });
+    usePromptStore.setState({ viewMode: "generation" });
+
+    let container!: HTMLElement;
+    await act(async () => {
+      ({ container } = await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} layout="panel" />,
+        { language: "en" },
+      ));
+    });
+
+    expect(container.querySelector("aside")).toHaveClass(
+      "w-[var(--sidebar-panel-width)]",
+    );
+    expect(screen.getByRole("button", { name: "Favorites" })).toBeVisible();
+    expect(useUIStore.getState().isSidebarCollapsed).toBe(true);
   });
 
   it("returns to card mode when opening ordinary prompt collections", async () => {

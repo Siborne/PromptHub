@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../stores/settings.store";
+import type { ViewMode as PromptViewMode } from "../../stores/prompt.store";
 import { useUIStore } from "../../stores/ui.store";
 import { getRuntimeCapabilities, isWebRuntime } from "../../runtime";
 import { resolveVisibleDesktopHomeModules } from "../../services/desktop-home-modules";
@@ -21,6 +22,9 @@ function useSidebarUiBindings() {
   const appModule = useUIStore((state) => state.appModule);
   const setAppModule = useUIStore((state) => state.setAppModule);
   const isCollapsed = useUIStore((state) => state.isSidebarCollapsed);
+  const isWorkbenchSidebarExpanded = useUIStore(
+    (state) => state.isWorkbenchSidebarExpanded,
+  );
   const sidebarPanelWidth = useUIStore((state) => state.sidebarPanelWidth);
   const setSidebarPanelWidth = useUIStore(
     (state) => state.setSidebarPanelWidth,
@@ -32,6 +36,7 @@ function useSidebarUiBindings() {
     appModule,
     setAppModule,
     isCollapsed,
+    isWorkbenchSidebarExpanded,
     sidebarPanelWidth,
     setSidebarPanelWidth,
     desktopHomeModules,
@@ -194,6 +199,7 @@ export function useSidebarShellController(
   onNavigate: (page: PageType) => void,
   layout: SidebarLayout,
   closeTagPopover: () => void,
+  promptViewMode: PromptViewMode,
 ) {
   const { t } = useTranslation();
   const ui = useSidebarUiBindings();
@@ -210,11 +216,25 @@ export function useSidebarShellController(
     closeTagPopover,
   );
   const confirmLeaveDirtySkillEditor = useConfirmLeaveDirtySkillEditor();
+  const workbenchActive =
+    ui.appModule === "prompt" && promptViewMode === "generation";
+  const isCollapsed = workbenchActive
+    ? !ui.isWorkbenchSidebarExpanded
+    : ui.isCollapsed;
+  const layoutStyle = getSidebarLayoutStyle(
+    layout,
+    isCollapsed,
+    ui.sidebarPanelWidth,
+  );
   return {
     ...ui,
     ...platform,
     ...modules,
-    ...getSidebarLayoutStyle(layout, ui.isCollapsed, ui.sidebarPanelWidth),
+    ...layoutStyle,
+    isCollapsed,
+    showPanel:
+      layoutStyle.showPanel &&
+      (!workbenchActive || ui.isWorkbenchSidebarExpanded),
     activeModule: ui.appModule,
     runtimeCapabilities,
     webRuntime,

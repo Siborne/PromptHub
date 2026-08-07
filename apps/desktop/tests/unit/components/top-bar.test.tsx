@@ -148,6 +148,7 @@ describe("TopBar", () => {
       appModule: "prompt",
       viewMode: "prompt",
       isSidebarCollapsed: false,
+      isWorkbenchSidebarExpanded: false,
     });
   });
 
@@ -1268,5 +1269,32 @@ describe("TopBar", () => {
     fireEvent.click(toggleButton);
 
     expect(useUIStore.getState().isSidebarCollapsed).toBe(true);
+  });
+
+  it("temporarily expands the Prompt panel in the image workbench", async () => {
+    useUIStore.setState({
+      appModule: "prompt",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+      isWorkbenchSidebarExpanded: false,
+    });
+    usePromptStore.setState({ viewMode: "generation" });
+
+    await act(async () => {
+      await renderWithI18n(
+        <TopBar onOpenSettings={vi.fn()} updateAvailable={null} />,
+        { language: "en" },
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+
+    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(true);
+    expect(useUIStore.getState().isSidebarCollapsed).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+
+    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(false);
+    expect(useUIStore.getState().isSidebarCollapsed).toBe(false);
+    expect(screen.getByRole("button", { name: "Expand" })).toBeVisible();
   });
 });

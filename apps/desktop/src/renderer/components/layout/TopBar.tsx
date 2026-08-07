@@ -130,9 +130,16 @@ export function TopBar({
   const selectedFolderId = useFolderStore((state) => state.selectedFolderId);
   const folders = useFolderStore((state) => state.folders);
   const promptTypeFilter = usePromptStore((state) => state.promptTypeFilter);
+  const promptViewMode = usePromptStore((state) => state.viewMode);
   const appModule = useUIStore((state) => state.appModule);
   const isSidebarCollapsed = useUIStore((state) => state.isSidebarCollapsed);
   const setSidebarCollapsed = useUIStore((state) => state.setSidebarCollapsed);
+  const isWorkbenchSidebarExpanded = useUIStore(
+    (state) => state.isWorkbenchSidebarExpanded,
+  );
+  const setWorkbenchSidebarExpanded = useUIStore(
+    (state) => state.setWorkbenchSidebarExpanded,
+  );
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
   const [isImageReverseModalOpen, setIsImageReverseModalOpen] = useState(false);
@@ -165,6 +172,17 @@ export function TopBar({
   const isSkillView = appModule === "skill";
   const isPromptView = appModule === "prompt";
   const isAgentsView = appModule === "agents";
+  const isGenerationWorkbench = isPromptView && promptViewMode === "generation";
+  const isSecondarySidebarCollapsed = isGenerationWorkbench
+    ? !isWorkbenchSidebarExpanded
+    : isSidebarCollapsed;
+  const toggleSecondarySidebar = () => {
+    if (isGenerationWorkbench) {
+      setWorkbenchSidebarExpanded(!isWorkbenchSidebarExpanded);
+      return;
+    }
+    setSidebarCollapsed(!isSidebarCollapsed);
+  };
   const showTopBarSearch = !isSkillStoreCatalogView && !isAgentsView;
   const showCreateButton =
     isPromptView || isSkillView || isMcpView || isPluginView;
@@ -265,10 +283,6 @@ export function TopBar({
         const searchableText = [
           p.title,
           p.description || "",
-          p.userPrompt,
-          p.userPromptEn || "",
-          p.systemPrompt || "",
-          p.systemPromptEn || "",
         ]
           .join(" ")
           .toLowerCase();
@@ -661,16 +675,16 @@ export function TopBar({
           ) : (
             <button
               type="button"
-              onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}
+              onClick={toggleSecondarySidebar}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
               style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
               title={
-                isSidebarCollapsed
+                isSecondarySidebarCollapsed
                   ? t("common.expand", "Expand")
                   : t("common.collapse", "Collapse")
               }
               aria-label={
-                isSidebarCollapsed
+                isSecondarySidebarCollapsed
                   ? t("common.expand", "Expand")
                   : t("common.collapse", "Collapse")
               }

@@ -4,6 +4,7 @@ import type { Folder } from "@prompthub/shared/types";
 import { useFolderStore } from "../../stores/folder.store";
 import { usePromptStore } from "../../stores/prompt.store";
 import { useSettingsStore } from "../../stores/settings.store";
+import { useUIStore } from "../../stores/ui.store";
 import { buildPromptStats } from "../../services/prompt-filter";
 import { mergePromptTagCatalog } from "../prompt/prompt-modal-utils";
 import type { FlattenedItem } from "./tree/utilities";
@@ -41,6 +42,9 @@ function useSidebarPromptBindings() {
   const filterTags = usePromptStore((state) => state.filterTags);
   const toggleFilterTag = usePromptStore((state) => state.toggleFilterTag);
   const clearFilterTags = usePromptStore((state) => state.clearFilterTags);
+  const setWorkbenchSidebarExpanded = useUIStore(
+    (state) => state.setWorkbenchSidebarExpanded,
+  );
   return {
     prompts,
     promptViewMode,
@@ -50,6 +54,7 @@ function useSidebarPromptBindings() {
     filterTags,
     toggleFilterTag,
     clearFilterTags,
+    setWorkbenchSidebarExpanded,
   };
 }
 
@@ -175,6 +180,7 @@ function useSidebarPromptNavigation(
   }, [currentPage, folders, onNavigate, prompt]);
   const openGenerationWorkbench = useCallback(() => {
     folders.selectFolder(null);
+    prompt.setWorkbenchSidebarExpanded(false);
     prompt.setPromptViewMode("generation");
     if (currentPage !== "home") onNavigate("home");
   }, [currentPage, folders, onNavigate, prompt]);
