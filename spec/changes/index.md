@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 44 |
-| Archived | 183 |
+| Active | 42 |
+| Archived | 185 |
 | Legacy | 1 |
 
 ## Active
@@ -28,11 +28,11 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-issue-179-configured-skill-targets` | active | `spec/changes/active/desktop-issue-179-configured-skill-targets/` |
 | `desktop-issue-192-copy-action-parity` | active | `spec/changes/active/desktop-issue-192-copy-action-parity/` |
 | `desktop-prompt-context-move` | active | `spec/changes/active/desktop-prompt-context-move/` |
+| `desktop-prompt-list-projection` | active | `spec/changes/active/desktop-prompt-list-projection/` |
 | `desktop-renderer-ui-test-coverage` | active | `spec/changes/active/desktop-renderer-ui-test-coverage/` |
 | `desktop-skill-ui-size-performance` | active | `spec/changes/active/desktop-skill-ui-size-performance/` |
 | `desktop-update-dialog-polish` | active | `spec/changes/active/desktop-update-dialog-polish/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
-| `homebrew-update-routing` | missing implementation | `spec/changes/active/homebrew-update-routing/` |
 | `homepage-changelog-route-retirement` | active | `spec/changes/active/homepage-changelog-route-retirement/` |
 | `macos-developer-id-signing` | active | `spec/changes/active/macos-developer-id-signing/` |
 | `mobile-app-shell` | active | `spec/changes/active/mobile-app-shell/` |
@@ -41,11 +41,9 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `platform-workbench-prototype` | in progress | `spec/changes/active/platform-workbench-prototype/` |
 | `plugin-issue-190-multi-native-manifests` | active | `spec/changes/active/plugin-issue-190-multi-native-manifests/` |
 | `plugin-management` | active | `spec/changes/active/plugin-management/` |
-| `preview-update-channel` | missing implementation | `spec/changes/active/preview-update-channel/` |
 | `project-skill-management` | in progress | `spec/changes/active/project-skill-management/` |
 | `prompt-output-format-contribution` | active | `spec/changes/active/prompt-output-format-contribution/` |
 | `r2-direct-downloads` | active | `spec/changes/active/r2-direct-downloads/` |
-| `readme-contributor-refresh` | missing implementation | `spec/changes/active/readme-contributor-refresh/` |
 | `readme-screenshots-v0-5-6` | active | `spec/changes/active/readme-screenshots-v0-5-6/` |
 | `release-0-6-0-version-alignment` | active | `spec/changes/active/release-0-6-0-version-alignment/` |
 | `republish-0-5-9-20260714` | active | `spec/changes/active/republish-0-5-9-20260714/` |
@@ -247,6 +245,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-07-28-unified-custom-store-sources` | archived | `spec/changes/archive/2026/07/2026-07-28-unified-custom-store-sources/` |
 | `2026-07-30-website-release-metadata-stable-boundary` | archived | `spec/changes/archive/2026/07/2026-07-30-website-release-metadata-stable-boundary/` |
 | `2026-08-01-web-agent-management` | archived | `spec/changes/archive/2026/08/2026-08-01-web-agent-management/` |
+| `2026-08-06-mcp-issues-200-202-analysis` | archived | `spec/changes/archive/2026/08/2026-08-06-mcp-issues-200-202-analysis/` |
+| `2026-08-06-mcp-issues-200-202-implementation` | archived | `spec/changes/archive/2026/08/2026-08-06-mcp-issues-200-202-implementation/` |
 
 ## Legacy
 
