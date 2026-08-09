@@ -16,6 +16,12 @@ import type {
   AgentProviderModelTestResult,
 } from "@prompthub/shared/types";
 import { Button } from "../ui";
+import {
+  AgentProviderDetailHeader,
+  AgentProviderDetailRow,
+  AgentProviderDetailSection,
+  AgentProviderDetailSurface,
+} from "./AgentProviderWorkbenchLayout";
 
 const THINKING_LEVELS: AgentPiThinkingLevel[] = [
   "off",
@@ -84,12 +90,9 @@ export function AgentPiProviderDetail({
     : t("agents.piModels.credentialMissing");
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-muted/[0.12] px-5 py-5">
-      <section
-        className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
-        aria-labelledby="pi-provider-heading"
-      >
-        <div className="flex min-w-0 flex-wrap items-start justify-between gap-4 px-4 py-4">
+    <AgentProviderDetailSurface>
+      <AgentProviderDetailSection ariaLabelledBy="pi-provider-heading">
+        <AgentProviderDetailHeader>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {t("agents.piModels.providerSection")}
@@ -150,30 +153,32 @@ export function AgentPiProviderDetail({
               </Button>
             ) : null}
           </div>
+        </AgentProviderDetailHeader>
+        <div className="border-t border-border/70 px-4 py-1">
+          <dl>
+            <AgentProviderDetailRow label={t("agents.piModels.apiType")}>
+              {provider.api ?? t("agents.piModels.platformDefault")}
+            </AgentProviderDetailRow>
+            <AgentProviderDetailRow label={t("agents.piModels.endpointLabel")}>
+              {provider.endpoint ?? t("agents.piModels.platformEndpoint")}
+            </AgentProviderDetailRow>
+            <AgentProviderDetailRow
+              label={t("agents.piModels.configurationSource")}
+            >
+              {sourceLabel}
+            </AgentProviderDetailRow>
+            <AgentProviderDetailRow
+              label={t("agents.piModels.credentialLabel")}
+            >
+              {credentialLabel}
+            </AgentProviderDetailRow>
+          </dl>
         </div>
-        <dl className="grid border-t border-border/70 sm:grid-cols-2 xl:grid-cols-4">
-          <MetadataItem
-            label={t("agents.piModels.apiType")}
-            value={provider.api ?? t("agents.piModels.platformDefault")}
-          />
-          <MetadataItem
-            label={t("agents.piModels.endpointLabel")}
-            value={provider.endpoint ?? t("agents.piModels.platformEndpoint")}
-          />
-          <MetadataItem
-            label={t("agents.piModels.configurationSource")}
-            value={sourceLabel}
-          />
-          <MetadataItem
-            label={t("agents.piModels.credentialLabel")}
-            value={credentialLabel}
-          />
-        </dl>
-      </section>
+      </AgentProviderDetailSection>
 
-      <section
-        className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
-        aria-labelledby="pi-provider-models-heading"
+      <AgentProviderDetailSection
+        className="mt-4"
+        ariaLabelledBy="pi-provider-models-heading"
       >
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
@@ -354,21 +359,7 @@ export function AgentPiProviderDetail({
             })}
           </ul>
         )}
-      </section>
-    </div>
-  );
-}
-
-function MetadataItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 border-b border-border/70 px-4 py-3 last:border-b-0 sm:odd:border-r sm:[&:nth-last-child(-n+2)]:border-b-0 xl:border-b-0 xl:border-r xl:last:border-r-0">
-      <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
-      <dd
-        className="mt-1 truncate text-sm font-medium text-foreground"
-        title={value}
-      >
-        {value}
-      </dd>
-    </div>
+      </AgentProviderDetailSection>
+    </AgentProviderDetailSurface>
   );
 }

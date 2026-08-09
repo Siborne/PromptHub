@@ -41,6 +41,14 @@ import {
 } from "./AgentProviderNativeConfig";
 import { AgentProviderProfileFormDialog } from "./AgentProviderProfileFormDialog";
 import { AgentProviderSourceDialog } from "./AgentProviderSourceDialog";
+import {
+  AgentProviderDetailHeader,
+  AgentProviderDetailRow,
+  AgentProviderDetailSection,
+  AgentProviderDetailSurface,
+  AgentProviderWorkbenchLayout,
+  providerWorkbenchListItemClass,
+} from "./AgentProviderWorkbenchLayout";
 
 const PROFILE_ROW_HEIGHT = 64;
 
@@ -94,11 +102,10 @@ function ProfileListItem({
         type="button"
         onClick={onSelect}
         aria-current={selected}
-        className={`block h-full w-full overflow-hidden rounded-lg border px-3 py-2 text-left transition-all ${
-          selected
-            ? "border-primary/30 bg-card shadow-sm ring-1 ring-primary/10"
-            : "border-border/70 bg-card hover:border-primary/20 hover:shadow-sm"
-        }`}
+        className={providerWorkbenchListItemClass(
+          selected,
+          "h-full overflow-hidden px-3 py-2",
+        )}
       >
         <span className="flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-sm font-semibold text-foreground">
@@ -120,21 +127,6 @@ function ProfileListItem({
         </span>
       </button>
     </li>
-  );
-}
-
-function DetailRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-1 border-b border-border/60 py-3 last:border-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
-      <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-all text-sm text-foreground">{children}</dd>
-    </div>
   );
 }
 
@@ -183,76 +175,92 @@ function ProfileDetail({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-muted/[0.12] px-5 py-5">
-      <header className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-4 py-4 shadow-sm">
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-sm font-semibold text-foreground">
-              {profile.name}
-            </h2>
-            {isCurrent ? (
-              <span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                {t("agents.providerProfiles.current")}
-              </span>
+    <AgentProviderDetailSurface>
+      <AgentProviderDetailSection>
+        <AgentProviderDetailHeader>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="truncate text-sm font-semibold text-foreground">
+                {profile.name}
+              </h2>
+              {isCurrent ? (
+                <span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  {t("agents.providerProfiles.current")}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {profile.providerKind} · {profile.protocol}
+            </p>
+          </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onEdit}
+              disabled={busy}
+            >
+              <PencilIcon className="h-3.5 w-3.5" />
+              {t("common.edit")}
+            </Button>
+            {supportsActivation ? (
+              <Button
+                size="sm"
+                onClick={onActivate}
+                disabled={busy || isCurrent}
+              >
+                {isCurrent ? (
+                  <CheckCircle2Icon className="h-3.5 w-3.5" />
+                ) : activating ? (
+                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="h-3.5 w-3.5" />
+                )}
+                {t(
+                  isCurrent
+                    ? "agents.providerProfiles.current"
+                    : "agents.providerProfiles.activate",
+                )}
+              </Button>
             ) : null}
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {profile.providerKind} · {profile.protocol}
-          </p>
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={onEdit}
-            disabled={busy}
-          >
-            <PencilIcon className="h-3.5 w-3.5" />
-            {t("common.edit")}
-          </Button>
-          {supportsActivation ? (
-            <Button size="sm" onClick={onActivate} disabled={busy || isCurrent}>
-              {isCurrent ? (
-                <CheckCircle2Icon className="h-3.5 w-3.5" />
-              ) : activating ? (
-                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCwIcon className="h-3.5 w-3.5" />
-              )}
-              {t(
-                isCurrent
-                  ? "agents.providerProfiles.current"
-                  : "agents.providerProfiles.activate",
-              )}
-            </Button>
-          ) : null}
-        </div>
-      </header>
+        </AgentProviderDetailHeader>
+      </AgentProviderDetailSection>
 
       <div className="mt-4 space-y-4">
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <AgentProviderDetailSection className="p-4">
           <h3 className="text-sm font-semibold text-foreground">
             {t("agents.providerProfiles.details")}
           </h3>
           <dl className="mt-2">
-            <DetailRow label={t("agents.providerProfiles.providerKind")}>
+            <AgentProviderDetailRow
+              label={t("agents.providerProfiles.providerKind")}
+            >
               {profile.providerKind}
-            </DetailRow>
+            </AgentProviderDetailRow>
             {typeof profile.config.providerId === "string" ||
             typeof profile.config.legacyProviderId === "string" ? (
-              <DetailRow label={t("agents.providerProfiles.providerId")}>
+              <AgentProviderDetailRow
+                label={t("agents.providerProfiles.providerId")}
+              >
                 {String(
                   profile.config.providerId ?? profile.config.legacyProviderId,
                 )}
-              </DetailRow>
+              </AgentProviderDetailRow>
             ) : null}
-            <DetailRow label={t("agents.providerProfiles.protocol")}>
+            <AgentProviderDetailRow
+              label={t("agents.providerProfiles.protocol")}
+            >
               {profile.protocol}
-            </DetailRow>
-            <DetailRow label={t("agents.providerProfiles.endpoint")}>
+            </AgentProviderDetailRow>
+            <AgentProviderDetailRow
+              label={t("agents.providerProfiles.endpoint")}
+            >
               {profile.endpoint || t("agents.providerProfiles.platformNative")}
-            </DetailRow>
-            <DetailRow label={t("agents.providerProfiles.credential")}>
+            </AgentProviderDetailRow>
+            <AgentProviderDetailRow
+              label={t("agents.providerProfiles.credential")}
+            >
               <span
                 className={`inline-flex items-center gap-1.5 ${secretStateClass(profile.secretState)}`}
               >
@@ -265,12 +273,12 @@ function ProfileDetail({
                   `agents.providerProfiles.secretState.${profile.secretState}`,
                 )}
               </span>
-            </DetailRow>
+            </AgentProviderDetailRow>
           </dl>
-        </section>
+        </AgentProviderDetailSection>
 
         {supportsConnectionTest ? (
-          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <AgentProviderDetailSection className="p-4">
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-semibold text-foreground">
@@ -391,10 +399,10 @@ function ProfileDetail({
                 ) : null}
               </div>
             ) : null}
-          </section>
+          </AgentProviderDetailSection>
         ) : null}
 
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <AgentProviderDetailSection className="p-4">
           <h3 className="text-sm font-semibold text-foreground">
             {t("agents.providerProfiles.modelMappings")}
           </h3>
@@ -419,9 +427,9 @@ function ProfileDetail({
               {t("agents.providerProfiles.noMappings")}
             </p>
           )}
-        </section>
+        </AgentProviderDetailSection>
 
-        <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-card p-4 shadow-sm">
           <Button
             size="sm"
             variant="secondary"
@@ -461,7 +469,7 @@ function ProfileDetail({
           </Button>
         </div>
       </div>
-    </div>
+    </AgentProviderDetailSurface>
   );
 }
 
@@ -537,40 +545,40 @@ export function AgentProviderProfileWorkbench({
       {!webRuntime && agent.id === "codex" ? (
         <AgentProviderMigrationNotice onMigrated={() => store.load(agent.id)} />
       ) : null}
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-muted/20 sm:w-64 xl:w-72">
-          <div className="border-b border-border p-3">
-            <div className="flex items-center justify-end gap-2">
-              {!webRuntime ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  aria-label={t("agents.providerProfiles.import.title")}
-                  title={t("agents.providerProfiles.import.title")}
-                  onClick={() => void store.importCurrent(agent.id)}
-                  disabled={busy}
-                >
-                  {store.busyAction === "import" ? (
-                    <Loader2Icon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileInputIcon className="h-4 w-4" />
-                  )}
-                </Button>
-              ) : null}
-              {!webRuntime ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  aria-label={t("agents.providerProfiles.sourceImport.open")}
-                  title={t("agents.providerProfiles.sourceImport.open")}
-                  onClick={() => setSourceDialogOpen(true)}
-                  disabled={busy}
-                >
-                  <DatabaseIcon className="h-4 w-4" />
-                </Button>
-              ) : null}
-            </div>
-          </div>
+      <AgentProviderWorkbenchLayout
+        toolbar={
+          <>
+            {!webRuntime ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label={t("agents.providerProfiles.import.title")}
+                title={t("agents.providerProfiles.import.title")}
+                onClick={() => void store.importCurrent(agent.id)}
+                disabled={busy}
+              >
+                {store.busyAction === "import" ? (
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileInputIcon className="h-4 w-4" />
+                )}
+              </Button>
+            ) : null}
+            {!webRuntime ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label={t("agents.providerProfiles.sourceImport.open")}
+                title={t("agents.providerProfiles.sourceImport.open")}
+                onClick={() => setSourceDialogOpen(true)}
+                disabled={busy}
+              >
+                <DatabaseIcon className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </>
+        }
+        sidebar={
           <nav
             ref={profileScrollRef}
             aria-label={t("agents.providerProfiles.listLabel")}
@@ -626,131 +634,127 @@ export function AgentProviderProfileWorkbench({
               </p>
             )}
           </nav>
-          <div className="border-t border-border p-3">
-            <Button
-              size="sm"
-              variant="secondary"
-              className="w-full bg-card"
-              onClick={() => setEditing(null)}
-              disabled={busy}
-            >
-              <PlusIcon className="h-4 w-4" />
-              {t("agents.providerProfiles.add")}
-            </Button>
+        }
+        footer={
+          <Button
+            size="sm"
+            variant="secondary"
+            className="w-full bg-card"
+            onClick={() => setEditing(null)}
+            disabled={busy}
+          >
+            <PlusIcon className="h-4 w-4" />
+            {t("agents.providerProfiles.add")}
+          </Button>
+        }
+      >
+        {store.errorCode ? (
+          <div
+            role="alert"
+            className="border-b border-destructive/30 bg-destructive/[0.06] px-5 py-2.5 text-xs text-destructive"
+          >
+            {t("agents.providerProfiles.errors.operation")}
           </div>
-        </aside>
-
-        <section className="flex min-w-0 flex-1 flex-col">
-          {store.errorCode ? (
-            <div
-              role="alert"
-              className="border-b border-destructive/30 bg-destructive/[0.06] px-5 py-2.5 text-xs text-destructive"
-            >
-              {t("agents.providerProfiles.errors.operation")}
+        ) : null}
+        {store.currentState?.status === "stale" ||
+        store.currentState?.status === "unavailable" ? (
+          <div
+            role="status"
+            className="border-b border-amber-500/30 bg-amber-500/[0.08] px-5 py-2.5 text-xs text-amber-700 dark:text-amber-300"
+          >
+            {t(
+              `agents.providerProfiles.currentState.${store.currentState.status}`,
+            )}
+          </div>
+        ) : null}
+        {isFormOpen ? (
+          <AgentProviderProfileFormDialog
+            isOpen
+            platformId={agent.id}
+            profile={editing ?? null}
+            busy={
+              store.busyAction === "create" || store.busyAction === "update"
+            }
+            onClose={() => setEditing(undefined)}
+            onCreate={store.createProfile}
+            onUpdate={store.updateProfile}
+          />
+        ) : selectedProfile ? (
+          <ProfileDetail
+            profile={selectedProfile}
+            isCurrent={selectedProfile.id === verifiedCurrentProfileId}
+            busy={busy}
+            activating={
+              store.busyAction === "preview" || store.busyAction === "activate"
+            }
+            testing={store.busyAction === "test-connection"}
+            modelTesting={store.busyAction === "test-model"}
+            copied={copiedProfileId === selectedProfile.id}
+            connectionResult={
+              store.connectionResult?.profileId === selectedProfile.id
+                ? store.connectionResult
+                : null
+            }
+            modelTestResult={
+              store.modelTestResult?.profileId === selectedProfile.id
+                ? store.modelTestResult
+                : null
+            }
+            supportsConnectionTest={
+              !webRuntime && agent.capabilities.provider.status === "supported"
+            }
+            supportsActivation={!webRuntime}
+            onEdit={() => setEditing(selectedProfile)}
+            onTestConnection={() =>
+              void store.testConnection(agent.id, selectedProfile.id)
+            }
+            onTestModel={() => setModelTestConfirmOpen(true)}
+            onCancelModelTest={() => void store.cancelModelTest()}
+            onActivate={() =>
+              void store.previewActivation(agent.id, selectedProfile.id)
+            }
+            onDuplicate={() =>
+              void store.duplicateProfile(
+                selectedProfile.id,
+                t("agents.providerProfiles.duplicateName", {
+                  name: selectedProfile.name,
+                }),
+              )
+            }
+            onExport={() => void exportSelected()}
+            onArchive={() =>
+              void store.archiveProfile(
+                selectedProfile.id,
+                selectedProfile.updatedAt,
+              )
+            }
+            onDelete={() => setDeleteTarget(selectedProfile)}
+          />
+        ) : store.currentState?.nativeConfig ? (
+          <AgentProviderNativeDetail
+            summary={store.currentState.nativeConfig}
+            busyAction={store.busyAction}
+            onImport={() => void store.importCurrent(agent.id)}
+            onRestoreOfficial={() => void store.restoreOfficial(agent.id)}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center px-8 text-center">
+            <div className="max-w-sm">
+              <KeyRoundIcon className="mx-auto h-8 w-8 text-muted-foreground/50" />
+              <h2 className="mt-3 text-sm font-semibold text-foreground">
+                {t("agents.providerProfiles.emptyTitle")}
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {t(
+                  webRuntime
+                    ? "agents.providerProfiles.webEmptyHint"
+                    : "agents.providerProfiles.emptyHint",
+                )}
+              </p>
             </div>
-          ) : null}
-          {store.currentState?.status === "stale" ||
-          store.currentState?.status === "unavailable" ? (
-            <div
-              role="status"
-              className="border-b border-amber-500/30 bg-amber-500/[0.08] px-5 py-2.5 text-xs text-amber-700 dark:text-amber-300"
-            >
-              {t(
-                `agents.providerProfiles.currentState.${store.currentState.status}`,
-              )}
-            </div>
-          ) : null}
-          {isFormOpen ? (
-            <AgentProviderProfileFormDialog
-              isOpen
-              platformId={agent.id}
-              profile={editing ?? null}
-              busy={
-                store.busyAction === "create" || store.busyAction === "update"
-              }
-              onClose={() => setEditing(undefined)}
-              onCreate={store.createProfile}
-              onUpdate={store.updateProfile}
-            />
-          ) : selectedProfile ? (
-            <ProfileDetail
-              profile={selectedProfile}
-              isCurrent={selectedProfile.id === verifiedCurrentProfileId}
-              busy={busy}
-              activating={
-                store.busyAction === "preview" ||
-                store.busyAction === "activate"
-              }
-              testing={store.busyAction === "test-connection"}
-              modelTesting={store.busyAction === "test-model"}
-              copied={copiedProfileId === selectedProfile.id}
-              connectionResult={
-                store.connectionResult?.profileId === selectedProfile.id
-                  ? store.connectionResult
-                  : null
-              }
-              modelTestResult={
-                store.modelTestResult?.profileId === selectedProfile.id
-                  ? store.modelTestResult
-                  : null
-              }
-              supportsConnectionTest={
-                !webRuntime &&
-                agent.capabilities.provider.status === "supported"
-              }
-              supportsActivation={!webRuntime}
-              onEdit={() => setEditing(selectedProfile)}
-              onTestConnection={() =>
-                void store.testConnection(agent.id, selectedProfile.id)
-              }
-              onTestModel={() => setModelTestConfirmOpen(true)}
-              onCancelModelTest={() => void store.cancelModelTest()}
-              onActivate={() =>
-                void store.previewActivation(agent.id, selectedProfile.id)
-              }
-              onDuplicate={() =>
-                void store.duplicateProfile(
-                  selectedProfile.id,
-                  t("agents.providerProfiles.duplicateName", {
-                    name: selectedProfile.name,
-                  }),
-                )
-              }
-              onExport={() => void exportSelected()}
-              onArchive={() =>
-                void store.archiveProfile(
-                  selectedProfile.id,
-                  selectedProfile.updatedAt,
-                )
-              }
-              onDelete={() => setDeleteTarget(selectedProfile)}
-            />
-          ) : store.currentState?.nativeConfig ? (
-            <AgentProviderNativeDetail
-              summary={store.currentState.nativeConfig}
-              busyAction={store.busyAction}
-              onImport={() => void store.importCurrent(agent.id)}
-              onRestoreOfficial={() => void store.restoreOfficial(agent.id)}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center px-8 text-center">
-              <div className="max-w-sm">
-                <KeyRoundIcon className="mx-auto h-8 w-8 text-muted-foreground/50" />
-                <h2 className="mt-3 text-sm font-semibold text-foreground">
-                  {t("agents.providerProfiles.emptyTitle")}
-                </h2>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {t(
-                    webRuntime
-                      ? "agents.providerProfiles.webEmptyHint"
-                      : "agents.providerProfiles.emptyHint",
-                  )}
-                </p>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
+          </div>
+        )}
+      </AgentProviderWorkbenchLayout>
 
       <AgentProviderSourceDialog
         isOpen={sourceDialogOpen}

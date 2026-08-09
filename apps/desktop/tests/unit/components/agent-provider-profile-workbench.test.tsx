@@ -29,6 +29,10 @@ describe("AgentProviderProfileWorkbench", () => {
 
     await renderWorkbench();
 
+    expect(screen.getByTestId("agent-provider-workbench")).toBeVisible();
+    expect(
+      screen.getByTestId("agent-provider-workbench-toolbar"),
+    ).toBeVisible();
     expect(window.api.agent.listProviderProfiles).toHaveBeenCalledWith({
       platformId: "claude",
     });

@@ -159,6 +159,10 @@ describe("AgentPiModelCatalogPanel", () => {
 
     await renderPanel();
 
+    expect(screen.getByTestId("agent-provider-workbench")).toBeVisible();
+    expect(
+      screen.getByTestId("agent-provider-workbench-toolbar"),
+    ).toBeVisible();
     const nav = screen.getByRole("navigation", { name: "Pi providers" });
     expect(within(nav).getByText("kimi-coding")).toBeVisible();
     expect(within(nav).getByText("deepseek")).toBeVisible();
@@ -166,6 +170,154 @@ describe("AgentPiModelCatalogPanel", () => {
     expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Credential configured")).toBeInTheDocument();
     expect(screen.getByLabelText("Missing credential")).toBeInTheDocument();
+  });
+
+  it("imports a PromptHub provider into Pi and refreshes the native catalog", async () => {
+    const getModelConfig = vi
+      .fn()
+      .mockResolvedValueOnce(modelConfig())
+      .mockResolvedValueOnce(
+        modelConfig({
+          provider: "provider-work",
+          model: "gpt-work",
+          modelCatalog: [
+            catalogProvider({
+              id: "provider-work",
+              source: "custom",
+              models: [{ id: "gpt-work", source: "custom" }],
+            }),
+          ],
+        }),
+      );
+    const listProviderSources = vi.fn().mockResolvedValue([
+      {
+        source: "prompthub",
+        sourceId: "provider-work",
+        name: "Work Gateway",
+        providerKind: "openai-compatible",
+        protocol: "openai-completions",
+        endpoint: "https://gateway.example.com/v1",
+        credentialReady: true,
+        compatible: true,
+        incompatibility: null,
+        models: [
+          {
+            id: "model-work",
+            name: "GPT Work",
+            model: "gpt-work",
+            isDefault: true,
+          },
+        ],
+      },
+    ]);
+    const importPiProviderSource = vi
+      .fn()
+      .mockResolvedValue({ backupPath: null });
+    installWindowMocks({
+      api: {
+        agent: {
+          getModelConfig,
+          listProviderSources,
+          importPiProviderSource,
+        },
+      },
+    });
+
+    await renderPanel();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import from PromptHub" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Import PromptHub provider",
+    });
+    expect(listProviderSources).toHaveBeenCalledWith("pi");
+    expect(within(dialog).getByText("Work Gateway")).toBeVisible();
+    const importButton = within(dialog).getByRole("button", { name: "Import" });
+    await waitFor(() => expect(importButton).toBeEnabled());
+    fireEvent.click(importButton);
+
+    await waitFor(() =>
+      expect(importPiProviderSource).toHaveBeenCalledWith({
+        platformId: "pi",
+        sourceId: "provider-work",
+        modelId: "model-work",
+      }),
+    );
+    await waitFor(() => expect(getModelConfig).toHaveBeenCalledTimes(2));
+  });
+
+  it("keeps the Pi import dialog open when the native write fails", async () => {
+    const importPiProviderSource = vi
+      .fn()
+      .mockRejectedValue(new Error("AGENT_PI_PROVIDER_EXISTS"));
+    installWindowMocks({
+      api: {
+        agent: {
+          getModelConfig: vi.fn().mockResolvedValue(modelConfig()),
+          listProviderSources: vi.fn().mockResolvedValue([
+            {
+              source: "prompthub",
+              sourceId: "provider-work",
+              name: "Work Gateway",
+              providerKind: "openai-compatible",
+              protocol: "openai-completions",
+              endpoint: "https://gateway.example.com/v1",
+              credentialReady: true,
+              compatible: true,
+              incompatibility: null,
+              models: [
+                {
+                  id: "model-work",
+                  name: "GPT Work",
+                  model: "gpt-work",
+                  isDefault: true,
+                },
+              ],
+            },
+          ]),
+          importPiProviderSource,
+        },
+      },
+    });
+
+    await renderPanel();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import from PromptHub" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Import PromptHub provider",
+    });
+    const importButton = within(dialog).getByRole("button", { name: "Import" });
+    await waitFor(() => expect(importButton).toBeEnabled());
+    fireEvent.click(importButton);
+
+    await waitFor(() => expect(importPiProviderSource).toHaveBeenCalled());
+    expect(dialog).toBeVisible();
+    expect(screen.getByRole("alert")).toBeVisible();
+  });
+
+  it("shows a recoverable error when PromptHub provider sources cannot load", async () => {
+    installWindowMocks({
+      api: {
+        agent: {
+          getModelConfig: vi.fn().mockResolvedValue(modelConfig()),
+          listProviderSources: vi.fn().mockRejectedValue(new Error("offline")),
+        },
+      },
+    });
+
+    await renderPanel();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import from PromptHub" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", {
+        name: "Import PromptHub provider",
+      }),
+    ).toBeVisible();
+    expect(await screen.findByRole("alert")).toBeVisible();
   });
 
   it("shows the selected provider's models and sets the default", async () => {

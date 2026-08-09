@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  DatabaseIcon,
   KeyRoundIcon,
   Loader2Icon,
   PlusIcon,
@@ -14,11 +15,18 @@ import type {
   AgentPiProviderApi,
   AgentPiThinkingLevel,
   AgentProviderModelTestResult,
+  AgentProviderSourceCandidate,
+  ImportAgentProviderSourceRequest,
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
 import { Button, ConfirmDialog, Input, Modal } from "../ui";
 import { EditPiModelDialog, EditPiProviderDialog } from "./AgentPiEditDialogs";
 import { AgentPiProviderDetail } from "./AgentPiProviderDetail";
+import { AgentProviderSourceDialog } from "./AgentProviderSourceDialog";
+import {
+  AgentProviderWorkbenchLayout,
+  providerWorkbenchListItemClass,
+} from "./AgentProviderWorkbenchLayout";
 
 const PI_APIS: AgentPiProviderApi[] = [
   "openai-completions",
@@ -62,6 +70,11 @@ export function AgentPiModelCatalogPanel({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
+  const [sourceCandidates, setSourceCandidates] = useState<
+    AgentProviderSourceCandidate[]
+  >([]);
+  const [sourceLoading, setSourceLoading] = useState(false);
   const [modelTestResult, setModelTestResult] = useState<{
     modelId: string;
     result: AgentProviderModelTestResult;
@@ -82,6 +95,40 @@ export function AgentPiModelCatalogPanel({
       }
     }
   }, []);
+
+  const loadSources = useCallback(async () => {
+    setSourceLoading(true);
+    setErrorCode(null);
+    try {
+      const candidates = await window.api.agent.listProviderSources("pi");
+      setSourceCandidates(candidates);
+      return candidates;
+    } catch {
+      setErrorCode("AGENT_PI_MODELS_OPERATION_FAILED");
+      setSourceCandidates([]);
+      return [];
+    } finally {
+      setSourceLoading(false);
+    }
+  }, []);
+
+  const importSource = useCallback(
+    async (request: ImportAgentProviderSourceRequest) => {
+      setBusyAction("import-source");
+      setErrorCode(null);
+      try {
+        const result = await window.api.agent.importPiProviderSource(request);
+        await load();
+        return result;
+      } catch {
+        setErrorCode("AGENT_PI_MODELS_OPERATION_FAILED");
+        return null;
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [load],
+  );
 
   useEffect(() => {
     setConfig(null);
@@ -167,76 +214,91 @@ export function AgentPiModelCatalogPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-muted/20 sm:w-64 xl:w-72">
-        <nav
-          aria-label={t("agents.piModels.listLabel")}
-          className="min-h-0 flex-1 overflow-y-auto p-2"
-        >
-          {catalog.length === 0 ? (
-            <p className="px-4 py-4 text-xs leading-5 text-muted-foreground">
-              {t("agents.piModels.empty")}
-            </p>
-          ) : (
-            <ul className="space-y-1.5">
-              {catalog.map((provider) => {
-                const isDefault = provider.id === config?.provider;
-                const selected = provider.id === selectedProviderId;
-                return (
-                  <li key={provider.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedProviderId(provider.id)}
-                      aria-current={selected}
-                      className={`block w-full rounded-lg border px-3 py-2.5 text-left transition-all ${
-                        selected
-                          ? "border-primary/30 bg-card shadow-sm ring-1 ring-primary/10"
-                          : "border-border/70 bg-card hover:border-primary/20 hover:shadow-sm"
-                      }`}
-                    >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate text-sm font-semibold text-foreground">
-                          {provider.id}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-2 text-[11px]">
-                          {isDefault ? (
-                            <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                              {t("agents.piModels.currentDefault")}
-                            </span>
-                          ) : null}
-                          {provider.source === "custom" ? (
-                            <span className="text-muted-foreground">
-                              {t("agents.piModels.customTag")}
-                            </span>
-                          ) : null}
-                        </span>
-                      </span>
-                      <span className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>
-                          {t("agents.piModels.modelsCount", {
-                            count: provider.models.length,
-                          })}
-                        </span>
-                        {provider.credentialReady ? (
-                          <KeyRoundIcon
-                            className="h-3 w-3 text-emerald-600 dark:text-emerald-400"
-                            aria-label={t("agents.piModels.credentialReady")}
-                          />
-                        ) : (
-                          <ShieldAlertIcon
-                            className="h-3 w-3 text-amber-600 dark:text-amber-400"
-                            aria-label={t("agents.piModels.credentialMissing")}
-                          />
+    <>
+      <AgentProviderWorkbenchLayout
+        toolbar={
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label={t("agents.providerProfiles.sourceImport.open")}
+            title={t("agents.providerProfiles.sourceImport.open")}
+            onClick={() => setSourceDialogOpen(true)}
+            disabled={busyAction !== null}
+          >
+            <DatabaseIcon className="h-4 w-4" />
+          </Button>
+        }
+        sidebar={
+          <nav
+            aria-label={t("agents.piModels.listLabel")}
+            className="h-full min-h-0 overflow-y-auto p-1"
+          >
+            {catalog.length === 0 ? (
+              <p className="px-4 py-4 text-xs leading-5 text-muted-foreground">
+                {t("agents.piModels.empty")}
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {catalog.map((provider) => {
+                  const isDefault = provider.id === config?.provider;
+                  const selected = provider.id === selectedProviderId;
+                  return (
+                    <li key={provider.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProviderId(provider.id)}
+                        aria-current={selected}
+                        className={providerWorkbenchListItemClass(
+                          selected,
+                          "px-3 py-2.5",
                         )}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </nav>
-        <div className="border-t border-border p-3">
+                      >
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                            {provider.id}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2 text-[11px]">
+                            {isDefault ? (
+                              <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                                {t("agents.piModels.currentDefault")}
+                              </span>
+                            ) : null}
+                            {provider.source === "custom" ? (
+                              <span className="text-muted-foreground">
+                                {t("agents.piModels.customTag")}
+                              </span>
+                            ) : null}
+                          </span>
+                        </span>
+                        <span className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>
+                            {t("agents.piModels.modelsCount", {
+                              count: provider.models.length,
+                            })}
+                          </span>
+                          {provider.credentialReady ? (
+                            <KeyRoundIcon
+                              className="h-3 w-3 text-emerald-600 dark:text-emerald-400"
+                              aria-label={t("agents.piModels.credentialReady")}
+                            />
+                          ) : (
+                            <ShieldAlertIcon
+                              className="h-3 w-3 text-amber-600 dark:text-amber-400"
+                              aria-label={t(
+                                "agents.piModels.credentialMissing",
+                              )}
+                            />
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </nav>
+        }
+        footer={
           <Button
             size="sm"
             variant="secondary"
@@ -247,10 +309,8 @@ export function AgentPiModelCatalogPanel({
             <PlusIcon className="h-4 w-4" />
             {t("agents.piModels.addProvider")}
           </Button>
-        </div>
-      </aside>
-
-      <section className="flex min-w-0 flex-1 flex-col">
+        }
+      >
         {errorCode ? (
           <div
             role="alert"
@@ -322,7 +382,18 @@ export function AgentPiModelCatalogPanel({
             </div>
           </div>
         )}
-      </section>
+      </AgentProviderWorkbenchLayout>
+
+      <AgentProviderSourceDialog
+        isOpen={sourceDialogOpen}
+        platformId="pi"
+        candidates={sourceCandidates}
+        loading={sourceLoading}
+        importing={busyAction === "import-source"}
+        onLoad={loadSources}
+        onImport={importSource}
+        onClose={() => setSourceDialogOpen(false)}
+      />
 
       <AddProviderDialog
         open={dialog?.kind === "add-provider"}
@@ -479,7 +550,7 @@ export function AgentPiModelCatalogPanel({
           isLoading={busyAction === "remove-model"}
         />
       ) : null}
-    </div>
+    </>
   );
 }
 

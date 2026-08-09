@@ -9,6 +9,13 @@ import { useTranslation } from "react-i18next";
 
 import type { AgentProviderNativeConfigSummary } from "@prompthub/shared/types";
 import { Button } from "../ui";
+import {
+  AgentProviderDetailHeader,
+  AgentProviderDetailRow,
+  AgentProviderDetailSection,
+  AgentProviderDetailSurface,
+  providerWorkbenchListItemClass,
+} from "./AgentProviderWorkbenchLayout";
 
 function classificationClass(
   classification: AgentProviderNativeConfigSummary["classification"],
@@ -18,21 +25,6 @@ function classificationClass(
     : classification === "custom"
       ? "text-primary"
       : "text-muted-foreground";
-}
-
-function DetailRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-1 border-b border-border/60 py-3 last:border-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
-      <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-all text-sm text-foreground">{children}</dd>
-    </div>
-  );
 }
 
 export function AgentProviderNativeListItem({
@@ -51,11 +43,10 @@ export function AgentProviderNativeListItem({
       data-testid="provider-native-card"
       onClick={onSelect}
       aria-current={selected}
-      className={`m-1 flex w-[calc(100%-0.5rem)] items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
-        selected
-          ? "border-primary/30 bg-card shadow-sm ring-1 ring-primary/10"
-          : "border-border/70 bg-card hover:border-primary/20 hover:shadow-sm"
-      }`}
+      className={providerWorkbenchListItemClass(
+        selected,
+        "m-1 flex w-[calc(100%-0.5rem)] items-center gap-3 px-3 py-2.5",
+      )}
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
         <CheckCircle2Icon className="h-4 w-4" />
@@ -96,9 +87,9 @@ export function AgentProviderNativeDetail({
   const { t } = useTranslation();
   const busy = busyAction !== null;
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-muted/[0.12] px-5 py-5">
-      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <header className="flex flex-wrap items-center gap-2 px-4 py-4">
+    <AgentProviderDetailSurface>
+      <AgentProviderDetailSection>
+        <AgentProviderDetailHeader>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <h2 className="truncate text-sm font-semibold text-foreground">
@@ -141,40 +132,42 @@ export function AgentProviderNativeDetail({
               </Button>
             ) : null}
           </div>
-        </header>
+        </AgentProviderDetailHeader>
 
         <div className="border-t border-border/70 px-4 py-1">
           <dl>
-            <DetailRow
+            <AgentProviderDetailRow
               label={t("agents.providerProfiles.currentNative.provider")}
             >
               {summary.providerKind}
-            </DetailRow>
-            <DetailRow
+            </AgentProviderDetailRow>
+            <AgentProviderDetailRow
               label={t("agents.providerProfiles.currentNative.protocol")}
             >
               {summary.protocol}
-            </DetailRow>
-            <DetailRow
+            </AgentProviderDetailRow>
+            <AgentProviderDetailRow
               label={t("agents.providerProfiles.currentNative.endpoint")}
             >
               {summary.endpoint ??
                 t("agents.providerProfiles.currentNative.noEndpoint")}
-            </DetailRow>
-            <DetailRow label={t("agents.providerProfiles.currentNative.model")}>
+            </AgentProviderDetailRow>
+            <AgentProviderDetailRow
+              label={t("agents.providerProfiles.currentNative.model")}
+            >
               {summary.model ??
                 t("agents.providerProfiles.currentNative.noModel")}
-            </DetailRow>
-            <DetailRow
+            </AgentProviderDetailRow>
+            <AgentProviderDetailRow
               label={t("agents.providerProfiles.currentNative.credential")}
             >
               {t(
                 `agents.providerProfiles.currentNative.credentialStatus.${summary.credential}`,
               )}
-            </DetailRow>
+            </AgentProviderDetailRow>
           </dl>
         </div>
-      </section>
-    </div>
+      </AgentProviderDetailSection>
+    </AgentProviderDetailSurface>
   );
 }

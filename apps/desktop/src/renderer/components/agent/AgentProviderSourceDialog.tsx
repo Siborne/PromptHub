@@ -8,7 +8,6 @@ import {
 import { useTranslation } from "react-i18next";
 
 import type {
-  AgentProviderProfilePublic,
   AgentProviderSourceCandidate,
   ImportAgentProviderSourceRequest,
 } from "@prompthub/shared";
@@ -23,7 +22,7 @@ interface AgentProviderSourceDialogProps {
   onLoad: (platformId: string) => Promise<AgentProviderSourceCandidate[]>;
   onImport: (
     request: ImportAgentProviderSourceRequest,
-  ) => Promise<AgentProviderProfilePublic | null>;
+  ) => Promise<unknown | null>;
   onClose: () => void;
 }
 
