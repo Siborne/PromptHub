@@ -805,6 +805,9 @@
     },
     "piModels": {
       "addProvider": "プロバイダーを追加",
+      "importCurrentTitle": "現在のプロバイダーを編集可能にする",
+      "importCurrentMessage": "「{{provider}}」に編集可能な models.json オーバーライドを作成しますか？Pi の組み込みモデルと既存の認証情報は変更されません。",
+      "importCurrentConfirm": "オーバーライドを作成",
       "listLabel": "Pi プロバイダー",
       "empty": "プロバイダーがまだ検出されていません。",
       "emptyTitle": "プロバイダー未選択",

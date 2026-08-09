@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DatabaseIcon,
+  FileInputIcon,
   KeyRoundIcon,
   Loader2Icon,
   PlusIcon,
@@ -36,6 +37,7 @@ const PI_APIS: AgentPiProviderApi[] = [
 ];
 
 type DialogState =
+  | { kind: "import-current"; providerId: string }
   | { kind: "add-provider" }
   | { kind: "add-model"; providerId: string }
   | { kind: "edit-provider"; provider: AgentModelCatalogProvider }
@@ -142,6 +144,11 @@ export function AgentPiModelCatalogPanel({
       catalog.find((provider) => provider.id === selectedProviderId) ?? null,
     [catalog, selectedProviderId],
   );
+  const currentProvider = useMemo(
+    () => catalog.find((provider) => provider.id === config?.provider) ?? null,
+    [catalog, config?.provider],
+  );
+  const canImportCurrent = currentProvider?.source === "built-in";
 
   useEffect(() => {
     if (selectedProvider || catalog.length === 0) return;
@@ -217,16 +224,35 @@ export function AgentPiModelCatalogPanel({
     <>
       <AgentProviderWorkbenchLayout
         toolbar={
-          <Button
-            size="sm"
-            variant="secondary"
-            aria-label={t("agents.providerProfiles.sourceImport.open")}
-            title={t("agents.providerProfiles.sourceImport.open")}
-            onClick={() => setSourceDialogOpen(true)}
-            disabled={busyAction !== null}
-          >
-            <DatabaseIcon className="h-4 w-4" />
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={t("agents.providerProfiles.import.title")}
+              title={t("agents.providerProfiles.import.title")}
+              onClick={() => {
+                if (currentProvider) {
+                  setDialog({
+                    kind: "import-current",
+                    providerId: currentProvider.id,
+                  });
+                }
+              }}
+              disabled={busyAction !== null || !canImportCurrent}
+            >
+              <FileInputIcon className="h-4 w-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={t("agents.providerProfiles.sourceImport.open")}
+              title={t("agents.providerProfiles.sourceImport.open")}
+              onClick={() => setSourceDialogOpen(true)}
+              disabled={busyAction !== null}
+            >
+              <DatabaseIcon className="h-4 w-4" />
+            </Button>
+          </>
         }
         sidebar={
           <nav
@@ -394,6 +420,27 @@ export function AgentPiModelCatalogPanel({
         onImport={importSource}
         onClose={() => setSourceDialogOpen(false)}
       />
+
+      {dialog?.kind === "import-current" ? (
+        <ConfirmDialog
+          isOpen
+          onClose={() => setDialog(null)}
+          onConfirm={() => {
+            void runAction("import-current", () =>
+              window.api.agent.importCurrentPiProvider({ agentId: "pi" }),
+            ).then((succeeded) => {
+              if (succeeded) setDialog(null);
+            });
+          }}
+          title={t("agents.piModels.importCurrentTitle")}
+          message={t("agents.piModels.importCurrentMessage", {
+            provider: dialog.providerId,
+          })}
+          confirmText={t("agents.piModels.importCurrentConfirm")}
+          cancelText={t("common.cancel")}
+          isLoading={busyAction === "import-current"}
+        />
+      ) : null}
 
       <AddProviderDialog
         open={dialog?.kind === "add-provider"}

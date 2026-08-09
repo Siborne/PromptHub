@@ -806,6 +806,9 @@
     },
     "piModels": {
       "addProvider": "Add provider",
+      "importCurrentTitle": "Make current provider editable",
+      "importCurrentMessage": "Create an editable models.json override for \"{{provider}}\"? Pi's built-in models and existing credential stay unchanged.",
+      "importCurrentConfirm": "Create override",
       "listLabel": "Pi providers",
       "empty": "No providers detected yet.",
       "emptyTitle": "No provider selected",

@@ -310,6 +310,27 @@ export async function addPiCustomProvider(
   );
 }
 
+export async function addPiProviderOverride(
+  rootPath: string,
+  providerIdInput: string,
+  modelIdInput: string,
+  options: PiWriteOptions,
+): Promise<AgentPiWriteResult> {
+  const providerId = requireProviderId(providerIdInput);
+  const modelId = requireModelId(modelIdInput);
+
+  const context = await readJsonTarget(path.join(rootPath, PI_MODELS_PATH));
+  const existing = providersOf(parseJsonObject(context.raw));
+  if (isRecord(existing[providerId])) fail("PROVIDER_EXISTS");
+  return applyJsonWrite(
+    context,
+    options,
+    ["providers", providerId],
+    { modelOverrides: { [modelId]: {} } },
+    (written) => isRecord(providersOf(written)[providerId]),
+  );
+}
+
 export async function importPiCustomProvider(
   rootPath: string,
   input: AgentPiCustomProviderInput,

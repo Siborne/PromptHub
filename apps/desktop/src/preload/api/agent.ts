@@ -121,6 +121,10 @@ export const agentApi = {
     input: AgentPiCustomProviderInput & { agentId: "pi" },
   ): Promise<AgentPiWriteResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_PROVIDER_ADD, input),
+  importCurrentPiProvider: (input: {
+    agentId: "pi";
+  }): Promise<AgentPiWriteResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_PROVIDER_IMPORT_CURRENT, input),
   updatePiProvider: (
     input: AgentPiCustomProviderUpdateInput & { agentId: "pi" },
   ): Promise<AgentPiWriteResult> =>

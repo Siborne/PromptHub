@@ -8,7 +8,9 @@ import { inspectAgentModelConfig } from "../../../src/main/services/agent-model-
 const temporaryRoots: string[] = [];
 
 async function createRoot(): Promise<string> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "prompthub-pi-catalog-"));
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), "prompthub-pi-catalog-"),
+  );
   temporaryRoots.push(root);
   return root;
 }
@@ -155,7 +157,7 @@ describe("Pi model catalog inspect", () => {
     const ollama = result.modelCatalog?.find(
       (provider) => provider.id === "ollama",
     );
-    expect(ollama?.source).toBe("built-in");
+    expect(ollama?.source).toBe("custom");
     const ids = ollama?.models.map((model) => model.id) ?? [];
     expect(ids).toContain("builtin-model");
     expect(ids).toContain("custom-model");
@@ -277,7 +279,7 @@ describe("Pi model catalog inspect", () => {
           { id: "valid-model" },
         ],
       },
-      "bounded": {
+      bounded: {
         models: Array.from({ length: 80 }, (_, index) => ({
           id: `bounded-${index}`,
         })),
@@ -297,12 +299,20 @@ describe("Pi model catalog inspect", () => {
 
     const result = await inspectAgentModelConfig(piContext(rootPath));
     const catalog = result.modelCatalog ?? [];
-    expect(catalog.find((provider) => provider.id === "not-a-record")).toBeUndefined();
+    expect(
+      catalog.find((provider) => provider.id === "not-a-record"),
+    ).toBeUndefined();
     expect(catalog.find((provider) => provider.id === "")).toBeUndefined();
-    expect(catalog.find((provider) => provider.id === "bad-models")).toBeDefined();
+    expect(
+      catalog.find((provider) => provider.id === "bad-models"),
+    ).toBeDefined();
 
-    const badEntries = catalog.find((provider) => provider.id === "bad-entries");
-    expect(badEntries?.models.map((model) => model.id)).toEqual(["valid-model"]);
+    const badEntries = catalog.find(
+      (provider) => provider.id === "bad-entries",
+    );
+    expect(badEntries?.models.map((model) => model.id)).toEqual([
+      "valid-model",
+    ]);
 
     const bounded = catalog.find((provider) => provider.id === "bounded");
     expect(bounded?.models).toHaveLength(64);

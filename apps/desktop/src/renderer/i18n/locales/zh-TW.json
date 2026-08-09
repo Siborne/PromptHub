@@ -805,6 +805,9 @@
     },
     "piModels": {
       "addProvider": "新增供應商",
+      "importCurrentTitle": "將目前供應商轉為可編輯設定",
+      "importCurrentMessage": "為「{{provider}}」建立可編輯的 models.json 覆寫設定？Pi 的內建模型與現有憑證不會改變。",
+      "importCurrentConfirm": "建立覆寫設定",
       "listLabel": "Pi 供應商",
       "empty": "尚未偵測到供應商。",
       "emptyTitle": "未選擇供應商",

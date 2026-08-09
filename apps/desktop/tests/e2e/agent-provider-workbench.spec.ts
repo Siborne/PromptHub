@@ -33,7 +33,23 @@ test("uses one Provider workbench shell for Claude Code and Pi", async ({}, test
   );
   fs.writeFileSync(
     path.join(piDir, "settings.json"),
-    JSON.stringify({ defaultProvider: "foxcode", defaultModel: "gpt-work" }),
+    JSON.stringify({ defaultProvider: "kimi-coding", defaultModel: "k3" }),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(piDir, "models-store.json"),
+    JSON.stringify({
+      "kimi-coding": {
+        models: [
+          {
+            id: "k3",
+            name: "Kimi K3",
+            api: "anthropic-messages",
+            baseUrl: "https://api.kimi.com/coding",
+          },
+        ],
+      },
+    }),
     "utf8",
   );
   fs.writeFileSync(
@@ -92,12 +108,28 @@ test("uses one Provider workbench shell for Claude Code and Pi", async ({}, test
     await expect(
       page.getByRole("button", { name: "Import from PromptHub" }),
     ).toBeVisible();
+    const importCurrent = page.getByRole("button", {
+      name: "Import current configuration",
+    });
+    await expect(importCurrent).toBeEnabled();
     await expect(page.getByText("foxcode").first()).toBeVisible();
     await expect(page.locator("body")).not.toContainText("pi-e2e-secret");
     const piToolbarBox = await page
       .getByTestId("agent-provider-workbench-toolbar")
       .boundingBox();
     expect(piToolbarBox?.height).toBe(claudeToolbarBox?.height);
+
+    await importCurrent.click();
+    await page.getByRole("button", { name: "Create override" }).click();
+    await expect(importCurrent).toBeDisabled();
+    await expect
+      .poll(() => {
+        const models = JSON.parse(
+          fs.readFileSync(path.join(piDir, "models.json"), "utf8"),
+        );
+        return models.providers["kimi-coding"]?.modelOverrides?.k3;
+      })
+      .toEqual({});
 
     await page.screenshot({
       path: testInfo.outputPath("pi-provider-workbench.png"),

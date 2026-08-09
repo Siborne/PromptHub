@@ -105,6 +105,7 @@ export function createWindowApiMock(overrides?: DeepPartial<MockRecord>) {
         listProviderSources: vi.fn().mockResolvedValue([]),
         importProviderSource: vi.fn(),
         importPiProviderSource: vi.fn(),
+        importCurrentPiProvider: vi.fn(),
         getProviderCurrentState: vi.fn().mockResolvedValue({
           platformId: "unknown",
           status: "none",

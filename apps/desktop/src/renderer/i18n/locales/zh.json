@@ -806,6 +806,9 @@
     },
     "piModels": {
       "addProvider": "添加供应商",
+      "importCurrentTitle": "将当前供应商转为可编辑配置",
+      "importCurrentMessage": "为“{{provider}}”创建可编辑的 models.json 覆盖配置？Pi 的内置模型和现有凭据不会改变。",
+      "importCurrentConfirm": "创建覆盖配置",
       "listLabel": "Pi 供应商",
       "empty": "暂未检测到供应商。",
       "emptyTitle": "未选择供应商",

@@ -179,8 +179,10 @@ export async function inspectPiModelCatalog(
         .map((model) => toCatalogEntry(model, "built-in"))
         .filter((model): model is AgentModelCatalogEntry => model !== null);
       const endpoint = sanitizeEndpoint(
-        getString(Array.isArray(entry.models) ? entry.models[0] : undefined, "baseUrl") ??
-          getString(entry, "baseUrl"),
+        getString(
+          Array.isArray(entry.models) ? entry.models[0] : undefined,
+          "baseUrl",
+        ) ?? getString(entry, "baseUrl"),
       );
       providers.set(providerId, {
         id: providerId,
@@ -226,10 +228,16 @@ export async function inspectPiModelCatalog(
         MAX_MODELS_PER_PROVIDER,
       );
       existing.credentialReady =
-        existing.credentialReady || authProviders.has(providerId) || hasInlineKey;
+        existing.credentialReady ||
+        authProviders.has(providerId) ||
+        hasInlineKey;
       existing.credentialSource = credentialSource;
-      existing.api = getString(entry, "api") as AgentModelCatalogProvider["api"];
+      existing.api = getString(
+        entry,
+        "api",
+      ) as AgentModelCatalogProvider["api"];
       if (endpoint) existing.endpoint = endpoint;
+      existing.source = "custom";
     } else {
       // The cap only blocks new providers; merges into existing providers
       // must still run for entries after a capped one.

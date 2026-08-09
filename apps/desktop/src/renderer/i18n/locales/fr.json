@@ -806,6 +806,9 @@
     },
     "piModels": {
       "addProvider": "Ajouter un fournisseur",
+      "importCurrentTitle": "Rendre le fournisseur actuel modifiable",
+      "importCurrentMessage": "Créer une substitution models.json modifiable pour « {{provider}} » ? Les modèles intégrés et l’identifiant existant de Pi restent inchangés.",
+      "importCurrentConfirm": "Créer la substitution",
       "listLabel": "Fournisseurs Pi",
       "empty": "Aucun fournisseur détecté pour le moment.",
       "emptyTitle": "Aucun fournisseur sélectionné",

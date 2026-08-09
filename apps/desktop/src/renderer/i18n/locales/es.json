@@ -806,6 +806,9 @@
     },
     "piModels": {
       "addProvider": "Añadir proveedor",
+      "importCurrentTitle": "Hacer editable el proveedor actual",
+      "importCurrentMessage": "¿Crear una anulación editable en models.json para «{{provider}}»? Los modelos integrados y la credencial existente de Pi no cambiarán.",
+      "importCurrentConfirm": "Crear anulación",
       "listLabel": "Proveedores de Pi",
       "empty": "Aún no se detectan proveedores.",
       "emptyTitle": "Ningún proveedor seleccionado",

@@ -121,6 +121,9 @@ describe("AgentPiModelCatalogPanel", () => {
         testModel: expect.any(String),
         testModelConfirmTitle: expect.any(String),
         testModelConfirmMessage: expect.any(String),
+        importCurrentTitle: expect.any(String),
+        importCurrentMessage: expect.any(String),
+        importCurrentConfirm: expect.any(String),
         form: expect.objectContaining({
           editProviderTitle: expect.any(String),
           editModelTitle: expect.any(String),
@@ -173,6 +176,77 @@ describe("AgentPiModelCatalogPanel", () => {
     expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Credential configured")).toBeInTheDocument();
     expect(screen.getByLabelText("Missing credential")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Import current configuration" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Import from PromptHub" }),
+    ).toBeEnabled();
+  });
+
+  it("imports the current built-in provider as an editable override", async () => {
+    const importCurrentPiProvider = vi.fn().mockResolvedValue({
+      backupPath: "/tmp/models.json.backup",
+    });
+    const getModelConfig = vi
+      .fn()
+      .mockResolvedValueOnce(modelConfig())
+      .mockResolvedValueOnce(
+        modelConfig({
+          modelCatalog: [catalogProvider({ source: "custom" })],
+        }),
+      );
+    installWindowMocks({
+      api: { agent: { getModelConfig, importCurrentPiProvider } },
+    });
+
+    await renderPanel();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import current configuration" }),
+    );
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Make current provider editable",
+      }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Create override" }));
+
+    await waitFor(() =>
+      expect(importCurrentPiProvider).toHaveBeenCalledWith({ agentId: "pi" }),
+    );
+    expect(getModelConfig).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not offer current import for a custom or unconfigured provider", async () => {
+    installWindowMocks({
+      api: {
+        agent: {
+          getModelConfig: vi
+            .fn()
+            .mockResolvedValueOnce(
+              modelConfig({
+                modelCatalog: [catalogProvider({ source: "custom" })],
+              }),
+            )
+            .mockResolvedValueOnce(
+              modelConfig({ provider: null, model: null, modelCatalog: [] }),
+            ),
+        },
+      },
+    });
+
+    const { unmount } = await renderWithI18n(
+      <AgentPiModelCatalogPanel agent={piAgent()} />,
+      { settleAsyncEffects: true },
+    );
+    expect(
+      screen.getByRole("button", { name: "Import current configuration" }),
+    ).toBeDisabled();
+    unmount();
+    await renderPanel();
+    expect(
+      screen.getByRole("button", { name: "Import current configuration" }),
+    ).toBeDisabled();
   });
 
   it("imports a PromptHub provider into Pi and refreshes the native catalog", async () => {

@@ -17,6 +17,7 @@ const launchAgentPlatformMock = vi.fn();
 const updatePiCustomProviderMock = vi.fn();
 const updatePiCustomModelMock = vi.fn();
 const testPiModelMock = vi.fn();
+const importCurrentPiProviderMock = vi.fn();
 
 vi.mock("electron", () => ({
   app: { getPath: vi.fn(() => "/tmp/prompthub") },
@@ -108,6 +109,10 @@ vi.mock("../../../src/main/services/agent-pi-model-test", () => ({
   testPiModel: testPiModelMock,
 }));
 
+vi.mock("../../../src/main/services/agent-pi-current-provider-import", () => ({
+  importCurrentPiProvider: importCurrentPiProviderMock,
+}));
+
 vi.mock("../../../src/main/services/agent-pi-model-writes", () => ({
   addPiCustomModel: vi.fn(),
   addPiCustomProvider: vi.fn(),
@@ -153,6 +158,7 @@ describe("Agent config file IPC", () => {
     updatePiCustomProviderMock.mockReset();
     updatePiCustomModelMock.mockReset();
     testPiModelMock.mockReset();
+    importCurrentPiProviderMock.mockReset();
     getPlatformRootDirMock.mockImplementation((platform: { id: string }) => {
       if (platform.id === "kimi") return "/Users/test/.kimi-code";
       if (platform.id === "pi") return "/Users/test/.pi/agent";
@@ -413,6 +419,27 @@ describe("Agent config file IPC", () => {
       },
       { backupRoot: "/tmp/prompthub/agent-config-backups" },
     );
+  });
+
+  it("resolves Pi current-provider import entirely in main", async () => {
+    importCurrentPiProviderMock.mockResolvedValue({ backupPath: null });
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await handlers[IPC_CHANNELS.AGENT_PI_PROVIDER_IMPORT_CURRENT](null, {
+      agentId: "pi",
+    });
+
+    expect(importCurrentPiProviderMock).toHaveBeenCalledWith(
+      "/Users/test/.pi/agent",
+      { backupRoot: "/tmp/prompthub/agent-config-backups" },
+    );
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_PI_PROVIDER_IMPORT_CURRENT](null, {
+        agentId: "codex",
+        providerId: "renderer-cannot-select-this",
+      }),
+    ).rejects.toThrow("only apply to the pi platform");
+    expect(importCurrentPiProviderMock).toHaveBeenCalledTimes(1);
   });
 
   it("routes a validated Pi model test without exposing credentials", async () => {

@@ -23,6 +23,7 @@ import {
 } from "../services/agent-pi-model-writes";
 import { createAgentUserConfigFileService } from "../services/agent-user-config-files";
 import { testPiModel } from "../services/agent-pi-model-test";
+import { importCurrentPiProvider } from "../services/agent-pi-current-provider-import";
 import {
   inspectAgentModelConfig,
   updateAgentModelConfig,
@@ -401,6 +402,16 @@ export function registerAgentIPC(options: RegisterAgentIPCOptions = {}): void {
         requirePiProviderInput(input),
         { backupRoot: piBackupRoot() },
       );
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PI_PROVIDER_IMPORT_CURRENT,
+    async (_, input: unknown) => {
+      const context = getAgentConfigContext(requirePiAgentId(input));
+      return importCurrentPiProvider(context.rootPath, {
+        backupRoot: piBackupRoot(),
+      });
     },
   );
 

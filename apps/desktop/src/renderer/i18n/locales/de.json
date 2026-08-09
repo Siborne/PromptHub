@@ -806,6 +806,9 @@
     },
     "piModels": {
       "addProvider": "Anbieter hinzufügen",
+      "importCurrentTitle": "Aktuellen Anbieter bearbeitbar machen",
+      "importCurrentMessage": "Eine bearbeitbare models.json-Überschreibung für „{{provider}}“ erstellen? Pi behält die integrierten Modelle und vorhandenen Anmeldedaten unverändert bei.",
+      "importCurrentConfirm": "Überschreibung erstellen",
       "listLabel": "Pi-Anbieter",
       "empty": "Noch keine Anbieter erkannt.",
       "emptyTitle": "Kein Anbieter ausgewählt",
