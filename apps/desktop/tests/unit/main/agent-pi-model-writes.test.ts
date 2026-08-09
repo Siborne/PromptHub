@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   addPiCustomModel,
   addPiCustomProvider,
+  importPiCustomProvider,
   removePiCustomModel,
   removePiCustomProvider,
   setPiCredential,
@@ -35,6 +36,182 @@ function options(rootPath: string) {
 }
 
 describe("Pi custom provider writes", () => {
+  it("imports a provider and managed credential as one recoverable operation", async () => {
+    const rootPath = await createRoot();
+    await fs.writeFile(
+      path.join(rootPath, "models.json"),
+      '{ "customTopLevel": true, "providers": {} }\n',
+    );
+    await fs.writeFile(
+      path.join(rootPath, "auth.json"),
+      '{ "existing": { "type": "api_key", "key": "keep" } }\n',
+    );
+
+    const result = await importPiCustomProvider(
+      rootPath,
+      {
+        providerId: "provider-work",
+        baseUrl: "https://gateway.example.com/v1",
+        api: "openai-completions",
+        models: [{ id: "gpt-work", name: "GPT Work", reasoning: true }],
+      },
+      "provider-secret",
+      options(rootPath),
+    );
+
+    const models = JSON.parse(
+      await fs.readFile(path.join(rootPath, "models.json"), "utf8"),
+    );
+    const auth = JSON.parse(
+      await fs.readFile(path.join(rootPath, "auth.json"), "utf8"),
+    );
+    expect(models.customTopLevel).toBe(true);
+    expect(models.providers["provider-work"].models).toEqual([
+      { id: "gpt-work", name: "GPT Work", reasoning: true },
+    ]);
+    expect(JSON.stringify(models)).not.toContain("provider-secret");
+    expect(auth.existing.key).toBe("keep");
+    expect(auth["provider-work"]).toEqual({
+      type: "api_key",
+      key: "provider-secret",
+    });
+    expect(result).toEqual({ backupPath: expect.any(String) });
+  });
+
+  it("imports a provider without creating auth.json when no credential exists", async () => {
+    const rootPath = await createRoot();
+
+    await importPiCustomProvider(
+      rootPath,
+      {
+        providerId: "local-models",
+        baseUrl: "http://localhost:11434/v1",
+        api: "openai-completions",
+        models: [{ id: "llama3.1:8b" }],
+      },
+      undefined,
+      options(rootPath),
+    );
+
+    expect(
+      JSON.parse(await fs.readFile(path.join(rootPath, "models.json"), "utf8"))
+        .providers["local-models"],
+    ).toBeDefined();
+    await expect(fs.stat(path.join(rootPath, "auth.json"))).rejects.toThrow();
+  });
+
+  it("rejects an invalid imported secret before creating either Pi file", async () => {
+    const rootPath = await createRoot();
+
+    await expect(
+      importPiCustomProvider(
+        rootPath,
+        {
+          providerId: "provider-work",
+          baseUrl: "https://gateway.example.com/v1",
+          api: "openai-completions",
+          models: [{ id: "gpt-work" }],
+        },
+        "invalid\nsecret",
+        options(rootPath),
+      ),
+    ).rejects.toThrow("AGENT_PI_SECRET_INVALID");
+    await expect(fs.stat(path.join(rootPath, "models.json"))).rejects.toThrow();
+    await expect(fs.stat(path.join(rootPath, "auth.json"))).rejects.toThrow();
+  });
+
+  it("aborts a Pi import before writing when auth.json changes concurrently", async () => {
+    const rootPath = await createRoot();
+    const modelsPath = path.join(rootPath, "models.json");
+    const authPath = path.join(rootPath, "auth.json");
+    await fs.writeFile(modelsPath, '{ "providers": {} }\n');
+    await fs.writeFile(authPath, "{}\n");
+
+    await expect(
+      importPiCustomProvider(
+        rootPath,
+        {
+          providerId: "provider-work",
+          baseUrl: "https://gateway.example.com/v1",
+          api: "openai-completions",
+          models: [{ id: "gpt-work" }],
+        },
+        "provider-secret",
+        {
+          ...options(rootPath),
+          hooks: {
+            beforeWrite: async () => {
+              await fs.writeFile(authPath, '{ "external": true }\n');
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow("AGENT_MODEL_CONFIG_CONCURRENT_CHANGE");
+    expect(JSON.parse(await fs.readFile(modelsPath, "utf8"))).toEqual({
+      providers: {},
+    });
+    expect(JSON.parse(await fs.readFile(authPath, "utf8"))).toEqual({
+      external: true,
+    });
+  });
+
+  it("rolls back both Pi files when the credential write fails", async () => {
+    const rootPath = await createRoot();
+    const modelsPath = path.join(rootPath, "models.json");
+    const authPath = path.join(rootPath, "auth.json");
+    await fs.writeFile(modelsPath, '{ "providers": {} }\n');
+    await fs.writeFile(authPath, "{}\n");
+    const originalModels = await fs.readFile(modelsPath, "utf8");
+    const originalAuth = await fs.readFile(authPath, "utf8");
+
+    await expect(
+      importPiCustomProvider(
+        rootPath,
+        {
+          providerId: "provider-work",
+          baseUrl: "https://gateway.example.com/v1",
+          api: "openai-completions",
+          models: [{ id: "gpt-work" }],
+        },
+        "provider-secret",
+        {
+          ...options(rootPath),
+          hooks: {
+            beforeCredentialWrite: async () => {
+              throw new Error("fault");
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow("AGENT_PI_WRITE_FAILED");
+    expect(await fs.readFile(modelsPath, "utf8")).toBe(originalModels);
+    expect(await fs.readFile(authPath, "utf8")).toBe(originalAuth);
+  });
+
+  it("does not write either Pi file when an imported provider already exists", async () => {
+    const rootPath = await createRoot();
+    const modelsPath = path.join(rootPath, "models.json");
+    await fs.writeFile(
+      modelsPath,
+      '{ "providers": { "provider-work": { "models": [] } } }\n',
+    );
+
+    await expect(
+      importPiCustomProvider(
+        rootPath,
+        {
+          providerId: "provider-work",
+          baseUrl: "https://gateway.example.com/v1",
+          api: "openai-completions",
+          models: [{ id: "gpt-work" }],
+        },
+        "provider-secret",
+        options(rootPath),
+      ),
+    ).rejects.toThrow("AGENT_PI_PROVIDER_EXISTS");
+    await expect(fs.stat(path.join(rootPath, "auth.json"))).rejects.toThrow();
+  });
+
   it("creates models.json for a new provider and keeps it callable", async () => {
     const rootPath = await createRoot();
     const result = await addPiCustomProvider(

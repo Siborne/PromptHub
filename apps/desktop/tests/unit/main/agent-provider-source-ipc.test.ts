@@ -19,6 +19,7 @@ describe("Agent Provider source IPC", () => {
     const service = {
       list: vi.fn(() => []),
       importSource: vi.fn(async () => ({ id: "profile-1" })),
+      importPiSource: vi.fn(async () => ({ backupPath: null })),
       ensureOfficial: vi.fn(async () => ({ id: "official-1" })),
     };
     registerAgentProviderSourceIPC(service);
@@ -33,10 +34,18 @@ describe("Agent Provider source IPC", () => {
 
     await handlers[IPC_CHANNELS.AGENT_PROVIDER_SOURCES_LIST](null, "codex");
     await handlers[IPC_CHANNELS.AGENT_PROVIDER_SOURCE_IMPORT](null, request);
+    await handlers[IPC_CHANNELS.AGENT_PI_PROVIDER_SOURCE_IMPORT](null, {
+      ...request,
+      platformId: "pi",
+    });
     await handlers[IPC_CHANNELS.AGENT_PROVIDER_OFFICIAL_ENSURE](null, "codex");
 
     expect(service.list).toHaveBeenCalledWith("codex");
     expect(service.importSource).toHaveBeenCalledWith(request);
+    expect(service.importPiSource).toHaveBeenCalledWith({
+      ...request,
+      platformId: "pi",
+    });
     expect(service.ensureOfficial).toHaveBeenCalledWith("codex");
   });
 
@@ -53,6 +62,9 @@ describe("Agent Provider source IPC", () => {
       importSource: vi.fn(async () => {
         throw new Error("AGENT_PROVIDER_SOURCE_NOT_FOUND");
       }),
+      importPiSource: vi.fn(async () => {
+        throw new Error("AGENT_PROVIDER_SOURCE_MODEL_NOT_FOUND");
+      }),
       ensureOfficial: vi.fn(async () => {
         throw new Error("AGENT_PROVIDER_OFFICIAL_RESTORE_UNSUPPORTED");
       }),
@@ -68,6 +80,9 @@ describe("Agent Provider source IPC", () => {
     await expect(
       handlers[IPC_CHANNELS.AGENT_PROVIDER_SOURCE_IMPORT](null, {}),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_NOT_FOUND");
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_PI_PROVIDER_SOURCE_IMPORT](null, {}),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_MODEL_NOT_FOUND");
     await expect(
       handlers[IPC_CHANNELS.AGENT_PROVIDER_OFFICIAL_ENSURE](null, "opencode"),
     ).rejects.toThrow("AGENT_PROVIDER_OFFICIAL_RESTORE_UNSUPPORTED");

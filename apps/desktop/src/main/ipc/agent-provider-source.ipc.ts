@@ -5,6 +5,7 @@ import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 interface AgentProviderSourceOperations {
   list(platformId: string): unknown;
   importSource(request: ImportAgentProviderSourceRequest): Promise<unknown>;
+  importPiSource(request: ImportAgentProviderSourceRequest): Promise<unknown>;
   ensureOfficial(platformId: string): Promise<unknown>;
 }
 
@@ -40,6 +41,9 @@ export function registerAgentProviderSourceIPC(
   );
   safeHandle(IPC_CHANNELS.AGENT_PROVIDER_SOURCE_IMPORT, (request) =>
     service.importSource(request as ImportAgentProviderSourceRequest),
+  );
+  safeHandle(IPC_CHANNELS.AGENT_PI_PROVIDER_SOURCE_IMPORT, (request) =>
+    service.importPiSource(request as ImportAgentProviderSourceRequest),
   );
   safeHandle(IPC_CHANNELS.AGENT_PROVIDER_OFFICIAL_ENSURE, (platformId) =>
     service.ensureOfficial(platformId as string),

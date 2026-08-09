@@ -23,11 +23,16 @@ describe("Agent Provider source preload API", () => {
 
     await agentApi.listProviderSources("codex");
     await agentApi.importProviderSource(request);
+    await agentApi.importPiProviderSource({ ...request, platformId: "pi" });
     await agentApi.ensureOfficialProviderProfile("codex");
 
     expect(mocks.invoke.mock.calls).toEqual([
       [IPC_CHANNELS.AGENT_PROVIDER_SOURCES_LIST, "codex"],
       [IPC_CHANNELS.AGENT_PROVIDER_SOURCE_IMPORT, request],
+      [
+        IPC_CHANNELS.AGENT_PI_PROVIDER_SOURCE_IMPORT,
+        { ...request, platformId: "pi" },
+      ],
       [IPC_CHANNELS.AGENT_PROVIDER_OFFICIAL_ENSURE, "codex"],
     ]);
   });

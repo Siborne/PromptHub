@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { CoreAIConfigFile } from "@prompthub/core";
-import type { AgentProviderProfilePublic } from "@prompthub/shared";
+import type {
+  AgentPiWriteResult,
+  AgentProviderProfilePublic,
+} from "@prompthub/shared";
 import { createAgentProviderSourceService } from "../../../src/main/services/agent-provider-source-service";
 
 const CREATED_PROFILE: AgentProviderProfilePublic = {
@@ -91,12 +94,17 @@ function config(): CoreAIConfigFile {
 
 function harness(read = vi.fn(() => config())) {
   const create = vi.fn(async () => CREATED_PROFILE);
+  const importPiProvider = vi.fn(
+    async (): Promise<AgentPiWriteResult> => ({ backupPath: null }),
+  );
   return {
     read,
     create,
+    importPiProvider,
     service: createAgentProviderSourceService({
       readConfig: read,
       createProfile: create,
+      importPiProvider,
     }),
   };
 }
@@ -274,6 +282,116 @@ describe("Agent Provider source service", () => {
         },
       }),
     ]);
+  });
+
+  it("projects PromptHub providers into Pi native catalog inputs", async () => {
+    const source = config();
+    source.models[0].capabilities = { reasoning: true };
+    const { service, importPiProvider } = harness(vi.fn(() => source));
+
+    expect(service.list("pi")[0]).toEqual(
+      expect.objectContaining({
+        compatible: true,
+        protocol: "openai-completions",
+      }),
+    );
+    const result = await service.importPiSource({
+      platformId: "pi",
+      sourceId: "provider-work",
+      modelId: "model-chat",
+    });
+
+    expect(importPiProvider).toHaveBeenCalledWith({
+      provider: {
+        providerId: "provider-work",
+        baseUrl: "https://gateway.example.com/v1",
+        api: "openai-completions",
+        models: [{ id: "gpt-work", name: "GPT Work", reasoning: true }],
+      },
+      secret: "provider-secret",
+    });
+    expect(result).toEqual({ backupPath: null });
+    expect(JSON.stringify(service.list("pi"))).not.toContain("provider-secret");
+  });
+
+  it("maps every supported PromptHub protocol to the Pi native API", () => {
+    const source = config();
+    source.providers.push({
+      id: "provider-gemini",
+      name: "Gemini",
+      provider: "gemini",
+      apiProtocol: "gemini",
+      apiKey: "gemini-secret",
+      apiUrl: "https://generativelanguage.googleapis.com",
+    });
+    source.models.push({
+      id: "model-gemini",
+      providerId: "provider-gemini",
+      provider: "gemini",
+      apiProtocol: "gemini",
+      apiKey: "",
+      apiUrl: "https://generativelanguage.googleapis.com",
+      model: "gemini-work",
+      type: "chat",
+    });
+    const { service } = harness(vi.fn(() => source));
+    const byId = Object.fromEntries(
+      service.list("pi").map((candidate) => [candidate.sourceId, candidate]),
+    );
+
+    expect(byId["provider-work"].protocol).toBe("openai-completions");
+    expect(byId["provider-anthropic"].protocol).toBe("anthropic-messages");
+    expect(byId["provider-gemini"].protocol).toBe("google-generative-ai");
+  });
+
+  it("fails closed before a Pi native import when the request is stale", async () => {
+    const { service, importPiProvider } = harness();
+
+    await expect(
+      service.importPiSource({
+        platformId: "codex",
+        sourceId: "provider-work",
+        modelId: "model-chat",
+      }),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
+    await expect(
+      service.importPiSource({
+        platformId: "pi",
+        sourceId: "missing",
+        modelId: "model-chat",
+      }),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_NOT_FOUND");
+    await expect(
+      service.importPiSource({
+        platformId: "pi",
+        sourceId: "provider-work",
+        modelId: "missing",
+      }),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_MODEL_NOT_FOUND");
+    await expect(
+      service.importSource({
+        platformId: "pi",
+        sourceId: "provider-work",
+        modelId: "model-chat",
+      }),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
+    expect(importPiProvider).not.toHaveBeenCalled();
+  });
+
+  it("rejects a Pi source whose id cannot become a native provider id", async () => {
+    const source = config();
+    source.providers[0].id = "---";
+    source.models[0].providerId = "---";
+    const { service, importPiProvider } = harness(vi.fn(() => source));
+
+    await expect(
+      service.importPiSource({
+        platformId: "pi",
+        sourceId: "---",
+        modelId: "model-chat",
+      }),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
+    expect(importPiProvider).not.toHaveBeenCalled();
   });
 
   it("fails closed for incompatible, missing and stale selections", async () => {

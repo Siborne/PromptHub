@@ -272,6 +272,10 @@ export const agentApi = {
     request: ImportAgentProviderSourceRequest,
   ): Promise<AgentProviderProfilePublic> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_SOURCE_IMPORT, request),
+  importPiProviderSource: (
+    request: ImportAgentProviderSourceRequest,
+  ): Promise<AgentPiWriteResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PI_PROVIDER_SOURCE_IMPORT, request),
   ensureOfficialProviderProfile: (
     platformId: string,
   ): Promise<AgentProviderProfilePublic> =>

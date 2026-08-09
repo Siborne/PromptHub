@@ -48,7 +48,10 @@ export interface PiWriteOptions {
   backupRoot: string;
   /** Test-only fault-injection hook fired after edits are computed and
    * before the digest check, so concurrent modifications are deterministic. */
-  hooks?: { beforeWrite?: () => Promise<void> };
+  hooks?: {
+    beforeWrite?: () => Promise<void>;
+    beforeCredentialWrite?: () => Promise<void>;
+  };
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -216,6 +219,74 @@ async function applyJsonWrite(
   return { backupPath };
 }
 
+function prepareJsonWrite(
+  context: JsonWriteContext,
+  pathSegments: (string | number)[],
+  nextValue: unknown,
+  verify: (written: JsonRecord) => boolean,
+): string {
+  const edits = modify(context.raw, pathSegments, nextValue, {
+    formattingOptions: { insertFinalNewline: true },
+  });
+  const next = applyEdits(context.raw, edits);
+  const written = parseJsonObject(next);
+  if (!verify(written)) fail("VERIFY_FAILED");
+  return next;
+}
+
+async function backupJsonTarget(
+  context: JsonWriteContext,
+  backupRoot: string,
+): Promise<string | null> {
+  try {
+    return await createBackup(context.absolutePath, backupRoot, "pi");
+  } catch {
+    fail("BACKUP_FAILED");
+  }
+}
+
+function requireSecret(secret: string): string {
+  if (
+    typeof secret !== "string" ||
+    !secret ||
+    secret.length > MAX_SECRET_LENGTH ||
+    /[\u0000-\u001f\u007f]/.test(secret)
+  ) {
+    fail("SECRET_INVALID");
+  }
+  return secret;
+}
+
+async function commitPiImport(
+  modelsContext: JsonWriteContext,
+  authContext: JsonWriteContext,
+  nextModels: string,
+  nextAuth: string,
+  options: PiWriteOptions,
+): Promise<AgentPiWriteResult> {
+  const backupPath = await backupJsonTarget(modelsContext, options.backupRoot);
+  await backupJsonTarget(authContext, options.backupRoot);
+  await options.hooks?.beforeWrite?.();
+  await assertConfigUnchanged(
+    modelsContext.absolutePath,
+    modelsContext.original,
+  );
+  await assertConfigUnchanged(authContext.absolutePath, authContext.original);
+
+  try {
+    await atomicWrite(modelsContext.absolutePath, nextModels);
+    await options.hooks?.beforeCredentialWrite?.();
+    await atomicWrite(authContext.absolutePath, nextAuth);
+  } catch {
+    await Promise.all([
+      restoreModelConfig(modelsContext.absolutePath, modelsContext.original),
+      restoreModelConfig(authContext.absolutePath, authContext.original),
+    ]).catch(() => undefined);
+    fail("WRITE_FAILED");
+  }
+  return { backupPath };
+}
+
 function providersOf(record: JsonRecord): JsonRecord {
   const providers = record.providers;
   return isRecord(providers) ? providers : {};
@@ -236,6 +307,53 @@ export async function addPiCustomProvider(
     ["providers", providerId],
     value,
     (written) => isRecord(providersOf(written)[providerId]),
+  );
+}
+
+export async function importPiCustomProvider(
+  rootPath: string,
+  input: AgentPiCustomProviderInput,
+  secret: string | undefined,
+  options: PiWriteOptions,
+): Promise<AgentPiWriteResult> {
+  if (!secret) return addPiCustomProvider(rootPath, input, options);
+
+  const { providerId, value } = normalizeProviderInput(input);
+  const managedSecret = requireSecret(secret);
+  const modelsContext = await readJsonTarget(
+    path.join(rootPath, PI_MODELS_PATH),
+  );
+  const authContext = await readJsonTarget(path.join(rootPath, PI_AUTH_PATH));
+  if (isRecord(providersOf(parseJsonObject(modelsContext.raw))[providerId])) {
+    fail("PROVIDER_EXISTS");
+  }
+
+  const nextModels = prepareJsonWrite(
+    modelsContext,
+    ["providers", providerId],
+    value,
+    (written) => isRecord(providersOf(written)[providerId]),
+  );
+  const nextAuth = prepareJsonWrite(
+    authContext,
+    [providerId],
+    { type: "api_key", key: managedSecret },
+    (written) => {
+      const entry = written[providerId];
+      return (
+        isRecord(entry) &&
+        entry.type === "api_key" &&
+        entry.key === managedSecret
+      );
+    },
+  );
+
+  return commitPiImport(
+    modelsContext,
+    authContext,
+    nextModels,
+    nextAuth,
+    options,
   );
 }
 
@@ -454,20 +572,13 @@ export async function setPiCredential(
   options: PiWriteOptions,
 ): Promise<AgentPiWriteResult> {
   const providerId = requireProviderId(providerIdInput);
-  if (
-    typeof secret !== "string" ||
-    !secret ||
-    secret.length > MAX_SECRET_LENGTH ||
-    /[\u0000-\u001f\u007f]/.test(secret)
-  ) {
-    fail("SECRET_INVALID");
-  }
+  const managedSecret = requireSecret(secret);
   const context = await readJsonTarget(path.join(rootPath, PI_AUTH_PATH));
   return applyJsonWrite(
     context,
     options,
     [providerId],
-    { type: "api_key", key: secret },
+    { type: "api_key", key: managedSecret },
     (written) => {
       const entry = written[providerId];
       return isRecord(entry) && entry.type === "api_key" && Boolean(entry.key);

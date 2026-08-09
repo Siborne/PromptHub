@@ -191,6 +191,7 @@ export const IPC_CHANNELS = {
   AGENT_MODEL_CONFIG_GET: "agent:modelConfig:get",
   AGENT_MODEL_CONFIG_SET: "agent:modelConfig:set",
   AGENT_PI_PROVIDER_ADD: "agent:pi:provider:add",
+  AGENT_PI_PROVIDER_SOURCE_IMPORT: "agent:pi:providerSource:import",
   AGENT_PI_PROVIDER_UPDATE: "agent:pi:provider:update",
   AGENT_PI_PROVIDER_REMOVE: "agent:pi:provider:remove",
   AGENT_PI_MODEL_ADD: "agent:pi:model:add",

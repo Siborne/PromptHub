@@ -4,6 +4,8 @@ import type {
   CoreAIProviderConfig,
 } from "@prompthub/core";
 import type {
+  AgentPiCustomProviderInput,
+  AgentPiWriteResult,
   AgentProviderProfilePublic,
   AgentProviderSourceCandidate,
   CreateAgentProviderProfileRequest,
@@ -16,6 +18,10 @@ interface AgentProviderSourceServiceOptions {
   createProfile: (
     request: CreateAgentProviderProfileRequest,
   ) => Promise<AgentProviderProfilePublic>;
+  importPiProvider: (input: {
+    provider: AgentPiCustomProviderInput;
+    secret?: string;
+  }) => Promise<AgentPiWriteResult>;
 }
 
 interface ProviderProjection {
@@ -30,6 +36,7 @@ const IMPORT_PLATFORM_IDS = new Set([
   "claude",
   "gemini",
   "opencode",
+  "pi",
   "qwen",
 ]);
 
@@ -63,6 +70,16 @@ function projectionFor(
 ): ProviderProjection | null {
   if (!IMPORT_PLATFORM_IDS.has(platformId)) return null;
   const providerId = nativeProviderId(provider.id);
+  if (platformId === "pi" && providerId) {
+    const protocol = {
+      openai: "openai-completions",
+      anthropic: "anthropic-messages",
+      gemini: "google-generative-ai",
+    }[provider.apiProtocol];
+    return protocol
+      ? { providerKind: provider.provider, protocol, config: { providerId } }
+      : null;
+  }
   if (
     platformId === "codex" &&
     provider.apiProtocol === "openai" &&
@@ -185,6 +202,7 @@ function candidateFor(
 export function createAgentProviderSourceService({
   readConfig,
   createProfile,
+  importPiProvider,
 }: AgentProviderSourceServiceOptions) {
   function list(platformId: string): AgentProviderSourceCandidate[] {
     const config = readConfig();
@@ -197,11 +215,16 @@ export function createAgentProviderSourceService({
     request: ImportAgentProviderSourceRequest,
   ): Promise<AgentProviderProfilePublic> {
     const platformId = requireRequestId(request.platformId);
+    if (platformId === "pi") {
+      throw new Error("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
+    }
     const sourceId = requireRequestId(request.sourceId);
     const modelId = requireRequestId(request.modelId);
     const config = readConfig();
     const provider = config.providers.find((item) => item.id === sourceId);
     if (!provider) throw new Error("AGENT_PROVIDER_SOURCE_NOT_FOUND");
+    const projection = projectionFor(platformId, provider);
+    if (!projection) throw new Error("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
     const candidate = candidateFor(config, provider, platformId);
     if (!candidate.compatible) {
       throw new Error("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
@@ -210,8 +233,6 @@ export function createAgentProviderSourceService({
       (item) => item.id === modelId,
     );
     if (!model) throw new Error("AGENT_PROVIDER_SOURCE_MODEL_NOT_FOUND");
-    const projection = projectionFor(platformId, provider);
-    if (!projection) throw new Error("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
     return createProfile({
       profile: {
         platformId,
@@ -231,5 +252,50 @@ export function createAgentProviderSourceService({
     });
   }
 
-  return { list, importSource };
+  async function importPiSource(
+    request: ImportAgentProviderSourceRequest,
+  ): Promise<AgentPiWriteResult> {
+    const platformId = requireRequestId(request.platformId);
+    const sourceId = requireRequestId(request.sourceId);
+    const modelId = requireRequestId(request.modelId);
+    if (platformId !== "pi") {
+      throw new Error("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
+    }
+    const config = readConfig();
+    const provider = config.providers.find((item) => item.id === sourceId);
+    if (!provider) throw new Error("AGENT_PROVIDER_SOURCE_NOT_FOUND");
+    const projection = projectionFor(platformId, provider);
+    const providerId = nativeProviderId(provider.id);
+    if (!projection || !providerId) {
+      throw new Error("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
+    }
+    const candidate = candidateFor(config, provider, platformId);
+    if (!candidate.compatible) {
+      throw new Error("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
+    }
+    const model = providerModels(config, provider).find(
+      (item) => item.id === modelId,
+    );
+    if (!model) throw new Error("AGENT_PROVIDER_SOURCE_MODEL_NOT_FOUND");
+    const secret = model.apiKey || provider.apiKey;
+    return importPiProvider({
+      provider: {
+        providerId,
+        baseUrl: provider.apiUrl,
+        api: projection.protocol as AgentPiCustomProviderInput["api"],
+        models: [
+          {
+            id: model.model,
+            ...(model.name && { name: model.name }),
+            ...(model.capabilities?.reasoning !== undefined && {
+              reasoning: model.capabilities.reasoning,
+            }),
+          },
+        ],
+      },
+      ...(secret && { secret }),
+    });
+  }
+
+  return { list, importSource, importPiSource };
 }

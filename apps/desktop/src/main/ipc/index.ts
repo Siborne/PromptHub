@@ -25,7 +25,11 @@ import { registerAgentProviderCurrentStateIPC } from "./agent-provider-current-s
 import { registerAgentProviderMigrationIPC } from "./agent-provider-migration.ipc";
 import { registerAgentAppearanceIPC } from "./agent-appearance.ipc";
 import { createAgentCodexProviderMigrationService } from "../services/agent-codex-provider-migration-service";
-import { resolveAgentProviderContext } from "../services/agent-platform-context";
+import {
+  getAgentConfigContext,
+  resolveAgentProviderContext,
+} from "../services/agent-platform-context";
+import { importPiCustomProvider } from "../services/agent-pi-model-writes";
 import {
   createAgentProviderRuntime,
   type AgentProviderRuntime,
@@ -410,6 +414,15 @@ export function registerAllIPC(
     const providerSourceService = createAgentProviderSourceService({
       readConfig: () => coreAIConfigService.read(),
       createProfile: (request) => runtime.profileService.create(request),
+      importPiProvider: ({ provider, secret }) => {
+        const context = getAgentConfigContext("pi");
+        return importPiCustomProvider(context.rootPath, provider, secret, {
+          backupRoot: path.join(
+            app.getPath("userData"),
+            "agent-config-backups",
+          ),
+        });
+      },
     });
     const officialProfileService = createAgentProviderOfficialProfileService({
       createProfile: (request) => runtime.profileService.create(request),
@@ -420,6 +433,7 @@ export function registerAllIPC(
     registerAgentProviderSourceIPC({
       list: providerSourceService.list,
       importSource: providerSourceService.importSource,
+      importPiSource: providerSourceService.importPiSource,
       ensureOfficial: officialProfileService.ensure,
     });
     registerAgentManagementBackupIPC(runtime.backupService);
