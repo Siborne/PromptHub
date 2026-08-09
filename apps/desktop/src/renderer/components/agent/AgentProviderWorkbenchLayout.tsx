@@ -32,7 +32,12 @@ export function AgentProviderWorkbenchLayout({
             {toolbar}
           </div>
         </div>
-        <div className="min-h-0 flex-1">{sidebar}</div>
+        <div
+          data-testid="agent-provider-workbench-sidebar"
+          className="min-h-0 flex-1 overflow-hidden"
+        >
+          {sidebar}
+        </div>
         <div className="border-t border-border p-3">{footer}</div>
       </aside>
       <section

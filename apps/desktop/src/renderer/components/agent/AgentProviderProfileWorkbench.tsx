@@ -582,7 +582,7 @@ export function AgentProviderProfileWorkbench({
           <nav
             ref={profileScrollRef}
             aria-label={t("agents.providerProfiles.listLabel")}
-            className="min-h-0 flex-1 overflow-y-auto p-1"
+            className="h-full min-h-0 overflow-y-auto p-1"
           >
             {store.currentState?.nativeConfig ? (
               <AgentProviderNativeListItem

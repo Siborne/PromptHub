@@ -163,6 +163,9 @@ describe("AgentPiModelCatalogPanel", () => {
     expect(
       screen.getByTestId("agent-provider-workbench-toolbar"),
     ).toBeVisible();
+    expect(screen.getByTestId("agent-provider-workbench-sidebar")).toHaveClass(
+      "overflow-hidden",
+    );
     const nav = screen.getByRole("navigation", { name: "Pi providers" });
     expect(within(nav).getByText("kimi-coding")).toBeVisible();
     expect(within(nav).getByText("deepseek")).toBeVisible();

@@ -33,6 +33,12 @@ describe("AgentProviderProfileWorkbench", () => {
     expect(
       screen.getByTestId("agent-provider-workbench-toolbar"),
     ).toBeVisible();
+    expect(screen.getByTestId("agent-provider-workbench-sidebar")).toHaveClass(
+      "overflow-hidden",
+    );
+    expect(
+      screen.getByRole("navigation", { name: "Provider profiles" }),
+    ).toHaveClass("h-full", "overflow-y-auto");
     expect(window.api.agent.listProviderProfiles).toHaveBeenCalledWith({
       platformId: "claude",
     });
