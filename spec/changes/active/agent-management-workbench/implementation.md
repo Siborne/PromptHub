@@ -2633,3 +2633,34 @@
   check; its Desktop unit batch passed 4,899 of 4,900 tests and failed in the
   unrelated database-backup MCP fixture because the fixture omitted the now
   required `bindings` array.
+
+### Pi Current Provider Import Parity
+
+- Added the missing current-configuration import control before Pi's existing
+  PromptHub-source import control, matching the generic Provider toolbar order,
+  icon treatment, tooltip behavior and confirmation boundary. The action is
+  disabled when Pi has no current provider/model or the current provider already
+  has a custom override.
+- Renderer submits only `agentId: "pi"`. Main re-inspects Pi's current settings
+  and bounded catalog, rejects missing, stale, custom or invalid provider/model
+  identities, then creates a same-id `models.json` entry using an empty
+  `modelOverrides` record for the current model. This is intentionally a no-op
+  model override: heterogeneous sibling protocols and endpoints remain untouched,
+  built-in models stay available and existing `auth.json` credentials are not
+  copied, changed or returned.
+- The Pi catalog now marks a built-in provider with a matching `models.json`
+  entry as custom, so the refreshed detail exposes the existing edit/remove
+  controls. Removing that entry naturally restores the built-in projection.
+- Focused unit/component/IPC/preload verification passed 5 files / 59 tests.
+  The new importer reached 100% statements, functions and lines; focused
+  coverage was rerun after adding the missing provider branch. Desktop typecheck,
+  affected ESLint, Prettier, spec traceability/index checks, `git diff --check`
+  and production build passed. The focused Electron E2E passed at 1440 x 900,
+  exercised the confirmation and durable override write, confirmed both toolbar
+  controls, checked secret redaction and captured the final editable Pi surface.
+  The build retains the existing large renderer chunk and mixed static/dynamic
+  `fflate` warnings. The wider Pi/provider regression passed 9 files / 124 tests.
+  The quick release harness passed 21 of 22 checks; its Desktop unit batch passed
+  4,905 of 4,906 tests and failed only in the unrelated existing
+  `database-backup.test.ts` MCP fixture because that fixture omits the now-required
+  `bindings` array.

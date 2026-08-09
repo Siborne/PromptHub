@@ -2990,3 +2990,30 @@ failure. Cancelled or invalid imports MUST perform zero native writes.
 - When the combined import reports failure
 - Then both `models.json` and `auth.json` match their pre-import contents
 - And the renderer receives only a stable public error code
+
+### `FR-AGENT-096`: Pi Current Provider Import Parity
+
+Pi MUST expose the same current-configuration import action and PromptHub-source
+import action in the shared Provider toolbar. Importing the current Pi
+configuration MUST create an editable same-id override for the currently active
+built-in provider without copying, deleting or returning its credential and
+without replacing Pi's built-in model catalog.
+
+The action MUST be unavailable when Pi has no configured provider or the current
+provider is already custom. Main MUST resolve the current provider and model from
+native configuration, validate both against the built-in catalog, then use the existing
+backup, digest, atomic-write, re-read verification and rollback pipeline.
+
+#### Scenario: Make the current built-in Pi provider editable
+
+- Given Pi's current provider comes from the built-in catalog
+- When the user confirms the current-configuration import
+- Then PromptHub writes a behavior-preserving same-id provider override to `models.json`
+- And the built-in models and existing credential remain available
+- And the refreshed provider detail exposes the custom editing controls
+
+#### Scenario: Reject an unavailable current import
+
+- Given Pi has no current built-in provider or already has a custom override
+- When the Provider toolbar is rendered or a stale request reaches main
+- Then the action is disabled or rejected before any native write

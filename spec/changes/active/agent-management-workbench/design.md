@@ -2322,8 +2322,33 @@ chat models. Pi import performs a constant number of bounded file reads,
 backups and atomic replacements; it adds no cache, polling loop, network call
 or renderer-resident credential state.
 
+## `DES-AGENT-114`: Pi Current Provider Override Import
+
+The Pi workbench toolbar mirrors the generic Provider toolbar with current
+configuration import first and PromptHub-source import second. Renderer sends
+only `{ agentId: "pi" }`; main re-inspects `settings.json` and the sanitized Pi
+catalog, so stale renderer-selected provider ids cannot choose a filesystem
+write target.
+
+For a current built-in provider, main writes a same-id provider entry containing
+an empty `modelOverrides` record for the current verified model into
+`models.json`. Pi treats this as a valid, behavior-preserving override: unlike a
+provider-level `baseUrl`, it cannot reroute sibling models that use different
+protocols or endpoints. Built-in models remain composed underneath it, while
+existing `auth.json` and environment credentials remain owned by Pi. The catalog
+projection marks a built-in provider with a matching custom entry as custom so
+the existing edit/remove controls operate on the override. Removing the entry
+restores the unmodified built-in projection.
+
+The import performs `O(P + M)` bounded catalog inspection and one bounded JSONC
+write. Existing backup, digest comparison, atomic replacement, semantic re-read
+verification and rollback primitives remain the only persistence path. Missing
+current provider/model, non-built-in source, stale model, malformed source and
+duplicate override fail before mutation.
+
 Traceability:
 
 | Requirement    | Design          | Verification     | Task          |
 | -------------- | --------------- | ---------------- | ------------- |
 | `FR-AGENT-095` | `DES-AGENT-113` | `TEST-AGENT-136` | `T-AGENT-182` |
+| `FR-AGENT-096` | `DES-AGENT-114` | `TEST-AGENT-137` | `T-AGENT-183` |

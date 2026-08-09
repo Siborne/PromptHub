@@ -419,6 +419,12 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 - [x] `T-AGENT-182` 按 `FR-AGENT-095` / `DES-AGENT-113` 提取共享 Provider
       workbench 视觉 primitives，并实现 PromptHub Provider 到 Pi 原生
       `models.json` / `auth.json` 的有界、可回滚导入。
+- [x] `TEST-AGENT-137` 复现 Pi 工具栏缺少当前配置导入入口；覆盖双按钮顺序、
+      确认与取消、已是自定义/未配置时禁用、main-owned 当前供应商解析、同 ID
+      override、内置模型与凭据保留、重复/畸形/并发失败零写入，以及 IPC/preload。
+- [x] `T-AGENT-183` 按 `FR-AGENT-096` / `DES-AGENT-114` 为 Pi 接入当前配置
+      导入按钮和 same-id `models.json` provider override，并让 catalog 正确投影
+      override 的可编辑来源；不得复制或返回凭据。
 
 - [ ] `T-AGENT-178` 将系统级模型服务配置确认为跨 Agent Provider Profile 层，补充 `agent_provider_bindings`、继承/独立副本、Agent target provider/model 映射和 projection digest 设计；禁止把同一 JSON 直接复制到不同 Agent。
 - [ ] `TEST-AGENT-133` 统一 Provider 来源与权限矩阵：官方目录只读、内置模型只读、内置 override、系统级配置、自定义 provider/model、imported provider；覆盖 UI 禁止编辑错误字段和允许编辑鉴权字段。

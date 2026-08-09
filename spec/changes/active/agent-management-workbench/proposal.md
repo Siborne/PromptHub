@@ -541,3 +541,9 @@ action. The import runs in the main process, selects one compatible chat model,
 writes the Pi provider and credential as one recoverable operation, and never
 returns a literal credential to the renderer. Unsupported protocols remain
 visible but disabled in the import review.
+
+The toolbar also keeps the shared current-configuration import action. For Pi,
+this creates a same-id provider override in `models.json` for the currently
+configured built-in provider, preserving Pi's built-in models and existing
+`auth.json` credential ownership. The action is unavailable when Pi has no
+current built-in provider or the provider is already custom.
