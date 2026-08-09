@@ -2948,3 +2948,45 @@ bodies remain platform-owned and are never persisted by this renderer fix.
 - When the user requests the next message page
 - Then the renderer stays on or clamps to the last page containing entries
 - And the transcript never presents an empty page caused by pagination state
+
+### `FR-AGENT-095`: Unified Provider Workbench And Pi Native Import
+
+Every Agent Provider & Model view MUST use the same sidebar width, toolbar
+placement, provider-row anatomy, detail header, metadata-row treatment and
+section surfaces. Platform adapters MAY expose different fields and actions,
+but they MUST NOT replace the shared visual hierarchy with an Agent-specific
+page composition.
+
+Pi MUST expose an import action in the shared sidebar toolbar. The action MUST
+list PromptHub providers, allow one compatible chat model to be selected, and
+import the selection into Pi's native `models.json` catalog. When the selected
+PromptHub model has a configured credential, the credential MUST be written to
+Pi's native `auth.json` without crossing the renderer boundary.
+
+The Pi import MUST validate the provider id, endpoint, protocol and model,
+reject duplicate or unsupported entries before writing, create backups, detect
+concurrent modification, and restore both native files after any partial write
+failure. Cancelled or invalid imports MUST perform zero native writes.
+
+#### Scenario: Provider tabs share one visual hierarchy
+
+- Given Claude Code and Pi expose different native provider adapters
+- When the user opens Provider & Model for either Agent
+- Then both views use the shared sidebar, toolbar, list-row and detail-section primitives
+- And only platform-specific data and commands differ
+
+#### Scenario: Import a PromptHub provider into Pi
+
+- Given a PromptHub chat provider uses a Pi-supported protocol
+- And the user selects one compatible model in Pi's import dialog
+- When the import is confirmed
+- Then the provider and model are written to Pi's native catalog
+- And any configured credential is written only by the main process
+- And the refreshed Pi provider list exposes the imported provider
+
+#### Scenario: Import rollback is complete
+
+- Given the Pi catalog write succeeds but the credential write fails
+- When the combined import reports failure
+- Then both `models.json` and `auth.json` match their pre-import contents
+- And the renderer receives only a stable public error code

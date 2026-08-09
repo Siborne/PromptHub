@@ -709,6 +709,13 @@ Current support boundary:
   state are excluded. The model projection reads `defaultProvider` and
   `defaultModel` from `settings.json` and updates only those selection fields
   through the existing backup, atomic-write and verification workflow.
+- Provider workbench: Pi uses the same master-detail shell, toolbar, provider
+  row and detail surfaces as the other Agent provider adapters. Importing a
+  PromptHub provider is an explicit native projection into `<root>/models.json`
+  and, when a managed key exists, `<root>/auth.json`; the main process resolves
+  the source and credential, prepares both JSONC edits, verifies both source
+  revisions and restores both files if either atomic write fails. Credentials
+  never cross the preload boundary or enter `models.json`.
 - Sessions: PromptHub scans only JSONL files below `<root>/sessions`, bounds
   metadata and detail reads, rejects unsafe ids and symlinks, and exposes
   `pi --session <id>` resume metadata without launching or editing Pi.

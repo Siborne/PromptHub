@@ -2604,3 +2604,32 @@
   complete multi-page traversal and a recoverable `truncated` response that
   still exposes cursor navigation without the old warning. Focused Pi, Oh My
   Pi and Agent Sessions panel suites pass 19 tests; desktop typecheck passes.
+
+### Unified Provider Workbench And Pi Import
+
+- Added shared Provider workbench primitives for the sidebar, fixed toolbar,
+  provider rows, detail canvas, headers, sections and metadata rows. Generic
+  Provider Profiles, current native configuration and Pi now use the same
+  geometry, spacing, selection treatment and 8 px surface radius while keeping
+  their platform-specific controls.
+- Pi now exposes the PromptHub provider import action in the shared toolbar.
+  Renderer requests contain only platform/source/model identifiers. Main maps
+  OpenAI, Anthropic and Gemini protocols into Pi APIs, resolves the selected
+  credential without exposing it, and projects the provider into native
+  `models.json` plus optional `auth.json`.
+- Managed-credential import prepares and validates both JSONC edits before any
+  mutation, backs up both targets, verifies both original digests, writes
+  atomically and restores both originals on partial failure. Imports without a
+  credential touch only `models.json`; duplicate providers, malformed input,
+  invalid secrets and concurrent edits fail before an unintended write.
+- Focused unit/component/IPC/preload verification passed 6 files / 98 tests.
+  Desktop typecheck, affected-file ESLint and production build passed. The
+  focused Electron Provider workbench
+  E2E passed and captured the Pi layout at 1440 x 900; the existing monolithic
+  Agent workspace E2E was also attempted but stopped at its pre-existing
+  registry count assertion before reaching Provider & Model. The production
+  build keeps the existing large renderer chunk and mixed static/dynamic
+  `fflate` warnings. The quick release harness completed every non-Desktop-unit
+  check; its Desktop unit batch passed 4,899 of 4,900 tests and failed in the
+  unrelated database-backup MCP fixture because the fixture omitted the now
+  required `bindings` array.

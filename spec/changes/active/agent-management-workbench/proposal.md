@@ -527,3 +527,17 @@ Transcript pagination must never expose an empty page when a native cursor
 returns duplicate or empty records. The renderer follows advancing cursors with
 a bounded hop count, clamps stale page state to the last loaded page, and keeps
 native transcript ownership and on-demand reading unchanged.
+
+## Scope Addendum 2026-08-09: Unified Provider Workbench And Pi Import
+
+The Provider & Model tab must present one visual system across Agent adapters.
+Platform-specific storage and editing semantics remain separate, but sidebar
+dimensions, action placement, provider-row anatomy, detail headers, metadata
+rows and section surfaces must not fork by Agent.
+
+Pi keeps `models.json`, `settings.json` and `auth.json` as its native sources of
+truth. Its shared workbench toolbar adds an explicit PromptHub-provider import
+action. The import runs in the main process, selects one compatible chat model,
+writes the Pi provider and credential as one recoverable operation, and never
+returns a literal credential to the renderer. Unsupported protocols remain
+visible but disabled in the import review.

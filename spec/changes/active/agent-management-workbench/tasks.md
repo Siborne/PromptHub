@@ -412,6 +412,14 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 
 ## Confirmed Unified Provider Design Follow-up
 
+- [x] `TEST-AGENT-136` 先复现 Claude/Pi Provider & Model 使用不同 sidebar、
+      toolbar、provider row 和 detail section，以及 Pi 缺少 PromptHub 导入入口；
+      覆盖共享布局、兼容/不兼容来源、main-only credential、IPC/preload 合同、
+      duplicate 零写入和双文件失败回滚。
+- [x] `T-AGENT-182` 按 `FR-AGENT-095` / `DES-AGENT-113` 提取共享 Provider
+      workbench 视觉 primitives，并实现 PromptHub Provider 到 Pi 原生
+      `models.json` / `auth.json` 的有界、可回滚导入。
+
 - [ ] `T-AGENT-178` 将系统级模型服务配置确认为跨 Agent Provider Profile 层，补充 `agent_provider_bindings`、继承/独立副本、Agent target provider/model 映射和 projection digest 设计；禁止把同一 JSON 直接复制到不同 Agent。
 - [ ] `TEST-AGENT-133` 统一 Provider 来源与权限矩阵：官方目录只读、内置模型只读、内置 override、系统级配置、自定义 provider/model、imported provider；覆盖 UI 禁止编辑错误字段和允许编辑鉴权字段。
 - [ ] `T-AGENT-179` 实现系统级 Provider Profile 到 Agent 的 bind/clone/unbind/import 流程；bind 继承系统配置，clone 生成独立自定义配置，删除系统 Profile 前展示受影响 Agent。

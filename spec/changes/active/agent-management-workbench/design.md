@@ -2293,3 +2293,37 @@ by entry id in `O(n)` time per fetched page; the bounded hop count prevents
 pathological adapters from causing unbounded I/O. The renderer updates the
 existing detail snapshot once, clamps the visible page to the last loaded page,
 and preserves a cursor for a later retry when the hop budget is reached.
+
+## `DES-AGENT-113`: Shared Provider Workbench Composition And Pi Import
+
+`AgentProviderWorkbenchLayout.tsx` owns the stable Provider & Model visual
+composition: responsive sidebar tracks, top action toolbar, scrollable provider
+list, bottom create action, detail canvas, list-item classes, detail header,
+metadata rows and section surfaces. The generic Provider Profile adapter and
+Pi native catalog adapter provide data and commands to these primitives rather
+than maintaining independent shells.
+
+Pi import reuses the existing PromptHub provider-source discovery service. The
+service adds a Pi protocol projection (`openai-completions`,
+`anthropic-messages`, or `google-generative-ai`) and resolves the selected
+provider/model entirely in the main process. A dedicated IPC operation passes
+only source and model identities from the renderer and returns only backup
+metadata; literal credentials remain main-process-only.
+
+The Pi writer prepares the `models.json` and optional `auth.json` edits before
+performing either write. It creates both backups, verifies both original
+digests, writes with atomic replacement, verifies the generated structures,
+and restores both original files if either replacement fails. Duplicate ids,
+invalid endpoints, unsupported protocols and malformed native files fail
+before the first write.
+
+Provider discovery remains `O(P + M)` for `P` configured providers and `M`
+chat models. Pi import performs a constant number of bounded file reads,
+backups and atomic replacements; it adds no cache, polling loop, network call
+or renderer-resident credential state.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-095` | `DES-AGENT-113` | `TEST-AGENT-136` | `T-AGENT-182` |
