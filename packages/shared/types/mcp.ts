@@ -206,6 +206,7 @@ export interface McpRemoveTargetNames {
 
 export interface McpApplyResult {
   path: string;
+  /** @deprecated Target projections no longer create persistent backup files. */
   backupPath?: string;
   target: McpTargetKind;
   appliedServerNames: string[];
@@ -258,6 +259,7 @@ export interface McpTargetSyncOptions {
 }
 
 export interface McpTargetSyncUpdated {
+  /** @deprecated Target projections no longer create persistent backup files. */
   backupPath?: string;
   bindingId: string;
   path: string;
@@ -322,6 +324,7 @@ export interface McpCreateFromSourceResult extends McpImportResult {
 
 export interface McpRemoveResult {
   path: string;
+  /** @deprecated Target projections no longer create persistent backup files. */
   backupPath?: string;
   target: McpTargetKind;
   removedServerNames: string[];

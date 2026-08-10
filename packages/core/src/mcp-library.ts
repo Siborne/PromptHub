@@ -77,6 +77,7 @@ import {
   getMcpTargetSyncReason,
   shouldSkipDisabledMcpPlatform,
 } from "./mcp-target-sync-policy";
+import { commitMcpTargetProjection } from "./mcp-target-projection";
 
 export { getMcpTargetPresets } from "./mcp-target-presets";
 export type { McpTargetPreset } from "./mcp-target-presets";
@@ -248,22 +249,6 @@ function selectServers(
   return servers;
 }
 
-function createBackup(filePath: string): string | undefined {
-  if (!fs.existsSync(filePath)) {
-    return undefined;
-  }
-  const backupPath = `${filePath}.prompthub-mcp-backup-${Date.now()}`;
-  fs.copyFileSync(filePath, backupPath);
-  return backupPath;
-}
-
-function writeTextFileAtomic(filePath: string, content: string): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tempPath, content, "utf8");
-  fs.renameSync(tempPath, filePath);
-}
-
 function isTomlTarget(target: McpTargetKind): boolean {
   return target === "codex" || target === "custom-toml";
 }
@@ -323,6 +308,44 @@ function findOverwrittenTargetNames(
   return servers
     .filter((server) => server.enabled && existingNames.has(server.name))
     .map((server) => server.name);
+}
+
+function verifyMcpTargetProjection(
+  filePath: string,
+  target: McpTargetKind,
+  expectedContent: string,
+  presentNames: string[],
+  absentNames: string[],
+): void {
+  try {
+    const writtenContent = fs.readFileSync(filePath, "utf8");
+    if (writtenContent !== expectedContent) {
+      throw new Error("written bytes do not match the projected content");
+    }
+    const names = new Set(
+      listExistingTargetServerNames(
+        {
+          target,
+          scope: "custom",
+          path: filePath,
+          serverIds: [],
+        },
+        writtenContent,
+      ),
+    );
+    const missing = presentNames.filter((name) => !names.has(name));
+    const retained = absentNames.filter((name) => names.has(name));
+    if (missing.length > 0 || retained.length > 0) {
+      throw new Error(
+        `entry verification failed (missing: ${missing.join(", ") || "none"}; retained: ${retained.join(", ") || "none"})`,
+      );
+    }
+  } catch (error) {
+    throw new CoreMcpError(
+      "TARGET_VERIFY_FAILED",
+      `MCP 目标配置写入校验失败: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 function buildEntryDigest(
@@ -1219,7 +1242,8 @@ export class CoreMcpLibraryService {
         "没有已启用的 MCP 服务可分发",
       );
     }
-    const existingContent = fs.existsSync(target.path)
+    const targetExisted = fs.existsSync(target.path);
+    const existingContent = targetExisted
       ? fs.readFileSync(target.path, "utf8")
       : "";
     const externalConflicts = findExternalTargetConflicts(
@@ -1257,9 +1281,6 @@ export class CoreMcpLibraryService {
           2,
         )}\n`;
 
-    const backupPath = createBackup(target.path);
-    writeTextFileAtomic(target.path, content);
-
     const now = nowMs();
     const bindingId = createBindingId(target);
     const existingBinding = library.bindings.find(
@@ -1290,17 +1311,33 @@ export class CoreMcpLibraryService {
       createdAt: existingBinding?.createdAt ?? now,
       updatedAt: now,
     };
-    this.write({
+    const nextLibrary = {
       ...library,
       bindings: [
         binding,
         ...library.bindings.filter((item) => item.id !== binding.id),
       ],
+    };
+    commitMcpTargetProjection({
+      filePath: target.path,
+      previousContent: targetExisted ? existingContent : undefined,
+      nextContent: content,
+      verify: () =>
+        verifyMcpTargetProjection(
+          target.path,
+          target.target,
+          content,
+          servers.map((server) => server.name),
+          [],
+        ),
+      persist: () => {
+        this.write(nextLibrary);
+      },
     });
 
     return {
       path: target.path,
-      backupPath,
+      backupPath: undefined,
       target: target.target,
       appliedServerNames: servers.map((server) => server.name),
       overwrittenServerNames,
@@ -1311,11 +1348,9 @@ export class CoreMcpLibraryService {
   }
 
   /**
-   * Remove selected servers from an agent target config file, with backup.
-   * Unrelated config content is preserved. The matching binding is updated
-   * and dropped when it becomes empty.
-   * 从目标配置文件中移除选定的 MCP 服务（带备份），保留无关配置；
-   * 同步更新 binding，为空时删除。
+   * Remove selected servers from an agent target config file. Unrelated
+   * config content is preserved. The matching binding is updated and dropped
+   * when it becomes empty.
    */
   removeFromTarget(target: McpApplyTarget): McpRemoveResult {
     const library = this.read();
@@ -1340,13 +1375,10 @@ export class CoreMcpLibraryService {
           2,
         )}\n`;
 
-    const backupPath = createBackup(target.path);
-    writeTextFileAtomic(target.path, content);
-
     const now = nowMs();
     const bindingId = createBindingId(target);
     const removedIds = new Set(target.serverIds);
-    this.write({
+    const nextLibrary = {
       ...library,
       bindings: library.bindings
         .map((binding) =>
@@ -1368,11 +1400,27 @@ export class CoreMcpLibraryService {
             : binding,
         )
         .filter((binding) => binding.serverIds.length > 0),
+    };
+    commitMcpTargetProjection({
+      filePath: target.path,
+      previousContent: existingContent,
+      nextContent: content,
+      verify: () =>
+        verifyMcpTargetProjection(
+          target.path,
+          target.target,
+          content,
+          [],
+          serverNames,
+        ),
+      persist: () => {
+        this.write(nextLibrary);
+      },
     });
 
     return {
       path: target.path,
-      backupPath,
+      backupPath: undefined,
       target: target.target,
       removedServerNames: serverNames,
       content: redactMcpConfigContent(target.target, content),
@@ -1409,9 +1457,6 @@ export class CoreMcpLibraryService {
           2,
         )}\n`;
 
-    const backupPath = createBackup(target.path);
-    writeTextFileAtomic(target.path, content);
-
     const removedNames = new Set(target.serverNames);
     const removedLibraryIds = new Set(
       library.servers
@@ -1420,7 +1465,7 @@ export class CoreMcpLibraryService {
     );
     const now = nowMs();
     const bindingId = createBindingId({ ...target, serverIds: [] });
-    this.write({
+    const nextLibrary = {
       ...library,
       bindings: library.bindings
         .map((binding) =>
@@ -1442,11 +1487,27 @@ export class CoreMcpLibraryService {
             : binding,
         )
         .filter((binding) => binding.serverIds.length > 0),
+    };
+    commitMcpTargetProjection({
+      filePath: target.path,
+      previousContent: existingContent,
+      nextContent: content,
+      verify: () =>
+        verifyMcpTargetProjection(
+          target.path,
+          target.target,
+          content,
+          [],
+          target.serverNames,
+        ),
+      persist: () => {
+        this.write(nextLibrary);
+      },
     });
 
     return {
       path: target.path,
-      backupPath,
+      backupPath: undefined,
       target: target.target,
       removedServerNames: target.serverNames,
       content: redactMcpConfigContent(target.target, content),

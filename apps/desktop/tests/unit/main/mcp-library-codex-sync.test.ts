@@ -187,7 +187,7 @@ describe("CoreMcpLibraryService", () => {
     expect(binding.serverIds.sort()).toEqual([first.id, second.id].sort());
   });
 
-  it("removes a server from a JSON target with a backup and keeps other entries", () => {
+  it("removes a server from a JSON target without leaving a backup sidecar", () => {
     const service = new CoreMcpLibraryService();
     const fetchServer = service.createServer({
       name: "fetch",
@@ -220,8 +220,8 @@ describe("CoreMcpLibraryService", () => {
     const written = JSON.parse(fs.readFileSync(targetPath, "utf8"));
 
     expect(result.removedServerNames).toEqual(["fetch"]);
-    expect(result.backupPath).toBeTruthy();
-    expect(fs.existsSync(result.backupPath!)).toBe(true);
+    expect(result.backupPath).toBeUndefined();
+    expect(fs.readdirSync(path.dirname(targetPath))).toEqual(["mcp.json"]);
     expect(written.mcpServers.fetch).toBeUndefined();
     expect(written.mcpServers.memory.command).toBe("npx");
     const binding = service.read().bindings[0];

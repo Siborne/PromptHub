@@ -95,7 +95,8 @@ describe("CoreMcpLibraryService", () => {
     });
     const afterRemove = JSON.parse(fs.readFileSync(targetPath, "utf8"));
 
-    expect(result.backupPath).toBeTruthy();
+    expect(result.backupPath).toBeUndefined();
+    expect(fs.readdirSync(path.dirname(targetPath))).toEqual(["opencode.json"]);
     expect(afterRemove.provider.openai.npm).toBe("@ai-sdk/openai");
     expect(afterRemove.mcp.external.url).toBe("https://example.com/mcp");
     expect(afterRemove.mcp.memory).toBeUndefined();
@@ -195,8 +196,8 @@ describe("CoreMcpLibraryService", () => {
     const written = JSON.parse(fs.readFileSync(targetPath, "utf8"));
 
     expect(result.removedServerNames).toEqual(["external"]);
-    expect(result.backupPath).toBeTruthy();
-    expect(fs.existsSync(result.backupPath!)).toBe(true);
+    expect(result.backupPath).toBeUndefined();
+    expect(fs.readdirSync(path.dirname(targetPath))).toEqual(["external.json"]);
     expect(written.keep).toBe(true);
     expect(written.mcpServers.external).toBeUndefined();
     expect(written.mcpServers.keep.command).toBe("uvx");
@@ -696,7 +697,7 @@ describe("CoreMcpLibraryService", () => {
     expect(removed.content).not.toContain("local-secret");
   });
 
-  it("applies Codex TOML targets with a backup and managed block", () => {
+  it("applies Codex TOML targets without leaving a sidecar backup", () => {
     const service = new CoreMcpLibraryService();
     const server = service.createServer({
       name: "filesystem",
@@ -717,8 +718,8 @@ describe("CoreMcpLibraryService", () => {
     });
     const written = fs.readFileSync(targetPath, "utf8");
 
-    expect(result.backupPath).toBeTruthy();
-    expect(fs.existsSync(result.backupPath!)).toBe(true);
+    expect(result.backupPath).toBeUndefined();
+    expect(fs.readdirSync(path.dirname(targetPath))).toEqual(["config.toml"]);
     expect(written).toContain('model = "gpt-5"');
     expect(written).toContain("# >>> PromptHub MCP managed block >>>");
     expect(written).toContain("[mcp_servers.filesystem]");
