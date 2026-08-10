@@ -53,6 +53,12 @@ function readActiveStatus(changePath) {
   const content = fs.readFileSync(implementationPath, "utf8");
   const statusLine = content.match(/^## Status\s*\n+\s*([^\n]+)/im)?.[1];
   if (!statusLine) return "active";
+  if (
+    /\b(?:not|never)\s+(?:implemented|completed|shipped)\b/i.test(statusLine) ||
+    /\bunimplemented\b/i.test(statusLine)
+  ) {
+    return "active";
+  }
   const knownStatus = statusLine.match(
     /\b(needs-convergence|review-pending|release-pending|in progress|implemented|completed|shipped|active)\b/i,
   );
