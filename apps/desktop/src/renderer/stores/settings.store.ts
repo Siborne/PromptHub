@@ -31,6 +31,7 @@ import {
   normalizeSyncProvider,
 } from "./settings/settings-normalizers";
 import {
+  getPersistedLanguageSetting,
   mergeSettingsState,
   migrateSettingsState,
   rehydrateSettingsState,
@@ -43,6 +44,10 @@ import type {
   AIProviderConfig,
   ModelRouteDefaults,
   SettingsState,
+} from "./settings/settings-types";
+import {
+  SUPPORTED_LANGUAGES,
+  type SupportedLanguage,
 } from "./settings/settings-types";
 import { normalizeAgentIdentityPreferences } from "../services/agent-identity";
 
@@ -110,6 +115,8 @@ function sanitizeGithubToken(token: string): string {
   return token.replace(/[\r\n\x00-\x1f\x7f]/g, "").trim();
 }
 
+let persistedRendererLanguage: SupportedLanguage | null = null;
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => {
@@ -142,7 +149,10 @@ export const useSettingsStore = create<SettingsState>()(
       name: "prompthub-settings",
       version: 19,
       partialize: stripEphemeralSettings,
-      merge: mergeSettingsState,
+      merge: (persistedState, currentState) => {
+        persistedRendererLanguage = getPersistedLanguageSetting(persistedState);
+        return mergeSettingsState(persistedState, currentState);
+      },
       migrate: migrateSettingsState,
       onRehydrateStorage: () => (state, error) => {
         if (error) {
@@ -154,6 +164,7 @@ export const useSettingsStore = create<SettingsState>()(
             state,
             useSettingsStore.setState,
             syncSettingsToMain,
+            persistedRendererLanguage !== null,
           );
         });
       },
@@ -179,6 +190,11 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
     modelRouteDefaults?: ModelRouteDefaults;
   };
   const state = useSettingsStore.getState();
+  const mainProcessLanguage =
+    typeof settings.language === "string" &&
+    SUPPORTED_LANGUAGES.includes(settings.language as SupportedLanguage)
+      ? (settings.language as SupportedLanguage)
+      : null;
   const launchAtStartup =
     typeof settings.launchAtStartup === "boolean"
       ? settings.launchAtStartup
@@ -290,4 +306,7 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
       sync: buildMainProcessSyncSettings(syncProvider),
     });
   if (!settings.networkProxy) void syncSettingsToMain({ networkProxy });
+  if (!persistedRendererLanguage && mainProcessLanguage) {
+    useSettingsStore.getState().setLanguage(mainProcessLanguage);
+  }
 }

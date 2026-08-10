@@ -14,6 +14,8 @@ describe("settings language actions", () => {
     localStorage.clear();
     changeLanguageMock.mockReset();
     changeLanguageMock.mockResolvedValue(undefined);
+    window.api.settings.get = vi.fn().mockResolvedValue(undefined);
+    window.api.settings.set = vi.fn().mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -23,9 +25,8 @@ describe("settings language actions", () => {
   it("normalizes locale variants before updating settings", async () => {
     const setSettings = vi.fn().mockResolvedValue(true);
     window.api.settings.set = setSettings;
-    const { useSettingsStore } = await import(
-      "../../../src/renderer/stores/settings.store"
-    );
+    const { useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
     setSettings.mockClear();
 
     useSettingsStore.getState().setLanguage("fr-FR");
@@ -57,6 +58,97 @@ describe("settings language actions", () => {
     });
   });
 
+  it("does not sync a temporary language when renderer persistence is absent", async () => {
+    const setSettings = vi.fn().mockResolvedValue(true);
+    window.api.settings.set = setSettings;
+
+    await import("../../../src/renderer/stores/settings.store");
+
+    await vi.waitFor(() => {
+      expect(setSettings).toHaveBeenCalled();
+    });
+    expect(
+      setSettings.mock.calls.some(([payload]) =>
+        Object.prototype.hasOwnProperty.call(payload, "language"),
+      ),
+    ).toBe(false);
+  });
+
+  it("restores the main-process language when renderer persistence is absent", async () => {
+    const setSettings = vi.fn().mockResolvedValue(true);
+    window.api.settings.set = setSettings;
+    window.api.settings.get = vi.fn().mockResolvedValue({ language: "zh" });
+    const { loadSettingsFromMainProcess, useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
+
+    await loadSettingsFromMainProcess();
+
+    expect(useSettingsStore.getState().language).toBe("zh");
+    expect(changeLanguageMock).toHaveBeenCalledWith("zh");
+  });
+
+  it("keeps an explicit renderer language over a different main value", async () => {
+    const setSettings = vi.fn().mockResolvedValue(true);
+    window.api.settings.set = setSettings;
+    window.api.settings.get = vi.fn().mockResolvedValue({ language: "zh" });
+    localStorage.setItem(
+      "prompthub-settings",
+      JSON.stringify({
+        state: { language: "de" },
+        version: 19,
+      }),
+    );
+    const { loadSettingsFromMainProcess, useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
+
+    await loadSettingsFromMainProcess();
+
+    expect(useSettingsStore.getState().language).toBe("de");
+    expect(changeLanguageMock).not.toHaveBeenCalledWith("zh");
+  });
+
+  it("treats an unsupported persisted renderer language as absent", async () => {
+    window.api.settings.get = vi.fn().mockResolvedValue({ language: "zh" });
+    localStorage.setItem(
+      "prompthub-settings",
+      JSON.stringify({
+        state: { language: "unsupported" },
+        version: 19,
+      }),
+    );
+    const { loadSettingsFromMainProcess, useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
+
+    await loadSettingsFromMainProcess();
+
+    expect(useSettingsStore.getState().language).toBe("zh");
+    expect(changeLanguageMock).toHaveBeenCalledWith("zh");
+  });
+
+  it("ignores an unsupported main-process language", async () => {
+    window.api.settings.get = vi
+      .fn()
+      .mockResolvedValue({ language: "unsupported" });
+    const { loadSettingsFromMainProcess, useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
+
+    await loadSettingsFromMainProcess();
+
+    expect(useSettingsStore.getState().language).toBe("en");
+    expect(changeLanguageMock).not.toHaveBeenCalledWith("unsupported");
+  });
+
+  it("recognizes only supported persisted language values", async () => {
+    const { getPersistedLanguageSetting } =
+      await import("../../../src/renderer/stores/settings/settings-persistence");
+
+    expect(getPersistedLanguageSetting(null)).toBeNull();
+    expect(getPersistedLanguageSetting({})).toBeNull();
+    expect(getPersistedLanguageSetting({ language: 1 })).toBeNull();
+    expect(getPersistedLanguageSetting({ language: "unsupported" })).toBeNull();
+    expect(getPersistedLanguageSetting({ language: "zh-TW" })).toBe("zh-TW");
+  });
+
   it("logs storage hydration failures with the original error", async () => {
     const error = new Error("local storage unavailable");
     const consoleError = vi
@@ -79,9 +171,8 @@ describe("settings language actions", () => {
   });
 
   it("maps traditional chinese locale aliases to zh-TW", async () => {
-    const { useSettingsStore } = await import(
-      "../../../src/renderer/stores/settings.store"
-    );
+    const { useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
 
     useSettingsStore.getState().setLanguage("zh-Hant");
 
@@ -96,9 +187,8 @@ describe("settings language actions", () => {
       .mockImplementation(() => undefined);
     changeLanguageMock.mockRejectedValueOnce(error);
 
-    const { useSettingsStore } = await import(
-      "../../../src/renderer/stores/settings.store"
-    );
+    const { useSettingsStore } =
+      await import("../../../src/renderer/stores/settings.store");
 
     useSettingsStore.getState().setLanguage("de");
     await Promise.resolve();
