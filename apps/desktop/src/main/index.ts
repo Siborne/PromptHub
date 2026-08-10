@@ -166,8 +166,8 @@ export function sendToMainWindow(channel: string, ...args: unknown[]) {
     }
   }
 }
-
 export function emitWindowVisibility(isVisible: boolean) {
+  if (isQuitting) return;
   sendToMainWindow("window:visibility-changed", isVisible);
   trayController.refresh();
 }
@@ -437,7 +437,7 @@ async function createWindow() {
     // Dev mode: try to load Vite dev server
     // 开发模式：尝试连接 Vite 开发服务器
     const devServerUrl =
-      process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
+      process.env.VITE_DEV_SERVER_URL || "http://127.0.0.1:5173";
     console.log("Loading dev server:", devServerUrl);
     try {
       await mainWindow.loadURL(devServerUrl);

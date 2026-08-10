@@ -4,6 +4,15 @@ import electron from "vite-plugin-electron";
 import renderer from "vite-plugin-electron-renderer";
 import path from "path";
 import type { Plugin } from "vite";
+import type { ChildProcess } from "node:child_process";
+import { treeKillSync } from "vite-plugin-electron";
+
+import { normalizeDesktopDevServerUrl } from "./src/main/dev-server-url";
+import {
+  createElectronRestartCoordinator,
+  type ElectronRestartCoordinator,
+  stopElectronBeforeRestart,
+} from "./src/main/electron-dev-restart";
 
 process.env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
 
@@ -34,6 +43,13 @@ const aliases = {
 // 体积审计。报告写入 dist-stats/，已加入 .gitignore。visualizer 仅提供 ESM，
 // 因此需要按需懒加载，避免污染 vite-plugin-electron 的 CJS 配置加载链路。
 const isBundleAnalyze = process.env.BUILD_ANALYZE === "1";
+const electronProcess = process as NodeJS.Process & {
+  electronApp?: ChildProcess;
+  prompthubElectronRestartCoordinator?: ElectronRestartCoordinator;
+};
+const electronRestartCoordinator =
+  (electronProcess.prompthubElectronRestartCoordinator ??=
+    createElectronRestartCoordinator());
 
 async function resolveAnalyzePlugins(): Promise<Plugin[]> {
   if (!isBundleAnalyze) return [];
@@ -50,21 +66,36 @@ async function resolveAnalyzePlugins(): Promise<Plugin[]> {
 }
 
 export default defineConfig(async () => ({
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: false,
+  },
   plugins: [
     react(),
     electron([
       {
         entry: "src/main/index.ts",
-        onstart(args) {
-          // Start Electron, vite-plugin-electron will auto-set VITE_DEV_SERVER_URL
-          // 启动 Electron，vite-plugin-electron 会自动设置 VITE_DEV_SERVER_URL
-          // Override default argv to remove "--no-sandbox" which causes
-          // "不支持的资源类型: --no-sandbox" on macOS with Electron 33.
-          // The default startup() uses [".", "--no-sandbox"] but --no-sandbox
-          // is a Linux-only Chromium flag and unnecessary on macOS/Windows.
-          // 覆盖默认 argv，移除 "--no-sandbox" 参数。该参数仅适用于 Linux，
-          // 在 macOS/Windows 上会导致 Electron 启动失败。
-          args.startup(["."]);
+        async onstart(args) {
+          await electronRestartCoordinator
+            .request(async () => {
+              process.env.VITE_DEV_SERVER_URL = normalizeDesktopDevServerUrl(
+                process.env.VITE_DEV_SERVER_URL,
+              );
+              await stopElectronBeforeRestart(
+                electronProcess.electronApp,
+                treeKillSync,
+              );
+              delete electronProcess.electronApp;
+              // Override the plugin's Linux-only default --no-sandbox argument.
+              await args.startup(["."]);
+            })
+            .catch((error) => {
+              console.error(
+                "Failed to restart Electron after main rebuild:",
+                error,
+              );
+            });
         },
         vite: {
           resolve: {
@@ -76,7 +107,9 @@ export default defineConfig(async () => ({
               // Keep native/runtime-only main-process deps out of the bundle.
               external: (id) =>
                 mainExternalModules.has(id) ||
-                [...mainExternalModules].some((item) => id.startsWith(`${item}/`)),
+                [...mainExternalModules].some((item) =>
+                  id.startsWith(`${item}/`),
+                ),
             },
           },
         },

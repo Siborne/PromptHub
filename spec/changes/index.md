@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 42 |
+| Active | 43 |
 | Archived | 185 |
 | Legacy | 1 |
 
@@ -21,6 +21,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `cli-feature-completeness` | active | `spec/changes/active/cli-feature-completeness/` |
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
+| `desktop-dev-server-loopback-isolation` | active | `spec/changes/active/desktop-dev-server-loopback-isolation/` |
 | `desktop-frontend-animation-system` | active | `spec/changes/active/desktop-frontend-animation-system/` |
 | `desktop-frontend-perf-tuneup` | active | `spec/changes/active/desktop-frontend-perf-tuneup/` |
 | `desktop-home-layout-controls` | active | `spec/changes/active/desktop-home-layout-controls/` |

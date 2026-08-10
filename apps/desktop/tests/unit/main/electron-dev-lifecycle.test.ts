@@ -26,4 +26,32 @@ describe("Electron development lifecycle", () => {
     expect(rendererEntry).toContain("<RendererErrorBoundary");
     expect(rendererEntry).toContain("<ToastProvider>");
   });
+
+  it("keeps renderer document, module, and HMR traffic on one loopback family", () => {
+    const viteConfig = fs.readFileSync(
+      path.join(desktopRoot, "vite.config.ts"),
+      "utf8",
+    );
+    const mainEntry = fs.readFileSync(
+      path.join(desktopRoot, "src/main/index.ts"),
+      "utf8",
+    );
+
+    expect(viteConfig).toContain('host: "127.0.0.1"');
+    expect(viteConfig).toContain("strictPort: false");
+    expect(viteConfig).not.toContain('host: "localhost"');
+    expect(viteConfig).toContain("normalizeDesktopDevServerUrl");
+    expect(viteConfig).toContain("stopElectronBeforeRestart");
+    expect(viteConfig).toContain("createElectronRestartCoordinator");
+    expect(viteConfig).toContain("prompthubElectronRestartCoordinator ??=");
+    expect(viteConfig).toContain(
+      "Failed to restart Electron after main rebuild",
+    );
+    expect(viteConfig).toContain("await args.startup");
+    expect(mainEntry).toContain('"http://127.0.0.1:5173"');
+    expect(mainEntry).not.toContain('"http://localhost:5173"');
+    expect(mainEntry).toMatch(
+      /function emitWindowVisibility\(isVisible: boolean\) \{\s+if \(isQuitting\) return;/,
+    );
+  });
 });

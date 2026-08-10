@@ -146,6 +146,14 @@
 - MCP 上游更新只能由用户显式应用。安全更新可直接执行；本地修改、双向冲突和无基线旧记录必须要求明确复核。应用更新必须保留密钥值、用户状态、记录身份、绑定和目标文件；目标文件只由既有显式分发/同步流程写入。
 - MCP Registry 的 npm/PyPI 模板必须固定已发布版本；无法正确映射为受支持运行时的 package 类型必须跳过，不得生成猜测命令。未来官方商店条目复用同一版本与 fingerprint 合同。
 
+### 14. Development Renderer Origin
+
+- 桌面开发服务器必须绑定明确的 IPv4 loopback 地址，不得使用可能在 IPv4 与 IPv6 之间分流的 `localhost`。
+- `5173` 只是首选端口；端口已被其他应用占用时，Vite 必须选择下一个可用端口，并通过 `VITE_DEV_SERVER_URL` 把实际 origin 交给 Electron。依赖把 loopback 重写为 `localhost` 时，Electron 启动前必须恢复为明确的 IPv4 地址，同时保留动态端口。
+- 开发启动流程不得为了抢占首选端口而终止、覆盖或干扰其他项目的进程。Electron 的无插件回退地址必须与 Vite 使用相同的地址族。
+- main-process rebuild 必须串行停止并等待当前 PromptHub Electron 子进程退出后再启动替代实例；同一保存批次的并发 build callback 必须合并到最新 generation，且 coordinator 必须跨 Vite config reload 保持唯一。重启失败可以记录错误并等待下一次 rebuild 恢复，但不得通过未处理的 child-exit 或 Promise rejection 关闭 Vite。
+- 应用进入退出阶段后，迟到的窗口可见性事件不得再刷新 tray、发送 renderer 消息或读取已关闭的应用数据库。
+
 ## Stable Scenarios
 
 ### Scenario: Contributor changes desktop runtime behavior
