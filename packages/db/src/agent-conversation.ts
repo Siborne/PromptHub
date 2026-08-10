@@ -22,7 +22,6 @@ interface MetadataRow {
   note: string | null;
   is_favorite: number;
   archived_at: number | null;
-  deleted_at: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -142,8 +141,8 @@ export class AgentConversationDB {
     this.db.run(
       `INSERT INTO agent_conversation_metadata (
         id, agent_id, session_id, title, project_id, project_path, tags_json,
-        note, is_favorite, archived_at, deleted_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        note, is_favorite, archived_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(agent_id, session_id) DO UPDATE SET
         title = excluded.title,
         project_id = excluded.project_id,
@@ -163,19 +162,19 @@ export class AgentConversationDB {
       optionalText(input.note, "note", MAX_NOTE_LENGTH),
       input.favorite ? 1 : 0,
       archivedAt,
-      existing?.deletedAt ?? null,
       existing?.createdAt ?? now,
       now,
     );
     return this.getRequiredMetadata(agentId, sessionId);
   }
 
-  softDelete(agentId: string, sessionId: string): AgentConversationMetadata {
-    return this.setDeletedAt(agentId, sessionId, Date.now());
-  }
-
-  restore(agentId: string, sessionId: string): AgentConversationMetadata {
-    return this.setDeletedAt(agentId, sessionId, null);
+  deleteMetadata(agentIdValue: string, sessionIdValue: string): void {
+    this.db.run(
+      `DELETE FROM agent_conversation_metadata
+       WHERE agent_id = ? AND session_id = ?`,
+      requiredText(agentIdValue, "agentId", 100),
+      requiredText(sessionIdValue, "sessionId", 160),
+    );
   }
 
   createHandoff(
@@ -224,29 +223,6 @@ export class AgentConversationDB {
     return this.getRequiredHandoff(id);
   }
 
-  private setDeletedAt(
-    agentIdValue: string,
-    sessionIdValue: string,
-    deletedAt: number | null,
-  ): AgentConversationMetadata {
-    const agentId = requiredText(agentIdValue, "agentId", 100);
-    const sessionId = requiredText(sessionIdValue, "sessionId", 160);
-    const existing =
-      this.getMetadata(agentId, sessionId) ??
-      this.upsertMetadata({ agentId, sessionId, tags: [] });
-    const updatedAt = Math.max(Date.now(), existing.updatedAt + 1);
-    this.db.run(
-      `UPDATE agent_conversation_metadata
-       SET deleted_at = ?, updated_at = ?
-       WHERE agent_id = ? AND session_id = ?`,
-      deletedAt,
-      updatedAt,
-      agentId,
-      sessionId,
-    );
-    return this.getRequiredMetadata(agentId, sessionId);
-  }
-
   private getRequiredMetadata(
     agentId: string,
     sessionId: string,
@@ -278,7 +254,6 @@ function metadataFromRow(row: MetadataRow): AgentConversationMetadata {
     note: row.note,
     favorite: row.is_favorite === 1,
     archivedAt: row.archived_at,
-    deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

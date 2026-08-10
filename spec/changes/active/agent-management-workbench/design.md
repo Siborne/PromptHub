@@ -147,7 +147,7 @@ Current Kimi Code files are managed as separate capabilities: `config.toml` for 
 
 Model inspection reads `default_model`, the selected `[models.*]` entry, and its `[providers.*]` non-secret fields. Literal `api_key`, custom authorization headers, and credential documents never enter renderer payloads. Writes preserve semantic TOML fields, create a backup, replace atomically, re-read, and use `kimi doctor config` when the executable is available.
 
-Session listing performs one bounded linear index pass, retains at most a bounded candidate window, and reads at most `O(page size)` state files with capped concurrency. Selected transcript reads are capped by bytes and line count. No recursive traversal of `sessions/` is used, so a 10,000-session inventory has `O(index bytes)` scan cost and bounded memory.
+Session listing performs one bounded linear index pass, retains at most a bounded candidate window, and reads at most `O(page size)` state files with capped concurrency. Default `New Session` shells without `lastPrompt` are not conversations and are omitted. A listed row must resolve its contained `agents/main/wire.jsonl`; that exact file remains the transcript source path. The lifecycle projection reports the bounded footprint of the containing native session directory because permanent delete removes that directory. Selected transcript reads are capped by bytes and line count. Inventory discovery never recursively traverses all of `sessions/`; only the returned page's session directories are measured with the shared 50,000-entry per-session bound, so discovery stays `O(index bytes + page size)` with bounded concurrency and memory.
 
 ## `DES-AGENT-004`: Provider Profile Storage
 
@@ -1104,6 +1104,8 @@ Batch confirmed on 2026-07-20; implements `FR-AGENT-025`.
 - Usage: the 5h / 7d / Opus window cards render side by side in one row instead of stacking vertically.
 - Sessions: keeps its existing two-pane layout, re-based onto the edge-to-edge shell.
 - Overview: dashboard content keeps internal section padding (that is content spacing, not a page margin); status strip and grid touch the pane edges.
+- Overview path details use native disclosure semantics but start open so raw
+  resolved paths and open-folder actions are visible by default.
 
 ## `DES-AGENT-022`: Codex Quota Adapter And Provider-Aware Overview
 
@@ -1128,13 +1130,14 @@ Batch confirmed on 2026-07-21; implements `FR-AGENT-027`.
 ### Contract
 
 - `AgentUsageQuota` replaces `fiveHour`/`sevenDay`/`sevenDayOpus` with `metrics: AgentUsageMetric[]`. A metric is `{ id, label, kind: "window" | "quota", utilization, resetsAt, usedAmount?, totalAmount?, unit? }`; amounts are present only for `quota` kind. All existing status/errorCode semantics stay.
-- Metric id registry for i18n: `fiveHour`, `sevenDay`, `sevenDayOpus` (Claude/Codex), `weekly`, `rolling` (Kimi), `premium`, `chat` (Copilot), and `promptCredits` (Antigravity); any other id (e.g. Antigravity/Gemini model quotas) renders its provider label.
+- Metric id registry for i18n: `fiveHour`, `sevenDay`, `sevenDayOpus` (Claude/Codex), `weekly`, `rolling` (Kimi), `premium`, and `chat` (Copilot); any other id (e.g. Antigravity/Gemini model quotas) renders its provider label.
 
 ### Adapters
 
 - Claude/Codex adapters keep their query logic and re-map results into `metrics` (ids above).
 - Kimi: read `~/.kimi-code/credentials/kimi-code.json` (fallback `~/.kimi-code/oauth/kimi-code*`) for `access_token`/`expires_at`; `GET https://api.kimi.com/coding/v1/usages`. Map `usage` -> `weekly` (limit/used/resetTime), `limits[]` entries -> `rolling` with duration-derived label, `membership.level` -> plan. Verified live 2026-07-21.
-- Antigravity: first discover the running Antigravity `language_server` process with bounded `ps` output, require both an Antigravity process marker and a valid CSRF argument, enumerate only loopback listening ports, and use fixed allowlisted RPC paths with a 4s timeout and 1 MiB response limit. `GetUserStatus` supplies the plan and monthly prompt-credit total; `RetrieveUserQuotaSummary` supplies grouped weekly and five-hour buckets for Gemini models and third-party Claude/GPT models. Group buckets map to `window` metrics, while monthly credits remain the only total `quota` metric. The CSRF value never leaves main-process memory or enters logs/errors. If no trusted desktop process exists on macOS, PromptHub may start the native `language_server` only from the verified `/Applications/Antigravity.app` or `~/Applications/Antigravity.app` resource path, with fixed arguments, telemetry and the built-in Chrome DevTools MCP disabled, a reserved loopback port, a random in-memory CSRF token, bounded startup/output/request limits, and no shell. The helper's IDE version is read through bounded `plutil` access to the verified app's `Info.plist`, with a sanitized compatibility fallback; PromptHub binds and waits for the explicitly announced HTTP listener rather than sending JSON RPC to the HTTPS gRPC port. Startup-only connection, timeout, and HTTP readiness failures retry with a bounded delay and overall deadline. The helper is terminated after every success or failure and escalates from `SIGTERM` to `SIGKILL` when necessary. The quota-summary request runs first so grouped quota remains available even when the optional account-status request fails. macOS Keychain (`service=gemini`, `account=antigravity`), legacy Antigravity CLI token, and shared Gemini credential reads remain compatibility fallbacks when the helper is absent or unavailable. PromptHub does not copy Antigravity OAuth client credentials or refresh its tokens itself; `antigravity-not-running` remains only a recovery state when neither a running service nor the bounded helper can provide current quota.
+- Kimi membership presentation maps current provider enums to public tempo plan names (`LEVEL_STANDARD` -> `Moderato`, `LEVEL_INTERMEDIATE` -> `Allegretto`, `LEVEL_ADVANCED` -> `Allegro`, `LEVEL_PREMIUM` -> `Vivace`) and keeps a readable fallback for unknown future values.
+- Antigravity: first discover the running Antigravity `language_server` process with bounded `ps` output, require both an Antigravity process marker and a valid CSRF argument, enumerate only loopback listening ports, and use fixed allowlisted RPC paths with a 4s timeout and 1 MiB response limit. `GetUserStatus` supplies plan identity only; `RetrieveUserQuotaSummary` supplies the authoritative grouped weekly and five-hour baseline buckets for Gemini models and third-party Claude/GPT models. Legacy `monthlyPromptCredits` and `availablePromptCredits` fields are not a baseline total and are ignored. AI credits are an overage mechanism and require a separately verified balance source before PromptHub may expose them. The CSRF value never leaves main-process memory or enters logs/errors. If no trusted desktop process exists on macOS, PromptHub may start the native `language_server` only from the verified `/Applications/Antigravity.app` or `~/Applications/Antigravity.app` resource path, with fixed arguments, telemetry and the built-in Chrome DevTools MCP disabled, a reserved loopback port, a random in-memory CSRF token, bounded startup/output/request limits, and no shell. The helper's IDE version is read through bounded `plutil` access to the verified app's `Info.plist`, with a sanitized compatibility fallback; PromptHub binds and waits for the explicitly announced HTTP listener rather than sending JSON RPC to the HTTPS gRPC port. Startup-only connection, timeout, and HTTP readiness failures retry with a bounded delay and overall deadline. The helper is terminated after every success or failure and escalates from `SIGTERM` to `SIGKILL` when necessary. The quota-summary request runs first so grouped quota remains available even when the optional account-status request fails. macOS Keychain (`service=gemini`, `account=antigravity`), legacy Antigravity CLI token, and shared Gemini credential reads remain compatibility fallbacks when the helper is absent or unavailable. PromptHub does not copy Antigravity OAuth client credentials or refresh its tokens itself; `antigravity-not-running` remains only a recovery state when neither a running service nor the bounded helper can provide current quota.
 - Gemini CLI: read `~/.gemini/oauth_creds.json` (`expiry_date` ms); POST `loadCodeAssist` then `retrieveUserQuota`; buckets -> `quota` metrics by `modelId`, tier -> plan.
 - Copilot: resolve a GitHub OAuth token from `~/.config/gh/hosts.yml` then `~/.config/github-copilot/hosts.json`; `GET https://api.github.com/copilot_internal/user` with `Authorization: token`; map `quota_snapshots.premium_interactions`/`chat` (entitlement/remaining/percent_used) -> `premium`/`chat` quota metrics, `quota_reset_date` -> resetsAt, `copilot_plan` -> plan.
 - Cursor stays `planned` (no public quota API; documented exclusion).
@@ -1794,6 +1797,11 @@ most 16 MiB per page, hides non-visible runtime/tool records, and keeps
 scanning until the visible page is full, the source ends or the scan budget is
 reached. A budget boundary returns a continuation cursor, including when the
 page has no visible entry, rather than claiming the conversation has no body.
+The visible-message projector accepts both legacy `event_msg` user/agent
+messages and current top-level `response_item` message records. Only explicit
+user/assistant roles and bounded `input_text`/`output_text` content are
+projected; developer instructions, reasoning, tool calls, outputs and image
+payloads remain private.
 
 Augment uses the same public page contract over its native
 `~/.augment/sessions/*.json` documents. The adapter validates the session id,
@@ -1892,8 +1900,8 @@ typed native `resume` contract and a cross-Agent handoff action. The handoff
 action opens a custom modal containing all detected target Agents and the
 project selector; preview generation remains the confirmation boundary before
 the existing digest-verified handoff. Export has a dedicated compact icon with
-Markdown/JSON choices. Edit and soft delete/restore remain in the custom
-overflow menu.
+Markdown/JSON choices. The custom overflow menu contains edit plus
+adapter-owned permanent delete only when the selected session supports it.
 
 `AgentConversationService.previewHandoff` is the single source of truth for the
 portable payload and transport tier. Each generated preview also receives an
@@ -2352,3 +2360,515 @@ Traceability:
 | -------------- | --------------- | ---------------- | ------------- |
 | `FR-AGENT-095` | `DES-AGENT-113` | `TEST-AGENT-136` | `T-AGENT-182` |
 | `FR-AGENT-096` | `DES-AGENT-114` | `TEST-AGENT-137` | `T-AGENT-183` |
+
+## `DES-AGENT-115`: Semantic Quota Contract And Shared Meter Composition
+
+Quota adapters normalize provider payloads into a versioned contract whose
+metrics carry typed scope, period and value unions. Finite values cross IPC only
+as remaining percentage, with remaining/limit amounts when trustworthy;
+unlimited and unknown are explicit variants. Adapters do not select a renderer
+or parse their ids in UI code.
+
+A shared pure presentation model owns grouping, semantic ordering, primary
+selection, bounded model expansion, reset formatting, tone and visualization
+selection. Finite percentage or amount values with rolling or day/week calendar
+periods use a compact SVG ring; month, billing-cycle, lifetime and
+provider-defined values use a horizontal remaining bar. Overview and the menu-bar popover compose
+the same meter component at different densities. Successful summaries omit the
+redundant provider-provenance sentence. Cached values remain stable during an
+in-flight refresh, whose busy state stays on the refresh control; stale copy is
+reserved for a failed refresh that affects trust. Old V1 renderer caches are
+ignored through the contract schema version. Provider endpoints, credential
+ownership, process cache, concurrency and persistence remain unchanged.
+
+Antigravity is a source-specific normalization rule, not a renderer branch. Its
+baseline metrics come only from `RetrieveUserQuotaSummary` grouped five-hour
+and weekly buckets. `GetUserStatus` contributes plan identity, while legacy
+prompt-credit counters are ignored because current provider documentation
+defines AI credits as overage and no verified balance contract is present.
+
+Kimi is also normalized at the adapter boundary. The current coding usages
+payload reports `remaining` and `limit`, and expresses its 5-hour window as
+`300 TIME_UNIT_MINUTE`; the adapter prefers that remaining value, accepts the
+proto unit, and retains compatibility with the older `used` payload. The
+official client treats top-level `usage` as weekly and `limits[]` as rolling
+windows. PromptHub does not map `totalQuota` because it is not a trustworthy
+numeric source for the separate cross-product monthly membership total.
+
+The complete adapter matrix, contract shape, cardinality rules, complexity,
+failure states and verification plan are authoritative in
+`quota-presentation-design.md`.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-097` | `DES-AGENT-115` | `TEST-AGENT-138` | `T-AGENT-184` |
+
+## `DES-AGENT-116`: Native Model Adapter Registry Expansion
+
+The existing main-process model configuration boundary remains the owner of
+native inspection and mutation. Its registry adds independent JSON/JSONC/YAML
+projections for Antigravity, Qoder, CoPaw, AutoClaw, QClaw and Hermes. Existing
+Claude Code, Codex, Grok, Pi, OpenCode and OpenClaw behavior is reused rather
+than copied into new renderer components. Capability declarations and Provider
+runtime registration derive from the same implemented platform set.
+
+The normalized operation remains O(F + M) time and O(F + M) bounded memory,
+where F is one native config file capped at 2 MiB and M is the platform's
+declared model catalog. Each request performs at most one primary config read,
+one optional catalog/active-workspace read, one backup copy, one atomic write
+and one verification read. No network request, polling loop, cache or background
+process is introduced.
+
+Antigravity resolves Provider state from the sibling
+`~/.gemini/antigravity-cli/settings.json` while retaining
+`~/.gemini/config` as its Skills/MCP root. Qoder reads `model.name` and sanitizes
+metadata from `modelConfigs.customModels`. AutoClaw reads `setting.json`. QClaw
+uses its own root with the verified OpenClaw JSON shape. Hermes reads
+`config.yaml`. CoPaw resolves the active workspace from `config.json`, validates
+that the selected workspace remains under the platform root, then reads and
+writes only its `agent.json`; its provider secret file is outside the adapter.
+
+All JSON mutations use structural JSONC edits so comments and unrelated keys
+survive. YAML mutations use the existing document-preserving parser. Backup,
+concurrent-change detection, atomic replacement, semantic verification and
+rollback are shared with existing adapters. Renderer and Provider Profile code
+continue to consume the normalized contract and therefore need no Agent-specific
+layout branch.
+
+NanoClaw is a separate target-binding design: the native source of truth is a
+per-group `container_configs` row managed by its CLI, not one platform-global
+file. It remains planned until `AgentProviderAdapterContext` and the workbench
+can carry an explicit child target. This avoids unsafe fan-out, arbitrary group
+selection and mutation of generated files.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-098` | `DES-AGENT-116` | `TEST-AGENT-176` | `T-AGENT-185` |
+
+## `DES-AGENT-117`: Provider Toolbar And Sidebar Containment
+
+`AgentProviderWorkbenchLayout` changes its toolbar from one fixed-height icon
+row to a bounded one-column command grid. Generic Profile and Pi workbenches
+continue to supply the same two commands, but each button now renders its
+existing localized accessible name as visible text. This keeps action semantics
+and IPC unchanged while making the commands discoverable at the sidebar's
+224-288 px responsive widths and across all seven locales.
+
+The sidebar owns `overflow-x-hidden` and keeps only its existing vertical scroll
+container. The native configuration card moves spacing to a containing block;
+the button remains `w-full` inside that block instead of combining `w-full`
+with horizontal margins. This removes the deterministic extra-width overflow
+without clipping focus state or changing list selection behavior.
+
+Rendering remains O(V), where V is the visible virtualized profile count. No
+network, filesystem, persistence, cache or process boundary changes.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-099` | `DES-AGENT-117` | `TEST-AGENT-177` | `T-AGENT-186` |
+
+## `DES-AGENT-118`: Adapter-Owned Session Footprint And Deletion
+
+`AgentSessionMetadata` carries an optional `sizeBytes` and an explicit
+`nativeDeleteSupported` capability. File-backed adapters populate the size from
+the same contained source they already discover. Shared-database adapters leave
+the size unknown until they implement a truthful row-level calculation; the UI
+never substitutes the whole database size. Codex reports the exact rollout JSONL
+size already collected during its bounded scan.
+
+The project selector builds an O(S + P) map from loaded sessions (`S`) and
+registered projects (`P`). Its stable identity is the exact project path, with a
+separate namespace for registered ids lacking a loaded path. Filtering uses the
+same identity helper, so equal basenames do not merge different directories.
+No additional filesystem scan, cache, network request or persistent project row
+is introduced.
+
+Permanent deletion remains behind the session adapter. The conversation service
+invokes the adapter-owned native delete first and changes no PromptHub metadata
+when that operation fails. After native success it hard-deletes the matching
+metadata row; a cleanup failure is logged without turning the already deleted
+native session into a reversible state. The Codex adapter validates the session
+id, rescans its configured active and archived roots without following symlinks,
+resolves the current matching rollout and unlinks only that contained regular
+file. There is no generic `sourcePath` deletion path. Renderer confirmation is
+required before IPC, and a successful response removes the session from local UI
+state immediately.
+
+Codex list and delete remain O(F), where `F` is the bounded native rollout
+inventory already required for identity resolution. Size display adds no extra
+I/O because scan metadata already includes byte size. Delete performs one bounded
+rescan, one native unlink and at most one metadata-row delete, with no retry.
+Native failure leaves metadata unchanged; successful native deletion is
+intentionally irreversible.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-100` | `DES-AGENT-118` | `TEST-AGENT-178` | `T-AGENT-187` |
+
+## `DES-AGENT-119`: Draft/Submitted Search State And Metadata Scope
+
+`AgentSessionsPanel` owns two ephemeral values: the input draft and the last
+submitted query. `onChange` updates only the draft. An Enter key handler ignores
+IME composition, prevents implicit form behavior and copies the trimmed draft to
+the submitted value. Only the submitted value participates in list requests,
+pagination and visible filtering. Agent changes reset both values. No search
+state is persisted.
+
+The main session-index service applies one final metadata predicate to live
+adapter results using `title`, `projectLabel` and `projectPath`; adapter-native
+body matches are therefore discarded before IPC. The persistent SQLite index
+uses `title` and `project_path` only and no longer consults `redacted_preview`.
+The renderer repeats the same visible metadata predicate so PromptHub-owned
+display-title overrides can be honored without allowing notes, tags or models to
+expand the result set.
+
+The indexed path retains the existing bounded SQLite query and page shape. The
+live path retains each adapter's bounded native lookup plus an `O(p)` pass over
+the returned page of at most 200 rows. Typing performs zero I/O; one Enter
+submission performs one list request. This change adds no cache, persistence,
+network request, unbounded scan or process lifetime.
+
+Analyze gate: the previous debounced/body-search behavior in
+`session-index-designs.md`, the database preview predicate and renderer adapter
+exceptions conflict with the newly confirmed product behavior. `FR-AGENT-101`
+supersedes those search semantics without changing transcript ownership or the
+list IPC shape. No source-of-truth migration, compatibility fallback or blocking
+`[待确认]` item remains.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-101` | `DES-AGENT-119` | `TEST-AGENT-179` | `T-AGENT-188` |
+
+## `DES-AGENT-120`: Loaded-Inventory Sort And Codex Thread-Name Projection
+
+`AgentSessionsPanel` replaces its status-filter state with an ephemeral sort
+mode. A pure comparator copies the filtered array before sorting by effective
+time (`updatedAt`, then `createdAt`) or truthful `sizeBytes`. Null and invalid
+values always compare after known values; ties use newest effective time and
+then session id. The default is newest. The operation is `O(n log n)` time and
+`O(n)` array space for the currently loaded, explicitly counted inventory, adds
+no I/O, and reapplies after each bounded page append. PromptHub archive metadata
+no longer excludes a native row; the existing compact archive icon preserves
+that state without retaining a status-filter control.
+
+The conversation projection has no soft-delete state. The renderer has no
+Restore branch or removed-state icon, and the shared IPC/preload contract does
+not expose a restore channel. The only visible delete command is the confirmed
+adapter-owned native delete from `FR-AGENT-100`.
+
+One renderer title helper supplies the effective title to list rows,
+destructive confirmation and handoff previews: trimmed PromptHub override,
+native adapter title, then id.
+Adapters continue to own their native-title/fallback decision. The Codex adapter
+adds one read-only title projection from `<codexRoot>/session_index.jsonl`. It
+resolves the index as a contained regular file, reads at most 8 MiB from the
+tail, drops a partial leading record, parses newest-to-oldest so the latest valid
+record wins, accepts only safe ids and bounds titles to 160 characters. One
+index read builds an `O(i)` map per list call and metadata projection remains
+`O(p)` for the requested page. Missing, symlinked, malformed and truncated index
+data falls back to the existing first visible user message without changing the
+rollout, index, SQLite state or IPC contract.
+
+Analyze gate: the existing status selector and archive-hides-from-Active copy
+conflict with the newly confirmed ordering behavior. `FR-AGENT-102` supersedes
+that renderer-only status exclusion while retaining non-destructive archive
+metadata and preserving the adapter-owned permanent-delete boundary from
+`FR-AGENT-100`.
+Codex's native `session_index.jsonl` is an additional read-only native source,
+not a PromptHub source-of-truth migration. No blocking `[待确认]` item remains.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-102` | `DES-AGENT-120` | `TEST-AGENT-180` | `T-AGENT-189` |
+
+## `DES-AGENT-121`: Bounded Latest Seek And Shared Row Context Menu
+
+`AgentSessionsPanel` owns only ephemeral context-menu coordinates and the
+selected session id. A native `contextmenu` event selects the row and renders
+the menu through `AgentConversationActions`, so toolbar and context actions call
+the same resume, handoff, export and confirmed-delete operations. No duplicate
+IPC orchestration, persistent menu state, metadata editor or new contract is
+introduced. The menu position is clamped to the viewport and global close
+listeners are installed only while it is open, then removed on close/unmount.
+
+The latest command reuses the existing 80-entry cursor reader and 20-entry view
+pages. One activation follows at most eight advancing cursors, de-duplicates
+entries by stable entry id and lands on the final loaded page. A stalled cursor
+is cleared; an advancing cursor remaining after eight reads stays available for
+another explicit activation. For `k <= 8` cursor pages and `e` loaded entries,
+one activation performs `O(k)` bounded I/O and `O(e)` de-duplication space/time.
+It adds no network work, cache, durable state, process or filesystem mutation.
+
+Analyze gate: earlier conversation CRUD and two-step-continuation text described
+a generic metadata editor as a History action. The confirmed product behavior
+removes that renderer operation while retaining the existing metadata storage
+boundary for already projected titles/project/archive state. No schema,
+migration, IPC or source-of-truth change is required, and no blocking
+`[待确认]` item remains.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-103` | `DES-AGENT-121` | `TEST-AGENT-181` | `T-AGENT-190` |
+
+## `DES-AGENT-122`: Shrinkable Markdown Surfaces And Tool Message Semantics
+
+`AgentConversationMarkdown` wraps GFM tables in a `max-w-full`, `min-w-0`
+horizontal scroll region and renders the table at `w-max min-w-full`. The
+Markdown root and user/assistant/tool bubble flex items also receive
+`min-w-0 max-w-full` containment. Ordinary tables still fill the bubble; only
+content wider than the available bubble scrolls. This is presentation-only and
+does not parse, copy, mutate or persist transcript text.
+
+`ConversationMessage` handles Tool before the informational fallback. Tool uses
+the assistant-side flex row, Agent avatar and the same 82% bounded bubble, with
+a sky-accented Tool label and terminal icon inside the bubble. System and
+unknown events continue through the centered notice branch. No role contract,
+adapter parser, IPC or storage boundary changes.
+
+Layout work remains `O(v)` for the visible Markdown nodes. Browser-native local
+overflow handles wide tables without duplicate rendering, measurement loops,
+observers, cache, I/O or background work. Tool rendering remains `O(1)` per
+visible entry.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-104` | `DES-AGENT-122` | `TEST-AGENT-182` | `T-AGENT-191` |
+
+## `DES-AGENT-123`: Capability-Gated Native Location Commands
+
+`AgentConversationActions` keeps the More trigger independent of permanent
+delete support and supplies the same location commands to both the toolbar menu
+and row context menu. Show in folder receives only `session.sourcePath`; Open
+project folder receives the already resolved registered/native `projectPath`.
+Missing values disable the matching menu item, rather than deriving a parent,
+falling back to an Agent root or hiding the distinction between the two paths.
+
+Both commands reuse `window.electron.openPath`, whose existing main-process
+handler validates existence and resolves file versus directory behavior: files
+are revealed with `showItemInFolder`, while directories use `shell.openPath`.
+This adds no IPC contract, storage, migration, cache, background process or
+network request. Each explicit action performs one `O(1)` IPC invocation and
+one filesystem metadata lookup in the existing handler. Failure returns through
+the existing conversation-action error surface without mutating transcript or
+PromptHub metadata.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-105` | `DES-AGENT-123` | `TEST-AGENT-183` | `T-AGENT-192` |
+
+## `DES-AGENT-124`: Claude Native-Record Classification And Cwd Projection
+
+The Claude JSONL parser returns both the validated native record and an optional
+visible entry. This lets metadata and index scans reuse one parse without
+mistaking intentionally hidden records for malformed input. Only native `user`
+and `assistant` records continue to content projection. `isMeta` rows,
+non-message types and known generated command wrappers are valid-but-hidden;
+`tool_result` arrays project as Tool entries. Malformed JSON and non-object rows
+remain parse errors. Titles continue to use the first visible User entry.
+
+Both the bounded live metadata read and optional local-index scan accept only an
+absolute, null-free native `cwd`. The exact value becomes `projectPath`, while
+`path.basename(projectPath)` becomes the displayed label; the encoded Claude
+storage directory is retained only when no valid cwd is available. Indexed
+metadata derives the same label and includes the same cwd in the verified
+`claude --resume` command. The Claude index adapter version advances from 1 to
+2, so enabled rebuildable metadata is rescanned rather than preserving the old
+encoded projection. There is no SQLite schema, IPC, transcript-body persistence
+or native-file migration.
+
+For `n` bounded JSONL records, parsing remains one `O(n)` pass with `O(1)`
+additional state. Live/index metadata reads remain capped at 256 KiB per file,
+detail reads remain capped at 2 MiB, scan concurrency remains one, and no new
+network, cache or background process is introduced.
+
+Analyze gate: Claude's encoded project directory and internal records were
+native storage details incorrectly exposed by the adapter, while the stable
+product behavior requires project identity and visible transcript semantics.
+The source of truth remains Claude's native JSONL; only its read-only projection
+changes. No compatibility migration or unresolved material decision remains.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-106` | `DES-AGENT-124` | `TEST-AGENT-184` | `T-AGENT-193` |
+
+## `DES-AGENT-125`: Bounded Gemini Marker And Cursor Key Resolution
+
+`scanGeminiFiles` resolves one optional `.project_root` marker per native cache
+directory before enumerating its chats. The marker is accepted only when it is
+a regular non-symlink file, no larger than 4 KiB, and contains one null-free
+absolute path. The resulting `SessionFile.projectPath` is reused by live
+metadata, index scan and resume projection. Gemini index adapter version
+advances from 1 to 2 so enabled, rebuildable metadata is reparsed without a
+schema migration.
+
+Gemini message parsing returns visible entries plus a count of malformed rows.
+`user` text maps to User, `gemini` text to Assistant, and a user content array
+whose only visible payload is `functionResponse.response.output` maps to Tool.
+`info`, unknown and empty well-formed rows are ignored without increasing parse
+errors. Native `error` text remains a System entry because it represents a
+user-relevant failed response rather than cache metadata. A non-empty native
+`summary`, bounded to its first 160-character line, precedes the first visible
+User title fallback in live and indexed metadata.
+
+The Cursor adapter receives the configured `homeDir`. It computes the Cursor
+key for that home and resolves only a remaining suffix below that root. At each
+level it streams actual directory entries, rejects symlinks, and follows every
+component name whose literal name is an exact or hyphen-delimited prefix of the
+remaining key. Resolution accepts exactly one terminal directory; zero or
+multiple matches fail closed. The walk visits at most 64 directories and 4,096
+entries per directory. When exact resolution fails for an under-home key, a
+second cached walk removes only uniquely matched existing prefix components and
+uses the remaining literal suffix as a compact label; it still returns no
+project path. The resolver never scans transcript content, follows symlinks,
+walks above home, accesses Cursor private databases or treats string
+replacement as proof of a path.
+
+Gemini enumeration remains `O(P + S)` for `P` project caches and `S` chat files,
+with one bounded marker read per project. Cursor resolution is bounded by 64
+directory opens and 4,096 streamed entries per opened directory, with `O(c)`
+candidate state for `c <= 64`. Both changes are read-only, add no network,
+schema, IPC, cache, background process or native-file mutation.
+
+Analyze gate: stable research previously kept Cursor project identity partial
+because no canonical private history index was allowed. This design does not
+promote that private index or claim universal resolution; it adds a
+filesystem-verified, unique under-home projection and preserves null fallback.
+Gemini's `.project_root` is an existing native marker and remains the source of
+truth. No unresolved material decision remains.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-107` | `DES-AGENT-125` | `TEST-AGENT-185` | `T-AGENT-194` |
+
+## `DES-AGENT-126`: Grok Build Usage And Conversation Size Projection
+
+The existing main-process usage service owns the Grok adapter. It reads at
+most 256 KiB from `<grok-root>/auth.json`, accepts only a host entry rooted at
+`https://auth.x.ai::` with a non-empty `key`, and parses `expires_at` through
+the shared epoch/ISO timestamp helper. The token remains inside the main
+process. One refresh launches exactly two parallel requests, each using the
+existing 10-second timeout and error classification:
+
+- `GET https://cli-chat-proxy.grok.com/v1/user?include=subscription` supplies
+  `subscriptionTier` only.
+- `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits` supplies
+  `config.currentPeriod`, `creditUsagePercent` and the weekly reset boundary.
+
+Billing success is sufficient for an `ok` quota; user metadata failure leaves
+the plan absent without discarding a valid weekly metric. Billing failure uses
+the existing `expired` or `unavailable` state and may retain a successfully
+read plan. The shared 60-second cache bounds normal refresh traffic to two
+requests per Agent per minute. Parsing is linear in the bounded JSON payload;
+the response mapper retains one weekly metric, so renderer memory is constant.
+
+The shared plan formatter maps known Grok native tier enums to public labels,
+including `XPremium` to `X Premium`, without adding a Grok-specific component.
+The existing period-first presentation policy renders the calendar-week metric
+as a ring.
+
+The Grok session adapter resolves `chat_history.jsonl` through the existing
+contained real-file guard while reading metadata, performs one file stat for
+each projected row, and uses that file for both `sourcePath` and `sizeBytes`.
+The directory scan remains bounded by the existing 50,000-session ceiling and
+detail reads remain capped at 2 MiB. No schema, IPC, transcript ownership or
+native file mutation changes.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-108` | `DES-AGENT-126` | `TEST-AGENT-186` | `T-AGENT-195` |
+
+## `DES-AGENT-127`: Session-Owned Footprint And Delete Registry
+
+The main session service owns a typed lifecycle registry beside the existing
+read adapters. Each listed adapter registers one of three deletion strategies:
+
+- a contained single-file target;
+- a contained multi-file or session-directory target resolved again from the
+  native session id; or
+- a native command / shared-database row mutation implemented by that adapter.
+
+The renderer still sends only `agentId` and `sessionId`. Immediately before a
+mutation, the main process reloads the native identity and validates every
+filesystem target as a regular non-symlink child of the configured Agent root.
+Multi-target validation finishes before the first removal. Shared SQLite
+stores use a transaction to delete known child rows before the session row and
+verify that exactly one session was removed. Native CLI stores use the CLI's
+own delete command. No generic renderer-provided `sourcePath` deletion exists.
+
+List projection uses the same registered target set. A file target contributes
+its exact byte size; a directory target is streamed without following symlinks
+and is capped by the existing 50,000-entry session inventory limit. Shared
+database adapters calculate logical bytes from the session row and its child
+rows in the same list query, so one session never reports the whole database
+file. Known sizes remain `O(1)` for file/stat and database projections;
+directory footprints are `O(F)` time and `O(D)` bounded traversal space for the
+files and directories owned by that session. List enrichment uses a bounded
+worker pool rather than unbounded `Promise.all` I/O.
+
+This design changes the earlier `DES-AGENT-118` capability gate: delete remains
+adapter-owned and confirmed, but every adapter that returns sessions must now
+provide a verified lifecycle strategy. The native mutation succeeds before
+PromptHub metadata is hard-deleted. A native failure leaves PromptHub metadata
+unchanged; a later metadata cleanup failure is reported without pretending the
+native content can be restored.
+
+Traceability:
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-110` | `DES-AGENT-127` | `TEST-AGENT-187` | `T-AGENT-196` |
+
+## `DES-AGENT-128`: Full Rule Inventory And Explicit Creation
+
+The Rules store keeps two related projections from the same IPC result:
+
+- `availableFiles` retains every descriptor returned by `rules:list` or
+  `rules:scan`, including global descriptors whose target does not yet exist.
+- `files` remains the existing visible workspace projection, so standalone
+  Rules navigation continues to omit missing global targets and disabled
+  platforms.
+
+`AgentRulesWorkspace` resolves its Agent target from `availableFiles`, still
+preferring the normalized resolved path over platform identity. Synchronization
+selects and reads only descriptors whose `exists` flag is true. A known missing
+descriptor renders an unframed centered creation state using the descriptor's
+`name` and `path`; an absent descriptor retains the bounded rescan and retry
+state.
+
+Creation reuses `window.api.rules.save(ruleId, "")`. The store merges the
+returned descriptor into both projections, selects the created rule, exposes
+its empty content through the existing editor and schedules the existing
+WebDAV save-sync. A failed write leaves the missing descriptor intact and
+returns the prompt to a retryable state. No IPC, preload, shared type,
+filesystem layout or main-process write path changes.
+
+Inventory matching and projection are `O(n)` in the bounded rule descriptor
+count with `O(n)` renderer state. Opening a missing target performs no I/O
+beyond the existing bounded inventory load; confirming creation performs one
+save IPC and one existing save-sync schedule.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-109` | `DES-AGENT-128` | `TEST-AGENT-188` | `T-AGENT-197` |

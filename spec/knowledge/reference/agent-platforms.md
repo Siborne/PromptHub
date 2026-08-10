@@ -169,6 +169,10 @@ Stable product rule:
 - GitHub Copilot CLI: `~/.copilot/copilot-instructions.md` or the resolved
   `<COPILOT_HOME>/copilot-instructions.md`
 - Windsurf: `~/.codeium/windsurf/memories/global_rules.md`
+- Kiro: `~/.kiro/steering/AGENTS.md` or the resolved
+  `<KIRO_HOME>/steering/AGENTS.md`
+- Cline CLI: `~/.cline/data/settings/rules/AGENTS.md`
+- Augment: `~/.augment/user-guidelines.md`
 - OpenClaw: `~/.openclaw/workspace/SOUL.md`
 - Qwen Code: `~/.qwen/QWEN.md` or the resolved `<QWEN_HOME>/QWEN.md`
 - Oh My Pi: `~/.omp/agent/RULES.md` or the resolved
@@ -192,11 +196,15 @@ Stable product rule:
 - `GitHub Copilot CLI` 已进入 Rules 白名单，但只暴露用户根目录下的
   `copilot-instructions.md`；仓库级 `.github/instructions/` 多文件规则仍由
   Copilot 和项目上下文管理。
-- `Cursor`、`Kiro`、`Roo Code` 已在资产文档中建模，但当前仍未进入
+- `Kiro` 和 `Cline CLI` 已进入 Rules 白名单，但分别只暴露
+  `steering/AGENTS.md` 与 CLI rules 目录中的 `AGENTS.md`；同目录 sibling
+  files 仍由原平台管理。`Augment` 只暴露官方用户指南入口
+  `user-guidelines.md`。
+- `Cursor`、`Qoder`、`Roo Code` 已在资产文档中建模，但当前仍未进入
   `Rules` 运行时全局规则白名单。
-- `Reasonix` 不进入当前白名单：它使用项目层级或记忆文件合并。Augment 仍以 rules 目录为主。
+- `Reasonix` 不进入当前白名单：它使用项目层级或记忆文件合并。Cherry Studio 与 TRAE 系列也没有已验证的用户级规则文件入口。
 - `Qwen Code` 已进入全局 Rules 运行时白名单，使用解析后的 `<QWEN_HOME>/QWEN.md`。项目 `QWEN.md` 与个人覆盖 `.qwen/QWEN.local.md` 的专用 scope UI 仍属于后续门禁，当前不得把 auto-memory 当作 Rule 导入。
-- 这些平台未进入白名单的主要原因分别是：缺少已确认的单一本地全局规则文件、以 steering / rules directory / multi-entry 结构为主，或其协议本身以 repository-scoped 文件为核心，而非用户级单文件。
+- 这些平台未进入白名单的主要原因是缺少已确认的用户级本地文件入口，或其协议只提供 repository-scoped 文件；PromptHub 不为这些平台发明不会被读取的全局文件。
 
 项目规则当前稳定支持：
 
@@ -354,7 +362,7 @@ Current support boundary:
 - `Qwen Code` 使用独立 `qwen` 平台 id；默认用户根为 `~/.qwen`，支持 `QWEN_HOME`，而 `QWEN_RUNTIME_DIR` 只影响会话/日志等运行态输出。
 - `Kimi Code` 保留 `kimi` 平台 id；优先解析 `KIMI_CODE_HOME` / `~/.kimi-code`，仅在 current root 缺失时回退 `KIMI_SHARE_DIR` / `~/.kimi`。Agent 工作台允许编辑 current `config.toml` / `tui.toml` / `mcp.json`，但不把 Kimi 伪装成尚未实现的结构化 MCP writer。
 - `Reasonix` 使用 `reasonix` 平台 id，管理 `~/.reasonix/skills/`，并把 `config.toml`、`settings.json`、`trust.json` 标记为发现/配置预览；Reasonix 的 TOML Plugin/MCP 语法不复用 Codex writer。
-- `Augment` 使用 `augment` 平台 id，管理 `~/.augment/skills/`，预览 `settings.json`；其 `rules/` 目录和 frontmatter 不压平成单一全局规则文件。
+- `Augment` 使用 `augment` 平台 id，管理 `~/.augment/skills/`，预览 `settings.json`，并通过 Rules 暴露官方 `~/.augment/user-guidelines.md` 用户指南入口；其 `rules/` 目录和 frontmatter 不压平成单一文件。
 - `QClaw` 使用独立 `qclaw` 平台 id，默认根目录为 PromptHub 兼容约定 `~/.qclaw`；由于官方强调基于 OpenClaw 并可关联 OpenClaw，当前复用 OpenClaw 的 workspace/SOUL.md 规则候选和 `skills/` 兼容面，但不创建未确认的 MCP 配置路径。
 - `Marvis` 暂不作为内置平台。当前公开资料证明产品存在和系统级 Agent 能力，但没有可落地的本地资产路径或 MCP/Skill 文件合同。
 
@@ -902,7 +910,10 @@ Current support boundary:
   - `~/.cline/data/settings/cline_mcp_settings.json`
 - Modeling note:
   - PromptHub now exposes Cline as a built-in platform for root-directory-based Skill integration and asset preview.
-  - Cline is not added to the current `Rules` global single-file whitelist because its public rule surface is directory-oriented and AGENTS-based rather than one canonical user-level markdown file.
+  - PromptHub exposes the verified Cline CLI global entry at
+    `~/.cline/data/settings/rules/AGENTS.md`. Other CLI rule files and the IDE
+    compatibility directory remain Cline-managed and are not inventoried by
+    the current single-entry Rules projection.
   - Cline's documented plugin surface applies to Cline SDK / CLI / Kanban and uses `AgentPlugin` entrypoints for tools/hooks/commands. It is runtime-only for PromptHub Plugin planning, not a first-version bundle adapter for the VSCode / JetBrains extension runtime.
   - History is read-only and partial: current Cline sessions use
     `~/.cline/data/sessions/sessions.db` as a bounded metadata index with
@@ -1040,7 +1051,10 @@ Current support boundary:
   - steering supports `always`, `fileMatch`, `manual`, and `auto`
   - manual and auto steering files surface like commands, but Kiro does not present a separate dedicated local `commands/` directory in current docs
 - Modeling note:
-  - Kiro is documented well enough for asset-level modeling, but its steering-first directory model is not the same thing as a single canonical global rule file, so it is not part of the current `Rules` whitelist.
+  - PromptHub exposes the verified user-level entry
+    `<KIRO_HOME>/steering/AGENTS.md` through Rules. Other steering files and
+    inclusion modes remain Kiro-managed and are not represented as complete
+    directory support.
   - locally verified CLI session metadata and JSONL are read-only runtime
     evidence, not a claimed public stable schema. PromptHub exposes only
     visible Prompt/Assistant `text` content, rejects unsafe files, hides
@@ -1371,6 +1385,7 @@ Current support boundary:
 - Reasonix guide: `https://github.com/esengine/DeepSeek-Reasonix/blob/main-v2/docs/GUIDE.md`
 - Augment Skills: `https://docs.augmentcode.com/cli/skills`
 - Augment rules: `https://docs.augmentcode.com/cli/rules`
+- Augment user guidelines: `https://docs.augmentcode.com/setup-augment/guidelines`
 - Augment CLI reference: `https://docs.augmentcode.com/cli/reference`
 - Augment MCP: `https://docs.augmentcode.com/cli/integrations`
 - Cherry Studio storage locations: `https://docs.cherry-ai.com/advanced-basic/data-storage-location`

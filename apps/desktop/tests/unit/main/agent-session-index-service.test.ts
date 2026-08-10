@@ -19,11 +19,13 @@ function claudeLine(
   sessionId: string,
   text: string,
   timestamp = "2026-07-29T08:00:00.000Z",
+  cwd?: string,
 ): string {
   return JSON.stringify({
     sessionId,
     timestamp,
     type: "user",
+    ...(cwd ? { cwd } : {}),
     message: { role: "user", content: text },
   });
 }
@@ -137,7 +139,12 @@ describe("Agent session index service", () => {
       homeDir,
       "workspace",
       SESSION_A,
-      claudeLine(SESSION_A, "Review the session index token sk-secret"),
+      claudeLine(
+        SESSION_A,
+        "Review the session index token sk-secret",
+        undefined,
+        "/workspace/project",
+      ),
     );
 
     expect(service.getState("claude")).toMatchObject({
@@ -183,8 +190,16 @@ describe("Agent session index service", () => {
     expect(indexed.sessions[0]).toMatchObject({
       id: SESSION_A,
       title: "Review the session index token [REDACTED]",
+      projectLabel: "project",
+      projectPath: "/workspace/project",
+      sizeBytes: (await fs.stat(sourcePath)).size,
+      nativeDeleteSupported: true,
       sourcePath,
-      resume: { executable: "claude", args: ["--resume", SESSION_A] },
+      resume: {
+        executable: "claude",
+        args: ["--resume", SESSION_A],
+        cwd: "/workspace/project",
+      },
     });
     const stored = index.listSessions({
       sourceId: enabled.source!.id,
@@ -197,7 +212,7 @@ describe("Agent session index service", () => {
     );
   });
 
-  it("preserves Cline matches found in visible turns when no persistent index is enabled", async () => {
+  it("limits Cline live search to title and project metadata", async () => {
     const snapshotPath = path.join(
       homeDir,
       ".cline",
@@ -225,12 +240,21 @@ describe("Agent session index service", () => {
     });
     expect(live).toMatchObject({
       adapter: "cline-session-snapshot-v1",
-      total: 1,
-      sessions: [expect.objectContaining({ id: "cline-live" })],
+      total: 0,
+      sessions: [],
     });
+
+    const projectMatch = await service.list("cline", {
+      limit: 10,
+      offset: 0,
+      search: "/workspace/cline",
+    });
+    expect(projectMatch.sessions).toEqual([
+      expect.objectContaining({ id: "cline-live" }),
+    ]);
   });
 
-  it("preserves Cursor matches found in visible turns when no persistent index is enabled", async () => {
+  it("drops Cursor matches found only in visible turns", async () => {
     const transcriptPath = path.join(
       homeDir,
       ".cursor",
@@ -264,12 +288,12 @@ describe("Agent session index service", () => {
     });
     expect(live).toMatchObject({
       adapter: "cursor-agent-transcript-v1",
-      total: 1,
-      sessions: [expect.objectContaining({ id: "cursor-live" })],
+      total: 0,
+      sessions: [],
     });
   });
 
-  it("preserves current Cherry matches found only in visible text parts", async () => {
+  it("drops current Cherry matches found only in visible text parts", async () => {
     const cherryRoot = path.join(homeDir, "CherryStudio");
     await writeCherryCurrentSession(cherryRoot, "current cherry body phrase");
     const cherryService = createAgentSessionIndexService({
@@ -287,8 +311,8 @@ describe("Agent session index service", () => {
     });
     expect(live).toMatchObject({
       adapter: "cherry-agent-session-db-v2",
-      total: 1,
-      sessions: [expect.objectContaining({ id: "cherry-body-session" })],
+      total: 0,
+      sessions: [],
     });
   });
 
@@ -356,11 +380,34 @@ describe("Agent session index service", () => {
   });
 
   it("commits Gemini parse errors without aborting valid sessions", async () => {
+    const projectPath = path.join(homeDir, "workspace", "Gemini Project");
+    await fs.mkdir(projectPath, { recursive: true });
+    await fs.mkdir(path.join(homeDir, ".gemini", "tmp", "project"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(homeDir, ".gemini", "tmp", "project", ".project_root"),
+      projectPath,
+    );
     await writeGeminiSession(homeDir, "project", "valid.json", {
       sessionId: SESSION_A,
+      summary: "Indexed Gemini title",
       startTime: "2026-07-29T08:00:00.000Z",
       lastUpdated: "2026-07-29T08:01:00.000Z",
-      messages: [{ type: "user", content: "Gemini index" }],
+      messages: [
+        { type: "info", content: "Internal context" },
+        { type: "user", content: "Gemini index" },
+        {
+          type: "user",
+          content: [
+            {
+              functionResponse: {
+                response: { output: "Indexed tool result" },
+              },
+            },
+          ],
+        },
+      ],
     });
     await writeGeminiSession(
       homeDir,
@@ -382,6 +429,7 @@ describe("Agent session index service", () => {
       expect.arrayContaining([
         expect.objectContaining({
           externalId: SESSION_A,
+          title: "Indexed Gemini title",
           sourceStatus: "present",
         }),
         expect.objectContaining({
@@ -396,16 +444,36 @@ describe("Agent session index service", () => {
       sessions: [
         expect.objectContaining({
           id: SESSION_A,
-          projectLabel: "project",
+          title: "Indexed Gemini title",
+          projectLabel: "Gemini Project",
+          projectPath,
           resume: {
             executable: "gemini",
             args: ["--resume", SESSION_A],
+            cwd: projectPath,
           },
         }),
       ],
     });
+    const movedProjectPath = path.join(homeDir, "workspace", "Gemini Moved");
+    await fs.mkdir(movedProjectPath, { recursive: true });
+    await fs.writeFile(
+      path.join(homeDir, ".gemini", "tmp", "project", ".project_root"),
+      movedProjectPath,
+    );
     await service.refresh("gemini");
     expect(index.getSource(source.id)!.lastStatus).toBe("partial");
+    expect(
+      await service.list("gemini", { limit: 10, offset: 0 }),
+    ).toMatchObject({
+      sessions: [
+        expect.objectContaining({
+          projectLabel: "Gemini Moved",
+          projectPath: movedProjectPath,
+          resume: expect.objectContaining({ cwd: movedProjectPath }),
+        }),
+      ],
+    });
   });
 
   it("isolates malformed Claude files and redacts supported credential shapes", async () => {
@@ -625,7 +693,7 @@ describe("Agent session index service", () => {
     index.commitScan({
       sourceId: source.id,
       mode: "full",
-      adapterVersion: "1",
+      adapterVersion: "2",
       scannedAt: 500,
       status: "ok",
       records: [
@@ -712,6 +780,6 @@ describe("Agent session index service", () => {
     expect(
       index.getSessionByExternalId(source.id, SESSION_A)!.sourceDigest,
     ).not.toBe("sha256:stale");
-    expect(index.getSource(source.id)!.adapterVersion).toBe("1");
+    expect(index.getSource(source.id)!.adapterVersion).toBe("2");
   });
 });

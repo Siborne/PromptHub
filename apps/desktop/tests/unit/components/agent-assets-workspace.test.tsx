@@ -163,6 +163,19 @@ function seedSkillScan(
 }
 
 function seedStores() {
+  const claudeRule = {
+    id: "claude-global",
+    platformId: "claude",
+    platformName: "Claude Code",
+    platformIcon: "Sparkles",
+    platformDescription: "Global Claude rules",
+    name: "CLAUDE.md",
+    description: "Global Claude rules",
+    path: "~/.claude/CLAUDE.md",
+    exists: true,
+    group: "assistant" as const,
+  };
+
   seedSkillScan([
     createAgentSkill({ localPath: "/Users/demo/skills/write" }),
     createAgentSkill({
@@ -214,20 +227,8 @@ function seedStores() {
   useRulesStore.setState({
     hasLoadedFiles: true,
     selectedRuleId: "claude-global",
-    files: [
-      {
-        id: "claude-global",
-        platformId: "claude",
-        platformName: "Claude Code",
-        platformIcon: "Sparkles",
-        platformDescription: "Global Claude rules",
-        name: "CLAUDE.md",
-        description: "Global Claude rules",
-        path: "~/.claude/CLAUDE.md",
-        exists: true,
-        group: "assistant",
-      },
-    ],
+    availableFiles: [claudeRule],
+    files: [claudeRule],
     currentFile: {
       id: "claude-global",
       platformId: "claude",

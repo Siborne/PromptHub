@@ -30,6 +30,7 @@ interface CopilotSessionRow {
   updated_at?: unknown;
   title?: unknown;
   message_count?: unknown;
+  size_bytes?: unknown;
 }
 
 interface CopilotTurnRow {
@@ -49,6 +50,7 @@ interface CopilotSession {
   createdAt: number | null;
   updatedAt: number | null;
   messageCount: number;
+  sizeBytes: number;
 }
 
 function isMissing(error: unknown): boolean {
@@ -90,6 +92,7 @@ function toMetadata(
     updatedAt: session.updatedAt,
     model: null,
     messageCount: session.messageCount || null,
+    sizeBytes: session.sizeBytes,
     sourcePath,
     resume: {
       executable: "copilot",
@@ -113,6 +116,7 @@ function parseSession(row: unknown): CopilotSession | null {
     createdAt: sessionTimestamp(record.created_at),
     updatedAt: sessionTimestamp(record.updated_at),
     messageCount: Math.max(0, rowNumber(record.message_count) || 0),
+    sizeBytes: Math.max(0, rowNumber(record.size_bytes) || 0),
   };
 }
 
@@ -132,7 +136,10 @@ function visibleEntry(
   };
 }
 
-async function openStore(rootPath: string): Promise<Database.Database | null> {
+async function openStore(
+  rootPath: string,
+  readOnly = true,
+): Promise<Database.Database | null> {
   const filePath = storePath(rootPath);
   const stat = await fs.lstat(filePath).catch((error: unknown) => {
     if (isMissing(error)) return null;
@@ -143,7 +150,7 @@ async function openStore(rootPath: string): Promise<Database.Database | null> {
     throw new Error("AGENT_SESSION_STORE_INVALID");
   }
   try {
-    return new Database(filePath, { readOnly: true });
+    return new Database(filePath, readOnly ? { readOnly: true } : undefined);
   } catch {
     throw new Error("AGENT_SESSION_STORE_UNAVAILABLE");
   }
@@ -238,6 +245,14 @@ function readSessionPage(
          FROM turns t
          WHERE t.session_id = s.id
        ) AS message_count
+       , length(CAST(COALESCE(s.id, '') AS BLOB))
+         + length(CAST(COALESCE(s.cwd, '') AS BLOB))
+         + length(CAST(COALESCE(s.repository, '') AS BLOB))
+         + length(CAST(COALESCE(s.summary, '') AS BLOB))
+         + COALESCE((SELECT SUM(
+             length(CAST(COALESCE(t.user_message, '') AS BLOB))
+             + length(CAST(COALESCE(t.assistant_response, '') AS BLOB))
+           ) FROM turns t WHERE t.session_id = s.id), 0) AS size_bytes
      FROM sessions s
      ${where}
      ORDER BY s.updated_at DESC, s.created_at DESC, s.id DESC
@@ -366,6 +381,30 @@ export function createCopilotSessionAdapter(copilotRoot: string) {
       );
       if (!detail) throw new Error("AGENT_SESSION_NOT_FOUND");
       return detail;
+    },
+
+    async delete(sessionId: string): Promise<void> {
+      if (!isSafeSessionId(sessionId)) {
+        throw new Error("AGENT_SESSION_ID_INVALID");
+      }
+      const database = await openStore(copilotRoot, false);
+      if (!database) throw new Error("AGENT_SESSION_NOT_FOUND");
+      try {
+        const remove = database.transaction(() => {
+          const exists = database.get(
+            "SELECT id FROM sessions WHERE id = ? LIMIT 1",
+            sessionId,
+          );
+          if (!exists) throw new Error("AGENT_SESSION_NOT_FOUND");
+          database
+            .prepare("DELETE FROM turns WHERE session_id = ?")
+            .run(sessionId);
+          database.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+        });
+        remove();
+      } finally {
+        database.close();
+      }
     },
   };
 }

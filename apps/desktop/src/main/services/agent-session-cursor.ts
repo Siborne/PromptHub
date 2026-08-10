@@ -25,12 +25,22 @@ const MAX_PROJECTS = 1_000;
 const MAX_SESSION_DIRECTORIES = 2_000;
 const MAX_METADATA_BYTES = 64 * 1024;
 const MAX_READ_CONCURRENCY = 8;
+const MAX_PROJECT_RESOLVE_DIRECTORIES = 64;
+const MAX_DIRECTORY_ENTRIES = 4_096;
 
 interface CursorCandidate {
   id: string;
   path: string;
   projectLabel: string;
+  projectPath: string | null;
   updatedAt: number;
+}
+
+interface CursorProjectResolver {
+  homeDir: string;
+  homeKey: string;
+  directories: Map<string, string[] | null>;
+  openedDirectories: number;
 }
 
 interface CursorMetadata {
@@ -79,13 +89,119 @@ async function readDirectories(directory: string) {
     });
 }
 
+function cursorProjectKey(projectPath: string): string {
+  const root = path.parse(projectPath).root;
+  return path.relative(root, projectPath).split(path.sep).join("-");
+}
+
+function createCursorProjectResolver(homeDir: string): CursorProjectResolver {
+  const normalizedHome = path.resolve(homeDir);
+  return {
+    homeDir: normalizedHome,
+    homeKey: cursorProjectKey(normalizedHome),
+    directories: new Map(),
+    openedDirectories: 0,
+  };
+}
+
+async function boundedChildDirectories(
+  resolver: CursorProjectResolver,
+  directory: string,
+): Promise<string[] | null> {
+  const cached = resolver.directories.get(directory);
+  if (cached !== undefined) return cached;
+  if (resolver.openedDirectories >= MAX_PROJECT_RESOLVE_DIRECTORIES) {
+    return null;
+  }
+  resolver.openedDirectories += 1;
+  const handle = await fs.opendir(directory).catch(() => null);
+  if (!handle) {
+    resolver.directories.set(directory, null);
+    return null;
+  }
+  const children: string[] = [];
+  let entryCount = 0;
+  try {
+    for await (const entry of handle) {
+      entryCount += 1;
+      if (entryCount > MAX_DIRECTORY_ENTRIES) {
+        resolver.directories.set(directory, null);
+        return null;
+      }
+      if (entry.isDirectory() && !entry.isSymbolicLink()) {
+        children.push(entry.name);
+      }
+    }
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+  resolver.directories.set(directory, children);
+  return children;
+}
+
+async function resolveCursorProjectPath(
+  resolver: CursorProjectResolver,
+  projectKey: string,
+): Promise<string | null> {
+  if (projectKey === resolver.homeKey) return resolver.homeDir;
+  const prefix = `${resolver.homeKey}-`;
+  if (!resolver.homeKey || !projectKey.startsWith(prefix)) return null;
+  const queue = [
+    {
+      directory: resolver.homeDir,
+      remaining: projectKey.slice(prefix.length),
+    },
+  ];
+  const matches = new Set<string>();
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const children = await boundedChildDirectories(resolver, current.directory);
+    if (!children) return null;
+    for (const child of children) {
+      if (current.remaining === child) {
+        matches.add(path.join(current.directory, child));
+        if (matches.size > 1) return null;
+      } else if (current.remaining.startsWith(`${child}-`)) {
+        queue.push({
+          directory: path.join(current.directory, child),
+          remaining: current.remaining.slice(child.length + 1),
+        });
+      }
+    }
+  }
+  return matches.size === 1 ? [...matches][0] : null;
+}
+
+async function compactCursorProjectLabel(
+  resolver: CursorProjectResolver,
+  projectKey: string,
+): Promise<string> {
+  const prefix = `${resolver.homeKey}-`;
+  if (!resolver.homeKey || !projectKey.startsWith(prefix)) return projectKey;
+  let directory = resolver.homeDir;
+  let remaining = projectKey.slice(prefix.length);
+  if (!remaining) return projectKey;
+  for (;;) {
+    const children = await boundedChildDirectories(resolver, directory);
+    if (!children || children.includes(remaining)) return remaining;
+    const prefixes = children.filter((child) =>
+      remaining.startsWith(`${child}-`),
+    );
+    if (prefixes.length !== 1) return remaining;
+    directory = path.join(directory, prefixes[0]);
+    remaining = remaining.slice(prefixes[0].length + 1);
+  }
+}
+
 async function scanCursorCandidates(
   cursorRoot: string,
+  homeDir: string,
 ): Promise<CursorCandidate[]> {
   if (!(await fs.realpath(cursorRoot).catch(() => null))) return [];
   const projectsRoot = path.join(cursorRoot, "projects");
   const projects = await readDirectories(projectsRoot);
   const candidates: CursorCandidate[] = [];
+  const projectResolver = createCursorProjectResolver(homeDir);
 
   for (const project of projects.slice(0, MAX_PROJECTS)) {
     if (
@@ -101,6 +217,14 @@ async function scanCursorCandidates(
       "agent-transcripts",
     );
     const sessions = await readDirectories(transcriptRoot);
+    if (sessions.length === 0) continue;
+    const projectPath = await resolveCursorProjectPath(
+      projectResolver,
+      project.name,
+    );
+    const projectLabel = projectPath
+      ? path.basename(projectPath) || projectPath
+      : await compactCursorProjectLabel(projectResolver, project.name);
     for (const session of sessions) {
       if (
         !session.isDirectory() ||
@@ -122,7 +246,8 @@ async function scanCursorCandidates(
       candidates.push({
         id: session.name,
         path: safePath,
-        projectLabel: project.name,
+        projectLabel,
+        projectPath,
         updatedAt: stat.mtimeMs,
       });
     }
@@ -170,7 +295,7 @@ function metadataFromCandidate(
       id: candidate.id,
       title,
       projectLabel: candidate.projectLabel,
-      projectPath: null,
+      projectPath: candidate.projectPath,
       createdAt: null,
       updatedAt: candidate.updatedAt,
       model: null,
@@ -179,6 +304,7 @@ function metadataFromCandidate(
       resume: {
         executable: "cursor-agent",
         args: ["--resume", candidate.id],
+        ...(candidate.projectPath ? { cwd: candidate.projectPath } : {}),
       },
     },
     searchableText,
@@ -200,14 +326,17 @@ function matchesSearch(metadata: CursorMetadata, search: string): boolean {
   return metadata.searchableText.toLocaleLowerCase().includes(search);
 }
 
-export function createCursorSessionAdapter(cursorRoot: string) {
+export function createCursorSessionAdapter(
+  cursorRoot: string,
+  homeDir: string,
+) {
   return {
     async list(
       limit: number,
       offset = 0,
       search?: string,
     ): Promise<AgentSessionListResult> {
-      const candidates = await scanCursorCandidates(cursorRoot);
+      const candidates = await scanCursorCandidates(cursorRoot, homeDir);
       const normalizedSearch = search?.trim().toLocaleLowerCase();
       const source = normalizedSearch
         ? candidates
@@ -232,7 +361,7 @@ export function createCursorSessionAdapter(cursorRoot: string) {
     },
 
     async read(sessionId: string): Promise<AgentSessionDetail> {
-      const candidate = (await scanCursorCandidates(cursorRoot)).find(
+      const candidate = (await scanCursorCandidates(cursorRoot, homeDir)).find(
         (item) => item.id === sessionId,
       );
       if (!candidate) throw new Error("AGENT_SESSION_NOT_FOUND");

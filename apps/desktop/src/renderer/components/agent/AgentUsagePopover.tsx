@@ -3,10 +3,7 @@ import type { TFunction } from "i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type {
-  AgentUsageMetric,
-  AgentUsageQuota,
-} from "@prompthub/shared/types";
+import type { AgentUsageQuota } from "@prompthub/shared/types";
 import { useSettingsStore } from "../../stores/settings.store";
 import { getRendererPlatform } from "../../services/runtime-platform";
 import { PlatformIcon } from "../ui/PlatformIcon";
@@ -14,9 +11,10 @@ import {
   AGENT_USAGE_POPOVER_AGENTS,
   formatAgentUsagePlan,
   getPrimaryUsageMetric,
-  getRemainingPercent,
   loadAgentUsageBatch,
 } from "./agent-usage-popover-model";
+import { AgentUsageMeter, AgentUsagePlanBadge } from "./AgentUsageMeter";
+import { buildAgentUsagePresentation } from "./agent-usage-presentation";
 import { readCachedAgentUsage, writeCachedAgentUsage } from "./use-agent-usage";
 
 interface UsageRowState {
@@ -24,17 +22,6 @@ interface UsageRowState {
   isLoading: boolean;
   hasError: boolean;
 }
-
-const METRIC_KEYS: Record<string, string> = {
-  fiveHour: "agents.usageTab.fiveHourWindow",
-  sevenDay: "agents.usageTab.sevenDayWindow",
-  sevenDayOpus: "agents.usageTab.sevenDayOpusWindow",
-  weekly: "agents.usageTab.weeklyWindow",
-  rolling: "agents.usageTab.rollingWindow",
-  premium: "agents.usageTab.premiumRequests",
-  chat: "agents.usageTab.chatRequests",
-  promptCredits: "agents.usageTab.promptCredits",
-};
 
 function createInitialState(): Record<string, UsageRowState> {
   return Object.fromEntries(
@@ -106,29 +93,6 @@ function usePopoverUsage() {
   return { isRefreshing, load, rows };
 }
 
-function metricLabel(metric: AgentUsageMetric, t: TFunction) {
-  const key = METRIC_KEYS[metric.id];
-  return key ? t(key) : metric.label;
-}
-
-function resetLabel(metric: AgentUsageMetric, t: TFunction) {
-  if (metric.resetsAt === null) return "";
-  const remainingMinutes = Math.max(
-    0,
-    Math.ceil((metric.resetsAt - Date.now()) / 60_000),
-  );
-  if (remainingMinutes === 0) return t("agents.usageTab.resetDue");
-  const days = Math.floor(remainingMinutes / 1_440);
-  const hours = Math.floor((remainingMinutes % 1_440) / 60);
-  if (days > 0) {
-    return t("agents.usageTab.resetsInDaysHours", { days, hours });
-  }
-  return t("agents.usageTab.resetsInHoursMinutes", {
-    hours,
-    minutes: remainingMinutes % 60,
-  });
-}
-
 function statusText(
   quota: AgentUsageQuota | null,
   isLoading: boolean,
@@ -138,24 +102,8 @@ function statusText(
   if (quota?.status === "no-credentials")
     return t("agents.usageTab.notConnected");
   if (quota?.status === "expired") return t("agents.usageTab.expiredShort");
+  if (quota?.status === "ok") return t("agents.usageTab.providerNoQuota");
   return t("agents.usageTab.unavailableTitle");
-}
-
-function UsageProgress({ remaining }: { remaining: number }) {
-  const color =
-    remaining <= 10
-      ? "bg-destructive"
-      : remaining <= 30
-        ? "bg-amber-500"
-        : "bg-primary";
-  return (
-    <span className="block h-1 w-full overflow-hidden rounded-full bg-foreground/10">
-      <span
-        className={`block h-full rounded-full ${color}`}
-        style={{ width: `${remaining}%` }}
-      />
-    </span>
-  );
 }
 
 function AgentUsageRow({
@@ -171,8 +119,18 @@ function AgentUsageRow({
   const [expanded, setExpanded] = useState(false);
   const valid = state.quota?.status === "ok" && state.quota.metrics.length > 0;
   const primary = valid ? getPrimaryUsageMetric(state.quota!) : null;
-  const remaining = primary ? getRemainingPercent(primary.utilization) : null;
-  const primaryLabel = primary ? metricLabel(primary, t) : "";
+  const orderedMetrics = useMemo(
+    () =>
+      state.quota
+        ? buildAgentUsagePresentation(state.quota.metrics, {
+            expanded: true,
+          }).groups.flatMap((group) => group.metrics)
+        : [],
+    [state.quota],
+  );
+  const secondaryMetrics = primary
+    ? orderedMetrics.filter((metric) => metric !== primary)
+    : [];
   const toggleLabel = t(
     expanded
       ? "agents.usagePopover.hideDetails"
@@ -182,8 +140,6 @@ function AgentUsageRow({
   const plan = state.quota?.plan
     ? formatAgentUsagePlan(state.quota.plan)
     : null;
-  const reset = primary ? resetLabel(primary, t) : "";
-  const remainingLabel = t("agents.usageTab.remainingLabel");
 
   return (
     <article
@@ -195,14 +151,7 @@ function AgentUsageRow({
         <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
           {name}
         </h2>
-        {plan ? (
-          <span
-            className="max-w-28 truncate text-xs text-muted-foreground"
-            title={plan}
-          >
-            {plan}
-          </span>
-        ) : null}
+        {plan ? <AgentUsagePlanBadge plan={plan} compact /> : null}
         {state.quota && state.quota.metrics.length > 1 ? (
           <button
             type="button"
@@ -220,34 +169,14 @@ function AgentUsageRow({
           <span />
         )}
       </div>
-      {primary && remaining !== null ? (
-        <div
-          role="progressbar"
-          aria-label={t("agents.usagePopover.progressLabel", {
-            agent: name,
-            metric: primaryLabel,
-            remaining,
-          })}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={remaining}
-          className="mt-2 pl-9"
-        >
-          <div className="mb-1.5 flex items-baseline justify-between gap-3 text-xs">
-            <span className="min-w-0 truncate font-medium text-foreground">
-              {primaryLabel}
-              {state.hasError ? ` · ${t("agents.usagePopover.cached")}` : ""}
-            </span>
-            <span className="shrink-0 font-medium tabular-nums text-foreground">
-              {remaining}% {remainingLabel}
-            </span>
-          </div>
-          <UsageProgress remaining={remaining} />
-          {reset ? (
-            <div className="mt-1.5 text-right text-[11px] tabular-nums text-muted-foreground">
-              {reset}
-            </div>
+      {primary ? (
+        <div className="mt-2 pl-9">
+          {state.hasError ? (
+            <p className="mb-1 text-[11px] text-muted-foreground">
+              {t("agents.usagePopover.cached")}
+            </p>
           ) : null}
+          <AgentUsageMeter metric={primary} compact />
         </div>
       ) : (
         <p className="mt-1 pl-9 text-xs text-muted-foreground">
@@ -256,30 +185,13 @@ function AgentUsageRow({
       )}
       {expanded && state.quota ? (
         <div className="mt-2 space-y-2 border-t border-border/60 pt-2 pl-9 text-xs">
-          {state.quota.metrics
-            .filter((metric) => metric.id !== primary?.id)
-            .map((metric) => {
-              const metricReset = resetLabel(metric, t);
-              const metricRemaining = getRemainingPercent(metric.utilization);
-              return (
-                <div key={metric.id} className="space-y-1.5">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="min-w-0 truncate font-medium text-foreground">
-                      {metricLabel(metric, t)}
-                    </span>
-                    <span className="shrink-0 tabular-nums text-foreground">
-                      {metricRemaining}% {remainingLabel}
-                    </span>
-                  </div>
-                  <UsageProgress remaining={metricRemaining} />
-                  {metricReset ? (
-                    <div className="text-right text-[11px] tabular-nums text-muted-foreground">
-                      {metricReset}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
+          {secondaryMetrics.map((metric, index) => (
+            <AgentUsageMeter
+              key={`${metric.id}:${index}`}
+              metric={metric}
+              compact
+            />
+          ))}
         </div>
       ) : null}
     </article>

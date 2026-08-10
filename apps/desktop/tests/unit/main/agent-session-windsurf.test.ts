@@ -104,6 +104,8 @@ describe("Windsurf public transcript sessions", () => {
           updatedAt: Date.parse("2026-07-28T01:02:03.000Z"),
           model: null,
           messageCount: 2,
+          sizeBytes: expect.any(Number),
+          nativeDeleteSupported: true,
           sourcePath,
           resume: null,
         },
@@ -144,6 +146,16 @@ describe("Windsurf public transcript sessions", () => {
     expect(JSON.stringify(detail)).not.toContain("PRIVATE_FILE_CONTENT");
     expect(JSON.stringify(detail)).not.toContain("PRIVATE_TOOL_OUTPUT");
     await expect(fs.readFile(sourcePath, "utf8")).resolves.toBe(sourceBefore);
+    await service.delete("windsurf", "trajectory-new");
+    await expect(fs.access(sourcePath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(
+      service.list("windsurf", { limit: 20 }),
+    ).resolves.toMatchObject({
+      total: 1,
+      sessions: [expect.objectContaining({ id: "trajectory-old" })],
+    });
   });
 
   it("skips unsafe files and bounds transcript content", async () => {

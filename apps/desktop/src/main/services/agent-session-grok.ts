@@ -105,6 +105,12 @@ async function grokMetadata(
     return null;
   }
   if (!isSessionRecord(summary)) return null;
+  const transcriptPath = await safeSessionFile(
+    path.join(root, "sessions"),
+    path.join(candidate.path, "chat_history.jsonl"),
+  );
+  if (!transcriptPath) return null;
+  const transcriptStat = await fs.stat(transcriptPath);
   const updatedAt = sessionTimestamp(summary.updated_at) || candidate.updatedAt;
   return {
     id: candidate.id,
@@ -119,7 +125,8 @@ async function grokMetadata(
     messageCount: sessionNumber(
       summary.num_chat_messages ?? summary.num_messages,
     ),
-    sourcePath: path.join(candidate.path, "chat_history.jsonl"),
+    sizeBytes: transcriptStat.size,
+    sourcePath: transcriptPath,
     resume: {
       executable: "grok",
       args: ["--resume", candidate.id],

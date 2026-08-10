@@ -98,6 +98,18 @@ describe("Kilo session adapter", () => {
       `${sessionId}.json`,
     );
     const resolvedSourcePath = await fs.realpath(sourcePath);
+    const ownedFiles = [
+      sourcePath,
+      path.join(storageRoot, "message", sessionId, "msg_user.json"),
+      path.join(storageRoot, "message", sessionId, "msg_assistant.json"),
+      path.join(storageRoot, "part", "msg_user", "part_text.json"),
+      path.join(storageRoot, "part", "msg_user", "part_tool.json"),
+      path.join(storageRoot, "part", "msg_assistant", "part_reasoning.json"),
+      path.join(storageRoot, "part", "msg_assistant", "part_text.json"),
+    ];
+    const expectedSize = (
+      await Promise.all(ownedFiles.map((file) => fs.stat(file)))
+    ).reduce((total, stat) => total + stat.size, 0);
     const service = createAgentSessionService({
       homeDir,
       kiloStorageRootDir: storageRoot,
@@ -118,6 +130,8 @@ describe("Kilo session adapter", () => {
           updatedAt: 1785427320000,
           model: "gpt-5.4",
           messageCount: 2,
+          sizeBytes: expectedSize,
+          nativeDeleteSupported: true,
           sourcePath: resolvedSourcePath,
           resume: {
             executable: "kilo",
@@ -144,8 +158,8 @@ describe("Kilo session adapter", () => {
           search: "opaque source-bound",
         }),
       ).resolves.toMatchObject({
-        total: 1,
-        sessions: [expect.objectContaining({ id: sessionId })],
+        total: 0,
+        sessions: [],
       });
     } finally {
       promptHubDatabase.close();
@@ -174,6 +188,19 @@ describe("Kilo session adapter", () => {
     expect(all.entries.map((entry) => entry.text).join("\n")).not.toContain(
       "private",
     );
+    await service.delete("kilo", sessionId);
+    await expect(fs.access(sourcePath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(
+      fs.access(path.join(storageRoot, "message", sessionId)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      fs.access(path.join(storageRoot, "part", "msg_user")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      fs.access(path.join(storageRoot, "part", "msg_assistant")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("handles missing roots and rejects malformed, symlinked or unsafe sources", async () => {

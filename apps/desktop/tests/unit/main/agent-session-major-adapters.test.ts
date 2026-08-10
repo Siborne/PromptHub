@@ -73,9 +73,31 @@ describe("major Agent session adapters", () => {
       }),
     ].join("\n");
     await fs.writeFile(currentPath, `${transcript}\n${"{}\n".repeat(700_000)}`);
+    const duplicatePath = path.join(
+      archiveDir,
+      `rollout-duplicate-${sessionId}.jsonl`,
+    );
+    await fs.writeFile(duplicatePath, transcript);
     await fs.writeFile(
-      path.join(archiveDir, `rollout-duplicate-${sessionId}.jsonl`),
-      transcript,
+      path.join(codexRootDir, "session_index.jsonl"),
+      [
+        JSON.stringify({
+          id: sessionId,
+          thread_name: "Previous Codex thread name",
+          updated_at: "2026-07-22T03:55:00.000Z",
+        }),
+        "{ malformed",
+        JSON.stringify({
+          id: "../../unsafe",
+          thread_name: "Unsafe thread name",
+          updated_at: "2026-07-22T03:56:00.000Z",
+        }),
+        JSON.stringify({
+          id: sessionId,
+          thread_name: " Renamed\u0000 Codex\nthread ",
+          updated_at: "2026-07-22T03:57:00.000Z",
+        }),
+      ].join("\n"),
     );
     const archivedId = "019f1111-1111-7111-a111-111111111111";
     await fs.writeFile(
@@ -93,7 +115,6 @@ describe("major Agent session adapters", () => {
         }),
       ].join("\n"),
     );
-
     const service = createAgentSessionService({ homeDir, codexRootDir });
     const list = await service.list("codex", { limit: 1 });
 
@@ -105,7 +126,7 @@ describe("major Agent session adapters", () => {
       sessions: [
         expect.objectContaining({
           id: sessionId,
-          title: "Fix the Codex history",
+          title: "Renamed Codex thread",
           projectPath: "/workspace/current",
           resume: {
             executable: "codex",
@@ -127,6 +148,121 @@ describe("major Agent session adapters", () => {
       ["user", "Fix the Codex history"],
       ["assistant", "History is visible."],
     ]);
+    await service.delete("codex", sessionId);
+    await expect(fs.access(currentPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(fs.access(duplicatePath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("reads current Codex response-item messages without exposing private records", async () => {
+    const homeDir = await createHome();
+    const codexRootDir = path.join(homeDir, ".codex");
+    const sessionDir = path.join(codexRootDir, "sessions", "2026", "08", "10");
+    const sessionId = "019fdfaa-d15a-7822-8ede-917f632d5b79";
+    const sessionPath = path.join(sessionDir, `rollout-${sessionId}.jsonl`);
+    await fs.mkdir(sessionDir, { recursive: true });
+    await fs.writeFile(
+      sessionPath,
+      [
+        JSON.stringify({
+          type: "session_meta",
+          timestamp: "2026-08-10T06:03:00.000Z",
+          payload: { id: sessionId, cwd: "/workspace/current-codex" },
+        }),
+        JSON.stringify({
+          type: "response_item",
+          timestamp: "2026-08-10T06:03:01.000Z",
+          payload: {
+            type: "message",
+            id: "developer-message",
+            role: "developer",
+            content: [{ type: "input_text", text: "Hidden instructions" }],
+          },
+        }),
+        JSON.stringify({
+          type: "response_item",
+          timestamp: "2026-08-10T06:03:02.000Z",
+          payload: {
+            type: "message",
+            id: "user-message",
+            role: "user",
+            content: [
+              { type: "input_text", text: "Render the current Codex history" },
+              {
+                type: "input_image",
+                image_url: "data:image/png;base64,hidden",
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
+          type: "response_item",
+          timestamp: "2026-08-10T06:03:03.000Z",
+          payload: {
+            type: "reasoning",
+            id: "private-reasoning",
+            summary: [{ type: "summary_text", text: "Hidden reasoning" }],
+          },
+        }),
+        JSON.stringify({
+          type: "response_item",
+          timestamp: "2026-08-10T06:03:04.000Z",
+          payload: {
+            type: "message",
+            id: "assistant-message",
+            role: "assistant",
+            phase: "final_answer",
+            content: [
+              { type: "output_text", text: "The current history is visible." },
+            ],
+          },
+        }),
+      ].join("\n"),
+    );
+    const sessionBytes = (await fs.stat(sessionPath)).size;
+
+    const service = createAgentSessionService({ homeDir, codexRootDir });
+    const list = await service.list("codex", { limit: 20 });
+    const detail = await service.read("codex", sessionId);
+
+    expect(list.sessions).toEqual([
+      expect.objectContaining({
+        id: sessionId,
+        title: "Render the current Codex history",
+        projectPath: "/workspace/current-codex",
+        sizeBytes: sessionBytes,
+        nativeDeleteSupported: true,
+      }),
+    ]);
+    expect(detail.entries).toEqual([
+      expect.objectContaining({
+        id: "user-message",
+        role: "user",
+        text: "Render the current Codex history",
+      }),
+      expect.objectContaining({
+        id: "assistant-message",
+        role: "assistant",
+        text: "The current history is visible.",
+      }),
+    ]);
+
+    await service.delete("codex", sessionId);
+    await expect(fs.access(sessionPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(service.delete("codex", sessionId)).rejects.toThrow(
+      "AGENT_SESSION_NOT_FOUND",
+    );
+    await expect(service.delete("grok", sessionId)).rejects.toThrow(
+      "AGENT_SESSION_NOT_FOUND",
+    );
+    await expect(service.delete("codex", "../outside")).rejects.toThrow(
+      "AGENT_SESSION_ID_INVALID",
+    );
   });
 
   it("paginates visible Codex messages beyond a large hidden runtime prefix", async () => {
@@ -269,8 +405,9 @@ describe("major Agent session adapters", () => {
         num_chat_messages: 3,
       }),
     );
+    const chatHistoryPath = path.join(sessionDir, "chat_history.jsonl");
     await fs.writeFile(
-      path.join(sessionDir, "chat_history.jsonl"),
+      chatHistoryPath,
       [
         JSON.stringify({ type: "system", content: "Hidden system prompt" }),
         JSON.stringify({
@@ -285,7 +422,12 @@ describe("major Agent session adapters", () => {
         JSON.stringify({ type: "tool_result", content: "Hidden tool output" }),
       ].join("\n"),
     );
+    const chatHistoryRealPath = await fs.realpath(chatHistoryPath);
     await fs.writeFile(path.join(sessionDir, "terminal", "call.log"), "secret");
+    const sessionBytes =
+      (await fs.stat(chatHistoryPath)).size +
+      (await fs.stat(path.join(sessionDir, "summary.json"))).size +
+      (await fs.stat(path.join(sessionDir, "terminal", "call.log"))).size;
 
     const service = createAgentSessionService({ homeDir, grokRootDir });
     const list = await service.list("grok", { limit: 20 });
@@ -297,6 +439,9 @@ describe("major Agent session adapters", () => {
         projectPath,
         model: "grok-4.5",
         messageCount: 3,
+        sourcePath: chatHistoryRealPath,
+        sizeBytes: sessionBytes,
+        nativeDeleteSupported: true,
         resume: {
           executable: "grok",
           args: ["--resume", sessionId],
@@ -310,6 +455,46 @@ describe("major Agent session adapters", () => {
       ["user", "Review Grok session support"],
       ["assistant", "The format is bounded."],
     ]);
+    await service.delete("grok", sessionId);
+    await expect(fs.access(sessionDir)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("uses a valid Codex thread name after an oversized partial index record", async () => {
+    const homeDir = await createHome();
+    const codexRootDir = path.join(homeDir, ".codex");
+    const sessionDir = path.join(codexRootDir, "sessions", "2026", "08", "10");
+    const sessionId = "019fdfab-1111-7222-8333-444444444444";
+    await fs.mkdir(sessionDir, { recursive: true });
+    await fs.writeFile(
+      path.join(sessionDir, `rollout-${sessionId}.jsonl`),
+      [
+        JSON.stringify({
+          type: "session_meta",
+          payload: { id: sessionId, cwd: "/workspace/oversized-index" },
+        }),
+        JSON.stringify({
+          type: "event_msg",
+          payload: { type: "user_message", message: "Fallback title" },
+        }),
+      ].join("\n"),
+    );
+    const lastRecord = Buffer.from(
+      `\n${JSON.stringify({ id: sessionId, thread_name: "Bounded native title" })}\n`,
+    );
+    await fs.writeFile(
+      path.join(codexRootDir, "session_index.jsonl"),
+      Buffer.concat([
+        Buffer.alloc(8 * 1024 * 1024 + 1 - lastRecord.length, 0x78),
+        lastRecord,
+      ]),
+    );
+
+    const service = createAgentSessionService({ homeDir, codexRootDir });
+    const list = await service.list("codex", { limit: 20 });
+
+    expect(list.sessions[0]?.title).toBe("Bounded native title");
   });
 
   it("reads OpenClaw indexed transcripts and rejects paths outside its root", async () => {

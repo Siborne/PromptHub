@@ -171,6 +171,10 @@ describe("GitHub Copilot session adapter", () => {
       ["assistant", "The session store is read-only."],
       ["user", "Keep the database private"],
     ]);
+    expect(list.sessions[0]).toMatchObject({
+      sizeBytes: expect.any(Number),
+      nativeDeleteSupported: true,
+    });
 
     await expect(
       service.list("copilot", { limit: 20, search: "private" }),
@@ -189,12 +193,23 @@ describe("GitHub Copilot session adapter", () => {
       await expect(
         sessionIndex.list("copilot", { limit: 20, search: "private" }),
       ).resolves.toMatchObject({
-        total: 1,
-        sessions: [expect.objectContaining({ id: "newer-session" })],
+        total: 0,
+        sessions: [],
       });
     } finally {
       promptHubDatabase.close();
     }
+
+    await service.delete("copilot", "newer-session");
+    await expect(service.read("copilot", "newer-session")).rejects.toThrow(
+      "AGENT_SESSION_NOT_FOUND",
+    );
+    await expect(service.list("copilot", { limit: 20 })).resolves.toMatchObject(
+      {
+        total: 1,
+        sessions: [expect.objectContaining({ id: "older-session" })],
+      },
+    );
   });
 
   it("returns an explicit empty result when Copilot has no local store", async () => {

@@ -224,6 +224,16 @@ describe("Cherry Studio Agent session adapter", () => {
     expect(detail.entries[1]?.text.length).toBeLessThanOrEqual(64 * 1024);
     expect(JSON.stringify(detail)).not.toContain("private chain");
     expect(JSON.stringify(detail)).not.toContain("must-not-leak");
+    expect(listed.sessions[0]).toMatchObject({
+      sizeBytes: expect.any(Number),
+      nativeDeleteSupported: true,
+    });
+
+    await service.delete("cherry-studio", "019c-current-session");
+    await expect(
+      service.read("cherry-studio", "019c-current-session"),
+    ).rejects.toThrow("AGENT_SESSION_NOT_FOUND");
+    expect((await fs.stat(currentPath)).isFile()).toBe(true);
   });
 
   it("lists, searches and cursor-pages visible Agent messages read-only", async () => {
@@ -250,6 +260,8 @@ describe("Cherry Studio Agent session adapter", () => {
           updatedAt: Date.parse("2026-07-30T10:02:00.000Z"),
           model: "claude-sonnet-4-5",
           messageCount: 2,
+          sizeBytes: expect.any(Number),
+          nativeDeleteSupported: true,
           sourcePath,
           resume: null,
         },

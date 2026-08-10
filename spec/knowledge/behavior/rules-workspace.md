@@ -43,41 +43,56 @@
 ### 5. Global Rule Support Is Explicit, Not Automatic
 
 - 平台在 `spec/knowledge/reference/agent-platforms.md` 中“有官方文档”并不等于它会自动进入 `Rules` 运行时支持集合。
-- 当前 `Rules` 模块的全局规则区只建模“每个平台一个稳定、可直接编辑的 canonical 全局规则文件”。
+- 当前 `Rules` 模块的全局规则区只建模“每个平台一个稳定、可直接编辑的用户级规则入口文件”。该入口可以是平台唯一的全局规则文件，也可以是官方规则目录明确接受的约定入口；后一种情况不得暗示 PromptHub 已管理同目录的全部文件。
 - 因此，新增全局规则支持需要同时满足：
   - 该平台存在稳定公开的用户级文件路径
+  - 平台明确读取该文件，而不是 PromptHub 自行猜测文件名
   - 该文件能被当前 `Rules` UI 以单文件模型清晰表达
   - 路径可由 `packages/shared/constants/platforms.ts` 稳定派生，不依赖额外探测
-- `OpenClaw` 虽然已有充分公开文档，但其长期上下文表面是 `~/.openclaw/workspace/` 下的一组 bootstrap files，至少包含 `AGENTS.md`、`SOUL.md`、`USER.md`、`IDENTITY.md`、`TOOLS.md`，并不等同于当前 `Rules` 模块支持的“单一全局规则文件”模型。
-- 因此，`OpenClaw` 当前仍停留在“资产文档已建模、运行时 Rules 暂未接入”的状态；除非后续明确扩展 `Rules` 为多文件 workspace-context 模型，否则不应仅因官方证据变充分就把它加入 `KNOWN_RULE_FILE_TEMPLATES`。
+- 对 Kiro、Cline、OpenClaw 等多文件规则或上下文目录，当前只投影一个已验证入口；其余 sibling files 继续由原平台管理，直到目录型 Rules 适配器单独实现。
 
 ### 6. Current Supported Global Rule Files
 
 - `Claude Code`: `~/.claude/CLAUDE.md`
+- `GitHub Copilot CLI`: `<COPILOT_HOME>/copilot-instructions.md`，默认 `~/.copilot/copilot-instructions.md`
 - `Codex CLI`: `~/.codex/AGENTS.md`
 - `ZCode Agent`: `~/.zcode/AGENTS.md`
 - `Grok Build`: `~/.grok/AGENTS.md`
+- `Qwen Code`: `<QWEN_HOME>/QWEN.md`，默认 `~/.qwen/QWEN.md`
+- `Kimi Code`: `<KIMI_CODE_HOME>/AGENTS.md`，默认 `~/.kimi-code/AGENTS.md`
 - `Gemini CLI`: `~/.gemini/GEMINI.md`
+- `Antigravity`: 与 Gemini 解析到同一个 `~/.gemini/GEMINI.md`，不创建重复 descriptor
 - `OpenCode`: `~/.config/opencode/AGENTS.md`
+- `Pi`: `<PI_CODING_AGENT_DIR>/AGENTS.md`，默认 `~/.pi/agent/AGENTS.md`
+- `Oh My Pi`: `<PI_CODING_AGENT_DIR>/RULES.md`，默认 `~/.omp/agent/RULES.md`
 - `Windsurf`: `~/.codeium/windsurf/memories/global_rules.md`
+- `Kiro`: `<KIRO_HOME>/steering/AGENTS.md`，默认 `~/.kiro/steering/AGENTS.md`
+- `Cline CLI`: `~/.cline/data/settings/rules/AGENTS.md`
+- `Augment`: `~/.augment/user-guidelines.md`
+- `OpenClaw`: `~/.openclaw/workspace/SOUL.md`
+- `QClaw`: PromptHub 兼容入口 `~/.qclaw/workspace/SOUL.md`
+- `Hermes Agent`: `~/.hermes/AGENTS.md`
+- `CodeBuddy`: `~/.codebuddy/CODEBUDDY.md`
+- `Amp`: `~/.config/amp/AGENTS.md`
+- `Kilo Code`: `~/.kilo/rules/global.md`
 
 ### 7. Documented Platforms Not In The Global Rules Whitelist
 
-- `OpenClaw`:
-  - 原因：官方公开的是 `~/.openclaw/workspace/` 下的一组 bootstrap files，而不是单一 canonical 全局规则文件。
 - `Cursor`:
-  - 原因：当前公开资料能确认 `.cursor/rules/`、repo `AGENTS.md`、user/team rules 概念，但没有在本轮确认一个稳定的本地用户级单文件规则路径。
-- `Kiro`:
-  - 原因：官方主模型是 steering 目录与 inclusion modes，`AGENTS.md` 只是兼容入口之一，不是当前可直接映射到 `Rules` 单文件白名单的 canonical global file。
+  - 原因：公开资料确认项目 `.cursor/rules/`、repo `AGENTS.md` 和设置内 User Rules，但没有稳定的用户级本地文件入口。
+- `Qoder`:
+  - 原因：当前规则合同是项目级 `.qoder/rules/` 和项目根 `AGENTS.md`，没有已确认的用户级本地文件入口。
+- `Cherry Studio` 与 `TRAE` 系列：
+  - 原因：当前没有已确认且可由共享平台注册表稳定派生的用户级规则文件入口。
 - `Roo Code`:
   - 原因：官方规则面由 `rules/` 目录、`rules-{mode}/` 目录、`.roorules`、`.roorules-{mode}`、`AGENTS.md` / `AGENT.md` 共同组成，属于多入口模式，不适合压缩成当前单文件白名单模型。
-- `GitHub Copilot`:
-  - 原因：其 durable contract 主要是 repository-scoped 文件，如 `.github/copilot-instructions.md` 与 `.github/instructions/*.instructions.md`，而不是单一用户级本地全局规则文件。
+- `Reasonix`:
+  - 原因：当前已验证合同以项目规则和记忆合并为主，没有独立的用户级单文件入口。
 
 ### 8. Promotion Criteria For Future Runtime Support
 
 - 若未来要把新平台加入 `KNOWN_RULE_FILE_TEMPLATES`，至少需要满足以下条件：
-  - 已确认单一 canonical 全局规则文件，而不是目录或多入口组合
+  - 已确认平台会读取的用户级文件入口；若入口位于多文件目录，UI 和说明必须明确只管理该入口
   - 该文件位于稳定的用户级本地路径，且跨平台模板可由常量直接表达
   - 当前 `Rules` UI 不需要新增新的结构概念就能正确展示和编辑
   - 不会让用户误以为 PromptHub 已完整支持该平台的全部上下文面
@@ -153,6 +168,20 @@
 - 比较工具行必须持续显示“PromptHub 托管版本 / 内部副本”和“外部文件版本 / 磁盘文件”两个来源；红色减项对应 PromptHub 托管版本，绿色增项对应外部文件版本。
 - 来源状态块应按内容宽度紧凑排列并在窄屏自然换行，不得通过 `flex: 1` 或等分网格拉伸占满整行；固定工具栏与滚动正文之间必须保留稳定间距。
 - 冲突解决按钮必须使用完整版本名称，不能只写“保留 PromptHub”或“保留外部”让用户猜测覆盖方向。
+
+### 15. Agent-Scoped Missing File Creation
+
+- Agent `Rules` 页必须从完整 descriptor inventory 解析目标；standalone
+  Rules 侧栏仍只使用可见且已存在的文件投影。
+- descriptor 已知但 `exists: false` 时，页面必须居中显示创建确认、声明的
+  canonical 文件名和精确目标路径；用户确认前不得读取、创建或打开空编辑器。
+- descriptor 的 `name`、`path`、`id` 和 `platformId` 是创建操作的唯一来源。
+  renderer 不得假设所有 Agent 都使用 `AGENTS.md`，也不得自行拼接目标路径。
+- 创建必须复用现有 Rules save contract 并写入空内容；成功后直接进入共享
+  Rules 编辑器，失败后保留可重试的创建状态。
+- `exists: true` 且正文为空表示真实空文件，必须直接打开空编辑器，不显示创建
+  确认。
+- descriptor 完全缺失时，保留一次有界 scan 和显式 retry，不得循环扫描。
 
 ## Stable Source Files
 

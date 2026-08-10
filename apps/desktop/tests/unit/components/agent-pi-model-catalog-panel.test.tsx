@@ -163,13 +163,17 @@ describe("AgentPiModelCatalogPanel", () => {
     await renderPanel();
 
     expect(screen.getByTestId("agent-provider-workbench")).toBeVisible();
+    const toolbar = screen.getByTestId("agent-provider-workbench-toolbar");
+    expect(toolbar).toBeVisible();
     expect(
-      screen.getByTestId("agent-provider-workbench-toolbar"),
+      within(toolbar).getByText("Import current configuration"),
     ).toBeVisible();
+    expect(within(toolbar).getByText("Import from PromptHub")).toBeVisible();
     expect(screen.getByTestId("agent-provider-workbench-sidebar")).toHaveClass(
       "overflow-hidden",
     );
     const nav = screen.getByRole("navigation", { name: "Pi providers" });
+    expect(nav).toHaveClass("overflow-x-hidden", "overflow-y-auto");
     expect(within(nav).getByText("kimi-coding")).toBeVisible();
     expect(within(nav).getByText("deepseek")).toBeVisible();
     expect(screen.getAllByText("1 models").length).toBeGreaterThan(0);

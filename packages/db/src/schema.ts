@@ -348,7 +348,6 @@ CREATE TABLE IF NOT EXISTS agent_conversation_metadata (
   note TEXT,
   is_favorite INTEGER NOT NULL DEFAULT 0 CHECK(is_favorite IN (0, 1)),
   archived_at INTEGER,
-  deleted_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   UNIQUE(agent_id, session_id)
@@ -438,7 +437,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_session_index_source_status
 CREATE INDEX IF NOT EXISTS idx_agent_conversation_metadata_agent_updated
   ON agent_conversation_metadata(agent_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_conversation_metadata_project
-  ON agent_conversation_metadata(project_id, deleted_at, updated_at DESC);
+  ON agent_conversation_metadata(project_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_conversation_handoffs_source
   ON agent_conversation_handoffs(
     source_agent_id,

@@ -116,6 +116,7 @@ function createQuota(
   overrides: Partial<AgentUsageQuota> = {},
 ): AgentUsageQuota {
   return {
+    schemaVersion: 2,
     agentId: "claude",
     adapter: "claude-oauth-v1",
     status: "ok",
@@ -124,15 +125,17 @@ function createQuota(
       {
         id: "fiveHour",
         label: "5-hour window",
-        kind: "window",
-        utilization: 42.4,
+        scope: { kind: "account" },
+        period: { kind: "rolling", durationSeconds: 18_000 },
+        value: { kind: "percentage", remainingPercent: 57.6 },
         resetsAt: Date.now() + (2 * 60 + 5) * 60_000,
       },
       {
         id: "sevenDay",
         label: "7-day window",
-        kind: "window",
-        utilization: 18,
+        scope: { kind: "account" },
+        period: { kind: "rolling", durationSeconds: 604_800 },
+        value: { kind: "percentage", remainingPercent: 82 },
         resetsAt: Date.now() + 3 * 24 * 3_600_000,
       },
     ],
@@ -386,16 +389,16 @@ describe("AgentOverviewPanel", () => {
 
     const usageBanner = screen.getByRole("region", { name: "Usage" });
     expect(
-      await within(usageBanner).findByRole("img", {
+      await within(usageBanner).findByRole("progressbar", {
         name: "5-hour window: 58% remaining",
       }),
     ).toBeVisible();
     expect(
-      within(usageBanner).getByRole("img", {
+      within(usageBanner).getByRole("progressbar", {
         name: "7-day window: 82% remaining",
       }),
     ).toBeVisible();
-    expect(within(usageBanner).getByText("claude-pro")).toBeVisible();
+    expect(within(usageBanner).getByText("Claude Pro")).toBeVisible();
     expect(screen.queryByRole("button", { name: /^usage/i })).toBeNull();
   });
 
@@ -595,8 +598,6 @@ describe("AgentOverviewPanel", () => {
       <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
     );
 
-    fireEvent.click(screen.getByText("Path details"));
-
     fireEvent.click(screen.getByRole("button", { name: "Open Root folder" }));
     expect(window.electron.openPath).toHaveBeenCalledWith("~/.claude");
 
@@ -612,8 +613,6 @@ describe("AgentOverviewPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Path details"));
-
     expect(
       screen.getByRole("button", { name: "Open Root folder" }),
     ).toBeVisible();
@@ -628,7 +627,7 @@ describe("AgentOverviewPanel", () => {
     ).toBeNull();
   });
 
-  it("keeps raw paths collapsed until the paths section is expanded", async () => {
+  it("shows raw path details expanded by default", async () => {
     await renderWithI18n(
       <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
     );
@@ -637,10 +636,6 @@ describe("AgentOverviewPanel", () => {
     const summary = screen.getByText("Path details");
     const details = summary.closest("details");
     expect(details).not.toBeNull();
-    expect(details).not.toHaveAttribute("open");
-
-    fireEvent.click(summary);
-
     expect(details).toHaveAttribute("open");
     expect(screen.getByText("~/.claude/skills")).toBeVisible();
     expect(screen.getByText("~/.claude/CLAUDE.md")).toBeVisible();

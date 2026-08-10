@@ -46,6 +46,11 @@ function message(role: string, text: string): Record<string, unknown> {
   };
 }
 
+function cursorProjectKey(projectPath: string): string {
+  const root = path.parse(projectPath).root;
+  return path.relative(root, projectPath).split(path.sep).join("-");
+}
+
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(
@@ -59,17 +64,15 @@ describe("Cursor session adapter", () => {
   it("lists local agent transcripts and searches visible turn text", async () => {
     const homeDir = await createHome();
     const cursorRootDir = path.join(homeDir, ".cursor");
+    const projectPath = path.join(homeDir, "Projects", "demo-app");
+    await fs.mkdir(projectPath, { recursive: true });
+    const projectKey = cursorProjectKey(projectPath);
     const sessionId = "11111111-1111-4111-8111-111111111111";
-    await writeTranscript(
-      cursorRootDir,
-      "Users-lingxiaotian-Projects-demo",
-      sessionId,
-      [
-        message("user", "Find this Cursor-only search phrase"),
-        message("assistant", "The answer is in the transcript."),
-        message("tool", "Do not expose this tool output"),
-      ],
-    );
+    await writeTranscript(cursorRootDir, projectKey, sessionId, [
+      message("user", "Find this Cursor-only search phrase"),
+      message("assistant", "The answer is in the transcript."),
+      message("tool", "Do not expose this tool output"),
+    ]);
 
     const service = createAgentSessionService({ homeDir, cursorRootDir });
     const page = await service.list("cursor", {
@@ -85,12 +88,201 @@ describe("Cursor session adapter", () => {
     });
     expect(page.sessions[0]).toMatchObject({
       id: sessionId,
-      projectLabel: "Users-lingxiaotian-Projects-demo",
+      projectLabel: "demo-app",
+      projectPath,
       resume: {
         executable: "cursor-agent",
         args: ["--resume", sessionId],
+        cwd: projectPath,
       },
     });
+  });
+
+  it("fails closed for ambiguous and symlink-only encoded projects", async () => {
+    const homeDir = await createHome();
+    const cursorRootDir = path.join(homeDir, ".cursor");
+    const ambiguousA = path.join(homeDir, "ambiguous", "a-b", "c");
+    const ambiguousB = path.join(homeDir, "ambiguous", "a", "b-c");
+    await Promise.all([
+      fs.mkdir(ambiguousA, { recursive: true }),
+      fs.mkdir(ambiguousB, { recursive: true }),
+    ]);
+    const ambiguousKey = cursorProjectKey(ambiguousA);
+    expect(cursorProjectKey(ambiguousB)).toBe(ambiguousKey);
+    const ambiguousSession = "12121212-1212-4121-8121-121212121212";
+    await writeTranscript(cursorRootDir, ambiguousKey, ambiguousSession, [
+      message("user", "Ambiguous project"),
+    ]);
+
+    const externalHome = await createHome();
+    const externalProject = path.join(externalHome, "linked-project");
+    await fs.mkdir(externalProject, { recursive: true });
+    const linkedProject = path.join(homeDir, "linked-project");
+    await fs.symlink(
+      externalProject,
+      linkedProject,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const linkedKey = cursorProjectKey(linkedProject);
+    const linkedSession = "13131313-1313-4131-8131-131313131313";
+    await writeTranscript(cursorRootDir, linkedKey, linkedSession, [
+      message("user", "Linked project"),
+    ]);
+
+    const service = createAgentSessionService({ homeDir, cursorRootDir });
+    const page = await service.list("cursor", { limit: 20 });
+    expect(page.sessions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: ambiguousSession,
+          projectLabel: "a-b-c",
+          projectPath: null,
+        }),
+        expect.objectContaining({
+          id: linkedSession,
+          projectLabel: "linked-project",
+          projectPath: null,
+        }),
+      ]),
+    );
+  });
+
+  it("bounds project resolution and accepts the exact home project", async () => {
+    const inaccessibleHome = await createHome();
+    const inaccessibleRoot = path.join(inaccessibleHome, ".cursor");
+    const inaccessibleProject = path.join(
+      inaccessibleHome,
+      "Projects",
+      "demo-app",
+    );
+    await fs.mkdir(inaccessibleProject, { recursive: true });
+    const inaccessibleSession = "14141414-1414-4141-8141-141414141414";
+    await writeTranscript(
+      inaccessibleRoot,
+      cursorProjectKey(inaccessibleProject),
+      inaccessibleSession,
+      [message("user", "Inaccessible resolver")],
+    );
+    const realOpendir = fs.opendir.bind(fs);
+    vi.spyOn(fs, "opendir").mockImplementation(async (directory, options) => {
+      if (path.resolve(String(directory)) === path.resolve(inaccessibleHome)) {
+        throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+      }
+      return realOpendir(directory, options);
+    });
+    const inaccessibleService = createAgentSessionService({
+      homeDir: inaccessibleHome,
+      cursorRootDir: inaccessibleRoot,
+    });
+    await expect(
+      inaccessibleService.list("cursor", { limit: 20 }),
+    ).resolves.toMatchObject({
+      sessions: [
+        expect.objectContaining({
+          projectLabel: "Projects-demo-app",
+          projectPath: null,
+        }),
+      ],
+    });
+    vi.restoreAllMocks();
+
+    const crowdedHome = await createHome();
+    const crowdedRoot = path.join(crowdedHome, ".cursor");
+    const crowdedProject = path.join(crowdedHome, "crowded-project");
+    const crowdedSession = "15151515-1515-4151-8151-151515151515";
+    await writeTranscript(
+      crowdedRoot,
+      cursorProjectKey(crowdedProject),
+      crowdedSession,
+      [message("user", "Crowded resolver")],
+    );
+    const crowdedHandle = {
+      close: vi.fn().mockResolvedValue(undefined),
+      async *[Symbol.asyncIterator]() {
+        for (let index = 0; index <= 4_096; index += 1) {
+          yield {
+            name: `entry-${index}`,
+            isDirectory: () => false,
+            isSymbolicLink: () => false,
+          };
+        }
+      },
+    };
+    vi.spyOn(fs, "opendir").mockResolvedValueOnce(crowdedHandle as never);
+    const crowdedService = createAgentSessionService({
+      homeDir: crowdedHome,
+      cursorRootDir: crowdedRoot,
+    });
+    await expect(
+      crowdedService.list("cursor", { limit: 20 }),
+    ).resolves.toMatchObject({
+      sessions: [
+        expect.objectContaining({
+          projectLabel: "crowded-project",
+          projectPath: null,
+        }),
+      ],
+    });
+    vi.restoreAllMocks();
+
+    const deepHome = await createHome();
+    const deepRoot = path.join(deepHome, ".cursor");
+    const deepProject = path.join(
+      deepHome,
+      ...Array.from({ length: 65 }, () => "a"),
+    );
+    await fs.mkdir(deepProject, { recursive: true });
+    const deepSession = "16161616-1616-4161-8161-161616161616";
+    await writeTranscript(
+      deepRoot,
+      cursorProjectKey(deepProject),
+      deepSession,
+      [message("user", "Deep resolver")],
+    );
+    const deepService = createAgentSessionService({
+      homeDir: deepHome,
+      cursorRootDir: deepRoot,
+    });
+    await expect(
+      deepService.list("cursor", { limit: 20 }),
+    ).resolves.toMatchObject({
+      sessions: [expect.objectContaining({ projectPath: null })],
+    });
+
+    const homeProject = await createHome();
+    const homeRoot = path.join(homeProject, ".cursor");
+    const homeSession = "17171717-1717-4171-8171-171717171717";
+    const homeKey = cursorProjectKey(homeProject);
+    await writeTranscript(homeRoot, homeKey, homeSession, [
+      message("user", "Home project"),
+    ]);
+    const trailingSession = "18181818-1818-4181-8181-181818181818";
+    await writeTranscript(homeRoot, `${homeKey}-`, trailingSession, [
+      message("user", "Trailing key"),
+    ]);
+    await fs.mkdir(
+      path.join(homeRoot, "projects", "empty", "agent-transcripts"),
+      { recursive: true },
+    );
+    const homeService = createAgentSessionService({
+      homeDir: homeProject,
+      cursorRootDir: homeRoot,
+    });
+    const homeSessions = await homeService.list("cursor", { limit: 20 });
+    expect(homeSessions.sessions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: homeSession,
+          projectLabel: path.basename(homeProject),
+          projectPath: homeProject,
+        }),
+        expect.objectContaining({
+          id: trailingSession,
+          projectLabel: `${homeKey}-`,
+          projectPath: null,
+        }),
+      ]),
+    );
   });
 
   it("reads bounded visible messages and hides tool records", async () => {

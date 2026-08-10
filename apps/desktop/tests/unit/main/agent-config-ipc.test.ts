@@ -59,6 +59,17 @@ vi.mock("../../../src/main/services/skill-installer", () => ({
         configFiles: ["settings.json", "models.json"],
       },
       {
+        id: "antigravity",
+        name: "Antigravity",
+        icon: "Sparkles",
+        rootDir: {
+          darwin: "~/.gemini/config",
+          win32: "%USERPROFILE%\\.gemini\\config",
+          linux: "~/.gemini/config",
+        },
+        skillsRelativePath: "skills",
+      },
+      {
         id: "kimi",
         name: "Kimi Code",
         icon: "Sparkles",
@@ -162,6 +173,7 @@ describe("Agent config file IPC", () => {
     getPlatformRootDirMock.mockImplementation((platform: { id: string }) => {
       if (platform.id === "kimi") return "/Users/test/.kimi-code";
       if (platform.id === "pi") return "/Users/test/.pi/agent";
+      if (platform.id === "antigravity") return "/Users/test/.gemini/config";
       return "/Users/test/.codex";
     });
     listConfigFilesMock.mockImplementation(
@@ -349,6 +361,29 @@ describe("Agent config file IPC", () => {
         model: "gpt-5.2",
         secondaryModel: undefined,
       },
+      { backupRoot: "/tmp/prompthub/agent-config-backups" },
+    );
+  });
+
+  it("routes Antigravity model IPC to its CLI settings root", async () => {
+    const { handlers, IPC_CHANNELS } = await setup();
+
+    await handlers[IPC_CHANNELS.AGENT_MODEL_CONFIG_GET](null, "antigravity");
+    await handlers[IPC_CHANNELS.AGENT_MODEL_CONFIG_SET](null, {
+      agentId: "antigravity",
+      model: "gemini-3-pro",
+    });
+
+    expect(inspectAgentModelConfigMock).toHaveBeenCalledWith({
+      agentId: "antigravity",
+      rootPath: "/Users/test/.gemini/antigravity-cli",
+    });
+    expect(updateAgentModelConfigMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "antigravity",
+        rootPath: "/Users/test/.gemini/antigravity-cli",
+        model: "gemini-3-pro",
+      }),
       { backupRoot: "/tmp/prompthub/agent-config-backups" },
     );
   });

@@ -94,6 +94,9 @@ function projectLabel(
   agentId: string,
   record: AgentSessionIndexRecord,
 ): string | null {
+  if (record.projectPath) {
+    return path.basename(record.projectPath) || record.projectPath;
+  }
   if (agentId === "claude")
     return path.basename(path.dirname(record.sourcePath));
   return path.basename(path.dirname(path.dirname(record.sourcePath)));
@@ -104,14 +107,23 @@ function resumeCommand(
   record: AgentSessionIndexRecord,
 ): AgentSessionMetadata["resume"] {
   if (agentId === "claude") {
-    return { executable: "claude", args: ["--resume", record.externalId] };
+    return {
+      executable: "claude",
+      args: ["--resume", record.externalId],
+      ...(record.projectPath ? { cwd: record.projectPath } : {}),
+    };
   }
-  return { executable: "gemini", args: ["--resume", record.externalId] };
+  return {
+    executable: "gemini",
+    args: ["--resume", record.externalId],
+    ...(record.projectPath ? { cwd: record.projectPath } : {}),
+  };
 }
 
 function toMetadata(
   agentId: string,
   record: AgentSessionIndexRecord,
+  nativeDeleteSupported: boolean,
 ): AgentSessionMetadata {
   return {
     id: record.externalId,
@@ -122,6 +134,8 @@ function toMetadata(
     updatedAt: record.updatedAt,
     model: record.model,
     messageCount: record.messageCount,
+    sizeBytes: record.sourceSizeBytes,
+    nativeDeleteSupported,
     sourcePath: record.sourcePath,
     resume: resumeCommand(agentId, record),
   };
@@ -132,28 +146,9 @@ function filterLiveResult(
   search?: string,
 ): AgentSessionListResult {
   const query = search?.trim().toLocaleLowerCase();
-  // Copilot, Cline, and Cursor apply the query inside their native stores,
-  // including visible turn text that is intentionally absent from metadata.
-  // Re-filtering that page here would drop valid matches that occur only in a
-  // turn.
-  if (
-    !query ||
-    result.adapter === "copilot-session-store-v1" ||
-    result.adapter === "cline-session-snapshot-v1" ||
-    result.adapter === "cursor-agent-transcript-v1" ||
-    result.adapter === "cherry-agent-session-db-v2" ||
-    result.adapter === "cherry-agent-session-db-v1" ||
-    result.adapter === "kilo-session-json-v1" ||
-    result.adapter === "hermes-state-db-v1" ||
-    result.adapter === "reasonix-events-v1" ||
-    result.adapter === "nanoclaw-v2-sqlite" ||
-    result.adapter === "copaw-safe-json-session-v2" ||
-    result.adapter === "qoder-transcript-jsonl-v1"
-  ) {
-    return result;
-  }
+  if (!query) return result;
   const sessions = result.sessions.filter((session) =>
-    [session.title, session.projectLabel, session.projectPath, session.model]
+    [session.title, session.projectLabel, session.projectPath]
       .filter((value): value is string => Boolean(value))
       .some((value) => value.toLocaleLowerCase().includes(query)),
   );
@@ -276,7 +271,9 @@ export function createAgentSessionIndexService(
     return {
       agentId,
       adapter: state.source.adapterId,
-      sessions: page.items.map((record) => toMetadata(agentId, record)),
+      sessions: page.items.map((record) =>
+        toMetadata(agentId, record, options.reader.canDelete(agentId)),
+      ),
       total: page.total,
       hasMore: page.hasMore,
     };
@@ -287,6 +284,9 @@ export function createAgentSessionIndexService(
     setEnabled,
     refresh,
     list,
+    canDelete: (agentId: string): boolean => options.reader.canDelete(agentId),
+    delete: (agentId: string, sessionId: string): Promise<void> =>
+      options.reader.delete(agentId, sessionId),
     read: (
       agentId: string,
       sessionId: string,

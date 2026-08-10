@@ -5,7 +5,12 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { AlertCircleIcon, Loader2Icon, RefreshCwIcon } from "lucide-react";
+import {
+  AlertCircleIcon,
+  FilePlus2Icon,
+  Loader2Icon,
+  RefreshCwIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -68,7 +73,7 @@ function useAgentRuleRetry(
 ): () => void {
   const { loadFiles, selectRule, selectionKey, targetRule } = input;
   return useCallback(() => {
-    if (targetRule) {
+    if (targetRule?.exists) {
       void selectRule(targetRule.id);
       return;
     }
@@ -108,6 +113,7 @@ function useAgentRuleSynchronization(input: AgentRuleSyncInput): () => void {
       void loadFiles({ force: true });
       return;
     }
+    if (!targetRule.exists) return;
     const selectionPending =
       selectedRuleId === targetRule.id && (isLoading || Boolean(error));
     if (currentFileId !== targetRule.id && !selectionPending) {
@@ -130,17 +136,22 @@ function useAgentRuleSynchronization(input: AgentRuleSyncInput): () => void {
 }
 
 function useAgentRuleWorkspaceState(agent: ManagedAgentSummary) {
-  const files = useRulesStore((state) => state.files);
+  const availableFiles = useRulesStore((state) => state.availableFiles);
   const selectedRuleId = useRulesStore((state) => state.selectedRuleId);
   const currentFile = useRulesStore((state) => state.currentFile);
   const hasLoadedFiles = useRulesStore((state) => state.hasLoadedFiles);
   const isLoading = useRulesStore((state) => state.isLoading);
   const error = useRulesStore((state) => state.error);
+  const isSaving = useRulesStore((state) => state.isSaving);
   const loadFiles = useRulesStore((state) => state.loadFiles);
   const selectRule = useRulesStore((state) => state.selectRule);
+  const createRule = useRulesStore((state) => state.createRule);
   const rulePath = normalizeRulePath(agent.paths.rules);
   const selectionKey = `${agent.id}\u0000${rulePath}`;
-  const targetRule = useMemo(() => findAgentRule(agent, files), [agent, files]);
+  const targetRule = useMemo(
+    () => findAgentRule(agent, availableFiles),
+    [agent, availableFiles],
+  );
   const retry = useAgentRuleSynchronization({
     currentFileId: currentFile?.id,
     error,
@@ -154,12 +165,81 @@ function useAgentRuleWorkspaceState(agent: ManagedAgentSummary) {
     targetRule,
   });
   return {
+    createRule,
     error,
     isLoading: isLoading || !hasLoadedFiles,
-    isTargetReady: Boolean(targetRule) && currentFile?.id === targetRule?.id,
+    isSaving,
+    isTargetReady:
+      Boolean(targetRule?.exists) && currentFile?.id === targetRule?.id,
+    missingRule: targetRule?.exists === false ? targetRule : null,
     retry,
     rulePath,
   };
+}
+
+function AgentRuleCreatePrompt({
+  agentName,
+  error,
+  isCreating,
+  onCreate,
+  rule,
+}: {
+  agentName: string;
+  error: string | null;
+  isCreating: boolean;
+  onCreate: () => void;
+  rule: RuleFileDescriptor;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex min-h-96 flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
+        <FilePlus2Icon aria-hidden="true" className="h-5 w-5" />
+      </div>
+      <h2 className="text-base font-semibold text-foreground">
+        {t("agents.createRuleFileTitle", "Create {{fileName}}?", {
+          fileName: rule.name,
+        })}
+      </h2>
+      <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
+        {t(
+          "agents.createRuleFileDescription",
+          "{{agentName}} does not have this rules file yet. Create it at the declared location?",
+          { agentName },
+        )}
+      </p>
+      <code className="mt-3 max-w-xl break-all rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+        {rule.path}
+      </code>
+      {error ? (
+        <p className="mt-3 text-sm text-destructive">
+          {t(
+            "agents.createRuleFileFailed",
+            "The rules file could not be created. Try again.",
+          )}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        onClick={onCreate}
+        disabled={isCreating}
+        className="mt-5 inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {isCreating ? (
+          <Loader2Icon aria-hidden="true" className="h-4 w-4 animate-spin" />
+        ) : (
+          <FilePlus2Icon aria-hidden="true" className="h-4 w-4" />
+        )}
+        {isCreating
+          ? t("agents.creatingRuleFile", "Creating {{fileName}}...", {
+              fileName: rule.name,
+            })
+          : t("agents.createRuleFile", "Create {{fileName}}", {
+              fileName: rule.name,
+            })}
+      </button>
+    </div>
+  );
 }
 
 function AgentRuleLoading() {
@@ -223,6 +303,19 @@ export function AgentRulesWorkspace({ agent }: { agent: ManagedAgentSummary }) {
     );
   }
   if (state.isLoading) return <AgentRuleLoading />;
+  if (state.missingRule) {
+    return (
+      <AgentRuleCreatePrompt
+        agentName={agent.name}
+        error={state.error}
+        isCreating={state.isSaving}
+        onCreate={() => {
+          void state.createRule(state.missingRule.id).catch(() => undefined);
+        }}
+        rule={state.missingRule}
+      />
+    );
+  }
   if (state.isTargetReady) return <RulesManager />;
   return <AgentRuleStatus error={state.error} onRetry={state.retry} />;
 }

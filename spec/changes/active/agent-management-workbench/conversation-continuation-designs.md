@@ -58,21 +58,21 @@ adapter version and external session id:
   transcript on demand through its live adapter.
 - **Update**: edit PromptHub-owned title override, project association, tags,
   note, favorite and archive state. Source transcript text is never edited.
-- **Delete**: create a PromptHub-owned soft-delete tombstone so rescans do not
-  immediately re-add the row. The deleted view can restore the record.
+- **Delete**: after explicit confirmation, invoke only a verified adapter-owned
+  native delete, then hard-delete the matching PromptHub metadata row.
 
-Native deletion is a separate destructive action. It is available only when a
+Native deletion is the only destructive action. It is available only when a
 platform adapter exposes a documented typed delete/cleanup plan with preview,
 explicit confirmation and post-action verification. PromptHub never implements
 native deletion by unlinking an arbitrary transcript file. A failed update,
-delete or restore leaves the previous projection unchanged.
+archive or native delete leaves the previous metadata projection unchanged.
 
 The persistence change extends the existing device-local session index rather
 than introducing a transcript database. PromptHub-owned annotations include
 `project_id`, `title_override`, `tags`, `note`, `favorite`, `archived_at` and
-`deleted_at`. Transcript bodies, absolute source paths and handoff payloads are
+timestamps. Transcript bodies, absolute source paths and handoff payloads are
 excluded from normal sync and backup unless a later explicit portability policy
-is approved.
+is approved. The projection has no soft-delete or restore state.
 
 ## `DES-AGENT-083`: Native Resume Execution
 
@@ -215,7 +215,7 @@ Conversation detail actions are ordered by user intent:
 1. **Resume in original Agent** when native resume is supported;
 2. **Continue in another Agent** with an Agent dropdown;
 3. **Export** with JSON/Markdown choices;
-4. secondary metadata edit, archive, delete and copy-native-command actions.
+4. row-context continuation, export and adapter-gated confirmed delete actions.
 
 The target dropdown shows Agent icon, name, installation state and continuation
 mode. Selection opens a context preview before launch. It does not auto-launch
@@ -234,8 +234,8 @@ not compete with ordinary browsing.
 
 - `TEST-AGENT-099`: project resolution, unmatched association, root rename and
   cross-Agent catalog pagination/search against real SQLite.
-- `TEST-AGENT-100`: CRUD state machine, rescan tombstones, restore, annotation
-  preservation and native-delete capability gating.
+- `TEST-AGENT-100`: CRUD state machine, archive and annotation preservation,
+  metadata hard deletion, native failure behavior and capability gating.
 - `TEST-AGENT-101`: native resume preflight, typed execution, unsafe cwd,
   missing source/executable and launch failure without shell construction.
 - `TEST-AGENT-102`: target capability matrix and handoff preview for full,

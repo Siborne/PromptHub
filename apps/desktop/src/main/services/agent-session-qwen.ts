@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -25,7 +26,7 @@ const COMMAND_OPTIONS = { timeout: 30_000, maxBuffer: MAX_LIST_BYTES };
 const MAX_NATIVE_LIST = 200;
 const MAX_CACHED_SESSIONS = 256;
 
-interface QwenSession extends Omit<AgentSessionMetadata, "sourcePath"> {
+interface QwenSession extends AgentSessionMetadata {
   declaredPath: string;
 }
 
@@ -39,7 +40,8 @@ function publicSession(session: QwenSession): AgentSessionMetadata {
     updatedAt: session.updatedAt,
     model: session.model,
     messageCount: session.messageCount,
-    sourcePath: null,
+    sizeBytes: session.sizeBytes,
+    sourcePath: session.sourcePath,
     resume: session.resume,
   };
 }
@@ -87,6 +89,7 @@ async function parseNativeRows(
     if (!id || !isSafeSessionId(id) || !declaredPath) continue;
     const sourcePath = await safeSessionFile(runtimeRoot, declaredPath);
     if (!sourcePath) continue;
+    const sourceStat = await fs.stat(sourcePath);
     const projectPath = sessionString(value.cwd);
     sessions.push({
       id,
@@ -97,6 +100,8 @@ async function parseNativeRows(
       updatedAt: sessionTimestamp(value.mtime),
       model: null,
       messageCount: null,
+      sizeBytes: sourceStat.size,
+      sourcePath,
       declaredPath,
       resume: {
         executable,

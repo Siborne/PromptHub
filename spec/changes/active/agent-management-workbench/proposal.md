@@ -65,6 +65,32 @@ update only `modelRoles.default` through the existing backup and rollback
 pipeline. It does not write credentials, query usage, or install plugin
 packages.
 
+## Scope Addendum 2026-08-10: Complete Session Lifecycle
+
+Native conversation footprint and confirmed permanent deletion are now a
+complete-adapter requirement rather than a Codex-only capability. File,
+directory, native-CLI and shared-database sources must each use their own
+main-process-owned identity and mutation boundary. Whole-database size and
+renderer-provided deletion paths remain out of scope.
+
+## Scope Addendum 2026-08-10: Unified Quota Presentation
+
+The delivered quota adapters already normalize six providers into one
+`metrics[]` collection, but the remaining `window`/`quota` split still encodes
+renderer choices. Overview consequently mixes large rings and progress bars,
+uses inconsistent used/remaining directions, reconstructs Antigravity groups
+from metric ids, and cannot bound a large model inventory reliably.
+
+This follow-up retains all current provider endpoints, credential ownership,
+cache and concurrency limits while replacing that presentation-bound contract
+with typed scope, period and value semantics. Every Agent adapter will only map
+provider data. A shared presentation model will group and order those metrics,
+and Overview plus the menu-bar popover will use the same semantic visualization
+selector and state components. Resettable percentage windows use compact rings;
+absolute, monthly, lifetime and provider-defined totals use horizontal remaining
+bars. Detailed inventory, composition, capacity and verification rules live in
+`quota-presentation-design.md`.
+
 ## Goals
 
 - 将本机已检测安装的预置 Agent 和已检测的自定义 Agent 提升为桌面端一级工作区；未安装平台保留在 registry 中，但不进入管理列表。
@@ -432,11 +458,12 @@ same project using a user-reviewed portable handoff context and records the
 lineage between source and target. Cross-Agent continuation never claims to
 migrate native ids, hidden reasoning, tool state or checkpoints.
 
-Conversation management covers bounded discovery/read, PromptHub-owned
-metadata edits, reversible PromptHub deletion, optional verified native
-deletion, and single/batch JSON or Markdown export. Native transcripts remain
-platform-owned and read-only. Export and handoff payloads exclude secrets,
-hidden tool data and absolute local paths by default.
+Conversation management covers bounded discovery/read, existing PromptHub-owned
+metadata projection, optional verified native deletion, and single/batch JSON or
+Markdown export. Conversation History does not expose a generic metadata editor
+or reversible soft-delete state. Native transcripts remain platform-owned and
+read-only. Export and handoff payloads exclude secrets, hidden tool data and
+absolute local paths by default.
 
 ## Scope Addendum 2026-08-01: Agent Asset Detail Navigation
 
@@ -547,3 +574,142 @@ this creates a same-id provider override in `models.json` for the currently
 configured built-in provider, preserving Pi's built-in models and existing
 `auth.json` credential ownership. The action is unavailable when Pi has no
 current built-in provider or the provider is already custom.
+
+## Scope Addendum 2026-08-10: Expanded Native Model Configuration
+
+Provider & Model must expose the same Profile workbench for every platform with
+an evidence-backed native model setting. The already supported Claude Code,
+Codex, Grok, Pi, OpenCode and OpenClaw adapters remain unchanged. This delivery
+adds model-only native adapters for Antigravity, Qoder, CoPaw, AutoClaw, QClaw
+and Hermes, using each platform's own file layout rather than aliasing the Claw
+family to OpenClaw.
+
+The renderer receives only model, provider, sanitized endpoint and credential
+status metadata. Native API keys remain in their owning files and are never
+returned over IPC. Writes update only the model selector fields, preserve
+unrelated configuration and credentials, use bounded reads, backup, atomic
+replacement, semantic re-read verification and rollback.
+
+NanoClaw is deliberately excluded from the platform-level adapter in this
+delivery. Its current model is owned per Agent Group in `container_configs`, so
+there is no truthful global model target for the existing platform-only Profile
+contract. Supporting it requires the target-binding work already tracked by
+`T-AGENT-178`; writing a generated container file or choosing an arbitrary group
+would violate native ownership and single-source-of-truth rules.
+
+## Scope Addendum 2026-08-10: Provider Toolbar Discoverability And Overflow
+
+The shared Provider toolbar must show the names of its two import commands, not
+only unfamiliar icons. The sidebar must remain vertically scrollable while
+never creating a horizontal scrollbar from list-item margin and width
+composition. The fix applies to both the generic Profile workbench and Pi's
+native catalog through shared layout primitives; no platform-specific visual
+branch is introduced.
+
+## Scope Addendum 2026-08-10: Native Conversation Storage Actions
+
+Conversation History must describe the native session inventory rather than only
+PromptHub's registered projects. The project filter merges exact project paths
+reported by loaded sessions with registered projects, and each session row shows
+the adapter-reported native storage size when that size has a truthful per-session
+meaning.
+
+The visible delete command is no longer a metadata-only removal. It is offered
+only when the selected adapter owns a verified, session-scoped delete operation.
+The renderer requires a destructive confirmation, while the main process
+re-resolves the current native session before deletion. Codex rollout JSONL is
+the first verified target. Shared database files and unverified multi-file
+stores must never be deleted through a generic `sourcePath` unlink fallback.
+
+## Scope Addendum 2026-08-10: Submitted Conversation Search
+
+Conversation History search is an explicit user submission, not a live filter.
+Typing changes only the input draft; PromptHub performs the search when the user
+presses Enter, and an empty submitted value restores the unfiltered inventory.
+
+Search results are limited to the displayed conversation title and project
+identity (project label or exact project path). Transcript text, PromptHub notes
+and tags, model names, native redacted previews and session ids are outside this
+search surface. This keeps the result set predictable and avoids repeated native
+filesystem or SQLite work while the user is still composing a query.
+
+## Scope Addendum 2026-08-10: Conversation Ordering And Native Titles
+
+The second Conversation History selector is an ordering control, not a status
+filter. It orders the loaded inventory by newest update, oldest update, largest
+session or smallest session; unknown timestamps and sizes stay after known
+values. Loading another page merges those rows into the same selected order.
+
+Conversation names follow one explicit priority: a PromptHub metadata override,
+then the Agent's native renamed title, then the adapter's first-user-message
+fallback, then the session id. Codex stores native thread names in its bounded
+`session_index.jsonl`; PromptHub reads that index without modifying it. Archived
+PromptHub metadata remains visible and marked after the status selector is
+removed. The conversation domain does not retain soft-delete or Restore state;
+permanent native deletion remains the only destructive action and removes its
+PromptHub metadata row after the native file is deleted.
+
+## Scope Addendum 2026-08-10: Latest Transcript And Row Context Actions
+
+Conversation History adds one explicit latest-messages control so a reader can
+move from early pages to the newest currently reachable transcript page without
+stepping through every page. Native cursor reads remain user-triggered and
+bounded; no eager full-history load is introduced.
+
+Each history row also gains a native right-click menu that reuses verified
+continuation, cross-Agent handoff, Markdown/JSON export and permanent-delete
+flows. Delete remains adapter-gated and requires the existing second
+confirmation. The generic conversation metadata editor is removed from both the
+toolbar and context menu; Agent-native titles remain read-only projections.
+
+## Scope Addendum 2026-08-10: Transcript Table Containment And Tool Messages
+
+Conversation Markdown must not allow wide GFM tables or long cell content to
+expand a message bubble beyond the transcript pane. Tables stay readable through
+a bubble-local horizontal scroll region while the surrounding conversation
+layout remains fixed.
+
+Tool calls and results are part of the Agent side of the conversation. They use
+the same left-aligned Agent avatar and bounded bubble as assistant messages,
+with a compact Tool label inside the bubble. Only system and unknown events keep
+the centered informational treatment.
+
+## Scope Addendum 2026-08-10: Native Session And Project Locations
+
+Conversation History exposes two separate location commands in both the More
+and row context menus: locate the exact Agent-owned session file in the platform
+file manager, and open the conversation's effective project directory. The
+commands use adapter-provided paths only; missing paths are disabled instead of
+guessed. This is a renderer integration with the existing safe shell path
+handler and does not change transcript ownership, persistence or IPC contracts.
+
+## Scope Addendum 2026-08-10: Claude Transcript And Project Projection
+
+Claude Code History must project user-visible conversation semantics rather
+than every native JSONL control record. PromptHub excludes Claude metadata,
+local-command wrappers and internal lifecycle records from the transcript and
+title fallback, while preserving visible user, assistant and tool-result
+entries. Ignored valid records are not parse failures.
+
+Claude's `projects/<encoded-path>/` directory name is a storage key rather than
+a user-facing project name. When a transcript supplies a safe absolute `cwd`,
+Conversation History uses that exact path as project identity and its basename
+as the label. The encoded directory remains only a compatibility fallback when
+the native record has no valid project path. The same projection applies to
+live browsing and the optional local metadata index.
+
+## Scope Addendum 2026-08-10: Gemini And Cursor Session Projection
+
+Gemini History must use each project cache's bounded `.project_root` marker as
+the native project identity rather than displaying the temporary cache key.
+Gemini `info` records are internal metadata, not conversation events, and
+function-response rows are Agent-owned Tool results rather than user messages.
+The live reader and optional metadata index must agree on project, title, role
+and parse-error semantics.
+
+Cursor's `projects/<encoded-path>/` key is likewise not a user-facing project
+name. PromptHub may resolve it only when it uniquely matches an existing,
+non-symlink directory below the configured user home through a bounded
+component walk. Ambiguous, external, oversized or missing mappings remain
+unresolved and keep a compact unresolved-tail label with no project path;
+PromptHub must not invent an absolute path by replacing hyphens with separators.

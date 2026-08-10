@@ -204,19 +204,35 @@ async function readMetadata(
     return null;
   }
   if (!isRecord(state)) return null;
+  const title = stringValue(state.title);
+  const lastPrompt = stringValue(state.lastPrompt);
+  if (!lastPrompt && title?.toLowerCase() === "new session") return null;
+  const wirePath = await safeRealFile(
+    sessionDir,
+    path.join(sessionDir, "agents", "main", "wire.jsonl"),
+  );
+  if (!wirePath) return null;
   const workDir = stringValue(state.workDir) || candidate.workDir;
-  const stat = await fs.stat(statePath);
+  const [stateStat, wireStat] = await Promise.all([
+    fs.stat(statePath),
+    fs.stat(wirePath),
+  ]);
   return {
     id: candidate.id,
-    title: stringValue(state.title) || candidate.id,
+    title:
+      title && title.toLowerCase() !== "new session"
+        ? title
+        : lastPrompt || candidate.id,
     projectLabel: workDir ? path.basename(workDir) : null,
     projectPath: workDir,
     createdAt: normalizeTimestamp(state.createdAt ?? state.created_at),
     updatedAt:
-      normalizeTimestamp(state.updatedAt ?? state.updated_at) || stat.mtimeMs,
+      normalizeTimestamp(state.updatedAt ?? state.updated_at) ||
+      stateStat.mtimeMs,
     model: null,
     messageCount: null,
-    sourcePath: sessionDir,
+    sizeBytes: wireStat.size,
+    sourcePath: wirePath,
     resume: {
       executable: "kimi",
       args: ["--session", candidate.id],

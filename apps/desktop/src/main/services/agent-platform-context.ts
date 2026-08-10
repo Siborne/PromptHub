@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { AgentProviderAdapterContext } from "@prompthub/shared";
 
 import { SkillInstaller } from "./skill-installer";
@@ -76,9 +78,15 @@ export function resolveAgentProviderContext(
 ): AgentProviderAdapterContext {
   const normalizedAgentId = agentId.trim();
   const context = getAgentConfigContext(normalizedAgentId);
+  const rootPath =
+    normalizedAgentId === "antigravity" &&
+    path.basename(context.rootPath) === "config" &&
+    path.basename(path.dirname(context.rootPath)) === ".gemini"
+      ? path.join(path.dirname(context.rootPath), "antigravity-cli")
+      : context.rootPath;
   return {
     agentId: normalizedAgentId,
     platformId: normalizedAgentId,
-    rootPath: context.rootPath,
+    rootPath,
   };
 }

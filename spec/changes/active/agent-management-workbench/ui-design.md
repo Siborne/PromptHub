@@ -337,8 +337,10 @@ Primary commands:
   context preview before launch.
 - **Export** opens JSON/Markdown and single/batch options.
 
-Secondary commands edit PromptHub metadata, archive, soft delete/restore, copy
-the native command, or request adapter-owned native deletion when supported.
+Secondary commands export the transcript or request adapter-owned permanent
+native deletion when supported. Right-clicking a row exposes the same verified
+continuation/export/delete actions. No generic metadata editor, removed state or
+Restore action is presented.
 The target dropdown shows only the Agent icon and full display name so options
 remain readable in the compact toolbar. Selecting an Agent never launches
 immediately; capability resolution happens in the reviewed apply plan. The
@@ -753,6 +755,18 @@ OpenClaw fork or that its files are OpenClaw-compatible.
 
 ## Reuse And Migration
 
+Tool calls and results use the Agent-side avatar and left-aligned bubble, with a
+compact Tool label inside the bubble. System/unknown events alone use centered
+notice cards. Markdown tables are constrained by a bubble-local horizontal
+scroll region so long cells never resize the transcript columns.
+
+Conversation History keeps two filesystem actions visually and semantically
+separate. `Show in folder` locates the native session file; `Open project
+folder` opens the working directory. Both appear in the toolbar More menu and
+row context menu, use familiar file-search/folder-open icons, and remain visible
+but disabled when their exact path is unavailable. Permanent delete stays in a
+separate destructive group.
+
 - Reuse `PlatformIcon`, shared buttons, menus, tabs, tooltips, dialogs, virtualized lists, toast, titlebar and wallpaper tokens.
 - Reuse `RulesManager` for Agent global-rule editing; Agent code may select the
   matching descriptor but must not copy its editor or persistence behavior.
@@ -780,6 +794,8 @@ OpenClaw fork or that its files are OpenClaw-compatible.
   the previous asset list.
 - Capability state changes enablement without changing tab order.
 - Unsupported actions are visible, disabled, explained and never invoke IPC.
+- Conversation location commands use their exact native/project path and never
+  disappear merely because permanent delete is unsupported.
 - Provider activation cannot report success before verification.
 - Asset actions reconcile with owning domain state.
 - Narrow layout has no overlap, clipped controls, inaccessible tabs, or unreadable longest locale strings.

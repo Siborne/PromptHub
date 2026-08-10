@@ -28,8 +28,7 @@ export interface AgentConversationRepository {
   upsertMetadata(
     input: UpsertAgentConversationMetadataInput,
   ): AgentConversationMetadata;
-  softDelete(agentId: string, sessionId: string): AgentConversationMetadata;
-  restore(agentId: string, sessionId: string): AgentConversationMetadata;
+  deleteMetadata(agentId: string, sessionId: string): void;
   createHandoff(
     input: CreateAgentConversationHandoffInput,
   ): AgentConversationHandoffRecord;
@@ -49,6 +48,8 @@ interface AgentConversationSessionReader {
     sessionId: string,
     input?: AgentSessionDetailPageInput,
   ): Promise<AgentSessionDetail>;
+  canDelete(agentId: string): boolean;
+  delete(agentId: string, sessionId: string): Promise<void>;
 }
 
 interface AgentConversationServiceOptions {
@@ -97,12 +98,19 @@ export class AgentConversationService {
     return this.options.repository.upsertMetadata(input);
   }
 
-  softDelete(agentId: string, sessionId: string) {
-    return this.options.repository.softDelete(agentId, sessionId);
-  }
-
-  restore(agentId: string, sessionId: string) {
-    return this.options.repository.restore(agentId, sessionId);
+  async deleteConversation(agentId: string, sessionId: string) {
+    if (!this.options.sessions.canDelete(agentId)) {
+      throw new Error("AGENT_SESSION_DELETE_UNSUPPORTED");
+    }
+    await this.options.sessions.delete(agentId, sessionId);
+    try {
+      this.options.repository.deleteMetadata(agentId, sessionId);
+    } catch {
+      console.warn(
+        "[agent-conversation] metadata cleanup failed after native deletion",
+      );
+    }
+    return { agentId, sessionId };
   }
 
   async resume(

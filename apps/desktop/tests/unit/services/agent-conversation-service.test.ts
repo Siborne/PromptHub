@@ -28,7 +28,6 @@ function metadata(
     note: null,
     favorite: false,
     archivedAt: null,
-    deletedAt: null,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
@@ -39,8 +38,7 @@ function createRepository(): AgentConversationRepository {
   return {
     listMetadata: vi.fn(() => []),
     upsertMetadata: vi.fn((input) => metadata(input)),
-    softDelete: vi.fn(() => metadata({ deletedAt: 10 })),
-    restore: vi.fn(() => metadata()),
+    deleteMetadata: vi.fn(),
     createHandoff: vi.fn(
       (input): AgentConversationHandoffRecord => ({
         id: "handoff-1",
@@ -137,6 +135,8 @@ function createService(overrides: Record<string, unknown> = {}) {
     sessions: {
       list: vi.fn(async () => sessionList()),
       read: vi.fn(async () => detail()),
+      canDelete: vi.fn(() => true),
+      delete: vi.fn(async () => undefined),
     },
     resolveExecutable,
     launch,
@@ -149,6 +149,82 @@ function createService(overrides: Record<string, unknown> = {}) {
 }
 
 describe("AgentConversationService", () => {
+  it("returns current metadata without soft-delete reconciliation", () => {
+    const { repository, service } = createService();
+    vi.mocked(repository.listMetadata).mockReturnValue([
+      metadata(),
+      metadata({ id: "metadata-2", sessionId: "session-2" }),
+    ]);
+
+    expect(service.listMetadata("claude", ["session-1", "session-2"])).toEqual([
+      metadata(),
+      metadata({ id: "metadata-2", sessionId: "session-2" }),
+    ]);
+  });
+
+  it("permanently deletes natively before removing PromptHub metadata", async () => {
+    const nativeDelete = vi.fn(async () => undefined);
+    const { repository, service } = createService({
+      sessions: {
+        list: vi.fn(async () => sessionList()),
+        read: vi.fn(async () => detail()),
+        canDelete: vi.fn(() => true),
+        delete: nativeDelete,
+      },
+    });
+
+    await expect(
+      service.deleteConversation("claude", "session-1"),
+    ).resolves.toEqual({ agentId: "claude", sessionId: "session-1" });
+    expect(nativeDelete.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(repository.deleteMetadata).mock.invocationCallOrder[0],
+    );
+    expect(repository.deleteMetadata).toHaveBeenCalledWith(
+      "claude",
+      "session-1",
+    );
+
+    vi.mocked(repository.deleteMetadata).mockClear();
+    nativeDelete.mockRejectedValueOnce(new Error("AGENT_SESSION_NOT_FOUND"));
+    await expect(
+      service.deleteConversation("claude", "session-1"),
+    ).rejects.toThrow("AGENT_SESSION_NOT_FOUND");
+    expect(repository.deleteMetadata).not.toHaveBeenCalled();
+  });
+
+  it("keeps native deletion successful when metadata cleanup fails", async () => {
+    const { repository, service } = createService();
+    vi.mocked(repository.deleteMetadata).mockImplementationOnce(() => {
+      throw new Error("SQLITE_IOERR");
+    });
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+
+    await expect(
+      service.deleteConversation("claude", "session-1"),
+    ).resolves.toEqual({ agentId: "claude", sessionId: "session-1" });
+    expect(warning).toHaveBeenCalledWith(
+      "[agent-conversation] metadata cleanup failed after native deletion",
+    );
+  });
+
+  it("rejects unsupported native deletion before writing metadata", async () => {
+    const { repository, service } = createService({
+      sessions: {
+        list: vi.fn(async () => sessionList()),
+        read: vi.fn(async () => detail()),
+        canDelete: vi.fn(() => false),
+        delete: vi.fn(),
+      },
+    });
+
+    await expect(
+      service.deleteConversation("claude", "session-1"),
+    ).rejects.toThrow("AGENT_SESSION_DELETE_UNSUPPORTED");
+    expect(repository.deleteMetadata).not.toHaveBeenCalled();
+  });
+
   it("launches the verified native resume command instead of reconstructing it", async () => {
     const { launch, service } = createService();
     const result = await service.resume({

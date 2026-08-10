@@ -555,7 +555,7 @@ function PathsPanel({ agent }: { agent: ManagedAgentSummary }) {
         {t("agents.pathConfiguration", "Paths")}
       </h2>
       <div className="mt-3 overflow-hidden rounded-md border border-border/80 bg-card shadow-sm">
-        <details className="group">
+        <details open className="group">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3.5 text-xs font-semibold text-muted-foreground [&::-webkit-details-marker]:hidden">
             <ChevronDownIcon
               aria-hidden="true"

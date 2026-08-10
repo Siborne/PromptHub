@@ -111,6 +111,43 @@ describe("BaseFields", () => {
     }
   });
 
+  it("keeps monochrome provider logos visible in light and dark themes", () => {
+    for (const category of ["GPT", "Moonshot", "Llama", "Grok"]) {
+      const { container, unmount } = render(<>{getCategoryIcon(category)}</>);
+      const icon = container.querySelector(`img[alt="${category}"]`);
+
+      expect(icon).toHaveClass("brightness-0", "dark:invert");
+      unmount();
+    }
+  });
+
+  it("hides a provider logo when its bundled asset cannot load", () => {
+    const { container } = render(<>{getCategoryIcon("GPT")}</>);
+    const icon = container.querySelector('img[alt="GPT"]');
+
+    expect(icon).toBeVisible();
+    fireEvent.error(icon!);
+    expect(icon).not.toBeVisible();
+  });
+
+  it("gives generated provider icons explicit light and dark theme colors", () => {
+    const cases = [
+      ["Custom", ["dark:bg-blue-400/10", "dark:text-blue-300"]],
+      ["Other", ["dark:bg-slate-400/10", "dark:text-slate-300"]],
+      ["nanobananai 🍌", ["dark:bg-yellow-300/10", "dark:text-yellow-100"]],
+      ["Unknown provider", ["dark:bg-slate-600", "dark:text-slate-50"]],
+      ["", ["dark:bg-slate-600", "dark:text-slate-50"]],
+    ] as const;
+
+    for (const [category, themeClasses] of cases) {
+      const { container, unmount } = render(<>{getCategoryIcon(category)}</>);
+      const icon = container.firstElementChild;
+
+      expect(icon).toHaveClass(...themeClasses);
+      unmount();
+    }
+  });
+
   it("shows protocol selection for providers that support custom protocols", async () => {
     const setModelForm = vi.fn();
 
@@ -230,11 +267,7 @@ describe("BaseFields", () => {
       { language: "en" },
     );
 
-    for (const label of [
-      "Image generation",
-      "Vision input",
-      "Reasoning",
-    ]) {
+    for (const label of ["Image generation", "Vision input", "Reasoning"]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
 

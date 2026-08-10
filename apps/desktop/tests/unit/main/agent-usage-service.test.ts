@@ -312,6 +312,7 @@ describe("Agent usage service", () => {
       const quota = await h.service.getUsage("claude");
 
       expect(quota).toEqual({
+        schemaVersion: 2,
         agentId: "claude",
         adapter: "claude-oauth-v1",
         status: "ok",
@@ -320,22 +321,25 @@ describe("Agent usage service", () => {
           {
             id: "fiveHour",
             label: "5-hour window",
-            kind: "window",
-            utilization: 12.5,
+            scope: { kind: "account" },
+            period: { kind: "rolling", durationSeconds: 18_000 },
+            value: { kind: "percentage", remainingPercent: 87.5 },
             resetsAt: Date.parse("2027-01-01T12:00:00.000Z"),
           },
           {
             id: "sevenDay",
             label: "7-day window",
-            kind: "window",
-            utilization: 40,
+            scope: { kind: "account" },
+            period: { kind: "rolling", durationSeconds: 604_800 },
+            value: { kind: "percentage", remainingPercent: 60 },
             resetsAt: Date.parse("2027-01-08T00:00:00.000Z"),
           },
           {
             id: "sevenDayOpus",
             label: "7-day Opus window",
-            kind: "window",
-            utilization: 3,
+            scope: { kind: "model-group", id: "opus", label: "Opus" },
+            period: { kind: "rolling", durationSeconds: 604_800 },
+            value: { kind: "percentage", remainingPercent: 97 },
             resetsAt: null,
           },
         ],
@@ -371,8 +375,9 @@ describe("Agent usage service", () => {
         {
           id: "fiveHour",
           label: "5-hour window",
-          kind: "window",
-          utilization: 7,
+          scope: { kind: "account" },
+          period: { kind: "rolling", durationSeconds: 18_000 },
+          value: { kind: "percentage", remainingPercent: 93 },
           resetsAt: null,
         },
       ]);
@@ -483,9 +488,9 @@ describe("Agent usage service", () => {
     it("rejects a non-string or empty agentId", async () => {
       const h = createHarness();
 
-      await expect(
-        h.service.getUsage(42 as unknown as string),
-      ).rejects.toThrow("Agent usage query requires a non-empty agentId");
+      await expect(h.service.getUsage(42 as unknown as string)).rejects.toThrow(
+        "Agent usage query requires a non-empty agentId",
+      );
       await expect(h.service.getUsage("  ")).rejects.toThrow(
         "Agent usage query requires a non-empty agentId",
       );
@@ -538,8 +543,7 @@ describe("Agent usage service", () => {
         },
         {
           name: "expired",
-          arrange: (h) =>
-            h.fetchImpl.mockResolvedValue(fakeResponse(401, {})),
+          arrange: (h) => h.fetchImpl.mockResolvedValue(fakeResponse(401, {})),
         },
         {
           name: "unavailable",
@@ -578,7 +582,9 @@ describe("Agent usage service", () => {
     it("returns custom-provider-active without network or keychain access when ANTHROPIC_BASE_URL is set", async () => {
       const h = createHarness();
       h.readFile.mockResolvedValue(
-        JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://api.krill-ai.com" } }),
+        JSON.stringify({
+          env: { ANTHROPIC_BASE_URL: "https://api.krill-ai.com" },
+        }),
       );
 
       const quota = await h.service.getUsage("claude");

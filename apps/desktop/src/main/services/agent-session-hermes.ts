@@ -46,6 +46,7 @@ interface HermesSessionRow {
   message_count?: unknown;
   cwd?: unknown;
   git_repo_root?: unknown;
+  size_bytes?: unknown;
 }
 
 interface HermesMessageRow {
@@ -100,6 +101,8 @@ function parseSession(
     updatedAt: sessionTimestamp(row.updated_at),
     model: sessionString(row.model),
     messageCount,
+    sizeBytes:
+      typeof row.size_bytes === "number" ? Math.max(0, row.size_bytes) : null,
     sourcePath,
     resume: {
       executable: "hermes",
@@ -146,10 +149,7 @@ async function resolveStore(rootPath: string): Promise<string | null> {
   return realStore;
 }
 
-function tableColumns(
-  database: Database.Database,
-  table: string,
-): Set<string> {
+function tableColumns(database: Database.Database, table: string): Set<string> {
   return new Set(
     database
       .all(`PRAGMA table_info("${table}")`)
@@ -271,7 +271,19 @@ function readListPage(
             (SELECT COUNT(*) FROM messages m
               WHERE m.session_id = s.id AND m.active = 1
                 AND lower(m.role) IN ('user', 'assistant')
-                AND trim(COALESCE(${VISIBLE_CONTENT_SQL}, '')) <> '') AS message_count
+                AND trim(COALESCE(${VISIBLE_CONTENT_SQL}, '')) <> '') AS message_count,
+            length(CAST(COALESCE(s.id, '') AS BLOB))
+              + length(CAST(COALESCE(s.title, '') AS BLOB))
+              + length(CAST(COALESCE(s.model, '') AS BLOB))
+              + length(CAST(COALESCE(s.cwd, '') AS BLOB))
+              + length(CAST(COALESCE(s.git_repo_root, '') AS BLOB))
+              + COALESCE((SELECT SUM(
+                  length(CAST(COALESCE(m.content, '') AS BLOB))
+                  + length(CAST(COALESCE(m.tool_calls, '') AS BLOB))
+                  + length(CAST(COALESCE(m.reasoning, '') AS BLOB))
+                  + length(CAST(COALESCE(m.reasoning_content, '') AS BLOB))
+                ) FROM messages m WHERE m.session_id = s.id), 0)
+              AS size_bytes
        FROM sessions s ${where.sql}
       ORDER BY updated_at DESC, s.started_at DESC, s.id DESC
       LIMIT ? OFFSET ?`,
@@ -417,6 +429,32 @@ export function createHermesSessionAdapter(rootPath: string) {
       );
       if (!detail) throw new Error("AGENT_SESSION_NOT_FOUND");
       return detail;
+    },
+
+    async delete(sessionId: string): Promise<void> {
+      if (!isSafeSessionId(sessionId)) {
+        throw new Error("AGENT_SESSION_ID_INVALID");
+      }
+      const sourcePath = await resolveStore(rootPath);
+      if (!sourcePath) throw new Error("AGENT_SESSION_NOT_FOUND");
+      const database = new Database(sourcePath);
+      try {
+        validateSchema(database);
+        const remove = database.transaction(() => {
+          const exists = database.get(
+            "SELECT id FROM sessions WHERE id = ? LIMIT 1",
+            sessionId,
+          );
+          if (!exists) throw new Error("AGENT_SESSION_NOT_FOUND");
+          database
+            .prepare("DELETE FROM messages WHERE session_id = ?")
+            .run(sessionId);
+          database.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+        });
+        remove();
+      } finally {
+        database.close();
+      }
     },
   };
 }

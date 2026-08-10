@@ -192,9 +192,7 @@ describe("Agent usage service (Codex adapter)", () => {
 
     it("omits ChatGPT-Account-Id when account_id is absent", async () => {
       const h = createHarness();
-      h.setAuthJson(
-        JSON.stringify({ tokens: { access_token: TOKEN } }),
-      );
+      h.setAuthJson(JSON.stringify({ tokens: { access_token: TOKEN } }));
       h.fetchImpl.mockResolvedValue(fakeResponse(200, usagePayload()));
 
       const quota = await h.service.getUsage("codex");
@@ -217,6 +215,7 @@ describe("Agent usage service (Codex adapter)", () => {
       const quota = await h.service.getUsage("codex");
 
       expect(quota).toEqual({
+        schemaVersion: 2,
         agentId: "codex",
         adapter: "codex-oauth-v1",
         status: "ok",
@@ -225,15 +224,17 @@ describe("Agent usage service (Codex adapter)", () => {
           {
             id: "fiveHour",
             label: "5-hour window",
-            kind: "window",
-            utilization: 25,
+            scope: { kind: "account" },
+            period: { kind: "rolling", durationSeconds: 18_000 },
+            value: { kind: "percentage", remainingPercent: 75 },
             resetsAt: 1_800_003_600_000,
           },
           {
             id: "sevenDay",
             label: "7-day window",
-            kind: "window",
-            utilization: 60,
+            scope: { kind: "account" },
+            period: { kind: "rolling", durationSeconds: 604_800 },
+            value: { kind: "percentage", remainingPercent: 40 },
             resetsAt: 1_800_604_800_000,
           },
         ],
@@ -263,15 +264,17 @@ describe("Agent usage service (Codex adapter)", () => {
       expect(metricById(quota, "fiveHour")).toEqual({
         id: "fiveHour",
         label: "5-hour window",
-        kind: "window",
-        utilization: 25,
+        scope: { kind: "account" },
+        period: { kind: "rolling", durationSeconds: 18_000 },
+        value: { kind: "percentage", remainingPercent: 75 },
         resetsAt: 1_800_003_600_000,
       });
       expect(metricById(quota, "sevenDay")).toEqual({
         id: "sevenDay",
         label: "7-day window",
-        kind: "window",
-        utilization: 60,
+        scope: { kind: "account" },
+        period: { kind: "rolling", durationSeconds: 604_800 },
+        value: { kind: "percentage", remainingPercent: 40 },
         resetsAt: 1_800_604_800_000,
       });
     });
@@ -297,8 +300,9 @@ describe("Agent usage service (Codex adapter)", () => {
       expect(metricById(quota, "sevenDay")).toEqual({
         id: "sevenDay",
         label: "7-day window",
-        kind: "window",
-        utilization: 80,
+        scope: { kind: "account" },
+        period: { kind: "rolling", durationSeconds: 604_800 },
+        value: { kind: "percentage", remainingPercent: 20 },
         resetsAt: 1_800_604_800_000,
       });
       expect(metricById(quota, "fiveHour")).toBeUndefined();
@@ -336,8 +340,9 @@ describe("Agent usage service (Codex adapter)", () => {
       expect(metricById(quota, "fiveHour")).toEqual({
         id: "fiveHour",
         label: "5-hour window",
-        kind: "window",
-        utilization: 10,
+        scope: { kind: "account" },
+        period: { kind: "rolling", durationSeconds: 18_000 },
+        value: { kind: "percentage", remainingPercent: 90 },
         resetsAt: null,
       });
     });

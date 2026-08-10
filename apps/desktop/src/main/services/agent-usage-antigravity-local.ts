@@ -8,6 +8,10 @@ import os from "node:os";
 import path from "node:path";
 
 import type { AgentUsageMetric } from "@prompthub/shared/types";
+import {
+  boundUsageMetrics,
+  percentageFromRemaining,
+} from "./agent-usage-contract";
 import type { NativeCommandRunner } from "./native-command";
 
 const GET_USER_STATUS_PATH =
@@ -179,10 +183,6 @@ async function resolveInstalledAntigravityVersion(
   });
 }
 
-function clampPercent(value: number): number {
-  return Math.min(100, Math.max(0, value));
-}
-
 export function parseAntigravityProcessList(
   stdout: string,
 ): AntigravityProcessInfo[] {
@@ -249,33 +249,10 @@ export function mapAntigravityLocalUsage(
 ): AntigravityLocalUsageSnapshot | null {
   if (!isRecord(body) || !isRecord(body.userStatus)) return null;
   const userStatus = body.userStatus;
-  const metrics: AgentUsageMetric[] = [];
-
-  const planStatus = isRecord(userStatus.planStatus)
-    ? userStatus.planStatus
-    : null;
-  const planInfo =
-    planStatus && isRecord(planStatus.planInfo) ? planStatus.planInfo : null;
-  const monthly = finiteNumber(planInfo?.monthlyPromptCredits);
-  const available = finiteNumber(planStatus?.availablePromptCredits);
-  if (monthly !== null && monthly > 0 && available !== null) {
-    const boundedAvailable = Math.min(monthly, Math.max(0, available));
-    metrics.push({
-      id: "promptCredits",
-      label: "Monthly prompt credits",
-      kind: "quota",
-      utilization: clampPercent(((monthly - boundedAvailable) / monthly) * 100),
-      resetsAt: null,
-      usedAmount: monthly - boundedAvailable,
-      totalAmount: monthly,
-      unit: "credits",
-    });
-  }
-
   const tier = isRecord(userStatus.userTier) ? userStatus.userTier : null;
   return {
     plan: nonEmptyString(tier?.name),
-    metrics,
+    metrics: [],
   };
 }
 
@@ -286,7 +263,7 @@ export function mapAntigravityQuotaSummary(body: unknown): AgentUsageMetric[] {
   const metrics: AgentUsageMetric[] = [];
   const seenIds = new Set<string>();
 
-  for (const group of groups) {
+  for (const [groupIndex, group] of groups.entries()) {
     if (!isRecord(group)) continue;
     const label = nonEmptyString(group.displayName);
     const buckets = Array.isArray(group.buckets) ? group.buckets : [];
@@ -302,17 +279,31 @@ export function mapAntigravityQuotaSummary(body: unknown): AgentUsageMetric[] {
       seenIds.add(id);
       metrics.push({
         id,
-        label,
-        kind: "window",
-        utilization: clampPercent(
-          Math.round((1 - remaining) * 100_000) / 1_000,
-        ),
+        label:
+          window === "weekly"
+            ? "Weekly quota"
+            : window === "5h"
+              ? "5-hour window"
+              : window,
+        scope: {
+          kind: "model-group",
+          id: `group-${groupIndex}`,
+          label,
+        },
+        period:
+          window === "weekly"
+            ? { kind: "calendar", unit: "week" }
+            : {
+                kind: "rolling",
+                durationSeconds: window === "5h" ? 18_000 : null,
+              },
+        value: percentageFromRemaining(remaining * 100),
         resetsAt: parseTimestamp(bucket.resetTime),
       });
     }
   }
 
-  return metrics;
+  return boundUsageMetrics(metrics);
 }
 
 function classifyRequestError(error: unknown): string {
@@ -639,10 +630,10 @@ export async function probeAntigravityBackgroundUsage(
     });
     const snapshot =
       status.kind === "ok" ? mapAntigravityLocalUsage(status.body) : null;
-    const metrics = [
+    const metrics = boundUsageMetrics([
       ...(snapshot?.metrics ?? []),
       ...mapAntigravityQuotaSummary(summary.body),
-    ];
+    ]);
     if (metrics.length === 0) {
       return { kind: "unavailable", errorCode: "invalid-response" };
     }
@@ -742,12 +733,12 @@ export function createAntigravityLocalUsageClient(
             return {
               kind: "ok",
               ...snapshot,
-              metrics: [
+              metrics: boundUsageMetrics([
                 ...snapshot.metrics,
                 ...(summary.kind === "ok"
                   ? mapAntigravityQuotaSummary(summary.body)
                   : []),
-              ],
+              ]),
             };
           }
           lastError = "invalid-response";

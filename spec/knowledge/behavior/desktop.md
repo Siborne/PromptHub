@@ -45,6 +45,15 @@
 - `Anthropic` 当前稳定行为为原生 `POST /v1/messages` 非流式聊天与 `GET /v1/models` 模型发现；在补齐原生 SSE 解析前，桌面端不应把 Claude 原生协议暴露为可流式聊天能力。
 - AI workbench 的“测试模型 / 测试默认模型 / 测试连接”是轻量探活，不是长文本生成或性能压测；聊天模型测试必须使用短 prompt、小 token 上限、非流式、关闭 thinking，并带显式测试超时，避免本地 OpenAI-compatible 模型因为继承 2048 token、stream 或 thinking 配置而被拖慢。
 
+### 5.1 Agent Provider And Model Configuration
+
+- Agent 的 Provider & Model 页面必须复用同一套 Profile workbench 布局和 normalized model contract；平台差异只能存在于 main-process native adapter，不得为每个 Agent 复制 renderer 页面。
+- 共享 Provider 侧栏的“导入当前配置”和“从 PromptHub 导入”必须同时显示图标与本地化文字，不能依赖用户猜测图标；固定宽度侧栏允许纵向滚动，但列表行、内边距和 focus state 不得制造横向滚动条。
+- 当前平台级 native model adapter 覆盖 Claude Code、Codex、Gemini、Antigravity、Grok、Kimi Code、OpenCode、Pi、Oh My Pi、Qwen Code、GitHub Copilot、Kiro、OpenClaw、CoPaw、AutoClaw、QClaw、Qoder 与 Hermes。`supported` 表示完整 Provider adapter，`partial` 表示只投影原生模型字段；两者都必须明确声明 capability evidence。
+- Antigravity 的 Skills/MCP root 仍是 `~/.gemini/config`，模型设置单独解析到 `~/.gemini/antigravity-cli/settings.json`。Claw family 只用于展示分组，各成员继续使用自己的 root、文件格式和安全边界，不得继承 OpenClaw adapter。
+- native model adapter 只能向 renderer 返回 model、provider、脱敏 endpoint、可用模型与 credential status；API key、token 和独立 secret store 不得进入 IPC。写入只更新模型选择字段，并使用 2 MiB 有界读取、symlink/路径 containment 校验、私有备份、并发修改检测、原子替换、语义重读和失败回滚。
+- CoPaw 只更新全局配置明确选中的 active Agent workspace；不得读取其 provider secret store。NanoClaw 的模型来源是 per-Agent-Group `container_configs`，在 Provider context 增加显式 child target 前继续保持 planned，不得选择任意 group 或修改生成的 container 文件。
+
 ### 6. Prompt AI Workbench Boundaries
 
 - 桌面端 Prompt AI 测试抽屉必须按 `promptType` 收敛可见模式：文本 Prompt 只提供单模型测试与多模型对比，image Prompt 才提供生图测试。
@@ -100,7 +109,7 @@
 - Prompt、Skill、MCP 与 Plugin 菜单项必须打开各自已有的创建或导入流程；Rule 当前只进入已有管理工作台，不得宣称存在尚未实现的通用新建流程。
 - 状态栏命令必须使用 `packages/shared` 的类型化命令协议，经 main、preload 与 renderer 路由；主进程只负责原生菜单、窗口显示和命令投递，renderer 继续拥有导航与业务弹窗。
 - preload 必须缓冲 renderer 尚未订阅时收到的状态栏命令。MCP 与 Plugin 等按需加载工作台必须先注册创建监听器，再发布就绪状态；卸载时必须先撤销就绪状态，再清理监听器，避免首次点击或重渲染期间因 lazy mount 竞态而丢失命令。
-- 状态栏菜单文案必须覆盖桌面端七种语言，优先读取应用内已保存语言，并在数据库尚未可用时回退到系统语言。Renderer 的语言设置在用户切换和旧版本地状态恢复时都必须同步到 Main 设置数据库；同步恢复回调只能在 Zustand Store 完成初始化后执行，避免界面语言与原生菜单语言分叉。
+- 状态栏菜单文案必须覆盖桌面端七种语言，优先读取应用内已保存语言，并在数据库尚未可用时回退到系统语言。Renderer 的语言设置在用户切换和旧版本地状态恢复时都必须同步到 Main 设置数据库；同步恢复回调只能在 Zustand Store 完成初始化后执行，避免界面语言与原生菜单语言分叉。Renderer 没有持久化语言时，Zustand 临时默认值不得覆盖 Main 设置，必须由 Main 返回的已验证语言恢复界面；已有 Renderer 明确偏好继续优先并回写 Main。
 - 未来 Agent 管理入口只有在对应能力真正可用时才显示；不得展示不可执行的灰色占位项。
 
 ### 9.4 Desktop Tray Agent Quotas
@@ -110,7 +119,68 @@
 - 首次快照尚未完成时，菜单必须按稳定 registry 顺序同步展示每个已验证 Agent 的具名 loading 行；两路有界并发中的单项结果完成后，只替换对应 Agent 行，不等待其他 Provider。
 - 额度投影只覆盖已经验证的 usage adapter，Provider 请求最多两路并发。单个平台失败必须被隔离并显示明确的未连接、凭据过期或暂不可用状态，不得伪造成 `0%`。
 - 紧凑摘要使用最紧张指标的剩余百分比；子菜单显示全部指标、重置时间和套餐。动态名称、指标和错误必须经过有界、无控制字符的安全投影，凭据和原始 Provider 错误不得进入菜单或日志。
+- Agent Overview 与菜单栏额度视图必须复用版本化的 scope/period/value 契约和同一套 presentation model。所有百分比和金额都统一表示“剩余”；有限滚动窗口与日/周窗口无论上报百分比还是绝对量都使用紧凑圆环，月度、账期、总量和 provider-defined 指标使用水平进度条，`unlimited` / `unknown` 不得伪造成 `0%`。成功态不重复显示“数据由服务商上报”，缓存刷新仅由刷新控件表达忙碌状态，刷新失败影响可信度时才明确标记旧数据。
+- Agent Overview 的路径详情默认展开，resolved path 与 open-folder 动作无需额外点击即可访问。
+- Antigravity baseline 额度只认 `RetrieveUserQuotaSummary` 的 Gemini 与 Claude/GPT 分组 5h/weekly 窗口；`GetUserStatus` 只提供套餐身份，其旧 `monthlyPromptCredits` / `availablePromptCredits` 字段不得显示为总额度。AI credits 属于 baseline 用尽后的 overage，只有独立且已验证的余额来源与类型化契约落地后才能展示。
+- 额度组合按 account、model-group、feature、model scope 排序，不得按 Agent id 分支。单个 model 列表默认最多展示四项，展开后全量仍限制为 64 项并在额度区域内部滚动；Provider 动态 id、label 和 unit 必须在 main 侧清理和限长后才能进入 IPC。
 - Kimi Code 当前 credential 的短期 access token 到期或在 usage 请求返回 `401` 时，主进程必须按官方 refresh contract 有界续期并最多重试一次 usage；续期必须与原生 CLI 共用锁语义、锁后重读、同进程合并并以 `0600` 原子替换当前 credential，未知字段保持不变，legacy credential 不得被写入。
+- Kimi Code 额度只将 coding usages 的顶层 `usage` 作为周额度、`limits[]` 作为滚动窗口；当前 `remaining`/`limit` 与旧 `used`/`limit` 都必须兼容，`300 TIME_UNIT_MINUTE` 必须归一为 5 小时。跨 Kimi 产品共享的月度会员总额度不得从不可信 `totalQuota` 或本地用量推算。
+- Kimi Code 套餐 badge 使用公开 tempo 名称，不展示内部 `LEVEL_*` 枚举；当前映射为 `Moderato`、`Allegretto`、`Allegro`、`Vivace`，未知值只做安全可读化。
+- Kimi Code 历史列表通过有界 `session_index.jsonl` 候选读取 `state.json`，过滤没有 `lastPrompt` 的默认 `New Session` 空壳；可读会话仍以 contained `agents/main/wire.jsonl` 作为精确正文来源，但大小覆盖永久删除所拥有的完整 session 目录，正文仍按 2 MiB 上限只读投影。
+- Grok Build usage 只接受有界 `auth.json` 中 `https://auth.x.ai::` 官方主机记录，由 main 进程使用 bearer token 并行查询官方 user 与 billing 端点；正常刷新复用 60 秒缓存，每个请求使用 10 秒超时，token、账户身份和原始响应不得进入 renderer、日志或持久化存储。
+- Grok Build 的 `subscriptionTier` 通过共享套餐 formatter 显示为公开可读名称；billing 的 `creditUsagePercent` 必须转换为剩余百分比，并以 provider current-period end 作为账户级周额度重置时间。周额度复用共享圆环，不得新增 Grok 专用前端。
+- Grok Build 历史列表以 contained `chat_history.jsonl` 的精确 real path 作为正文来源；会话大小覆盖永久删除所拥有的完整 session 目录，包括 summary 和该会话的运行附件。
+
+### 9.5 Agent Conversation Storage Actions
+
+- Agent 会话历史的项目筛选必须合并 PromptHub 已登记项目与当前原生会话报告的精确项目路径；同名不同路径必须保持为可区分的独立筛选项，不得只按目录 basename 合并。
+- 每个已支持历史适配器返回的会话都必须显示与永久删除目标一致的非负占用：单文件使用精确字节，多文件求和，目录进行不跟随软链接的有界遍历，共享数据库计算该会话及子行的逻辑字节；不得把整个共享数据库大小重复算到每个会话。
+- 永久删除只允许通过已验证的适配器操作，并在 renderer 中二次确认、在 main 中按 `agentId + sessionId` 重新解析当前会话。文件、多文件、目录、共享 SQLite 行和提供官方删除命令的 CLI 分别使用自己的 adapter-owned 策略；不得删除 renderer 提供的 `sourcePath`，也不得把软链接、越界或已变化目标当作原会话。
+- 永久删除先执行适配器拥有的原生删除；原生删除失败不得修改 PromptHub 元数据。原生删除成功后应硬删除对应 PromptHub 元数据并由 renderer 立即移除会话；元数据清理失败不得把已删除的原生会话重新显示为可恢复状态。该操作不可撤销，且不得自动重试。
+
+### 9.6 Agent Conversation Search Submission
+
+- Agent 会话搜索必须区分输入草稿与已提交查询。用户输入期间不得请求、筛选或重排会话；只有在非输入法组合状态下按 Enter 才提交去除首尾空白的查询，提交空查询恢复完整列表。
+- 搜索范围只包含会话标题、项目标签和项目路径，采用大小写不敏感的字面包含匹配。正文、备注、标签、模型名、脱敏 preview 与 session id 不得产生搜索结果。
+- 已提交查询必须同时用于首批请求与后续加载；renderer、live-reader 最终投影和持久化 SQLite 索引必须保持相同范围。输入过程不得启动文件扫描、SQLite 查询、网络请求、计时器或持久化写入。
+
+### 9.7 Agent Conversation Ordering And Titles
+
+- 会话历史的第二个选择器是已加载清单排序，不是 PromptHub 元数据状态筛选；必须提供最近更新、最早更新、占用最大和占用最小，未知时间或大小在两个方向中都排在已知值之后，后续加载的分页按当前模式重新合并。
+- 会话显示标题的优先级固定为 PromptHub 非空改名、Agent 原生非空标题、适配器第一条可见用户消息回退、会话 id。列表、删除确认和跨 Agent 交接必须使用同一有效标题投影。
+- Codex 原生标题来自只读、至多 8 MiB 的 `session_index.jsonl` tail；同一安全 session id 取最后一条合法 `thread_name`，控制字符被清理，畸形、超限、软链接或缺失索引回退到 rollout 的第一条可见用户消息。PromptHub 不写入或迁移该索引。
+- 移除状态筛选后，PromptHub 归档元数据不得让仍存在的原生会话不可达；列表以紧凑归档图标表示该状态。会话域不存在软删除、已移除筛选或恢复动作。归档不修改原生 transcript，永久删除继续遵守适配器所有权和二次确认边界。
+
+### 9.8 Agent Conversation Latest Navigation And Context Actions
+
+- Transcript 分页必须提供“最新消息”命令。一次操作最多跟进八个继续前进的原生 cursor，每页继续沿用 80 条读取上限和 20 条显示上限；按 entry id 去重并落到本次可达的最后一页。cursor 仍可前进时按钮继续可用，cursor 停滞时不得空转或显示空白页。
+- 右键点击历史会话行必须先选中该行，再在视口范围内显示上下文菜单。菜单复用当前 Agent 原生续接、跨 Agent 续接、Markdown/JSON 导出和适配器允许的永久删除；不得复制一套 IPC 或业务流程。
+- 永久删除继续要求二次确认。会话工具栏和右键菜单均不得提供通用“编辑信息”或元数据编辑弹窗；Agent 原生标题只读展示。右键菜单必须支持 Escape、外部点击、窗口失焦、缩放和滚动关闭，关闭操作不得写入任何数据。
+
+### 9.9 Agent Transcript Markdown And Tool Roles
+
+- 用户、Assistant 与 Tool 气泡都必须可在 flex 行中收缩。GFM 表格宽于气泡时，只允许在气泡内部形成横向滚动区域，不得撑宽气泡、Transcript 右栏或应用窗口；普通窄表格仍填满可用气泡宽度。
+- Tool 调用和结果属于 Agent 侧消息，必须使用左对齐 Agent 头像、最大 82% 的有界气泡和气泡内 Tool 标签；不得使用居中的系统通知卡。System 与 unknown 事件继续使用居中信息提示语义。
+- Markdown containment 只影响展示，不得改写 native transcript、handoff 或 Markdown/JSON 导出内容，也不得增加测量循环、缓存、网络或文件读取。
+
+### 9.10 Agent Conversation Native Locations
+
+- 会话工具栏“更多”和会话行右键菜单必须区分“在文件夹中显示”与“打开项目目录”。前者只使用适配器提供的原生会话 `sourcePath`，令 Finder/资源管理器定位该文件；后者只打开已解析的登记项目或原生 `projectPath`。
+- 缺少某条路径时仅禁用对应菜单项，不得猜测父目录、Agent 根目录或其他项目。更多菜单的可见性不得由永久删除能力控制。
+- 两个操作复用主进程既有安全 shell 路径处理器；renderer 不直接打开编辑原生会话文件、不拼接路径、不写 transcript 或 PromptHub 元数据。
+
+### 9.11 Claude Conversation Projection
+
+- Claude 会话正文只投影原生可见的 User、Assistant 与 `tool_result` 内容；`isMeta`、`system`、`mode`、`file-history-snapshot`、`attachment`、`last-prompt`、`ai-title`、空内容及已知本地命令 wrapper 不得显示为“事件”、用户消息或标题来源。合法但隐藏的记录不计为 parse error，畸形 JSON 或非对象记录仍计错。
+- Claude `projects/<encoded-key>/` 目录名只是原生存储键。只要有界 JSONL 元数据提供安全绝对 `cwd`，项目 identity 必须保留该精确路径，界面 label 使用其 basename，项目筛选与原生 resume cwd 使用同一值；只有缺少有效 cwd 时才回退显示 encoded key。
+- live reader 与可选本地索引必须使用同一 Claude 项目和标题投影。本地索引只存有界、可重建的脱敏元数据；投影规则升级通过 adapter version 重扫，不迁移或修改 Claude transcript，也不新增 PromptHub schema。
+
+### 9.12 Gemini And Cursor Conversation Projection
+
+- Gemini 项目身份来自 cache project 目录下至多 4 KiB 的 regular、非软链接 `.project_root`。安全绝对路径作为精确 `projectPath`、basename label 和 resume cwd；缺失、相对、超限、软链接或目录外 marker 只回退 cache key，不猜测路径。live 与本地索引使用同一投影，marker 改变时即使 chat 文件未变也必须刷新项目身份。
+- Gemini 非空 native `summary` 优先于第一条可见 User 作为标题。`user`、`gemini` 分别投影为 User、Assistant；纯 `functionResponse.response.output` 投影为 Agent 侧 Tool；`info`、未知及空的合法记录隐藏且不计 parse error；原生 `error` 文本保留为 System，畸形文档与非对象 message 仍计错。
+- Cursor encoded project key 只有在配置 home 下通过真实、非软链接目录组件得到唯一匹配时才成为精确 `projectPath`、basename label 和 resume cwd。解析全程最多打开 64 个目录、每目录流式接受 4,096 个 entry；零匹配、歧义、软链接、目录拒绝或上限命中都必须保持 null path。
+- 对无法精确解析但确认属于 home 前缀的 Cursor key，只能剥离唯一匹配的既有目录前缀，并把剩余 literal tail 作为紧凑 label；不得把 tail 中的连字符猜成目录分隔符。Cursor 私有数据库、外部路径和 transcript 内容不得参与项目路径推断。
 
 ### 10. Renderer List Virtualization
 

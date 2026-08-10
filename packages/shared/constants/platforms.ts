@@ -339,6 +339,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     agentsRelativePath: "agents",
     mcpRelativePath: "settings/mcp.json",
     pluginsRelativePath: "powers",
+    globalRuleFile: "steering/AGENTS.md",
     configFiles: ["settings/cli.json"],
     launchPaths: {
       darwin: ["/Applications/Kiro.app", "~/Applications/Kiro.app"],
@@ -513,6 +514,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     },
     skillsRelativePath: "skills",
     mcpRelativePath: "data/settings/cline_mcp_settings.json",
+    globalRuleFile: "data/settings/rules/AGENTS.md",
     configFiles: [
       "data/settings/global-settings.json",
       "data/settings/cline_mcp_settings.json",
@@ -608,6 +610,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     // Auggie persists MCP servers in settings.json; no generic MCP writer is
     // exposed until the settings schema has a dedicated target adapter.
     mcpRelativePath: "settings.json",
+    globalRuleFile: "user-guidelines.md",
     configFiles: ["settings.json"],
   },
   {
@@ -745,6 +748,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: ["~/.copaw"],
     },
     skillsRelativePath: "skills",
+    configFiles: ["config.json"],
   },
   {
     id: "autoclaw",
@@ -761,6 +765,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: ["~/.openclaw-autoclaw"],
     },
     skillsRelativePath: "skills",
+    configFiles: ["setting.json"],
   },
   {
     id: "nanoclaw",
@@ -789,6 +794,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     },
     skillsRelativePath: "skills",
     globalRuleFile: "workspace/SOUL.md",
+    configFiles: ["openclaw.json"],
   },
   {
     id: "qoder",
@@ -800,6 +806,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.qoder",
     },
     skillsRelativePath: "skills",
+    configFiles: ["settings.json"],
   },
   {
     id: "qoderwork",
@@ -823,6 +830,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     },
     skillsRelativePath: "skills",
     globalRuleFile: "AGENTS.md",
+    configFiles: ["config.yaml"],
   },
   {
     id: "codebuddy",

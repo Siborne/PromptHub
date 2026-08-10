@@ -36,16 +36,22 @@ interface AgentModelProviderAdapterOptions {
 
 const ADAPTER_VERSION = "model-profile-v1";
 export const AGENT_MODEL_PROVIDER_PLATFORM_IDS = [
+  "antigravity",
+  "autoclaw",
   "claude",
   "copilot",
   "codex",
+  "copaw",
   "gemini",
   "grok",
+  "hermes",
   "kiro",
   "kimi",
   "opencode",
   "pi",
   "openclaw",
+  "qclaw",
+  "qoder",
   "qwen",
   "oh-my-pi",
 ] as const;
@@ -53,16 +59,22 @@ const SUPPORTED_PLATFORM_IDS = new Set<string>(
   AGENT_MODEL_PROVIDER_PLATFORM_IDS,
 );
 const DEFAULT_CONFIG_PATHS: Record<string, string> = {
+  antigravity: "settings.json",
+  autoclaw: "setting.json",
   claude: "settings.json",
   copilot: "settings.json",
   codex: "config.toml",
+  copaw: "config.json",
   gemini: "settings.json",
   grok: "config.toml",
+  hermes: "config.yaml",
   kiro: "settings/cli.json",
   kimi: "config.toml",
   opencode: "opencode.jsonc",
   pi: "settings.json",
   openclaw: "openclaw.json",
+  qclaw: "openclaw.json",
+  qoder: "settings.json",
   qwen: "settings.json",
   "oh-my-pi": "config.yml",
 };

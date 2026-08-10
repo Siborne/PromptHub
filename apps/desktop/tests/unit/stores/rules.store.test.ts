@@ -8,10 +8,43 @@ import { useRulesStore } from "../../../src/renderer/stores/rules.store";
 import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
 import { scheduleAllSaveSync } from "../../../src/renderer/services/webdav-save-sync";
 import { installWindowMocks } from "../../helpers/window";
+import type {
+  RuleFileContent,
+  RuleFileDescriptor,
+} from "@prompthub/shared/types";
+
+function descriptor(
+  overrides: Partial<RuleFileDescriptor> = {},
+): RuleFileDescriptor {
+  return {
+    id: "claude-global",
+    platformId: "claude",
+    platformName: "Claude Code",
+    platformIcon: "claude",
+    platformDescription: "Claude rules",
+    name: "CLAUDE.md",
+    description: "Claude global rule file",
+    path: "/Users/test/.claude/CLAUDE.md",
+    exists: true,
+    group: "assistant",
+    ...overrides,
+  };
+}
+
+function content(overrides: Partial<RuleFileContent> = {}): RuleFileContent {
+  return {
+    ...descriptor(overrides),
+    content: "",
+    versions: [],
+    ...overrides,
+  };
+}
 
 describe("rules store", () => {
   beforeEach(() => {
+    vi.mocked(scheduleAllSaveSync).mockReset();
     useRulesStore.setState({
+      availableFiles: [],
       files: [],
       selectedRuleId: null,
       currentFile: null,
@@ -33,6 +66,85 @@ describe("rules store", () => {
       aiModel: "gpt-4o-mini",
       aiModels: [],
     });
+  });
+
+  it("retains missing global descriptors without exposing them in the standalone Rules list", async () => {
+    const missing = descriptor({ exists: false });
+    const read = vi.fn();
+    installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([missing]),
+          read,
+        },
+      },
+    });
+
+    await useRulesStore.getState().loadFiles();
+
+    expect(useRulesStore.getState()).toEqual(
+      expect.objectContaining({
+        availableFiles: [missing],
+        files: [],
+        selectedRuleId: null,
+        currentFile: null,
+        hasLoadedFiles: true,
+      }),
+    );
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("creates a missing rule through the existing save contract and selects it", async () => {
+    const missing = descriptor({ exists: false });
+    const created = content({ exists: true });
+    const save = vi.fn().mockResolvedValue(created);
+    installWindowMocks({ api: { rules: { save } } });
+    useRulesStore.setState({
+      availableFiles: [missing],
+      files: [],
+      hasLoadedFiles: true,
+    });
+
+    await useRulesStore.getState().createRule(missing.id);
+
+    expect(save).toHaveBeenCalledWith("claude-global", "");
+    expect(useRulesStore.getState()).toEqual(
+      expect.objectContaining({
+        availableFiles: [expect.objectContaining({ exists: true })],
+        files: [expect.objectContaining({ exists: true })],
+        selectedRuleId: "claude-global",
+        currentFile: created,
+        draftContent: "",
+        isSaving: false,
+      }),
+    );
+    expect(scheduleAllSaveSync).toHaveBeenCalledWith("rules:create");
+  });
+
+  it("keeps a missing rule retryable when creation fails", async () => {
+    const missing = descriptor({ exists: false });
+    const save = vi.fn().mockRejectedValue(new Error("RULE_CREATE_FAILED"));
+    installWindowMocks({ api: { rules: { save } } });
+    useRulesStore.setState({
+      availableFiles: [missing],
+      files: [],
+      hasLoadedFiles: true,
+    });
+
+    await expect(
+      useRulesStore.getState().createRule(missing.id),
+    ).rejects.toThrow("RULE_CREATE_FAILED");
+
+    expect(useRulesStore.getState()).toEqual(
+      expect.objectContaining({
+        availableFiles: [missing],
+        files: [],
+        currentFile: null,
+        error: "RULE_CREATE_FAILED",
+        isSaving: false,
+      }),
+    );
+    expect(scheduleAllSaveSync).not.toHaveBeenCalled();
   });
 
   it("loads descriptors, selects the first rule, and groups files into global/project sections", async () => {
@@ -99,11 +211,15 @@ describe("rules store", () => {
     expect(useRulesStore.getState().getSidebarSections()).toEqual([
       expect.objectContaining({
         id: "global",
-        items: [expect.objectContaining({ id: "claude-global", type: "global" })],
+        items: [
+          expect.objectContaining({ id: "claude-global", type: "global" }),
+        ],
       }),
       expect.objectContaining({
         id: "project",
-        items: [expect.objectContaining({ id: "project:docs-site", type: "project" })],
+        items: [
+          expect.objectContaining({ id: "project:docs-site", type: "project" }),
+        ],
       }),
     ]);
   });
@@ -411,6 +527,20 @@ describe("rules store", () => {
     });
 
     useRulesStore.setState({
+      availableFiles: [
+        {
+          id: "claude-global",
+          platformId: "claude",
+          platformName: "Claude Code",
+          platformIcon: "Bot",
+          platformDescription: "Claude rules",
+          name: "CLAUDE.md",
+          description: "Claude rules",
+          path: "/Users/test/.claude/CLAUDE.md",
+          exists: true,
+          group: "assistant",
+        },
+      ],
       files: [
         {
           id: "claude-global",
@@ -436,7 +566,9 @@ describe("rules store", () => {
   });
 
   it("ignores stale rule reads when the user switches selection before the first read resolves", async () => {
-    let resolveClaude: ((value: Awaited<ReturnType<typeof Promise.resolve>>) => void) | null = null;
+    let resolveClaude:
+      | ((value: Awaited<ReturnType<typeof Promise.resolve>>) => void)
+      | null = null;
     const readMock = vi.fn((ruleId: string) => {
       if (ruleId === "claude-global") {
         return new Promise((resolve) => {
@@ -536,7 +668,9 @@ describe("rules store", () => {
 
     useRulesStore.getState().dismissConflictDialog("codex-global");
     expect(useRulesStore.getState().conflictDialogRuleId).toBeNull();
-    expect(useRulesStore.getState().dismissedConflictRuleIds).toContain("codex-global");
+    expect(useRulesStore.getState().dismissedConflictRuleIds).toContain(
+      "codex-global",
+    );
 
     // Selecting the same rule again must not re-open after dismiss.
     useRulesStore.setState({
@@ -545,6 +679,8 @@ describe("rules store", () => {
     });
     await useRulesStore.getState().selectRule("codex-global");
     expect(useRulesStore.getState().conflictDialogRuleId).toBeNull();
-    expect(useRulesStore.getState().currentFile?.syncStatus).toBe("out-of-sync");
+    expect(useRulesStore.getState().currentFile?.syncStatus).toBe(
+      "out-of-sync",
+    );
   });
 });

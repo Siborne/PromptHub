@@ -19,8 +19,10 @@ async function setup() {
   const service = {
     listMetadata: vi.fn(() => []),
     updateMetadata: vi.fn((input) => ({ ...input, id: "metadata-1" })),
-    softDelete: vi.fn(() => ({ deletedAt: 10 })),
-    restore: vi.fn(() => ({ deletedAt: null })),
+    deleteConversation: vi.fn(async (agentId, sessionId) => ({
+      agentId,
+      sessionId,
+    })),
     resume: vi.fn(async () => ({
       status: "launched",
       mode: "native-resume",
@@ -61,6 +63,7 @@ describe("Agent conversation IPC", () => {
 
   it("forwards bounded metadata CRUD and native resume requests", async () => {
     const { handlers, IPC_CHANNELS, service } = await setup();
+    expect(handlers).not.toHaveProperty("agent:conversation:restore");
     await handlers[IPC_CHANNELS.AGENT_CONVERSATION_METADATA_LIST](
       {},
       {
@@ -94,6 +97,17 @@ describe("Agent conversation IPC", () => {
       agentId: "claude",
       sessionId: "session-1",
     });
+    await handlers[IPC_CHANNELS.AGENT_CONVERSATION_DELETE](
+      {},
+      {
+        agentId: "claude",
+        sessionId: "session-1",
+      },
+    );
+    expect(service.deleteConversation).toHaveBeenCalledWith(
+      "claude",
+      "session-1",
+    );
   });
 
   it("previews and confirms a cross-Agent handoff with an exact digest", async () => {

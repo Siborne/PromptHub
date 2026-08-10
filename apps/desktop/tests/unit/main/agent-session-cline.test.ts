@@ -209,6 +209,29 @@ describe("Cline session adapter", () => {
       "private-file",
     );
     expect(await fs.stat(databasePath)).toBeTruthy();
+    const snapshotPath = path.join(
+      clineRootDir,
+      "data",
+      "sessions",
+      "new-session.json",
+    );
+    await service.delete("cline", "new-session");
+    await expect(fs.access(snapshotPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(fs.access(databasePath)).resolves.toBeUndefined();
+    const database = new Database(databasePath, { readOnly: true });
+    try {
+      expect(
+        database.get("SELECT id FROM sessions WHERE id = ?", "new-session"),
+      ).toBeNull();
+    } finally {
+      database.close();
+    }
+    await expect(service.list("cline", { limit: 10 })).resolves.toMatchObject({
+      total: 0,
+      sessions: [],
+    });
   });
 
   it("falls back to legacy task histories and keeps malformed records bounded", async () => {
@@ -251,6 +274,10 @@ describe("Cline session adapter", () => {
       }),
     ]);
     expect(detail.parseErrors).toBeGreaterThanOrEqual(1);
+    await service.delete("cline", "legacy-task");
+    await expect(
+      fs.access(path.join(clineRootDir, "data", "tasks", "legacy-task")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("does not follow symlinked snapshots or create a missing Cline root", async () => {
@@ -297,18 +324,26 @@ describe("Cline session adapter", () => {
     const clineRootDir = path.join(homeDir, ".cline");
     const sessionsRoot = path.join(clineRootDir, "data", "sessions");
     await fs.mkdir(sessionsRoot, { recursive: true });
+    const externalSessionPath = path.join(
+      sessionsRoot,
+      "external-session.json",
+    );
     await fs.writeFile(
-      path.join(sessionsRoot, "external-session.json"),
+      externalSessionPath,
       JSON.stringify({
         sessionId: "external-session",
         manifest: {
           title: "External messages",
-          messagesPath: "external-messages.json",
+          messagesPath: "external-session-messages.json",
         },
       }),
     );
+    const externalMessagesPath = path.join(
+      sessionsRoot,
+      "external-session-messages.json",
+    );
     await fs.writeFile(
-      path.join(sessionsRoot, "external-messages.json"),
+      externalMessagesPath,
       JSON.stringify({
         messages: [
           { role: "user", content: "External user message" },
@@ -329,6 +364,17 @@ describe("Cline session adapter", () => {
     );
 
     const service = createAgentSessionService({ homeDir, clineRootDir });
+    const externalList = await service.list("cline", { limit: 20 });
+    expect(
+      externalList.sessions.find(
+        (session) => session.id === "external-session",
+      ),
+    ).toMatchObject({
+      sizeBytes:
+        (await fs.stat(externalSessionPath)).size +
+        (await fs.stat(externalMessagesPath)).size,
+      nativeDeleteSupported: true,
+    });
     await expect(
       service.read("cline", "external-session"),
     ).resolves.toMatchObject({
@@ -347,6 +393,13 @@ describe("Cline session adapter", () => {
       service.read("cline", "unsafe-messages"),
     ).resolves.toMatchObject({
       entries: [],
+    });
+    await service.delete("cline", "external-session");
+    await expect(fs.access(externalSessionPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(fs.access(externalMessagesPath)).rejects.toMatchObject({
+      code: "ENOENT",
     });
   });
 });

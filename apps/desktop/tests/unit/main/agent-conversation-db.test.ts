@@ -54,9 +54,12 @@ describe("AgentConversationDB", () => {
         .join(" ")
         .toLowerCase(),
     ).not.toMatch(/transcript|messages_json|content_json/);
+    expect(
+      tables.find((table) => table.name === "agent_conversation_metadata")?.sql,
+    ).not.toContain("deleted_at");
   });
 
-  it("creates, updates, soft-deletes, and restores conversation metadata", () => {
+  it("creates, updates, archives, and deletes conversation metadata", () => {
     const created = conversations.upsertMetadata({
       agentId: "claude",
       sessionId: "session-1",
@@ -76,7 +79,6 @@ describe("AgentConversationDB", () => {
       tags: ["release", "urgent"],
       favorite: true,
       archivedAt: null,
-      deletedAt: null,
     });
     expect(
       conversations.listMetadata("claude", ["session-1", "missing"]),
@@ -103,9 +105,8 @@ describe("AgentConversationDB", () => {
     });
     expect(updated.archivedAt).toEqual(expect.any(Number));
 
-    const deleted = conversations.softDelete("claude", "session-1");
-    expect(deleted.deletedAt).toEqual(expect.any(Number));
-    expect(conversations.restore("claude", "session-1").deletedAt).toBeNull();
+    conversations.deleteMetadata("claude", "session-1");
+    expect(conversations.getMetadata("claude", "session-1")).toBeNull();
   });
 
   it("records a bounded handoff without storing the portable payload", () => {

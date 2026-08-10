@@ -23,7 +23,7 @@ async function selectAgent(page: Page, name: string): Promise<void> {
 }
 
 test.describe("E2E: Agent workspace", () => {
-  test("shows the complete Agent registry in one capability-aware shell", async ({}, testInfo) => {
+  test("shows the installed Agent registry in one capability-aware shell", async ({}, testInfo) => {
     let receivedProviderAuthorization = "";
     let receivedProviderModelBody = "";
     const providerServer = createServer((request, response) => {
@@ -60,6 +60,7 @@ test.describe("E2E: Agent workspace", () => {
       path.join(os.tmpdir(), "prompthub-agent-e2e-"),
     );
     const homeDir = path.join(userDataDir, "home");
+    fs.mkdirSync(path.join(homeDir, ".cline"), { recursive: true });
     const claudeDir = path.join(homeDir, ".claude");
     fs.mkdirSync(claudeDir, { recursive: true });
     fs.writeFileSync(
@@ -135,6 +136,7 @@ test.describe("E2E: Agent workspace", () => {
         createdAt: "2026-07-17T08:00:00.000Z",
         updatedAt: "2026-07-17T08:01:00.000Z",
         workDir: path.join(homeDir, "isolated-project"),
+        lastPrompt: "Inspect the Kimi session adapter",
       }),
       "utf8",
     );
@@ -319,9 +321,12 @@ test.describe("E2E: Agent workspace", () => {
         window.api.skill.getSupportedPlatforms(),
       );
       await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
-      await expect(
-        page.getByText(`${supportedPlatforms.length} available`),
-      ).toBeVisible();
+      const installedCount = page.getByText(/^\d+ available$/);
+      await expect(installedCount).toBeVisible();
+      const installedCountText = await installedCount.textContent();
+      const installedTotal = Number(installedCountText?.match(/^\d+/)?.[0]);
+      expect(installedTotal).toBeGreaterThan(0);
+      expect(installedTotal).toBeLessThanOrEqual(supportedPlatforms.length);
 
       await selectAgent(page, "Cline");
       await expect(page.getByRole("heading", { name: "Cline" })).toBeVisible();
@@ -342,19 +347,14 @@ test.describe("E2E: Agent workspace", () => {
       await expect(page.getByRole("tab", { name: "Assets" })).toHaveCount(0);
       await page.getByRole("tab", { name: "Skills" }).click();
       await expect(
-        page.getByRole("tabpanel", { name: "Skills" }),
-      ).toContainText(path.join(claudeDir, "skills"));
-      await expect(
-        page.getByRole("button", { name: "Install My Skill" }),
+        page.getByRole("button", { name: "Add Skill" }),
       ).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath("agent-workspace-skills.png"),
         animations: "disabled",
       });
       await page.getByRole("tab", { name: "MCP" }).click();
-      await expect(page.getByRole("tabpanel", { name: "MCP" })).toContainText(
-        path.join(homeDir, ".claude.json"),
-      );
+      await expect(page.getByRole("button", { name: "Add MCP" })).toBeVisible();
       await expect(
         page.getByRole("textbox", { name: "Search assets" }),
       ).toBeVisible();
@@ -372,7 +372,7 @@ test.describe("E2E: Agent workspace", () => {
       });
       await expect(claudeImport).toContainText("claude-sonnet");
       await claudeImport
-        .getByRole("button", { name: "Create profile" })
+        .getByRole("button", { name: "Create and edit" })
         .click();
       await expect(page.getByLabel("Default model")).toHaveCount(0);
       await page.screenshot({
@@ -399,14 +399,12 @@ test.describe("E2E: Agent workspace", () => {
         page.getByRole("heading", { name: "Codex appearance" }),
       ).toBeVisible();
       await expect(page.getByText("Midnight")).toBeVisible();
-      await expect(page.getByText("Orbit")).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath("agent-workspace-appearance.png"),
         animations: "disabled",
       });
-      await page
-        .getByRole("heading", { name: "Pets" })
-        .scrollIntoViewIfNeeded();
+      await page.getByRole("button", { name: /^Pets/ }).click();
+      await expect(page.getByText("Orbit")).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath("agent-workspace-appearance-pets.png"),
         animations: "disabled",
@@ -431,24 +429,14 @@ test.describe("E2E: Agent workspace", () => {
       await expect(page.getByText("Credential available")).toBeVisible();
 
       await page.getByRole("button", { name: "Add profile" }).click();
-      const codexProfile = page.getByRole("dialog", {
+      const codexProfile = page.getByRole("region", {
         name: "Add provider profile",
       });
-      await codexProfile
-        .getByRole("textbox", { name: "Name" })
-        .fill("E2E gateway");
-      await codexProfile
-        .getByRole("textbox", { name: "Provider kind" })
-        .fill("openai-compatible");
-      await codexProfile
-        .getByRole("textbox", { name: "Provider ID" })
-        .fill("e2e-gateway");
-      await codexProfile
-        .getByRole("textbox", { name: "Endpoint (optional)" })
-        .fill(providerEndpoint);
-      await codexProfile
-        .getByRole("textbox", { name: "Primary model" })
-        .fill("gpt-5.4");
+      await codexProfile.getByLabel("Name").fill("E2E gateway");
+      await codexProfile.getByLabel("Provider kind").fill("openai-compatible");
+      await codexProfile.getByLabel("Provider ID").fill("e2e-gateway");
+      await codexProfile.getByLabel("Endpoint").fill(providerEndpoint);
+      await codexProfile.getByLabel("Primary model").fill("gpt-5.4");
       await codexProfile
         .getByLabel("Credential (write-only)")
         .fill("e2e-secret-token");
@@ -539,7 +527,7 @@ test.describe("E2E: Agent workspace", () => {
         page.getByRole("navigation", { name: "Provider profiles" }),
       ).toBeVisible();
       await page.getByRole("button", { name: "Add profile" }).click();
-      const qwenProfile = page.getByRole("dialog", {
+      const qwenProfile = page.getByRole("region", {
         name: "Add provider profile",
       });
       await qwenProfile
@@ -616,7 +604,7 @@ test.describe("E2E: Agent workspace", () => {
       ).toBeVisible();
       await page.getByRole("tab", { name: "Provider & Model" }).click();
       await page.getByRole("button", { name: "Add profile" }).click();
-      const openCodeProfile = page.getByRole("dialog", {
+      const openCodeProfile = page.getByRole("region", {
         name: "Add provider profile",
       });
       await openCodeProfile

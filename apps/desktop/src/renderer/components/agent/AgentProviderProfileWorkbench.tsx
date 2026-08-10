@@ -552,28 +552,36 @@ export function AgentProviderProfileWorkbench({
               <Button
                 size="sm"
                 variant="secondary"
+                className="w-full min-w-0"
                 aria-label={t("agents.providerProfiles.import.title")}
                 title={t("agents.providerProfiles.import.title")}
                 onClick={() => void store.importCurrent(agent.id)}
                 disabled={busy}
               >
                 {store.busyAction === "import" ? (
-                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                  <Loader2Icon className="h-4 w-4 shrink-0 animate-spin" />
                 ) : (
-                  <FileInputIcon className="h-4 w-4" />
+                  <FileInputIcon className="h-4 w-4 shrink-0" />
                 )}
+                <span className="min-w-0 truncate">
+                  {t("agents.providerProfiles.import.title")}
+                </span>
               </Button>
             ) : null}
             {!webRuntime ? (
               <Button
                 size="sm"
                 variant="secondary"
+                className="w-full min-w-0"
                 aria-label={t("agents.providerProfiles.sourceImport.open")}
                 title={t("agents.providerProfiles.sourceImport.open")}
                 onClick={() => setSourceDialogOpen(true)}
                 disabled={busy}
               >
-                <DatabaseIcon className="h-4 w-4" />
+                <DatabaseIcon className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 truncate">
+                  {t("agents.providerProfiles.sourceImport.open")}
+                </span>
               </Button>
             ) : null}
           </>
@@ -582,7 +590,7 @@ export function AgentProviderProfileWorkbench({
           <nav
             ref={profileScrollRef}
             aria-label={t("agents.providerProfiles.listLabel")}
-            className="h-full min-h-0 overflow-y-auto p-1"
+            className="h-full min-h-0 overflow-x-hidden overflow-y-auto p-1"
           >
             {store.currentState?.nativeConfig ? (
               <AgentProviderNativeListItem

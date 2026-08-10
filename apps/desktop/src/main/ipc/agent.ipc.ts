@@ -11,7 +11,10 @@ import type {
   AgentUsageQuota,
 } from "@prompthub/shared/types";
 import { SkillInstaller } from "../services/skill-installer";
-import { getAgentConfigContext } from "../services/agent-platform-context";
+import {
+  getAgentConfigContext,
+  resolveAgentProviderContext,
+} from "../services/agent-platform-context";
 import {
   addPiCustomModel,
   addPiCustomProvider,
@@ -314,7 +317,7 @@ export function registerAgentIPC(options: RegisterAgentIPCOptions = {}): void {
   ipcMain.handle(
     IPC_CHANNELS.AGENT_MODEL_CONFIG_GET,
     async (_, agentId: string) => {
-      const context = getAgentConfigContext(agentId);
+      const context = resolveAgentProviderContext(agentId);
       return inspectAgentModelConfig({ agentId, rootPath: context.rootPath });
     },
   );
@@ -360,7 +363,7 @@ export function registerAgentIPC(options: RegisterAgentIPCOptions = {}): void {
       ) {
         throw new Error("Agent model update thinkingLevel is invalid");
       }
-      const context = getAgentConfigContext(payload.agentId);
+      const context = resolveAgentProviderContext(payload.agentId);
       return updateAgentModelConfig(
         {
           agentId: payload.agentId,
@@ -518,6 +521,7 @@ export function registerAgentIPC(options: RegisterAgentIPCOptions = {}): void {
           error instanceof Error ? error.message : error,
         );
         const fallback: AgentUsageQuota = {
+          schemaVersion: 2,
           agentId,
           adapter: "unknown",
           status: "unavailable",

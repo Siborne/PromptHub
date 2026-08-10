@@ -41,6 +41,7 @@ interface CherrySessionRow {
   created_at?: unknown;
   updated_at?: unknown;
   message_count?: unknown;
+  size_bytes?: unknown;
 }
 
 interface CherryMessageRow {
@@ -121,6 +122,8 @@ function parseSession(
     updatedAt: sessionTimestamp(row.updated_at),
     model: sessionString(row.model),
     messageCount: count,
+    sizeBytes:
+      typeof row.size_bytes === "number" ? Math.max(0, row.size_bytes) : null,
     sourcePath,
     resume: null,
   };
@@ -268,6 +271,13 @@ function readCurrentListPage(
        (SELECT COUNT(*) FROM agent_session_message m
         WHERE m.session_id = s.id
           AND lower(m.role) IN ('user', 'assistant')) AS message_count
+       , length(CAST(COALESCE(s.id, '') AS BLOB))
+         + length(CAST(COALESCE(s.name, '') AS BLOB))
+         + length(CAST(COALESCE(s.description, '') AS BLOB))
+         + COALESCE((SELECT SUM(
+             length(CAST(COALESCE(m.data, '') AS BLOB))
+           ) FROM agent_session_message m WHERE m.session_id = s.id), 0)
+         AS size_bytes
      FROM agent_session s
      LEFT JOIN agent_workspace w ON w.id = s.workspace_id ${where.sql}
      ORDER BY s.updated_at DESC, s.created_at DESC, s.id DESC
@@ -326,7 +336,16 @@ function readListPage(
             (SELECT COUNT(*) FROM session_messages m
              WHERE m.session_id = s.id
                AND lower(m.role) IN ('user', 'assistant')
-               AND trim(COALESCE(m.content, '')) <> '') AS message_count
+               AND trim(COALESCE(m.content, '')) <> '') AS message_count,
+            length(CAST(COALESCE(s.id, '') AS BLOB))
+              + length(CAST(COALESCE(s.name, '') AS BLOB))
+              + length(CAST(COALESCE(s.description, '') AS BLOB))
+              + length(CAST(COALESCE(s.accessible_paths, '') AS BLOB))
+              + COALESCE((SELECT SUM(
+                  length(CAST(COALESCE(m.content, '') AS BLOB))
+                  + length(CAST(COALESCE(m.metadata, '') AS BLOB))
+                ) FROM session_messages m WHERE m.session_id = s.id), 0)
+              AS size_bytes
        FROM sessions s ${where.sql}
       ORDER BY s.updated_at DESC, s.created_at DESC, s.id DESC
       LIMIT ? OFFSET ?`,
@@ -600,6 +619,45 @@ export function createCherryStudioSessionAdapter(rootPath: string) {
       );
       if (!detail) throw new Error("AGENT_SESSION_NOT_FOUND");
       return detail;
+    },
+
+    async delete(sessionId: string): Promise<void> {
+      if (!isSafeSessionId(sessionId)) {
+        throw new Error("AGENT_SESSION_ID_INVALID");
+      }
+      const store = await resolveStore(rootPath);
+      if (!store) throw new Error("AGENT_SESSION_NOT_FOUND");
+      const database = new Database(store.sourcePath);
+      try {
+        validateSchema(database, store.schema);
+        const remove = database.transaction(() => {
+          const table =
+            store.schema === "current" ? "agent_session" : "sessions";
+          const exists = database.get(
+            `SELECT id FROM ${table} WHERE id = ? LIMIT 1`,
+            sessionId,
+          );
+          if (!exists) throw new Error("AGENT_SESSION_NOT_FOUND");
+          if (store.schema === "current") {
+            database
+              .prepare("DELETE FROM agent_session_message WHERE session_id = ?")
+              .run(sessionId);
+            database
+              .prepare("DELETE FROM agent_session WHERE id = ?")
+              .run(sessionId);
+          } else {
+            database
+              .prepare("DELETE FROM session_messages WHERE session_id = ?")
+              .run(sessionId);
+            database
+              .prepare("DELETE FROM sessions WHERE id = ?")
+              .run(sessionId);
+          }
+        });
+        remove();
+      } finally {
+        database.close();
+      }
     },
   };
 }

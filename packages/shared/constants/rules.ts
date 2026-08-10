@@ -20,6 +20,9 @@ const opencodePlatform = requirePlatform("opencode");
 const piPlatform = requirePlatform("pi");
 const ohMyPiPlatform = requirePlatform("oh-my-pi");
 const windsurfPlatform = requirePlatform("windsurf");
+const kiroPlatform = requirePlatform("kiro");
+const clinePlatform = requirePlatform("cline");
+const augmentPlatform = requirePlatform("augment");
 const openclawPlatform = requirePlatform("openclaw");
 const qclawPlatform = requirePlatform("qclaw");
 const hermesPlatform = requirePlatform("hermes");
@@ -42,6 +45,9 @@ export const RULE_PLATFORM_ORDER = [
   "pi",
   "oh-my-pi",
   "windsurf",
+  "kiro",
+  "cline",
+  "augment",
   "openclaw",
   "qclaw",
   "hermes",
@@ -189,6 +195,42 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     name: "global_rules.md",
     description:
       "Global Windsurf rules loaded from the local Windsurf configuration.",
+    group: "tooling",
+  },
+  "kiro-global": {
+    id: "kiro-global",
+    platformId: "kiro",
+    platformName: kiroPlatform.name,
+    platformIcon: kiroPlatform.icon,
+    platformDescription:
+      "Global Kiro AGENTS.md entry stored in the user steering directory.",
+    name: "AGENTS.md",
+    description:
+      "Global Kiro instructions loaded from the user steering directory. Other steering files remain Kiro-managed.",
+    group: "assistant",
+  },
+  "cline-global": {
+    id: "cline-global",
+    platformId: "cline",
+    platformName: clinePlatform.name,
+    platformIcon: clinePlatform.icon,
+    platformDescription:
+      "Global Cline AGENTS.md entry stored in the CLI rules directory.",
+    name: "AGENTS.md",
+    description:
+      "Global Cline instructions loaded from the CLI rules directory. Other rule files remain Cline-managed.",
+    group: "tooling",
+  },
+  "augment-global": {
+    id: "augment-global",
+    platformId: "augment",
+    platformName: augmentPlatform.name,
+    platformIcon: augmentPlatform.icon,
+    platformDescription:
+      "Global Augment user guidelines stored in the documented local guidelines file.",
+    name: "user-guidelines.md",
+    description:
+      "Global Augment user guidelines applied to Agent and Chat sessions.",
     group: "tooling",
   },
   "openclaw-global": {

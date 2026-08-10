@@ -13,6 +13,14 @@ import {
   createAntigravityLocalUsageClient,
   type AntigravityLocalUsageClient,
 } from "./agent-usage-antigravity-local";
+import {
+  ACCOUNT_USAGE_SCOPE,
+  amountFromRemaining,
+  amountFromUsed,
+  boundUsageMetrics,
+  percentageFromRemaining,
+  percentageFromUsed,
+} from "./agent-usage-contract";
 import { SkillInstaller } from "./skill-installer";
 import { getPlatformRootDir } from "./skill-installer-utils";
 import {
@@ -82,6 +90,11 @@ const CODEX_USAGE_ADAPTER = "codex-oauth-v1";
 const CODEX_OFFICIAL_PROVIDER = "openai";
 const KIMI_USAGE_ENDPOINT = "https://api.kimi.com/coding/v1/usages";
 const KIMI_USAGE_ADAPTER = "kimi-oauth-v1";
+const GROK_USER_ENDPOINT =
+  "https://cli-chat-proxy.grok.com/v1/user?include=subscription";
+const GROK_BILLING_ENDPOINT =
+  "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
+const GROK_USAGE_ADAPTER = "grok-oauth-v1";
 const ANTIGRAVITY_USAGE_ADAPTER = "antigravity-oauth-v1";
 const ANTIGRAVITY_KEYCHAIN_SERVICE = "gemini";
 const ANTIGRAVITY_KEYCHAIN_ACCOUNT = "antigravity";
@@ -110,11 +123,34 @@ const KEYCHAIN_TIMEOUT_MS = 10_000;
 const KEYCHAIN_MAX_BUFFER = 64 * 1024;
 const FETCH_TIMEOUT_MS = 10_000;
 const CACHE_TTL_MS = 60_000;
+const MAX_GROK_AUTH_BYTES = 256 * 1024;
+const KIMI_WINDOW_SECONDS_BY_UNIT: Readonly<Record<string, number>> = {
+  second: 1,
+  minute: 60,
+  hour: 3_600,
+  day: 86_400,
+  week: 604_800,
+};
 
 const WINDOW_METRIC_META = {
-  fiveHour: { id: "fiveHour", label: "5-hour window" },
-  sevenDay: { id: "sevenDay", label: "7-day window" },
-  sevenDayOpus: { id: "sevenDayOpus", label: "7-day Opus window" },
+  fiveHour: {
+    id: "fiveHour",
+    label: "5-hour window",
+    scope: ACCOUNT_USAGE_SCOPE,
+    durationSeconds: 18_000,
+  },
+  sevenDay: {
+    id: "sevenDay",
+    label: "7-day window",
+    scope: ACCOUNT_USAGE_SCOPE,
+    durationSeconds: 604_800,
+  },
+  sevenDayOpus: {
+    id: "sevenDayOpus",
+    label: "7-day Opus window",
+    scope: { kind: "model-group", id: "opus", label: "Opus" } as const,
+    durationSeconds: 604_800,
+  },
 } as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -157,8 +193,9 @@ function toWindowMetric(
   return {
     id: meta.id,
     label: meta.label,
-    kind: "window",
-    utilization: window.utilization,
+    scope: meta.scope,
+    period: { kind: "rolling", durationSeconds: meta.durationSeconds },
+    value: percentageFromUsed(window.utilization),
     resetsAt: window.resetsAt,
   };
 }
@@ -294,17 +331,65 @@ function parseKimiCredentials(raw: string): TokenCredentials | null {
   };
 }
 
+function parseGrokCredentials(raw: string): TokenCredentials | null {
+  if (Buffer.byteLength(raw, "utf8") > MAX_GROK_AUTH_BYTES) return null;
+  const value = parseJsonObject(raw);
+  if (!value) return null;
+  for (const [host, candidate] of Object.entries(value)) {
+    if (!host.startsWith("https://auth.x.ai::") || !isRecord(candidate)) {
+      continue;
+    }
+    const accessToken = toNonEmptyString(candidate.key);
+    if (!accessToken) continue;
+    return {
+      accessToken,
+      expiresAt: parseResetTime(candidate.expires_at),
+    };
+  }
+  return null;
+}
+
+function parseKimiWindowDuration(
+  entry: Record<string, unknown>,
+): number | null {
+  const window = isRecord(entry.window) ? entry.window : null;
+  const duration = toFiniteNumber(window?.duration);
+  const unit = toNonEmptyString(window?.timeUnit)
+    ?.toLowerCase()
+    .replace(/^time_unit_/, "")
+    .replace(/s$/, "");
+  if (duration === null || duration <= 0 || !unit) return null;
+  const multiplier = KIMI_WINDOW_SECONDS_BY_UNIT[unit] ?? null;
+  return multiplier === null ? null : duration * multiplier;
+}
+
+function parseKimiQuotaValue(
+  detail: Record<string, unknown>,
+): AgentUsageMetric["value"] | null {
+  const limit = toFiniteNumber(detail.limit);
+  if (limit === null) return null;
+  const remaining = toFiniteNumber(detail.remaining);
+  if (remaining !== null) {
+    return amountFromRemaining(remaining, limit, "requests");
+  }
+  const used = toFiniteNumber(detail.used);
+  return used === null ? null : amountFromUsed(used, limit, "requests");
+}
+
 function parseKimiRollingLimit(entry: unknown): AgentUsageMetric | null {
   if (!isRecord(entry)) return null;
   const detail = isRecord(entry.detail) ? entry.detail : entry;
-  const used = toFiniteNumber(detail.used);
-  const limit = toFiniteNumber(detail.limit);
-  if (used === null || limit === null) return null;
+  const value = parseKimiQuotaValue(detail);
+  if (!value) return null;
   return {
     id: "rolling",
     label: "Rolling window",
-    kind: "window",
-    utilization: limit > 0 ? (used / limit) * 100 : 0,
+    scope: ACCOUNT_USAGE_SCOPE,
+    period: {
+      kind: "rolling",
+      durationSeconds: parseKimiWindowDuration(entry),
+    },
+    value,
     resetsAt: parseResetTime(
       entry.resetTime ?? detail.resetTime ?? entry.reset_time,
     ),
@@ -316,30 +401,25 @@ function mapKimiMetrics(body: unknown): AgentUsageMetric[] {
   const metrics: AgentUsageMetric[] = [];
   const usage = isRecord(body.usage) ? body.usage : null;
   if (usage) {
-    const limit = toFiniteNumber(usage.limit);
-    const used = toFiniteNumber(usage.used);
+    const value = parseKimiQuotaValue(usage);
     const resetsAt = parseResetTime(usage.resetTime);
-    if (limit !== null && limit > 0 && used !== null) {
+    if (value?.kind === "amount") {
       metrics.push({
         id: "weekly",
         label: "Weekly quota",
-        kind: "quota",
-        utilization: (used / limit) * 100,
+        scope: ACCOUNT_USAGE_SCOPE,
+        period: { kind: "calendar", unit: "week" },
+        value,
         resetsAt,
-        usedAmount: used,
-        totalAmount: limit,
-        unit: "%",
       });
     } else {
-      // A zero/absent limit means the provider did not report amounts; keep
-      // the metric but omit the amounts instead of dividing by zero.
       metrics.push({
         id: "weekly",
         label: "Weekly quota",
-        kind: "quota",
-        utilization: 0,
+        scope: ACCOUNT_USAGE_SCOPE,
+        period: { kind: "calendar", unit: "week" },
+        value: { kind: "unknown" },
         resetsAt,
-        unit: "%",
       });
     }
   }
@@ -358,6 +438,30 @@ function parseKimiPlan(body: unknown): string | null {
     ? body.user.membership
     : null;
   return toNonEmptyString(membership?.level);
+}
+
+function parseGrokPlan(body: unknown): string | null {
+  return isRecord(body) ? toNonEmptyString(body.subscriptionTier) : null;
+}
+
+function mapGrokWeeklyMetric(body: unknown): AgentUsageMetric[] {
+  if (!isRecord(body) || !isRecord(body.config)) return [];
+  const used = toFiniteNumber(body.config.creditUsagePercent);
+  const currentPeriod = isRecord(body.config.currentPeriod)
+    ? body.config.currentPeriod
+    : null;
+  const resetsAt = parseResetTime(currentPeriod?.end);
+  if (used === null || resetsAt === null) return [];
+  return [
+    {
+      id: "weekly",
+      label: "Weekly quota",
+      scope: ACCOUNT_USAGE_SCOPE,
+      period: { kind: "calendar", unit: "week" },
+      value: percentageFromUsed(used),
+      resetsAt,
+    },
+  ];
 }
 
 function parseAntigravityCredentials(raw: string): TokenCredentials | null {
@@ -449,9 +553,10 @@ function mapAntigravityModelMetrics(body: unknown): AgentUsageMetric[] {
     if (remainingFraction === null) continue;
     metrics.push({
       id: `model:${name}`,
-      label: name,
-      kind: "quota",
-      utilization: (1 - remainingFraction) * 100,
+      label: "Model quota",
+      scope: { kind: "model", id: name, label: name },
+      period: { kind: "provider-defined", label: "Provider quota" },
+      value: percentageFromRemaining(remainingFraction * 100),
       resetsAt: parseResetTime(quotaInfo.resetTime),
     });
   }
@@ -468,9 +573,10 @@ function mapGeminiBucketMetrics(body: unknown): AgentUsageMetric[] {
     if (!modelId || remainingFraction === null) continue;
     metrics.push({
       id: `model:${modelId}`,
-      label: modelId,
-      kind: "quota",
-      utilization: (1 - remainingFraction) * 100,
+      label: "Model quota",
+      scope: { kind: "model", id: modelId, label: modelId },
+      period: { kind: "provider-defined", label: "Provider quota" },
+      value: percentageFromRemaining(remainingFraction * 100),
       resetsAt: parseResetTime(bucket.resetTime),
     });
   }
@@ -483,35 +589,30 @@ function parseCopilotSnapshot(
   value: unknown,
   resetsAt: number | null,
 ): AgentUsageMetric | null {
-  if (!isRecord(value) || value.unlimited === true) return null;
+  if (!isRecord(value)) return null;
+  const base = {
+    id,
+    label,
+    scope: { kind: "feature", id, label } as const,
+    period: { kind: "calendar", unit: "billing-cycle" } as const,
+    resetsAt,
+  };
+  if (value.unlimited === true) {
+    return { ...base, value: { kind: "unlimited" } };
+  }
   const entitlement = toFiniteNumber(value.entitlement);
   const remaining = toFiniteNumber(value.remaining);
   const percentUsed = toFiniteNumber(value.percent_used);
-  let utilization = percentUsed;
-  if (
-    utilization === null &&
-    entitlement !== null &&
-    entitlement > 0 &&
-    remaining !== null
-  ) {
-    utilization = (1 - remaining / entitlement) * 100;
-  }
-  if (utilization === null) return null;
-  const metric: AgentUsageMetric = {
-    id,
-    label,
-    kind: "quota",
-    utilization,
-    resetsAt,
-    unit: "requests",
-  };
   if (entitlement !== null && remaining !== null) {
-    metric.usedAmount = entitlement - remaining;
+    return {
+      ...base,
+      value: amountFromRemaining(remaining, entitlement, "requests"),
+    };
   }
-  if (entitlement !== null) {
-    metric.totalAmount = entitlement;
+  if (percentUsed !== null) {
+    return { ...base, value: percentageFromUsed(percentUsed) };
   }
-  return metric;
+  return { ...base, value: { kind: "unknown" } };
 }
 
 function mapCopilotMetrics(body: unknown): AgentUsageMetric[] {
@@ -535,7 +636,8 @@ function buildQuota(
   fetchedAt: number,
   overrides: Partial<AgentUsageQuota> = {},
 ): AgentUsageQuota {
-  return {
+  const quota: AgentUsageQuota = {
+    schemaVersion: 2,
     agentId,
     adapter: USAGE_ADAPTER,
     status,
@@ -545,6 +647,8 @@ function buildQuota(
     fetchedAt,
     ...overrides,
   };
+  quota.metrics = boundUsageMetrics(quota.metrics);
+  return quota;
 }
 
 export function createAgentUsageService(
@@ -922,6 +1026,63 @@ export function createAgentUsageService(
     });
   }
 
+  async function queryGrokUsage(
+    agentId: string,
+    configRoot: string,
+  ): Promise<AgentUsageQuota> {
+    const buildGrokQuota = (
+      status: AgentUsageQuota["status"],
+      overrides: Partial<AgentUsageQuota> = {},
+    ): AgentUsageQuota =>
+      buildQuota(agentId, status, now(), {
+        adapter: GROK_USAGE_ADAPTER,
+        ...overrides,
+      });
+
+    let credentials: TokenCredentials | null = null;
+    try {
+      credentials = parseGrokCredentials(
+        await readFile(path.join(configRoot, "auth.json")),
+      );
+    } catch {
+      // Missing or unreadable native auth remains an explicit no-credential state.
+    }
+    if (!credentials) return buildGrokQuota("no-credentials");
+    if (credentials.expiresAt !== null && credentials.expiresAt <= now()) {
+      return buildGrokQuota("expired");
+    }
+
+    const request = (url: string) =>
+      fetchJson(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${credentials.accessToken}`,
+          Accept: "application/json",
+          "User-Agent": "prompthub-desktop",
+          "x-grok-client-mode": "build",
+        },
+      });
+    const [userResult, billingResult] = await Promise.all([
+      request(GROK_USER_ENDPOINT),
+      request(GROK_BILLING_ENDPOINT),
+    ]);
+    const plan =
+      userResult.kind === "ok" ? parseGrokPlan(userResult.body) : null;
+    if (billingResult.kind === "expired") {
+      return buildGrokQuota("expired", { plan });
+    }
+    if (billingResult.kind === "unavailable") {
+      return buildGrokQuota("unavailable", {
+        plan,
+        errorCode: billingResult.errorCode,
+      });
+    }
+    return buildGrokQuota("ok", {
+      plan,
+      metrics: mapGrokWeeklyMetric(billingResult.body),
+    });
+  }
+
   async function readHomeCredentials(
     relativePath: string,
     parse: (raw: string) => TokenCredentials | null,
@@ -1224,6 +1385,9 @@ export function createAgentUsageService(
     }
     if (agentId === "kimi") {
       return queryKimiUsage(agentId, configRoot);
+    }
+    if (agentId === "grok") {
+      return queryGrokUsage(agentId, configRoot);
     }
     if (agentId === "antigravity") {
       return queryAntigravityUsage(agentId);

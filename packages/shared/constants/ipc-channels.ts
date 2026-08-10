@@ -210,7 +210,6 @@ export const IPC_CHANNELS = {
   AGENT_CONVERSATION_METADATA_LIST: "agent:conversationMetadata:list",
   AGENT_CONVERSATION_METADATA_UPDATE: "agent:conversationMetadata:update",
   AGENT_CONVERSATION_DELETE: "agent:conversation:delete",
-  AGENT_CONVERSATION_RESTORE: "agent:conversation:restore",
   AGENT_CONVERSATION_RESUME: "agent:conversation:resume",
   AGENT_CONVERSATION_HANDOFF_PREVIEW: "agent:conversation:handoffPreview",
   AGENT_CONVERSATION_HANDOFF_CONTINUE: "agent:conversation:handoffContinue",

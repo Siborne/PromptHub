@@ -38,38 +38,40 @@ export function AgentProviderNativeListItem({
 }) {
   const { t } = useTranslation();
   return (
-    <button
-      type="button"
-      data-testid="provider-native-card"
-      onClick={onSelect}
-      aria-current={selected}
-      className={providerWorkbenchListItemClass(
-        selected,
-        "m-1 flex w-[calc(100%-0.5rem)] items-center gap-3 px-3 py-2.5",
-      )}
-    >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-        <CheckCircle2Icon className="h-4 w-4" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="min-w-0 truncate text-sm font-semibold text-foreground">
-            {t("agents.providerProfiles.currentNative.title")}
+    <div className="p-1">
+      <button
+        type="button"
+        data-testid="provider-native-card"
+        onClick={onSelect}
+        aria-current={selected}
+        className={providerWorkbenchListItemClass(
+          selected,
+          "flex items-center gap-3 px-3 py-2.5",
+        )}
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <CheckCircle2Icon className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+              {t("agents.providerProfiles.currentNative.title")}
+            </span>
+            <span
+              className={`shrink-0 text-xs font-medium ${classificationClass(summary.classification)}`}
+            >
+              {t(
+                `agents.providerProfiles.currentNative.classification.${summary.classification}`,
+              )}
+            </span>
           </span>
-          <span
-            className={`shrink-0 text-xs font-medium ${classificationClass(summary.classification)}`}
-          >
-            {t(
-              `agents.providerProfiles.currentNative.classification.${summary.classification}`,
-            )}
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+            {summary.model ?? summary.name}
           </span>
         </span>
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-          {summary.model ?? summary.name}
-        </span>
-      </span>
-      <ArrowUpRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/50" />
-    </button>
+        <ArrowUpRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+      </button>
+    </div>
   );
 }
 

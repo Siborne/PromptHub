@@ -44,15 +44,10 @@ export function registerAgentConversationIPC(
     async (_, value: unknown) =>
       invoke(async () => {
         const request = identityRequest(value);
-        return options.service.softDelete(request.agentId, request.sessionId);
-      }),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.AGENT_CONVERSATION_RESTORE,
-    async (_, value: unknown) =>
-      invoke(async () => {
-        const request = identityRequest(value);
-        return options.service.restore(request.agentId, request.sessionId);
+        return options.service.deleteConversation(
+          request.agentId,
+          request.sessionId,
+        );
       }),
   );
   ipcMain.handle(

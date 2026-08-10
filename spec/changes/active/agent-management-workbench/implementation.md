@@ -1794,13 +1794,13 @@
 - Implemented device-local `agent_conversation_metadata` and
   `agent_conversation_handoffs` projections with idempotent migration,
   parameterized access and no transcript/message body persistence. PromptHub
-  owns titles, project association, tags, notes, favorite/archive state,
-  soft-delete tombstones and handoff lineage; native Agent files remain
-  read-only and authoritative.
-- Agent History now overlays PromptHub metadata on the adapter-backed native
-  session list, supports project and active/archive/removed filters, displays
-  the live bounded transcript and exposes edit, soft delete/restore, native
-  resume and JSON/Markdown export actions.
+  owns titles, project association, tags, notes, favorite/archive state and
+  handoff lineage; native Agent files remain authoritative.
+- Agent History now overlays existing PromptHub metadata on the adapter-backed
+  native session list, supports project filtering and archive metadata, displays
+  the live bounded transcript and exposes verified permanent native delete,
+  native resume and JSON/Markdown export actions. It does not expose a generic
+  conversation metadata editor.
 - Native Resume re-resolves the current adapter session and executable in the
   main process, then executes the adapter-owned argument vector through a
   mode-0700 macOS terminal launcher. Arguments are staged in mode-0600 files
@@ -1832,10 +1832,10 @@
   export actions are icon-only with accessible names and styled hover/focus
   tooltips, leaving more vertical space for the session list and transcript.
 - Transcript rendering now uses role-aware chat bubbles with a separate round
-  avatar for every user and assistant message instead of placing role labels
-  inside full-width gray rows. Users are right-aligned in the primary color,
-  assistants are left-aligned on white, and system/tool records use centered
-  white notice bubbles with distinct accents. The light theme uses white surfaces for the
+  avatar for every user, assistant and tool message instead of placing role labels
+  inside full-width gray rows. Users are right-aligned in the primary color;
+  assistants and tool records are left-aligned Agent messages on white, while
+  system/unknown records use centered white notice bubbles. The light theme uses white surfaces for the
   history rail, detail header and continuation toolbar over a restrained canvas.
 - Conversation bodies use a dedicated compact GFM renderer with 13px body
   text, bounded heading/list/table/code styles, sanitized HTML, allowlisted
@@ -1843,7 +1843,7 @@
   remains the source for handoff and export; Markdown rendering is presentation
   only.
 - Removed the renderer wrapper's generic `mt-2` so user and assistant message
-  bodies use only the bubble's intentional padding. Tool and system notices
+  bodies use only the bubble's intentional padding. Tool bubbles and system notices
   retain a role-aware `mt-1` separation, preventing the large blank strip that
   previously appeared above every conversation body. The sessions regression
   suite covers this spacing contract.
@@ -2112,8 +2112,9 @@
   the verified native CLI terminal resume for the current Agent and a
   cross-Agent CLI continuation entry. Target Agent/project configuration opens
   only after the second choice and lists only verified CLI handoff targets.
-  Markdown/JSON export has its own compact icon; metadata edit and soft
-  delete/restore remain in the custom overflow menu.
+  Markdown/JSON export has its own compact icon; verified permanent deletion is
+  the only destructive overflow action, and no metadata edit or soft
+  delete/restore action remains.
 - The main process now returns the exact shell-quoted CLI command with each
   reviewed handoff preview. Copy and direct Terminal launch therefore share the
   same target executable, working directory and digest-verified payload. When
@@ -2560,22 +2561,17 @@
   `git diff --check` also passed; the build retains the existing chunk-size and
   mixed static/dynamic `fflate` warnings.
 
-### Conversation Metadata Dialog Styling And Archive Semantics
+### Conversation Metadata Dialog Styling And Archive Semantics (Superseded)
 
-- Replaced the bespoke metadata dialog shell and native checkbox controls with
-  the shared `Modal` and `Checkbox` components plus the workspace input tokens.
-  Title, project, tags, note, favorite and archive controls now share the same
-  spacing, focus treatment, surface colors and action hierarchy as the rest of
-  the desktop UI.
-- Clarified that archive is local PromptHub metadata. It hides a conversation
-  from Active and keeps it available through Archived; the native Agent
+- This intermediate renderer dialog was removed by `FR-AGENT-103`; Conversation
+  History no longer exposes generic title, project, tag, note, favorite or
+  archive editing.
+- Clarified that archive is local PromptHub metadata. It marks the conversation
+  without excluding it from the current history list; the native Agent
   transcript remains untouched and is never moved or deleted by this control.
-- The metadata edit regression now asserts the shared modal surface and the
-  archive explanation before exercising the existing save and soft-delete flow.
-  The focused Agent Sessions panel suite passes 10 tests; broader typecheck,
-  lint, formatting, production build, spec traceability and `git diff --check`
-  remain the required verification gates. The build retains the existing
-  large-chunk and mixed static/dynamic `fflate` warnings.
+- The former modal regression was replaced with assertions that toolbar and row
+  context actions do not expose editing. Existing archived metadata remains a
+  read-only row projection.
 
 ### Conversation History Density And Cursor Safety
 
@@ -2664,3 +2660,573 @@
   4,905 of 4,906 tests and failed only in the unrelated existing
   `database-backup.test.ts` MCP fixture because that fixture omits the now-required
   `bindings` array.
+
+### Semantic And Composable Agent Quotas
+
+- Completed `FR-AGENT-097` / `DES-AGENT-115` / `TEST-AGENT-138` /
+  `T-AGENT-184`. The shared usage contract is now schema V2 with typed scope,
+  period and value unions. Claude, Codex, Kimi, Antigravity, Gemini and Copilot
+  adapters normalize provider data to remaining percentages and optional
+  remaining/limit amounts; unlimited and unknown values remain explicit.
+- Added one bounded main-process normalization boundary. Dynamic ids, labels,
+  scope text and units are sanitized and length-limited, non-finite values are
+  rejected, and inventories are capped at 64 before IPC. Renderer cache reads
+  validate the complete V2 envelope and reject stale, malformed or oversized
+  entries. No DB, filesystem layout, credential source, provider endpoint,
+  request cadence or background process changed.
+- Added a shared renderer presentation model and `AgentUsageMeter`. Finite
+  percentage or amount values with rolling or day/week periods render as
+  compact SVG rings; month, billing-cycle, lifetime and provider-defined values render as
+  horizontal remaining bars. Overview and the menu-bar popover share labels,
+  reset formatting, warning tones, primary selection and accessible progress
+  semantics. Successful summaries no longer repeat provider provenance;
+  cached/updating/stale trust states remain explicit.
+- Scope composition is Agent-independent: account, model-group, feature and
+  model groups use stable ordering; individual models collapse to the four most
+  constrained entries and expand within a 64-item bounded scroll region. Cold
+  loading no longer fabricates 5-hour or 7-day percentages.
+- Test-first verification reproduced four presentation failures before the
+  implementation. The final targeted quota regression passed 15 files / 279
+  tests, and the locale/hardcoded-copy regression passed 3 files / 4 tests.
+  Focused coverage for the new normalization, shared meter, banner,
+  presentation selector and renderer cache reached 100% statements, branches,
+  functions and lines (5 files / 84 tests). Existing provider service files
+  retain legacy uncovered parser/error branches, while every new semantic
+  normalization and visualization condition has a direct regression.
+- Desktop typecheck, full repository lint including file-size limits, affected
+  ESLint and the production build passed. A focused Electron Playwright run
+  passed at 1440 x 900 and 820 x 900, asserted four semantic rings plus one
+  amount bar, removed provider-source copy, bounded the desktop usage section
+  below 260 px and found no horizontal overflow. Temporary screenshots, test
+  specification and Electron user-data directory were removed after inspection.
+- The quick release harness was also attempted. All completed non-governance
+  checks outside the Desktop unit batch passed, but the run remained red for
+  two unrelated repository conditions: the generated change index is stale
+  after parallel active/archive additions, and `database-backup.test.ts` still
+  supplies an MCP fixture without the required `bindings` array. The Desktop
+  batch passed 4,975 of 4,977 tests; its other failure was a Kimi lock-liveness
+  timeout under the full parallel run, and that file passed in isolation with
+  35 of 35 tests immediately afterward.
+- Layout follow-up: Overview now uses container-width `auto-fit` tracks instead
+  of `xl` viewport breakpoints, so Antigravity's two model groups share one row
+  at a 1,008 px CSS viewport while each group's 5-hour and weekly rings remain
+  aligned. Plan names now use the shared icon-and-label subscription badge in
+  both Overview and the menu-bar popover. A focused Electron Playwright check
+  asserted equal group Y positions, right-column placement and no horizontal
+  overflow at 1,008 x 900; the temporary fixture and screenshot were removed.
+- Visual follow-up: cached values no longer expose the transient
+  `cached/updating` implementation message; the disabled spinning refresh
+  control remains the busy indicator and failed refreshes still mark values
+  stale. Full-width amount groups and cyclic ring groups now use separate
+  layout rows so a spanning amount bar cannot preserve empty `auto-fit` tracks.
+  Ring meters use readable bounded widths in a wrapping flex row, so related
+  5-hour and weekly windows stay clustered without truncating labels; narrower
+  containers stack groups before they compress metric copy. The focused
+  banner, meter and presentation regression passed 3 files / 43 tests. A
+  temporary Electron Playwright fixture passed at 1,440 x 900 and 820 x 900,
+  asserting full-width amount composition, group/ring placement, untruncated
+  metric copy and no horizontal page overflow; its screenshots, isolated user
+  data and temporary test were removed after inspection.
+- Antigravity source-semantics follow-up: removed the account-level monthly
+  prompt-credit metric derived from `GetUserStatus.planStatus`. Current
+  Antigravity documentation defines baseline quota as 5-hour and weekly windows
+  and AI credits as a separate overage mechanism; the local adapter now uses
+  `GetUserStatus` only for plan identity and emits baseline metrics only from
+  `RetrieveUserQuotaSummary`. The legacy credit fields remain in the regression
+  fixture to prove they cannot reappear as a fabricated total. Renderer cache
+  validation also rejects older Antigravity V2 snapshots containing the retired
+  `promptCredits` metric while preserving valid grouped-window caches. The
+  regression failed first on the old mapping, then the focused quota suite
+  passed 5 files / 114 tests; desktop typecheck, affected ESLint, production
+  build, traceability validation and `git diff --check` also passed.
+- Kimi current-payload follow-up: the coding usages endpoint now reports
+  weekly and rolling values as `remaining` plus `limit`, and its 5-hour window
+  as `300 TIME_UNIT_MINUTE`. The adapter now prefers the provider-reported
+  remainder, normalizes proto and legacy time units, and keeps compatibility
+  with older `used` plus `limit` responses. A regression fixture reproduces
+  the live response and failed against the prior adapter before the fix. The
+  response's `totalQuota` remains deliberately unmapped: Kimi documents a
+  separate monthly membership total shared across products, but the current
+  endpoint does not provide a trustworthy numeric value and the official Kimi
+  Code client does not use that field for plan usage. The focused quota
+  regression passed 6 files / 142 tests; desktop typecheck, affected ESLint,
+  production build, traceability validation and `git diff --check` passed. The
+  build retains only the existing renderer chunk-size and mixed `fflate`
+  import warnings. A final current-account read through the production adapter
+  returned `ok` with one weekly amount metric and one 18,000-second rolling
+  amount metric; no credential or account identifier was printed.
+- Period-visualization correction: restored the confirmed period-first rule
+  after Kimi's absolute request amounts exposed an incorrect value-first
+  selector. Finite rolling and calendar day/week metrics now render as compact
+  rings whether their provider reports percentage or amount values; monthly,
+  billing-cycle, lifetime and provider-defined totals remain bars. The Overview
+  path disclosure now starts open. Regression tests failed first against both
+  old behaviors, then the focused quota/Overview regression passed 8 files /
+  164 tests. Desktop typecheck, affected ESLint, production build,
+  traceability validation and `git diff --check` passed; the build retains only
+  the existing renderer chunk-size and mixed `fflate` import warnings. Live
+  Electron inspection at 1,280 x 740 and 900 x 740 confirmed that Kimi's two
+  finite windows remain compact rings without content overlap, and the path
+  details are expanded on first render.
+- Kimi identity and history correction: the shared plan formatter now maps the
+  provider's current `LEVEL_*` membership enums to the public tempo names, so
+  `LEVEL_INTERMEDIATE` renders as `Allegretto` in both Overview and the tray
+  popover. The bounded Kimi session reader now omits default `New Session`
+  shells with no `lastPrompt`, requires a contained readable main wire file,
+  and reports that exact `wire.jsonl` path and byte size. Test-first coverage
+  reproduced the raw enum and empty-shell history rows. Current local data now
+  projects 7 readable conversations from 18 indexed Kimi shells, with exact
+  wire-file sizes and readable User/Assistant transcript entries. The final
+  broader quota/session-adapter regression passed 8 files / 149 tests, and the
+  dedicated session service/panel regression passed 2 files / 25 tests. The
+  broader session run also caught and corrected a stale Gemini malformed-row
+  counter name. An isolated-HOME Electron check at 1,280 x 820 verified one
+  real Kimi row, the exact 224 B wire size, User/Assistant transcript bubbles
+  and absence of the empty `New Session` shell without clipping or overlap.
+  The legacy full Agent-workspace E2E remains blocked before the Kimi step by
+  its stale complete-registry count assertion: the isolated fixture exposes 5
+  installed Agents while the test still expects all 35 supported platforms.
+
+### Expanded Native Model Configuration
+
+- Completed `FR-AGENT-098` / `DES-AGENT-116` / `TEST-AGENT-176` /
+  `T-AGENT-185`. The shared model adapter registry now enables Antigravity,
+  Qoder, CoPaw, AutoClaw, QClaw and Hermes in the existing Provider Profile
+  workbench. Existing Claude Code, Codex, Grok, Pi, OpenCode and OpenClaw paths
+  remain on the same normalized contract; no Agent-specific renderer layout was
+  added.
+- Antigravity resolves its CLI model root separately from the shared
+  `~/.gemini/config` asset root. Qoder projects `model.name` and sanitized
+  `customModels` metadata. AutoClaw and QClaw use their own verified native
+  files. Hermes preserves YAML routing fields. CoPaw resolves and contains the
+  active workspace before changing only its `active_model` pair. All adapters
+  keep literal credentials main-owned and preserve unrelated native fields.
+- NanoClaw remains planned because its model source is per Agent Group rather
+  than platform-global. The existing target-binding follow-up `T-AGENT-178`
+  must add an explicit child target before model mutation can be truthful and
+  safe; generated container files are not treated as source of truth.
+- Test-first verification reproduced 11 unsupported/capability/root failures.
+  The final focused regression passed 8 files / 122 tests, and the expanded
+  adapter plus legacy model-config coverage passed 2 files / 36 tests. Every
+  new statement and branch in the six adapters is covered; the legacy combined
+  file remains at 89.44% statements and 88.83% branches overall. Desktop and
+  shared typecheck, the root file-size and desktop ESLint gate, and the
+  production build passed. An initial ad hoc ESLint command was run from the
+  repository root and could not find the desktop package's flat config; the
+  authoritative package-scoped lint subsequently passed.
+- The repository changed-profile harness passed governance, file-size, shared,
+  database, core, CLI, Web, Cloudflare, mobile, Desktop lint and Desktop
+  typecheck gates. Its Desktop unit batch passed 4,998 of 4,999 tests and failed
+  only in the unrelated existing `database-backup.test.ts` fixture because its
+  MCP library omits the now-required `bindings` array; all 122 focused tests for
+  this change passed immediately before the harness.
+
+### Provider Toolbar And Sidebar Containment
+
+- Completed `FR-AGENT-099` / `DES-AGENT-117` / `TEST-AGENT-177` /
+  `T-AGENT-186`. The generic Profile and Pi Provider workbenches now render the
+  existing current-configuration and PromptHub-source import commands as
+  one-column icon-and-text buttons. The commands keep their accessible names,
+  tooltips and original handlers; no Provider, credential, persistence or IPC
+  behavior changed.
+- The shared sidebar now contains horizontal overflow while preserving its
+  vertical inventory scroll. Native configuration row spacing moved to an
+  outer padding wrapper, so the full-width button no longer combines width and
+  horizontal margin beyond its content box.
+- Test-first verification reproduced three failures for icon-only commands and
+  native-row overflow. The final focused component suites passed 60 tests, the
+  adjacent workspace/editor suites passed 39 tests, and a real Electron run at
+  1440 x 900 confirmed both command labels, equal generic/Pi toolbar geometry
+  and `scrollWidth <= clientWidth`. Desktop typecheck, root lint and the
+  production build passed. The Playwright Electron process and isolated user
+  data were closed and removed by the test harness.
+
+### Current Codex History Message Compatibility
+
+- Extended `FR-AGENT-079` / `DES-AGENT-094` / `TEST-AGENT-114` /
+  `T-AGENT-151` after a real current Codex rollout appeared in the History list
+  but rendered a blank transcript. The 84 MB source was non-empty; its visible
+  turns used top-level `response_item` message records while the adapter only
+  recognized the legacy `event_msg` user/agent message shape.
+- The Codex projector now accepts both formats, exposes only bounded
+  user/assistant text and continues excluding developer instructions,
+  reasoning, tool records and image payloads. Metadata title extraction and
+  paginated detail reads share the same projector, so the list and body cannot
+  disagree about whether current-format visible turns exist.
+- Test-first verification reproduced the UUID fallback title and empty detail.
+  The new fixture plus the existing major adapters, session service,
+  conversation service and renderer History suites pass 4 files / 42 tests.
+  Focused V8 coverage for `agent-session-codex.ts` reached 97.18% statements and
+  lines, 84.61% branches and 100% functions; every changed message-format branch
+  executed. A read-only probe of the reported real session returned 38 visible
+  user/assistant entries on the first bounded page, a non-UUID title, zero parse
+  errors and a valid continuation cursor without printing transcript content.
+- Affected ESLint, desktop typecheck, the full renderer/main/preload production
+  build, spec traceability/index validation and `git diff --check` passed. The
+  build retains the existing large-chunk and mixed `fflate` import warnings.
+
+### Conversation Storage Size, Project Filters And Native Delete
+
+- Completed `FR-AGENT-100` / `DES-AGENT-118` / `TEST-AGENT-178` /
+  `T-AGENT-187`, and closed the adapter-owned gate remaining in
+  `T-AGENT-137`. Codex session metadata now projects the exact rollout JSONL
+  byte size and explicit native-delete capability. Session cards show the
+  formatted footprint; adapters without a truthful per-session value display
+  an explicit unknown value rather than the size of a shared database.
+- Conversation project filters now merge registered projects with exact paths
+  reported by loaded native sessions. Options are deduplicated by path, and
+  equal labels are disambiguated with their paths before exact-path filtering.
+  This is an O(S + P) in-memory projection over loaded sessions and registered
+  projects and adds no persistent project rows, scans, cache or network work.
+- The visible delete action is offered only for verified adapters, opens the
+  shared destructive confirmation dialog, and sends no IPC mutation on cancel.
+  Main re-resolves the Codex session through its configured active and archived
+  roots, validates each contained regular file without following symlinks,
+  deletes all matching rollout copies, and then hard-deletes the PromptHub
+  metadata row. Native deletion failure leaves metadata unchanged. Unsupported
+  adapters fail before mutation; no renderer-provided path or generic unlink
+  fallback exists.
+- Test-first red state reproduced all three reported failures. Final focused
+  verification passed 5 files / 40 tests; adjacent session-index, preload and
+  locale regressions passed 5 files / 35 tests. New size formatting reached
+  100% statements, branches, functions and lines; the focused legacy Codex,
+  conversation-service and IPC modules measured 97.48%, 89.67% and 91.7%
+  statements respectively, with every new size/delete success, unsupported and
+  native-delete, cleanup and unsupported branches exercised.
+- Desktop and shared typecheck, affected ESLint, Prettier, production build,
+  spec traceability, spec-index validation and `git diff --check` passed. The
+  production build retains its existing large renderer chunk and mixed `fflate`
+  import warnings. No long-running process, port, browser, temporary session or
+  user-owned native conversation was created or retained; native deletion was
+  verified only against isolated temporary fixtures.
+
+### Enter-Submitted Conversation Search
+
+- Completed `FR-AGENT-101` / `DES-AGENT-119` / `TEST-AGENT-179` /
+  `T-AGENT-188`. Conversation History now keeps the editable draft separate from
+  the submitted query. Input changes perform no request or local filtering;
+  Enter submits the trimmed value, IME composition is ignored, repeated Enter
+  can refresh the same query, and submitting an empty value restores the full
+  inventory. Pagination continues with the submitted value even if the draft
+  changes afterward.
+- Renderer, live session-index projection and persistent SQLite index now limit
+  matches to title, project label and project path. PromptHub metadata notes and
+  tags, model names, native body-only matches and indexed redacted previews no
+  longer expand results. The search placeholder names the title/project scope in
+  all seven locales.
+- Test-first red state reproduced the 250 ms input debounce, Copilot/Cline/Cursor
+  body-result exceptions and SQLite preview match. Focused component, service and
+  DB verification passed 3 files / 38 tests; locale regression passed 2 files /
+  9 tests. Focused V8 coverage measured the main session-index service at 100%
+  branches and 99.55% statements, while the legacy renderer panel measured
+  85.47% branches and 94.89% statements with every changed search condition
+  exercised.
+- Desktop typecheck, affected ESLint, file-size guard and production build
+  passed. A real Electron Playwright flow with isolated HOME/CODEX_HOME passed
+  body-only rejection, project match and empty-query restoration at 1280 x 820;
+  the Electron process, temporary home and screenshot were removed afterward.
+
+### Conversation Ordering And Native Titles
+
+- Completed `FR-AGENT-102` / `DES-AGENT-120` / `TEST-AGENT-180` /
+  `T-AGENT-189`. The second Conversation History selector now orders the loaded
+  inventory by newest, oldest, largest or smallest. Unknown primary values stay
+  last, ties are deterministic, input arrays are not mutated, and appended pages
+  are merged into the active order. PromptHub archive metadata remains visible
+  through a compact row icon instead of excluding native sessions. Legacy
+  The current development-only soft-delete field, Restore IPC/preload contract,
+  removed-state icon and Restore menu branch were deleted rather than retained
+  as compatibility behavior. Permanent native deletion now hard-deletes the
+  matching PromptHub metadata row after the adapter succeeds.
+- Added one effective-title projection for list, destructive-confirmation and
+  handoff surfaces: PromptHub override, native adapter title, then session id. The Codex
+  adapter now reads the latest safe `thread_name` from a contained, read-only,
+  8 MiB-bounded tail of native `session_index.jsonl`; malformed, unsafe, missing
+  or unusable index data keeps the first-visible-user-message fallback.
+- Test-first red state reproduced the ordering, title and soft-delete contract
+  defects. Focused verification passed 8 files / 55 tests across sort/title
+  helpers, renderer behavior, Codex fixtures, locale parity, conversation
+  service, database, IPC and preload. Desktop typecheck, affected ESLint,
+  Prettier and production build passed after the soft-delete removal follow-up.
+  Focused V8 coverage measured the legacy conversation service at 90.95%
+  statements and 75.23% branches; every changed delete, unsupported and cleanup
+  branch is covered, while the remaining uncovered lines are unrelated legacy
+  handoff/export guards. The earlier real Electron
+  Playwright flow used isolated HOME/CODEX_HOME, confirmed native renamed titles
+  and largest-first ordering at 1280 x 820, and removed its process, temporary
+  home and screenshot; the follow-up reconciliation branch is covered at the
+  main-service and renderer-component boundaries rather than by another E2E run.
+- Focused V8 coverage measured the new sort/title helper at 100% statements,
+  branches, functions and lines. The legacy Codex adapter measured 97.85%
+  statements and 85.82% branches with every new native-title branch exercised;
+  its remaining uncovered lines are pre-existing detail-page empty-line and
+  oversized-rollout error branches outside this title projection.
+
+### Latest Transcript Navigation And Row Context Actions
+
+- Completed `FR-AGENT-103` / `DES-AGENT-121` / `TEST-AGENT-181` /
+  `T-AGENT-190`. Transcript pagination now includes an icon-only latest-messages
+  command with localized name and tooltip. One activation follows at most eight
+  advancing 80-entry cursor pages, de-duplicates stable entry ids and lands on
+  the newest 20-entry view page reached; a remaining cursor keeps the command
+  available for another explicit activation.
+- Right-clicking a session row selects it and opens a viewport-contained menu
+  that reuses native continuation, cross-Agent continuation, Markdown/JSON
+  export and adapter-gated permanent deletion. Escape, outside pointer input,
+  window blur, resize and scroll close the menu. Delete still uses the existing
+  destructive confirmation before IPC.
+- Removed the generic conversation metadata dialog, its toolbar/menu entry and
+  its obsolete seven-locale strings. Existing metadata projection and storage
+  contracts were not migrated or duplicated; native Agent titles remain
+  read-only. Test-first component coverage proves bounded latest traversal,
+  duplicate cursor handling, resume, JSON export, deletion cancel/confirm and
+  the absence of the edit command.
+- Focused verification passed 8 files / 56 tests, desktop typecheck, affected
+  ESLint, Prettier, file-size guard, production build, traceability/index checks
+  and `git diff --check`. One isolated-HOME Electron Playwright flow verified
+  the latest-page command and row context menu at 1280 x 820; both screenshots
+  were inspected for clipping/overlap, then the Electron process, temporary
+  home and screenshots were removed. The build retains the existing large-chunk
+  and mixed static/dynamic `fflate` warnings.
+- Focused V8 coverage measured the two legacy renderer modules together at
+  94.93% statements/lines and 88.6% branches. Every new latest-navigation and
+  context-action condition is exercised, including loaded-only/cursor-backed
+  latest seeks, duplicate cursors, supported/unsupported resume, handoff and
+  delete branches, Escape/outside close, export, and deletion cancel/confirm;
+  remaining uncovered branches belong to pre-existing loading/error and handoff
+  transport fallbacks outside this interaction delta.
+
+### Transcript Table Containment And Tool Message Semantics
+
+- Completed `FR-AGENT-104` / `DES-AGENT-122` / `TEST-AGENT-182` /
+  `T-AGENT-191`. GFM tables now render inside a shrinkable, bubble-local
+  horizontal scroll region. User, assistant and tool bubbles and the Markdown
+  root use explicit `min-w-0` containment, so long paths and wide columns no
+  longer enlarge the transcript pane or window.
+- Tool calls/results now render as Agent-side messages with the left Agent
+  avatar, bounded white bubble and compact Tool label. System and unknown events
+  retain the centered informational notice treatment. This changes presentation
+  only; native transcript, handoff and export text remain unchanged.
+- Test-first regressions cover wide-table containment and the Tool avatar/bubble
+  structure. Focused Markdown and Session component verification passed 2 files
+  / 16 tests before broader gates.
+- Focused V8 coverage measured the two renderer modules at 94.4% statements and
+  87.59% branches; both new table-containment and Tool-role branches are
+  exercised. Desktop production build and one isolated-HOME Electron Playwright
+  flow passed. At 1280 x 820 the transcript retained `scrollWidth <=
+clientWidth`, the table wrapper owned horizontal overflow, and the inspected
+  screenshot showed no pane/bubble overflow. Test Electron, temporary HOME,
+  screenshot and coverage artifacts were removed afterward. Existing build
+  warnings remain limited to the large renderer chunk and mixed `fflate`
+  import.
+
+### Native Session And Project Location Actions
+
+- Completed `FR-AGENT-105` / `DES-AGENT-123` / `TEST-AGENT-183` /
+  `T-AGENT-192`. The selected-conversation More menu now remains available
+  without native-delete support and exposes two distinct commands: reveal the
+  exact Agent-owned session file and open the effective project directory. The
+  row context menu reuses the same callbacks.
+- Missing `sourcePath` or `projectPath` keeps only the corresponding command
+  disabled. The renderer does not derive or guess locations. Both commands
+  reuse the existing validated `window.electron.openPath` bridge, which reveals
+  files and opens directories in main; failures use the existing conversation
+  action error without changing transcript or metadata.
+- Test-first component coverage reproduced the delete-only More menu and then
+  verified both exact path calls, shared toolbar/context actions, disabled
+  missing-source behavior, menu visibility without delete capability and shell
+  failure handling. Focused Session component verification passed 1 file / 13
+  tests; the seven-locale renderer suite passed 5 files / 42 tests. Focused V8
+  coverage for the two legacy conversation renderer modules measured 95.76%
+  statements/lines and 88.35% branches, with both new path commands, disabled
+  state and success/failure paths exercised.
+- Desktop typecheck, affected ESLint, Prettier and production build passed. One
+  isolated-HOME Electron Playwright flow verified the two commands in both the
+  row context menu and toolbar More menu at 1280 x 820; the inspected screenshot
+  showed correct grouping, icons and no clipping. The test process, temporary
+  HOME, screenshot and coverage artifacts were removed afterward. Existing
+  build warnings remain limited to the large renderer chunk and mixed `fflate`
+  import.
+
+### Claude Transcript And Project Projection
+
+- Completed `FR-AGENT-106` / `DES-AGENT-124` / `TEST-AGENT-184` /
+  `T-AGENT-193`. The Claude JSONL adapter now distinguishes visible entries,
+  valid internal records and malformed input. Meta records, lifecycle/system
+  rows and generated local-command wrappers no longer render as Events, supply
+  a fallback title or inflate parse errors. Visible `tool_result` content is
+  projected with the Tool role.
+- Live metadata and the optional local metadata index now retain a safe absolute
+  native `cwd` as project identity, display its basename instead of Claude's
+  encoded storage-directory key and use the same cwd for native resume. The
+  encoded key remains a fallback for sessions without valid cwd. Claude index
+  adapter version 2 causes existing rebuildable metadata to be rescanned; no
+  schema, IPC or native transcript migration was added.
+- Test-first unit regressions cover meta, system, lifecycle, generated command,
+  visible user/assistant, tool-result and malformed records, plus live/index
+  label and resume consistency. The focused service suites pass 2 files / 27
+  tests. Focused V8 coverage measured the index service at 99.56% lines and
+  94.33% branches and the legacy multi-adapter session service at 85.77% lines
+  and 72.95% branches; every new Claude classification and cwd projection path
+  exercised by the regression is covered, while remaining gaps are unrelated
+  legacy adapters and guards.
+- An isolated-HOME Electron Playwright flow passed 2 tests and visually verified
+  that Claude History shows only the visible question, answer and real
+  `newpaper-repair` project label, with no Event or encoded `-Users-` option.
+  Desktop typecheck, affected ESLint and production build passed before the
+  documentation convergence gate. The existing build warnings remain limited
+  to the large renderer chunk and mixed static/dynamic `fflate` import.
+
+### Gemini And Cursor Session Projection
+
+- Completed `FR-AGENT-107` / `DES-AGENT-125` / `TEST-AGENT-185` /
+  `T-AGENT-194`. Gemini live and indexed session metadata now reads the bounded
+  native `.project_root`, uses its exact safe path for project identity and
+  resume, and prefers the bounded native `summary` title. Marker changes
+  invalidate otherwise reusable indexed metadata; Gemini index adapter version
+  2 rebuilds older projections without a schema or transcript migration.
+- Gemini `info`, unknown and empty native rows are valid hidden records;
+  visible User/Assistant rows remain unchanged, pure function responses project
+  as Agent-side Tool messages, native errors remain System, and only malformed
+  documents/non-object message rows increment parse errors.
+- Cursor resolves its encoded key only through a unique, non-symlink under-home
+  directory walk capped at 64 opened directories and 4,096 streamed entries per
+  directory. Exact matches provide project path, basename and resume cwd.
+  Missing, stale, ambiguous, inaccessible and over-limit keys keep null paths;
+  under-home keys show only the literal unresolved tail instead of the complete
+  encoded absolute key. Cursor private databases and external paths are not
+  read.
+- Test-first verification passes 3 focused unit files / 35 tests and one
+  isolated-HOME Electron E2E file / 3 tests. Inspected Gemini and Cursor
+  screenshots show native/compact project labels, Gemini native title and Tool
+  bubble, no Gemini info Event and no Cursor tool payload. Cursor adapter
+  coverage reaches 100% statements/lines/functions and 99.2% branches; the only
+  uncovered branch is the defensive basename fallback for an impossible
+  root-valued configured home.
+- A read-only local probe scanned 58 Gemini and 3 Cursor sessions in 63.7 ms and
+  6.8 ms respectively. All 58 Gemini and all 3 Cursor rows avoided encoded
+  absolute labels; 41 Gemini rows had valid native project markers, while the 3
+  stale Cursor sources had no existing exact path and correctly used compact
+  labels with null paths. No transcript text, credential or private Cursor
+  database was emitted by the probe.
+- Desktop typecheck, affected ESLint, production build, spec traceability/index
+  validation and `git diff --check` passed. The build retains the existing
+  large renderer chunk and mixed static/dynamic `fflate` import warnings. The
+  repository file-size gate remains blocked by the unrelated pre-existing
+  `agent-usage-service-providers.test.ts` at 1,647 lines against its 1,500-line
+  preferred limit; this session batch did not modify that file.
+
+### Grok Build Subscription, Weekly Usage And Session Size
+
+- Completed `FR-AGENT-108` / `DES-AGENT-126` / `TEST-AGENT-186` /
+  `T-AGENT-195`. The main-process usage service now reads only a bounded
+  official `auth.x.ai` credential and performs two parallel, ten-second-bounded
+  Grok Build requests for subscription metadata and weekly billing. The shared
+  60-second cache, force-refresh behavior and existing expired/unavailable
+  states remain the only request and failure policy; credentials and account
+  identity do not cross IPC.
+- The native subscription tier now uses the shared plan formatter, including
+  `XPremium` as `X Premium`. The billing period maps to one account-scoped
+  calendar-week metric whose value is the provider percentage converted to
+  remaining. Existing period-first presentation therefore renders the metric
+  as the same compact ring used by other weekly windows; no Grok-specific
+  renderer component was added.
+- Grok session metadata now resolves and stats the contained
+  `chat_history.jsonl`; each history row uses that exact file for `sourcePath`
+  and `sizeBytes`. Directory size, summary metadata, lock and event files remain
+  excluded.
+- Focused verification passed 10 unit files / 170 tests, desktop typecheck,
+  affected ESLint, Prettier, file-size, production build and traceability
+  validation. Grok provider cases live in a dedicated focused test file rather
+  than extending the legacy multi-provider suite past its preferred limit. A
+  sanitized production-adapter probe returned status `ok`, plan `XPremium` and
+  one weekly metric with 85 percent remaining; no credential or account
+  identity was printed.
+- One read-only Electron Playwright flow against the installed Grok Build data
+  passed at 1440 x 900. It verified the visible `X Premium` badge, 85 percent
+  weekly ring and seven history rows whose exact transcript sizes were all
+  known. The inspected Overview and Sessions screenshots had no overlap or
+  horizontal overflow. The test Electron process, isolated PromptHub user-data
+  directory, temporary test file and screenshots were removed afterward.
+
+### Missing Agent Rule File Creation
+
+- Completed `FR-AGENT-109` / `DES-AGENT-128` / `TEST-AGENT-188` /
+  `T-AGENT-197`. The Rules store now retains the complete descriptor inventory
+  separately from the existing visible Rules sidebar projection. Agent Rules
+  can therefore distinguish a declared missing target from an existing empty
+  file without making missing global files appear in standalone Rules.
+- A known missing target renders a centered confirmation with the descriptor's
+  exact canonical name and path. Confirmation reuses the existing rule-id save
+  contract with empty content, then opens the shared editor. Failed creation
+  remains retryable. Existing empty files still open directly, and an absent
+  descriptor retains the bounded scan/retry behavior. No Agent filename,
+  including `AGENTS.md`, is hardcoded in the renderer.
+- Test-first regressions cover zero pre-confirmation writes, success/loading,
+  failure, existing empty content, canonical `GEMINI.md`, descriptor absence,
+  visible/raw store projections and save-sync scheduling. Focused verification
+  passed 7 files / 78 tests; the affected ESLint command passed. The new
+  workspace component reached 100 percent statement, branch, function and line
+  coverage, and every changed store branch is exercised; unrelated legacy
+  branches keep the whole store below 100 percent.
+- An isolated-HOME Electron Playwright flow passed and verified that a missing
+  `GEMINI.md` is not created before confirmation, is created as a zero-byte file
+  after confirmation and then opens in the empty editor. Its Electron process,
+  temporary HOME and Playwright artifacts were removed. The current full
+  desktop typecheck is blocked by parallel session-lifecycle edits whose
+  adapter type does not yet declare `delete`; this Rules change does not touch
+  that main-process service. The repository file-size gate is likewise blocked
+  by the concurrently expanded 1,646-line session service. A focused rerun
+  confirms three unrelated unit failures remain in the MCP backup fixture and
+  the Copilot/Kilo session projections; the Rules-focused 78-test set remains
+  green.
+
+### Complete Session Footprint And Permanent Delete
+
+- Completed `FR-AGENT-110` / `DES-AGENT-127` / `TEST-AGENT-187` /
+  `T-AGENT-196`. Every adapter currently capable of returning Conversation
+  History now projects a non-negative per-session footprint and verified
+  permanent-delete capability in both live and indexed metadata. Claude,
+  Gemini and the remaining file-backed adapters use contained files;
+  Kiro, Reasonix and Kilo resolve known companion files; Cline resolves its
+  snapshot/task/external-message payload and removes its native index row;
+  Kimi and Grok own their complete session directories.
+- Copilot, Cherry Studio and Hermes calculate logical session and child-row
+  bytes instead of assigning the shared SQLite file to every conversation.
+  Their delete implementations use transactions and retain the database and
+  unrelated sessions. OpenCode uses one bounded native DB projection for sizes
+  and delegates deletion to its official `session delete` command.
+- The renderer still sends only `agentId + sessionId`, keeps the existing
+  second confirmation and now describes the target as native conversation
+  data rather than one file. Main re-lists the native session immediately
+  before mutation, validates all filesystem targets before removing the first,
+  rejects missing/symlinked/escaped targets, and only then allows the existing
+  PromptHub metadata cleanup.
+- Verification passed 25 session unit files / 134 tests, the focused
+  conversation UI/service/IPC set at 3 files / 35 tests, desktop typecheck,
+  affected ESLint and the production build. The new lifecycle registry reaches
+  100 percent statement, branch, function and line coverage. The isolated-HOME Electron history
+  suite passed 3 tests; its Claude fixture displayed a known size, offered the
+  confirmed permanent-delete action, removed the native JSONL and disappeared
+  from the list. Build output retains the existing renderer chunk-size and
+  mixed static/dynamic `fflate` warnings.
+
+### Agent Workbench Validation Convergence
+
+- The session service was split at its real boundaries: environment/platform
+  root resolution, transcript value parsing, and native footprint/delete
+  policy now live in dedicated modules. The orchestration service is 1,475
+  lines and the repository file-size gate passes. Review also found and fixed
+  an invalid relative `HERMES_HOME` fallback that could duplicate the home path.
+- The final changed-unit regression set passed 49 files / 627 tests. Focused
+  coverage runs reached 100 percent statements, branches, functions, and lines
+  for the newly extracted session root/parser/storage helpers, usage contract,
+  usage presentation, usage meter, and session display helpers.
+- The installed-only Agent registry, provider workbench, missing-rule creation,
+  metadata search/project projection, and Agent workspace Electron suite passed
+  7 Playwright tests in one isolated worker. Desktop, database, and shared
+  package typechecks, desktop ESLint, production build, spec traceability,
+  spec-index validation, formatting, diff checks, and the file-size gate passed.
+- The production build still reports the pre-existing renderer chunk-size and
+  mixed static/dynamic `fflate` warnings. Those warnings are not introduced or
+  suppressed by this change.

@@ -127,6 +127,8 @@ describe("Antigravity CLI conversation sessions", () => {
           updatedAt: Date.parse("2026-06-13T14:39:24.000Z"),
           model: null,
           messageCount: 3,
+          sizeBytes: expect.any(Number),
+          nativeDeleteSupported: true,
           sourcePath,
           resume: {
             executable: "agy",

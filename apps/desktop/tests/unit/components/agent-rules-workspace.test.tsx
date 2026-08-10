@@ -96,6 +96,7 @@ function content(overrides: Partial<RuleFileContent> = {}): RuleFileContent {
 
 function resetRulesStore(): void {
   useRulesStore.setState({
+    availableFiles: [],
     files: [],
     selectedRuleId: null,
     currentFile: null,
@@ -131,6 +132,10 @@ describe("AgentRulesWorkspace", () => {
     });
     useRulesStore.setState({
       hasLoadedFiles: true,
+      availableFiles: [
+        descriptor({ path: "/Users/test/.claude/CLAUDE.md" }),
+        selected,
+      ],
       files: [descriptor({ path: "/Users/test/.claude/CLAUDE.md" }), selected],
     });
     const save = vi.fn().mockImplementation(
@@ -192,6 +197,7 @@ describe("AgentRulesWorkspace", () => {
     });
     useRulesStore.setState({
       hasLoadedFiles: true,
+      availableFiles: [descriptor()],
       files: [descriptor()],
       selectedRuleId: "codex-global",
       currentFile: content({
@@ -245,7 +251,11 @@ describe("AgentRulesWorkspace", () => {
         },
       },
     });
-    useRulesStore.setState({ hasLoadedFiles: true, files: [] });
+    useRulesStore.setState({
+      hasLoadedFiles: true,
+      availableFiles: [],
+      files: [],
+    });
 
     await act(async () => {
       await renderWithI18n(<AgentRulesWorkspace agent={claudeAgent} />, {
@@ -266,6 +276,156 @@ describe("AgentRulesWorkspace", () => {
     expect(scan).toHaveBeenCalledTimes(1);
   });
 
+  it("asks before creating a declared missing rule and opens the empty editor after confirmation", async () => {
+    const missing = descriptor({ exists: false });
+    const created = content({ exists: true, content: "" });
+    let resolveSave: ((value: RuleFileContent) => void) | undefined;
+    const pendingSave = new Promise<RuleFileContent>((resolve) => {
+      resolveSave = resolve;
+    });
+    const read = vi.fn();
+    const save = vi.fn().mockReturnValue(pendingSave);
+    installWindowMocks({
+      api: {
+        rules: {
+          read,
+          save,
+        },
+      },
+    });
+    useRulesStore.setState({
+      hasLoadedFiles: true,
+      availableFiles: [missing],
+      files: [],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<AgentRulesWorkspace agent={claudeAgent} />, {
+        language: "en",
+      });
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Create CLAUDE.md?" }),
+    ).toBeVisible();
+    expect(screen.getByText(missing.path)).toBeVisible();
+    expect(screen.queryByRole("textbox", { name: "Rule Content" })).toBeNull();
+    expect(read).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create CLAUDE.md" }));
+
+    expect(
+      screen.getByRole("button", { name: "Creating CLAUDE.md..." }),
+    ).toBeDisabled();
+    await act(async () => {
+      resolveSave?.(created);
+      await pendingSave;
+    });
+
+    expect(
+      await screen.findByRole("textbox", { name: "Rule Content" }),
+    ).toHaveValue("");
+    expect(save).toHaveBeenCalledWith("claude-global", "");
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("uses the Agent descriptor's canonical name instead of assuming AGENTS.md", async () => {
+    const geminiAgent: ManagedAgentSummary = {
+      ...claudeAgent,
+      id: "gemini",
+      name: "Gemini CLI",
+      paths: {
+        ...claudeAgent.paths,
+        root: "/Users/test/.gemini",
+        rules: "/Users/test/.gemini/GEMINI.md",
+      },
+    };
+    const missingGemini = descriptor({
+      id: "gemini-global",
+      platformId: "gemini",
+      platformName: "Gemini CLI",
+      name: "GEMINI.md",
+      path: "/Users/test/.gemini/GEMINI.md",
+      exists: false,
+    });
+    const { api } = installWindowMocks();
+    useRulesStore.setState({
+      hasLoadedFiles: true,
+      availableFiles: [missingGemini],
+      files: [],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<AgentRulesWorkspace agent={geminiAgent} />, {
+        language: "en",
+      });
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Create GEMINI.md?" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Create GEMINI.md" }),
+    ).toBeVisible();
+    expect(screen.getByText(missingGemini.path)).toBeVisible();
+    expect(api.rules.read).not.toHaveBeenCalled();
+    expect(api.rules.save).not.toHaveBeenCalled();
+  });
+
+  it("keeps the missing-file prompt available after creation fails", async () => {
+    const missing = descriptor({ exists: false });
+    const save = vi.fn().mockRejectedValue(new Error("RULE_CREATE_FAILED"));
+    installWindowMocks({ api: { rules: { save } } });
+    useRulesStore.setState({
+      hasLoadedFiles: true,
+      availableFiles: [missing],
+      files: [],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<AgentRulesWorkspace agent={claudeAgent} />, {
+        language: "en",
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create CLAUDE.md" }));
+
+    expect(
+      await screen.findByText(
+        "The rules file could not be created. Try again.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Create CLAUDE.md" }),
+    ).toBeEnabled();
+    expect(screen.queryByRole("textbox", { name: "Rule Content" })).toBeNull();
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens an existing empty rule without showing the creation prompt", async () => {
+    const emptyRule = content({ content: "" });
+    const read = vi.fn().mockResolvedValue(emptyRule);
+    installWindowMocks({ api: { rules: { read } } });
+    useRulesStore.setState({
+      hasLoadedFiles: true,
+      availableFiles: [descriptor()],
+      files: [descriptor()],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<AgentRulesWorkspace agent={claudeAgent} />, {
+        language: "en",
+      });
+    });
+
+    expect(
+      await screen.findByRole("textbox", { name: "Rule Content" }),
+    ).toHaveValue("");
+    expect(screen.queryByText("Create CLAUDE.md?")).toBeNull();
+    expect(read).toHaveBeenCalledWith("claude-global");
+  });
+
   it("keeps a missing rule scoped and retries only after an explicit action", async () => {
     const scan = vi.fn().mockResolvedValue([]);
     installWindowMocks({
@@ -275,7 +435,11 @@ describe("AgentRulesWorkspace", () => {
         },
       },
     });
-    useRulesStore.setState({ hasLoadedFiles: true, files: [] });
+    useRulesStore.setState({
+      hasLoadedFiles: true,
+      availableFiles: [],
+      files: [],
+    });
 
     await act(async () => {
       await renderWithI18n(<AgentRulesWorkspace agent={claudeAgent} />, {
@@ -322,6 +486,7 @@ describe("AgentRulesWorkspace", () => {
   it("shows a scoped read failure and retries the known descriptor without rescanning", async () => {
     useRulesStore.setState({
       hasLoadedFiles: true,
+      availableFiles: [descriptor()],
       files: [descriptor()],
       selectedRuleId: "claude-global",
       currentFile: null,
@@ -380,6 +545,14 @@ describe("AgentRulesWorkspace", () => {
     });
     useRulesStore.setState({
       hasLoadedFiles: true,
+      availableFiles: [
+        descriptor({
+          id: "project:team",
+          platformId: "workspace",
+          path: customDescriptor.path,
+        }),
+        customDescriptor,
+      ],
       files: [
         descriptor({
           id: "project:team",

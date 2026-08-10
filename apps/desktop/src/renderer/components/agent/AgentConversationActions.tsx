@@ -4,11 +4,11 @@ import {
   CopyIcon,
   DownloadIcon,
   FileJsonIcon,
+  FileSearchIcon,
   FileTextIcon,
   FolderIcon,
+  FolderOpenIcon,
   MoreHorizontalIcon,
-  PencilIcon,
-  RotateCcwIcon,
   SquareTerminalIcon,
   Trash2Icon,
   XIcon,
@@ -22,12 +22,15 @@ import type {
   ManagedAgentSummary,
   SkillProject,
 } from "@prompthub/shared/types";
-import { Checkbox } from "../ui/Checkbox";
-import { Modal } from "../ui/Modal";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { Select, type SelectOption } from "../ui/Select";
 import { useToast } from "../ui/Toast";
 import { copyTextToClipboard } from "../../utils/clipboard";
+import {
+  formatSessionSize,
+  resolveSessionTitle,
+} from "./agent-session-display";
 
 const DIRECT_HANDOFF_AGENT_IDS = new Set(["claude", "codex"]);
 
@@ -37,7 +40,9 @@ interface AgentConversationActionsProps {
   projects: SkillProject[];
   session: AgentSessionMetadata;
   metadata: AgentConversationMetadata | null;
-  onMetadataChange(metadata: AgentConversationMetadata): void;
+  contextMenu: { x: number; y: number } | null;
+  onContextMenuClose(): void;
+  onDeleted(sessionId: string): void;
   onError(message: string | null): void;
 }
 
@@ -47,7 +52,9 @@ export function AgentConversationActions({
   projects,
   session,
   metadata,
-  onMetadataChange,
+  contextMenu,
+  onContextMenuClose,
+  onDeleted,
   onError,
 }: AgentConversationActionsProps) {
   const { t } = useTranslation();
@@ -74,10 +81,10 @@ export function AgentConversationActions({
   const [preview, setPreview] =
     useState<AgentConversationHandoffPreview | null>(null);
   const [isWorking, setIsWorking] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [isChoosingHandoff, setIsChoosingHandoff] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const targetOptions = useMemo(
     () =>
@@ -146,6 +153,26 @@ export function AgentConversationActions({
   useEffect(() => {
     setProjectId(inferredProject?.id || "");
   }, [inferredProject?.id, session.id]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => onContextMenuClose();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", close);
+    window.addEventListener("blur", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [contextMenu, onContextMenuClose]);
 
   const target = targets.find((candidate) => candidate.id === targetAgentId);
   const project = projects.find((candidate) => candidate.id === projectId);
@@ -250,6 +277,29 @@ export function AgentConversationActions({
       }
     });
 
+  const resumeCurrentAgent = () =>
+    run(async () => {
+      await window.api.agent.resumeConversation({
+        agentId: agent.id,
+        sessionId: session.id,
+      });
+      showToast(
+        t("agents.resumeStarted", "Opened {{agent}} in Terminal.", {
+          agent: agent.name,
+        }),
+        "success",
+      );
+    });
+
+  const openConversationPath = (targetPath: string) => {
+    void run(async () => {
+      const result = await window.electron?.openPath?.(targetPath);
+      if (!result?.success) {
+        throw new Error(result?.error || "AGENT_CONVERSATION_PATH_OPEN_FAILED");
+      }
+    });
+  };
+
   return (
     <>
       <div
@@ -267,20 +317,7 @@ export function AgentConversationActions({
             icon={<SquareTerminalIcon className="h-4 w-4" />}
             primary
             disabled={isWorking || !session.resume}
-            onClick={() =>
-              void run(async () => {
-                await window.api.agent.resumeConversation({
-                  agentId: agent.id,
-                  sessionId: session.id,
-                });
-                showToast(
-                  t("agents.resumeStarted", "Opened {{agent}} in Terminal.", {
-                    agent: agent.name,
-                  }),
-                  "success",
-                );
-              })
-            }
+            onClick={() => void resumeCurrentAgent()}
           />
           <PrimaryActionButton
             label={t("agents.handoffConversation", "Continue elsewhere")}
@@ -329,29 +366,15 @@ export function AgentConversationActions({
           </button>
           {isMoreOpen ? (
             <ConversationActionsMenu
-              deleted={Boolean(metadata?.deletedAt)}
+              canShowInFolder={Boolean(session.sourcePath)}
+              canOpenProjectFolder={Boolean(projectPath)}
+              canDelete={Boolean(session.nativeDeleteSupported)}
               onClose={() => setIsMoreOpen(false)}
-              onEdit={() => setIsEditing(true)}
-              onRestore={() =>
-                void run(async () => {
-                  onMetadataChange(
-                    await window.api.agent.restoreConversation({
-                      agentId: agent.id,
-                      sessionId: session.id,
-                    }),
-                  );
-                })
+              onShowInFolder={() =>
+                openConversationPath(session.sourcePath || "")
               }
-              onDelete={() =>
-                void run(async () => {
-                  onMetadataChange(
-                    await window.api.agent.deleteConversation({
-                      agentId: agent.id,
-                      sessionId: session.id,
-                    }),
-                  );
-                })
-              }
+              onOpenProjectFolder={() => openConversationPath(projectPath)}
+              onDelete={() => setIsDeleteConfirmOpen(true)}
             />
           ) : null}
         </div>
@@ -395,20 +418,61 @@ export function AgentConversationActions({
           onConfirm={() => void confirmHandoff()}
         />
       ) : null}
-      {isEditing ? (
-        <ConversationEditDialog
-          agentId={agent.id}
-          metadata={metadata}
-          projects={projects}
-          session={session}
-          onCancel={() => setIsEditing(false)}
-          onSaved={(next) => {
-            onMetadataChange(next);
-            setIsEditing(false);
-          }}
-          onError={onError}
+      {contextMenu ? (
+        <ConversationContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          agentName={agent.name}
+          canResume={Boolean(session.resume)}
+          canHandoff={targets.length > 0}
+          canShowInFolder={Boolean(session.sourcePath)}
+          canOpenProjectFolder={Boolean(projectPath)}
+          canDelete={Boolean(session.nativeDeleteSupported)}
+          onClose={onContextMenuClose}
+          onResume={() => void resumeCurrentAgent()}
+          onHandoff={() => setIsChoosingHandoff(true)}
+          onShowInFolder={() => openConversationPath(session.sourcePath || "")}
+          onOpenProjectFolder={() => openConversationPath(projectPath)}
+          onExport={(format) => void exportConversation(format)}
+          onDelete={() => setIsDeleteConfirmOpen(true)}
         />
       ) : null}
+      <ConfirmDialog
+        isOpen={isDeleteConfirmOpen}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={() =>
+          void run(async () => {
+            await window.api.agent.deleteConversation({
+              agentId: agent.id,
+              sessionId: session.id,
+            });
+            setIsDeleteConfirmOpen(false);
+            onDeleted(session.id);
+          })
+        }
+        title={t(
+          "agents.confirmDeleteConversationTitle",
+          "Delete conversation?",
+        )}
+        message={t(
+          "agents.confirmDeleteConversationMessage",
+          "This permanently deletes the native conversation data for {{title}} ({{size}}). This cannot be undone.",
+          {
+            title: resolveSessionTitle(
+              session.title,
+              session.id,
+              metadata?.title,
+            ),
+            size:
+              formatSessionSize(session.sizeBytes) ||
+              t("agents.sessionSizeUnknown", "size unknown"),
+          },
+        )}
+        confirmText={t("agents.deleteConversation", "Delete permanently")}
+        cancelText={t("common.cancel", "Cancel")}
+        variant="destructive"
+        isLoading={isWorking}
+      />
     </>
   );
 }
@@ -471,16 +535,20 @@ function PrimaryActionButton({
 }
 
 function ConversationActionsMenu({
-  deleted,
+  canShowInFolder,
+  canOpenProjectFolder,
+  canDelete,
   onClose,
-  onEdit,
-  onRestore,
+  onShowInFolder,
+  onOpenProjectFolder,
   onDelete,
 }: {
-  deleted: boolean;
+  canShowInFolder: boolean;
+  canOpenProjectFolder: boolean;
+  canDelete: boolean;
   onClose(): void;
-  onEdit(): void;
-  onRestore(): void;
+  onShowInFolder(): void;
+  onOpenProjectFolder(): void;
   onDelete(): void;
 }) {
   const { t } = useTranslation();
@@ -494,26 +562,132 @@ function ConversationActionsMenu({
       className="absolute right-0 top-11 z-30 w-52 rounded-xl border border-border/80 bg-popover p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.16)]"
     >
       <MenuAction
-        label={t("agents.editConversation", "Edit details")}
-        icon={<PencilIcon className="h-4 w-4" />}
-        onClick={() => run(onEdit)}
+        label={t("agents.showConversationInFolder", "Show in folder")}
+        icon={<FileSearchIcon className="h-4 w-4" />}
+        disabled={!canShowInFolder}
+        onClick={() => run(onShowInFolder)}
+      />
+      <MenuAction
+        label={t("agents.openConversationProjectFolder", "Open project folder")}
+        icon={<FolderOpenIcon className="h-4 w-4" />}
+        disabled={!canOpenProjectFolder}
+        onClick={() => run(onOpenProjectFolder)}
+      />
+      {canDelete ? (
+        <>
+          <div className="my-1 h-px bg-border/70" />
+          <MenuAction
+            label={t("agents.deleteConversation", "Delete permanently")}
+            icon={<Trash2Icon className="h-4 w-4" />}
+            destructive
+            onClick={() => run(onDelete)}
+          />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function ConversationContextMenu({
+  x,
+  y,
+  agentName,
+  canResume,
+  canHandoff,
+  canShowInFolder,
+  canOpenProjectFolder,
+  canDelete,
+  onClose,
+  onResume,
+  onHandoff,
+  onShowInFolder,
+  onOpenProjectFolder,
+  onExport,
+  onDelete,
+}: {
+  x: number;
+  y: number;
+  agentName: string;
+  canResume: boolean;
+  canHandoff: boolean;
+  canShowInFolder: boolean;
+  canOpenProjectFolder: boolean;
+  canDelete: boolean;
+  onClose(): void;
+  onResume(): void;
+  onHandoff(): void;
+  onShowInFolder(): void;
+  onOpenProjectFolder(): void;
+  onExport(format: "markdown" | "json"): void;
+  onDelete(): void;
+}) {
+  const { t } = useTranslation();
+  const run = (action: () => void) => {
+    onClose();
+    action();
+  };
+  const left = Math.max(8, Math.min(x, window.innerWidth - 232));
+  const top = Math.max(8, Math.min(y, window.innerHeight - 340));
+  return (
+    <div
+      role="menu"
+      aria-label={t("agents.conversationContextMenu", "Conversation actions")}
+      onContextMenu={(event) => event.preventDefault()}
+      onPointerDown={(event) => event.stopPropagation()}
+      className="fixed z-50 w-56 rounded-lg border border-border/80 bg-popover p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.18)]"
+      style={{ left, top }}
+    >
+      {canResume ? (
+        <MenuAction
+          label={t("agents.continueInCurrentAgent", "Continue in {{agent}}", {
+            agent: agentName,
+          })}
+          icon={<SquareTerminalIcon className="h-4 w-4" />}
+          onClick={() => run(onResume)}
+        />
+      ) : null}
+      {canHandoff ? (
+        <MenuAction
+          label={t("agents.handoffConversation", "Continue elsewhere")}
+          icon={<ArrowRightLeftIcon className="h-4 w-4" />}
+          onClick={() => run(onHandoff)}
+        />
+      ) : null}
+      <div className="my-1 h-px bg-border/70" />
+      <MenuAction
+        label={t("agents.showConversationInFolder", "Show in folder")}
+        icon={<FileSearchIcon className="h-4 w-4" />}
+        disabled={!canShowInFolder}
+        onClick={() => run(onShowInFolder)}
+      />
+      <MenuAction
+        label={t("agents.openConversationProjectFolder", "Open project folder")}
+        icon={<FolderOpenIcon className="h-4 w-4" />}
+        disabled={!canOpenProjectFolder}
+        onClick={() => run(onOpenProjectFolder)}
       />
       <div className="my-1 h-px bg-border/70" />
       <MenuAction
-        label={t(
-          deleted ? "agents.restoreConversation" : "agents.deleteConversation",
-          deleted ? "Restore" : "Remove from history",
-        )}
-        icon={
-          deleted ? (
-            <RotateCcwIcon className="h-4 w-4" />
-          ) : (
-            <Trash2Icon className="h-4 w-4" />
-          )
-        }
-        destructive={!deleted}
-        onClick={() => run(deleted ? onRestore : onDelete)}
+        label={t("agents.exportMarkdown", "Export Markdown")}
+        icon={<FileTextIcon className="h-4 w-4" />}
+        onClick={() => run(() => onExport("markdown"))}
       />
+      <MenuAction
+        label={t("agents.exportJson", "Export JSON")}
+        icon={<FileJsonIcon className="h-4 w-4" />}
+        onClick={() => run(() => onExport("json"))}
+      />
+      {canDelete ? (
+        <>
+          <div className="my-1 h-px bg-border/70" />
+          <MenuAction
+            label={t("agents.deleteConversation", "Delete permanently")}
+            icon={<Trash2Icon className="h-4 w-4" />}
+            destructive
+            onClick={() => run(onDelete)}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -554,19 +728,22 @@ function MenuAction({
   icon,
   onClick,
   destructive = false,
+  disabled = false,
 }: {
   label: string;
   icon: React.ReactNode;
   onClick(): void;
   destructive?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
       aria-label={label}
+      disabled={disabled}
       onClick={onClick}
-      className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-xs font-medium transition-colors ${
+      className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         destructive
           ? "text-destructive hover:bg-destructive/10"
           : "text-foreground hover:bg-accent"
@@ -782,155 +959,6 @@ function HandoffDialog({
   );
 }
 
-function ConversationEditDialog({
-  agentId,
-  metadata,
-  projects,
-  session,
-  onCancel,
-  onSaved,
-  onError,
-}: {
-  agentId: string;
-  metadata: AgentConversationMetadata | null;
-  projects: SkillProject[];
-  session: AgentSessionMetadata;
-  onCancel(): void;
-  onSaved(value: AgentConversationMetadata): void;
-  onError(message: string): void;
-}) {
-  const { t } = useTranslation();
-  const [title, setTitle] = useState(metadata?.title || session.title);
-  const [projectId, setProjectId] = useState(metadata?.projectId || "");
-  const [tags, setTags] = useState(metadata?.tags.join(", ") || "");
-  const [note, setNote] = useState(metadata?.note || "");
-  const [favorite, setFavorite] = useState(metadata?.favorite || false);
-  const [archived, setArchived] = useState(Boolean(metadata?.archivedAt));
-  const project = projects.find((candidate) => candidate.id === projectId);
-
-  const save = async () => {
-    try {
-      onSaved(
-        await window.api.agent.updateConversationMetadata({
-          agentId,
-          sessionId: session.id,
-          title,
-          projectId: project?.id || null,
-          projectPath: project?.rootPath || session.projectPath,
-          tags: tags
-            .split(",")
-            .map((tag) => tag.trim())
-            .filter(Boolean),
-          note,
-          favorite,
-          archived,
-        }),
-      );
-    } catch {
-      onError(
-        t(
-          "agents.conversationSaveFailed",
-          "Could not save conversation details.",
-        ),
-      );
-    }
-  };
-
-  return (
-    <Modal
-      isOpen
-      onClose={onCancel}
-      title={t("agents.editConversation", "Edit conversation")}
-      size="md"
-    >
-      <div className="space-y-5">
-        <div className="space-y-4">
-          <Field label={t("agents.conversationTitle", "Title")}>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="h-10 w-full rounded-xl border-0 bg-muted/50 px-4 text-sm text-foreground outline-none transition-all duration-base placeholder:text-muted-foreground focus:bg-background focus:ring-2 focus:ring-primary/30"
-            />
-          </Field>
-          <Field label={t("agents.conversationProject", "Project")}>
-            <Select
-              ariaLabel={t("agents.conversationProject", "Project")}
-              value={projectId}
-              onChange={setProjectId}
-              options={[
-                {
-                  value: "",
-                  label: t("agents.unassignedProject", "Unassigned"),
-                  labelText: t("agents.unassignedProject", "Unassigned"),
-                },
-                ...projects.map((candidate) => ({
-                  value: candidate.id,
-                  label: candidate.name,
-                  labelText: candidate.name,
-                })),
-              ]}
-              triggerClassName="flex h-10 w-full items-center justify-between gap-2 rounded-xl border-0 bg-muted/50 px-4 text-left text-sm text-foreground outline-none transition-all duration-base hover:bg-muted/70 focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-primary/30"
-            />
-          </Field>
-          <Field label={t("agents.conversationTags", "Tags (comma separated)")}>
-            <input
-              value={tags}
-              onChange={(event) => setTags(event.target.value)}
-              className="h-10 w-full rounded-xl border-0 bg-muted/50 px-4 text-sm text-foreground outline-none transition-all duration-base placeholder:text-muted-foreground focus:bg-background focus:ring-2 focus:ring-primary/30"
-            />
-          </Field>
-          <Field label={t("agents.conversationNote", "Note")}>
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              rows={4}
-              className="min-h-[120px] w-full resize-none rounded-xl border-0 bg-muted/50 px-4 py-3 text-sm text-foreground outline-none transition-all duration-base placeholder:text-muted-foreground focus:bg-background focus:ring-2 focus:ring-primary/30"
-            />
-          </Field>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-x-5 gap-y-2">
-            <Checkbox
-              checked={favorite}
-              onChange={setFavorite}
-              label={t("agents.favoriteConversation", "Favorite")}
-            />
-            <Checkbox
-              checked={archived}
-              onChange={setArchived}
-              label={t("agents.archiveConversation", "Archive in PromptHub")}
-            />
-          </div>
-          <p className="text-xs leading-5 text-muted-foreground">
-            {t(
-              "agents.archiveConversationHint",
-              "Archiving hides this conversation from Active. The native transcript stays untouched and can be found in Archived.",
-            )}
-          </p>
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-border/70 pt-4">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            {t("common.cancel", "Cancel")}
-          </button>
-          <button
-            type="button"
-            onClick={() => void save()}
-            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            {t("common.save", "Save")}
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 function OptionLabel({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -939,22 +967,5 @@ function OptionLabel({ icon, text }: { icon: React.ReactNode; text: string }) {
       </span>
       <span className="truncate">{text}</span>
     </span>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </label>
   );
 }

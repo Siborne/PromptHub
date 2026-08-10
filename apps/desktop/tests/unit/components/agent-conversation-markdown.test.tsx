@@ -44,4 +44,25 @@ describe("AgentConversationMarkdown", () => {
     expect(screen.queryByRole("img", { name: "tracker" })).toBeNull();
     expect(screen.getByText("tracker")).toBeVisible();
   });
+
+  it("contains wide GFM tables inside a horizontal scroll region", () => {
+    const { container } = render(
+      <AgentConversationMarkdown
+        content={[
+          "| File | Focus | Do not put here |",
+          "| --- | --- | --- |",
+          "| `docs/workflow/01-requirements/README.md` | what / why / success | framework and implementation details |",
+        ].join("\n")}
+      />,
+    );
+
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("min-w-full", "w-max");
+    expect(table.parentElement).toHaveClass(
+      "min-w-0",
+      "max-w-full",
+      "overflow-x-auto",
+    );
+    expect(container.firstElementChild).toHaveClass("min-w-0", "max-w-full");
+  });
 });

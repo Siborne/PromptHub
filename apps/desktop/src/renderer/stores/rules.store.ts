@@ -22,6 +22,7 @@ function isOutOfSyncRule(file: RuleFileContent | null | undefined): boolean {
 }
 
 interface RulesState {
+  availableFiles: RuleFileDescriptor[];
   files: RuleFileDescriptor[];
   selectedRuleId: RuleFileId | null;
   currentFile: RuleFileContent | null;
@@ -43,6 +44,7 @@ interface RulesState {
   setSearchQuery: (query: string) => void;
   setDraftContent: (content: string) => void;
   setAiInstruction: (instruction: string) => void;
+  createRule: (ruleId: RuleFileId) => Promise<void>;
   saveCurrentRule: () => Promise<void>;
   resolveCurrentRuleConflict: (
     strategy: RuleConflictResolutionStrategy,
@@ -113,10 +115,18 @@ function filterVisibleRuleFiles(
   });
 }
 
+function updateRuleDescriptor(
+  files: RuleFileDescriptor[],
+  updated: RuleFileDescriptor,
+): RuleFileDescriptor[] {
+  return files.map((file) => (file.id === updated.id ? updated : file));
+}
+
 let latestLoadFilesRequestId = 0;
 let latestSelectRuleRequestId = 0;
 
 export const useRulesStore = create<RulesState>((set, get) => ({
+  availableFiles: [],
   files: [],
   selectedRuleId: null,
   currentFile: null,
@@ -153,7 +163,13 @@ export const useRulesStore = create<RulesState>((set, get) => ({
         files.some((file) => file.id === currentSelectedRuleId)
           ? currentSelectedRuleId
           : (files[0]?.id ?? null);
-      set({ files, selectedRuleId, isLoading: false, hasLoadedFiles: true });
+      set({
+        availableFiles: allFiles,
+        files,
+        selectedRuleId,
+        isLoading: false,
+        hasLoadedFiles: true,
+      });
 
       if (selectedRuleId) {
         // When force-scanning, clear currentFile so selectRule's early-return guard
@@ -227,6 +243,30 @@ export const useRulesStore = create<RulesState>((set, get) => ({
 
   setAiInstruction: (instruction) => set({ aiInstruction: instruction }),
 
+  createRule: async (ruleId) => {
+    set({ isSaving: true, error: null });
+    try {
+      const created = await window.api.rules.save(ruleId, "");
+      const availableFiles = updateRuleDescriptor(
+        get().availableFiles,
+        created,
+      );
+      set({
+        availableFiles,
+        files: filterVisibleRuleFiles(availableFiles),
+        selectedRuleId: created.id,
+        currentFile: created,
+        draftContent: created.content,
+        isSaving: false,
+        conflictDialogRuleId: null,
+      });
+      scheduleAllSaveSync("rules:create");
+    } catch (error) {
+      set({ isSaving: false, error: getErrorMessage(error) });
+      throw error;
+    }
+  },
+
   saveCurrentRule: async () => {
     const selectedRuleId = get().selectedRuleId;
     if (!selectedRuleId) {
@@ -239,15 +279,15 @@ export const useRulesStore = create<RulesState>((set, get) => ({
         selectedRuleId,
         get().draftContent,
       );
-      const nextFiles = get().files.map((file) =>
-        file.id === updated.id
-          ? { ...file, exists: true, path: updated.path }
-          : file,
+      const availableFiles = updateRuleDescriptor(
+        get().availableFiles,
+        updated,
       );
       set({
         selectedRuleId: updated.id,
         currentFile: updated,
-        files: nextFiles,
+        availableFiles,
+        files: filterVisibleRuleFiles(availableFiles),
         draftContent: updated.content,
         isSaving: false,
       });
@@ -270,20 +310,15 @@ export const useRulesStore = create<RulesState>((set, get) => ({
         selectedRuleId,
         strategy,
       );
-      const nextFiles = get().files.map((file) =>
-        file.id === updated.id
-          ? {
-              ...file,
-              exists: updated.exists,
-              path: updated.path,
-              syncStatus: updated.syncStatus,
-            }
-          : file,
+      const availableFiles = updateRuleDescriptor(
+        get().availableFiles,
+        updated,
       );
       set({
         selectedRuleId: updated.id,
         currentFile: updated,
-        files: nextFiles,
+        availableFiles,
+        files: filterVisibleRuleFiles(availableFiles),
         draftContent: updated.content,
         isSaving: false,
         conflictDialogRuleId: null,
@@ -361,13 +396,15 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await window.api.rules.addProject(input);
-      const files = await window.api.rules.list();
-      const created = files.find(
+      const availableFiles = await window.api.rules.list();
+      const files = filterVisibleRuleFiles(availableFiles);
+      const created = availableFiles.find(
         (file) =>
           file.id.startsWith("project:") &&
           file.projectRootPath?.toLowerCase() === input.rootPath.toLowerCase(),
       );
       set({
+        availableFiles,
         files,
         selectedRuleId: created?.id ?? get().selectedRuleId,
         isLoading: false,
@@ -388,7 +425,8 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await window.api.rules.removeProject(projectId);
-      const files = await window.api.rules.list();
+      const availableFiles = await window.api.rules.list();
+      const files = filterVisibleRuleFiles(availableFiles);
       const removedRuleId = `project:${projectId}`;
       const nextSelectedRuleId =
         get().selectedRuleId === removedRuleId
@@ -396,6 +434,7 @@ export const useRulesStore = create<RulesState>((set, get) => ({
           : get().selectedRuleId;
 
       set({
+        availableFiles,
         files,
         selectedRuleId: nextSelectedRuleId,
         isLoading: false,
@@ -418,13 +457,15 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const result = await window.api.rules.removeMissingProjects(ruleIds);
-      const files = filterVisibleRuleFiles(await window.api.rules.list());
+      const availableFiles = await window.api.rules.list();
+      const files = filterVisibleRuleFiles(availableFiles);
       const selectedRuleId = files.some(
         (file) => file.id === get().selectedRuleId,
       )
         ? get().selectedRuleId
         : (files[0]?.id ?? null);
       set({
+        availableFiles,
         files,
         selectedRuleId,
         currentFile:

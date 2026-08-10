@@ -57,6 +57,7 @@ function entry(index: number): AgentSessionEntry {
 
 describe("AgentSessionsPanel", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.mocked(copyTextToClipboard).mockClear();
   });
@@ -140,15 +141,155 @@ describe("AgentSessionsPanel", () => {
       limit: 80,
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Message page 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Latest messages" }));
+    expect(await screen.findByText("Message 119")).toBeVisible();
+    expect(screen.getByText("Page 6 of 6")).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Load more sessions" }));
     await waitFor(() =>
       expect(listSessions).toHaveBeenNthCalledWith(2, "codex", 50, 50),
     );
     expect(await screen.findByText("Session 99")).toBeVisible();
     expect(screen.getByText("100 / 120")).toBeVisible();
+    expect(
+      screen
+        .getByRole("button", { name: /Session 99/ })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: /Session 49/ }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  it("skips duplicate transcript cursor pages instead of showing an empty page", async () => {
+  it("sorts loaded conversations by time or size and keeps unknown sizes last", async () => {
+    const sessions = [
+      {
+        ...metadata(1),
+        title: "Old conversation",
+        createdAt: 100,
+        updatedAt: 100,
+        sizeBytes: 1024,
+        nativeDeleteSupported: true,
+      },
+      {
+        ...metadata(2),
+        title: "Newest conversation",
+        createdAt: 300,
+        updatedAt: 300,
+        sizeBytes: 4096,
+      },
+      {
+        ...metadata(3),
+        title: "Unknown-size conversation",
+        createdAt: 200,
+        updatedAt: 200,
+        sizeBytes: null,
+      },
+    ];
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessions,
+            total: sessions.length,
+            hasMore: false,
+          }),
+          readSession: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessionId: sessions[0].id,
+            entries: [],
+            parseErrors: 0,
+            truncated: false,
+          }),
+          resumeConversation: vi.fn(),
+          listConversationMetadata: vi.fn().mockResolvedValue([
+            {
+              id: "metadata-1",
+              agentId: "codex",
+              sessionId: sessions[0].id,
+              title: "PromptHub renamed conversation",
+              projectId: null,
+              projectPath: sessions[0].projectPath,
+              tags: [],
+              note: null,
+              favorite: false,
+              archivedAt: null,
+              createdAt: 100,
+              updatedAt: 150,
+            },
+          ]),
+        },
+      },
+    });
+
+    await renderWithI18n(
+      <ToastProvider>
+        <AgentSessionsPanel agent={agent} />
+      </ToastProvider>,
+      {
+        language: "en",
+        settleAsyncEffects: true,
+      },
+    );
+
+    const rowOrder = () => {
+      const row = screen.getByRole("button", {
+        name: /Newest conversation/,
+      });
+      return Array.from(row.parentElement?.children || [])
+        .filter((element) => element.tagName === "BUTTON")
+        .map((element) => element.textContent || "");
+    };
+
+    await screen.findByRole("button", {
+      name: /PromptHub renamed conversation/,
+    });
+    expect(screen.queryByLabelText("Removed")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "More conversation actions" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Delete permanently" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "Restore" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "More conversation actions" }),
+    );
+    expect(rowOrder()).toEqual([
+      expect.stringContaining("Newest conversation"),
+      expect.stringContaining("Unknown-size conversation"),
+      expect.stringContaining("PromptHub renamed conversation"),
+    ]);
+
+    fireEvent.click(screen.getByLabelText("Sort conversations"));
+    fireEvent.click(screen.getByRole("option", { name: "Largest first" }));
+    expect(rowOrder()).toEqual([
+      expect.stringContaining("Newest conversation"),
+      expect.stringContaining("PromptHub renamed conversation"),
+      expect.stringContaining("Unknown-size conversation"),
+    ]);
+
+    fireEvent.click(screen.getByLabelText("Sort conversations"));
+    fireEvent.click(screen.getByRole("option", { name: "Smallest first" }));
+    expect(rowOrder()).toEqual([
+      expect.stringContaining("PromptHub renamed conversation"),
+      expect.stringContaining("Newest conversation"),
+      expect.stringContaining("Unknown-size conversation"),
+    ]);
+
+    fireEvent.click(screen.getByLabelText("Sort conversations"));
+    fireEvent.click(screen.getByRole("option", { name: "Oldest first" }));
+    expect(rowOrder()).toEqual([
+      expect.stringContaining("PromptHub renamed conversation"),
+      expect.stringContaining("Unknown-size conversation"),
+      expect.stringContaining("Newest conversation"),
+    ]);
+  });
+
+  it("jumps to the latest loaded transcript page across duplicate cursor pages", async () => {
     const firstPageEntries = Array.from({ length: 80 }, (_, index) =>
       entry(index),
     );
@@ -216,9 +357,7 @@ describe("AgentSessionsPanel", () => {
     });
 
     await screen.findByText("Message 0");
-    fireEvent.click(screen.getByRole("button", { name: "Message page 4" }));
-    await screen.findByText("Message 79");
-    fireEvent.click(screen.getByRole("button", { name: "Next message page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Latest messages" }));
 
     await waitFor(() => {
       expect(readSession).toHaveBeenCalledWith("codex", "session-0", {
@@ -400,7 +539,7 @@ describe("AgentSessionsPanel", () => {
       "aria-haspopup",
       "listbox",
     );
-    expect(screen.getByLabelText("Conversation status")).toHaveAttribute(
+    expect(screen.getByLabelText("Sort conversations")).toHaveAttribute(
       "aria-haspopup",
       "listbox",
     );
@@ -408,7 +547,7 @@ describe("AgentSessionsPanel", () => {
       document.querySelector('select[aria-label="Filter by project"]'),
     ).toBeNull();
     expect(
-      document.querySelector('select[aria-label="Conversation status"]'),
+      document.querySelector('select[aria-label="Sort conversations"]'),
     ).toBeNull();
     const primaryActions = screen.getByTestId("conversation-primary-actions");
     expect(primaryActions.querySelectorAll("button")).toHaveLength(2);
@@ -475,10 +614,25 @@ describe("AgentSessionsPanel", () => {
         .querySelector(".agent-conversation-markdown"),
     ).not.toHaveClass("mt-2");
     expect(screen.getByTestId("conversation-message-entry-3")).toHaveClass(
+      "flex",
+      "items-start",
+    );
+    expect(screen.getByTestId("conversation-message-entry-3")).not.toHaveClass(
       "mx-auto",
-      "rounded-2xl",
+    );
+    expect(screen.getByTestId("conversation-avatar-entry-3")).toHaveClass(
+      "rounded-full",
+    );
+    expect(screen.getByTestId("conversation-bubble-entry-3")).toHaveClass(
+      "min-w-0",
+      "max-w-[82%]",
       "bg-white",
     );
+    expect(
+      screen
+        .getByTestId("conversation-bubble-entry-3")
+        .querySelector(".agent-conversation-markdown"),
+    ).not.toHaveClass("mt-2");
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Continue in ChatGPT" }),
@@ -596,28 +750,36 @@ describe("AgentSessionsPanel", () => {
     expect(await screen.findByText("Conversation exported.")).toBeVisible();
   });
 
-  it("edits PromptHub metadata and soft-removes a native conversation", async () => {
-    const current = metadata(2);
-    const updateConversationMetadata = vi.fn().mockResolvedValue({
-      id: "metadata-2",
+  it("opens session actions on right click without exposing metadata editing", async () => {
+    const targetAgent = {
+      ...agent,
+      id: "claude",
+      name: "Claude Code",
+    } as ManagedAgentSummary;
+    const current = {
+      ...metadata(2),
+      sizeBytes: 1536,
+      nativeDeleteSupported: true,
+      sourcePath: "/Users/test/.codex/sessions/session-2.jsonl",
+      resume: {
+        executable: "codex",
+        args: ["resume", "session-2"],
+        cwd: "/workspace/PromptHub",
+      },
+    };
+    const deleteConversation = vi.fn().mockResolvedValue({
       agentId: "codex",
       sessionId: current.id,
-      title: "Renamed conversation",
-      projectId: null,
-      projectPath: current.projectPath,
-      tags: ["release"],
-      note: "Keep this context",
-      favorite: false,
-      archivedAt: null,
-      deletedAt: null,
-      createdAt: 1,
-      updatedAt: 2,
     });
-    const deleteConversation = vi.fn().mockResolvedValue({
-      ...(await updateConversationMetadata({})),
-      deletedAt: 3,
+    const resumeConversation = vi.fn().mockResolvedValue({
+      status: "launched",
+      mode: "native-resume",
     });
-    updateConversationMetadata.mockClear();
+    const exportConversation = vi.fn().mockResolvedValue({
+      canceled: false,
+      filePath: "/tmp/session.json",
+    });
+    const openPath = vi.fn().mockResolvedValue({ success: true });
     installWindowMocks({
       api: {
         agent: {
@@ -637,12 +799,166 @@ describe("AgentSessionsPanel", () => {
             truncated: false,
           }),
           listConversationMetadata: vi.fn().mockResolvedValue([]),
-          resumeConversation: vi.fn(),
-          updateConversationMetadata,
+          resumeConversation,
           deleteConversation,
+          exportConversation,
+        },
+      },
+      electron: { openPath },
+    });
+
+    await renderWithI18n(
+      <ToastProvider>
+        <AgentSessionsPanel agent={agent} agents={[agent, targetAgent]} />
+      </ToastProvider>,
+      {
+        language: "en",
+        settleAsyncEffects: true,
+      },
+    );
+    expect(
+      await screen.findByRole("button", { name: /Session 2/ }),
+    ).toHaveTextContent("1.5 KB");
+    fireEvent.click(
+      screen.getByRole("button", { name: "More conversation actions" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Show in folder" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Open project folder" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show in folder" }));
+    await waitFor(() =>
+      expect(openPath).toHaveBeenLastCalledWith(current.sourcePath),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "More conversation actions" }),
+    );
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Open project folder" }),
+    );
+    await waitFor(() =>
+      expect(openPath).toHaveBeenLastCalledWith(current.projectPath),
+    );
+
+    const sessionRow = await screen.findByRole("button", { name: /Session 2/ });
+    fireEvent.contextMenu(sessionRow, { clientX: 320, clientY: 240 });
+    expect(
+      screen.getByRole("menuitem", { name: "Continue in ChatGPT" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Continue elsewhere" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Export Markdown" }),
+    ).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Export JSON" })).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Show in folder" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Open project folder" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Delete permanently" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "Edit details" })).toBeNull();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(
+      screen.queryByRole("menu", { name: "Conversation actions" }),
+    ).toBeNull();
+
+    fireEvent.contextMenu(sessionRow, { clientX: 320, clientY: 240 });
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Continue elsewhere" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Continue in another Agent" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.contextMenu(sessionRow, { clientX: 320, clientY: 240 });
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Continue in ChatGPT" }),
+    );
+    await waitFor(() =>
+      expect(resumeConversation).toHaveBeenCalledWith({
+        agentId: "codex",
+        sessionId: current.id,
+      }),
+    );
+
+    fireEvent.contextMenu(sessionRow, { clientX: 320, clientY: 240 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Export JSON" }));
+    await waitFor(() =>
+      expect(exportConversation).toHaveBeenCalledWith({
+        agentId: "codex",
+        sessionId: current.id,
+        format: "json",
+      }),
+    );
+
+    fireEvent.contextMenu(sessionRow, { clientX: 320, clientY: 240 });
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Delete permanently" }),
+    );
+    expect(deleteConversation).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
+      "This permanently deletes the native conversation data",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(deleteConversation).not.toHaveBeenCalled();
+
+    fireEvent.contextMenu(sessionRow, { clientX: 320, clientY: 240 });
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Delete permanently" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
+    await waitFor(() =>
+      expect(deleteConversation).toHaveBeenCalledWith({
+        agentId: "codex",
+        sessionId: current.id,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /Session 2/ }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("hides unsupported row context actions and closes on outside input", async () => {
+    const current = metadata(3);
+    const openPath = vi.fn().mockResolvedValue({
+      success: false,
+      error: "Project directory is unavailable",
+    });
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessions: [current],
+            total: 1,
+            hasMore: false,
+          }),
+          readSession: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessionId: current.id,
+            entries: [],
+            parseErrors: 0,
+            truncated: false,
+          }),
+          resumeConversation: vi.fn(),
           exportConversation: vi.fn(),
         },
       },
+      electron: { openPath },
     });
 
     await renderWithI18n(
@@ -654,61 +970,105 @@ describe("AgentSessionsPanel", () => {
         settleAsyncEffects: true,
       },
     );
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "More conversation actions",
-      }),
-    );
-    fireEvent.click(screen.getByRole("menuitem", { name: "Edit details" }));
-    expect(screen.getByRole("dialog")).toHaveClass(
-      "app-wallpaper-panel-strong",
-    );
-    expect(
-      screen.getByText(
-        "Archiving hides this conversation from Active. The native transcript stays untouched and can be found in Archived.",
-      ),
-    ).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Title"), {
-      target: { value: "Renamed conversation" },
-    });
-    fireEvent.change(screen.getByLabelText("Tags (comma separated)"), {
-      target: { value: "release" },
-    });
-    fireEvent.change(screen.getByLabelText("Note"), {
-      target: { value: "Keep this context" },
-    });
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Archive in PromptHub" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(updateConversationMetadata).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: "Renamed conversation",
-          tags: ["release"],
-          note: "Keep this context",
-          archived: true,
-        }),
-      ),
-    );
-    expect((await screen.findAllByText("Renamed conversation")).length).toBe(1);
+    const sessionRow = await screen.findByRole("button", { name: /Session 3/ });
     fireEvent.click(
       screen.getByRole("button", { name: "More conversation actions" }),
     );
+    expect(
+      screen.getByRole("menuitem", { name: "Show in folder" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("menuitem", { name: "Open project folder" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("menuitem", { name: "Delete permanently" }),
+    ).toBeNull();
     fireEvent.click(
-      screen.getByRole("menuitem", { name: "Remove from history" }),
+      screen.getByRole("menuitem", { name: "Open project folder" }),
     );
     await waitFor(() =>
-      expect(deleteConversation).toHaveBeenCalledWith({
-        agentId: "codex",
-        sessionId: current.id,
+      expect(openPath).toHaveBeenCalledWith(current.projectPath),
+    );
+    expect(
+      await screen.findByText("Conversation action failed."),
+    ).toBeVisible();
+
+    fireEvent.contextMenu(sessionRow, { clientX: 8, clientY: 8 });
+    expect(screen.getByRole("menuitem", { name: "Export JSON" })).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Show in folder" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("menuitem", { name: "Open project folder" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("menuitem", { name: "Continue in ChatGPT" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Continue elsewhere" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Delete permanently" }),
+    ).toBeNull();
+
+    fireEvent.pointerDown(document.body);
+    expect(
+      screen.queryByRole("menu", { name: "Conversation actions" }),
+    ).toBeNull();
+  });
+
+  it("builds project filters from native session paths without registered projects", async () => {
+    const sessions = [
+      {
+        ...metadata(0),
+        projectLabel: "PromptHub",
+        projectPath: "/work/a/PromptHub",
+      },
+      {
+        ...metadata(1),
+        projectLabel: "PromptHub",
+        projectPath: "/work/b/PromptHub",
+      },
+    ];
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessions,
+            total: sessions.length,
+            hasMore: false,
+          }),
+          readSession: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessionId: sessions[0].id,
+            entries: [],
+            parseErrors: 0,
+            truncated: false,
+          }),
+        },
+      },
+    });
+
+    await renderWithI18n(<AgentSessionsPanel agent={agent} />, {
+      language: "en",
+      settleAsyncEffects: true,
+    });
+    fireEvent.click(screen.getByLabelText("Filter by project"));
+    expect(
+      await screen.findByRole("option", {
+        name: "PromptHub · /work/a/PromptHub",
       }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: /Renamed conversation/ }),
-      ).not.toBeInTheDocument(),
-    );
+    ).toBeVisible();
+    const secondProject = screen.getByRole("option", {
+      name: "PromptHub · /work/b/PromptHub",
+    });
+    expect(secondProject).toBeVisible();
+    fireEvent.click(secondProject);
+    expect(screen.getByRole("button", { name: /Session 1/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Session 0/ })).toBeNull();
   });
 
   it("explains a successful native-source empty result", async () => {
@@ -921,31 +1281,40 @@ describe("AgentSessionsPanel", () => {
     });
   });
 
-  it("debounces indexed search through the main-process list contract", async () => {
+  it("submits search only on Enter and reuses the submitted query for pagination", async () => {
     const listSessions = vi.fn(
       async (
         _agentId: string,
         _limit: number,
-        _offset: number,
+        offset: number,
         search?: string,
-      ) => ({
-        agentId: "gemini",
-        adapter: "gemini-json-v1",
-        sessions: search === "review" ? [metadata(7)] : [],
-        total: search === "review" ? 1 : 0,
-        hasMore: false,
-      }),
+      ) => {
+        if (search === "review") {
+          return {
+            agentId: "gemini",
+            adapter: "gemini-json-v1",
+            sessions: [
+              {
+                ...metadata(offset === 0 ? 7 : 57),
+                title: offset === 0 ? "Review plan" : "Review follow-up",
+              },
+            ],
+            total: 51,
+            hasMore: offset === 0,
+          };
+        }
+        return {
+          agentId: "gemini",
+          adapter: "gemini-json-v1",
+          sessions: [metadata(0)],
+          total: 1,
+          hasMore: false,
+        };
+      },
     );
     installWindowMocks({
       api: {
         agent: {
-          getSessionIndexState: vi.fn().mockResolvedValue({
-            supported: true,
-            enabled: true,
-            lastStatus: "ok",
-            lastScannedAt: 100,
-            lastErrorCode: null,
-          }),
           listSessions,
           readSession: vi.fn().mockResolvedValue({
             agentId: "gemini",
@@ -966,36 +1335,78 @@ describe("AgentSessionsPanel", () => {
       { language: "en", settleAsyncEffects: true },
     );
     const search = await screen.findByRole("textbox", {
-      name: "Search sessions",
+      name: "Search titles or projects",
     });
+    const callsBeforeTyping = listSessions.mock.calls.length;
+
+    vi.useFakeTimers();
     fireEvent.change(search, { target: { value: "review" } });
+    fireEvent.keyDown(search, { key: "Enter", isComposing: true });
+    try {
+      await act(async () => vi.advanceTimersByTimeAsync(300));
+      expect(listSessions).toHaveBeenCalledTimes(callsBeforeTyping);
+      expect(screen.getByRole("button", { name: /Session 0/ })).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    fireEvent.keyDown(search, { key: "Enter" });
     await waitFor(() =>
       expect(listSessions).toHaveBeenLastCalledWith("gemini", 50, 0, "review"),
     );
     expect(
-      await screen.findByRole("button", { name: /Session 7/ }),
+      await screen.findByRole("button", { name: /Review plan/ }),
+    ).toBeVisible();
+
+    const submittedInput = screen.getByRole("textbox", {
+      name: "Search titles or projects",
+    });
+    fireEvent.change(submittedInput, { target: { value: "ignored draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Load more sessions" }));
+    await waitFor(() =>
+      expect(listSessions).toHaveBeenLastCalledWith("gemini", 50, 50, "review"),
+    );
+    expect(await screen.findByText("Review follow-up")).toBeVisible();
+
+    fireEvent.change(submittedInput, { target: { value: "" } });
+    fireEvent.keyDown(submittedInput, { key: "Enter" });
+    await waitFor(() =>
+      expect(listSessions).toHaveBeenLastCalledWith("gemini", 50, 0),
+    );
+    expect(
+      await screen.findByRole("button", { name: /Session 0/ }),
     ).toBeVisible();
   });
 
-  it("keeps Copilot matches found only in visible turn text", async () => {
-    const listSessions = vi.fn(
-      async (
-        _agentId: string,
-        _limit: number,
-        _offset: number,
-        _search?: string,
-      ) => ({
-        agentId: "copilot",
-        adapter: "copilot-session-store-v1",
-        sessions: [metadata(1)],
-        total: 1,
-        hasMore: false,
-      }),
-    );
+  it("matches only effective titles and project identity", async () => {
+    const session = {
+      ...metadata(1),
+      title: "Quarterly planning",
+      model: "private-model",
+    };
+    const listSessions = vi.fn(async () => ({
+      agentId: "copilot",
+      adapter: "copilot-session-store-v1",
+      sessions: [session],
+      total: 1,
+      hasMore: false,
+    }));
     installWindowMocks({
       api: {
         agent: {
           listSessions,
+          listConversationMetadata: vi.fn().mockResolvedValue([
+            {
+              agentId: "copilot",
+              sessionId: "session-1",
+              title: "Release review",
+              note: "private note",
+              tags: ["private-tag"],
+              projectId: null,
+              projectPath: "/workspace/PromptHub",
+              archivedAt: null,
+            },
+          ]),
           readSession: vi.fn().mockResolvedValue({
             agentId: "copilot",
             adapter: "copilot-session-store-v1",
@@ -1015,113 +1426,31 @@ describe("AgentSessionsPanel", () => {
       { language: "en", settleAsyncEffects: true },
     );
     const search = await screen.findByRole("textbox", {
-      name: "Search sessions",
+      name: "Search titles or projects",
     });
+
     fireEvent.change(search, { target: { value: "private" } });
-    await waitFor(() =>
-      expect(listSessions).toHaveBeenLastCalledWith(
-        "copilot",
-        50,
-        0,
-        "private",
-      ),
-    );
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(await screen.findByText("No sessions found.")).toBeVisible();
+
+    const titleSearch = screen.getByRole("textbox", {
+      name: "Search titles or projects",
+    });
+    fireEvent.change(titleSearch, { target: { value: "release review" } });
+    fireEvent.keyDown(titleSearch, { key: "Enter" });
     expect(
-      await screen.findByRole("button", { name: /Session 1/ }),
+      await screen.findByRole("button", { name: /Release review/ }),
     ).toBeVisible();
-  });
 
-  it("keeps Cline matches found only in visible turn text", async () => {
-    const listSessions = vi.fn(
-      async (
-        _agentId: string,
-        _limit: number,
-        _offset: number,
-        _search?: string,
-      ) => ({
-        agentId: "cline",
-        adapter: "cline-session-snapshot-v1",
-        sessions: [metadata(1)],
-        total: 1,
-        hasMore: false,
-      }),
-    );
-    installWindowMocks({
-      api: {
-        agent: {
-          listSessions,
-          readSession: vi.fn().mockResolvedValue({
-            agentId: "cline",
-            adapter: "cline-session-snapshot-v1",
-            sessionId: "session-1",
-            entries: [],
-            parseErrors: 0,
-            truncated: false,
-          }),
-        },
-      },
+    const projectSearch = screen.getByRole("textbox", {
+      name: "Search titles or projects",
     });
-
-    await renderWithI18n(
-      <AgentSessionsPanel agent={{ ...agent, id: "cline", name: "Cline" }} />,
-      { language: "en", settleAsyncEffects: true },
-    );
-    const search = await screen.findByRole("textbox", {
-      name: "Search sessions",
+    fireEvent.change(projectSearch, {
+      target: { value: "/workspace/prompthub" },
     });
-    fireEvent.change(search, { target: { value: "private" } });
-    await waitFor(() =>
-      expect(listSessions).toHaveBeenLastCalledWith("cline", 50, 0, "private"),
-    );
+    fireEvent.keyDown(projectSearch, { key: "Enter" });
     expect(
-      await screen.findByRole("button", { name: /Session 1/ }),
-    ).toBeVisible();
-  });
-
-  it("keeps Cursor matches found only in visible turn text", async () => {
-    const listSessions = vi.fn(
-      async (
-        _agentId: string,
-        _limit: number,
-        _offset: number,
-        _search?: string,
-      ) => ({
-        agentId: "cursor",
-        adapter: "cursor-agent-transcript-v1",
-        sessions: [metadata(1)],
-        total: 1,
-        hasMore: false,
-      }),
-    );
-    installWindowMocks({
-      api: {
-        agent: {
-          listSessions,
-          readSession: vi.fn().mockResolvedValue({
-            agentId: "cursor",
-            adapter: "cursor-agent-transcript-v1",
-            sessionId: "session-1",
-            entries: [],
-            parseErrors: 0,
-            truncated: false,
-          }),
-        },
-      },
-    });
-
-    await renderWithI18n(
-      <AgentSessionsPanel agent={{ ...agent, id: "cursor", name: "Cursor" }} />,
-      { language: "en", settleAsyncEffects: true },
-    );
-    const search = await screen.findByRole("textbox", {
-      name: "Search sessions",
-    });
-    fireEvent.change(search, { target: { value: "private" } });
-    await waitFor(() =>
-      expect(listSessions).toHaveBeenLastCalledWith("cursor", 50, 0, "private"),
-    );
-    expect(
-      await screen.findByRole("button", { name: /Session 1/ }),
+      await screen.findByRole("button", { name: /Release review/ }),
     ).toBeVisible();
   });
 });

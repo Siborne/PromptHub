@@ -49,6 +49,7 @@ import type {
   AgentSessionIndexSetEnabledRequest,
   AgentSessionListResult,
   AgentConversationActionResult,
+  AgentConversationDeleteResult,
   AgentConversationExportRequest,
   AgentConversationExportSaveResult,
   AgentConversationHandoffPreview,
@@ -202,12 +203,8 @@ export const agentApi = {
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONVERSATION_METADATA_UPDATE, input),
   deleteConversation: (
     request: AgentConversationResumeRequest,
-  ): Promise<AgentConversationMetadata> =>
+  ): Promise<AgentConversationDeleteResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONVERSATION_DELETE, request),
-  restoreConversation: (
-    request: AgentConversationResumeRequest,
-  ): Promise<AgentConversationMetadata> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONVERSATION_RESTORE, request),
   resumeConversation: (
     request: AgentConversationResumeRequest,
   ): Promise<AgentConversationActionResult> =>

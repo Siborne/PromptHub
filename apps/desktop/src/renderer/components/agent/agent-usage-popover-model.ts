@@ -26,6 +26,7 @@ interface LoadAgentUsageBatchOptions {
 
 function unavailableQuota(agentId: string): AgentUsageQuota {
   return {
+    schemaVersion: 2,
     agentId,
     adapter: "popover-projection",
     status: "unavailable",
@@ -62,29 +63,7 @@ export async function loadAgentUsageBatch({
   return results;
 }
 
-export function getRemainingPercent(utilization: number): number {
-  if (!Number.isFinite(utilization)) return 0;
-  return Math.max(0, Math.min(100, 100 - Math.round(utilization)));
-}
-
-export function formatAgentUsagePlan(plan: string): string {
-  const trimmed = plan.trim();
-  const normalized = trimmed.replace(/^level[_\s-]+/i, "");
-  if (!normalized) return "";
-  if (!/[_-]/.test(normalized)) {
-    return normalized === normalized.toUpperCase()
-      ? `${normalized[0].toUpperCase()}${normalized.slice(1).toLowerCase()}`
-      : normalized;
-  }
-  return normalized
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((part) => `${part[0].toUpperCase()}${part.slice(1).toLowerCase()}`)
-    .join(" ");
-}
-
-export function getPrimaryUsageMetric(quota: AgentUsageQuota) {
-  return quota.metrics.reduce((mostConstrained, metric) =>
-    metric.utilization > mostConstrained.utilization ? metric : mostConstrained,
-  );
-}
+export {
+  formatAgentUsagePlan,
+  getPrimaryUsageMetric,
+} from "./agent-usage-presentation";

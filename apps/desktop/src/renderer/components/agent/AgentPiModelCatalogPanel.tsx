@@ -228,6 +228,7 @@ export function AgentPiModelCatalogPanel({
             <Button
               size="sm"
               variant="secondary"
+              className="w-full min-w-0"
               aria-label={t("agents.providerProfiles.import.title")}
               title={t("agents.providerProfiles.import.title")}
               onClick={() => {
@@ -240,24 +241,31 @@ export function AgentPiModelCatalogPanel({
               }}
               disabled={busyAction !== null || !canImportCurrent}
             >
-              <FileInputIcon className="h-4 w-4" />
+              <FileInputIcon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 truncate">
+                {t("agents.providerProfiles.import.title")}
+              </span>
             </Button>
             <Button
               size="sm"
               variant="secondary"
+              className="w-full min-w-0"
               aria-label={t("agents.providerProfiles.sourceImport.open")}
               title={t("agents.providerProfiles.sourceImport.open")}
               onClick={() => setSourceDialogOpen(true)}
               disabled={busyAction !== null}
             >
-              <DatabaseIcon className="h-4 w-4" />
+              <DatabaseIcon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 truncate">
+                {t("agents.providerProfiles.sourceImport.open")}
+              </span>
             </Button>
           </>
         }
         sidebar={
           <nav
             aria-label={t("agents.piModels.listLabel")}
-            className="h-full min-h-0 overflow-y-auto p-1"
+            className="h-full min-h-0 overflow-x-hidden overflow-y-auto p-1"
           >
             {catalog.length === 0 ? (
               <p className="px-4 py-4 text-xs leading-5 text-muted-foreground">

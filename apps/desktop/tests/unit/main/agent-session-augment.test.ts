@@ -76,6 +76,8 @@ describe("Augment CLI conversation sessions", () => {
           updatedAt: Date.parse("2026-03-06T02:12:01.486Z"),
           model: "gpt-5.4",
           messageCount: 2,
+          sizeBytes: expect.any(Number),
+          nativeDeleteSupported: true,
           sourcePath,
           resume: {
             executable: "auggie",
@@ -103,6 +105,16 @@ describe("Augment CLI conversation sessions", () => {
       entries: [{ role: "assistant", text: "Add a rollback checkpoint." }],
       nextCursor: null,
     });
+    await service.delete("augment", sessionId);
+    await expect(fs.access(sourcePath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(service.list("augment", { limit: 20 })).resolves.toMatchObject(
+      {
+        total: 0,
+        sessions: [],
+      },
+    );
   });
 
   it("rejects malformed sessions and cursors without exposing private agent state", async () => {

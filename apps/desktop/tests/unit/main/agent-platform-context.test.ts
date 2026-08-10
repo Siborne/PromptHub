@@ -44,6 +44,23 @@ describe("Agent platform context", () => {
     });
   });
 
+  it("separates Antigravity's CLI model root from its shared asset root", async () => {
+    getSupportedPlatformsMock.mockReturnValue([{ id: "antigravity" }]);
+    getPlatformRootDirMock.mockReturnValue("/Users/test/.gemini/config");
+    const { resolveAgentProviderContext } = await loadModule();
+
+    expect(resolveAgentProviderContext("antigravity")).toEqual({
+      agentId: "antigravity",
+      platformId: "antigravity",
+      rootPath: "/Users/test/.gemini/antigravity-cli",
+    });
+
+    getPlatformRootDirMock.mockReturnValue("/custom/antigravity-models");
+    expect(resolveAgentProviderContext("antigravity").rootPath).toBe(
+      "/custom/antigravity-models",
+    );
+  });
+
   it("normalizes, deduplicates, and allowlists declared config files", async () => {
     getBuiltinAgentOverrideMock.mockReturnValue({
       configRelativePaths: [

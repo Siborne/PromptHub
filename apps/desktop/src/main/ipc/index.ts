@@ -167,7 +167,6 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.AGENT_CONVERSATION_METADATA_LIST,
   IPC_CHANNELS.AGENT_CONVERSATION_METADATA_UPDATE,
   IPC_CHANNELS.AGENT_CONVERSATION_DELETE,
-  IPC_CHANNELS.AGENT_CONVERSATION_RESTORE,
   IPC_CHANNELS.AGENT_CONVERSATION_RESUME,
   IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_PREVIEW,
   IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_CONTINUE,
@@ -358,6 +357,16 @@ export function registerAllIPC(
             runtime.sessionIndexDb,
             agentId,
           ).read(agentId, sessionId, input),
+        canDelete: (agentId) =>
+          createAgentSessionIndexOperations(
+            runtime.sessionIndexDb,
+            agentId,
+          ).canDelete(agentId),
+        delete: (agentId, sessionId) =>
+          createAgentSessionIndexOperations(
+            runtime.sessionIndexDb,
+            agentId,
+          ).delete(agentId, sessionId),
       },
       resolveExecutable: commandRunner.resolve,
       launch: (command) => terminal.launch(command),

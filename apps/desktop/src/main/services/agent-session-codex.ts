@@ -14,6 +14,7 @@ import {
   isSessionRecord,
   parseVisibleJsonLines,
   readSessionPrefix,
+  safeSessionFile,
   scanSessionFiles,
   sessionString,
   sessionTimestamp,
@@ -22,6 +23,7 @@ import {
 
 const ADAPTER = "codex-rollout-jsonl-v1";
 const MAX_METADATA_BYTES = 256 * 1024;
+const MAX_THREAD_INDEX_BYTES = 8 * 1024 * 1024;
 const DEFAULT_DETAIL_PAGE_SIZE = 80;
 const MAX_DETAIL_PAGE_SIZE = 200;
 const READ_CHUNK_BYTES = 64 * 1024;
@@ -49,17 +51,28 @@ function visibleCodexEntry(
   value: Record<string, unknown>,
   index: number,
 ): AgentSessionEntry | null {
-  if (value.type !== "event_msg" || !isSessionRecord(value.payload))
-    return null;
-  const eventType = sessionString(value.payload.type);
-  const role =
-    eventType === "user_message"
+  if (!isSessionRecord(value.payload)) return null;
+  const payloadType = sessionString(value.payload.type);
+  const legacyRole =
+    value.type === "event_msg" && payloadType === "user_message"
       ? "user"
-      : eventType === "agent_message"
+      : value.type === "event_msg" && payloadType === "agent_message"
         ? "assistant"
         : null;
+  const responseRole =
+    value.type === "response_item" && payloadType === "message"
+      ? sessionString(value.payload.role)
+      : null;
+  const role =
+    responseRole === "user" || responseRole === "assistant"
+      ? responseRole
+      : legacyRole;
   if (!role) return null;
-  const text = boundedSessionText(value.payload.message);
+  const text = boundedSessionText(
+    value.type === "response_item"
+      ? value.payload.content
+      : value.payload.message,
+  );
   if (!text) return null;
   return {
     id: sessionString(value.payload.id) || `${index}`,
@@ -225,7 +238,9 @@ function codexMeta(raw: string, fallbackId: string) {
   return { id, cwd, createdAt, visible };
 }
 
-async function scanCodexFiles(codexRoot: string): Promise<CodexFile[]> {
+async function scanCodexCandidates(
+  codexRoot: string,
+): Promise<Array<ScannedSessionFile & { active: boolean }>> {
   const [active, archived] = await Promise.all([
     scanSessionFiles(
       path.join(codexRoot, "sessions"),
@@ -238,10 +253,14 @@ async function scanCodexFiles(codexRoot: string): Promise<CodexFile[]> {
       0,
     ),
   ]);
-  const candidates = [
+  return [
     ...active.map((file) => ({ ...file, active: true })),
     ...archived.map((file) => ({ ...file, active: false })),
   ];
+}
+
+async function scanCodexFiles(codexRoot: string): Promise<CodexFile[]> {
+  const candidates = await scanCodexCandidates(codexRoot);
   const unique = new Map<string, Omit<CodexFile, "orderAt">>();
   for (const file of candidates.sort((a, b) => {
     if (a.active !== b.active) return a.active ? -1 : 1;
@@ -260,19 +279,71 @@ async function scanCodexFiles(codexRoot: string): Promise<CodexFile[]> {
   return files.sort((a, b) => b.orderAt - a.orderAt);
 }
 
-async function metadata(file: CodexFile): Promise<AgentSessionMetadata> {
+async function readCodexThreadNames(
+  codexRoot: string,
+): Promise<Map<string, string>> {
+  const indexPath = await safeSessionFile(
+    codexRoot,
+    path.join(codexRoot, "session_index.jsonl"),
+  );
+  if (!indexPath) return new Map();
+  const handle = await fs.open(indexPath, "r");
+  try {
+    const stat = await handle.stat();
+    const size = Math.min(stat.size, MAX_THREAD_INDEX_BYTES);
+    const start = stat.size - size;
+    const buffer = Buffer.alloc(size);
+    await handle.read(buffer, 0, size, start);
+    const lines = buffer.toString("utf8").split(/\r?\n/);
+    if (start > 0) {
+      const previousByte = Buffer.alloc(1);
+      await handle.read(previousByte, 0, 1, start - 1);
+      if (previousByte[0] !== 0x0a) lines.shift();
+    }
+    const names = new Map<string, string>();
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      let value: unknown;
+      try {
+        value = JSON.parse(lines[index] || "");
+      } catch {
+        continue;
+      }
+      if (!isSessionRecord(value)) continue;
+      const id = sessionString(value.id);
+      const title = sessionString(value.thread_name)
+        ?.replace(/[\u0000-\u001f\u007f]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 160);
+      if (id && title && isSafeSessionId(id) && !names.has(id)) {
+        names.set(id, title);
+      }
+    }
+    return names;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function metadata(
+  file: CodexFile,
+  nativeTitle?: string,
+): Promise<AgentSessionMetadata> {
   const { raw } = await readSessionPrefix(file.path, MAX_METADATA_BYTES);
   const meta = codexMeta(raw, file.id);
   const firstUser = meta.visible.find((entry) => entry.role === "user");
   return {
     id: meta.id,
-    title: firstUser?.text.split("\n", 1)[0].slice(0, 160) || meta.id,
+    title:
+      nativeTitle || firstUser?.text.split("\n", 1)[0].slice(0, 160) || meta.id,
     projectLabel: meta.cwd ? path.basename(meta.cwd) : null,
     projectPath: meta.cwd,
     createdAt: meta.createdAt,
     updatedAt: file.updatedAt,
     model: null,
     messageCount: meta.visible.length || null,
+    sizeBytes: file.size,
+    nativeDeleteSupported: true,
     sourcePath: file.path,
     resume: {
       executable: "codex",
@@ -282,12 +353,43 @@ async function metadata(file: CodexFile): Promise<AgentSessionMetadata> {
   };
 }
 
+async function deleteCodexSession(
+  codexRoot: string,
+  sessionId: string,
+): Promise<void> {
+  if (!isSafeSessionId(sessionId)) throw new Error("AGENT_SESSION_ID_INVALID");
+  const files = (await scanCodexCandidates(codexRoot)).filter(
+    (candidate) => fileSessionId(candidate.path) === sessionId,
+  );
+  if (files.length === 0) throw new Error("AGENT_SESSION_NOT_FOUND");
+  const roots = [
+    path.join(codexRoot, "sessions"),
+    path.join(codexRoot, "archived_sessions"),
+  ];
+  const safePaths: string[] = [];
+  for (const file of files) {
+    let safePath: string | null = null;
+    for (const root of roots) {
+      safePath = await safeSessionFile(root, file.path);
+      if (safePath) break;
+    }
+    if (!safePath) throw new Error("AGENT_SESSION_DELETE_UNSAFE");
+    safePaths.push(safePath);
+  }
+  await Promise.all(safePaths.map((safePath) => fs.unlink(safePath)));
+}
+
 export function createCodexSessionAdapter(codexRoot: string) {
   return {
     async list(limit: number, offset = 0): Promise<AgentSessionListResult> {
-      const files = await scanCodexFiles(codexRoot);
+      const [files, threadNames] = await Promise.all([
+        scanCodexFiles(codexRoot),
+        readCodexThreadNames(codexRoot),
+      ]);
       const sessions = await Promise.all(
-        files.slice(offset, offset + limit).map(metadata),
+        files
+          .slice(offset, offset + limit)
+          .map((file) => metadata(file, threadNames.get(file.id))),
       );
       return {
         agentId: "codex",
@@ -316,5 +418,7 @@ export function createCodexSessionAdapter(codexRoot: string) {
         nextCursor: page.nextCursor,
       };
     },
+    delete: (sessionId: string): Promise<void> =>
+      deleteCodexSession(codexRoot, sessionId),
   };
 }

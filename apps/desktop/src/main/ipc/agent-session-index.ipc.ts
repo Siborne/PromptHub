@@ -24,6 +24,8 @@ export interface AgentSessionIndexOperations {
     agentId: string,
     options: AgentSessionIndexListOptions,
   ): Promise<AgentSessionListResult>;
+  canDelete(agentId: string): boolean;
+  delete(agentId: string, sessionId: string): Promise<void>;
   read(
     agentId: string,
     sessionId: string,

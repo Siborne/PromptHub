@@ -98,9 +98,9 @@ describe("Agent session index preload API", () => {
     };
 
     await agentApi.listConversationMetadata("claude", ["session-1"]);
+    expect(agentApi).not.toHaveProperty("restoreConversation");
     await agentApi.updateConversationMetadata(metadata);
     await agentApi.deleteConversation(identity);
-    await agentApi.restoreConversation(identity);
     await agentApi.resumeConversation(identity);
     await agentApi.previewConversationHandoff(handoff);
     await agentApi.continueConversationInAgent(continuation);
@@ -116,7 +116,6 @@ describe("Agent session index preload API", () => {
       ],
       [IPC_CHANNELS.AGENT_CONVERSATION_METADATA_UPDATE, metadata],
       [IPC_CHANNELS.AGENT_CONVERSATION_DELETE, identity],
-      [IPC_CHANNELS.AGENT_CONVERSATION_RESTORE, identity],
       [IPC_CHANNELS.AGENT_CONVERSATION_RESUME, identity],
       [IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_PREVIEW, handoff],
       [IPC_CHANNELS.AGENT_CONVERSATION_HANDOFF_CONTINUE, continuation],

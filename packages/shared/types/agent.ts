@@ -591,8 +591,15 @@ export interface AgentSessionMetadata {
   updatedAt: number | null;
   model: string | null;
   messageCount: number | null;
+  sizeBytes?: number | null;
+  nativeDeleteSupported?: boolean;
   sourcePath: string | null;
   resume: AgentResumeCommand | null;
+}
+
+export interface AgentConversationDeleteResult {
+  agentId: string;
+  sessionId: string;
 }
 
 export interface AgentSessionListResult {
@@ -636,7 +643,6 @@ export interface AgentConversationMetadata {
   note: string | null;
   favorite: boolean;
   archivedAt: number | null;
-  deletedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -1289,20 +1295,44 @@ export interface AgentCodexProviderTestResult {
   errorCode?: string;
 }
 
-export type AgentUsageMetricKind = "window" | "quota";
+export type AgentQuotaScope =
+  | { kind: "account" }
+  | { kind: "model-group"; id: string; label: string }
+  | { kind: "model"; id: string; label: string }
+  | { kind: "feature"; id: string; label: string };
+
+export type AgentQuotaPeriod =
+  | { kind: "rolling"; durationSeconds: number | null }
+  | {
+      kind: "calendar";
+      unit: "day" | "week" | "month" | "billing-cycle";
+    }
+  | { kind: "lifetime" }
+  | { kind: "provider-defined"; label: string };
+
+export type AgentQuotaValue =
+  | { kind: "percentage"; remainingPercent: number }
+  | {
+      kind: "amount";
+      remainingPercent: number;
+      remainingAmount: number;
+      limitAmount: number;
+      unit: string;
+    }
+  | { kind: "unlimited" }
+  | { kind: "unknown" };
 
 export interface AgentUsageMetric {
   id: string;
   label: string;
-  kind: AgentUsageMetricKind;
-  utilization: number;
+  scope: AgentQuotaScope;
+  period: AgentQuotaPeriod;
+  value: AgentQuotaValue;
   resetsAt: number | null;
-  usedAmount?: number;
-  totalAmount?: number;
-  unit?: string;
 }
 
 export interface AgentUsageQuota {
+  schemaVersion: 2;
   agentId: string;
   adapter: string;
   status: AgentUsageQuotaStatus;

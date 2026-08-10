@@ -96,6 +96,21 @@ test("uses one Provider workbench shell for Claude Code and Pi", async ({}, test
     const claudeToolbarBox = await page
       .getByTestId("agent-provider-workbench-toolbar")
       .boundingBox();
+    await expect(
+      page
+        .getByTestId("agent-provider-workbench-toolbar")
+        .getByText("Import current configuration"),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByTestId("agent-provider-workbench-toolbar")
+        .getByText("Import from PromptHub"),
+    ).toBeVisible();
+    expect(
+      await page
+        .getByTestId("agent-provider-workbench-sidebar")
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
 
     await selectAgent(page, "Pi");
     await page.getByRole("tab", { name: "Provider & Model" }).click();
@@ -118,6 +133,11 @@ test("uses one Provider workbench shell for Claude Code and Pi", async ({}, test
       .getByTestId("agent-provider-workbench-toolbar")
       .boundingBox();
     expect(piToolbarBox?.height).toBe(claudeToolbarBox?.height);
+    expect(
+      await page
+        .getByTestId("agent-provider-workbench-sidebar")
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
 
     await importCurrent.click();
     await page.getByRole("button", { name: "Create override" }).click();

@@ -104,6 +104,9 @@ describe("Kiro CLI read-only sessions", () => {
     const metadataBefore = await fs.readFile(session.metadataPath, "utf8");
     const transcriptBefore = await fs.readFile(session.transcriptPath, "utf8");
     const realMetadataPath = await fs.realpath(session.metadataPath);
+    const sessionSize =
+      (await fs.stat(session.metadataPath)).size +
+      (await fs.stat(session.transcriptPath)).size;
     const service = createAgentSessionService({
       homeDir,
       kiroRootDir: kiroRoot,
@@ -122,6 +125,8 @@ describe("Kiro CLI read-only sessions", () => {
           updatedAt: Date.parse("2026-07-28T02:03:04.000Z"),
           model: null,
           messageCount: null,
+          sizeBytes: sessionSize,
+          nativeDeleteSupported: true,
           sourcePath: realMetadataPath,
           resume: null,
         },
@@ -167,6 +172,17 @@ describe("Kiro CLI read-only sessions", () => {
     await expect(fs.readFile(session.transcriptPath, "utf8")).resolves.toBe(
       transcriptBefore,
     );
+    await service.delete("kiro", "session-new");
+    await expect(fs.access(session.metadataPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(fs.access(session.transcriptPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(service.list("kiro", { limit: 20 })).resolves.toMatchObject({
+      total: 1,
+      sessions: [expect.objectContaining({ id: "session-old" })],
+    });
   });
 
   it("skips mismatched, linked, and unsafe sessions while bounding text", async () => {
@@ -295,6 +311,8 @@ describe("Kiro CLI read-only sessions", () => {
         updatedAt: fallbackStat.mtimeMs,
         model: null,
         messageCount: null,
+        sizeBytes: expect.any(Number),
+        nativeDeleteSupported: true,
         sourcePath: await fs.realpath(fallback.metadataPath),
         resume: null,
       },

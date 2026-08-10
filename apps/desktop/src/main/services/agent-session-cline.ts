@@ -379,6 +379,38 @@ async function readSessionIndex(
   }
 }
 
+async function deleteSessionIndexRow(
+  clineRoot: string,
+  sessionId: string,
+): Promise<void> {
+  const filePath = sessionIndexPath(clineRoot);
+  const stat = await fs.lstat(filePath).catch((error: unknown) => {
+    if (isMissing(error)) return null;
+    throw error;
+  });
+  if (!stat) return;
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error("AGENT_SESSION_DELETE_TARGET_INVALID");
+  }
+  const safePath = await safeSessionFile(clineRoot, filePath);
+  if (!safePath) throw new Error("AGENT_SESSION_DELETE_TARGET_INVALID");
+  const database = new Database(safePath);
+  try {
+    const tableRows = database.pragma("table_info(sessions)");
+    if (!Array.isArray(tableRows)) return;
+    const columns = sessionIndexColumns(tableRows);
+    const idColumn = chooseColumn(columns, ["session_id", "sessionId", "id"]);
+    if (!idColumn) return;
+    database.transaction(() => {
+      database
+        .prepare(`DELETE FROM sessions WHERE ${idColumn} = ?`)
+        .run(sessionId);
+    })();
+  } finally {
+    database.close();
+  }
+}
+
 async function scanCandidates(clineRoot: string): Promise<ClineCandidate[]> {
   const snapshots = await scanSessionFiles(
     sessionRoot(clineRoot),
@@ -681,6 +713,13 @@ export function createClineSessionAdapter(clineRoot: string) {
         resolved.messages,
         resolved.truncated,
       );
+    },
+
+    async deleteIndexRow(sessionId: string): Promise<void> {
+      if (!isSafeSessionId(sessionId)) {
+        throw new Error("AGENT_SESSION_ID_INVALID");
+      }
+      await deleteSessionIndexRow(clineRoot, sessionId);
     },
   };
 }

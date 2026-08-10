@@ -1098,6 +1098,7 @@ describe("Agent workspace shell", () => {
       api: {
         agent: {
           getUsage: vi.fn().mockResolvedValue({
+            schemaVersion: 2,
             agentId: "claude",
             adapter: "claude-oauth-v1",
             status: "ok",
@@ -1106,15 +1107,17 @@ describe("Agent workspace shell", () => {
               {
                 id: "fiveHour",
                 label: "5-hour window",
-                kind: "window",
-                utilization: 42,
+                scope: { kind: "account" },
+                period: { kind: "rolling", durationSeconds: 18_000 },
+                value: { kind: "percentage", remainingPercent: 58 },
                 resetsAt: Date.now() + 3_600_000,
               },
               {
                 id: "sevenDay",
                 label: "7-day window",
-                kind: "window",
-                utilization: 18,
+                scope: { kind: "account" },
+                period: { kind: "rolling", durationSeconds: 604_800 },
+                value: { kind: "percentage", remainingPercent: 82 },
                 resetsAt: null,
               },
             ],
@@ -1132,16 +1135,16 @@ describe("Agent workspace shell", () => {
     ).not.toBeInTheDocument();
     const usageBanner = await screen.findByRole("region", { name: "Usage" });
     expect(
-      await within(usageBanner).findByRole("img", {
+      await within(usageBanner).findByRole("progressbar", {
         name: "5-hour window: 58% remaining",
       }),
     ).toBeVisible();
     expect(
-      within(usageBanner).getByRole("img", {
+      within(usageBanner).getByRole("progressbar", {
         name: "7-day window: 82% remaining",
       }),
     ).toBeVisible();
-    expect(within(usageBanner).getByText("claude-pro")).toBeVisible();
+    expect(within(usageBanner).getByText("Claude Pro")).toBeVisible();
   });
 
   it("does not render the usage banner or fetch usage when the capability is planned", async () => {

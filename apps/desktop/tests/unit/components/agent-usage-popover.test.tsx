@@ -1,14 +1,16 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentUsageQuota } from "@prompthub/shared/types";
+import type {
+  AgentUsageMetric,
+  AgentUsageQuota,
+} from "@prompthub/shared/types";
 import { AgentUsagePopover } from "../../../src/renderer/components/agent/AgentUsagePopover";
 import {
   AGENT_USAGE_POPOVER_AGENTS,
   formatAgentUsagePlan,
   getPrimaryUsageMetric,
-  getRemainingPercent,
   loadAgentUsageBatch,
 } from "../../../src/renderer/components/agent/agent-usage-popover-model";
 import { renderWithI18n as renderWithI18nBase } from "../../helpers/i18n";
@@ -17,11 +19,34 @@ function renderWithI18n(ui: ReactElement) {
   return renderWithI18nBase(ui, { settleAsyncEffects: true });
 }
 
+function percentageMetric(
+  id: string,
+  label: string,
+  remainingPercent: number,
+  resetsAt: number | null = null,
+): AgentUsageMetric {
+  return {
+    id,
+    label,
+    scope: { kind: "account" },
+    period:
+      id === "weekly"
+        ? { kind: "calendar", unit: "week" }
+        : {
+            kind: "rolling",
+            durationSeconds: id === "fiveHour" ? 18_000 : null,
+          },
+    value: { kind: "percentage", remainingPercent },
+    resetsAt,
+  };
+}
+
 function quota(
   agentId: string,
   overrides: Partial<AgentUsageQuota> = {},
 ): AgentUsageQuota {
   return {
+    schemaVersion: 2,
     agentId,
     adapter: `${agentId}-test`,
     status: "ok",
@@ -29,20 +54,8 @@ function quota(
     plan: "pro",
     fetchedAt: 1_800_000_000_000,
     metrics: [
-      {
-        id: "weekly",
-        label: "Weekly quota",
-        kind: "window",
-        utilization: 66,
-        resetsAt: 1_800_086_400_000,
-      },
-      {
-        id: "fiveHour",
-        label: "5-hour window",
-        kind: "window",
-        utilization: 20,
-        resetsAt: 1_800_007_200_000,
-      },
+      percentageMetric("weekly", "Weekly quota", 34, 1_800_086_400_000),
+      percentageMetric("fiveHour", "5-hour window", 80, 1_800_007_200_000),
     ],
     ...overrides,
   };
@@ -63,34 +76,21 @@ describe("Agent usage popover", () => {
     expect(items.every((item) => item.status === "unavailable")).toBe(true);
     expect(getUsage).toHaveBeenCalledWith("claude", { forceRefresh: false });
     expect(JSON.stringify(items)).not.toContain("private provider failure");
-    expect(getRemainingPercent(Number.NaN)).toBe(0);
-    expect(getRemainingPercent(-20)).toBe(100);
-    expect(getRemainingPercent(130)).toBe(0);
-    expect(getRemainingPercent(33.6)).toBe(66);
     expect(getPrimaryUsageMetric(quota("codex"))).toMatchObject({
       id: "weekly",
     });
-    expect(formatAgentUsagePlan("LEVEL_INTERMEDIATE")).toBe("Intermediate");
+    expect(formatAgentUsagePlan("LEVEL_INTERMEDIATE")).toBe("Allegretto");
+    expect(formatAgentUsagePlan("LEVEL_STANDARD")).toBe("Moderato");
+    expect(formatAgentUsagePlan("LEVEL_ADVANCED")).toBe("Allegro");
+    expect(formatAgentUsagePlan("LEVEL_PREMIUM")).toBe("Vivace");
     expect(formatAgentUsagePlan("chatgpt_pro")).toBe("Chatgpt Pro");
     expect(formatAgentUsagePlan("  ")).toBe("");
     expect(
       getPrimaryUsageMetric(
         quota("codex", {
           metrics: [
-            {
-              id: "weekly",
-              label: "Weekly quota",
-              kind: "window",
-              utilization: 10,
-              resetsAt: null,
-            },
-            {
-              id: "fiveHour",
-              label: "5-hour window",
-              kind: "window",
-              utilization: 90,
-              resetsAt: null,
-            },
+            percentageMetric("weekly", "Weekly quota", 90),
+            percentageMetric("fiveHour", "5-hour window", 10),
           ],
         }),
       ),
@@ -154,7 +154,7 @@ describe("Agent usage popover", () => {
     });
   });
 
-  it("renders CodexBar-style compact cards with inline remaining values and provider states", async () => {
+  it("renders semantic compact quota rows and provider states", async () => {
     window.localStorage.setItem(
       "prompthub.agent-usage.codex",
       JSON.stringify(quota("codex")),
@@ -182,20 +182,13 @@ describe("Agent usage popover", () => {
     expect(screen.getByRole("heading", { name: "Agent quotas" })).toBeVisible();
     expect(screen.getByText("Codex")).toBeVisible();
     expect(screen.getAllByAltText("codex icon")).toHaveLength(2);
-    expect(screen.getAllByText("34% remaining").length).toBeGreaterThan(0);
     expect(screen.getAllByText("pro").length).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("progressbar", {
-        name: "Codex, Weekly quota: 34% remaining",
-      }),
-    ).toHaveAttribute("aria-valuenow", "34");
-    expect(
-      screen
-        .getByRole("progressbar", {
-          name: "Codex, Weekly quota: 34% remaining",
-        })
-        .querySelector(".h-1"),
-    ).toHaveClass("block", "w-full");
+    const codexArticle = screen.getByRole("article", { name: "Codex quota" });
+    const codexProgress = within(codexArticle).getByRole("progressbar", {
+      name: "Weekly quota: 34% remaining",
+    });
+    expect(codexProgress).toHaveAttribute("aria-valuenow", "34");
+    expect(codexProgress).toHaveAttribute("data-usage-visual", "ring");
 
     expect(await screen.findAllByText("Not connected")).toHaveLength(2);
     expect(screen.getAllByText("Credentials expired")).toHaveLength(2);
@@ -222,6 +215,19 @@ describe("Agent usage popover", () => {
       view.unmount();
       userAgent.mockRestore();
     }
+  });
+
+  it("distinguishes an empty provider response from loading and failure", async () => {
+    window.api.agent.getUsage = vi.fn(async (agentId: string) =>
+      quota(agentId, { metrics: [] }),
+    );
+
+    await renderWithI18n(<AgentUsagePopover />);
+
+    expect(
+      await screen.findAllByText("The provider did not report a quota."),
+    ).toHaveLength(6);
+    expect(screen.queryByText("Usage unavailable")).not.toBeInTheDocument();
   });
 
   it("expands secondary metrics and force refreshes without replacing the cached row with loading", async () => {
@@ -254,56 +260,36 @@ describe("Agent usage popover", () => {
         metrics:
           agentId === "codex"
             ? [
-                {
-                  id: "custom",
-                  label: "Custom credits",
-                  kind: "credits",
-                  utilization: 95,
-                  resetsAt: null,
-                },
-                {
-                  id: "weekly",
-                  label: "Weekly quota",
-                  kind: "window",
-                  utilization: 80,
-                  resetsAt: Date.now() - 1,
-                },
-                {
-                  id: "chat",
-                  label: "Chat requests",
-                  kind: "credits",
-                  utilization: 10,
-                  resetsAt: null,
-                },
+                percentageMetric("custom", "Custom credits", 5),
+                percentageMetric("weekly", "Weekly quota", 20, Date.now() - 1),
+                percentageMetric("chat", "Chat requests", 90),
               ]
-            : [
-                {
-                  id: "custom",
-                  label: "Custom credits",
-                  kind: "credits",
-                  utilization: 80,
-                  resetsAt: null,
-                },
-              ],
+            : [percentageMetric("custom", "Custom credits", 20)],
       }),
     );
 
     await renderWithI18n(<AgentUsagePopover />);
 
-    const codexProgress = await screen.findByRole("progressbar", {
-      name: "Codex, Custom credits: 5% remaining",
+    const codexProgress = within(
+      await screen.findByRole("article", { name: "Codex quota" }),
+    ).getByRole("progressbar", {
+      name: "Custom credits: 5% remaining",
     });
-    const kimiProgress = screen.getByRole("progressbar", {
-      name: "Kimi Code, Custom credits: 20% remaining",
+    const kimiProgress = within(
+      screen.getByRole("article", { name: "Kimi Code quota" }),
+    ).getByRole("progressbar", {
+      name: "Custom credits: 20% remaining",
     });
-    expect(codexProgress.querySelector(".bg-destructive")).toBeInTheDocument();
-    expect(kimiProgress.querySelector(".bg-amber-500")).toBeInTheDocument();
+    expect(
+      codexProgress.querySelector(".text-destructive"),
+    ).toBeInTheDocument();
+    expect(kimiProgress.querySelector(".text-amber-500")).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Show Codex quota details" }),
     );
-    expect(screen.getByText("5% remaining")).toBeVisible();
-    expect(screen.getAllByText("20% remaining").length).toBeGreaterThan(0);
+    expect(screen.getByText("5%")).toBeVisible();
+    expect(screen.getAllByText("20%").length).toBeGreaterThan(0);
     expect(screen.getByText("Reset pending")).toBeVisible();
   });
 
@@ -322,8 +308,13 @@ describe("Agent usage popover", () => {
 
     await renderWithI18n(<AgentUsagePopover />);
 
-    expect(await screen.findByText("Weekly quota · Cached")).toBeVisible();
-    expect(screen.getAllByText("34% remaining").length).toBeGreaterThan(0);
+    expect(await screen.findByText("Cached")).toBeVisible();
+    expect(screen.getByText("Weekly quota")).toBeVisible();
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Weekly quota: 34% remaining",
+      }),
+    ).toHaveAttribute("data-usage-visual", "ring");
     expect(screen.getAllByText("Usage unavailable")).toHaveLength(5);
   });
 });

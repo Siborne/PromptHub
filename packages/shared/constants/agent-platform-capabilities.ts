@@ -106,6 +106,7 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
     usage: VERIFIED_USAGE,
   }),
   antigravity: depthCapabilities({
+    providerModel: MODEL_CONFIG_ONLY,
     sessions: VERIFIED_ANTIGRAVITY_CLI_SESSION,
     usage: VERIFIED_USAGE,
   }),
@@ -147,6 +148,7 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
   grok: depthCapabilities({
     providerModel: declaration("supported", "verified-provider-adapter"),
     sessions: VERIFIED_SESSION,
+    usage: VERIFIED_USAGE,
   }),
   qwen: depthCapabilities({
     providerModel: declaration("supported", "verified-provider-adapter"),
@@ -163,18 +165,21 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
     sessions: VERIFIED_SESSION,
   }),
   copaw: depthCapabilities({
+    providerModel: MODEL_CONFIG_ONLY,
     sessions: declaration("supported", "verified-copaw-safe-json-session-v2"),
   }),
-  autoclaw: depthCapabilities(),
+  autoclaw: depthCapabilities({ providerModel: MODEL_CONFIG_ONLY }),
   nanoclaw: depthCapabilities({
     sessions: declaration("supported", "verified-nanoclaw-v2-sqlite"),
   }),
-  qclaw: depthCapabilities(),
+  qclaw: depthCapabilities({ providerModel: MODEL_CONFIG_ONLY }),
   qoder: depthCapabilities({
+    providerModel: MODEL_CONFIG_ONLY,
     sessions: declaration("supported", "verified-qoder-transcript-jsonl-v1"),
   }),
   qoderwork: depthCapabilities(),
   hermes: depthCapabilities({
+    providerModel: MODEL_CONFIG_ONLY,
     sessions: declaration("supported", "verified-hermes-state-db"),
   }),
   codebuddy: depthCapabilities(),

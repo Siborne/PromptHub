@@ -39,6 +39,37 @@ import { createReasonixSessionAdapter } from "./agent-session-reasonix";
 import { createNanoClawSessionAdapter } from "./agent-session-nanoclaw";
 import { createCoPawSessionAdapter } from "./agent-session-copaw";
 import { createQoderSessionAdapter } from "./agent-session-qoder";
+import { safeSessionFile } from "./agent-session-adapter-utils";
+import {
+  resolveCherryStudioRoot,
+  resolveCoPawRoots,
+  resolveEnvironmentRoot,
+  resolveHermesRoot,
+  resolveKiloStorageRoot,
+  resolveNanoClawRoots,
+  resolveQwenRuntimeRoot,
+  resolveReasonixStateRoot,
+} from "./agent-session-roots";
+import {
+  boundedText,
+  isRecord,
+  normalizeRole,
+  normalizeTimestamp,
+  numberValue,
+  stringValue,
+} from "./agent-session-parser-utils";
+import {
+  assertSessionId,
+  assertSessionListLimit,
+  assertSessionListOffset,
+  enrichSessionResult,
+  isSessionId,
+  MAX_SESSION_LIST_LIMIT,
+  MAX_SESSION_SCAN_FILES,
+  nativeSessionTargets,
+  removeSessionTargets,
+  supportsNativeSessionDelete,
+} from "./agent-session-storage";
 
 interface AgentSessionServiceOptions {
   homeDir: string;
@@ -101,102 +132,28 @@ interface SessionFile {
   id: string;
   path: string;
   projectLabel: string;
+  projectPath: string | null;
   size: number;
   updatedAt: number;
 }
 
-const MAX_LIST_LIMIT = 200;
-const MAX_SCAN_FILES = 50_000;
 const MAX_INDEX_SCAN_FILES = 10_000;
 const MAX_DETAIL_BYTES = 2 * 1024 * 1024;
 const MAX_METADATA_BYTES = 256 * 1024;
-const MAX_ENTRY_TEXT = 64 * 1024;
+const MAX_GEMINI_PROJECT_ROOT_BYTES = 4 * 1024;
 const COMMAND_OPTIONS = {
   timeout: 30_000,
   maxBuffer: MAX_DETAIL_BYTES,
 };
-
-function assertLimit(limit: number): void {
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST_LIMIT) {
-    throw new Error("AGENT_SESSION_LIMIT_INVALID");
-  }
-}
-
-function assertOffset(offset: number, limit: number): void {
-  if (
-    !Number.isInteger(offset) ||
-    offset < 0 ||
-    offset + limit > MAX_SCAN_FILES
-  ) {
-    throw new Error("AGENT_SESSION_OFFSET_INVALID");
-  }
-}
-
-function assertSessionId(sessionId: string): void {
-  if (!isSessionId(sessionId)) {
-    throw new Error("AGENT_SESSION_ID_INVALID");
-  }
-}
-
-function isSessionId(value: string): boolean {
-  return /^[A-Za-z0-9_-]{1,160}$/.test(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function numberValue(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function collectText(value: unknown, depth = 0): string[] {
-  if (depth > 6 || value === null || value === undefined) return [];
-  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => collectText(item, depth + 1));
-  }
-  if (!isRecord(value)) return [];
-  const direct = [
-    value.text,
-    value.content,
-    value.message,
-    value.result,
-  ].flatMap((item) => collectText(item, depth + 1));
-  return direct.length > 0 ? direct : [];
-}
-
-function boundedText(value: unknown): string {
-  return collectText(value).join("\n").slice(0, MAX_ENTRY_TEXT);
-}
-
-function normalizeTimestamp(value: unknown): number | null {
-  const numeric = numberValue(value);
-  if (numeric !== null)
-    return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
-  const text = stringValue(value);
-  if (!text) return null;
-  const parsed = Date.parse(text);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function normalizeRole(value: unknown): AgentSessionEntry["role"] {
-  const role = stringValue(value)?.toLowerCase();
-  if (
-    role === "user" ||
-    role === "assistant" ||
-    role === "tool" ||
-    role === "system"
-  ) {
-    return role;
-  }
-  return "unknown";
-}
-
+const OPENCODE_SIZE_QUERY = `SELECT s.id,
+  length(CAST(COALESCE(s.title, '') AS BLOB))
+  + length(CAST(COALESCE(s.directory, '') AS BLOB))
+  + length(CAST(COALESCE(s.metadata, '') AS BLOB))
+  + COALESCE((SELECT SUM(length(CAST(COALESCE(m.data, '') AS BLOB)))
+      FROM message m WHERE m.session_id = s.id), 0)
+  + COALESCE((SELECT SUM(length(CAST(COALESCE(p.data, '') AS BLOB)))
+      FROM part p WHERE p.session_id = s.id), 0) AS sizeBytes
+FROM session s`;
 async function readPrefix(
   filePath: string,
   maxBytes: number,
@@ -223,7 +180,7 @@ async function readPrefix(
 
 async function scanClaudeFiles(
   root: string,
-  maxFiles = MAX_SCAN_FILES,
+  maxFiles = MAX_SESSION_SCAN_FILES,
   signal?: AbortSignal,
 ): Promise<SessionFile[]> {
   const files: SessionFile[] = [];
@@ -260,6 +217,7 @@ async function scanClaudeFiles(
         id: entry.name.slice(0, -".jsonl".length),
         path: filePath,
         projectLabel: projectEntry.name,
+        projectPath: null,
         size: stat.size,
         updatedAt: Math.trunc(stat.mtimeMs),
       });
@@ -268,9 +226,48 @@ async function scanClaudeFiles(
   return files.sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
+async function readGeminiProjectRoot(
+  projectDirectory: string,
+): Promise<string | null> {
+  const markerPath = path.join(projectDirectory, ".project_root");
+  const markerStat = await fs.lstat(markerPath).catch(() => null);
+  if (
+    !markerStat?.isFile() ||
+    markerStat.isSymbolicLink() ||
+    markerStat.size > MAX_GEMINI_PROJECT_ROOT_BYTES
+  ) {
+    return null;
+  }
+  const [realProjectDirectory, realMarkerPath] = await Promise.all([
+    fs.realpath(projectDirectory).catch(() => null),
+    fs.realpath(markerPath).catch(() => null),
+  ]);
+  if (
+    !realProjectDirectory ||
+    !realMarkerPath ||
+    path.dirname(realMarkerPath) !== realProjectDirectory
+  ) {
+    return null;
+  }
+  const { raw, truncated } = await readPrefix(
+    realMarkerPath,
+    MAX_GEMINI_PROJECT_ROOT_BYTES,
+  ).catch(() => ({ raw: "", truncated: false, digest: "" }));
+  const candidate = stringValue(raw);
+  if (
+    truncated ||
+    !candidate ||
+    !path.isAbsolute(candidate) ||
+    candidate.includes("\0")
+  ) {
+    return null;
+  }
+  return path.normalize(candidate);
+}
+
 async function scanGeminiFiles(
   root: string,
-  maxFiles = MAX_SCAN_FILES,
+  maxFiles = MAX_SESSION_SCAN_FILES,
   signal?: AbortSignal,
 ): Promise<SessionFile[]> {
   const files: SessionFile[] = [];
@@ -286,10 +283,14 @@ async function scanGeminiFiles(
   for (const projectEntry of projectEntries) {
     throwIfAborted(signal);
     if (!projectEntry.isDirectory() || projectEntry.isSymbolicLink()) continue;
-    const chatsPath = path.join(root, projectEntry.name, "chats");
-    const entries = await fs
-      .readdir(chatsPath, { withFileTypes: true })
-      .catch(() => []);
+    const projectDirectory = path.join(root, projectEntry.name);
+    const [projectPath, entries] = await Promise.all([
+      readGeminiProjectRoot(projectDirectory),
+      fs
+        .readdir(path.join(projectDirectory, "chats"), { withFileTypes: true })
+        .catch(() => []),
+    ]);
+    const chatsPath = path.join(projectDirectory, "chats");
     for (const entry of entries) {
       throwIfAborted(signal);
       if (
@@ -306,7 +307,10 @@ async function scanGeminiFiles(
       files.push({
         id: entry.name.slice(0, -".json".length),
         path: filePath,
-        projectLabel: projectEntry.name,
+        projectLabel: projectPath
+          ? path.basename(projectPath) || projectPath
+          : projectEntry.name,
+        projectPath,
         size: stat.size,
         updatedAt: Math.trunc(stat.mtimeMs),
       });
@@ -315,10 +319,26 @@ async function scanGeminiFiles(
   return files.sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
-function parseClaudeLine(
-  line: string,
-  index: number,
-): AgentSessionEntry | null {
+interface ParsedClaudeLine {
+  record: Record<string, unknown>;
+  entry: AgentSessionEntry | null;
+}
+
+const CLAUDE_INTERNAL_USER_CONTENT =
+  /^<(?:local-command-caveat|command-name|command-message|command-args)(?:>|\s)/i;
+
+function hasClaudeToolResult(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.some(
+      (item) =>
+        isRecord(item) &&
+        stringValue(item.type)?.toLowerCase() === "tool_result",
+    )
+  );
+}
+
+function parseClaudeLine(line: string, index: number): ParsedClaudeLine | null {
   let value: unknown;
   try {
     value = JSON.parse(line);
@@ -326,14 +346,33 @@ function parseClaudeLine(
     return null;
   }
   if (!isRecord(value)) return null;
+  const nativeType = stringValue(value.type)?.toLowerCase();
+  if (
+    value.isMeta === true ||
+    (nativeType !== "user" && nativeType !== "assistant")
+  ) {
+    return { record: value, entry: null };
+  }
   const message = isRecord(value.message) ? value.message : value;
-  const text = boundedText(message.content ?? message);
-  if (!text) return null;
+  const content = message.content ?? message;
+  if (
+    typeof content === "string" &&
+    CLAUDE_INTERNAL_USER_CONTENT.test(content.trim())
+  ) {
+    return { record: value, entry: null };
+  }
+  const text = boundedText(content);
+  if (!text) return { record: value, entry: null };
   return {
-    id: `${index}`,
-    role: normalizeRole(message.role ?? value.type),
-    timestamp: normalizeTimestamp(value.timestamp),
-    text,
+    record: value,
+    entry: {
+      id: `${index}`,
+      role: hasClaudeToolResult(content)
+        ? "tool"
+        : normalizeRole(message.role ?? nativeType),
+      timestamp: normalizeTimestamp(value.timestamp),
+      text,
+    },
   };
 }
 
@@ -346,13 +385,9 @@ function parseClaudeMetadata(
   let resumeId = fileId;
 
   for (const [index, line] of raw.split(/\r?\n/).entries()) {
-    let value: unknown;
-    try {
-      value = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (!isRecord(value)) continue;
+    const parsed = parseClaudeLine(line, index);
+    if (!parsed) continue;
+    const value = parsed.record;
 
     const candidateId = stringValue(value.sessionId);
     if (candidateId && /^[A-Za-z0-9_-]{1,160}$/.test(candidateId)) {
@@ -368,9 +403,8 @@ function parseClaudeMetadata(
       projectPath = candidatePath;
     }
     if (!title) {
-      const entry = parseClaudeLine(line, index);
-      if (entry?.role === "user") {
-        title = entry.text.split("\n", 1)[0].slice(0, 160);
+      if (parsed.entry?.role === "user") {
+        title = parsed.entry.text.split("\n", 1)[0].slice(0, 160);
       }
     }
     if (title && projectPath) break;
@@ -388,12 +422,16 @@ async function claudeMetadata(
   return {
     id: file.id,
     title: title || file.id,
-    projectLabel: file.projectLabel,
+    projectLabel: projectPath
+      ? path.basename(projectPath) || projectPath
+      : file.projectLabel,
     projectPath,
     createdAt: null,
     updatedAt: file.updatedAt,
     model: null,
     messageCount: null,
+    sizeBytes: file.size,
+    nativeDeleteSupported: true,
     sourcePath: file.path,
     resume: {
       executable: "claude",
@@ -420,25 +458,59 @@ function parseGeminiDocument(raw: string): {
 
 function geminiEntries(data: Record<string, unknown>): {
   entries: AgentSessionEntry[];
-  rejected: number;
+  malformed: number;
 } {
   const messages = Array.isArray(data.messages) ? data.messages : [];
-  const entries = messages
-    .map((message, index): AgentSessionEntry | null => {
-      if (!isRecord(message)) return null;
-      const text = boundedText(message.content ?? message);
-      if (!text) return null;
-      const rawRole = stringValue(message.type)?.toLowerCase();
-      const role = rawRole === "gemini" ? "assistant" : normalizeRole(rawRole);
-      return {
-        id: stringValue(message.id) || `${index}`,
-        role,
-        timestamp: normalizeTimestamp(message.timestamp),
-        text,
-      };
-    })
-    .filter((entry): entry is AgentSessionEntry => Boolean(entry));
-  return { entries, rejected: messages.length - entries.length };
+  const entries: AgentSessionEntry[] = [];
+  let malformed = 0;
+  for (const [index, message] of messages.entries()) {
+    if (!isRecord(message)) {
+      malformed += 1;
+      continue;
+    }
+    const nativeType = stringValue(message.type)?.toLowerCase();
+    const content = message.content ?? message;
+    const visibleText = boundedText(content);
+    let role: AgentSessionEntry["role"] | null = null;
+    let text = visibleText;
+    if (nativeType === "user") {
+      role = visibleText ? "user" : "tool";
+      if (!visibleText) text = geminiFunctionResponseText(content);
+    } else if (nativeType === "gemini") {
+      role = "assistant";
+    } else if (nativeType === "error") {
+      role = "system";
+    }
+    if (!role || !text) continue;
+    entries.push({
+      id: stringValue(message.id) || `${index}`,
+      role,
+      timestamp: normalizeTimestamp(message.timestamp),
+      text,
+    });
+  }
+  return { entries, malformed };
+}
+
+function geminiFunctionResponseText(content: unknown): string {
+  if (!Array.isArray(content)) return "";
+  const outputs = content.flatMap((item) => {
+    if (!isRecord(item) || !isRecord(item.functionResponse)) return [];
+    const response = item.functionResponse.response;
+    if (!isRecord(response)) return [];
+    return response.output;
+  });
+  return boundedText(outputs);
+}
+
+function geminiTitle(
+  data: Record<string, unknown>,
+  entries: AgentSessionEntry[],
+  fallback: string,
+): string {
+  const summary = stringValue(data.summary)?.split(/\r?\n/, 1)[0].slice(0, 160);
+  const firstUser = entries.find((entry) => entry.role === "user");
+  return summary || firstUser?.text.split("\n", 1)[0].slice(0, 160) || fallback;
 }
 
 async function geminiMetadata(
@@ -450,20 +522,22 @@ async function geminiMetadata(
   const id = stringValue(data.sessionId);
   if (!id || !/^[A-Za-z0-9_-]{1,160}$/.test(id)) return null;
   const { entries } = geminiEntries(data);
-  const firstUser = entries.find((entry) => entry.role === "user");
   return {
     id,
-    title: firstUser?.text.split("\n", 1)[0].slice(0, 160) || id,
+    title: geminiTitle(data, entries, id),
     projectLabel: file.projectLabel,
-    projectPath: null,
+    projectPath: file.projectPath,
     createdAt: normalizeTimestamp(data.startTime),
     updatedAt: normalizeTimestamp(data.lastUpdated) || file.updatedAt,
     model: null,
     messageCount: Array.isArray(data.messages) ? data.messages.length : null,
+    sizeBytes: file.size,
+    nativeDeleteSupported: true,
     sourcePath: file.path,
     resume: {
       executable: "gemini",
       args: ["--resume", id],
+      ...(file.projectPath ? { cwd: file.projectPath } : {}),
     },
   };
 }
@@ -471,12 +545,15 @@ async function geminiMetadata(
 function parseOpenCodeSession(
   value: unknown,
   executable: string,
+  sizes: Map<string, number>,
 ): AgentSessionMetadata | null {
   if (!isRecord(value)) return null;
   const id = stringValue(value.id);
   if (!id || !/^[A-Za-z0-9_-]{1,160}$/.test(id)) return null;
   const title = stringValue(value.title) || id;
   const projectPath = stringValue(value.directory);
+  const sizeBytes = sizes.get(id);
+  if (sizeBytes === undefined) return null;
   return {
     id,
     title,
@@ -486,6 +563,8 @@ function parseOpenCodeSession(
     updatedAt: normalizeTimestamp(value.updated),
     model: stringValue(value.model),
     messageCount: numberValue(value.messageCount),
+    sizeBytes,
+    nativeDeleteSupported: true,
     sourcePath: null,
     resume: {
       executable,
@@ -493,6 +572,34 @@ function parseOpenCodeSession(
       ...(projectPath ? { cwd: projectPath } : {}),
     },
   };
+}
+
+async function openCodeSessionSizes(
+  commandRunner: NativeCommandRunner,
+  executable: string,
+): Promise<Map<string, number>> {
+  const result = await commandRunner.run(
+    executable,
+    ["db", OPENCODE_SIZE_QUERY, "--format", "json"],
+    COMMAND_OPTIONS,
+  );
+  let rows: unknown;
+  try {
+    rows = JSON.parse(result.stdout);
+  } catch {
+    throw new Error("AGENT_SESSION_LIST_INVALID");
+  }
+  const sizes = new Map<string, number>();
+  if (!Array.isArray(rows)) return sizes;
+  for (const row of rows) {
+    if (!isRecord(row)) continue;
+    const id = stringValue(row.id);
+    const size = numberValue(row.sizeBytes);
+    if (id && isSessionId(id) && size !== null && size >= 0) {
+      sizes.set(id, size);
+    }
+  }
+  return sizes;
 }
 
 function parseOpenCodeDetail(
@@ -612,20 +719,30 @@ async function claudeScanRecord(
   if (reused) return reused;
   const { raw, digest } = await readPrefix(file.path, MAX_METADATA_BYTES);
   let title: string | null = null;
-  let validEntries = 0;
+  let validRecords = 0;
+  let projectPath: string | null = null;
   for (const [index, line] of raw.split(/\r?\n/).entries()) {
     if (!line.trim()) continue;
-    const entry = parseClaudeLine(line, index);
-    if (!entry) continue;
-    validEntries += 1;
-    if (!title && entry.role === "user") {
-      title = entry.text.split("\n", 1)[0].slice(0, 160);
+    const parsed = parseClaudeLine(line, index);
+    if (!parsed) continue;
+    validRecords += 1;
+    const candidatePath = stringValue(parsed.record.cwd);
+    if (
+      !projectPath &&
+      candidatePath &&
+      path.isAbsolute(candidatePath) &&
+      !candidatePath.includes("\0")
+    ) {
+      projectPath = candidatePath;
+    }
+    if (!title && parsed.entry?.role === "user") {
+      title = parsed.entry.text.split("\n", 1)[0].slice(0, 160);
     }
   }
   return {
     externalId: file.id,
     title: redactMetadataText(title || file.id),
-    projectPath: null,
+    projectPath,
     createdAt: null,
     updatedAt: file.updatedAt,
     model: null,
@@ -635,7 +752,7 @@ async function claudeScanRecord(
     sourceMtimeMs: file.updatedAt,
     sourceSizeBytes: file.size,
     sourceDigest: digest,
-    sourceStatus: validEntries > 0 ? "present" : "parse-error",
+    sourceStatus: validRecords > 0 ? "present" : "parse-error",
   };
 }
 
@@ -645,7 +762,7 @@ async function geminiScanRecord(
   adapterVersionChanged: boolean,
 ): Promise<AgentSessionScanRecordInput> {
   const reused = reusableRecord(file, previous, adapterVersionChanged);
-  if (reused) return reused;
+  if (reused && reused.projectPath === file.projectPath) return reused;
   const { raw, digest } = await readPrefix(file.path, MAX_METADATA_BYTES);
   const { data, parseErrorCount } = parseGeminiDocument(raw);
   if (!data) {
@@ -663,15 +780,12 @@ async function geminiScanRecord(
     };
   }
   const id = stringValue(data.sessionId);
-  const { entries, rejected } = geminiEntries(data);
-  const firstUser = entries.find((entry) => entry.role === "user");
+  const { entries, malformed } = geminiEntries(data);
   const validId = id && isSessionId(id) ? id : file.id;
   return {
     externalId: validId,
-    title: redactMetadataText(
-      firstUser?.text.split("\n", 1)[0].slice(0, 160) || validId,
-    ),
-    projectPath: null,
+    title: redactMetadataText(geminiTitle(data, entries, validId)),
+    projectPath: file.projectPath,
     createdAt: normalizeTimestamp(data.startTime),
     updatedAt: normalizeTimestamp(data.lastUpdated) || file.updatedAt,
     model: null,
@@ -682,7 +796,7 @@ async function geminiScanRecord(
     sourceSizeBytes: file.size,
     sourceDigest: digest,
     sourceStatus:
-      id && isSessionId(id) && parseErrorCount + rejected === 0
+      id && isSessionId(id) && parseErrorCount + malformed === 0
         ? "present"
         : "parse-error",
   };
@@ -762,6 +876,26 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
   const kiroRoot =
     options.kiroRootDir ||
     resolveEnvironmentRoot(process.env.KIRO_HOME, options.homeDir, ".kiro");
+  const windsurfRoot = path.join(options.homeDir, ".windsurf", "transcripts");
+  const antigravityRoot =
+    options.antigravityRootDir ||
+    path.join(options.homeDir, ".gemini", "antigravity-cli");
+  const augmentRoot =
+    options.augmentRootDir || path.join(options.homeDir, ".augment");
+  const cherryStudioRoot =
+    options.cherryStudioRootDir || resolveCherryStudioRoot(options.homeDir);
+  const kiloStorageRoot =
+    options.kiloStorageRootDir || resolveKiloStorageRoot(options.homeDir);
+  const hermesRoot =
+    options.hermesRootDir || resolveHermesRoot(options.homeDir);
+  const reasonixRoot =
+    options.reasonixStateRootDir || resolveReasonixStateRoot(options.homeDir);
+  const nanoclawRoots =
+    options.nanoclawRootDirs || resolveNanoClawRoots(options.homeDir);
+  const copawRoots =
+    options.copawRootDirs || resolveCoPawRoots(options.homeDir);
+  const qoderRoot =
+    options.qoderRootDir || path.join(options.homeDir, ".qoder");
   const kimiAdapter = createKimiSessionAdapter(kimiRoot);
   const codexAdapter = createCodexSessionAdapter(codexRoot);
   const grokAdapter = createGrokSessionAdapter(grokRoot);
@@ -769,50 +903,49 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
   const qwenAdapter = createQwenSessionAdapter(qwenRuntimeRoot, commandRunner);
   const piAdapter = createPiSessionAdapter(piRoot);
   const ohMyPiAdapter = createOhMyPiSessionAdapter(ohMyPiRoot);
-  const windsurfAdapter = createWindsurfSessionAdapter(
-    path.join(options.homeDir, ".windsurf", "transcripts"),
-  );
+  const windsurfAdapter = createWindsurfSessionAdapter(windsurfRoot);
   const kiroAdapter = createKiroSessionAdapter(kiroRoot);
   const copilotAdapter = createCopilotSessionAdapter(copilotRoot);
   const clineAdapter = createClineSessionAdapter(clineRoot);
-  const cursorAdapter = createCursorSessionAdapter(cursorRoot);
-  const antigravityAdapter = createAntigravitySessionAdapter(
-    options.antigravityRootDir ||
-      path.join(options.homeDir, ".gemini", "antigravity-cli"),
-  );
-  const augmentAdapter = createAugmentSessionAdapter(
-    options.augmentRootDir || path.join(options.homeDir, ".augment"),
-  );
-  const cherryStudioAdapter = createCherryStudioSessionAdapter(
-    options.cherryStudioRootDir || resolveCherryStudioRoot(options.homeDir),
-  );
-  const kiloAdapter = createKiloSessionAdapter(
-    options.kiloStorageRootDir || resolveKiloStorageRoot(options.homeDir),
-  );
-  const hermesAdapter = createHermesSessionAdapter(
-    options.hermesRootDir || resolveHermesRoot(options.homeDir),
-  );
-  const reasonixAdapter = createReasonixSessionAdapter(
-    options.reasonixStateRootDir || resolveReasonixStateRoot(options.homeDir),
-  );
-  const nanoclawAdapter = createNanoClawSessionAdapter(
-    options.nanoclawRootDirs || resolveNanoClawRoots(options.homeDir),
-  );
-  const copawAdapter = createCoPawSessionAdapter(
-    options.copawRootDirs || resolveCoPawRoots(options.homeDir),
-  );
-  const qoderAdapter = createQoderSessionAdapter(
-    options.qoderRootDir || path.join(options.homeDir, ".qoder"),
-  );
+  const cursorAdapter = createCursorSessionAdapter(cursorRoot, options.homeDir);
+  const antigravityAdapter = createAntigravitySessionAdapter(antigravityRoot);
+  const augmentAdapter = createAugmentSessionAdapter(augmentRoot);
+  const cherryStudioAdapter =
+    createCherryStudioSessionAdapter(cherryStudioRoot);
+  const kiloAdapter = createKiloSessionAdapter(kiloStorageRoot);
+  const hermesAdapter = createHermesSessionAdapter(hermesRoot);
+  const reasonixAdapter = createReasonixSessionAdapter(reasonixRoot);
+  const nanoclawAdapter = createNanoClawSessionAdapter(nanoclawRoots);
+  const copawAdapter = createCoPawSessionAdapter(copawRoots);
+  const qoderAdapter = createQoderSessionAdapter(qoderRoot);
+  const nativeRoots = new Map<string, string[]>([
+    ["antigravity", [antigravityRoot]],
+    ["augment", [augmentRoot]],
+    ["cline", [clineRoot]],
+    ["copaw", copawRoots],
+    ["cursor", [cursorRoot]],
+    ["grok", [grokRoot]],
+    ["kilo", [kiloStorageRoot]],
+    ["kimi", [kimiRoot]],
+    ["kiro", [kiroRoot]],
+    ["nanoclaw", nanoclawRoots],
+    ["oh-my-pi", [ohMyPiRoot]],
+    ["openclaw", [openclawRoot]],
+    ["pi", [piRoot]],
+    ["qoder", [qoderRoot]],
+    ["qwen", [qwenRuntimeRoot]],
+    ["reasonix", [reasonixRoot]],
+    ["windsurf", [windsurfRoot]],
+  ]);
 
-  return {
+  const service = {
     getIndexSource(agentId: string): AgentSessionIndexSourceDescriptor | null {
       if (agentId === "claude") {
         return {
           platformId: agentId,
           rootPath: claudeProjectsRoot,
           adapterId: "claude-jsonl-v1",
-          adapterVersion: "1",
+          adapterVersion: "2",
         };
       }
       if (agentId === "gemini") {
@@ -820,7 +953,7 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
           platformId: agentId,
           rootPath: geminiProjectsRoot,
           adapterId: "gemini-json-v1",
-          adapterVersion: "1",
+          adapterVersion: "2",
         };
       }
       return null;
@@ -853,9 +986,9 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
       agentId: string,
       input: ListOptions,
     ): Promise<AgentSessionListResult> {
-      assertLimit(input.limit);
+      assertSessionListLimit(input.limit);
       const offset = input.offset ?? 0;
-      assertOffset(offset, input.limit);
+      assertSessionListOffset(offset, input.limit);
       if (agentId === "claude") {
         const files = await scanClaudeFiles(claudeProjectsRoot);
         const selected = files.slice(offset, offset + input.limit);
@@ -899,8 +1032,12 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
           : isRecord(parsed) && Array.isArray(parsed.sessions)
             ? parsed.sessions
             : [];
+        const sizes =
+          rows.length > 0
+            ? await openCodeSessionSizes(commandRunner, executable)
+            : new Map<string, number>();
         const normalized = rows
-          .map((row) => parseOpenCodeSession(row, executable))
+          .map((row) => parseOpenCodeSession(row, executable, sizes))
           .filter((row): row is AgentSessionMetadata => Boolean(row));
         return {
           agentId,
@@ -928,90 +1065,257 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
       }
 
       if (agentId === "copilot") {
-        return copilotAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await copilotAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "cline") {
-        return clineAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await clineAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "cursor") {
-        return cursorAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await cursorAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "antigravity") {
-        return antigravityAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await antigravityAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "augment") {
-        return augmentAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await augmentAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "cherry-studio") {
-        return cherryStudioAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await cherryStudioAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "kilo") {
-        return kiloAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await kiloAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "hermes") {
-        return hermesAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await hermesAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "reasonix") {
-        return reasonixAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await reasonixAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "nanoclaw") {
-        return nanoclawAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await nanoclawAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "copaw") {
-        return copawAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await copawAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "qoder") {
-        return qoderAdapter.list(input.limit, offset, input.search);
+        return enrichSessionResult(
+          agentId,
+          await qoderAdapter.list(input.limit, offset, input.search),
+          true,
+        );
       }
 
       if (agentId === "kimi") {
-        return kimiAdapter.list(input.limit, offset);
+        return enrichSessionResult(
+          agentId,
+          await kimiAdapter.list(input.limit, offset),
+          true,
+        );
       }
 
       if (agentId === "codex") {
-        return codexAdapter.list(input.limit, offset);
+        return enrichSessionResult(
+          agentId,
+          await codexAdapter.list(input.limit, offset),
+          true,
+        );
       }
 
       if (agentId === "grok") {
-        return grokAdapter.list(input.limit, offset);
+        return enrichSessionResult(
+          agentId,
+          await grokAdapter.list(input.limit, offset),
+          true,
+        );
       }
 
       if (agentId === "openclaw") {
-        return openclawAdapter.list(input.limit, offset);
+        return enrichSessionResult(
+          agentId,
+          await openclawAdapter.list(input.limit, offset),
+          true,
+        );
       }
 
       if (agentId === "qwen") {
-        return qwenAdapter.list(input.limit, offset);
+        return enrichSessionResult(
+          agentId,
+          await qwenAdapter.list(input.limit, offset),
+          true,
+        );
       }
 
       if (agentId === "pi") {
-        return piAdapter.list(input.limit, offset);
+        return enrichSessionResult(
+          agentId,
+          await piAdapter.list(input.limit, offset),
+          true,
+        );
       }
 
       if (agentId === "oh-my-pi") {
-        return ohMyPiAdapter.list(input.limit, offset);
+        return enrichSessionResult(
+          agentId,
+          await ohMyPiAdapter.list(input.limit, offset),
+          true,
+        );
       }
 
       if (agentId === "windsurf") {
-        return windsurfAdapter.list(input.limit, offset);
+        return enrichSessionResult(
+          agentId,
+          await windsurfAdapter.list(input.limit, offset),
+          true,
+        );
       }
 
       if (agentId === "kiro") {
-        return kiroAdapter.list(input.limit, offset);
+        return enrichSessionResult(
+          agentId,
+          await kiroAdapter.list(input.limit, offset),
+          true,
+        );
       }
 
       throw new Error("AGENT_SESSION_UNSUPPORTED");
+    },
+
+    canDelete(agentId: string): boolean {
+      return supportsNativeSessionDelete(agentId);
+    },
+
+    async delete(agentId: string, sessionId: string): Promise<void> {
+      assertSessionId(sessionId);
+      if (agentId === "codex") {
+        await codexAdapter.delete(sessionId);
+        return;
+      }
+      if (agentId === "claude") {
+        const matches = (await scanClaudeFiles(claudeProjectsRoot)).filter(
+          (candidate) => candidate.id === sessionId,
+        );
+        if (matches.length === 0) throw new Error("AGENT_SESSION_NOT_FOUND");
+        for (const match of matches) {
+          const target = await safeSessionFile(claudeProjectsRoot, match.path);
+          if (!target) throw new Error("AGENT_SESSION_NOT_FOUND");
+          await fs.unlink(target);
+        }
+        return;
+      }
+      if (agentId === "gemini") {
+        const matches: SessionFile[] = [];
+        for (const candidate of await scanGeminiFiles(geminiProjectsRoot)) {
+          const metadata = await geminiMetadata(candidate);
+          if (metadata?.id === sessionId) matches.push(candidate);
+        }
+        if (matches.length === 0) throw new Error("AGENT_SESSION_NOT_FOUND");
+        for (const match of matches) {
+          const target = await safeSessionFile(geminiProjectsRoot, match.path);
+          if (!target) throw new Error("AGENT_SESSION_NOT_FOUND");
+          await fs.unlink(target);
+        }
+        return;
+      }
+      if (agentId === "opencode") {
+        const executable = await commandRunner.resolve("opencode");
+        if (!executable) throw new Error("AGENT_SESSION_COMMAND_NOT_FOUND");
+        await commandRunner.run(
+          executable,
+          ["session", "delete", sessionId],
+          COMMAND_OPTIONS,
+        );
+        return;
+      }
+      if (agentId === "copilot") {
+        await copilotAdapter.delete(sessionId);
+        return;
+      }
+      if (agentId === "cherry-studio") {
+        await cherryStudioAdapter.delete(sessionId);
+        return;
+      }
+      if (agentId === "hermes") {
+        await hermesAdapter.delete(sessionId);
+        return;
+      }
+      if (!supportsNativeSessionDelete(agentId)) {
+        throw new Error("AGENT_SESSION_DELETE_UNSUPPORTED");
+      }
+      let offset = 0;
+      let match: AgentSessionMetadata | undefined;
+      while (offset < MAX_SESSION_SCAN_FILES) {
+        const page = await service.list(agentId, {
+          limit: MAX_SESSION_LIST_LIMIT,
+          offset,
+        });
+        match = page.sessions.find((session) => session.id === sessionId);
+        if (match || !page.hasMore || page.sessions.length === 0) break;
+        offset += page.sessions.length;
+      }
+      if (!match) throw new Error("AGENT_SESSION_NOT_FOUND");
+      const targets = await nativeSessionTargets(agentId, match);
+      if (targets.length === 0) {
+        throw new Error("AGENT_SESSION_DELETE_TARGET_INVALID");
+      }
+      await removeSessionTargets(targets, nativeRoots.get(agentId) || []);
+      if (agentId === "cline") {
+        await clineAdapter.deleteIndexRow(sessionId);
+      }
     },
 
     async read(
@@ -1033,9 +1337,12 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
         const entries: AgentSessionEntry[] = [];
         for (const [index, line] of raw.split(/\r?\n/).entries()) {
           if (!line.trim()) continue;
-          const entry = parseClaudeLine(line, index);
-          if (entry) entries.push(entry);
-          else parseErrors += 1;
+          const parsed = parseClaudeLine(line, index);
+          if (!parsed) {
+            parseErrors += 1;
+          } else if (parsed.entry) {
+            entries.push(parsed.entry);
+          }
         }
         return {
           agentId,
@@ -1069,13 +1376,13 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
           );
           const { data, parseErrorCount } = parseGeminiDocument(raw);
           if (!data) throw new Error("AGENT_SESSION_INVALID");
-          const { entries, rejected } = geminiEntries(data);
+          const { entries, malformed } = geminiEntries(data);
           return {
             agentId,
             adapter: "gemini-json-v1",
             sessionId,
             entries,
-            parseErrors: parseErrorCount + rejected,
+            parseErrors: parseErrorCount + malformed,
             truncated,
           };
         }
@@ -1169,98 +1476,5 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
       throw new Error("AGENT_SESSION_UNSUPPORTED");
     },
   };
-}
-
-function resolveEnvironmentRoot(
-  configured: string | undefined,
-  homeDir: string,
-  fallback: string,
-): string {
-  if (!configured?.trim() || configured.includes("\0")) {
-    return path.join(homeDir, fallback);
-  }
-  const expanded = configured.trim().replace(/^~(?=$|[\\/])/, homeDir);
-  return path.isAbsolute(expanded)
-    ? path.normalize(expanded)
-    : path.join(homeDir, fallback);
-}
-
-function resolveQwenRuntimeRoot(options: AgentSessionServiceOptions): string {
-  const configured =
-    options.qwenRuntimeDir ||
-    process.env.QWEN_RUNTIME_DIR ||
-    process.env.QWEN_HOME ||
-    path.join(options.homeDir, ".qwen");
-  if (configured.includes("\0")) return path.join(options.homeDir, ".qwen");
-  const expanded = configured.replace(/^~(?=$|[\\/])/, options.homeDir);
-  return path.resolve(expanded);
-}
-
-function resolveCherryStudioRoot(homeDir: string): string {
-  if (process.platform === "darwin") {
-    return path.join(homeDir, "Library", "Application Support", "CherryStudio");
-  }
-  if (process.platform === "win32") {
-    return resolveEnvironmentRoot(
-      process.env.APPDATA,
-      homeDir,
-      path.join("AppData", "Roaming", "CherryStudio"),
-    );
-  }
-  return resolveEnvironmentRoot(
-    process.env.XDG_CONFIG_HOME,
-    homeDir,
-    path.join(".config", "CherryStudio"),
-  );
-}
-
-function resolveKiloStorageRoot(homeDir: string): string {
-  const dataRoot = resolveEnvironmentRoot(
-    process.env.XDG_DATA_HOME,
-    homeDir,
-    path.join(".local", "share"),
-  );
-  return path.join(dataRoot, "kilo", "storage");
-}
-
-function resolveHermesRoot(homeDir: string): string {
-  if (process.env.HERMES_HOME?.trim()) {
-    return resolveEnvironmentRoot(
-      process.env.HERMES_HOME,
-      homeDir,
-      path.join(homeDir, ".hermes"),
-    );
-  }
-  if (process.platform === "win32") {
-    const localAppData = resolveEnvironmentRoot(
-      process.env.LOCALAPPDATA,
-      homeDir,
-      path.join("AppData", "Local"),
-    );
-    return path.join(localAppData, "hermes");
-  }
-  return path.join(homeDir, ".hermes");
-}
-
-function resolveReasonixStateRoot(homeDir: string): string {
-  return resolveEnvironmentRoot(
-    process.env.REASONIX_STATE_HOME || process.env.REASONIX_HOME,
-    homeDir,
-    ".reasonix",
-  );
-}
-
-function resolveNanoClawRoots(homeDir: string): string[] {
-  return [".nanoclaw", "nanoclaw", "nanoclaw-v2"].map((name) =>
-    path.join(homeDir, name),
-  );
-}
-
-function resolveCoPawRoots(homeDir: string): string[] {
-  const explicit =
-    process.env.QWENPAW_WORKING_DIR || process.env.COPAW_WORKING_DIR;
-  if (explicit?.trim()) {
-    return [resolveEnvironmentRoot(explicit, homeDir, ".qwenpaw")];
-  }
-  return [path.join(homeDir, ".qwenpaw"), path.join(homeDir, ".copaw")];
+  return service;
 }

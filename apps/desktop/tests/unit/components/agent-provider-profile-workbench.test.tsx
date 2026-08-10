@@ -30,15 +30,18 @@ describe("AgentProviderProfileWorkbench", () => {
     await renderWorkbench();
 
     expect(screen.getByTestId("agent-provider-workbench")).toBeVisible();
+    const toolbar = screen.getByTestId("agent-provider-workbench-toolbar");
+    expect(toolbar).toBeVisible();
     expect(
-      screen.getByTestId("agent-provider-workbench-toolbar"),
+      within(toolbar).getByText("Import current configuration"),
     ).toBeVisible();
+    expect(within(toolbar).getByText("Import from PromptHub")).toBeVisible();
     expect(screen.getByTestId("agent-provider-workbench-sidebar")).toHaveClass(
       "overflow-hidden",
     );
     expect(
       screen.getByRole("navigation", { name: "Provider profiles" }),
-    ).toHaveClass("h-full", "overflow-y-auto");
+    ).toHaveClass("h-full", "overflow-x-hidden", "overflow-y-auto");
     expect(window.api.agent.listProviderProfiles).toHaveBeenCalledWith({
       platformId: "claude",
     });
@@ -134,6 +137,8 @@ describe("AgentProviderProfileWorkbench", () => {
     expect(screen.queryByText(/sk-|agent-provider:/i)).not.toBeInTheDocument();
     const nativeRow = screen.getByTestId("provider-native-card");
     expect(nativeRow).toHaveClass("rounded-lg", "border", "bg-card");
+    expect(nativeRow).not.toHaveClass("m-1", "w-[calc(100%-0.5rem)]");
+    expect(nativeRow.parentElement).toHaveClass("p-1");
     expect(nativeRow).not.toHaveClass("border-b");
     expect(
       screen.queryByText(

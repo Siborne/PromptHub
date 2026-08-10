@@ -602,10 +602,9 @@ export class AgentSessionIndexDB {
     const query = `%${escapeLike(normalized.toLocaleLowerCase())}%`;
     where.push(
       `(LOWER(title) LIKE ? ESCAPE '\\' OR
-        LOWER(COALESCE(project_path, '')) LIKE ? ESCAPE '\\' OR
-        LOWER(COALESCE(redacted_preview, '')) LIKE ? ESCAPE '\\')`,
+        LOWER(COALESCE(project_path, '')) LIKE ? ESCAPE '\\')`,
     );
-    params.push(query, query, query);
+    params.push(query, query);
   }
 
   private sourceFromRow(row: AgentSessionSourceRow): AgentSessionSource {

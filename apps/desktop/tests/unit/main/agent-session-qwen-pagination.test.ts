@@ -220,7 +220,8 @@ describe("Qwen session deep-page continuity", () => {
           updatedAt: null,
           model: null,
           messageCount: null,
-          sourcePath: null,
+          sizeBytes: (await fs.stat(transcriptPath)).size,
+          sourcePath: await fs.realpath(transcriptPath),
           resume: {
             executable: "/usr/local/bin/qwen",
             args: ["--resume", "fallback-title"],

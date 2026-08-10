@@ -23,14 +23,12 @@ export function AgentProviderWorkbenchLayout({
 }) {
   return (
     <div data-testid="agent-provider-workbench" className="flex min-h-0 flex-1">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-muted/20 sm:w-64 xl:w-72">
+      <aside className="flex w-56 min-w-0 shrink-0 flex-col overflow-hidden border-r border-border bg-muted/20 sm:w-64 xl:w-72">
         <div
           data-testid="agent-provider-workbench-toolbar"
           className="border-b border-border p-3"
         >
-          <div className="flex h-8 items-center justify-end gap-2">
-            {toolbar}
-          </div>
+          <div className="grid min-w-0 grid-cols-1 gap-2">{toolbar}</div>
         </div>
         <div
           data-testid="agent-provider-workbench-sidebar"

@@ -166,52 +166,53 @@ describe("Antigravity local usage adapter", () => {
     ]);
   });
 
-  it("maps account credits without exposing per-model or session metadata", () => {
+  it("keeps plan identity but ignores legacy credit counters", () => {
     expect(mapAntigravityLocalUsage(localPayload())).toEqual({
       plan: "Pro",
-      metrics: [
-        {
-          id: "promptCredits",
-          label: "Monthly prompt credits",
-          kind: "quota",
-          utilization: 37.5,
-          resetsAt: null,
-          usedAmount: 375,
-          totalAmount: 1_000,
-          unit: "credits",
-        },
-      ],
+      metrics: [],
     });
   });
 
-  it("maps each Antigravity model group to weekly and five-hour window rings", () => {
+  it("maps each Antigravity model group to semantic weekly and five-hour quotas", () => {
     expect(mapAntigravityQuotaSummary(quotaSummaryPayload())).toEqual([
       {
         id: "antigravity:gemini-weekly:weekly",
-        label: "Gemini Models",
-        kind: "window",
-        utilization: 20,
+        label: "Weekly quota",
+        scope: { kind: "model-group", id: "group-0", label: "Gemini Models" },
+        period: { kind: "calendar", unit: "week" },
+        value: { kind: "percentage", remainingPercent: 80 },
         resetsAt: Date.parse("2027-01-09T00:00:00.000Z"),
       },
       {
         id: "antigravity:gemini-5h:5h",
-        label: "Gemini Models",
-        kind: "window",
-        utilization: 50,
+        label: "5-hour window",
+        scope: { kind: "model-group", id: "group-0", label: "Gemini Models" },
+        period: { kind: "rolling", durationSeconds: 18_000 },
+        value: { kind: "percentage", remainingPercent: 50 },
         resetsAt: Date.parse("2027-01-02T05:00:00.000Z"),
       },
       {
         id: "antigravity:3p-weekly:weekly",
-        label: "Claude and GPT models",
-        kind: "window",
-        utilization: 0,
+        label: "Weekly quota",
+        scope: {
+          kind: "model-group",
+          id: "group-1",
+          label: "Claude and GPT models",
+        },
+        period: { kind: "calendar", unit: "week" },
+        value: { kind: "percentage", remainingPercent: 100 },
         resetsAt: null,
       },
       {
         id: "antigravity:3p-5h:5h",
-        label: "Claude and GPT models",
-        kind: "window",
-        utilization: 75,
+        label: "5-hour window",
+        scope: {
+          kind: "model-group",
+          id: "group-1",
+          label: "Claude and GPT models",
+        },
+        period: { kind: "rolling", durationSeconds: 18_000 },
+        value: { kind: "percentage", remainingPercent: 25 },
         resetsAt: null,
       },
     ]);
@@ -260,13 +261,18 @@ describe("Antigravity local usage adapter", () => {
       kind: "ok",
       plan: "Pro",
       metrics: expect.arrayContaining([
-        expect.objectContaining({ id: "promptCredits", utilization: 37.5 }),
         expect.objectContaining({
           id: "antigravity:gemini-weekly:weekly",
-          kind: "window",
+          scope: expect.objectContaining({ kind: "model-group" }),
         }),
       ]),
     });
+    if (result.kind === "ok") {
+      expect(result.metrics).toHaveLength(4);
+      expect(result.metrics.map((metric) => metric.id)).not.toContain(
+        "promptCredits",
+      );
+    }
     expect(request).toHaveBeenNthCalledWith(1, {
       port: 43100,
       csrfToken: CSRF_TOKEN,

@@ -43,30 +43,27 @@ const CATEGORY_ICON_SRC: Record<string, string> = {
   ERNIE: "", // Placeholder for ERNIE
 };
 
-const SPECIAL_CATEGORY_ICON: Record<string, LucideIcon> = {
-  Custom: SlidersHorizontalIcon,
-  Other: CircleDotDashedIcon,
-};
-
-const SPECIAL_CATEGORY_ICON_STYLE: Record<
+const SPECIAL_CATEGORY_ICONS: Record<
   string,
-  { background: string; color: string; border: string }
+  { icon: LucideIcon; className: string }
 > = {
   Custom: {
-    background: "linear-gradient(135deg, #eef2ff 0%, #dbeafe 100%)",
-    color: "#2563eb",
-    border: "1px solid rgba(37,99,235,0.18)",
+    icon: SlidersHorizontalIcon,
+    className:
+      "border border-blue-600/20 bg-blue-50 text-blue-600 shadow-sm dark:border-blue-400/25 dark:bg-blue-400/10 dark:text-blue-300",
   },
   Other: {
-    background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",
-    color: "#475569",
-    border: "1px solid rgba(71,85,105,0.18)",
+    icon: CircleDotDashedIcon,
+    className:
+      "border border-slate-500/20 bg-slate-100 text-slate-600 shadow-sm dark:border-slate-400/25 dark:bg-slate-400/10 dark:text-slate-300",
   },
 };
+
+const MONOCHROME_CATEGORY_ICONS = new Set(["GPT", "Moonshot", "Llama", "Grok"]);
 
 export function hasDedicatedCategoryIcon(category: string): boolean {
   return Boolean(
-    CATEGORY_ICON_SRC[category] || SPECIAL_CATEGORY_ICON[category],
+    CATEGORY_ICON_SRC[category] || SPECIAL_CATEGORY_ICONS[category],
   );
 }
 
@@ -74,28 +71,19 @@ function renderSpecialCategoryIcon(
   category: string,
   size: number,
 ): React.ReactNode {
-  const Icon = SPECIAL_CATEGORY_ICON[category];
-  if (!Icon) {
+  const specialIcon = SPECIAL_CATEGORY_ICONS[category];
+  if (!specialIcon) {
     return null;
   }
 
-  const style =
-    SPECIAL_CATEGORY_ICON_STYLE[category] ?? SPECIAL_CATEGORY_ICON_STYLE.Other;
+  const Icon = specialIcon.icon;
   return (
     <div
       data-category-icon={category}
+      className={`flex shrink-0 items-center justify-center rounded-md ${specialIcon.className}`}
       style={{
         width: size,
         height: size,
-        borderRadius: 6,
-        background: style.background,
-        border: style.border,
-        color: style.color,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
       }}
     >
       <Icon size={size * 0.68} strokeWidth={2.2} />
@@ -112,18 +100,12 @@ export function getCategoryIcon(category: string, size = 20): React.ReactNode {
   if (category === "nanobananai 🍌") {
     return (
       <div
+        className="flex shrink-0 items-center justify-center rounded-md border border-yellow-400 bg-yellow-50 text-yellow-900 shadow-sm dark:border-yellow-300/30 dark:bg-yellow-300/10 dark:text-yellow-100"
         style={{
           width: size,
           height: size,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
           fontSize: size * 0.75,
-          background: "linear-gradient(135deg, #fefce8 0%, #fef08a 100%)",
-          borderRadius: 6,
-          border: "1px solid #fde047",
           lineHeight: 1,
-          boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
         }}
       >
         🍌
@@ -142,9 +124,13 @@ export function getCategoryIcon(category: string, size = 20): React.ReactNode {
         alt={category}
         width={size}
         height={size}
-        style={{ borderRadius: 6, objectFit: "contain", display: "block" }}
+        className={`block rounded-md object-contain ${
+          MONOCHROME_CATEGORY_ICONS.has(category)
+            ? "brightness-0 dark:invert"
+            : ""
+        }`}
         onError={(e) => {
-          // If no matching icon, generate a colored circle with the first letter as fallback
+          // Keep broken-image glyphs out of compact provider icon slots.
           (e.currentTarget as HTMLImageElement).style.display = "none";
         }}
       />
@@ -162,19 +148,12 @@ export function getCategoryIcon(category: string, size = 20): React.ReactNode {
 
   return (
     <div
+      className="flex shrink-0 items-center justify-center rounded-full border border-border bg-muted text-foreground dark:bg-slate-600 dark:text-slate-50"
       style={{
         width: size,
         height: size,
-        borderRadius: "999px",
-        background:
-          "linear-gradient(135deg, rgba(148,163,184,0.9), rgba(148,163,184,0.4))",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#0f172a",
         fontSize,
         fontWeight: 600,
-        flexShrink: 0,
       }}
     >
       {letter}

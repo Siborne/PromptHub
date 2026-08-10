@@ -29,9 +29,9 @@ async function temporaryRoot(): Promise<string> {
 
 afterEach(async () => {
   await Promise.all(
-    temporaryRoots.splice(0).map((root) =>
-      fs.rm(root, { recursive: true, force: true }),
-    ),
+    temporaryRoots
+      .splice(0)
+      .map((root) => fs.rm(root, { recursive: true, force: true })),
   );
 });
 
@@ -52,10 +52,7 @@ function profile(platformId = "claude"): AgentProviderProfile {
   };
 }
 
-function mapping(
-  routeKey: string,
-  modelId: string,
-): AgentProviderModelMapping {
+function mapping(routeKey: string, modelId: string): AgentProviderModelMapping {
   return {
     id: `mapping-${routeKey}`,
     providerProfileId: "profile-1",
@@ -138,9 +135,7 @@ describe("Agent model Provider Profile adapter", () => {
         secretRef: null,
         source: "native-import",
       },
-      modelMappings: [
-        { routeKey: "primary", modelId: "claude-sonnet-4-5" },
-      ],
+      modelMappings: [{ routeKey: "primary", modelId: "claude-sonnet-4-5" }],
     });
   });
 
@@ -222,11 +217,15 @@ describe("Agent model Provider Profile adapter", () => {
   it("applies, verifies, and rolls back a real Claude settings file", async () => {
     const rootPath = await temporaryRoot();
     const targetPath = path.join(rootPath, "settings.json");
-    const original = `${JSON.stringify({
-      model: "claude-sonnet-4-5",
-      env: { ANTHROPIC_API_KEY: "secret-token" },
-      permissions: { allow: ["Read"] },
-    }, null, 2)}\n`;
+    const original = `${JSON.stringify(
+      {
+        model: "claude-sonnet-4-5",
+        env: { ANTHROPIC_API_KEY: "secret-token" },
+        permissions: { allow: ["Read"] },
+      },
+      null,
+      2,
+    )}\n`;
     await fs.writeFile(targetPath, original);
     const context = {
       agentId: "claude",
@@ -247,10 +246,12 @@ describe("Agent model Provider Profile adapter", () => {
     );
 
     const receipt = await adapter.apply(context, plan);
-    await expect(adapter.verify(context, plan, receipt)).resolves.toMatchObject({
-      verified: true,
-      state: { values: { model: "claude-opus-4-1" } },
-    });
+    await expect(adapter.verify(context, plan, receipt)).resolves.toMatchObject(
+      {
+        verified: true,
+        state: { values: { model: "claude-opus-4-1" } },
+      },
+    );
     const updated = await fs.readFile(targetPath, "utf8");
     expect(updated).toContain("claude-opus-4-1");
     expect(updated).toContain("secret-token");
@@ -290,17 +291,20 @@ describe("Agent model Provider Profile adapter", () => {
     );
     const receipt = await adapter.apply(context, plan);
 
-    await expect(adapter.verify(context, plan, receipt)).resolves.toMatchObject({
-      verified: true,
-      state: {
-        values: {
-          model: "anthropic/claude-sonnet-4-5",
-          secondaryModel: "anthropic/claude-haiku-4-5",
+    await expect(adapter.verify(context, plan, receipt)).resolves.toMatchObject(
+      {
+        verified: true,
+        state: {
+          values: {
+            model: "anthropic/claude-sonnet-4-5",
+            secondaryModel: "anthropic/claude-haiku-4-5",
+          },
         },
       },
-    });
-    await expect(fs.readFile(path.join(rootPath, "opencode.jsonc"), "utf8"))
-      .resolves.toContain("// keep");
+    );
+    await expect(
+      fs.readFile(path.join(rootPath, "opencode.jsonc"), "utf8"),
+    ).resolves.toContain("// keep");
   });
 
   it("blocks missing mappings, invalid configs, and cross-platform contexts", async () => {
@@ -361,10 +365,7 @@ describe("Agent model Provider Profile adapter", () => {
       ),
     ).resolves.toMatchObject({
       status: "blocked",
-      blockedReasons: [
-        "duplicate-model-route",
-        "model-parameters-unsupported",
-      ],
+      blockedReasons: ["duplicate-model-route", "model-parameters-unsupported"],
     });
 
     for (const config of [
@@ -393,9 +394,7 @@ describe("Agent model Provider Profile adapter", () => {
     for (const status of ["invalid", "unsupported"] as const) {
       const adapter = createAgentModelProviderAdapter("claude", {
         backupRoot: path.join(rootPath, "backups"),
-        inspect: vi
-          .fn()
-          .mockResolvedValue(modelConfiguration({ status })),
+        inspect: vi.fn().mockResolvedValue(modelConfiguration({ status })),
       });
       await expect(adapter.importCurrent(context)).rejects.toThrow(
         "AGENT_PROVIDER_IMPORT_UNAVAILABLE",
@@ -454,10 +453,15 @@ describe("Agent model Provider Profile adapter", () => {
   it("rejects unsupported factories, profile mismatches, and every stale apply boundary", async () => {
     const rootPath = await temporaryRoot();
     expect(() =>
-      createAgentModelProviderAdapter("antigravity", {
+      createAgentModelProviderAdapter("nanoclaw", {
         backupRoot: path.join(rootPath, "backups"),
       }),
     ).toThrow("AGENT_PROVIDER_ADAPTER_UNSUPPORTED");
+    expect(() =>
+      createAgentModelProviderAdapter("antigravity", {
+        backupRoot: path.join(rootPath, "backups"),
+      }),
+    ).not.toThrow();
     const context = {
       agentId: "claude",
       platformId: "claude",
@@ -507,9 +511,7 @@ describe("Agent model Provider Profile adapter", () => {
     };
     const noPrimaryAdapter = createAgentModelProviderAdapter("claude", {
       backupRoot: path.join(rootPath, "backups"),
-      inspect: vi.fn().mockResolvedValue(
-        modelConfiguration({ model: null }),
-      ),
+      inspect: vi.fn().mockResolvedValue(modelConfiguration({ model: null })),
       update: vi.fn(),
     });
     await expect(
@@ -600,7 +602,9 @@ describe("Agent model Provider Profile adapter", () => {
       restored: true,
       nativeDigest: current.nativeDigest,
     });
-    await expect(fs.stat(path.join(rootPath, "settings.json"))).rejects.toThrow();
+    await expect(
+      fs.stat(path.join(rootPath, "settings.json")),
+    ).rejects.toThrow();
 
     await expect(
       adapter.rollback(context, {
@@ -614,9 +618,11 @@ describe("Agent model Provider Profile adapter", () => {
 
     const malicious = createAgentModelProviderAdapter("claude", {
       backupRoot,
-      inspect: vi.fn().mockResolvedValue(
-        modelConfiguration({ sourceRelativePath: "../outside.json" }),
-      ),
+      inspect: vi
+        .fn()
+        .mockResolvedValue(
+          modelConfiguration({ sourceRelativePath: "../outside.json" }),
+        ),
     });
     await expect(
       malicious.rollback(context, { ...receipt, backupRef: null }),
@@ -627,9 +633,11 @@ describe("Agent model Provider Profile adapter", () => {
 
     const absoluteTarget = createAgentModelProviderAdapter("claude", {
       backupRoot,
-      inspect: vi.fn().mockResolvedValue(
-        modelConfiguration({ sourceRelativePath: path.join(rootPath, "x") }),
-      ),
+      inspect: vi
+        .fn()
+        .mockResolvedValue(
+          modelConfiguration({ sourceRelativePath: path.join(rootPath, "x") }),
+        ),
     });
     await expect(
       absoluteTarget.rollback(context, { ...receipt, backupRef: null }),
@@ -672,11 +680,7 @@ describe("Agent model Provider Profile adapter", () => {
     });
     const before = await adapter.inspect(context);
     const plan = await adapter.planActivation(
-      activationInput(
-        context,
-        [mapping("primary", "new")],
-        before,
-      ),
+      activationInput(context, [mapping("primary", "new")], before),
     );
     const receipt = await adapter.apply(context, plan);
 

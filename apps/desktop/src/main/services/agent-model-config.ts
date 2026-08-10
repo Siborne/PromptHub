@@ -42,6 +42,8 @@ interface UpdateOptions {
 type JsonRecord = Record<string, unknown>;
 
 const JSON_ADAPTER_PATHS: Record<string, string[]> = {
+  antigravity: ["settings.json"],
+  autoclaw: ["setting.json"],
   claude: ["settings.json"],
   copilot: ["settings.json"],
   gemini: ["settings.json"],
@@ -49,12 +51,18 @@ const JSON_ADAPTER_PATHS: Record<string, string[]> = {
   qwen: ["settings.json"],
   opencode: ["opencode.jsonc", "opencode.json"],
   openclaw: ["openclaw.json"],
+  qclaw: ["openclaw.json"],
+  qoder: ["settings.json"],
   kiro: ["settings/cli.json"],
 };
 const OH_MY_PI_MODEL_ADAPTER = "oh-my-pi-yaml-v1";
 const OH_MY_PI_CONFIG_PATHS = ["config.yml", "config.yaml"] as const;
 const OH_MY_PI_MODELS_PATH = "models.yml";
+const HERMES_MODEL_ADAPTER = "hermes-yaml-v1";
+const HERMES_CONFIG_PATH = "config.yaml";
+const COPAW_MODEL_ADAPTER = "copaw-active-agent-v1";
 const MAX_MODEL_LENGTH = 512;
+const SAFE_CHILD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 function emptyResult(
   agentId: string,
@@ -112,7 +120,6 @@ function providerFromModel(model: string | null): string | null {
 }
 
 export { fileExists, readTextConfig, sanitizeEndpoint };
-
 
 function normalizeModel(value: string): string {
   const model = value.trim();
@@ -357,6 +364,76 @@ function inspectCopilot(
   });
 }
 
+function inspectAntigravity(
+  data: JsonRecord,
+  relativePath: string,
+): AgentModelConfiguration {
+  const model = getString(data, "model");
+  return emptyResult("antigravity", model ? "configured" : "not-configured", {
+    adapter: "antigravity-settings-v1",
+    model,
+    provider: "google-antigravity",
+    availableModels: model ? [model] : [],
+    credentialStatus: "platform-managed",
+    sourceRelativePath: relativePath,
+    canSetModel: true,
+  });
+}
+
+function qoderCustomModels(data: JsonRecord): JsonRecord[] {
+  const entries = getRecord(data, "modelConfigs")?.customModels;
+  return Array.isArray(entries) ? entries.filter(isRecord) : [];
+}
+
+function inspectQoder(
+  data: JsonRecord,
+  relativePath: string,
+): AgentModelConfiguration {
+  const model = getString(getRecord(data, "model"), "name");
+  const customModels = qoderCustomModels(data);
+  const selected = customModels.find(
+    (entry) =>
+      getString(entry, "key") === model || getString(entry, "model") === model,
+  );
+  const availableModels = customModels
+    .map((entry) => getString(entry, "key") || getString(entry, "model"))
+    .filter((entry): entry is string => Boolean(entry));
+  if (model && !availableModels.includes(model)) availableModels.push(model);
+  const apiKey = getString(selected, "apiKey");
+  return emptyResult("qoder", model ? "configured" : "not-configured", {
+    adapter: "qoder-settings-v1",
+    model,
+    provider: getString(selected, "provider") || "qoder",
+    endpoint: sanitizeEndpoint(getString(selected, "baseURL")),
+    availableModels,
+    credentialStatus: selected
+      ? apiKey
+        ? "configured"
+        : "missing"
+      : "platform-managed",
+    sourceRelativePath: relativePath,
+    canSetModel: true,
+  });
+}
+
+function inspectAutoClaw(
+  data: JsonRecord,
+  relativePath: string,
+): AgentModelConfiguration {
+  const model = getString(data, "model");
+  const endpoint = sanitizeEndpoint(getString(data, "baseUrl"));
+  return emptyResult("autoclaw", model ? "configured" : "not-configured", {
+    adapter: "autoclaw-setting-v1",
+    model,
+    provider: endpoint ? "openai-compatible" : "platform-default",
+    endpoint,
+    availableModels: model ? [model] : [],
+    credentialStatus: getString(data, "apiKey") ? "configured" : "missing",
+    sourceRelativePath: relativePath,
+    canSetModel: true,
+  });
+}
+
 function inspectPi(
   data: JsonRecord,
   relativePath: string,
@@ -364,7 +441,15 @@ function inspectPi(
   const model = getString(data, "defaultModel");
   const provider = getString(data, "defaultProvider");
   const rawThinkingLevel = getString(data, "defaultThinkingLevel");
-  const thinkingLevel = ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(rawThinkingLevel ?? "")
+  const thinkingLevel = [
+    "off",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ].includes(rawThinkingLevel ?? "")
     ? (rawThinkingLevel as AgentPiThinkingLevel)
     : null;
   return emptyResult("pi", model ? "configured" : "not-configured", {
@@ -464,14 +549,18 @@ function inspectOpenCode(
 }
 
 function inspectOpenClaw(
+  agentId: "openclaw" | "qclaw",
   data: JsonRecord,
   relativePath: string,
 ): AgentModelConfiguration {
   const defaults = getRecord(getRecord(data, "agents"), "defaults");
   const modelConfig = getRecord(defaults, "model");
   const model = getString(modelConfig, "primary");
-  return emptyResult("openclaw", model ? "configured" : "not-configured", {
-    adapter: "openclaw-config-v1",
+  return emptyResult(agentId, model ? "configured" : "not-configured", {
+    adapter:
+      agentId === "openclaw"
+        ? "openclaw-config-v1"
+        : "qclaw-openclaw-config-v1",
     model,
     fallbackModels: getStringArray(modelConfig, "fallbacks"),
     provider: providerFromModel(model),
@@ -501,6 +590,10 @@ function inspectJsonAdapter(
   data: JsonRecord,
   relativePath: string,
 ): AgentModelConfiguration {
+  if (agentId === "antigravity") {
+    return inspectAntigravity(data, relativePath);
+  }
+  if (agentId === "autoclaw") return inspectAutoClaw(data, relativePath);
   if (agentId === "claude") return inspectClaude(data, relativePath);
   if (agentId === "copilot") return inspectCopilot(data, relativePath);
   if (agentId === "gemini") return inspectGemini(data, relativePath);
@@ -508,13 +601,18 @@ function inspectJsonAdapter(
   if (agentId === "qwen") return inspectQwen(data, relativePath);
   if (agentId === "opencode") return inspectOpenCode(data, relativePath);
   if (agentId === "kiro") return inspectKiro(data, relativePath);
-  return inspectOpenClaw(data, relativePath);
+  if (agentId === "qoder") return inspectQoder(data, relativePath);
+  return inspectOpenClaw(agentId as "openclaw" | "qclaw", data, relativePath);
 }
 
 function jsonAdapterId(agentId: string): string {
+  if (agentId === "antigravity") return "antigravity-settings-v1";
+  if (agentId === "autoclaw") return "autoclaw-setting-v1";
   if (agentId === "copilot") return "copilot-settings-v1";
   if (agentId === "kiro") return "kiro-cli-settings-v1";
   if (agentId === "pi") return "pi-settings-v1";
+  if (agentId === "qclaw") return "qclaw-openclaw-config-v1";
+  if (agentId === "qoder") return "qoder-settings-v1";
   return agentId === "qwen" ? "qwen-settings-v1" : `${agentId}-config-v1`;
 }
 
@@ -587,9 +685,156 @@ function inspectTomlAdapter(
   return agentId === "codex" ? inspectCodex(data) : inspectKimi(data);
 }
 
+function inspectHermes(data: JsonRecord): AgentModelConfiguration {
+  const modelValue = data.model;
+  const modelConfig = isRecord(modelValue) ? modelValue : undefined;
+  const model = modelConfig
+    ? getString(modelConfig, "default")
+    : typeof modelValue === "string"
+      ? observedModel(modelValue.trim() || null)
+      : null;
+  const provider =
+    getString(modelConfig, "provider") || providerFromModel(model);
+  return emptyResult("hermes", model ? "configured" : "not-configured", {
+    adapter: HERMES_MODEL_ADAPTER,
+    model,
+    provider,
+    endpoint: sanitizeEndpoint(getString(modelConfig, "base_url")),
+    availableModels: model ? [model] : [],
+    credentialStatus: getString(modelConfig, "api_key")
+      ? "configured"
+      : "platform-managed",
+    sourceRelativePath: HERMES_CONFIG_PATH,
+    canSetModel: true,
+    formattingMayChange: true,
+  });
+}
+
+interface CopawModelTarget {
+  absolutePath: string;
+  relativePath: string;
+}
+
+function copawWorkspaceFromConfig(
+  rootPath: string,
+  config: JsonRecord,
+): { activeAgent: string; workspacePath: string } {
+  const agents = getRecord(config, "agents");
+  const activeAgent = getString(agents, "active_agent");
+  if (!activeAgent || !SAFE_CHILD_ID.test(activeAgent)) {
+    throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  }
+  const profile = getRecord(getRecord(agents, "profiles"), activeAgent);
+  const declaredWorkspace = getString(profile, "workspace_dir");
+  const workspacePath = path.resolve(
+    rootPath,
+    declaredWorkspace || path.join("workspaces", activeAgent),
+  );
+  const root = path.resolve(rootPath);
+  if (!workspacePath.startsWith(`${root}${path.sep}`)) {
+    throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  }
+  return { activeAgent, workspacePath };
+}
+
+async function resolveCopawModelTarget(
+  rootPath: string,
+): Promise<CopawModelTarget> {
+  const configPath = path.join(rootPath, "config.json");
+  const config = parseJsonRecord(await readTextConfig(configPath));
+  const { workspacePath } = copawWorkspaceFromConfig(rootPath, config);
+  const [realRoot, realWorkspace] = await Promise.all([
+    fs.realpath(rootPath),
+    fs.realpath(workspacePath),
+  ]);
+  if (!realWorkspace.startsWith(`${realRoot}${path.sep}`)) {
+    throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  }
+  const absolutePath = path.join(workspacePath, "agent.json");
+  return {
+    absolutePath,
+    relativePath: path
+      .relative(rootPath, absolutePath)
+      .split(path.sep)
+      .join("/"),
+  };
+}
+
+function inspectCopaw(
+  data: JsonRecord,
+  relativePath: string,
+): AgentModelConfiguration {
+  const activeModel = getRecord(data, "active_model");
+  const provider = getString(activeModel, "provider_id");
+  const nativeModel = getString(activeModel, "model");
+  const model =
+    provider && nativeModel ? `${provider}/${nativeModel}` : nativeModel;
+  return emptyResult("copaw", model ? "configured" : "not-configured", {
+    adapter: COPAW_MODEL_ADAPTER,
+    model,
+    provider,
+    availableModels: model ? [model] : [],
+    credentialStatus: "platform-managed",
+    sourceRelativePath: relativePath,
+    canSetModel: true,
+  });
+}
+
 export async function inspectAgentModelConfig(
   context: AgentModelContext,
 ): Promise<AgentModelConfiguration> {
+  if (context.agentId === "copaw") {
+    const configPath = path.join(context.rootPath, "config.json");
+    if (!(await fileExists(configPath))) {
+      return emptyResult("copaw", "missing", {
+        adapter: COPAW_MODEL_ADAPTER,
+        sourceRelativePath: "config.json",
+      });
+    }
+    try {
+      const target = await resolveCopawModelTarget(context.rootPath);
+      if (!(await fileExists(target.absolutePath))) {
+        return emptyResult("copaw", "missing", {
+          adapter: COPAW_MODEL_ADAPTER,
+          sourceRelativePath: target.relativePath,
+          canSetModel: true,
+        });
+      }
+      return inspectCopaw(
+        parseJsonRecord(await readTextConfig(target.absolutePath)),
+        target.relativePath,
+      );
+    } catch {
+      return emptyResult("copaw", "invalid", {
+        adapter: COPAW_MODEL_ADAPTER,
+        sourceRelativePath: "config.json",
+        errorCode: "AGENT_MODEL_CONFIG_INVALID",
+      });
+    }
+  }
+
+  if (context.agentId === "hermes") {
+    const configPath = path.join(context.rootPath, HERMES_CONFIG_PATH);
+    if (!(await fileExists(configPath))) {
+      return emptyResult("hermes", "missing", {
+        adapter: HERMES_MODEL_ADAPTER,
+        sourceRelativePath: HERMES_CONFIG_PATH,
+        canSetModel: true,
+        formattingMayChange: true,
+      });
+    }
+    try {
+      return inspectHermes(parseYamlRecord(await readTextConfig(configPath)));
+    } catch {
+      return emptyResult("hermes", "invalid", {
+        adapter: HERMES_MODEL_ADAPTER,
+        sourceRelativePath: HERMES_CONFIG_PATH,
+        errorCode: "AGENT_MODEL_CONFIG_INVALID",
+        formattingMayChange: true,
+      });
+    }
+  }
+
   if (context.agentId === "codex" || context.agentId === "kimi") {
     const agentId = context.agentId;
     const adapter = agentId === "codex" ? "codex-toml-v1" : "kimi-code-toml-v1";
@@ -785,11 +1030,11 @@ function jsonModelEdits(
     return next.endsWith("\n") ? next : `${next}\n`;
   }
   const modelPath =
-    agentId === "gemini" || agentId === "qwen"
+    agentId === "gemini" || agentId === "qwen" || agentId === "qoder"
       ? ["model", "name"]
       : agentId === "kiro"
         ? ["chat", "defaultModel"]
-        : agentId === "openclaw"
+        : agentId === "openclaw" || agentId === "qclaw"
           ? ["agents", "defaults", "model", "primary"]
           : ["model"];
   let next = applyEdits(
@@ -807,6 +1052,104 @@ function jsonModelEdits(
   return next.endsWith("\n") ? next : `${next}\n`;
 }
 
+function jsoncEdit(
+  raw: string,
+  propertyPath: (string | number)[],
+  value: unknown,
+): string {
+  const next = applyEdits(
+    raw,
+    modify(raw, propertyPath, value, {
+      formattingOptions: { insertSpaces: true, tabSize: 2, eol: "\n" },
+    }),
+  );
+  return next.endsWith("\n") ? next : `${next}\n`;
+}
+
+async function updateHermesModel(
+  context: UpdateAgentModelContext,
+  model: string,
+  options: UpdateOptions,
+): Promise<UpdateAgentModelResult> {
+  const targetPath = path.join(context.rootPath, HERMES_CONFIG_PATH);
+  const exists = await fileExists(targetPath);
+  const original = exists ? await readTextConfig(targetPath) : null;
+  const raw = original ?? "{}\n";
+  const data = parseYamlRecord(raw);
+  const document = parseYamlDocument(raw);
+  if (isRecord(data.model) || !("model" in data)) {
+    document.setIn(["model", "default"], model);
+  } else if (typeof data.model === "string") {
+    document.set("model", model);
+  } else {
+    throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  }
+  const backupPath = await createBackup(
+    targetPath,
+    options.backupRoot,
+    context.agentId,
+  );
+  await assertConfigUnchanged(targetPath, original);
+  try {
+    await atomicWrite(targetPath, serializeYamlDocument(document));
+    return { ...(await verifyModelUpdate(context, model)), backupPath };
+  } catch {
+    await restoreModelConfig(targetPath, original).catch(() => undefined);
+    throw new Error("AGENT_MODEL_CONFIG_UPDATE_FAILED");
+  }
+}
+
+function splitCopawModel(
+  value: string,
+  currentProvider: string | null,
+): { provider: string; model: string } {
+  const separator = value.indexOf("/");
+  const provider = separator > 0 ? value.slice(0, separator) : currentProvider;
+  const model = separator > 0 ? value.slice(separator + 1) : value;
+  if (!provider || !model) throw new Error("AGENT_MODEL_CONFIG_MODEL_INVALID");
+  return { provider, model };
+}
+
+async function updateCopawModel(
+  context: UpdateAgentModelContext,
+  model: string,
+  options: UpdateOptions,
+): Promise<UpdateAgentModelResult> {
+  let target: CopawModelTarget;
+  try {
+    target = await resolveCopawModelTarget(context.rootPath);
+  } catch {
+    throw new Error("AGENT_MODEL_CONFIG_INVALID");
+  }
+  const exists = await fileExists(target.absolutePath);
+  const original = exists ? await readTextConfig(target.absolutePath) : null;
+  const raw = original ?? "{}\n";
+  const data = parseJsonRecord(raw);
+  const currentProvider = getString(
+    getRecord(data, "active_model"),
+    "provider_id",
+  );
+  const selected = splitCopawModel(model, currentProvider);
+  let next = jsoncEdit(raw, ["active_model", "provider_id"], selected.provider);
+  next = jsoncEdit(next, ["active_model", "model"], selected.model);
+  const backupPath = await createBackup(
+    target.absolutePath,
+    options.backupRoot,
+    context.agentId,
+  );
+  await assertConfigUnchanged(target.absolutePath, original);
+  try {
+    await atomicWrite(target.absolutePath, next);
+    const expected = `${selected.provider}/${selected.model}`;
+    return { ...(await verifyModelUpdate(context, expected)), backupPath };
+  } catch {
+    await restoreModelConfig(target.absolutePath, original).catch(
+      () => undefined,
+    );
+    throw new Error("AGENT_MODEL_CONFIG_UPDATE_FAILED");
+  }
+}
+
 export async function updateAgentModelConfig(
   context: UpdateAgentModelContext,
   options: UpdateOptions,
@@ -816,6 +1159,14 @@ export async function updateAgentModelConfig(
     context.secondaryModel === null || context.secondaryModel === undefined
       ? context.secondaryModel
       : normalizeModel(context.secondaryModel);
+
+  if (context.agentId === "copaw") {
+    return updateCopawModel(context, model, options);
+  }
+
+  if (context.agentId === "hermes") {
+    return updateHermesModel(context, model, options);
+  }
 
   if (context.agentId === "oh-my-pi") {
     const resolved = await resolveOhMyPiConfigPath(context.rootPath);

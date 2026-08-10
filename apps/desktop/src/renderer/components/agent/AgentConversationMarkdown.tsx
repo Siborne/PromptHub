@@ -50,9 +50,11 @@ const markdownComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
     </pre>
   ),
   table: ({ children }) => (
-    <table className="my-2 w-full border-collapse text-left text-xs">
-      {children}
-    </table>
+    <div className="my-2 min-w-0 max-w-full overflow-x-auto rounded-md last:mb-0">
+      <table className="w-max min-w-full border-collapse text-left text-xs">
+        {children}
+      </table>
+    </div>
   ),
   th: ({ children }) => (
     <th className="border border-current/20 bg-black/5 px-2 py-1 font-semibold">
@@ -89,7 +91,7 @@ export function AgentConversationMarkdown({
   content,
 }: AgentConversationMarkdownProps) {
   return (
-    <div className="agent-conversation-markdown break-words text-[13px] leading-5">
+    <div className="agent-conversation-markdown min-w-0 max-w-full break-words text-[13px] leading-5">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeSanitize]}

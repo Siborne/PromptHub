@@ -99,6 +99,9 @@ describe("Agent session service", () => {
           id: "550e8400-e29b-41d4-a716-446655440000",
           title: "Qwen integration",
           projectPath: "/workspace/project",
+          sizeBytes: (await fs.stat(transcriptPath)).size,
+          nativeDeleteSupported: true,
+          sourcePath: await fs.realpath(transcriptPath),
           resume: {
             executable: "/opt/homebrew/bin/qwen",
             args: ["--resume", "550e8400-e29b-41d4-a716-446655440000"],
@@ -126,6 +129,10 @@ describe("Agent session service", () => {
       ["user", "Review Qwen support"],
       ["assistant", "The adapter is ready."],
     ]);
+    await service.delete("qwen", "550e8400-e29b-41d4-a716-446655440000");
+    await expect(fs.access(transcriptPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it.skipIf(process.platform === "win32")(
@@ -177,9 +184,38 @@ describe("Agent session service", () => {
       "-Users-test-project",
     );
     await fs.mkdir(projectDir, { recursive: true });
+    const currentPath = path.join(projectDir, "session-new.jsonl");
     await fs.writeFile(
-      path.join(projectDir, "session-new.jsonl"),
+      currentPath,
       [
+        JSON.stringify({
+          type: "user",
+          isMeta: true,
+          cwd: "/Users/test/project",
+          message: {
+            role: "user",
+            content:
+              "<local-command-caveat>Generated command context</local-command-caveat>",
+          },
+        }),
+        JSON.stringify({
+          type: "system",
+          subtype: "local_command",
+          cwd: "/Users/test/project",
+          content: "Fix the release workflow",
+        }),
+        JSON.stringify({
+          type: "user",
+          cwd: "/Users/test/project",
+          message: {
+            role: "user",
+            content: "<command-name>review</command-name>",
+          },
+        }),
+        JSON.stringify({
+          type: "last-prompt",
+          content: "Fix the release workflow",
+        }),
         JSON.stringify({
           type: "user",
           sessionId: "session-new",
@@ -192,6 +228,14 @@ describe("Agent session service", () => {
           type: "assistant",
           timestamp: "2026-07-15T10:01:00.000Z",
           message: { role: "assistant", content: "I found the issue." },
+        }),
+        JSON.stringify({
+          type: "user",
+          timestamp: "2026-07-15T10:02:00.000Z",
+          message: {
+            role: "user",
+            content: [{ type: "tool_result", content: "Read completed" }],
+          },
         }),
       ].join("\n"),
     );
@@ -212,6 +256,7 @@ describe("Agent session service", () => {
 
     const service = createAgentSessionService({ homeDir });
     const result = await service.list("claude", { limit: 1 });
+    const currentSize = (await fs.stat(currentPath)).size;
 
     expect(result.adapter).toBe("claude-jsonl-v1");
     expect(result.hasMore).toBe(true);
@@ -219,8 +264,10 @@ describe("Agent session service", () => {
     expect(result.sessions[0]).toMatchObject({
       id: "session-new",
       title: "Fix the release workflow",
-      projectLabel: "-Users-test-project",
+      projectLabel: "project",
       projectPath: "/Users/test/project",
+      sizeBytes: currentSize,
+      nativeDeleteSupported: true,
       resume: {
         executable: "claude",
         args: ["--resume", "session-new"],
@@ -229,9 +276,10 @@ describe("Agent session service", () => {
     });
 
     const detail = await service.read("claude", "session-new");
-    expect(detail.entries.map((entry) => entry.text)).toEqual([
-      "Fix the release workflow",
-      "I found the issue.",
+    expect(detail.entries).toMatchObject([
+      { role: "user", text: "Fix the release workflow" },
+      { role: "assistant", text: "I found the issue." },
+      { role: "tool", text: "Read completed" },
     ]);
     expect(detail.parseErrors).toBe(1);
     expect(detail.truncated).toBe(false);
@@ -239,6 +287,7 @@ describe("Agent session service", () => {
     const legacy = await service.list("claude", { limit: 1, offset: 1 });
     expect(legacy.sessions[0]).toMatchObject({
       id: "session-old",
+      projectLabel: "-Users-test-project",
       projectPath: null,
       resume: {
         executable: "claude",
@@ -246,6 +295,11 @@ describe("Agent session service", () => {
       },
     });
     expect(legacy.sessions[0].resume).not.toHaveProperty("cwd");
+
+    await service.delete("claude", "session-new");
+    await expect(fs.access(currentPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("uses OpenCode's bounded JSON CLI and sanitized export", async () => {
@@ -265,10 +319,18 @@ describe("Agent session service", () => {
         stderr: "",
       })
       .mockResolvedValueOnce({
+        stdout: JSON.stringify([{ id: "ses_123", sizeBytes: 4096 }]),
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
         stdout: JSON.stringify({
           info: { id: "ses_123", title: "Review Agent adapters" },
           messages: [{ role: "user", content: "Audit the adapter" }],
         }),
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        stdout: "",
         stderr: "",
       });
     const service = createAgentSessionService({
@@ -284,6 +346,8 @@ describe("Agent session service", () => {
       id: "ses_123",
       title: "Review Agent adapters",
       projectPath: "/workspace/project",
+      sizeBytes: 4096,
+      nativeDeleteSupported: true,
       resume: {
         executable: "/opt/homebrew/bin/opencode",
         args: ["--session", "ses_123"],
@@ -300,7 +364,20 @@ describe("Agent session service", () => {
     expect(run).toHaveBeenNthCalledWith(
       2,
       "/opt/homebrew/bin/opencode",
+      ["db", expect.stringContaining("FROM session s"), "--format", "json"],
+      expect.objectContaining({ maxBuffer: 2 * 1024 * 1024 }),
+    );
+    expect(run).toHaveBeenNthCalledWith(
+      3,
+      "/opt/homebrew/bin/opencode",
       ["export", "ses_123", "--sanitize"],
+      expect.objectContaining({ maxBuffer: 2 * 1024 * 1024 }),
+    );
+    await service.delete("opencode", "ses_123");
+    expect(run).toHaveBeenNthCalledWith(
+      4,
+      "/opt/homebrew/bin/opencode",
+      ["session", "delete", "ses_123"],
       expect.objectContaining({ maxBuffer: 2 * 1024 * 1024 }),
     );
   });
@@ -330,10 +407,15 @@ describe("Agent session service", () => {
       updated: 1_700_000_000_000 - index,
       directory: `/workspace/project-${index}`,
     }));
-    const run = vi.fn().mockResolvedValue({
-      stdout: JSON.stringify(rows),
-      stderr: "",
-    });
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: JSON.stringify(rows), stderr: "" })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify(
+          rows.map((row, index) => ({ id: row.id, sizeBytes: index + 1 })),
+        ),
+        stderr: "",
+      });
     const service = createAgentSessionService({
       homeDir: await createHome(),
       commandRunner: {
@@ -348,6 +430,9 @@ describe("Agent session service", () => {
       rows.slice(20, 40).map((row) => row.id),
     );
     expect(page).toMatchObject({ total: 41, hasMore: true });
+    expect(
+      page.sessions.every((session) => typeof session.sizeBytes === "number"),
+    ).toBe(true);
     expect(run).toHaveBeenCalledWith(
       "/opt/homebrew/bin/opencode",
       ["session", "list", "--format", "json", "--max-count", "41"],
@@ -357,22 +442,35 @@ describe("Agent session service", () => {
 
   it("indexes Gemini project sessions and returns a bounded transcript", async () => {
     const homeDir = await createHome();
-    const chatsDir = path.join(
+    const projectPath = path.join(homeDir, "workspace", "PromptHub");
+    const projectCacheDir = path.join(
       homeDir,
       ".gemini",
       "tmp",
       "project-hash",
-      "chats",
     );
+    const chatsDir = path.join(projectCacheDir, "chats");
+    await fs.mkdir(projectPath, { recursive: true });
     await fs.mkdir(chatsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(projectCacheDir, ".project_root"),
+      projectPath,
+    );
     await fs.writeFile(
       path.join(chatsDir, "session-2026-07-15-abcd1234.json"),
       JSON.stringify({
         sessionId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         projectHash: "project-hash",
+        summary: "Native Gemini title",
         startTime: "2026-07-15T10:00:00.000Z",
         lastUpdated: "2026-07-15T10:02:00.000Z",
         messages: [
+          {
+            id: "message-info",
+            timestamp: "2026-07-15T09:59:00.000Z",
+            type: "info",
+            content: "Loaded project context",
+          },
           {
             id: "message-1",
             timestamp: "2026-07-15T10:00:00.000Z",
@@ -385,20 +483,46 @@ describe("Agent session service", () => {
             type: "gemini",
             content: [{ text: "The plan has one open risk." }],
           },
+          {
+            id: "message-tool",
+            timestamp: "2026-07-15T10:01:30.000Z",
+            type: "user",
+            content: [
+              {
+                functionResponse: {
+                  id: "read-1",
+                  name: "read_file",
+                  response: { output: "Tool completed" },
+                },
+              },
+            ],
+          },
+          {
+            id: "message-error",
+            timestamp: "2026-07-15T10:01:45.000Z",
+            type: "error",
+            content: "A visible model error",
+          },
+          "malformed-message-row",
         ],
       }),
     );
 
     const service = createAgentSessionService({ homeDir });
     const list = await service.list("gemini", { limit: 20 });
+    const sessionPath = path.join(chatsDir, "session-2026-07-15-abcd1234.json");
 
     expect(list.sessions[0]).toMatchObject({
       id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      title: "Review the release plan",
-      projectLabel: "project-hash",
+      title: "Native Gemini title",
+      projectLabel: "PromptHub",
+      projectPath,
+      sizeBytes: (await fs.stat(sessionPath)).size,
+      nativeDeleteSupported: true,
       resume: {
         executable: "gemini",
         args: ["--resume", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"],
+        cwd: projectPath,
       },
     });
     const detail = await service.read(
@@ -408,8 +532,70 @@ describe("Agent session service", () => {
     expect(detail.entries.map((entry) => [entry.role, entry.text])).toEqual([
       ["user", "Review the release plan"],
       ["assistant", "The plan has one open risk."],
+      ["tool", "Tool completed"],
+      ["system", "A visible model error"],
     ]);
+    expect(detail.parseErrors).toBe(1);
     expect(detail.truncated).toBe(false);
+
+    await service.delete("gemini", "a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+    await expect(fs.access(sessionPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("keeps Gemini cache labels when project markers are unsafe", async () => {
+    const homeDir = await createHome();
+    const geminiRoot = path.join(homeDir, ".gemini", "tmp");
+    const sessions = [
+      ["missing-marker", "missing-session"],
+      ["relative-marker", "relative-session"],
+      ["oversized-marker", "oversized-session"],
+      ["symlink-marker", "symlink-session"],
+    ] as const;
+
+    for (const [project, sessionId] of sessions) {
+      const projectDir = path.join(geminiRoot, project);
+      const chatsDir = path.join(projectDir, "chats");
+      await fs.mkdir(chatsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(chatsDir, `${sessionId}.json`),
+        JSON.stringify({
+          sessionId,
+          messages: [{ type: "user", content: sessionId }],
+        }),
+      );
+    }
+    await fs.writeFile(
+      path.join(geminiRoot, "relative-marker", ".project_root"),
+      "relative/project",
+    );
+    await fs.writeFile(
+      path.join(geminiRoot, "oversized-marker", ".project_root"),
+      `/workspace/${"x".repeat(4 * 1024)}`,
+    );
+    const externalMarker = path.join(homeDir, "external-project-root");
+    await fs.writeFile(externalMarker, "/workspace/external");
+    await fs.symlink(
+      externalMarker,
+      path.join(geminiRoot, "symlink-marker", ".project_root"),
+    );
+
+    const service = createAgentSessionService({ homeDir });
+    const list = await service.list("gemini", { limit: 20 });
+    expect(
+      Object.fromEntries(
+        list.sessions.map((session) => [session.id, session.projectLabel]),
+      ),
+    ).toEqual({
+      "missing-session": "missing-marker",
+      "relative-session": "relative-marker",
+      "oversized-session": "oversized-marker",
+      "symlink-session": "symlink-marker",
+    });
+    expect(list.sessions.every((session) => session.projectPath === null)).toBe(
+      true,
+    );
   });
 
   it("reads current Kimi Code sessions from its bounded index and rejects escaped roots", async () => {
@@ -422,7 +608,17 @@ describe("Agent session service", () => {
       "wd_project_123456789abc",
       sessionId,
     );
+    const emptySessionId = "session_empty_12345678";
+    const emptySessionDir = path.join(
+      kimiRootDir,
+      "sessions",
+      "wd_project_123456789abc",
+      emptySessionId,
+    );
     await fs.mkdir(path.join(sessionDir, "agents", "main"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(emptySessionDir, "agents", "main"), {
       recursive: true,
     });
     await fs.writeFile(
@@ -439,6 +635,11 @@ describe("Agent session service", () => {
           sessionDir,
           workDir: "/workspace/kimi-project",
         }),
+        JSON.stringify({
+          sessionId: emptySessionId,
+          sessionDir: emptySessionDir,
+          workDir: "/workspace/kimi-project",
+        }),
       ].join("\n"),
     );
     await fs.writeFile(
@@ -448,7 +649,21 @@ describe("Agent session service", () => {
         createdAt: "2026-07-17T08:00:00.000Z",
         updatedAt: "2026-07-17T08:02:00.000Z",
         workDir: "/workspace/kimi-project",
+        lastPrompt: "Review the Kimi adapter",
       }),
+    );
+    await fs.writeFile(
+      path.join(emptySessionDir, "state.json"),
+      JSON.stringify({
+        title: "New Session",
+        createdAt: "2026-07-17T08:03:00.000Z",
+        updatedAt: "2026-07-17T08:03:00.000Z",
+        workDir: "/workspace/kimi-project",
+      }),
+    );
+    await fs.writeFile(
+      path.join(emptySessionDir, "agents", "main", "wire.jsonl"),
+      `${JSON.stringify({ type: "metadata", protocol_version: "1.1" })}\n`,
     );
     await fs.writeFile(
       path.join(sessionDir, "agents", "main", "wire.jsonl"),
@@ -487,6 +702,12 @@ describe("Agent session service", () => {
 
     const service = createAgentSessionService({ homeDir, kimiRootDir });
     const list = await service.list("kimi", { limit: 20 });
+    const wirePath = await fs.realpath(
+      path.join(sessionDir, "agents", "main", "wire.jsonl"),
+    );
+    const sessionBytes =
+      (await fs.stat(path.join(sessionDir, "state.json"))).size +
+      (await fs.stat(wirePath)).size;
 
     expect(list).toMatchObject({
       adapter: "kimi-code-index-v1",
@@ -499,6 +720,9 @@ describe("Agent session service", () => {
         title: "Review Kimi Code integration",
         projectLabel: "kimi-project",
         projectPath: "/workspace/kimi-project",
+        sizeBytes: sessionBytes,
+        nativeDeleteSupported: true,
+        sourcePath: wirePath,
         resume: {
           executable: "kimi",
           args: ["--session", sessionId],
@@ -518,6 +742,14 @@ describe("Agent session service", () => {
       ["user", "Review the Kimi adapter"],
       ["assistant", "The adapter is ready for review."],
     ]);
+    await service.delete("kimi", sessionId);
+    await expect(fs.access(sessionDir)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(service.list("kimi", { limit: 20 })).resolves.toMatchObject({
+      total: 0,
+      sessions: [],
+    });
   });
 
   it("reads the newest Kimi session from the bounded tail of an oversized index", async () => {
@@ -530,13 +762,23 @@ describe("Agent session service", () => {
       "wd_recent",
       sessionId,
     );
-    await fs.mkdir(sessionDir, { recursive: true });
+    await fs.mkdir(path.join(sessionDir, "agents", "main"), {
+      recursive: true,
+    });
     await fs.writeFile(
       path.join(sessionDir, "state.json"),
       JSON.stringify({
         title: "Newest bounded session",
         updatedAt: "2026-07-17T09:00:00.000Z",
+        lastPrompt: "Newest bounded prompt",
       }),
+    );
+    await fs.writeFile(
+      path.join(sessionDir, "agents", "main", "wire.jsonl"),
+      `${JSON.stringify({
+        type: "turn.prompt",
+        input: "Newest bounded prompt",
+      })}\n`,
     );
     await fs.writeFile(
       path.join(kimiRootDir, "session_index.jsonl"),

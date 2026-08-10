@@ -211,7 +211,19 @@ describe("Hermes session adapter", () => {
     ).resolves.toMatchObject({
       adapter: "hermes-state-db-v1",
       total: 1,
-      sessions: [{ id: "20260731_100000_abcd1234" }],
+      sessions: [
+        {
+          id: "20260731_100000_abcd1234",
+          sizeBytes: expect.any(Number),
+          nativeDeleteSupported: true,
+        },
+      ],
+    });
+
+    await service.delete("hermes", "20260731_100000_abcd1234");
+    await expect(service.list("hermes", { limit: 20 })).resolves.toMatchObject({
+      total: 1,
+      sessions: [{ id: "20260730_090000_dcba4321" }],
     });
   });
 

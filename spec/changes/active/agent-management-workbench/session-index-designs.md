@@ -100,8 +100,10 @@ affect the request.
 
 The Sessions page subscribes once, filters progress by its active request and
 Agent, and unsubscribes on unmount. While indexing, it shows determinate
-progress and one cancel action. Indexed search is debounced and runs through
-SQLite; disabled sources preserve the existing live-reader fallback. Agent
+progress and one cancel action. Indexed search runs through SQLite only after
+the user submits the draft with Enter; typing performs no list request. Search
+matches only session title and project identity, while disabled sources preserve
+the existing live-reader fallback with the same final metadata predicate. Agent
 changes invalidate late list, refresh and progress results.
 
 ## `DES-AGENT-053`: Cancellation Commit Barrier And Scale Verification
