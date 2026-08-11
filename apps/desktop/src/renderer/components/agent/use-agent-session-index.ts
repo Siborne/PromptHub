@@ -14,6 +14,11 @@ const EMPTY_STATE: AgentSessionIndexPublicState = {
 };
 
 let requestSequence = 0;
+const AUTOMATIC_REFRESH_MAX_AGE_MS = 5 * 60 * 1000;
+const automaticRefreshes = new Map<
+  string,
+  Promise<AgentSessionIndexPublicState>
+>();
 
 function nextRequestId(): string {
   requestSequence += 1;
@@ -30,7 +35,34 @@ function isEmptyState(state: AgentSessionIndexPublicState): boolean {
   );
 }
 
-export function useAgentSessionIndex(agentId: string) {
+function needsAutomaticRefresh(state: AgentSessionIndexPublicState): boolean {
+  return (
+    state.lastScannedAt === null ||
+    Date.now() - state.lastScannedAt >= AUTOMATIC_REFRESH_MAX_AGE_MS
+  );
+}
+
+function refreshAutomatically(
+  agentId: string,
+): Promise<AgentSessionIndexPublicState> {
+  const current = automaticRefreshes.get(agentId);
+  if (current) return current;
+  const requestId = nextRequestId();
+  const pending = window.api.agent
+    .refreshSessionIndex({ agentId, requestId })
+    .finally(() => {
+      if (automaticRefreshes.get(agentId) === pending) {
+        automaticRefreshes.delete(agentId);
+      }
+    });
+  automaticRefreshes.set(agentId, pending);
+  return pending;
+}
+
+export function useAgentSessionIndex(
+  agentId: string,
+  automaticPreference?: boolean,
+) {
   const [state, setState] = useState<AgentSessionIndexPublicState>(EMPTY_STATE);
   const [progress, setProgress] = useState<AgentSessionIndexProgress | null>(
     null,
@@ -39,7 +71,9 @@ export function useAgentSessionIndex(agentId: string) {
   const [isIndexing, setIsIndexing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const [hasLoadedState, setHasLoadedState] = useState(false);
   const activeRequest = useRef<string | null>(null);
+  const reconciledPreference = useRef<string | null>(null);
   const currentAgent = useRef(agentId);
   currentAgent.current = agentId;
 
@@ -50,12 +84,20 @@ export function useAgentSessionIndex(agentId: string) {
     setError(null);
     setIsChanging(false);
     setIsIndexing(false);
+    setHasLoadedState(false);
+    setRevision(0);
     window.api.agent
       .getSessionIndexState(agentId)
       .then((next) => {
-        if (active && !isEmptyState(next)) setState(next);
+        if (!active) return;
+        if (!isEmptyState(next)) setState(next);
+        setHasLoadedState(true);
       })
-      .catch(() => active && setError("state"));
+      .catch(() => {
+        if (!active) return;
+        setError("state");
+        setHasLoadedState(true);
+      });
     return () => {
       active = false;
       const requestId = activeRequest.current;
@@ -110,8 +152,8 @@ export function useAgentSessionIndex(agentId: string) {
   }, [agentId]);
 
   const setEnabled = useCallback(
-    async (enabled: boolean) => {
-      if (isChanging || isIndexing) return;
+    async (enabled: boolean): Promise<AgentSessionIndexPublicState | null> => {
+      if (isChanging || isIndexing) return null;
       setIsChanging(true);
       setError(null);
       try {
@@ -119,12 +161,14 @@ export function useAgentSessionIndex(agentId: string) {
           agentId,
           enabled,
         });
-        if (currentAgent.current !== agentId) return;
+        if (currentAgent.current !== agentId) return null;
         setState(next);
         setRevision((value) => value + 1);
         if (enabled) await refresh();
+        return next;
       } catch {
         if (currentAgent.current === agentId) setError("toggle");
+        return null;
       } finally {
         if (currentAgent.current === agentId) setIsChanging(false);
       }
@@ -137,6 +181,69 @@ export function useAgentSessionIndex(agentId: string) {
     if (!requestId) return false;
     return window.api.agent.cancelSessionIndex({ requestId });
   }, []);
+
+  useEffect(() => {
+    if (
+      automaticPreference === undefined ||
+      !hasLoadedState ||
+      !state.supported
+    ) {
+      return;
+    }
+    const preferenceKey = `${agentId}:${automaticPreference}`;
+    if (reconciledPreference.current === preferenceKey) return;
+    reconciledPreference.current = preferenceKey;
+
+    let active = true;
+    void (async () => {
+      let next = state;
+      const changed = state.enabled !== automaticPreference;
+      if (changed) {
+        try {
+          next = await window.api.agent.setSessionIndexEnabled({
+            agentId,
+            enabled: automaticPreference,
+          });
+        } catch {
+          if (active && currentAgent.current === agentId) setError("toggle");
+          reconciledPreference.current = null;
+          return;
+        }
+        if (!active || currentAgent.current !== agentId) return;
+        if (!automaticPreference) {
+          setState(next);
+          setRevision((value) => value + 1);
+          return;
+        }
+      }
+      if (!automaticPreference) return;
+      if (!needsAutomaticRefresh(next)) {
+        if (changed) {
+          setState(next);
+          setRevision((value) => value + 1);
+        }
+        return;
+      }
+      try {
+        const refreshed = await refreshAutomatically(agentId);
+        if (!active || currentAgent.current !== agentId) return;
+        setState(refreshed);
+        setRevision((value) => value + 1);
+      } catch {
+        if (active && currentAgent.current === agentId) setError("refresh");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [
+    agentId,
+    automaticPreference,
+    hasLoadedState,
+    state.enabled,
+    state.lastScannedAt,
+    state.supported,
+  ]);
 
   return {
     state,

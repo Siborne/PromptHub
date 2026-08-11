@@ -146,6 +146,7 @@ export interface SettingsState {
   enableNotifications: boolean;
   showCopyNotification: boolean;
   showSaveNotification: boolean;
+  localSessionIndexEnabled: boolean;
   tagFilterMode: TagFilterMode;
   promptTagCatalog: string[];
   language: SupportedLanguage;
@@ -259,6 +260,7 @@ export interface SettingsState {
   setShortcutMode: (key: string, mode: "global" | "local") => void;
   setShowCopyNotification: (enabled: boolean) => void;
   setShowSaveNotification: (enabled: boolean) => void;
+  setLocalSessionIndexEnabled: (enabled: boolean) => void;
   setTagFilterMode: (mode: TagFilterMode) => void;
   addPromptTagCatalogEntry: (tag: string) => void;
   renamePromptTagCatalogEntry: (oldTag: string, newTag: string) => void;

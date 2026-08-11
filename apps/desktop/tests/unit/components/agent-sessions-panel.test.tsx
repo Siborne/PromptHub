@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentSessionsPanel } from "../../../src/renderer/components/agent/AgentSessionsPanel";
 import { ToastProvider } from "../../../src/renderer/components/ui/Toast";
 import { copyTextToClipboard } from "../../../src/renderer/utils/clipboard";
+import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
 import type {
   AgentSessionEntry,
   AgentSessionListResult,
@@ -60,6 +61,7 @@ describe("AgentSessionsPanel", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.mocked(copyTextToClipboard).mockClear();
+    useSettingsStore.getState().setLocalSessionIndexEnabled(true);
   });
 
   it("pages metadata and provides fast transcript pagination", async () => {
@@ -116,6 +118,9 @@ describe("AgentSessionsPanel", () => {
     expect(
       screen.getByTestId("conversation-transcript-pagination"),
     ).toHaveTextContent("Page 1 of 4+");
+    expect(
+      screen.getByRole("button", { name: "First message page" }),
+    ).toBeDisabled();
     expect(screen.queryByText(/bounded preview/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Session 0/ })).toHaveStyle({
       contentVisibility: "auto",
@@ -145,6 +150,14 @@ describe("AgentSessionsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Latest messages" }));
     expect(await screen.findByText("Message 119")).toBeVisible();
     expect(screen.getByText("Page 6 of 6")).toBeInTheDocument();
+
+    const readsBeforeFirstPage = readSession.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "First message page" }));
+    expect(await screen.findByText("Message 19")).toBeVisible();
+    expect(readSession).toHaveBeenCalledTimes(readsBeforeFirstPage);
+    expect(
+      screen.getByRole("button", { name: "First message page" }),
+    ).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Load more sessions" }));
     await waitFor(() =>
@@ -1168,7 +1181,7 @@ describe("AgentSessionsPanel", () => {
     expect(screen.queryByText("Session 50")).not.toBeInTheDocument();
   });
 
-  it("requires explicit opt-in and exposes scoped progress cancellation", async () => {
+  it("applies the system index preference without History controls", async () => {
     let progressListener:
       | ((progress: {
           agentId: string;
@@ -1230,22 +1243,12 @@ describe("AgentSessionsPanel", () => {
       },
     });
 
-    await renderWithI18n(
+    const view = await renderWithI18n(
       <AgentSessionsPanel
         agent={{ ...agent, id: "claude", name: "Claude Code" }}
       />,
       { language: "en", settleAsyncEffects: true },
     );
-    const toggle = await screen.findByRole("switch", {
-      name: "Enable local session indexing",
-    });
-    expect(toggle).not.toBeChecked();
-    expect(
-      screen.getByText(
-        "Caches redacted session metadata locally to make search and paging faster. Transcript text stays in the Agent's files and is read only when opened.",
-      ),
-    ).toBeVisible();
-    fireEvent.click(toggle);
     await waitFor(() =>
       expect(setSessionIndexEnabled).toHaveBeenCalledWith({
         agentId: "claude",
@@ -1262,13 +1265,14 @@ describe("AgentSessionsPanel", () => {
         total: 3,
       });
     });
-    expect(await screen.findByText("Indexing 1 / 3")).toBeVisible();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Cancel session indexing" }),
-    );
-    expect(cancelSessionIndex).toHaveBeenCalledWith({
-      requestId: request.requestId,
-    });
+    expect(
+      screen.queryByRole("switch", {
+        name: "Enable local session indexing",
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Indexing 1 / 3")).not.toBeInTheDocument();
+    view.unmount();
+    expect(cancelSessionIndex).not.toHaveBeenCalled();
 
     await act(async () => {
       resolveRefresh?.({

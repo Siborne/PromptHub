@@ -60,11 +60,11 @@ export function GeneralSettings() {
             label={t("settings.closeAction")}
             description={t("settings.closeActionDesc")}
           >
-          <Select
-            ariaLabel={t("settings.closeAction")}
-            value={settings.closeAction}
-            onChange={(value) =>
-              settings.setCloseAction(value as "ask" | "minimize" | "exit")
+            <Select
+              ariaLabel={t("settings.closeAction")}
+              value={settings.closeAction}
+              onChange={(value) =>
+                settings.setCloseAction(value as "ask" | "minimize" | "exit")
               }
               options={[
                 { value: "ask", label: t("settings.askEveryTime") },
@@ -117,6 +117,16 @@ export function GeneralSettings() {
 
       <SettingSection title={t("settings.behaviorPreferences", "行为与偏好")}>
         <SettingItem
+          label={t("settings.agentHistoryAcceleration")}
+          description={t("settings.agentHistoryAccelerationDesc")}
+        >
+          <ToggleSwitch
+            ariaLabel={t("settings.agentHistoryAcceleration")}
+            checked={settings.localSessionIndexEnabled}
+            onChange={settings.setLocalSessionIndexEnabled}
+          />
+        </SettingItem>
+        <SettingItem
           label={t("settings.tagFilterMode", "标签点击模式")}
           description={t(
             "settings.tagFilterModeDesc",
@@ -130,8 +140,14 @@ export function GeneralSettings() {
               settings.setTagFilterMode(value as "single" | "multi")
             }
             options={[
-              { value: "single", label: t("settings.tagFilterModeSingle", "单选") },
-              { value: "multi", label: t("settings.tagFilterModeMulti", "多选") },
+              {
+                value: "single",
+                label: t("settings.tagFilterModeSingle", "单选"),
+              },
+              {
+                value: "multi",
+                label: t("settings.tagFilterModeMulti", "多选"),
+              },
             ]}
             className="w-40"
           />

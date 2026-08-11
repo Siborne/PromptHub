@@ -30,6 +30,115 @@ describe("useAgentSessionIndex", () => {
     vi.restoreAllMocks();
   });
 
+  it("reconciles an application preference and refreshes only when enabled", async () => {
+    const setSessionIndexEnabled = vi
+      .fn()
+      .mockResolvedValueOnce(state(true))
+      .mockResolvedValueOnce(state(false));
+    const refreshSessionIndex = vi.fn().mockResolvedValue(state(true));
+    const getSessionIndexState = vi
+      .fn()
+      .mockResolvedValueOnce(state(false))
+      .mockResolvedValueOnce(state(true));
+    installWindowMocks({
+      api: {
+        agent: {
+          getSessionIndexState,
+          setSessionIndexEnabled,
+          refreshSessionIndex,
+        },
+      },
+    });
+
+    const enabledHook = renderHook(() => useAgentSessionIndex("claude", true));
+    await waitFor(() => expect(refreshSessionIndex).toHaveBeenCalledOnce());
+    expect(setSessionIndexEnabled).toHaveBeenNthCalledWith(1, {
+      agentId: "claude",
+      enabled: true,
+    });
+    enabledHook.unmount();
+
+    const disabledHook = renderHook(() =>
+      useAgentSessionIndex("gemini", false),
+    );
+    await waitFor(() =>
+      expect(setSessionIndexEnabled).toHaveBeenNthCalledWith(2, {
+        agentId: "gemini",
+        enabled: false,
+      }),
+    );
+    expect(refreshSessionIndex).toHaveBeenCalledTimes(1);
+    disabledHook.unmount();
+  });
+
+  it("reuses a fresh persisted index without scanning again", async () => {
+    const freshState: AgentSessionIndexPublicState = {
+      supported: true,
+      enabled: true,
+      lastStatus: "ok",
+      lastScannedAt: Date.now(),
+      lastErrorCode: null,
+    };
+    const refreshSessionIndex = vi.fn().mockResolvedValue(freshState);
+    installWindowMocks({
+      api: {
+        agent: {
+          getSessionIndexState: vi.fn().mockResolvedValue(freshState),
+          refreshSessionIndex,
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useAgentSessionIndex("gemini", true));
+    await waitFor(() => expect(result.current.state.enabled).toBe(true));
+    await act(async () => Promise.resolve());
+
+    expect(refreshSessionIndex).not.toHaveBeenCalled();
+  });
+
+  it("keeps one automatic warmup alive across History remounts", async () => {
+    const staleState: AgentSessionIndexPublicState = {
+      supported: true,
+      enabled: true,
+      lastStatus: "ok",
+      lastScannedAt: 1,
+      lastErrorCode: null,
+    };
+    const warmedState: AgentSessionIndexPublicState = {
+      ...staleState,
+      lastScannedAt: Date.now(),
+    };
+    const warmup = deferred<AgentSessionIndexPublicState>();
+    const refreshSessionIndex = vi.fn(() => warmup.promise);
+    const cancelSessionIndex = vi.fn().mockResolvedValue(true);
+    installWindowMocks({
+      api: {
+        agent: {
+          getSessionIndexState: vi.fn().mockResolvedValue(staleState),
+          refreshSessionIndex,
+          cancelSessionIndex,
+        },
+      },
+    });
+
+    const first = renderHook(() => useAgentSessionIndex("gemini", true));
+    await waitFor(() => expect(refreshSessionIndex).toHaveBeenCalledOnce());
+    first.unmount();
+
+    const second = renderHook(() => useAgentSessionIndex("gemini", true));
+    await waitFor(() => expect(second.result.current.state.enabled).toBe(true));
+    expect(refreshSessionIndex).toHaveBeenCalledOnce();
+    expect(cancelSessionIndex).not.toHaveBeenCalled();
+
+    await act(async () => warmup.resolve(warmedState));
+    await waitFor(() =>
+      expect(second.result.current.state.lastScannedAt).toBe(
+        warmedState.lastScannedAt,
+      ),
+    );
+    second.unmount();
+  });
+
   it("opts in explicitly, accepts only scoped progress, cancels, and disables", async () => {
     const refresh = deferred<AgentSessionIndexPublicState>();
     let progressListener:

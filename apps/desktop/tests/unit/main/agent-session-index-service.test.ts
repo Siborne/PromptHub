@@ -645,6 +645,40 @@ describe("Agent session index service", () => {
     });
   });
 
+  it("falls back to live history after an automatic index refresh fails", async () => {
+    const sourcePath = await writeClaudeSession(
+      homeDir,
+      "workspace",
+      SESSION_A,
+      claudeLine(SESSION_A, "Indexed before failure"),
+    );
+    const reader = createAgentSessionService({ homeDir });
+    const automaticService = createAgentSessionIndexService({
+      index,
+      reader,
+      now: () => 4_000,
+    });
+    automaticService.setEnabled("claude", true);
+    await automaticService.refresh("claude");
+    await fs.writeFile(
+      sourcePath,
+      claudeLine(SESSION_A, "Live after failed refresh"),
+    );
+    vi.spyOn(reader, "scanIndex").mockRejectedValueOnce(
+      new Error("scan unavailable"),
+    );
+
+    await expect(automaticService.refresh("claude")).rejects.toThrow(
+      "scan unavailable",
+    );
+    const fallback = await automaticService.list("claude", {
+      limit: 10,
+      offset: 0,
+    });
+
+    expect(fallback.sessions[0]?.title).toBe("Live after failed refresh");
+  });
+
   it("disables persistence while preserving the rebuildable local index", async () => {
     await writeClaudeSession(
       homeDir,

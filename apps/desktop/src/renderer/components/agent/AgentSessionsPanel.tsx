@@ -4,6 +4,7 @@ import {
   BotIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronsLeftIcon,
   ChevronsRightIcon,
   Clock3Icon,
   CopyIcon,
@@ -12,11 +13,9 @@ import {
   HistoryIcon,
   InfoIcon,
   Loader2Icon,
-  RefreshCwIcon,
   SearchIcon,
   TerminalSquareIcon,
   UserIcon,
-  XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -32,6 +31,7 @@ import { AgentConversationMarkdown } from "./AgentConversationMarkdown";
 import { AgentConversationActions } from "./AgentConversationActions";
 import { useAgentSessionIndex } from "./use-agent-session-index";
 import { Select } from "../ui/Select";
+import { useSettingsStore } from "../../stores/settings.store";
 import {
   formatSessionSize,
   resolveSessionTitle,
@@ -97,7 +97,14 @@ export function AgentSessionsPanel({
   projects = [],
 }: AgentSessionsPanelProps) {
   const { t } = useTranslation();
-  const sessionIndex = useAgentSessionIndex(agent.id);
+  const [isLoading, setIsLoading] = useState(true);
+  const localSessionIndexEnabled = useSettingsStore(
+    (state) => state.localSessionIndexEnabled,
+  );
+  const sessionIndex = useAgentSessionIndex(
+    agent.id,
+    isLoading ? undefined : localSessionIndexEnabled,
+  );
   const [sessions, setSessions] = useState<AgentSessionMetadata[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AgentSessionDetail | null>(null);
@@ -110,7 +117,6 @@ export function AgentSessionsPanel({
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [nextOffset, setNextOffset] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isReading, setIsReading] = useState(false);
   const [isLoadingMoreTranscript, setIsLoadingMoreTranscript] = useState(false);
@@ -156,7 +162,10 @@ export function AgentSessionsPanel({
         setSelectedId(result.sessions[0]?.id || null);
       })
       .catch(() => active && setError(t("agents.sessionsLoadFailed")))
-      .finally(() => active && setIsLoading(false));
+      .finally(() => {
+        if (!active) return;
+        setIsLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -192,9 +201,8 @@ export function AgentSessionsPanel({
 
   useEffect(() => {
     if (submittedSearch.agentId !== agent.id) return;
-    if (!sessionIndex.state.enabled && submittedSearch.revision === 0) return;
+    if (sessionIndex.revision === 0 && submittedSearch.revision === 0) return;
     let active = true;
-    setIsLoading(true);
     setError(null);
     listSessions(
       agent.id,
@@ -210,18 +218,11 @@ export function AgentSessionsPanel({
         setNextOffset(SESSION_PAGE_SIZE);
         setSelectedId(result.sessions[0]?.id || null);
       })
-      .catch(() => active && setError(t("agents.sessionsLoadFailed")))
-      .finally(() => active && setIsLoading(false));
+      .catch(() => active && setError(t("agents.sessionsLoadFailed")));
     return () => {
       active = false;
     };
-  }, [
-    agent.id,
-    sessionIndex.revision,
-    sessionIndex.state.enabled,
-    submittedSearch,
-    t,
-  ]);
+  }, [agent.id, sessionIndex.revision, submittedSearch, t]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -590,101 +591,6 @@ export function AgentSessionsPanel({
               triggerClassName="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border/80 bg-background px-2.5 text-left text-xs text-foreground shadow-sm outline-none transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-primary/20"
             />
           </div>
-          {sessionIndex.state.supported ? (
-            <div className="mt-3 border-t border-border/70 pt-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-foreground">
-                  {t("agents.localSessionIndex")}
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-label={t("agents.enableLocalSessionIndex")}
-                  aria-describedby="local-session-index-description"
-                  aria-checked={sessionIndex.state.enabled}
-                  disabled={sessionIndex.isChanging || sessionIndex.isIndexing}
-                  onClick={() =>
-                    void sessionIndex.setEnabled(!sessionIndex.state.enabled)
-                  }
-                  className={`relative ml-auto h-5 w-9 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                    sessionIndex.state.enabled
-                      ? "bg-primary"
-                      : "bg-muted-foreground/30"
-                  }`}
-                >
-                  <span
-                    className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                      sessionIndex.state.enabled
-                        ? "translate-x-4"
-                        : "translate-x-0"
-                    }`}
-                  />
-                </button>
-                {sessionIndex.state.enabled && !sessionIndex.isIndexing ? (
-                  <button
-                    type="button"
-                    aria-label={t("agents.refreshLocalSessionIndex")}
-                    title={t("agents.refreshLocalSessionIndex")}
-                    onClick={() => void sessionIndex.refresh()}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-                  >
-                    <RefreshCwIcon className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
-              </div>
-              <p
-                id="local-session-index-description"
-                className="mt-1.5 pr-2 text-[11px] leading-4 text-muted-foreground"
-              >
-                {t("agents.localSessionIndexDescription")}
-              </p>
-              {sessionIndex.isIndexing && sessionIndex.progress ? (
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>
-                        {t("agents.indexingSessions", {
-                          processed: sessionIndex.progress.processed,
-                          total: sessionIndex.progress.total,
-                        })}
-                      </span>
-                    </div>
-                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full bg-primary transition-[width]"
-                        style={{
-                          width: `${
-                            sessionIndex.progress.total > 0
-                              ? Math.min(
-                                  100,
-                                  (sessionIndex.progress.processed /
-                                    sessionIndex.progress.total) *
-                                    100,
-                                )
-                              : 0
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={t("agents.cancelSessionIndexing")}
-                    title={t("agents.cancelSessionIndexing")}
-                    onClick={() => void sessionIndex.cancel()}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-                  >
-                    <XIcon className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ) : null}
-              {sessionIndex.error ? (
-                <p className="mt-2 text-[11px] text-destructive">
-                  {t("agents.sessionIndexFailed")}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {filtered.map((session) => (
@@ -913,6 +819,16 @@ function TranscriptPagination({
       aria-label={t("agents.transcriptPagination", "Message pages")}
       className="flex h-12 shrink-0 items-center justify-center gap-1 border-b border-border/70 bg-white px-4 dark:bg-background"
     >
+      <button
+        type="button"
+        aria-label={t("agents.transcriptFirstPage", "First message page")}
+        title={t("agents.transcriptFirstPage", "First message page")}
+        disabled={currentPage === 0 || isLoading}
+        onClick={() => onPageChange(0)}
+        className="mr-1 grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+      >
+        <ChevronsLeftIcon className="h-4 w-4" />
+      </button>
       <button
         type="button"
         aria-label={t("agents.transcriptPreviousPage", "Previous message page")}

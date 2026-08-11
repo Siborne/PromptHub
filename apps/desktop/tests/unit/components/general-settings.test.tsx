@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { GeneralSettings } from "../../../src/renderer/components/settings/GeneralSettings";
 import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
+import { createDefaultSettingsValues } from "../../../src/renderer/stores/settings/settings-defaults";
 import { renderWithI18n } from "../../helpers/i18n";
 
 describe("GeneralSettings", () => {
@@ -25,6 +26,7 @@ describe("GeneralSettings", () => {
     settings.setShowCopyNotification(false);
     settings.setShowSaveNotification(false);
     settings.setTagFilterMode("multi");
+    settings.setLocalSessionIndexEnabled(false);
   });
 
   it("renders the four sections (startup / editor / language / notifications)", async () => {
@@ -43,12 +45,34 @@ describe("GeneralSettings", () => {
     expect(
       screen.getByRole("switch", { name: "Launch at Startup" }),
     ).toHaveAttribute("aria-checked", "false");
-    expect(
-      screen.getByRole("switch", { name: "Auto Save" }),
-    ).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("switch", { name: "Auto Save" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
     expect(
       screen.getByRole("switch", { name: "Save Success Notification" }),
     ).toHaveAttribute("aria-checked", "false");
+    expect(
+      screen.getByRole("switch", { name: "Accelerate Agent history search" }),
+    ).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("enables Agent history acceleration by default and owns its toggle", async () => {
+    expect(createDefaultSettingsValues().localSessionIndexEnabled).toBe(true);
+    const user = userEvent.setup();
+    await renderWithI18n(<GeneralSettings />, { language: "en" });
+
+    await user.click(
+      screen.getByRole("switch", {
+        name: "Accelerate Agent history search",
+      }),
+    );
+
+    expect(useSettingsStore.getState().localSessionIndexEnabled).toBe(true);
+    expect(
+      JSON.parse(localStorage.getItem("prompthub-settings") ?? "{}").state
+        .localSessionIndexEnabled,
+    ).toBe(true);
   });
 
   it("toggles launch-at-startup via the toggle switch", async () => {
@@ -57,9 +81,7 @@ describe("GeneralSettings", () => {
 
     expect(useSettingsStore.getState().launchAtStartup).toBe(false);
 
-    await user.click(
-      screen.getByRole("switch", { name: "Launch at Startup" }),
-    );
+    await user.click(screen.getByRole("switch", { name: "Launch at Startup" }));
 
     expect(useSettingsStore.getState().launchAtStartup).toBe(true);
   });
@@ -97,5 +119,4 @@ describe("GeneralSettings", () => {
 
     expect(useSettingsStore.getState().tagFilterMode).toBe("single");
   });
-
 });

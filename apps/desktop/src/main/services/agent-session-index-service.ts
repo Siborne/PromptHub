@@ -251,7 +251,12 @@ export function createAgentSessionIndexService(
     input: AgentSessionIndexListOptions,
   ): Promise<AgentSessionListResult> {
     const state = getState(agentId);
-    if (!state.enabled || !state.source || state.source.lastStatus === "idle") {
+    if (
+      !state.enabled ||
+      !state.source ||
+      state.source.lastStatus === "idle" ||
+      state.source.lastStatus === "error"
+    ) {
       return filterLiveResult(
         await options.reader.list(agentId, {
           limit: input.limit,

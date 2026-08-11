@@ -41,6 +41,7 @@ function createDefaultAppearanceValues() {
     enableNotifications: true,
     showCopyNotification: true,
     showSaveNotification: true,
+    localSessionIndexEnabled: true,
   } satisfies Partial<SettingsValues>;
 }
 
