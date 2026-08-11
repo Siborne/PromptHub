@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import type { Settings } from '@prompthub/shared';
 import { DEFAULT_SETTINGS } from '@prompthub/shared';
 import { getServerDatabase } from '../database.js';
-import { getSettingsDir } from '../runtime-paths.js';
+import { getSettingsDir, getUserSettingsPath } from '../runtime-paths.js';
 import { writeJsonFileAtomic } from './atomic-json-file.js';
 
 function getSettingsFilePath(userId: string): string {
-  return `${getSettingsDir()}/${userId}.json`;
+  return getUserSettingsPath(userId);
 }
 
 function ensureSettingsDir(): void {

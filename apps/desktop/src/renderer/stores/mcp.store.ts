@@ -864,7 +864,11 @@ export const useMcpStore = create<McpState>()(
     {
       name: "mcp-store",
       partialize: (state) => ({
-        customStoreSources: state.customStoreSources,
+        ...(typeof window === "undefined" ||
+        window.__PROMPTHUB_WEB__ === true ||
+        !window.api?.settings?.rendererPersistence
+          ? { customStoreSources: state.customStoreSources }
+          : {}),
         remoteMarketEntries: normalizeRemoteMarketEntries(
           state.remoteMarketEntries,
         ),

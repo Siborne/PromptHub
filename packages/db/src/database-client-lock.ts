@@ -17,6 +17,13 @@ export interface DatabaseClientLease {
   release: () => void;
 }
 
+export interface DatabaseClientLeaseInspection {
+  clientsPath: string;
+  livePids: number[];
+  staleEntries: string[];
+  unknownEntries: string[];
+}
+
 export type DatabaseLockRecoveryReason =
   | "live-client"
   | "unknown-client"
@@ -104,6 +111,26 @@ function inspectClientLeaseDirectory(
     }
   }
   return { livePids, staleEntries, unknownEntries };
+}
+
+export function inspectDatabaseClientLeases(
+  dbPath: string,
+  options: {
+    isProcessAlive?: (pid: number) => boolean;
+    excludePids?: readonly number[];
+  } = {},
+): DatabaseClientLeaseInspection {
+  const clientsPath = `${dbPath}.clients`;
+  const inspection = inspectClientLeaseDirectory(
+    clientsPath,
+    options.isProcessAlive ?? defaultIsProcessAlive,
+  );
+  const excluded = new Set(options.excludePids ?? []);
+  return {
+    clientsPath,
+    ...inspection,
+    livePids: inspection.livePids.filter((pid) => !excluded.has(pid)),
+  };
 }
 
 export function inspectDatabaseClientLock(

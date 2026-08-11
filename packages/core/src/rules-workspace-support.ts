@@ -77,6 +77,7 @@ export interface ExtraGlobalRuleTemplate {
 
 export interface RulesWorkspaceServiceDeps {
   getRulesDir: () => string;
+  assertStorageAvailable?: () => void;
   createRuleDb: () => RuleDB;
   getPlatformGlobalRulePath: (platform: SkillPlatform) => string | null;
   getPlatformRootDir: (platform: SkillPlatform) => string;

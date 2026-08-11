@@ -40,11 +40,11 @@ vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
     "githubToken",
     "networkProxy",
   ],
-  getAiConfigSnapshot: () => ({
+  getCanonicalAiConfigSnapshot: async () => ({
     aiProvider: "openai",
     aiApiKey: "integration-key",
   }),
-  getSettingsStateSnapshot: () => ({
+  getCanonicalSettingsStateSnapshot: async () => ({
     state: { language: "en", theme: "dark" },
     settingsUpdatedAt: "2026-04-16T00:00:00.000Z",
   }),

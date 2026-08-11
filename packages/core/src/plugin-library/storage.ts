@@ -45,9 +45,18 @@ import {
   remapRestoredPluginPackage,
   writePluginPackageSnapshot,
 } from "./package-materialization";
+import {
+  readCanonicalPluginLibrary,
+  readCanonicalPluginVersions,
+  writeCanonicalPluginState,
+} from "../canonical-plugin-library";
+import { getRuntimeStorageContext } from "../runtime-paths";
 
 export class PluginLibraryStorage {
   read(): PluginLibraryFile {
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      return normalizeLibrary(readCanonicalPluginLibrary());
+    }
     const primaryPath = getPluginLibraryFilePath();
     if (fs.existsSync(primaryPath)) {
       const raw = parseJsonObject(
@@ -76,11 +85,21 @@ export class PluginLibraryStorage {
       ...library,
       updatedAt: nowIso(),
     });
-    writeJsonFileAtomic(getPluginLibraryFilePath(), next);
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      writeCanonicalPluginState({
+        library: next,
+        versions: this.readVersions(),
+      });
+    } else {
+      writeJsonFileAtomic(getPluginLibraryFilePath(), next);
+    }
     return next;
   }
 
   readVersions(): PluginVersionFile {
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      return normalizePluginVersionsFile(readCanonicalPluginVersions());
+    }
     const versionPath = getPluginVersionFilePath();
     if (!fs.existsSync(versionPath)) {
       return defaultPluginVersions();
@@ -97,7 +116,11 @@ export class PluginLibraryStorage {
       ...versionsFile,
       updatedAt: nowIso(),
     });
-    writeJsonFileAtomic(getPluginVersionFilePath(), next);
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      writeCanonicalPluginState({ library: this.read(), versions: next });
+    } else {
+      writeJsonFileAtomic(getPluginVersionFilePath(), next);
+    }
     return next;
   }
 
@@ -206,7 +229,7 @@ export class PluginLibraryStorage {
         plugin.id === pluginId ? restoredPlugin : plugin,
       ),
     };
-    writeJsonFileAtomic(getPluginLibraryFilePath(), nextLibrary);
+    this.write(nextLibrary);
     return {
       plugin: restoredPlugin,
       library: nextLibrary,
@@ -341,7 +364,6 @@ export class PluginLibraryStorage {
         entry.id === pluginId ? nextPlugin : entry,
       ),
     };
-    writeJsonFileAtomic(getPluginLibraryFilePath(), nextLibrary);
-    return nextLibrary;
+    return this.write(nextLibrary);
   }
 }

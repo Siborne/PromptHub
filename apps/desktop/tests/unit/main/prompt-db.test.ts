@@ -260,9 +260,7 @@ describe("PromptDB (in-memory SQLite)", () => {
         second.id,
       ]);
       expect(db.getChildren(parent.id).map((prompt) => prompt.order)).toEqual([
-        0,
-        1,
-        2,
+        0, 1, 2,
       ]);
     });
 
@@ -533,6 +531,37 @@ describe("PromptDB (in-memory SQLite)", () => {
       expect(versions[2]?.version).toBe(1);
     });
 
+    it("preserves ownership and visibility during direct restore", () => {
+      rawDb
+        .prepare(
+          "INSERT INTO users (id, username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("user-1", "owner", "hash", 1, 1);
+      db.insertPromptDirect({
+        id: "shared-import",
+        ownerUserId: "user-1",
+        visibility: "shared",
+        title: "Shared import",
+        userPrompt: "content",
+        variables: [],
+        tags: [],
+        images: [],
+        videos: [],
+        isFavorite: false,
+        isPinned: false,
+        version: 1,
+        currentVersion: 1,
+        usageCount: 0,
+        createdAt: "2026-08-11T00:00:00.000Z",
+        updatedAt: "2026-08-11T00:00:00.000Z",
+      });
+
+      expect(db.getById("shared-import")).toMatchObject({
+        ownerUserId: "user-1",
+        visibility: "shared",
+      });
+    });
+
     it("does not delete the initial v1 snapshot", () => {
       const p = db.create({ title: "Protected baseline", userPrompt: "v1" });
       db.update(p.id, { userPrompt: "v2" });
@@ -541,9 +570,9 @@ describe("PromptDB (in-memory SQLite)", () => {
       const second = versions.find((version) => version.version === 2)!;
 
       expect(db.deleteVersion(initial.id)).toBe(false);
-      expect(db.getVersions(p.id).some((version) => version.version === 1)).toBe(
-        true,
-      );
+      expect(
+        db.getVersions(p.id).some((version) => version.version === 1),
+      ).toBe(true);
 
       expect(db.deleteVersion(second.id)).toBe(true);
       expect(db.getVersions(p.id).map((version) => version.version)).toEqual([
@@ -926,9 +955,7 @@ describe("PromptDB (in-memory SQLite)", () => {
       const meta = db.getAllMeta();
       const all = db.getAll();
 
-      expect(meta.map((m) => m.id).sort()).toEqual(
-        all.map((p) => p.id).sort(),
-      );
+      expect(meta.map((m) => m.id).sort()).toEqual(all.map((p) => p.id).sort());
       expect(meta.map((m) => m.id)).toEqual([
         second.id,
         first.id, // updated_at DESC

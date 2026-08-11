@@ -1,7 +1,7 @@
 import path from "path";
 
 import { rewriteRuleWithAi } from "../rules-rewrite";
-import { coreRulesWorkspaceService } from "../rules-workspace";
+import { coreRulesWorkspaceService } from "../rules-workspace-default";
 import { CliError, EXIT_CODES, type CliContext } from "./types";
 import { RULES_HELP } from "./help";
 import { emitSuccess, toJson } from "./io";

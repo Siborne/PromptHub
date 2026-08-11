@@ -17,8 +17,8 @@ vi.mock("../../../src/renderer/services/database", () => ({
 }));
 
 vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
-  getAiConfigSnapshot: vi.fn(),
-  getSettingsStateSnapshot: vi.fn(),
+  getCanonicalAiConfigSnapshot: vi.fn(),
+  getCanonicalSettingsStateSnapshot: vi.fn(),
   restoreAiConfigSnapshot: vi.fn(),
   restoreSettingsStateSnapshot: vi.fn(),
   SENSITIVE_SETTINGS_FIELDS: [

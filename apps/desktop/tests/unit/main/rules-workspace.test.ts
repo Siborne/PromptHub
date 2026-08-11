@@ -48,12 +48,13 @@ describe("rules workspace storage", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  function createGlobalRulesTestService() {
+  function createGlobalRulesTestService(assertStorageAvailable?: () => void) {
     const homeDir = path.join(tempDir, "home");
     fs.mkdirSync(homeDir, { recursive: true });
 
     return createRulesWorkspaceService({
       getRulesDir,
+      assertStorageAvailable,
       createRuleDb: () => new RuleDB(initDatabase()),
       getPlatformGlobalRulePath: (platform) => {
         if (platform.id === "claude") {
@@ -71,6 +72,16 @@ describe("rules workspace storage", () => {
       },
     });
   }
+
+  it("blocks rule mutations while structural storage maintenance is active", async () => {
+    const service = createGlobalRulesTestService(() => {
+      throw new Error("storage maintenance active");
+    });
+
+    await expect(service.bootstrapRuleWorkspace()).rejects.toThrow(
+      "storage maintenance active",
+    );
+  });
 
   it("creates a managed project rule and indexes it in SQLite", async () => {
     const projectRoot = path.join(tempDir, "docs-site");

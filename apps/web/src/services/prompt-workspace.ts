@@ -648,8 +648,12 @@ function importPromptWorkspaceRecords(
           continue;
         }
 
-        promptDb.insertPromptDirect(prompt);
-        updatePromptOwnership(db, prompt);
+        const importedPrompt = {
+          ...prompt,
+          ownerUserId: resolveOwnerUserId(db, prompt.ownerUserId),
+        };
+        promptDb.insertPromptDirect(importedPrompt);
+        updatePromptOwnership(db, importedPrompt);
         for (const version of readPromptVersions(promptsDir, prompt.id)) {
           promptDb.insertVersionDirect(version);
           versionCount += 1;
@@ -722,8 +726,12 @@ export function importPromptWorkspaceIntoDatabase(
   const promptFiles = collectPromptFiles(promptsDir);
 
   for (const folder of folders) {
-    folderDb.insertFolderDirect(folder);
-    updateFolderOwnership(db, folder);
+    const importedFolder = {
+      ...folder,
+      ownerUserId: resolveOwnerUserId(db, folder.ownerUserId),
+    };
+    folderDb.insertFolderDirect(importedFolder);
+    updateFolderOwnership(db, importedFolder);
   }
 
   const versionCount = importPromptWorkspaceRecords(db, promptDb, promptsDir, promptFiles);

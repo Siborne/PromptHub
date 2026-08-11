@@ -173,7 +173,11 @@ export function partializeSkillState(state: SkillState) {
     selectedProjectId: state.selectedProjectId,
     projectScanState: sanitizePersistedProjectScanState(state.projectScanState),
     agentScanState: sanitizePersistedAgentScanState(state.agentScanState),
-    customStoreSources: state.customStoreSources,
+    ...(typeof window === "undefined" ||
+    window.__PROMPTHUB_WEB__ === true ||
+    !window.api?.settings?.rendererPersistence
+      ? { customStoreSources: state.customStoreSources }
+      : {}),
     selectedStoreSourceId: state.selectedStoreSourceId,
     remoteStoreEntries: filteredEntries,
     translationCache: pruneSkillTranslationCache(state.translationCache),

@@ -17,10 +17,11 @@ PromptHub 当前稳定架构事实主要保存在：
 
 ## ADR Index
 
-| ID  | Title | Status | Path | Related change/issue | Updated |
-| --- | ----- | ------ | ---- | -------------------- | ------- |
-| ADR-20260801-001 | Web Agent server-host inventory boundary | Superseded | `spec/adr/ADR-20260801-001-web-agent-server-host-inventory.md` | `web-agent-management` | 2026-08-02 |
-| ADR-20260802-001 | Self-hosted Web Agent service parity | Accepted | `spec/adr/ADR-20260802-001-web-agent-service-parity.md` | `web-agent-service-parity` | 2026-08-02 |
+| ID               | Title                                    | Status     | Path                                                           | Related change/issue                                                   | Updated    |
+| ---------------- | ---------------------------------------- | ---------- | -------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------- |
+| ADR-20260801-001 | Web Agent server-host inventory boundary | Superseded | `spec/adr/ADR-20260801-001-web-agent-server-host-inventory.md` | `web-agent-management`                                                 | 2026-08-02 |
+| ADR-20260802-001 | Self-hosted Web Agent service parity     | Accepted   | `spec/adr/ADR-20260802-001-web-agent-service-parity.md`        | `web-agent-service-parity`                                             | 2026-08-02 |
+| ADR-20260811-001 | Storage authority and evolution          | Accepted   | `spec/adr/ADR-20260811-001-storage-authority-and-evolution.md` | `database-migration-safety`, `official-cloud-backup-and-saas-platform` | 2026-08-11 |
 
 ## Routing Rule
 

@@ -17,7 +17,7 @@ interface OutputFormatItemRow {
 }
 
 export class PromptOutputFormatDB {
-  constructor(private db: Database.Database) {}
+  constructor(protected readonly db: Database.Database) {}
 
   create(data: CreateOutputFormatItemDTO): OutputFormatItem {
     const normalized = this.normalizeCreateInput(data);
@@ -35,7 +35,7 @@ export class PromptOutputFormatDB {
     const now = Date.now();
 
     const maxOrder = this.getMaxSortOrder(normalized.sourcePromptId);
-    const sortOrder = normalized.sortOrder ?? (maxOrder + 1);
+    const sortOrder = normalized.sortOrder ?? maxOrder + 1;
 
     this.db
       .prepare(
@@ -219,9 +219,7 @@ export class PromptOutputFormatDB {
         ? [sourcePromptId, targetPromptId]
         : [sourcePromptId];
 
-    const row = this.db
-      .prepare(query)
-      .get(...params) as
+    const row = this.db.prepare(query).get(...params) as
       | OutputFormatItemRow
       | undefined;
 

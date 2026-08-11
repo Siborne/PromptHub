@@ -9,7 +9,15 @@
 
 ### 1. Durable Source Of Truth
 
-- SQLite 仍是 Prompt、Folder 及其关系数据的唯一持久化真相源。
+- 当前 v0.6 本地用户资源由 canonical 文件承接 authority；Prompt、Folder、Skill、
+  Rule、MCP、Plugin、Agent、Generation 与关系 mutation 通过领域协调器同时维护
+  canonical bundle/object 和可重建 SQLite 目录。首次切换只在完整 shadow compare、
+  旧树 safety point、原子发布和 fresh reopen 通过后发生，不能用“更新时间较新者获胜”
+  的双写合并代替。
+- `settings` 是兼容配置表；`users`、`refresh_tokens`、`user_settings` 是
+  server-authoritative 表；migration intent、client lease、Agent session index 与
+  conversation metadata 是 operational 表。重建同设备目录时必须显式保留这些表，
+  portable snapshot 不得把密码哈希、token 或设备状态写入 canonical 用户资源。
 - `${dbPath}.clients/` 只保存进程租约，用于判断运行时锁是否可能仍有活跃所有者；
   它不是业务数据，也不能替代 SQLite 状态。
 
@@ -58,6 +66,23 @@
   两类修复都必须先创建带时间戳的原文件备份，并使用新连接再次得到 `ok`。
 - 其它完整性错误不得被误判为锁冲突，也不得猜测性修复。初始化必须停止，并保留
   原数据库供备份恢复或人工诊断。
+
+### 6. Migration Leadership And History
+
+- 结构迁移前必须取得 path-scoped migration intent；已有活跃 client lease 时不得
+  执行破坏性迁移。intent 有有限等待、owner PID、operation ID 和 stale-owner 恢复，
+  malformed/symlink 路径必须 fail closed。
+- schema、legacy adoption、索引、checksummed migration history 与
+  `PRAGMA user_version` 在同一事务提交；任一结构步骤或 finalization 失败必须整体
+  回滚，不能吞掉异常后正常返回。
+- 当前 migration manifest 是 numeric schema、表、索引、列、legacy identity、checksum
+  与 destructive classification 的单一来源。新增结构变化必须追加不可变 entry，不能
+  修改已经发布的 identity 或 checksum。
+- 初始化先拒绝较新的 numeric schema、未知 history 或 checksum mismatch，再创建
+  安全点或执行写入。迁移提交后必须用当前连接与只读 reopen 分别校验
+  `quick_check`、必需表/索引、manifest history、schema version 和领域不变量。
+- Desktop 的 Skill 本机仓库发现属于 host reconciliation，不属于共享 schema
+  migration。CLI 或 Web 先打开数据库不得把 Desktop 后续 reconciliation 标记为已完成。
 
 ## Stable Scenarios
 

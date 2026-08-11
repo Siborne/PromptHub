@@ -974,6 +974,24 @@ export function getDatabaseInfo(): { name: string; description: string } {
  */
 const IDB_MIGRATION_DONE_KEY = "prompthub:idb-migration-done";
 
+async function isIndexedDbMigrationMarkedDone(): Promise<boolean> {
+  const canonicalStatus =
+    window.api?.settings?.rendererPersistence?.isIndexedDbMigrationDone;
+  if (canonicalStatus) return canonicalStatus();
+  return localStorage.getItem(IDB_MIGRATION_DONE_KEY) === "1";
+}
+
+async function markIndexedDbMigrationDone(): Promise<void> {
+  const canonicalMarker =
+    window.api?.settings?.rendererPersistence?.markIndexedDbMigrationDone;
+  if (canonicalMarker) {
+    await canonicalMarker();
+    localStorage.removeItem(IDB_MIGRATION_DONE_KEY);
+    return;
+  }
+  localStorage.setItem(IDB_MIGRATION_DONE_KEY, "1");
+}
+
 async function getMainProcessVersionKeys(promptIds: string[]): Promise<Set<string>> {
   if (!window.api?.version?.getAll || promptIds.length === 0) {
     return new Set();
@@ -1023,7 +1041,7 @@ export async function migrateLegacyIndexedDbToMainProcess(): Promise<{
 }> {
   // Fast path: migration already confirmed in a previous session.
   // 快速路径：localStorage 标记说明上次已完成，直接跳过。
-  if (localStorage.getItem(IDB_MIGRATION_DONE_KEY) === "1") {
+  if (await isIndexedDbMigrationMarkedDone()) {
     return { migrated: false, promptCount: 0, folderCount: 0, versionCount: 0 };
   }
 
@@ -1048,7 +1066,7 @@ export async function migrateLegacyIndexedDbToMainProcess(): Promise<{
   if (legacyPrompts.length === 0 && legacyFolders.length === 0) {
     // Nothing in IDB either — mark as done so we skip this check on next boot.
     // IDB 也没有数据 — 写入标记，下次启动跳过此检查。
-    localStorage.setItem(IDB_MIGRATION_DONE_KEY, "1");
+    await markIndexedDbMigrationDone();
     return { migrated: false, promptCount: 0, folderCount: 0, versionCount: 0 };
   }
 
@@ -1084,7 +1102,7 @@ export async function migrateLegacyIndexedDbToMainProcess(): Promise<{
       mainFolders,
     )
   ) {
-    localStorage.setItem(IDB_MIGRATION_DONE_KEY, "1");
+    await markIndexedDbMigrationDone();
     return { migrated: false, promptCount: 0, folderCount: 0, versionCount: 0 };
   }
 
@@ -1120,7 +1138,7 @@ export async function migrateLegacyIndexedDbToMainProcess(): Promise<{
           refreshedFolders,
         )
       ) {
-        localStorage.setItem(IDB_MIGRATION_DONE_KEY, "1");
+        await markIndexedDbMigrationDone();
       }
       return { migrated: false, promptCount: 0, folderCount: 0, versionCount: 0 };
     }
@@ -1133,7 +1151,7 @@ export async function migrateLegacyIndexedDbToMainProcess(): Promise<{
 
   // Mark migration as done so future boots skip the IDB check entirely.
   // 写入持久化标记，后续启动直接跳过 IDB 检查。
-  localStorage.setItem(IDB_MIGRATION_DONE_KEY, "1");
+  await markIndexedDbMigrationDone();
 
   return {
     migrated: true,

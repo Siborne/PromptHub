@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 54 |
+| Active | 56 |
 | Archived | 186 |
 | Legacy | 1 |
 
@@ -16,8 +16,9 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | Change | Recorded status | Path |
 | --- | --- | --- |
 | `agent-management-workbench` | active | `spec/changes/active/agent-management-workbench/` |
+| `agent-provider-protocol-bridge` | active | `spec/changes/active/agent-provider-protocol-bridge/` |
 | `app-shell-left-rail` | in progress | `spec/changes/active/app-shell-left-rail/` |
-| `cli-agent-management` | active | `spec/changes/active/cli-agent-management/` |
+| `cli-agent-management` | implemented | `spec/changes/active/cli-agent-management/` |
 | `cli-feature-completeness` | active | `spec/changes/active/cli-feature-completeness/` |
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
@@ -46,6 +47,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `mobile-app-shell` | active | `spec/changes/active/mobile-app-shell/` |
 | `mobile-prompt-persistence-hardening` | release-pending | `spec/changes/active/mobile-prompt-persistence-hardening/` |
 | `mobile-webdav-distribution` | active | `spec/changes/active/mobile-webdav-distribution/` |
+| `official-cloud-backup-and-saas-platform` | implemented | `spec/changes/active/official-cloud-backup-and-saas-platform/` |
 | `pi-agent-separation` | active | `spec/changes/active/pi-agent-separation/` |
 | `platform-workbench-prototype` | in progress | `spec/changes/active/platform-workbench-prototype/` |
 | `plugin-issue-190-multi-native-manifests` | active | `spec/changes/active/plugin-issue-190-multi-native-manifests/` |

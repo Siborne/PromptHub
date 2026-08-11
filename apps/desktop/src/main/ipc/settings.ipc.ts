@@ -13,6 +13,9 @@ import type {
   CoreAIModelConfig,
   CoreAIModelRoute,
   CoreAIProviderConfig,
+  MarketplaceSourceRecord,
+  RendererPersistenceMigrationInput,
+  RendererPersistenceStore,
 } from '@prompthub/core';
 import {
   getMinimizeOnLaunchSetting,
@@ -136,6 +139,21 @@ const AI_SETTINGS_KEYS = new Set([
   'modelRouteDefaults',
 ]);
 
+const RENDERER_SECRET_SETTING_KEYS = new Set([
+  ...AI_SETTINGS_KEYS,
+  'sync',
+  'webdavUsername',
+  'webdavPassword',
+  'webdavEncryptionPassword',
+  'selfHostedSyncUsername',
+  'selfHostedSyncPassword',
+  's3AccessKeyId',
+  's3SecretAccessKey',
+  's3EncryptionPassword',
+  'githubToken',
+  'networkProxy',
+]);
+
 export function hasAISettingsPayload(settings: Partial<Settings>): boolean {
   return Object.keys(settings).some((key) => AI_SETTINGS_KEYS.has(key));
 }
@@ -144,6 +162,23 @@ export function stripAISettingsPayload(settings: Partial<Settings>): Partial<Set
   return Object.fromEntries(
     Object.entries(settings).filter(([key]) => !AI_SETTINGS_KEYS.has(key)),
   ) as Partial<Settings>;
+}
+
+function stripRendererSecretSettingsPayload(
+  settings: Partial<Settings>,
+): Partial<Settings> {
+  return Object.fromEntries(
+    Object.entries(settings).filter(
+      ([key]) => !RENDERER_SECRET_SETTING_KEYS.has(key),
+    ),
+  ) as Partial<Settings>;
+}
+
+function scrubRendererSecretSettingsRows(db: Database.Database): void {
+  const statement = db.prepare('DELETE FROM settings WHERE key = ?');
+  db.transaction(() => {
+    for (const key of RENDERER_SECRET_SETTING_KEYS) statement.run(key);
+  })();
 }
 
 function buildLegacyAIModel(
@@ -207,7 +242,10 @@ function persistSharedAIConfig(newSettings: Partial<Settings>): void {
 /**
  * Register settings-related IPC handlers
  */
-export function registerSettingsIPC(db: Database.Database): void {
+export function registerSettingsIPC(
+  db: Database.Database,
+  options: { rendererPersistence?: RendererPersistenceStore } = {},
+): void {
   // Get settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async () => {
     const settings: Settings = { ...DEFAULT_SETTINGS };
@@ -309,6 +347,12 @@ export function registerSettingsIPC(db: Database.Database): void {
 
     migrateTraeCnPlatformState(settings);
     mergeSharedAIConfig(settings);
+    if (options.rendererPersistence) {
+      const canonical = await options.rendererPersistence.readHydratedState();
+      if (canonical.migrationComplete) {
+        Object.assign(settings, canonical.settings);
+      }
+    }
     await applyNetworkProxySettings(settings.networkProxy);
 
     return settings;
@@ -316,8 +360,10 @@ export function registerSettingsIPC(db: Database.Database): void {
 
   // Save settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, async (_event, newSettings: Partial<Settings>) => {
-    persistSharedAIConfig(newSettings);
-    const dbSettings = stripAISettingsPayload(newSettings);
+    if (!options.rendererPersistence) persistSharedAIConfig(newSettings);
+    const dbSettings = options.rendererPersistence
+      ? stripRendererSecretSettingsPayload(newSettings)
+      : stripAISettingsPayload(newSettings);
     const stmt = db.prepare(`
       INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)
     `);
@@ -341,4 +387,68 @@ export function registerSettingsIPC(db: Database.Database): void {
     }
     return true;
   });
+
+  if (!options.rendererPersistence) return;
+  const persistence = options.rendererPersistence;
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_MIGRATE,
+    async (_event, input: RendererPersistenceMigrationInput) => {
+      const result = await persistence.migrate({
+        ...(input ?? {}),
+        legacyAIConfig: input?.legacyAIConfig ?? coreAIConfigService.read(),
+      });
+      scrubRendererSecretSettingsRows(db);
+      return result;
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_GET,
+    async () => persistence.readHydratedState(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_REPLACE_SETTINGS,
+    async (_event, settings: Record<string, unknown>) => {
+      await persistence.replaceSettings(settings ?? {});
+      return true;
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_REPLACE_SOURCES,
+    async (
+      _event,
+      domain: 'skill' | 'mcp' | 'plugin',
+      sources: MarketplaceSourceRecord[],
+    ) => {
+      if (domain !== 'skill' && domain !== 'mcp' && domain !== 'plugin') {
+        throw new Error('Invalid marketplace source domain');
+      }
+      await persistence.replaceMarketplaceSources(
+        domain,
+        Array.isArray(sources) ? sources : [],
+      );
+      return true;
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_REPLACE_RECOVERY_PATHS,
+    async (_event, paths: string[]) => {
+      await persistence.replaceRecoveryPaths(Array.isArray(paths) ? paths : []);
+      return true;
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_DEVICE_ID,
+    async () => persistence.getOrCreateSelfHostedDeviceId(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_IDB_STATUS,
+    async () => persistence.isIndexedDbMigrationDone(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_IDB_DONE,
+    async () => {
+      await persistence.markIndexedDbMigrationDone();
+      return true;
+    },
+  );
 }

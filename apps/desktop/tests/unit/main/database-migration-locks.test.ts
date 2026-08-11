@@ -4,6 +4,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { spawn } from "child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import DatabaseAdapter from "../../../src/main/database/sqlite";
@@ -15,7 +16,13 @@ import {
   configureRuntimePaths,
   resetRuntimePaths,
 } from "../../../src/main/runtime-paths";
-import { initDatabase as initSharedDatabase } from "@prompthub/db";
+import {
+  acquireDatabaseMigrationIntent,
+  DatabaseMigrationBusyError,
+  getCurrentDatabaseSchemaInvariants,
+  initDatabase as initSharedDatabase,
+  listDatabaseSafetyPoints,
+} from "@prompthub/db";
 
 function createLegacySkillSchema(dbPath: string): DatabaseAdapter.Database {
   const db = new DatabaseAdapter(dbPath);
@@ -94,6 +101,10 @@ function createDatabaseWithIndexMismatch(dbPath: string): void {
   fs.writeFileSync(dbPath, bytes);
 }
 
+function listManagedDatabaseSafetyPoints(dbPath: string): string[] {
+  return listDatabaseSafetyPoints(dbPath).map((point) => point.directoryPath);
+}
+
 describe("database migration locking regression", () => {
   const tempDirs: string[] = [];
 
@@ -104,6 +115,26 @@ describe("database migration locking regression", () => {
     for (const dir of tempDirs.splice(0)) {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("derives immutable legacy identities and final invariants from one manifest", () => {
+    const invariants = getCurrentDatabaseSchemaInvariants();
+    expect(
+      new Set(invariants.legacyMigrations.map((entry) => entry.migrationId))
+        .size,
+    ).toBe(invariants.legacyMigrations.length);
+    expect(
+      new Set(invariants.legacyMigrations.map((entry) => entry.name)).size,
+    ).toBe(invariants.legacyMigrations.length);
+    expect(
+      invariants.legacyMigrations.every((entry) =>
+        /^[a-f0-9]{64}$/u.test(entry.checksum),
+      ),
+    ).toBe(true);
+    expect(invariants.tables).toContain("canonical_resources");
+    expect(invariants.indexes).toContain(
+      "idx_canonical_resources_type_updated",
+    );
   });
 
   it("auto-finalizes one-shot statements through adapter helpers", () => {
@@ -122,6 +153,124 @@ describe("database migration locking regression", () => {
     expect(() => db.run("DROP TABLE demo")).not.toThrow();
 
     db.close();
+  });
+
+  it("acquires one finite path-scoped migration leader and returns a typed busy error", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-migration-intent-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    const leader = acquireDatabaseMigrationIntent(dbPath, {
+      pid: 101,
+      token: "1".repeat(32),
+      isProcessAlive: () => true,
+    });
+    let clock = 0;
+
+    expect(() =>
+      acquireDatabaseMigrationIntent(dbPath, {
+        pid: 202,
+        token: "2".repeat(32),
+        timeoutMs: 3,
+        retryIntervalMs: 1,
+        now: () => clock,
+        sleep: (milliseconds) => {
+          clock += milliseconds;
+        },
+        isProcessAlive: () => true,
+      }),
+    ).toThrow(DatabaseMigrationBusyError);
+    try {
+      acquireDatabaseMigrationIntent(dbPath, {
+        pid: 202,
+        token: "2".repeat(32),
+        timeoutMs: 0,
+        isProcessAlive: () => true,
+      });
+    } catch (error) {
+      expect(error).toMatchObject({ code: "DATABASE_MIGRATION_BUSY" });
+    }
+
+    leader.release();
+    expect(fs.existsSync(leader.intentPath)).toBe(false);
+  });
+
+  it("recovers a stale migration owner but refuses malformed or unsafe intents", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-stale-intent-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    const stale = acquireDatabaseMigrationIntent(dbPath, {
+      pid: 101,
+      token: "a".repeat(32),
+      isProcessAlive: () => true,
+    });
+    const recovered = acquireDatabaseMigrationIntent(dbPath, {
+      pid: 202,
+      token: "b".repeat(32),
+      isProcessAlive: (pid) => pid === 202,
+    });
+    stale.release();
+    expect(fs.existsSync(recovered.intentPath)).toBe(true);
+    recovered.release();
+
+    fs.writeFileSync(`${dbPath}.migration-intent.json`, "{}", "utf8");
+    expect(() => acquireDatabaseMigrationIntent(dbPath)).toThrow(
+      "malformed or unsafe",
+    );
+    fs.rmSync(`${dbPath}.migration-intent.json`, { force: true });
+
+    fs.mkdirSync(`${dbPath}.migration-intent.json`);
+    expect(() => acquireDatabaseMigrationIntent(dbPath)).toThrow(
+      "malformed or unsafe",
+    );
+  });
+
+  it("refuses destructive migration while another registered client is alive", async () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-live-migration-client-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    createLegacySkillSchema(dbPath).close();
+    const child = spawn(
+      process.execPath,
+      ["-e", "process.stdout.write('ready\\n'); setInterval(() => {}, 1000)"],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
+    await new Promise<void>((resolve, reject) => {
+      child.once("error", reject);
+      child.stdout.once("data", () => resolve());
+    });
+    const clientsPath = `${dbPath}.clients`;
+    fs.mkdirSync(clientsPath);
+    fs.writeFileSync(
+      path.join(clientsPath, `${child.pid}.json`),
+      JSON.stringify({
+        pid: child.pid,
+        registeredAt: new Date().toISOString(),
+      }),
+      "utf8",
+    );
+
+    try {
+      expect(() => initSharedDatabase(dbPath)).toThrow(
+        "requires all other clients to close",
+      );
+      expect(fs.existsSync(`${dbPath}.migration-intent.json`)).toBe(false);
+      const probe = new DatabaseAdapter(dbPath);
+      expect(
+        probe.get(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'prompts'",
+        ),
+      ).toBeNull();
+      probe.close();
+    } finally {
+      child.kill("SIGTERM");
+      await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    }
   });
 
   it("drops the legacy skills name index during migration without hitting table locks", () => {
@@ -154,14 +303,27 @@ describe("database migration locking regression", () => {
       "SELECT name FROM schema_migrations WHERE name = ?",
       "drop_skill_name_unique_v2",
     );
-    const backupFiles = fs
-      .readdirSync(tempDir)
-      .filter((entry) => entry.startsWith("prompthub.db.backup-"));
+    const safetyPoints = listManagedDatabaseSafetyPoints(dbPath);
 
     expect(droppedIndex).toBeNull();
     expect(sourceIndex).toEqual({ name: "idx_skills_source_id" });
     expect(migrationRow).toEqual({ name: "drop_skill_name_unique_v2" });
-    expect(backupFiles).toHaveLength(1);
+    expect(safetyPoints).toHaveLength(1);
+    expect(
+      JSON.parse(
+        fs.readFileSync(path.join(safetyPoints[0], "manifest.json"), "utf8"),
+      ),
+    ).toMatchObject({
+      formatVersion: 1,
+      kind: "database-safety-point",
+      reason: "pre-migration",
+      state: "complete",
+    });
+    expect(
+      fs
+        .readdirSync(tempDir)
+        .filter((entry) => entry.startsWith("prompthub.db.backup-")),
+    ).toEqual([]);
   });
 
   it("does not create pre-migration backups when the schema is already current", () => {
@@ -176,11 +338,29 @@ describe("database migration locking regression", () => {
     initSharedDatabase(dbPath);
     closeDatabase();
 
-    const backupFiles = fs
-      .readdirSync(tempDir)
-      .filter((entry) => entry.startsWith("prompthub.db.backup-"));
+    expect(listManagedDatabaseSafetyPoints(dbPath)).toEqual([]);
+  });
 
-    expect(backupFiles).toEqual([]);
+  it("creates a safety point when the handoff launch migration marker is missing", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-handoff-marker-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    initSharedDatabase(dbPath);
+    closeDatabase();
+
+    const current = new DatabaseAdapter(dbPath);
+    current.run(
+      "DELETE FROM schema_migrations WHERE name = ?",
+      "agent_conversation_handoff_launch_v2",
+    );
+    current.close();
+
+    initSharedDatabase(dbPath);
+    closeDatabase();
+
+    expect(listManagedDatabaseSafetyPoints(dbPath)).toHaveLength(1);
   });
 
   it("repairs a freelist-only integrity mismatch before migrations without losing rows", () => {
@@ -197,11 +377,18 @@ describe("database migration locking regression", () => {
     expect(db.get("SELECT value FROM keeper WHERE id = 1")).toEqual({
       value: "preserved",
     });
+    const safetyPoints = listManagedDatabaseSafetyPoints(dbPath);
+    expect(safetyPoints).toHaveLength(1);
+    expect(
+      JSON.parse(
+        fs.readFileSync(path.join(safetyPoints[0], "manifest.json"), "utf8"),
+      ),
+    ).toMatchObject({ reason: "integrity-repair", state: "complete" });
     expect(
       fs
         .readdirSync(tempDir)
         .filter((entry) => entry.includes(".integrity-backup-")),
-    ).toHaveLength(1);
+    ).toEqual([]);
   });
 
   it("repairs index-only entry mismatches before migrations without losing rows", () => {
@@ -218,11 +405,12 @@ describe("database migration locking regression", () => {
     expect(db.get("SELECT COUNT(*) AS count FROM keeper")).toEqual({
       count: 20,
     });
+    expect(listManagedDatabaseSafetyPoints(dbPath)).toHaveLength(1);
     expect(
       fs
         .readdirSync(tempDir)
         .filter((entry) => entry.includes(".integrity-backup-")),
-    ).toHaveLength(1);
+    ).toEqual([]);
   });
 
   it("stops before migration when the required backup cannot be created", () => {
@@ -234,9 +422,15 @@ describe("database migration locking regression", () => {
     const legacyDb = new DatabaseAdapter(dbPath);
     legacyDb.exec("CREATE TABLE keeper (id INTEGER PRIMARY KEY, value TEXT)");
     legacyDb.close();
-    const copySpy = vi.spyOn(fs, "copyFileSync").mockImplementation(() => {
-      throw new Error("disk full");
-    });
+    const originalExec = DatabaseAdapter.prototype.exec;
+    const vacuumSpy = vi
+      .spyOn(DatabaseAdapter.prototype, "exec")
+      .mockImplementation(function (sql: string) {
+        if (sql.startsWith("VACUUM INTO")) {
+          throw new Error("disk full");
+        }
+        return originalExec.call(this, sql);
+      });
 
     try {
       expect(() => initSharedDatabase(dbPath)).toThrow("disk full");
@@ -248,8 +442,232 @@ describe("database migration locking regression", () => {
       ).toBeNull();
       probe.close();
     } finally {
-      copySpy.mockRestore();
+      vacuumSpy.mockRestore();
     }
+  });
+
+  it("rejects a database from a newer catalog version before rewriting it", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-newer-version-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    const futureDb = new DatabaseAdapter(dbPath);
+    futureDb.exec("CREATE TABLE keeper (id INTEGER PRIMARY KEY, value TEXT)");
+    futureDb.pragma("user_version = 999");
+    futureDb.close();
+    const before = fs.readFileSync(dbPath);
+
+    expect(() => initSharedDatabase(dbPath)).toThrow(
+      "newer database schema version",
+    );
+    expect(fs.readFileSync(dbPath)).toEqual(before);
+    expect(listManagedDatabaseSafetyPoints(dbPath)).toEqual([]);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "rejects a symlinked database before compatibility inspection",
+    () => {
+      const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "prompthub-db-symlink-"),
+      );
+      tempDirs.push(tempDir);
+      const dbPath = path.join(tempDir, "prompthub.db");
+      initSharedDatabase(dbPath);
+      closeDatabase();
+      const linkPath = path.join(tempDir, "linked.db");
+      fs.symlinkSync(dbPath, linkPath);
+
+      expect(() => initSharedDatabase(linkPath)).toThrow(
+        "Database path is not a regular file",
+      );
+    },
+  );
+
+  it("rejects tampered migration history before creating a new safety point", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-checksum-mismatch-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    const currentDb = initSharedDatabase(dbPath);
+    currentDb.run(
+      "UPDATE database_migration_history SET checksum = ? WHERE migration_id = ?",
+      "tampered",
+      1,
+    );
+    closeDatabase();
+    const before = fs.readFileSync(dbPath);
+
+    expect(() => initSharedDatabase(dbPath)).toThrow(
+      "migration checksum mismatch",
+    );
+    expect(fs.readFileSync(dbPath)).toEqual(before);
+    expect(listManagedDatabaseSafetyPoints(dbPath)).toEqual([]);
+  });
+
+  it("rolls back every structural migration when finalization fails", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-atomic-rollback-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    createLegacySkillSchema(dbPath).close();
+
+    expect(() =>
+      initSharedDatabase(dbPath, {
+        beforeMigrationCommit: () => {
+          throw new Error("injected finalization failure");
+        },
+      }),
+    ).toThrow("injected finalization failure");
+
+    const probe = new DatabaseAdapter(dbPath);
+    expect(
+      probe.get(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'prompts'",
+      ),
+    ).toBeNull();
+    expect(
+      probe.get(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_skills_name_lower'",
+      ),
+    ).toEqual({ name: "idx_skills_name_lower" });
+    expect(probe.pragma("user_version")).toEqual([{ user_version: 0 }]);
+    probe.close();
+    expect(listManagedDatabaseSafetyPoints(dbPath)).toHaveLength(1);
+  });
+
+  it("rolls back representative DDL, data, destructive, and history statement failures", () => {
+    const failureCases = [
+      "ALTER TABLE skills ADD COLUMN source_url",
+      "UPDATE skills SET original_tags = tags",
+      "DROP INDEX IF EXISTS idx_skills_name_lower",
+      "INSERT INTO database_migration_history",
+    ];
+    const originalRun = DatabaseAdapter.prototype.run;
+
+    for (const sqlFragment of failureCases) {
+      const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "prompthub-db-statement-rollback-"),
+      );
+      tempDirs.push(tempDir);
+      const dbPath = path.join(tempDir, "prompthub.db");
+      createLegacySkillSchema(dbPath).close();
+      let injected = false;
+      const runSpy = vi
+        .spyOn(DatabaseAdapter.prototype, "run")
+        .mockImplementation(function (sql: string, ...params: unknown[]) {
+          const normalizedSql = sql.replace(/\s+/gu, " ").trim();
+          if (!injected && normalizedSql.includes(sqlFragment)) {
+            injected = true;
+            throw new Error(`injected statement failure: ${sqlFragment}`);
+          }
+          return originalRun.call(this, sql, ...params);
+        });
+
+      try {
+        expect(() => initSharedDatabase(dbPath)).toThrow(
+          `injected statement failure: ${sqlFragment}`,
+        );
+      } finally {
+        runSpy.mockRestore();
+      }
+
+      expect(injected, sqlFragment).toBe(true);
+      const probe = new DatabaseAdapter(dbPath);
+      expect(
+        probe.get(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'prompts'",
+        ),
+        sqlFragment,
+      ).toBeNull();
+      expect(
+        probe.get(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_skills_name_lower'",
+        ),
+        sqlFragment,
+      ).toEqual({ name: "idx_skills_name_lower" });
+      expect(probe.pragma("user_version"), sqlFragment).toEqual([
+        { user_version: 0 },
+      ]);
+      probe.close();
+      expect(listManagedDatabaseSafetyPoints(dbPath), sqlFragment).toHaveLength(
+        1,
+      );
+    }
+  });
+
+  it("retains the safety point and releases leadership when post-commit verification fails", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-post-commit-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    createLegacySkillSchema(dbPath).close();
+
+    expect(() =>
+      initSharedDatabase(dbPath, {
+        afterMigrationCommit: () => {
+          throw new Error("injected post-commit failure");
+        },
+      }),
+    ).toThrow("injected post-commit failure");
+
+    expect(listManagedDatabaseSafetyPoints(dbPath)).toHaveLength(1);
+    expect(fs.existsSync(`${dbPath}.migration-intent.json`)).toBe(false);
+    expect(() => initSharedDatabase(dbPath)).not.toThrow();
+  });
+
+  it("fails post-migration verification when a required index is removed", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-post-index-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+
+    expect(() =>
+      initSharedDatabase(dbPath, {
+        afterMigrationCommit: () => {
+          const committed = new DatabaseAdapter(dbPath);
+          committed.exec("DROP INDEX idx_canonical_resources_type_updated");
+          committed.close();
+        },
+      }),
+    ).toThrow("Post-migration index is missing");
+    expect(fs.existsSync(`${dbPath}.migration-intent.json`)).toBe(false);
+  });
+
+  it("keeps shared migrations host-neutral when local repositories are unresolved", () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-db-host-reconciliation-"),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    const legacy = createLegacySkillSchema(dbPath);
+    legacy.run(
+      "INSERT INTO skills (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+      "skill-1",
+      "Writer",
+      Date.now(),
+      Date.now(),
+    );
+    legacy.close();
+
+    expect(() => initSharedDatabase(dbPath)).not.toThrow();
+    closeDatabase();
+
+    const probe = new DatabaseAdapter(dbPath);
+    expect(
+      probe.get("SELECT local_repo_path FROM skills WHERE id = ?", "skill-1"),
+    ).toEqual({ local_repo_path: null });
+    expect(
+      probe.get(
+        "SELECT name FROM schema_migrations WHERE name = ?",
+        "backfill_local_repo_path_v1",
+      ),
+    ).toEqual({ name: "backfill_local_repo_path_v1" });
+    probe.close();
   });
 
   it("fails closed without rewriting databases that have unsupported corruption", () => {
@@ -305,7 +723,13 @@ describe("database migration locking regression", () => {
     fs.mkdirSync(`${dbPath}.lock`);
     configureRuntimePaths({ userDataPath });
 
-    expect(() => initDesktopDatabase()).not.toThrow();
+    initDesktopDatabase();
     expect(fs.existsSync(`${dbPath}.lock`)).toBe(false);
+    expect(listManagedDatabaseSafetyPoints(dbPath)).toHaveLength(0);
+    expect(
+      fs
+        .readdirSync(path.dirname(dbPath))
+        .filter((entry) => entry.includes(".backup-before-0.5.3.")),
+    ).toEqual([]);
   });
 });

@@ -8,6 +8,7 @@ import {
   pickSupportedBackupFile,
   previewImportFile,
   restoreFromFile,
+  usesAtomicPortableRestore,
   type ImportPreviewSummary,
 } from "../services/database-backup";
 import { hasAnySkipped } from "../services/database-backup-format";
@@ -99,7 +100,7 @@ export function useBackupImportController() {
     setConfirmingImport(true);
     let safetyBackupId: string | undefined;
     try {
-      if (!isWebRuntime()) {
+      if (!isWebRuntime() && !usesAtomicPortableRestore(importPreview.file)) {
         const currentVersion = await window.electron?.updater?.getVersion?.();
         const safetyBackup = await createUpgradeBackup({
           fromVersion: currentVersion || undefined,

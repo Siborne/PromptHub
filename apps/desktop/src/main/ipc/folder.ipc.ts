@@ -1,8 +1,12 @@
-import { ipcMain } from 'electron';
-import { IPC_CHANNELS } from '@prompthub/shared/constants';
-import { FolderDB } from '../database/folder';
-import { PromptDB } from '../database/prompt';
-import type { CreateFolderDTO, Folder, UpdateFolderDTO } from '@prompthub/shared/types';
+import { ipcMain } from "electron";
+import { IPC_CHANNELS } from "@prompthub/shared/constants";
+import { FolderDB } from "../database/folder";
+import { PromptDB } from "../database/prompt";
+import type {
+  CreateFolderDTO,
+  Folder,
+  UpdateFolderDTO,
+} from "@prompthub/shared/types";
 import { syncPromptWorkspaceFromDatabase } from "../services/prompt-workspace";
 
 /**
@@ -16,11 +20,14 @@ export function registerFolderIPC(db: FolderDB, promptDb: PromptDB): void {
 
   // Create folder
   // 创建文件夹
-  ipcMain.handle(IPC_CHANNELS.FOLDER_CREATE, async (_event, data: CreateFolderDTO) => {
-    const created = db.create(data);
-    syncWorkspace();
-    return created;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.FOLDER_CREATE,
+    async (_event, data: CreateFolderDTO) => {
+      const created = db.create(data);
+      syncWorkspace();
+      return created;
+    },
+  );
 
   // Get all folders
   // 获取所有文件夹
@@ -30,13 +37,16 @@ export function registerFolderIPC(db: FolderDB, promptDb: PromptDB): void {
 
   // Update folder
   // 更新文件夹
-  ipcMain.handle(IPC_CHANNELS.FOLDER_UPDATE, async (_event, id: string, data: UpdateFolderDTO) => {
-    const updated = db.update(id, data);
-    if (updated) {
-      syncWorkspace();
-    }
-    return updated;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.FOLDER_UPDATE,
+    async (_event, id: string, data: UpdateFolderDTO) => {
+      const updated = db.update(id, data);
+      if (updated) {
+        syncWorkspace();
+      }
+      return updated;
+    },
+  );
 
   // Delete folder
   // 删除文件夹
@@ -56,8 +66,12 @@ export function registerFolderIPC(db: FolderDB, promptDb: PromptDB): void {
     return true;
   });
 
-  ipcMain.handle(IPC_CHANNELS.FOLDER_INSERT_DIRECT, async (_event, folder: Folder) => {
-    db.insertFolderDirect(folder);
-    return true;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.FOLDER_INSERT_DIRECT,
+    async (_event, folder: Folder) => {
+      db.insertFolderDirect(folder);
+      syncWorkspace();
+      return true;
+    },
+  );
 }

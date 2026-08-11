@@ -69,6 +69,7 @@ vi.mock("../../../src/renderer/services/database-backup", () => ({
   ),
   previewImportFile: vi.fn(),
   restoreFromFile: vi.fn(),
+  usesAtomicPortableRestore: vi.fn(() => false),
 }));
 
 vi.mock("../../../src/renderer/services/database", () => ({

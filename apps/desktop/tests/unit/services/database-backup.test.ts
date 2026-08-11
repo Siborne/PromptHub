@@ -6,8 +6,10 @@ import {
   exportDatabase,
   restoreFromBackup,
   restoreFromFile,
+  usesAtomicPortableRestore,
 } from "../../../src/renderer/services/database-backup";
 import { installWindowMocks } from "../../helpers/window";
+import { createTransactionMock } from "./database-backup-test-helpers";
 
 const clearDatabaseMock = vi.fn().mockResolvedValue(undefined);
 const getDatabaseMock = vi.fn();
@@ -34,8 +36,9 @@ vi.mock("../../../src/renderer/services/database", () => ({
 }));
 
 vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
-  getAiConfigSnapshot: (...args: unknown[]) => getAiConfigSnapshotMock(...args),
-  getSettingsStateSnapshot: (...args: unknown[]) =>
+  getCanonicalAiConfigSnapshot: (...args: unknown[]) =>
+    getAiConfigSnapshotMock(...args),
+  getCanonicalSettingsStateSnapshot: (...args: unknown[]) =>
     getSettingsStateSnapshotMock(...args),
   restoreAiConfigSnapshot: (...args: unknown[]) =>
     restoreAiConfigSnapshotMock(...args),
@@ -47,48 +50,6 @@ vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
     "aiApiKey",
   ],
 }));
-
-function createTransactionMock(getAllResult: unknown[] = []) {
-  const transaction: {
-    error: null;
-    objectStore: (name: string) => {
-      add: ReturnType<typeof vi.fn>;
-      clear: ReturnType<typeof vi.fn>;
-      getAll: ReturnType<typeof vi.fn>;
-    };
-    oncomplete: (() => void) | null;
-    onerror: (() => void) | null;
-  } = {
-    error: null,
-    objectStore: () => ({
-      add: vi.fn(),
-      clear: vi.fn(),
-      getAll: vi.fn(() => {
-        const request: {
-          result?: unknown[];
-          onsuccess: (() => void) | null;
-          onerror: (() => void) | null;
-        } = {
-          result: getAllResult,
-          onsuccess: null,
-          onerror: null,
-        };
-        queueMicrotask(() => {
-          request.onsuccess?.();
-        });
-        return request;
-      }),
-    }),
-    oncomplete: null,
-    onerror: null,
-  };
-
-  queueMicrotask(() => {
-    transaction.oncomplete?.();
-  });
-
-  return transaction;
-}
 
 describe("database-backup restore", () => {
   beforeEach(() => {
@@ -1088,6 +1049,45 @@ describe("database-backup restore", () => {
     );
   });
 
+  it("routes legacy JSON through the atomic main-process restore boundary", async () => {
+    const restorePortableLogicalBackup = vi.fn().mockResolvedValue({
+      success: true,
+      needsRestart: true,
+    });
+    installWindowMocks({ electron: { restorePortableLogicalBackup } });
+    const sourceText = JSON.stringify({
+          kind: "prompthub-backup",
+          exportedAt: "2026-08-11T00:00:00.000Z",
+          payload: {
+            version: 1,
+            exportedAt: "2026-08-11T00:00:00.000Z",
+            prompts: [],
+            folders: [],
+            versions: [],
+            settings: {
+              state: { language: "zh", webdavPassword: "must-not-cross-ipc" },
+            },
+          },
+        });
+    const file = {
+      name: "legacy.json",
+      text: vi.fn().mockResolvedValue(sourceText),
+    } as unknown as File;
+
+    expect(usesAtomicPortableRestore(file)).toBe(true);
+    await restoreFromFile(file);
+
+    expect(restorePortableLogicalBackup).toHaveBeenCalledTimes(1);
+    const envelope = JSON.parse(
+      restorePortableLogicalBackup.mock.calls[0][0],
+    ) as Record<string, any>;
+    expect(envelope.kind).toBe("prompthub-export");
+    expect(envelope.scope.settings).toBe(true);
+    expect(envelope.payload.settings.state.language).toBe("zh");
+    expect(envelope.payload.settings.state.webdavPassword).toBeUndefined();
+    expect(getDatabaseMock).not.toHaveBeenCalled();
+  });
+
   it("restores folders in parent-first order even when backup payload is unsorted", async () => {
     const parentFolder = {
       id: "folder-parent",
@@ -1337,18 +1337,15 @@ describe("database-backup restore", () => {
     expect(embedded.payload.versions).toEqual([
       expect.objectContaining({ promptId: "prompt-zip-1" }),
     ]);
-    expect(embedded.payload.images).toEqual({
-      "image-zip.png": "image-base64",
-    });
-    expect(embedded.payload.videos).toEqual({
-      "video-zip.mp4": "video-base64",
-    });
+    expect(embedded.payload.images).toBeUndefined();
+    expect(embedded.payload.videos).toBeUndefined();
     expect(embedded.payload.skills).toEqual([
       expect.objectContaining({ name: "writer" }),
     ]);
-    expect(embedded.payload.skillFiles).toEqual({
-      "skill-zip-1": [{ relativePath: "SKILL.md", content: "# Writer" }],
-    });
+    expect(embedded.payload.skillFiles).toBeUndefined();
+    expect(window.electron.readImageBase64).not.toHaveBeenCalled();
+    expect(window.electron.readVideoBase64).not.toHaveBeenCalled();
+    expect(window.api.skill.readLocalFiles).not.toHaveBeenCalled();
     expect(embedded.payload.settingsUpdatedAt).toBe("2026-04-21T00:00:00.000Z");
   });
 
@@ -1357,6 +1354,7 @@ describe("database-backup restore", () => {
       version: 1,
       updatedAt: "2026-07-15T00:00:00.000Z",
       servers: [{ id: "mcp-1", name: "filesystem", transport: "stdio" }],
+      bindings: [],
     };
     const pluginLibrary = {
       version: 1,

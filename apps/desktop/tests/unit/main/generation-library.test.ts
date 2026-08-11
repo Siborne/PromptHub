@@ -4,6 +4,12 @@ import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DatabaseAdapter, SCHEMA } from "@prompthub/db";
 import {
+  acquireStorageMaintenanceIntent,
+  readGenerationResourceBundle,
+  writeCanonicalStorageAuthority,
+  writeRuntimeLayoutState,
+} from "@prompthub/core";
+import {
   configureRuntimePaths,
   getGeneratedImagesDir,
   getImagesDir,
@@ -60,6 +66,79 @@ describe("GenerationLibrary", () => {
         path.join(tempDir, "data", "generations", batch.id, "batch.json"),
       ),
     ).toBe(true);
+  });
+
+  it("publishes canonical generation bundles and keeps display bytes in cache", async () => {
+    writeRuntimeLayoutState(tempDir);
+    writeCanonicalStorageAuthority(tempDir, {
+      consistencyId: "a".repeat(64),
+      operationId: "generation-authority",
+    });
+    resetRuntimePaths();
+    configureRuntimePaths({ userDataPath: tempDir });
+    library = new GenerationLibrary(db);
+
+    const batch = await library.createBatch({
+      prompt: "Canonical poster",
+      model: { id: "m1", provider: "openai", model: "gpt-image-1" },
+      targetCount: 1,
+    });
+    const completed = await library.commitOutput({
+      batchId: batch.id,
+      slotIndex: 0,
+      mimeType: "image/png",
+      base64: PNG_BYTES.toString("base64"),
+    });
+    const bundlePath = path.join(tempDir, "data", "generations", batch.id);
+    const restored = readGenerationResourceBundle(
+      bundlePath,
+      path.join(tempDir, "data", "assets", "objects"),
+    );
+
+    expect(restored.bundleManifest.revision).toBe(2);
+    expect(restored.outputs).toHaveLength(1);
+    expect(getGeneratedImagesDir()).toBe(
+      path.join(tempDir, "cache", "generated-images"),
+    );
+    expect(
+      fs.readFileSync(
+        path.join(
+          getGeneratedImagesDir(),
+          batch.id,
+          completed.slots[0].output!.fileName,
+        ),
+      ),
+    ).toEqual(PNG_BYTES);
+    expect(fs.existsSync(path.join(bundlePath, "manifest.json"))).toBe(true);
+    expect(
+      db
+        .prepare(
+          `SELECT revision, content_hash FROM canonical_resources
+           WHERE resource_type = ? AND resource_id = ?`,
+        )
+        .get("generation", batch.id),
+    ).toEqual({
+      revision: 2,
+      content_hash: restored.bundleManifest.contentHash,
+    });
+  });
+
+  it("blocks generation writes during structural storage maintenance", async () => {
+    const maintenance = acquireStorageMaintenanceIntent(tempDir, {
+      operationId: "generation-restore",
+      operationKind: "restore",
+    });
+    try {
+      await expect(
+        library.createBatch({
+          prompt: "Blocked",
+          model: { id: "m1", provider: "openai", model: "gpt-image-1" },
+          targetCount: 1,
+        }),
+      ).rejects.toMatchObject({ code: "STORAGE_MAINTENANCE_BUSY" });
+    } finally {
+      maintenance.release();
+    }
   });
 
   it("commits validated image bytes before reporting a successful slot", async () => {

@@ -688,7 +688,11 @@ export const usePluginStore = create<PluginState>()(
     {
       name: "plugin-store",
       partialize: (state) => ({
-        customStoreSources: state.customStoreSources,
+        ...(typeof window === "undefined" ||
+        window.__PROMPTHUB_WEB__ === true ||
+        !window.api?.settings?.rendererPersistence
+          ? { customStoreSources: state.customStoreSources }
+          : {}),
         marketEntries: normalizePersistedPluginMarketEntries(
           state.marketEntries,
           state.marketSources,

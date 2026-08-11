@@ -55,7 +55,7 @@ interface PromptVersionRow {
 }
 
 export class PromptDB {
-  constructor(private db: Database.Database) {}
+  constructor(protected readonly db: Database.Database) {}
 
   /**
    * Create Prompt
@@ -94,10 +94,10 @@ export class PromptDB {
       data.notes || null,
       null,
       0,
-        0,
-        0,
-        now,
-        now,
+      0,
+      0,
+      now,
+      now,
     );
 
     // Create initial version
@@ -313,7 +313,9 @@ export class PromptDB {
         systemPromptEn: data.systemPromptEn,
       }),
       ...(data.userPrompt !== undefined && { userPrompt: data.userPrompt }),
-      ...(data.userPromptEn !== undefined && { userPromptEn: data.userPromptEn }),
+      ...(data.userPromptEn !== undefined && {
+        userPromptEn: data.userPromptEn,
+      }),
       ...(data.variables !== undefined && { variables: data.variables }),
       ...(data.tags !== undefined && { tags: data.tags }),
       ...(data.folderId !== undefined && { folderId: data.folderId }),
@@ -564,17 +566,18 @@ export class PromptDB {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO prompts (
-          id, visibility, title, description, prompt_type, system_prompt, system_prompt_en, user_prompt,
+          id, owner_user_id, visibility, title, description, prompt_type, system_prompt, system_prompt_en, user_prompt,
           user_prompt_en, variables, tags, folder_id, parent_id, sort_order, images, videos, is_favorite, is_pinned,
           current_version, usage_count, source, notes, last_ai_response, created_at, updated_at
         ) VALUES (
-          @id, @visibility, @title, @description, @prompt_type, @system_prompt, @system_prompt_en, @user_prompt,
+          @id, @owner_user_id, @visibility, @title, @description, @prompt_type, @system_prompt, @system_prompt_en, @user_prompt,
           @user_prompt_en, @variables, @tags, @folder_id, @parent_id, @sort_order, @images, @videos, @is_favorite, @is_pinned,
           @current_version, @usage_count, @source, @notes, @last_ai_response, @created_at, @updated_at
         )`,
       )
       .run({
         "@id": prompt.id,
+        "@owner_user_id": prompt.ownerUserId ?? null,
         "@visibility": prompt.visibility ?? "private",
         "@title": prompt.title,
         "@description": prompt.description ?? null,
@@ -634,15 +637,19 @@ export class PromptDB {
    * 获取所有唯一的标签
    */
   getAllTags(): string[] {
-    const rows = this.db.prepare(`SELECT tags FROM prompts WHERE tags IS NOT NULL AND tags != '[]'`).all() as { tags: string }[];
+    const rows = this.db
+      .prepare(
+        `SELECT tags FROM prompts WHERE tags IS NOT NULL AND tags != '[]'`,
+      )
+      .all() as { tags: string }[];
     const tagSet = new Set<string>();
-    
+
     for (const row of rows) {
       try {
         const tags = JSON.parse(row.tags);
         if (Array.isArray(tags)) {
           for (const tag of tags) {
-            if (typeof tag === 'string' && tag.trim()) {
+            if (typeof tag === "string" && tag.trim()) {
               tagSet.add(tag.trim());
             }
           }
@@ -651,7 +658,7 @@ export class PromptDB {
         // ignore invalid json
       }
     }
-    
+
     // Sort case-insensitively
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
   }
@@ -662,12 +669,14 @@ export class PromptDB {
    */
   renameTag(oldTag: string, newTag: string): void {
     if (!oldTag || !newTag || oldTag === newTag) return;
-    
+
     const txn = this.db.transaction(() => {
       // Find all prompts containing the old tag
       // LIKE '%"oldTag"%' is a fast initial filter
-      const rows = this.db.prepare(`SELECT id, tags FROM prompts WHERE tags LIKE ?`).all(`%"${oldTag}"%`) as { id: string, tags: string }[];
-      
+      const rows = this.db
+        .prepare(`SELECT id, tags FROM prompts WHERE tags LIKE ?`)
+        .all(`%"${oldTag}"%`) as { id: string; tags: string }[];
+
       const updateStmt = this.db.prepare(`
         UPDATE prompts 
         SET tags = ?, current_version = current_version + 1, updated_at = ?
@@ -683,7 +692,9 @@ export class PromptDB {
           if (Array.isArray(tags) && tags.includes(oldTag)) {
             // Replace oldTag with newTag.
             // If newTag already exists in the array, just remove oldTag (to avoid duplicates)
-            const newTags = Array.from(new Set(tags.map(t => t === oldTag ? newTag : t)));
+            const newTags = Array.from(
+              new Set(tags.map((t) => (t === oldTag ? newTag : t))),
+            );
             updateStmt.run(JSON.stringify(newTags), now, row.id);
             hasUpdates = true;
           }
@@ -692,7 +703,7 @@ export class PromptDB {
         }
       }
     });
-    
+
     txn();
   }
 
@@ -702,10 +713,12 @@ export class PromptDB {
    */
   deleteTag(tag: string): void {
     if (!tag) return;
-    
+
     const txn = this.db.transaction(() => {
-      const rows = this.db.prepare(`SELECT id, tags FROM prompts WHERE tags LIKE ?`).all(`%"${tag}"%`) as { id: string, tags: string }[];
-      
+      const rows = this.db
+        .prepare(`SELECT id, tags FROM prompts WHERE tags LIKE ?`)
+        .all(`%"${tag}"%`) as { id: string; tags: string }[];
+
       const updateStmt = this.db.prepare(`
         UPDATE prompts 
         SET tags = ?, current_version = current_version + 1, updated_at = ?
@@ -718,7 +731,7 @@ export class PromptDB {
         try {
           const tags = JSON.parse(row.tags);
           if (Array.isArray(tags) && tags.includes(tag)) {
-            const newTags = tags.filter(t => t !== tag);
+            const newTags = tags.filter((t) => t !== tag);
             updateStmt.run(JSON.stringify(newTags), now, row.id);
           }
         } catch (e) {
@@ -726,14 +739,18 @@ export class PromptDB {
         }
       }
     });
-    
+
     txn();
   }
 
   /**
    * Move a prompt under another prompt, or reorder it within the same level.
    */
-  movePrompt(promptId: string, newParentId: string | null, newOrder: number): void {
+  movePrompt(
+    promptId: string,
+    newParentId: string | null,
+    newOrder: number,
+  ): void {
     if (!Number.isFinite(newOrder) || newOrder < 0) {
       throw new Error("Prompt order must be a non-negative number");
     }
@@ -767,7 +784,10 @@ export class PromptDB {
       const targetSiblingIds = this.getPromptSiblingIds(targetParentId).filter(
         (id) => id !== promptId,
       );
-      const targetIndex = Math.min(Math.trunc(newOrder), targetSiblingIds.length);
+      const targetIndex = Math.min(
+        Math.trunc(newOrder),
+        targetSiblingIds.length,
+      );
       targetSiblingIds.splice(targetIndex, 0, promptId);
       this.rewritePromptSiblingOrder(
         targetParentId,
@@ -780,7 +800,10 @@ export class PromptDB {
     txn();
   }
 
-  private assertValidPromptParent(promptId: string, parentId: string | null): void {
+  private assertValidPromptParent(
+    promptId: string,
+    parentId: string | null,
+  ): void {
     if (parentId === null) {
       return;
     }

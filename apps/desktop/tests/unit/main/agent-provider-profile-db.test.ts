@@ -10,6 +10,7 @@ import {
   AgentProviderProfileDB,
   closeDatabase,
   initDatabase,
+  listDatabaseSafetyPoints,
 } from "@prompthub/db";
 import Database from "../../../src/main/database/sqlite";
 import { SCHEMA } from "../../../src/main/database/schema";
@@ -694,10 +695,11 @@ describe("Agent provider profile migration", () => {
     initDatabase(dbPath);
     closeDatabase();
 
+    expect(listDatabaseSafetyPoints(dbPath)).toHaveLength(1);
     expect(
       fs
         .readdirSync(tempDir)
         .filter((entry) => entry.startsWith("prompthub.db.backup-")),
-    ).toHaveLength(1);
+    ).toEqual([]);
   });
 });

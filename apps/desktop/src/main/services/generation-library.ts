@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { constants as fsConstants } from "fs";
+import { constants as fsConstants, existsSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
 import {
@@ -8,10 +8,19 @@ import {
   reduceGenerationCounts,
 } from "@prompthub/core/image-generation-workbench";
 import {
+  assertStorageMaintenanceAvailable,
+  getRuntimeStorageContext,
+  materializeGenerationResourceBundle,
+  readContentAddressedObject,
+  type ResourceBundleManifest,
+} from "@prompthub/core";
+import {
+  getAssetsDir,
   getGeneratedImagesDir,
   getGenerationsDir,
   getImagesDir,
   getLegacyGeneratedImagesDir,
+  getUserDataPath,
 } from "@prompthub/core/runtime-paths";
 import type {
   CommitGenerationOutputInput,
@@ -24,6 +33,7 @@ import type {
   SetGenerationFavoriteInput,
 } from "@prompthub/shared/types";
 import type Database from "../database/sqlite";
+import { CanonicalResourceDB } from "@prompthub/db";
 import {
   downloadRemoteImage,
   type RemoteImageDownload,
@@ -119,6 +129,10 @@ export class GenerationLibrary {
     ) => Promise<RemoteImageDownload> = downloadRemoteImage,
   ) {}
 
+  private assertStorageAvailable(): void {
+    assertStorageMaintenanceAvailable(getUserDataPath());
+  }
+
   private getBatchDir(batchId: string): string {
     assertBatchId(batchId);
     return path.join(getGenerationsDir(), batchId);
@@ -147,6 +161,29 @@ export class GenerationLibrary {
   private async migrateLegacyOutputs(
     manifest: GenerationBatchManifest,
   ): Promise<void> {
+    this.assertStorageAvailable();
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      const targetDir = path.join(getGeneratedImagesDir(), manifest.id);
+      await fs.mkdir(targetDir, { recursive: true });
+      for (const slot of manifest.slots) {
+        if (!slot.output) continue;
+        const target = path.join(targetDir, slot.output.fileName);
+        try {
+          await fs.copyFile(
+            readContentAddressedObject(
+              path.join(getAssetsDir(), "objects"),
+              slot.output.sha256,
+              { maxBytes: slot.output.byteSize },
+            ).path,
+            target,
+            fsConstants.COPYFILE_EXCL,
+          );
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        }
+      }
+      return;
+    }
     const legacyDir = path.join(getLegacyGeneratedImagesDir(), manifest.id);
     const targetDir = path.join(getGeneratedImagesDir(), manifest.id);
     try {
@@ -177,6 +214,7 @@ export class GenerationLibrary {
   private async writeManifest(
     manifest: GenerationBatchManifest,
   ): Promise<void> {
+    this.assertStorageAvailable();
     const manifestPath = this.getManifestPath(manifest.id);
     const tempPath = `${manifestPath}.${crypto.randomUUID()}.tmp`;
     await fs.mkdir(path.dirname(manifestPath), { recursive: true });
@@ -188,7 +226,44 @@ export class GenerationLibrary {
     }
   }
 
-  private indexManifest(manifest: GenerationBatchManifest): void {
+  private writeCanonicalManifest(
+    manifest: GenerationBatchManifest,
+  ): ResourceBundleManifest {
+    const outputSources = Object.fromEntries(
+      manifest.slots.flatMap((slot) =>
+        slot.output
+          ? [
+              [
+                slot.output.fileName,
+                path.join(
+                  getGeneratedImagesDir(),
+                  manifest.id,
+                  slot.output.fileName,
+                ),
+              ],
+            ]
+          : [],
+      ),
+    );
+    const bundlePath = this.getBatchDir(manifest.id);
+    return materializeGenerationResourceBundle({
+      bundlePath,
+      objectsRoot: path.join(getAssetsDir(), "objects"),
+      manifest,
+      outputSources,
+      writePolicy: {
+        mode: existsSync(path.join(bundlePath, "manifest.json"))
+          ? "replace"
+          : "create",
+      },
+    }).bundleManifest;
+  }
+
+  private indexManifest(
+    manifest: GenerationBatchManifest,
+    publishCanonical?: () => ResourceBundleManifest,
+  ): void {
+    this.assertStorageAvailable();
     const sourcePromptId = manifest.sourcePromptId
       ? this.db
           .prepare("SELECT id FROM prompts WHERE id = ?")
@@ -250,6 +325,22 @@ export class GenerationLibrary {
           slot.output?.createdAt ?? null,
         );
       }
+      const published = publishCanonical?.();
+      if (published) {
+        new CanonicalResourceDB(this.db).upsert({
+          resourceType: published.resourceType,
+          resourceId: published.resourceId,
+          schemaVersion: published.schemaVersion,
+          revision: published.revision,
+          contentHash: published.contentHash,
+          manifestPath: path.posix.join(
+            "generations",
+            manifest.id,
+            "manifest.json",
+          ),
+          updatedAt: published.updatedAt,
+        });
+      }
     });
     write();
   }
@@ -270,8 +361,12 @@ export class GenerationLibrary {
         ? manifest.completedAt
         : manifest.updatedAt
       : undefined;
-    await this.writeManifest(manifest);
-    this.indexManifest(manifest);
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      this.indexManifest(manifest, () => this.writeCanonicalManifest(manifest));
+    } else {
+      await this.writeManifest(manifest);
+      this.indexManifest(manifest);
+    }
     return manifest;
   }
 
@@ -321,8 +416,12 @@ export class GenerationLibrary {
       createdAt: now,
       updatedAt: now,
     };
-    await this.writeManifest(manifest);
-    this.indexManifest(manifest);
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      this.indexManifest(manifest, () => this.writeCanonicalManifest(manifest));
+    } else {
+      await this.writeManifest(manifest);
+      this.indexManifest(manifest);
+    }
     return manifest;
   }
 
@@ -334,6 +433,7 @@ export class GenerationLibrary {
   }
 
   async listBatches(): Promise<GenerationBatchManifest[]> {
+    this.assertStorageAvailable();
     await fs.mkdir(getGenerationsDir(), { recursive: true });
     const entries = await fs.readdir(getGenerationsDir(), {
       withFileTypes: true,
@@ -392,6 +492,7 @@ export class GenerationLibrary {
     claimedMimeType?: string,
     revisedPrompt?: string,
   ): Promise<GenerationBatchManifest> {
+    this.assertStorageAvailable();
     assertSlotIndex(manifest, slotIndex);
     if (!["pending", "running"].includes(manifest.slots[slotIndex].status)) {
       throw new Error("Generation slot cannot accept output");
@@ -529,6 +630,7 @@ export class GenerationLibrary {
   async copyOutputToPromptMedia(
     input: GenerationOutputTargetInput,
   ): Promise<string> {
+    this.assertStorageAvailable();
     const manifest = await this.getBatch(input.batchId);
     const output = manifest.slots.find(
       (slot) => slot.output?.id === input.outputId,

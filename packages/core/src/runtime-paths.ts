@@ -1,6 +1,10 @@
-import fs from "fs";
 import os from "os";
 import path from "path";
+
+import {
+  resolveRuntimeStorageContext,
+  type RuntimeStorageContext,
+} from "./runtime-storage-context";
 
 export interface RuntimePathOverrides {
   appDataPath?: string;
@@ -14,16 +18,23 @@ export interface RuntimePathOverrides {
 const DEFAULT_PRODUCT_NAME = "PromptHub";
 
 let runtimePathOverrides: RuntimePathOverrides = {};
+let runtimeStorageContext: RuntimeStorageContext | null = null;
 
 export function configureRuntimePaths(overrides: RuntimePathOverrides): void {
   runtimePathOverrides = {
     ...runtimePathOverrides,
     ...overrides,
   };
+  runtimeStorageContext = null;
 }
 
 export function resetRuntimePaths(): void {
   runtimePathOverrides = {};
+  runtimeStorageContext = null;
+}
+
+export function refreshRuntimeStorageContext(): void {
+  runtimeStorageContext = null;
 }
 
 function getPlatform(): NodeJS.Platform {
@@ -36,23 +47,17 @@ function getProductName(): string {
 
 function getDefaultAppDataPath(platform: NodeJS.Platform): string {
   const homeDir = os.homedir();
-
   if (platform === "darwin") {
     return path.join(homeDir, "Library", "Application Support");
   }
-
   if (platform === "win32") {
     return process.env.APPDATA || path.join(homeDir, "AppData", "Roaming");
   }
-
   return process.env.XDG_CONFIG_HOME || path.join(homeDir, ".config");
 }
 
 function resolveInitialUserDataPath(): string {
-  const appDataPath = path.resolve(
-    runtimePathOverrides.appDataPath ?? getDefaultAppDataPath(getPlatform()),
-  );
-  return path.join(appDataPath, getProductName());
+  return path.join(getAppDataPath(), getProductName());
 }
 
 export function getAppDataPath(): string {
@@ -62,28 +67,18 @@ export function getAppDataPath(): string {
 }
 
 export function getUserDataPath(): string {
-  if (runtimePathOverrides.userDataPath) {
-    return path.resolve(runtimePathOverrides.userDataPath);
-  }
-
-  return resolveInitialUserDataPath();
+  return runtimePathOverrides.userDataPath
+    ? path.resolve(runtimePathOverrides.userDataPath)
+    : resolveInitialUserDataPath();
 }
 
-function resolvePreferredPath(
-  primaryPath: string,
-  legacyPath?: string,
-): string {
-  if (fs.existsSync(primaryPath)) {
-    return primaryPath;
-  }
-  if (legacyPath && fs.existsSync(legacyPath)) {
-    return legacyPath;
-  }
-  return primaryPath;
+export function getRuntimeStorageContext(): RuntimeStorageContext {
+  runtimeStorageContext ??= resolveRuntimeStorageContext(getUserDataPath());
+  return runtimeStorageContext;
 }
 
 export function getDataDir(): string {
-  return path.join(getUserDataPath(), "data");
+  return getRuntimeStorageContext().dataPath;
 }
 
 export function getLegacyDatabasePath(): string {
@@ -91,30 +86,35 @@ export function getLegacyDatabasePath(): string {
 }
 
 export function getDatabasePath(): string {
-  const unifiedDbPath = path.join(getDataDir(), "prompthub.db");
-  const legacyDbPath = getLegacyDatabasePath();
-
-  if (fs.existsSync(unifiedDbPath)) {
-    return unifiedDbPath;
-  }
-
-  if (fs.existsSync(legacyDbPath)) {
-    return legacyDbPath;
-  }
-
-  return unifiedDbPath;
+  return getRuntimeStorageContext().databasePath;
 }
 
 export function getConfigDir(): string {
-  return path.join(getUserDataPath(), "config");
+  return getRuntimeStorageContext().configPath;
+}
+
+export function getSecretsDir(): string {
+  return getRuntimeStorageContext().secretsPath;
+}
+
+export function getBackupsDir(): string {
+  return getRuntimeStorageContext().backupsPath;
+}
+
+export function getCacheDir(): string {
+  return getRuntimeStorageContext().cachePath;
 }
 
 export function getLogsDir(): string {
-  return path.join(getUserDataPath(), "logs");
+  return getRuntimeStorageContext().logsPath;
+}
+
+export function getOperationsDir(): string {
+  return getRuntimeStorageContext().operationsPath;
 }
 
 export function getAssetsDir(): string {
-  return path.join(getDataDir(), "assets");
+  return getRuntimeStorageContext().assetsPath;
 }
 
 export function getAttachmentsDir(): string {
@@ -126,14 +126,13 @@ export function getLegacySkillsDir(): string {
 }
 
 export function getSkillsDir(): string {
-  return resolvePreferredPath(
-    path.join(getDataDir(), "skills"),
-    getLegacySkillsDir(),
-  );
+  return getRuntimeStorageContext().skillsPath;
 }
 
 export function getRulesDir(): string {
-  return path.join(getDataDir(), "rules");
+  return getRuntimeStorageContext().localAuthority === "canonical-files"
+    ? path.join(getCacheDir(), "rules-workspace")
+    : path.join(getDataDir(), "rules");
 }
 
 export function getLegacyWorkspaceDir(): string {
@@ -145,67 +144,36 @@ export function getLegacyPromptsWorkspaceDir(): string {
 }
 
 export function getPromptsDir(): string {
-  return resolvePreferredPath(
-    path.join(getDataDir(), "prompts"),
-    getLegacyPromptsWorkspaceDir(),
-  );
+  return getRuntimeStorageContext().promptsPath;
 }
 
 export function getWorkspaceDir(): string {
-  const dataDir = getDataDir();
-  if (
-    fs.existsSync(path.join(dataDir, "prompts")) ||
-    fs.existsSync(path.join(dataDir, "folders.json"))
-  ) {
-    return dataDir;
-  }
-
-  const legacyWorkspaceDir = getLegacyWorkspaceDir();
-  if (fs.existsSync(legacyWorkspaceDir)) {
-    return legacyWorkspaceDir;
-  }
-
-  return dataDir;
+  return getRuntimeStorageContext().workspacePath;
 }
 
 export function getPromptsWorkspaceDir(): string {
-  return getPromptsDir();
+  return getRuntimeStorageContext().localAuthority === "canonical-files"
+    ? path.join(getCacheDir(), "prompt-workspace")
+    : getPromptsDir();
 }
 
 export function getLegacyImagesDir(): string {
   return path.join(getUserDataPath(), "images");
 }
 
-function containsOnlyObsoleteGenerationAssets(imagesDir: string): boolean {
-  try {
-    const entries = fs.readdirSync(imagesDir);
-    return (
-      entries.includes("generated") &&
-      entries.every((entry) => entry === "generated" || entry === ".DS_Store")
-    );
-  } catch {
-    return false;
-  }
-}
-
 export function getImagesDir(): string {
-  const primaryPath = path.join(getAssetsDir(), "images");
-  const legacyPath = getLegacyImagesDir();
-  if (
-    fs.existsSync(legacyPath) &&
-    containsOnlyObsoleteGenerationAssets(primaryPath)
-  ) {
-    return legacyPath;
-  }
-  return resolvePreferredPath(primaryPath, legacyPath);
+  return getRuntimeStorageContext().imagesPath;
 }
 
 export function getGenerationsDir(): string {
-  return path.join(getDataDir(), "generations");
+  return getRuntimeStorageContext().generationsPath;
 }
 
 export function getGeneratedImagesDir(): string {
-  return path.join(getGenerationsDir(), "assets");
+  const context = getRuntimeStorageContext();
+  return context.localAuthority === "canonical-files"
+    ? path.join(context.cachePath, "generated-images")
+    : path.join(getGenerationsDir(), "assets");
 }
 
 export function getLegacyGeneratedImagesDir(): string {
@@ -217,8 +185,17 @@ export function getLegacyVideosDir(): string {
 }
 
 export function getVideosDir(): string {
-  return resolvePreferredPath(
-    path.join(getAssetsDir(), "videos"),
-    getLegacyVideosDir(),
-  );
+  return getRuntimeStorageContext().videosPath;
 }
+
+export type { RuntimeStorageContext } from "./runtime-storage-context";
+export {
+  CURRENT_LAYOUT_EPOCH,
+  CURRENT_LAYOUT_STATE_FORMAT_VERSION,
+  LAYOUT_STATE_FILE_NAME,
+  LEGACY_LAYOUT_EPOCH,
+  deriveStorageRootIdentity,
+  readRuntimeLayoutState,
+  resolveRuntimeStorageContext,
+  writeRuntimeLayoutState,
+} from "./runtime-storage-context";

@@ -186,7 +186,14 @@ function normalizeBaseUrl(url: string): string {
   return normalizePromptHubWebBaseUrl(url);
 }
 
-function getOrCreateDesktopDeviceId(): string {
+async function getOrCreateDesktopDeviceId(): Promise<string> {
+  const canonicalDeviceId =
+    window.api?.settings?.rendererPersistence?.getOrCreateDeviceId;
+  if (canonicalDeviceId) {
+    const value = await canonicalDeviceId();
+    window.localStorage.removeItem("prompthub-self-hosted-device-id");
+    return value;
+  }
   const storageKey = "prompthub-self-hosted-device-id";
   const existing = window.localStorage.getItem(storageKey);
   if (existing) {
@@ -212,7 +219,7 @@ async function buildDesktopHeartbeatPayload(): Promise<DeviceHeartbeatPayload> {
   const userAgent = navigator.userAgent;
   const appVersion = await window.electron?.updater?.getVersion?.();
   return {
-    id: getOrCreateDesktopDeviceId(),
+    id: await getOrCreateDesktopDeviceId(),
     type: "desktop",
     name: "PromptHub Desktop",
     platform: detectDesktopPlatform(userAgent),

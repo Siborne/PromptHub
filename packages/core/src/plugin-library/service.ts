@@ -44,7 +44,6 @@ import {
   type GitHubRepositoryRef,
   createPluginId,
   getManagedPluginsDir,
-  getPluginLibraryFilePath,
   getPluginLocalPackagePath,
   isGitTransportSourceKind,
   normalizeRelativePosixPath,
@@ -54,7 +53,6 @@ import {
   safePluginBrandColor,
   safeString,
   safeStringArray,
-  writeJsonFileAtomic,
 } from "./shared";
 import {
   BUILTIN_PLUGIN_MARKET_SOURCES,
@@ -233,12 +231,14 @@ function buildAndPersistInstalledPlugin(
   library: PluginLibraryFile,
   options: InstalledPluginOptions,
   warnings: string[],
+  persist: (library: PluginLibraryFile) => PluginLibraryFile,
 ): PluginInstallResult {
   try {
     return persistInstalledPlugin(
       library,
       buildInstalledPlugin(options),
       warnings,
+      persist,
     );
   } catch (error) {
     if (options.materialized?.managedPath) {
@@ -255,6 +255,7 @@ function persistInstalledPlugin(
   library: PluginLibraryFile,
   plugin: PluginLibraryEntry,
   warnings: string[],
+  persist: (library: PluginLibraryFile) => PluginLibraryFile,
 ): PluginInstallResult {
   const nextLibrary: PluginLibraryFile = {
     ...library,
@@ -262,7 +263,7 @@ function persistInstalledPlugin(
     plugins: [...library.plugins, plugin],
   };
   try {
-    writeJsonFileAtomic(getPluginLibraryFilePath(), nextLibrary);
+    persist(nextLibrary);
   } catch (error) {
     if (plugin.managedPath) {
       fs.rmSync(plugin.managedPath, { recursive: true, force: true });
@@ -317,6 +318,7 @@ function persistSourceUpdate(
   plugin: PluginLibraryEntry,
   materialized: MaterializedPluginPackage | undefined,
   check: PluginSourceUpdateCheck,
+  persist: (library: PluginLibraryFile) => PluginLibraryFile,
 ): PluginSourceUpdateResult {
   const nextLibrary: PluginLibraryFile = {
     ...library,
@@ -326,7 +328,7 @@ function persistSourceUpdate(
     ),
   };
   try {
-    writeJsonFileAtomic(getPluginLibraryFilePath(), nextLibrary);
+    persist(nextLibrary);
   } catch (error) {
     if (
       materialized?.managedPath &&
@@ -548,6 +550,7 @@ export class CorePluginLibraryService {
         trustLevel: preview.entry.trustLevel,
       },
       preview.warnings,
+      (next) => this.write(next),
     );
   }
 
@@ -597,6 +600,7 @@ export class CorePluginLibraryService {
           trustLevel: "custom",
         },
         preview.warnings,
+        (next) => this.write(next),
       );
     } finally {
       if (sourcePackage.cleanupPath) {
@@ -662,6 +666,7 @@ export class CorePluginLibraryService {
         trustLevel: "custom",
       },
       [],
+      (next) => this.write(next),
     );
   }
 
@@ -756,6 +761,7 @@ export class CorePluginLibraryService {
       nextPlugin,
       materialized,
       check,
+      (next) => this.write(next),
     );
   }
 
@@ -984,6 +990,7 @@ export class CorePluginLibraryService {
     return distributePlugin(
       {
         readLibrary: () => this.read(),
+        persistLibrary: (library) => this.write(library),
         resolveTargetPath: this.resolvePluginTargetPath,
       },
       request,
@@ -996,6 +1003,7 @@ export class CorePluginLibraryService {
     return removePluginDistribution(
       {
         readLibrary: () => this.read(),
+        persistLibrary: (library) => this.write(library),
         resolveTargetPath: this.resolvePluginTargetPath,
       },
       request,
@@ -1030,7 +1038,7 @@ export class CorePluginLibraryService {
       updatedAt: nowIso(),
       plugins: nextPlugins,
     };
-    writeJsonFileAtomic(getPluginLibraryFilePath(), nextLibrary);
+    this.write(nextLibrary);
     if (deletedPlugin?.managedPath) {
       this.deleteManagedPluginPath(deletedPlugin.managedPath);
     }

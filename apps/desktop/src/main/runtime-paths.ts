@@ -1,7 +1,40 @@
 import os from "os";
 import path from "path";
-import fs from "fs";
 
+import {
+  configureRuntimePaths as configureCoreRuntimePaths,
+  getAppDataPath as getCoreAppDataPath,
+  getAssetsDir,
+  getAttachmentsDir,
+  getBackupsDir,
+  getCacheDir,
+  getConfigDir,
+  getDatabasePath,
+  getDataDir,
+  getGeneratedImagesDir,
+  getGenerationsDir,
+  getImagesDir,
+  getLegacyDatabasePath,
+  getLegacyGeneratedImagesDir,
+  getLegacyImagesDir,
+  getLegacyPromptsWorkspaceDir,
+  getLegacySkillsDir,
+  getLegacyVideosDir,
+  getLegacyWorkspaceDir,
+  getLogsDir,
+  getOperationsDir,
+  getPromptsDir,
+  getPromptsWorkspaceDir,
+  getRulesDir,
+  getRuntimeStorageContext,
+  refreshRuntimeStorageContext,
+  getSecretsDir,
+  getSkillsDir,
+  getUserDataPath as getCoreUserDataPath,
+  getVideosDir,
+  getWorkspaceDir,
+  resetRuntimePaths as resetCoreRuntimePaths,
+} from "@prompthub/core/runtime-paths";
 import { resolveInitialUserDataPath } from "./data-path";
 
 const DEFAULT_PRODUCT_NAME = "PromptHub";
@@ -17,208 +50,100 @@ export interface RuntimePathOverrides {
 
 let runtimePathOverrides: RuntimePathOverrides = {};
 
-export function configureRuntimePaths(overrides: RuntimePathOverrides): void {
-  runtimePathOverrides = {
-    ...runtimePathOverrides,
-    ...overrides,
-  };
-}
-
-export function resetRuntimePaths(): void {
-  runtimePathOverrides = {};
-}
-
 function getPlatform(): NodeJS.Platform {
   return runtimePathOverrides.platform ?? process.platform;
 }
 
-function getProductName(): string {
-  return runtimePathOverrides.productName ?? DEFAULT_PRODUCT_NAME;
-}
-
 function getDefaultAppDataPath(platform: NodeJS.Platform): string {
   const homeDir = os.homedir();
-
   if (platform === "darwin") {
     return path.join(homeDir, "Library", "Application Support");
   }
-
   if (platform === "win32") {
     return process.env.APPDATA || path.join(homeDir, "AppData", "Roaming");
   }
-
   return process.env.XDG_CONFIG_HOME || path.join(homeDir, ".config");
 }
 
-export function getAppDataPath(): string {
-  return path.resolve(
-    runtimePathOverrides.appDataPath ?? getDefaultAppDataPath(getPlatform()),
-  );
-}
-
-export function getUserDataPath(): string {
+function resolveDesktopUserDataPath(): string {
   if (runtimePathOverrides.userDataPath) {
     return path.resolve(runtimePathOverrides.userDataPath);
   }
-
-  const appDataPath = getAppDataPath();
-  const defaultUserDataPath = path.join(appDataPath, getProductName());
-
+  const appDataPath = path.resolve(
+    runtimePathOverrides.appDataPath ?? getDefaultAppDataPath(getPlatform()),
+  );
+  const productName = runtimePathOverrides.productName ?? DEFAULT_PRODUCT_NAME;
   return resolveInitialUserDataPath({
     appDataPath,
-    defaultUserDataPath,
+    defaultUserDataPath: path.join(appDataPath, productName),
     exePath: runtimePathOverrides.exePath ?? process.execPath,
     isPackaged: runtimePathOverrides.isPackaged ?? false,
     platform: getPlatform(),
   });
 }
 
-function resolvePreferredPath(
-  primaryPath: string,
-  legacyPath?: string,
-): string {
-  if (fs.existsSync(primaryPath)) {
-    return primaryPath;
+function applyCoreRuntimePaths(): void {
+  configureCoreRuntimePaths({
+    ...runtimePathOverrides,
+    userDataPath: resolveDesktopUserDataPath(),
+  });
+}
+
+export function configureRuntimePaths(overrides: RuntimePathOverrides): void {
+  runtimePathOverrides = { ...runtimePathOverrides, ...overrides };
+  applyCoreRuntimePaths();
+}
+
+export function resetRuntimePaths(): void {
+  runtimePathOverrides = {};
+  resetCoreRuntimePaths();
+}
+
+export function getAppDataPath(): string {
+  if (Object.keys(runtimePathOverrides).length === 0) {
+    return getCoreAppDataPath();
   }
-  if (legacyPath && fs.existsSync(legacyPath)) {
-    return legacyPath;
-  }
-  return primaryPath;
-}
-
-export function getDataDir(): string {
-  return path.join(getUserDataPath(), "data");
-}
-
-export function getLegacyDatabasePath(): string {
-  return path.join(getUserDataPath(), "prompthub.db");
-}
-
-export function getDatabasePath(): string {
-  const unifiedDbPath = path.join(getDataDir(), "prompthub.db");
-  const legacyDbPath = getLegacyDatabasePath();
-
-  if (fs.existsSync(unifiedDbPath)) {
-    return unifiedDbPath;
-  }
-
-  if (fs.existsSync(legacyDbPath)) {
-    return legacyDbPath;
-  }
-
-  return unifiedDbPath;
-}
-
-export function getConfigDir(): string {
-  return path.join(getUserDataPath(), "config");
-}
-
-export function getLogsDir(): string {
-  return path.join(getUserDataPath(), "logs");
-}
-
-export function getAssetsDir(): string {
-  return path.join(getDataDir(), "assets");
-}
-
-export function getAttachmentsDir(): string {
-  return path.join(getAssetsDir(), "attachments");
-}
-
-export function getLegacySkillsDir(): string {
-  return path.join(getUserDataPath(), "skills");
-}
-
-export function getSkillsDir(): string {
-  return resolvePreferredPath(
-    path.join(getDataDir(), "skills"),
-    getLegacySkillsDir(),
+  return path.resolve(
+    runtimePathOverrides.appDataPath ?? getDefaultAppDataPath(getPlatform()),
   );
 }
 
-export function getRulesDir(): string {
-  return path.join(getDataDir(), "rules");
-}
-
-export function getLegacyWorkspaceDir(): string {
-  return path.join(getUserDataPath(), "workspace");
-}
-
-export function getLegacyPromptsWorkspaceDir(): string {
-  return path.join(getLegacyWorkspaceDir(), "prompts");
-}
-
-export function getPromptsDir(): string {
-  return resolvePreferredPath(
-    path.join(getDataDir(), "prompts"),
-    getLegacyPromptsWorkspaceDir(),
-  );
-}
-
-export function getWorkspaceDir(): string {
-  const dataDir = getDataDir();
-  if (
-    fs.existsSync(path.join(dataDir, "prompts")) ||
-    fs.existsSync(path.join(dataDir, "folders.json"))
-  ) {
-    return dataDir;
+export function getUserDataPath(): string {
+  if (Object.keys(runtimePathOverrides).length === 0) {
+    return getCoreUserDataPath();
   }
-
-  const legacyWorkspaceDir = getLegacyWorkspaceDir();
-  if (fs.existsSync(legacyWorkspaceDir)) {
-    return legacyWorkspaceDir;
-  }
-
-  return dataDir;
+  return resolveDesktopUserDataPath();
 }
 
-export function getPromptsWorkspaceDir(): string {
-  return getPromptsDir();
-}
+export {
+  getAssetsDir,
+  getAttachmentsDir,
+  getBackupsDir,
+  getCacheDir,
+  getConfigDir,
+  getDatabasePath,
+  getDataDir,
+  getGeneratedImagesDir,
+  getGenerationsDir,
+  getImagesDir,
+  getLegacyDatabasePath,
+  getLegacyGeneratedImagesDir,
+  getLegacyImagesDir,
+  getLegacyPromptsWorkspaceDir,
+  getLegacySkillsDir,
+  getLegacyVideosDir,
+  getLegacyWorkspaceDir,
+  getLogsDir,
+  getOperationsDir,
+  getPromptsDir,
+  getPromptsWorkspaceDir,
+  getRulesDir,
+  getRuntimeStorageContext,
+  refreshRuntimeStorageContext,
+  getSecretsDir,
+  getSkillsDir,
+  getVideosDir,
+  getWorkspaceDir,
+};
 
-export function getLegacyImagesDir(): string {
-  return path.join(getUserDataPath(), "images");
-}
-
-function containsOnlyObsoleteGenerationAssets(imagesDir: string): boolean {
-  try {
-    const entries = fs.readdirSync(imagesDir);
-    return (
-      entries.includes("generated") &&
-      entries.every((entry) => entry === "generated" || entry === ".DS_Store")
-    );
-  } catch {
-    return false;
-  }
-}
-
-export function getImagesDir(): string {
-  const primaryPath = path.join(getAssetsDir(), "images");
-  const legacyPath = getLegacyImagesDir();
-  if (
-    fs.existsSync(legacyPath) &&
-    containsOnlyObsoleteGenerationAssets(primaryPath)
-  ) {
-    return legacyPath;
-  }
-  return resolvePreferredPath(primaryPath, legacyPath);
-}
-
-export function getGenerationsDir(): string {
-  return path.join(getDataDir(), "generations");
-}
-
-export function getGeneratedImagesDir(): string {
-  return path.join(getGenerationsDir(), "assets");
-}
-
-export function getLegacyVideosDir(): string {
-  return path.join(getUserDataPath(), "videos");
-}
-
-export function getVideosDir(): string {
-  return resolvePreferredPath(
-    path.join(getAssetsDir(), "videos"),
-    getLegacyVideosDir(),
-  );
-}
+export type { RuntimeStorageContext } from "@prompthub/core/runtime-paths";

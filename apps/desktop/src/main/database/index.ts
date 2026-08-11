@@ -9,21 +9,30 @@
 import path from "path";
 import fs from "fs";
 import {
+  createDatabaseSafetyPoint,
   DatabaseAdapter,
   initDatabase as dbInit,
   getDatabase,
   closeDatabase,
   isDatabaseEmpty,
 } from "@prompthub/db";
-import type { InitDatabaseHooks } from "@prompthub/db";
+import {
+  assertStorageMaintenanceAvailable,
+  CanonicalRuleDB,
+  CanonicalSkillDB,
+  getRuntimeStorageContext,
+  recoverCanonicalResourcePublications,
+} from "@prompthub/core";
 import type { RecoveryContentCounts } from "@prompthub/shared/types";
 import {
   getLegacyPromptsWorkspaceDir,
+  getDataDir,
   getDatabasePath,
   getLegacyWorkspaceDir,
   getSkillsDir,
   getUserDataPath,
 } from "../runtime-paths";
+import { reconcileDesktopSkillRepoPaths } from "../services/skill-repo-reconciliation";
 
 // ── Re-exports from @prompthub/db ────────────────────────────────────────────
 // All consumers in the desktop app can continue importing from this file.
@@ -31,12 +40,13 @@ export { getDatabase, closeDatabase, isDatabaseEmpty };
 export { DatabaseAdapter } from "@prompthub/db";
 export type { Database } from "@prompthub/db";
 export { SCHEMA_TABLES, SCHEMA_INDEXES, SCHEMA } from "@prompthub/db";
-export { PromptDB } from "@prompthub/db";
-export { PromptRelationDB } from "@prompthub/db";
-export { PromptOutputFormatDB } from "@prompthub/db";
-export { FolderDB } from "@prompthub/db";
-export { SkillDB } from "@prompthub/db";
-export { RuleDB } from "@prompthub/db";
+export {
+  PromptDB,
+  PromptRelationDB,
+  PromptOutputFormatDB,
+  FolderDB,
+} from "@prompthub/core";
+export { SkillDB, RuleDB } from "@prompthub/core";
 
 // ── Desktop-specific types ───────────────────────────────────────────────────
 
@@ -154,61 +164,38 @@ function resolveSkillRepoPath(skill: {
 
 // ── Desktop initDatabase wrapper ─────────────────────────────────────────────
 
-const UPGRADE_BACKUP_MARKER = ".prompthub-0.5.3-backup-done";
-
-/**
- * Make a one-time copy of prompthub.db before the first 0.5.3 boot touches it.
- * A marker file in userData prevents the backup from being repeated.
- *
- * v0.5.3: 首次启动前对 prompthub.db 做一次性备份，防止升级逻辑误伤数据。
- * 使用标记文件避免重复备份。
- */
-function ensurePreUpgradeBackup(dbPath: string): void {
-  try {
-    if (!fs.existsSync(dbPath)) {
-      return; // fresh install, nothing to back up
-    }
-    const markerPath = path.join(path.dirname(dbPath), UPGRADE_BACKUP_MARKER);
-    if (fs.existsSync(markerPath)) {
-      return; // already done on a previous 0.5.3 boot
-    }
-
-    const stats = fs.statSync(dbPath);
-    if (stats.size < 4096) {
-      // Trivially small DB — nothing meaningful to back up. Do NOT write the
-      // marker here: if the user later imports real data and restarts, we want
-      // the first "real" boot to still produce a safety backup.
-      // v0.5.3 review 反馈修复：空库不写 marker，待真实数据出现时仍能触发备份。
-      return;
-    }
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupPath = `${dbPath}.backup-before-0.5.3.${timestamp}.db`;
-    fs.copyFileSync(dbPath, backupPath);
-    fs.writeFileSync(markerPath, new Date().toISOString(), "utf8");
-    console.log(`[startup] Pre-0.5.3 backup created at: ${backupPath}`);
-  } catch (error) {
-    // Backup is defensive — never let it crash startup.
-    // 备份属于防御措施，失败不得阻断启动。
-    console.warn(
-      "[startup] ensurePreUpgradeBackup failed (continuing):",
-      error,
-    );
-  }
-}
-
 /**
  * Initialize database with desktop-specific path resolution and hooks.
  */
 export function initDatabase(): DatabaseAdapter.Database {
+  assertStorageMaintenanceAvailable(getUserDataPath());
+  recoverCanonicalResourcePublications(getDataDir());
   const dbPath = getDatabasePath();
-  ensurePreUpgradeBackup(dbPath);
-  const hooks: InitDatabaseHooks = {
-    resolveSkillRepoPath,
+  const database = dbInit(dbPath, {
     // Main-process initialization runs only after Electron's single-instance gate.
     recoverUnregisteredLock: true,
-  };
-  return dbInit(dbPath, hooks);
+  });
+  try {
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      new CanonicalSkillDB(database).reconcileCanonicalWorkspaces();
+      new CanonicalRuleDB(database).reconcileCanonicalWorkspaces();
+    } else {
+      reconcileDesktopSkillRepoPaths(
+        database,
+        path.join(
+          getDataDir(),
+          "operations",
+          "migrations",
+          "desktop-skill-repo-v1.json",
+        ),
+        resolveSkillRepoPath,
+      );
+    }
+    return database;
+  } catch (error) {
+    closeDatabase();
+    throw error;
+  }
 }
 
 // ── Data recovery (desktop-only) ─────────────────────────────────────────────
@@ -476,10 +463,11 @@ export function performDatabaseRecovery(
     // 1. Backup current database
     let backupPath: string | undefined;
     if (sourceDb && fs.existsSync(targetDb)) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      backupPath = `${targetDb}.pre-recovery-${timestamp}`;
-      fs.copyFileSync(targetDb, backupPath);
-      console.log(`[Recovery] Backed up current DB to: ${backupPath}`);
+      const safetyPoint = createDatabaseSafetyPoint(targetDb, "pre-recovery");
+      backupPath = path.join(safetyPoint.directoryPath, "database.sqlite");
+      console.log(
+        `[Recovery] Preserved current DB in safety point: ${safetyPoint.id}`,
+      );
     }
 
     // 2. Copy source database over current

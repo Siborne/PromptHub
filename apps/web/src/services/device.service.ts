@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { getDevicesDir } from '../runtime-paths.js';
+import { getDevicesDir, getUserDevicesPath } from '../runtime-paths.js';
 import { writeJsonFileAtomic } from './atomic-json-file.js';
 
 export type RegisteredDeviceType = 'desktop' | 'browser';
@@ -27,7 +27,7 @@ export interface DeviceHeartbeatInput {
 }
 
 function getDevicesFilePath(userId: string): string {
-  return `${getDevicesDir()}/${userId}.json`;
+  return getUserDevicesPath(userId);
 }
 
 function ensureDevicesDir(): void {

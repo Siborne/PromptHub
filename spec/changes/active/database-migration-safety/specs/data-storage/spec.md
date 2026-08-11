@@ -187,6 +187,46 @@ references, Skill/Rule/MCP/Plugin state, and PromptHub-owned Agent metadata, the
 atomically publishes it. A missing or malformed canonical record fails closed;
 the active database remains unchanged.
 
+### `FR-DATA-012`: Complete Durable Asset Root
+
+The local `data/` tree must contain the canonical representation of every
+PromptHub-owned user asset required to reconstruct the library: Prompts, Skills,
+Rules, MCP definitions, Plugins, managed Agent definitions, generations,
+Folders, Tags, relations, output formats, domain versions, and referenced media.
+The database, browser storage, cache, external Agent projection, and adjacent
+backup file must never be the only remaining copy of such data.
+
+Native Agent conversation history remains externally owned until the user
+explicitly imports or enables PromptHub management for it. Imported or managed
+conversation resources then follow the same canonical bundle, version, media,
+and portability rules under `data/`.
+
+#### Scenario: The user copies only the durable data tree to a fresh root
+
+PromptHub validates the layout and resource schemas, stages a new catalog, and
+reconstructs stable IDs, versions, Folder/Tag membership, relations, output
+formats, and media references. Device credentials and disposable UI state may
+require reauthentication or reset, but no user-authored asset is missing.
+
+### `FR-DATA-013`: Independent Resource Schema Evolution
+
+The root layout epoch, per-domain resource schema, user edit revision, local
+catalog schema, portable envelope, sync protocol, and encryption envelope must
+evolve independently. Adding a new user-owned domain registers a new bounded
+`data/<domain>/` owner and does not require moving unrelated domains or bumping
+the root layout epoch.
+
+Readers must preserve unknown additive fields when round-tripping supported
+resources. Supported older schemas use immutable ordered converters. Unknown
+newer schemas fail closed or open read-only without rewriting the resource.
+
+#### Scenario: A future Workflow asset domain is added
+
+The release registers a versioned Workflow bundle, runtime-path owner,
+portability policy, catalog projection, migration fixtures, and cleanup rules.
+Existing Prompt, Skill, Rule, and media paths remain unchanged, and rebuilding
+the catalog includes Workflows without a whole-library JSON rewrite.
+
 ## Non-Functional Requirements
 
 - `NFR-DATA-001`: Root discovery and inventory are `O(E + B)` in visited entries
@@ -206,13 +246,19 @@ the active database remains unchanged.
   invalidation rules. Canonical-file scanning and database rebuild are streaming
   or incremental, use bounded concurrency, and complete in `O(E + B)` over
   visited entries and bytes.
+- `NFR-DATA-008`: Resource conversion and catalog projection are bounded and
+  incremental. A schema upgrade visits only affected domains and completes in
+  `O(E + B)` over their visited entries and bytes; it does not deserialize the
+  complete library when one resource family changes.
 
 ## Compatibility Decisions
 
-- `[待确认] COMPAT-DATA-001`: replace per-getter dual-read with one preflight
+- `[confirmed 2026-08-11] COMPAT-DATA-001`: replace per-getter dual-read with one
+  preflight
   legacy/canonical layout-epoch decision during the v0.6 line, while retaining
   read compatibility until the documented v0.7 removal boundary.
-- `[待确认] COMPAT-DATA-002`: same-device safety points may retain encrypted
+- `[confirmed 2026-08-11] COMPAT-DATA-002`: same-device safety points may retain
+  encrypted
   device-bound secret blobs; portable snapshots exclude them and require
   reauthentication after restore.
 - `[confirmed 2026-08-10] COMPAT-DATA-003`: adopt file-first authority for local user-owned

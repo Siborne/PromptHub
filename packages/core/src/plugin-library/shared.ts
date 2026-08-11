@@ -13,7 +13,14 @@ import type {
 } from "@prompthub/shared/types/plugin";
 import { PLUGIN_INVENTORY_KEYS } from "@prompthub/shared/types/plugin";
 
-import { getConfigDir, getDataDir } from "../runtime-paths";
+import {
+  getCacheDir,
+  getConfigDir,
+  getDataDir,
+  getRuntimeStorageContext,
+  getUserDataPath,
+} from "../runtime-paths";
+import { assertStorageMaintenanceAvailable } from "../storage-maintenance-intent";
 
 export const PLUGIN_LIBRARY_FILE_NAME = "library.json";
 export const PLUGIN_MARKET_CACHE_FILE_NAME = "market-cache.json";
@@ -242,7 +249,9 @@ export function getLegacyPluginLibraryFilePath(): string {
 }
 
 export function getPluginMarketCacheFilePath(): string {
-  return path.join(getManagedPluginsDir(), PLUGIN_MARKET_CACHE_FILE_NAME);
+  return getRuntimeStorageContext().localAuthority === "canonical-files"
+    ? path.join(getCacheDir(), "plugin-market-cache.json")
+    : path.join(getManagedPluginsDir(), PLUGIN_MARKET_CACHE_FILE_NAME);
 }
 
 export function getPluginVersionFilePath(): string {
@@ -268,6 +277,7 @@ export function nowMs(): number {
 }
 
 export function writeJsonFileAtomic(filePath: string, data: unknown): void {
+  assertStorageMaintenanceAvailable(getUserDataPath());
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
   fs.writeFileSync(tempPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");

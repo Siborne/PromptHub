@@ -13,6 +13,11 @@ import {
   normalizeCustomAgentDraft,
   normalizeCustomAgents,
 } from "./agent-root-config";
+import {
+  ensureCanonicalAgentDeviceConfig,
+  publishCanonicalAgentDeviceConfig,
+} from "../canonical-agent-device-config";
+import { getRuntimeStorageContext } from "../runtime-paths";
 
 interface StatementLike {
   get(...params: unknown[]): unknown;
@@ -104,6 +109,10 @@ export function readAgentManagementSettings(
   };
 }
 
+function isCanonicalAuthority(): boolean {
+  return getRuntimeStorageContext().localAuthority === "canonical-files";
+}
+
 function customRootPaths(customAgents: CustomAgentConfig[]): string[] {
   return customAgents.map((agent) => agent.rootPath);
 }
@@ -153,10 +162,18 @@ export class AgentSettingsRepository {
   constructor(private readonly database: AgentSettingsDatabase) {}
 
   read(): AgentManagementSettings {
-    return readAgentManagementSettings(this.database);
+    const databaseSettings = readAgentManagementSettings(this.database);
+    if (!isCanonicalAuthority()) return databaseSettings;
+    const canonical = ensureCanonicalAgentDeviceConfig(databaseSettings);
+    return {
+      builtinAgentOverrides: canonical.builtinAgentOverrides,
+      customAgents: canonical.customAgents,
+      disabledPlatformIds: canonical.disabledPlatformIds,
+      agentIdentityPreferences: canonical.agentIdentityPreferences,
+    };
   }
 
-  private write(entries: Record<string, unknown>): void {
+  private writeDatabase(entries: Record<string, unknown>): void {
     const statement = this.database.prepare(
       "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
     );
@@ -165,6 +182,28 @@ export class AgentSettingsRepository {
         statement.run(key, JSON.stringify(value));
       }
     })();
+  }
+
+  private write(entries: Record<string, unknown>): void {
+    if (!isCanonicalAuthority()) return this.writeDatabase(entries);
+    const current = this.read();
+    const next: AgentManagementSettings = {
+      builtinAgentOverrides:
+        (entries.builtinAgentOverrides as
+          | Record<string, BuiltinAgentOverrideConfig>
+          | undefined) ?? current.builtinAgentOverrides,
+      customAgents:
+        (entries.customAgents as CustomAgentConfig[] | undefined) ??
+        current.customAgents,
+      disabledPlatformIds:
+        (entries.disabledPlatformIds as string[] | undefined) ??
+        current.disabledPlatformIds,
+      agentIdentityPreferences:
+        (entries.agentIdentityPreferences as
+          | AgentIdentityPreferences
+          | undefined) ?? current.agentIdentityPreferences,
+    };
+    publishCanonicalAgentDeviceConfig(next, () => this.writeDatabase(entries));
   }
 
   setEnabled(

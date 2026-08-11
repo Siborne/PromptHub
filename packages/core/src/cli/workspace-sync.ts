@@ -10,12 +10,13 @@ import {
   type PromptDB,
   type SkillDB,
 } from "../database";
+import { publishCanonicalPromptGraph } from "../canonical-prompt-graph-db";
 import { CoreMcpLibraryService, getMcpLibraryFilePath } from "../mcp-library";
 import {
   CorePluginLibraryService,
   getPluginLibraryFilePath,
 } from "../plugin-library";
-import { coreRulesWorkspaceService } from "../rules-workspace";
+import { coreRulesWorkspaceService } from "../rules-workspace-default";
 import { getImagesDir, getVideosDir } from "../runtime-paths";
 import type {
   AgentAssetFileSnapshot,
@@ -677,6 +678,7 @@ export async function restoreCliWorkspaceSnapshot(
   }
   writeMediaDirectory(getImagesDir(), snapshot.images);
   writeMediaDirectory(getVideosDir(), snapshot.videos);
+  if (options.db) publishCanonicalPromptGraph(options.db);
 
   return createCliWorkspaceSummary(snapshot);
 }

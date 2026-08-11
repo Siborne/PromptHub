@@ -1,5 +1,11 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+import {
+  copyStorageInventory,
+  createStorageInventory,
+} from "@prompthub/core";
+import { createConsistentDatabaseImage } from "@prompthub/db";
 
 /**
  * Upgrade backup service
@@ -8,7 +14,7 @@ import path from "path";
  * userData directory so users can recover after a botched upgrade (see #94).
  *
  * Layout (v0.5.4+):
- *   <userData>/backups/
+ *   <userData>/backups/safety-points/upgrades/
  *       v<fromVersion>-<timestamp>/
  *           backup-manifest.json
  *           prompthub.db
@@ -24,8 +30,12 @@ import path from "path";
  *           ...
  */
 
-/** New backup root name (lives INSIDE userData). */
-const UPGRADE_BACKUP_ROOT_NAME = "backups";
+/** Managed upgrade safety points live below the shared safety-point class. */
+const UPGRADE_BACKUP_ROOT_SEGMENTS = [
+  "backups",
+  "safety-points",
+  "upgrades",
+] as const;
 
 export const RUNTIME_CACHE_ENTRIES = new Set([
   "Cache",
@@ -55,7 +65,10 @@ const MANIFEST_FILE_NAME = "backup-manifest.json";
 export const MAX_UPGRADE_BACKUP_SNAPSHOTS = 5;
 
 const MANIFEST_KIND = "prompthub-upgrade-backup";
-const MANIFEST_SCHEMA_VERSION = 2;
+const MANIFEST_SCHEMA_VERSION = 3;
+const DEFAULT_MAX_UPGRADE_BACKUP_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+const DEFAULT_MAX_UPGRADE_BACKUP_BYTES = 10 * 1024 * 1024 * 1024;
+const UPGRADE_BACKUP_CAPACITY_HEADROOM_BYTES = 64 * 1024 * 1024;
 
 const TRANSIENT_DATABASE_ENTRY_PATTERNS = [
   /^prompthub\.db\.lock$/i,
@@ -82,12 +95,20 @@ export interface UpgradeBackupManifest {
   platform: string;
   /** Absolute path this backup was migrated from, if applicable. */
   legacyMigratedFrom?: string;
+  runIdentity?: string;
+  inventoryDigest?: string;
+  totalBytes?: number;
+  databaseSafetyPointId?: string;
+  databaseCaptureMode?: "consistent-image" | "raw-recovery-evidence";
+  databaseImageSha256?: string;
+  databaseRawEvidenceSha256?: string;
+  secretPolicy?: "encrypted-device-bound-only";
 }
 
 export interface UpgradeBackupSnapshot {
   /** Absolute path of the snapshot directory. */
   backupPath: string;
-  /** Directory name only (usable as a stable id within <userData>/backups). */
+  /** Directory name only (stable within the managed upgrade safety-point root). */
   backupId: string;
   manifest: UpgradeBackupManifest;
 }
@@ -109,10 +130,14 @@ export interface CreateUpgradeDataSnapshotOptions {
   skipRetentionPrune?: boolean;
   /** Persist an empty manifest so a failed restore can roll back to no data. */
   allowEmpty?: boolean;
+  /** Test seam for capacity failures; production uses statfs on the backup root. */
+  getAvailableBytes?: (targetPath: string) => number;
 }
 
 interface PruneUpgradeBackupOptions {
   maxSnapshots?: number;
+  maxAgeMs?: number;
+  maxBytes?: number;
   protectedBackupIds?: string[];
 }
 
@@ -134,7 +159,11 @@ function sanitizeVersion(version: string): string {
 }
 
 export function getUpgradeBackupRoot(userDataPath: string): string {
-  return path.join(path.resolve(userDataPath), UPGRADE_BACKUP_ROOT_NAME);
+  return path.join(path.resolve(userDataPath), ...UPGRADE_BACKUP_ROOT_SEGMENTS);
+}
+
+function getPreviousInRootUpgradeBackupRoot(userDataPath: string): string {
+  return path.join(path.resolve(userDataPath), "backups");
 }
 
 export function getLegacyUpgradeBackupRoot(userDataPath: string): string {
@@ -187,6 +216,87 @@ function shouldCopySnapshotPath(sourcePath: string): boolean {
   return true;
 }
 
+function defaultAvailableBytes(targetPath: string): number {
+  let candidate = path.resolve(targetPath);
+  while (!fs.existsSync(candidate)) {
+    const parent = path.dirname(candidate);
+    if (parent === candidate) return 0;
+    candidate = parent;
+  }
+  const stats = fs.statfsSync(candidate, { bigint: true });
+  const available = stats.bavail * stats.bsize;
+  return available > BigInt(Number.MAX_SAFE_INTEGER)
+    ? Number.MAX_SAFE_INTEGER
+    : Number(available);
+}
+
+function hasSqliteHeader(filePath: string): boolean {
+  const descriptor = fs.openSync(filePath, "r");
+  try {
+    const header = Buffer.alloc(16);
+    const bytesRead = fs.readSync(descriptor, header, 0, header.length, 0);
+    return (
+      bytesRead === header.length &&
+      header.equals(Buffer.from("SQLite format 3\0", "binary"))
+    );
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function copyRawDatabaseEvidence(
+  sourcePath: string,
+  targetPath: string,
+): { sizeBytes: number; sha256: string } {
+  const sourceStats = fs.lstatSync(sourcePath);
+  if (!sourceStats.isFile() || sourceStats.isSymbolicLink()) {
+    throw new Error(`Legacy database evidence is not a regular file: ${sourcePath}`);
+  }
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true, mode: 0o700 });
+  fs.copyFileSync(sourcePath, targetPath, fs.constants.COPYFILE_EXCL);
+  fs.chmodSync(targetPath, 0o600);
+  const descriptor = fs.openSync(targetPath, "r");
+  const digest = crypto.createHash("sha256");
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  let sizeBytes = 0;
+  try {
+    fs.fsyncSync(descriptor);
+    for (;;) {
+      const bytesRead = fs.readSync(
+        descriptor,
+        buffer,
+        0,
+        buffer.length,
+        sizeBytes,
+      );
+      if (bytesRead === 0) break;
+      digest.update(buffer.subarray(0, bytesRead));
+      sizeBytes += bytesRead;
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  return {
+    sizeBytes,
+    sha256: digest.digest("hex"),
+  };
+}
+
+function inferDetachedLayoutEpoch(rootPath: string): 0 | 1 {
+  const canonicalDataPath = path.join(rootPath, "data");
+  try {
+    const stats = fs.lstatSync(canonicalDataPath);
+    return !stats.isSymbolicLink() &&
+      stats.isDirectory() &&
+      fs.readdirSync(canonicalDataPath).length > 0
+      ? 1
+      : 0;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
+}
+
 function parseManifest(raw: unknown): UpgradeBackupManifest | null {
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
@@ -228,6 +338,39 @@ function parseManifest(raw: unknown): UpgradeBackupManifest | null {
       typeof obj.legacyMigratedFrom === "string"
         ? obj.legacyMigratedFrom
         : undefined,
+    runIdentity:
+      typeof obj.runIdentity === "string" ? obj.runIdentity : undefined,
+    inventoryDigest:
+      typeof obj.inventoryDigest === "string"
+        ? obj.inventoryDigest
+        : undefined,
+    totalBytes:
+      typeof obj.totalBytes === "number" && Number.isSafeInteger(obj.totalBytes)
+        ? obj.totalBytes
+        : undefined,
+    databaseSafetyPointId:
+      typeof obj.databaseSafetyPointId === "string"
+        ? obj.databaseSafetyPointId
+        : undefined,
+    databaseCaptureMode:
+      obj.databaseCaptureMode === "consistent-image" ||
+      obj.databaseCaptureMode === "raw-recovery-evidence"
+        ? obj.databaseCaptureMode
+        : undefined,
+    databaseImageSha256:
+      typeof obj.databaseImageSha256 === "string" &&
+      /^[a-f0-9]{64}$/u.test(obj.databaseImageSha256)
+        ? obj.databaseImageSha256
+        : undefined,
+    databaseRawEvidenceSha256:
+      typeof obj.databaseRawEvidenceSha256 === "string" &&
+      /^[a-f0-9]{64}$/u.test(obj.databaseRawEvidenceSha256)
+        ? obj.databaseRawEvidenceSha256
+        : undefined,
+    secretPolicy:
+      obj.secretPolicy === "encrypted-device-bound-only"
+        ? obj.secretPolicy
+        : undefined,
   };
 }
 
@@ -247,7 +390,7 @@ async function readManifest(
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Copy the entire userData tree into <userData>/backups/v<from>-<timestamp>/
+ * Copy durable user data into the managed upgrade safety-point root.
  * and write a manifest describing what was copied.
  *
  * Never silently overwrites: if a directory with the same name already exists
@@ -271,45 +414,88 @@ export async function createUpgradeDataSnapshot(
     );
   }
 
-  const entries = await fs.promises.readdir(resolvedUserDataPath, {
-    withFileTypes: true,
-  });
-  const copiedItems = entries
-    .map((entry) => entry.name)
-    // Skip the backup root itself so we don't recursively copy previous snapshots.
-    .filter(
-      (entryName) =>
-        entryName !== UPGRADE_BACKUP_ROOT_NAME &&
-        !RUNTIME_CACHE_ENTRIES.has(entryName) &&
-        !isTransientDatabaseEntry(entryName),
-    );
-
-  if (copiedItems.length === 0 && !options.allowEmpty) {
-    throw new Error(
-      `Cannot create upgrade backup because the user data path is empty: ${resolvedUserDataPath}`,
-    );
-  }
-
   const createdAt = new Date().toISOString();
+  const runIdentity = crypto.randomUUID();
   const backupRoot = getUpgradeBackupRoot(resolvedUserDataPath);
   const backupId = `v${sanitizeVersion(options.fromVersion)}-${formatTimestampForPath(createdAt)}`;
   const backupPath = path.join(backupRoot, backupId);
-
-  await fs.promises.mkdir(backupPath, { recursive: true });
+  const stagingPath = path.join(backupRoot, `.stage-${backupId}-${runIdentity}`);
+  if (fs.existsSync(backupPath) || fs.existsSync(stagingPath)) {
+    throw new Error(`Upgrade backup already exists: ${backupId}`);
+  }
+  const canonicalDatabase = path.join(
+    resolvedUserDataPath,
+    "data",
+    "prompthub.db",
+  );
+  const legacyDatabase = path.join(resolvedUserDataPath, "prompthub.db");
+  const databasePath = fs.existsSync(canonicalDatabase)
+    ? canonicalDatabase
+    : fs.existsSync(legacyDatabase)
+      ? legacyDatabase
+      : null;
+  const detachedLayoutEpoch = inferDetachedLayoutEpoch(resolvedUserDataPath);
+  const databaseRelativePath =
+    detachedLayoutEpoch === 1 ? "data/prompthub.db" : "prompthub.db";
 
   let manifest: UpgradeBackupManifest;
   try {
-    for (const entryName of copiedItems) {
-      const sourcePath = path.join(resolvedUserDataPath, entryName);
-      const targetPath = path.join(backupPath, entryName);
-      await fs.promises.cp(sourcePath, targetPath, {
-        recursive: true,
-        preserveTimestamps: true,
-        errorOnExist: true,
-        force: false,
-        filter: shouldCopySnapshotPath,
-      });
+    const inventory = createStorageInventory(resolvedUserDataPath, {
+      detachedLayoutEpoch,
+      includeSecrets: true,
+      excludeRelativePaths: databasePath ? [databaseRelativePath] : [],
+    });
+    if (inventory.files.length === 0 && !databasePath && !options.allowEmpty) {
+      throw new Error(
+        `Cannot create upgrade backup because the user data path is empty: ${resolvedUserDataPath}`,
+      );
     }
+    const databaseSourceBytes = databasePath
+      ? fs.lstatSync(databasePath).size
+      : 0;
+    const requiredBytes =
+      inventory.totalBytes +
+      databaseSourceBytes +
+      UPGRADE_BACKUP_CAPACITY_HEADROOM_BYTES;
+    const availableBytes = (
+      options.getAvailableBytes ?? defaultAvailableBytes
+    )(backupRoot);
+    if (availableBytes < requiredBytes) {
+      throw new Error(
+        `Insufficient space for upgrade backup: required=${requiredBytes}, available=${availableBytes}`,
+      );
+    }
+    copyStorageInventory(inventory, stagingPath);
+    let databaseCaptureMode:
+      | "consistent-image"
+      | "raw-recovery-evidence"
+      | undefined;
+    let databaseImageSha256: string | undefined;
+    let databaseRawEvidenceSha256: string | undefined;
+    let databaseBytes = 0;
+    if (databasePath) {
+      const targetDatabase = path.join(
+        stagingPath,
+        ...databaseRelativePath.split("/"),
+      );
+      if (hasSqliteHeader(databasePath)) {
+        const image = createConsistentDatabaseImage(databasePath, targetDatabase);
+        databaseBytes = image.sizeBytes;
+        databaseImageSha256 = image.sha256;
+        databaseCaptureMode = "consistent-image";
+      } else {
+        const evidence = copyRawDatabaseEvidence(databasePath, targetDatabase);
+        databaseBytes = evidence.sizeBytes;
+        databaseRawEvidenceSha256 = evidence.sha256;
+        databaseCaptureMode = "raw-recovery-evidence";
+      }
+    }
+    const copiedItems = Array.from(
+      new Set([
+        ...inventory.files.map((entry) => entry.relativePath.split("/")[0]),
+        ...(databasePath ? [databaseRelativePath.split("/")[0]] : []),
+      ]),
+    ).sort();
 
     manifest = {
       kind: MANIFEST_KIND,
@@ -320,15 +506,26 @@ export async function createUpgradeDataSnapshot(
       sourcePath: resolvedUserDataPath,
       copiedItems,
       platform: process.platform,
+      runIdentity,
+      inventoryDigest: inventory.digest,
+      totalBytes: inventory.totalBytes + databaseBytes,
+      ...(databaseCaptureMode ? { databaseCaptureMode } : {}),
+      ...(databaseImageSha256 ? { databaseImageSha256 } : {}),
+      ...(databaseRawEvidenceSha256
+        ? { databaseRawEvidenceSha256 }
+        : {}),
+      secretPolicy: "encrypted-device-bound-only",
     };
 
     await fs.promises.writeFile(
-      path.join(backupPath, MANIFEST_FILE_NAME),
+      path.join(stagingPath, MANIFEST_FILE_NAME),
       JSON.stringify(manifest, null, 2),
       "utf8",
     );
+    await fs.promises.mkdir(backupRoot, { recursive: true });
+    await fs.promises.rename(stagingPath, backupPath);
   } catch (error) {
-    await fs.promises.rm(backupPath, { recursive: true, force: true });
+    await fs.promises.rm(stagingPath, { recursive: true, force: true });
     throw error;
   }
 
@@ -351,23 +548,40 @@ export async function pruneUpgradeBackups(
   options: PruneUpgradeBackupOptions = {},
 ): Promise<void> {
   const maxSnapshots = options.maxSnapshots ?? MAX_UPGRADE_BACKUP_SNAPSHOTS;
+  const maxAgeMs = options.maxAgeMs ?? DEFAULT_MAX_UPGRADE_BACKUP_AGE_MS;
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_UPGRADE_BACKUP_BYTES;
   const protectedBackupIds = new Set(options.protectedBackupIds ?? []);
 
   if (maxSnapshots < 1) {
     throw new Error(`maxSnapshots must be at least 1, got ${maxSnapshots}`);
   }
+  if (!Number.isFinite(maxAgeMs) || maxAgeMs < 1) {
+    throw new Error(`maxAgeMs must be positive, got ${maxAgeMs}`);
+  }
+  if (!Number.isFinite(maxBytes) || maxBytes < 1) {
+    throw new Error(`maxBytes must be positive, got ${maxBytes}`);
+  }
 
   const backups = await listUpgradeBackups(userDataPath);
-  const keptBackupIds = new Set<string>();
+  const keptBackupIds = new Set<string>(
+    backups
+      .filter((backup) => protectedBackupIds.has(backup.backupId))
+      .map((backup) => backup.backupId),
+  );
+  let keptBytes = backups
+    .filter((backup) => keptBackupIds.has(backup.backupId))
+    .reduce((total, backup) => total + backup.sizeBytes, 0);
 
   for (const backup of backups) {
-    if (protectedBackupIds.has(backup.backupId)) {
+    if (keptBackupIds.has(backup.backupId)) continue;
+    const tooOld = Date.now() - Date.parse(backup.manifest.createdAt) > maxAgeMs;
+    if (
+      !tooOld &&
+      keptBackupIds.size < maxSnapshots &&
+      keptBytes + backup.sizeBytes <= maxBytes
+    ) {
       keptBackupIds.add(backup.backupId);
-      continue;
-    }
-
-    if (keptBackupIds.size < maxSnapshots) {
-      keptBackupIds.add(backup.backupId);
+      keptBytes += backup.sizeBytes;
       continue;
     }
 
@@ -376,7 +590,7 @@ export async function pruneUpgradeBackups(
 }
 
 /**
- * List all valid upgrade backups under <userData>/backups, newest first.
+ * List all valid managed upgrade safety points, newest first.
  * Directories without a readable manifest are ignored silently.
  */
 export async function listUpgradeBackups(
@@ -444,7 +658,7 @@ export async function deleteUpgradeBackup(
   if (!fs.existsSync(backupPath)) return;
 
   // Require a valid manifest so we don't delete an unrelated directory that
-  // someone may have dropped into <userData>/backups.
+  // someone may have dropped into the managed upgrade safety-point root.
   const manifest = await readManifest(backupPath);
   if (!manifest) {
     throw new Error(
@@ -482,10 +696,8 @@ export async function getUpgradeBackup(
 }
 
 /**
- * One-time migration: move snapshots from the legacy sibling directory
- * (<userData>/../PromptHub-upgrade-backups) into <userData>/backups, then
- * write a marker so we never run again. Failures are non-fatal — the legacy
- * directory is left intact so a retry is possible on the next launch.
+ * One-time migration: move snapshots from both historical roots into the
+ * managed upgrade safety-point directory. Failed copies remain retryable.
  */
 export async function migrateLegacyUpgradeBackups(
   userDataPath: string,
@@ -500,107 +712,96 @@ export async function migrateLegacyUpgradeBackups(
     return { migrated: 0, skipped: 0, legacyRoot, alreadyDone: true };
   }
 
-  // Nothing to migrate — still write the marker so future launches are cheap.
-  if (!fs.existsSync(legacyRoot)) {
-    await fs.promises.mkdir(newRoot, { recursive: true });
-    await fs.promises.writeFile(markerPath, new Date().toISOString(), "utf8");
-    return { migrated: 0, skipped: 0, legacyRoot, alreadyDone: false };
-  }
-
   await fs.promises.mkdir(newRoot, { recursive: true });
 
   let migrated = 0;
   let skipped = 0;
-
-  const legacyEntries = await fs.promises.readdir(legacyRoot, {
-    withFileTypes: true,
-  });
-
-  for (const entry of legacyEntries) {
-    if (!entry.isDirectory()) {
-      skipped++;
-      continue;
-    }
-    if (!isValidBackupId(entry.name)) {
-      skipped++;
-      continue;
-    }
-
-    const legacyBackupPath = path.join(legacyRoot, entry.name);
-    const newBackupPath = path.join(newRoot, entry.name);
-
-    // Skip if already present in the new root (previous partial migration).
-    if (fs.existsSync(newBackupPath)) {
-      skipped++;
-      continue;
-    }
-
-    const manifest = await readManifest(legacyBackupPath);
-
-    try {
-      await fs.promises.cp(legacyBackupPath, newBackupPath, {
-        recursive: true,
-        preserveTimestamps: true,
-        errorOnExist: true,
-        force: false,
-        filter: shouldCopySnapshotPath,
-      });
-    } catch (error) {
-      console.warn(
-        `[upgrade-backup] Failed to migrate '${entry.name}' from legacy root:`,
-        error,
-      );
-      // Best-effort cleanup of a partial copy so retries remain possible.
-      await fs.promises.rm(newBackupPath, { recursive: true, force: true });
-      skipped++;
-      continue;
-    }
-
-    // Rewrite the manifest with the new schema + legacyMigratedFrom hint.
-    if (manifest) {
-      const upgraded: UpgradeBackupManifest = {
-        ...manifest,
-        schemaVersion: MANIFEST_SCHEMA_VERSION,
-        legacyMigratedFrom: legacyBackupPath,
-      };
+  let failed = false;
+  const sourceRoots = [
+    getPreviousInRootUpgradeBackupRoot(resolvedUserDataPath),
+    legacyRoot,
+  ];
+  for (const sourceRoot of sourceRoots) {
+    if (!fs.existsSync(sourceRoot)) continue;
+    const entries = await fs.promises.readdir(sourceRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (
+        sourceRoot === getPreviousInRootUpgradeBackupRoot(resolvedUserDataPath) &&
+        entry.name === "safety-points"
+      ) {
+        continue;
+      }
+      if (!entry.isDirectory() || !isValidBackupId(entry.name)) {
+        skipped += 1;
+        continue;
+      }
+      const sourceBackupPath = path.join(sourceRoot, entry.name);
+      if (path.resolve(sourceBackupPath) === path.resolve(path.dirname(newRoot))) {
+        skipped += 1;
+        continue;
+      }
+      const manifest = await readManifest(sourceBackupPath);
+      if (!manifest) {
+        skipped += 1;
+        continue;
+      }
+      const destinationBackupPath = path.join(newRoot, entry.name);
+      if (fs.existsSync(destinationBackupPath)) {
+        skipped += 1;
+        continue;
+      }
       try {
+        await fs.promises.cp(sourceBackupPath, destinationBackupPath, {
+          recursive: true,
+          preserveTimestamps: true,
+          errorOnExist: true,
+          force: false,
+          filter: shouldCopySnapshotPath,
+        });
         await fs.promises.writeFile(
-          path.join(newBackupPath, MANIFEST_FILE_NAME),
-          JSON.stringify(upgraded, null, 2),
+          path.join(destinationBackupPath, MANIFEST_FILE_NAME),
+          JSON.stringify(
+            {
+              ...manifest,
+              schemaVersion: MANIFEST_SCHEMA_VERSION,
+              legacyMigratedFrom: sourceBackupPath,
+            } satisfies UpgradeBackupManifest,
+            null,
+            2,
+          ),
           "utf8",
         );
+        await fs.promises.rm(sourceBackupPath, {
+          recursive: true,
+          force: true,
+        });
+        migrated += 1;
       } catch (error) {
         console.warn(
-          `[upgrade-backup] Migrated '${entry.name}' but could not rewrite manifest:`,
+          `[upgrade-backup] Failed to migrate '${entry.name}' from legacy root:`,
           error,
         );
+        await fs.promises.rm(destinationBackupPath, {
+          recursive: true,
+          force: true,
+        });
+        skipped += 1;
+        failed = true;
       }
     }
-
-    // Legacy copy removed only after the new copy is in place.
-    try {
-      await fs.promises.rm(legacyBackupPath, { recursive: true, force: true });
-    } catch (error) {
-      console.warn(
-        `[upgrade-backup] Migrated '${entry.name}' but could not remove legacy copy:`,
-        error,
-      );
+    if (sourceRoot === legacyRoot) {
+      try {
+        if ((await fs.promises.readdir(sourceRoot)).length === 0) {
+          await fs.promises.rm(sourceRoot, { recursive: true, force: true });
+        }
+      } catch {
+        // A retained legacy root remains available for the next retry.
+      }
     }
-
-    migrated++;
   }
-
-  // Remove the legacy root if it's now empty, so users don't see a stale dir.
-  try {
-    const remaining = await fs.promises.readdir(legacyRoot);
-    if (remaining.length === 0) {
-      await fs.promises.rm(legacyRoot, { recursive: true, force: true });
-    }
-  } catch {
-    // non-fatal
+  if (!failed) {
+    await fs.promises.writeFile(markerPath, new Date().toISOString(), "utf8");
   }
-
-  await fs.promises.writeFile(markerPath, new Date().toISOString(), "utf8");
 
   return { migrated, skipped, legacyRoot, alreadyDone: false };
 }

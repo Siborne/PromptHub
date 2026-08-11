@@ -15,6 +15,18 @@
 
 - 在高风险布局迁移或升级前，应具备保险快照、预备份或等价的可回滚手段。
 - 恢复或迁移失败后，不应把用户留在半恢复或半迁移状态。
+- 完整恢复、portable restore、升级恢复和数据库恢复必须先在不可见 stage 中准备
+  候选，校验容量、路径、symlink、schema、hash、SQLite quick-check 与领域数量，
+  再通过 durable journal 发布。任一 DB、文件、配置或领域步骤失败时必须回滚；
+  崩溃后的下一次启动必须在打开业务服务前完成或回滚 journal，不能报告 partial
+  success。
+- 全量 portable snapshot 只能在一个 storage maintenance intent 内生成：先阻止新
+  client，关闭 writer，创建一致 SQLite image，投影 canonical tree，核对 logical
+  envelope 与 canonical inventory，再流式写 ZIP。选择性导出不得附带未选择领域的
+  完整 canonical checkpoint。
+- 恢复候选、安全点、被覆盖根和 pre-restore 状态统一进入有界 recovery registry，
+  按数量、年龄和总字节限制清理。正在使用的 operation ID 必须受保护；损坏、未完成
+  或越界 artifact 不得被当作可恢复快照。
 - 当前目录残留恢复重试时，旧根目录中的空 `prompthub.db` 占位文件不得阻断
   Skill/workspace 残留迁移。若旧根 `prompthub.db` 与统一目录
   `data/prompthub.db` 同时存在且内容冲突，必须先把旧根数据库保留为
@@ -76,6 +88,13 @@
   回滚保护。回滚失败必须作为独立错误暴露，不能把部分恢复报告为成功。
 - 迁移所需的数据库原文件备份或升级安全快照创建失败时必须停止迁移/升级写入，
   不得记录警告后继续打开并修改旧数据库。
+- 文件优先 authority 的首次发布必须发生在 renderer 持久状态迁移之后。旧数据树先
+  保存为一个有界 UUID safety point，再 stage canonical tree 和重建目录；只有 hash、
+  graph、SQLite、fresh reopen 与运行期 context 刷新全部成功才提交。失败继续使用旧
+  authority，不得留下 marker 指向半成品。
+- 资源 schema 转换必须使用 durable publication journal。转换中断后启动时先完成或
+  回滚 journal；未知较新 schema 不得被旧客户端降级写回，用户 revision 不随 schema
+  转换递增。
 
 ### 3. Stable Internal Sources
 

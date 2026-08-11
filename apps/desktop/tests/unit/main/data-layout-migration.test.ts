@@ -7,7 +7,10 @@ import path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import DatabaseAdapter from "../../../src/main/database/sqlite";
-import { SCHEMA_TABLES, SCHEMA_INDEXES } from "../../../src/main/database/schema";
+import {
+  SCHEMA_TABLES,
+  SCHEMA_INDEXES,
+} from "../../../src/main/database/schema";
 import { SkillDB } from "../../../src/main/database/skill";
 import {
   getDataLayoutMigrationMarkerPath,
@@ -69,32 +72,44 @@ describe("data-layout-migration", () => {
       "utf8",
     );
     fs.mkdirSync(path.join(userDataPath, "images"), { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "images", "demo.png"), "png", "utf8");
+    fs.writeFileSync(
+      path.join(userDataPath, "images", "demo.png"),
+      "png",
+      "utf8",
+    );
     fs.writeFileSync(
       path.join(userDataPath, "shortcuts.json"),
       '{"showApp":"Alt+Shift+P"}',
       "utf8",
     );
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "db-bytes", "utf8");
+    fs.writeFileSync(
+      path.join(userDataPath, "prompthub.db"),
+      "db-bytes",
+      "utf8",
+    );
 
     const result = await migrateLegacyDataLayout(userDataPath, "0.5.5");
 
     expect(result.status).toBe("migrated");
     expect(result.backupId).toBeTruthy();
     expect(result.movedEntries).toEqual(
-      expect.arrayContaining(["workspace", "skills", "images", "shortcuts.json"]),
+      expect.arrayContaining([
+        "workspace",
+        "skills",
+        "images",
+        "shortcuts.json",
+      ]),
     );
 
     expect(fs.existsSync(path.join(userDataPath, "workspace"))).toBe(false);
     expect(fs.existsSync(path.join(userDataPath, "skills"))).toBe(false);
     expect(fs.existsSync(path.join(userDataPath, "images"))).toBe(false);
-    expect(fs.existsSync(path.join(userDataPath, "shortcuts.json"))).toBe(false);
+    expect(fs.existsSync(path.join(userDataPath, "shortcuts.json"))).toBe(
+      false,
+    );
 
     expect(
-      fs.readFileSync(
-        path.join(userDataPath, "data", "folders.json"),
-        "utf8",
-      ),
+      fs.readFileSync(path.join(userDataPath, "data", "folders.json"), "utf8"),
     ).toContain("folder-1");
     expect(
       fs.readFileSync(
@@ -121,10 +136,7 @@ describe("data-layout-migration", () => {
       ),
     ).toContain("showApp");
     expect(
-      fs.readFileSync(
-        path.join(userDataPath, "data", "prompthub.db"),
-        "utf8",
-      ),
+      fs.readFileSync(path.join(userDataPath, "data", "prompthub.db"), "utf8"),
     ).toBe("db-bytes");
     expect(fs.existsSync(path.join(userDataPath, "prompthub.db"))).toBe(false);
 
@@ -137,8 +149,12 @@ describe("data-layout-migration", () => {
       .filter((entry) => !entry.startsWith("."));
     expect(backupDirs.length).toBeGreaterThan(0);
     const backupDir = path.join(backupRoot, backupDirs[0]);
-    expect(fs.existsSync(path.join(backupDir, "workspace", "folders.json"))).toBe(true);
-    expect(fs.existsSync(path.join(backupDir, "skills", "demo-skill", "SKILL.md"))).toBe(true);
+    expect(
+      fs.existsSync(path.join(backupDir, "workspace", "folders.json")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(backupDir, "skills", "demo-skill", "SKILL.md")),
+    ).toBe(true);
   });
 
   it("is a no-op when the marker already exists", async () => {
@@ -162,19 +178,29 @@ describe("data-layout-migration", () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
     fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "data", "prompthub.db"), "db-bytes", "utf8");
+    fs.writeFileSync(
+      path.join(userDataPath, "data", "prompthub.db"),
+      "db-bytes",
+      "utf8",
+    );
 
     const result = await migrateLegacyDataLayout(userDataPath, "0.5.5");
 
     expect(result.status).toBe("no-legacy-data");
     expect(result.backupId).toBeNull();
-    expect(fs.existsSync(getDataLayoutMigrationMarkerPath(userDataPath))).toBe(false);
+    expect(fs.existsSync(getDataLayoutMigrationMarkerPath(userDataPath))).toBe(
+      false,
+    );
   });
 
   it("migrates a legacy root database into the unified data directory", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "db-root", "utf8");
+    fs.writeFileSync(
+      path.join(userDataPath, "prompthub.db"),
+      "db-root",
+      "utf8",
+    );
 
     const result = await migrateLegacyDataLayout(userDataPath, "0.5.7");
 
@@ -190,7 +216,9 @@ describe("data-layout-migration", () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
 
-    const legacyDb = createTestDatabase(path.join(userDataPath, "prompthub.db"));
+    const legacyDb = createTestDatabase(
+      path.join(userDataPath, "prompthub.db"),
+    );
     const now = Date.now();
     const skillId = "skill-release-guard";
     legacyDb
@@ -236,15 +264,7 @@ describe("data-layout-migration", () => {
           id, skill_id, version, content, files_snapshot, note, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(
-        "skill-version-2",
-        skillId,
-        2,
-        "# guard v1",
-        null,
-        null,
-        now + 1,
-      );
+      .run("skill-version-2", skillId, 2, "# guard v1", null, null, now + 1);
     legacyDb.close();
 
     const result = await migrateLegacyDataLayout(userDataPath, "0.5.7");
@@ -288,7 +308,9 @@ describe("data-layout-migration", () => {
 
   it("preserves the source directory when the target already has conflicting files", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
-    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), { recursive: true });
+    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), {
+      recursive: true,
+    });
     fs.writeFileSync(
       path.join(userDataPath, "skills", "demo", "SKILL.md"),
       "source-skill",
@@ -335,24 +357,32 @@ describe("data-layout-migration", () => {
   it("rejects a legacy root directory symlink instead of moving it into data", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     const externalWorkspacePath = path.join(tmpBase, "outside-workspace");
-    fs.mkdirSync(path.join(externalWorkspacePath, "prompts"), { recursive: true });
+    fs.mkdirSync(path.join(externalWorkspacePath, "prompts"), {
+      recursive: true,
+    });
     fs.writeFileSync(
       path.join(externalWorkspacePath, "prompts", "external.md"),
       "external prompt",
       "utf8",
     );
     fs.mkdirSync(userDataPath, { recursive: true });
-    fs.symlinkSync(externalWorkspacePath, path.join(userDataPath, "workspace"), "dir");
+    fs.symlinkSync(
+      externalWorkspacePath,
+      path.join(userDataPath, "workspace"),
+      "dir",
+    );
 
     const result = await migrateLegacyDataLayout(userDataPath, "0.5.7");
 
     expect(result.status).toBe("partial-failure");
     expect(result.failedEntries).toContain("workspace");
     expect(result.movedEntries).not.toContain("workspace");
-    expect(fs.lstatSync(path.join(userDataPath, "workspace")).isSymbolicLink()).toBe(
-      true,
+    expect(
+      fs.lstatSync(path.join(userDataPath, "workspace")).isSymbolicLink(),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(userDataPath, "data", "prompts"))).toBe(
+      false,
     );
-    expect(fs.existsSync(path.join(userDataPath, "data", "prompts"))).toBe(false);
     expect(
       fs.readFileSync(
         path.join(externalWorkspacePath, "prompts", "external.md"),
@@ -384,21 +414,27 @@ describe("data-layout-migration", () => {
     expect(result.status).toBe("partial-failure");
     expect(result.failedEntries).toContain("workspace");
     expect(result.movedEntries).not.toContain("workspace");
-    expect(fs.existsSync(path.join(userDataPath, "workspace", "prompts", "safe.md"))).toBe(
-      true,
-    );
     expect(
-      fs.lstatSync(
-        path.join(userDataPath, "workspace", "prompts", "linked-secret.md"),
-      ).isSymbolicLink(),
+      fs.existsSync(path.join(userDataPath, "workspace", "prompts", "safe.md")),
     ).toBe(true);
-    expect(fs.existsSync(path.join(userDataPath, "data", "prompts"))).toBe(false);
+    expect(
+      fs
+        .lstatSync(
+          path.join(userDataPath, "workspace", "prompts", "linked-secret.md"),
+        )
+        .isSymbolicLink(),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(userDataPath, "data", "prompts"))).toBe(
+      false,
+    );
   });
 
   it("retries residual entries even when a migration marker already exists", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     const canonicalBackupId = "backup-initial-full";
-    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), { recursive: true });
+    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), {
+      recursive: true,
+    });
     fs.writeFileSync(
       path.join(userDataPath, "skills", "demo", "SKILL.md"),
       "# retried skill",
@@ -420,7 +456,9 @@ describe("data-layout-migration", () => {
 
     expect(result.status).toBe("migrated");
     expect(result.backupId).toBe(canonicalBackupId);
-    expect(result.movedEntries).toEqual(expect.arrayContaining(["workspace", "skills"]));
+    expect(result.movedEntries).toEqual(
+      expect.arrayContaining(["workspace", "skills"]),
+    );
     expect(fs.existsSync(path.join(userDataPath, "skills"))).toBe(false);
     expect(
       fs.readFileSync(
@@ -438,7 +476,11 @@ describe("data-layout-migration", () => {
   it("continues migrating root database when an old marker lacks dbLayoutVersion", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "root-db", "utf8");
+    fs.writeFileSync(
+      path.join(userDataPath, "prompthub.db"),
+      "root-db",
+      "utf8",
+    );
     fs.writeFileSync(
       getDataLayoutMigrationMarkerPath(userDataPath),
       JSON.stringify({
@@ -465,7 +507,9 @@ describe("data-layout-migration", () => {
   it("cleans an empty legacy root database while retrying skill residual migration", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     const canonicalBackupId = "backup-before-empty-db-cleanup";
-    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), { recursive: true });
+    fs.mkdirSync(path.join(userDataPath, "skills", "demo"), {
+      recursive: true,
+    });
     fs.writeFileSync(
       path.join(userDataPath, "skills", "demo", "SKILL.md"),
       "# residual skill",
@@ -475,7 +519,9 @@ describe("data-layout-migration", () => {
 
     const rootDb = createTestDatabase(path.join(userDataPath, "prompthub.db"));
     rootDb.close();
-    const unifiedDb = createTestDatabase(path.join(userDataPath, "data", "prompthub.db"));
+    const unifiedDb = createTestDatabase(
+      path.join(userDataPath, "data", "prompthub.db"),
+    );
     unifiedDb.close();
 
     fs.writeFileSync(
@@ -536,7 +582,9 @@ describe("data-layout-migration", () => {
     rootDb.pragma("wal_checkpoint(TRUNCATE)");
     rootDb.close();
 
-    const targetDb = createTestDatabase(path.join(userDataPath, "data", "prompthub.db"));
+    const targetDb = createTestDatabase(
+      path.join(userDataPath, "data", "prompthub.db"),
+    );
     targetDb
       .prepare(
         "INSERT INTO prompts (id, title, user_prompt, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
@@ -588,11 +636,19 @@ describe("data-layout-migration", () => {
     expect(markerRecord.failedEntries).toBeUndefined();
   });
 
-  it("uses unified data database when a partial marker left root database residual", () => {
+  it("rejects runtime binding when a partial marker left both databases active", () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "root-db", "utf8");
-    fs.writeFileSync(path.join(userDataPath, "data", "prompthub.db"), "data-db", "utf8");
+    fs.writeFileSync(
+      path.join(userDataPath, "prompthub.db"),
+      "root-db",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(userDataPath, "data", "prompthub.db"),
+      "data-db",
+      "utf8",
+    );
     fs.writeFileSync(
       getDataLayoutMigrationMarkerPath(userDataPath),
       JSON.stringify({
@@ -606,7 +662,7 @@ describe("data-layout-migration", () => {
 
     configureRuntimePaths({ userDataPath });
 
-    expect(getDatabasePath()).toBe(path.join(userDataPath, "data", "prompthub.db"));
+    expect(() => getDatabasePath()).toThrow("mixed PromptHub storage layout");
   });
 
   it("preserves a conflicting legacy root database as a backup and completes migration", async () => {
@@ -619,10 +675,18 @@ describe("data-layout-migration", () => {
       .prepare(
         "INSERT INTO prompts (id, title, user_prompt, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
       )
-      .run("prompt-root", "Root prompt", "Keep root data", Date.now(), Date.now());
+      .run(
+        "prompt-root",
+        "Root prompt",
+        "Keep root data",
+        Date.now(),
+        Date.now(),
+      );
     rootDb.close();
 
-    const unifiedDb = createTestDatabase(path.join(userDataPath, "data", "prompthub.db"));
+    const unifiedDb = createTestDatabase(
+      path.join(userDataPath, "data", "prompthub.db"),
+    );
     unifiedDb.close();
 
     fs.writeFileSync(
@@ -640,7 +704,9 @@ describe("data-layout-migration", () => {
     expect(result.status).toBe("migrated");
     expect(result.failedEntries).toEqual([]);
     configureRuntimePaths({ userDataPath });
-    expect(getDatabasePath()).toBe(path.join(userDataPath, "data", "prompthub.db"));
+    expect(getDatabasePath()).toBe(
+      path.join(userDataPath, "data", "prompthub.db"),
+    );
     expect(fs.existsSync(rootDbPath)).toBe(false);
     expect(fs.existsSync(path.join(userDataPath, "data", "prompthub.db"))).toBe(
       true,

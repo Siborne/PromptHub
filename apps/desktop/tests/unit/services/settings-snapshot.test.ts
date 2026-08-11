@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getAiConfigSnapshot,
+  getCanonicalAiConfigSnapshot,
+  getCanonicalSettingsStateSnapshot,
   getSettingsStateSnapshot,
   restoreAiConfigSnapshot,
   restoreSettingsStateSnapshot,
@@ -11,6 +13,10 @@ const PRIMARY_SETTINGS_KEY = "prompthub-settings";
 describe("settings-snapshot", () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    if (window.api.settings) delete window.api.settings.rendererPersistence;
   });
 
   it("removes model api keys from AI snapshots while preserving root config when requested", () => {
@@ -92,7 +98,7 @@ describe("settings-snapshot", () => {
     });
   });
 
-  it("preserves local-only settings fields when restoring a remote snapshot", () => {
+  it("preserves local-only settings fields when restoring a remote snapshot", async () => {
     localStorage.setItem(
       PRIMARY_SETTINGS_KEY,
       JSON.stringify({
@@ -105,7 +111,7 @@ describe("settings-snapshot", () => {
       }),
     );
 
-    restoreSettingsStateSnapshot(
+    await restoreSettingsStateSnapshot(
       {
         state: {
           language: "en",
@@ -131,7 +137,7 @@ describe("settings-snapshot", () => {
     });
   });
 
-  it("round-trips the non-sensitive Codex identity preference", () => {
+  it("round-trips the non-sensitive Codex identity preference", async () => {
     localStorage.setItem(
       PRIMARY_SETTINGS_KEY,
       JSON.stringify({
@@ -156,14 +162,14 @@ describe("settings-snapshot", () => {
         },
       }),
     );
-    restoreSettingsStateSnapshot(snapshot);
+    await restoreSettingsStateSnapshot(snapshot);
 
     expect(getSettingsStateSnapshot()?.state.agentIdentityPreferences).toEqual({
       codex: { name: "chatgpt", icon: "codex" },
     });
   });
 
-  it("restores AI config into existing settings state", () => {
+  it("restores AI config into existing settings state", async () => {
     localStorage.setItem(
       PRIMARY_SETTINGS_KEY,
       JSON.stringify({
@@ -174,7 +180,7 @@ describe("settings-snapshot", () => {
       }),
     );
 
-    restoreAiConfigSnapshot({
+    await restoreAiConfigSnapshot({
       aiProvider: "anthropic",
       aiApiProtocol: "anthropic",
       aiApiKey: "restored-key",
@@ -203,5 +209,63 @@ describe("settings-snapshot", () => {
       },
       settingsUpdatedAt: undefined,
     });
+  });
+
+  it("restores desktop snapshots through canonical main storage and propagates failures", async () => {
+    const replaceSettings = vi.fn(async () => undefined);
+    window.api.settings = {
+      ...(window.api.settings ?? {}),
+      rendererPersistence: {
+        get: vi.fn(async () => ({
+          settings: {
+            language: "zh",
+            webdavPassword: "local-secret",
+            aiProviders: [{ id: "p1", apiKey: "provider-secret" }],
+          },
+        })),
+        replaceSettings,
+      },
+    };
+
+    expect(
+      await getCanonicalSettingsStateSnapshot({
+        excludeFields: ["webdavPassword"],
+      }),
+    ).toEqual({
+      state: {
+        language: "zh",
+        aiProviders: [{ id: "p1", apiKey: "provider-secret" }],
+      },
+      settingsUpdatedAt: undefined,
+    });
+    expect(await getCanonicalAiConfigSnapshot()).toMatchObject({
+      aiProviders: [{ id: "p1" }],
+    });
+
+    await restoreSettingsStateSnapshot(
+      { state: { language: "en", webdavPassword: "remote-secret" } },
+      { preserveLocalFields: ["webdavPassword"] },
+    );
+    await restoreAiConfigSnapshot({
+      aiProviders: [{ id: "p1", provider: "openai" }],
+    });
+
+    expect(replaceSettings).toHaveBeenNthCalledWith(1, {
+      language: "en",
+      webdavPassword: "local-secret",
+    });
+    expect(replaceSettings).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        aiProviders: [
+          { id: "p1", provider: "openai", apiKey: "provider-secret" },
+        ],
+      }),
+    );
+
+    replaceSettings.mockRejectedValueOnce(new Error("canonical write failed"));
+    await expect(
+      restoreSettingsStateSnapshot({ state: { language: "fr" } }),
+    ).rejects.toThrow("canonical write failed");
   });
 });

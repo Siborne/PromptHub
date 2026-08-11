@@ -28,16 +28,15 @@ import type {
   RuleVersionSnapshot,
 } from "@prompthub/shared/types";
 
-import { initDatabase, RuleDB } from "./database";
-import {
-  getDefaultPlatformGlobalRulePath,
-  getDefaultPlatformRootDir,
-} from "./platform-paths";
-import { getRulesDir } from "./runtime-paths";
+import { RuleDB } from "./database";
 export type {
   ExtraGlobalRuleTemplate,
   RulesWorkspaceService,
   RulesWorkspaceServiceDeps,
+} from "./rules-workspace-support";
+export {
+  resolveDisplayedRuleFileName,
+  ruleGroupForKnownId,
 } from "./rules-workspace-support";
 import {
   LEGACY_RULE_HISTORY_DIR_NAME,
@@ -94,6 +93,10 @@ export function createRulesWorkspaceService(
     RuleFileId,
     Promise<AppendRuleVersionResult>
   >();
+
+  function assertStorageAvailable(): void {
+    deps.assertStorageAvailable?.();
+  }
 
   function getAllGlobalRuleTemplates(): Array<
     | (typeof KNOWN_RULE_FILE_TEMPLATES)[KnownRuleFileId]
@@ -248,6 +251,7 @@ export function createRulesWorkspaceService(
     ruleId: RuleFileId,
     index: StoredRuleVersionIndexEntry[],
   ): Promise<void> {
+    assertStorageAvailable();
     await writeJsonFile(getRuleVersionIndexPath(ruleId), index);
   }
 
@@ -485,6 +489,7 @@ export function createRulesWorkspaceService(
     ruleId: RuleFileId,
     versions: RuleVersionSnapshot[],
   ): Promise<StoredRuleVersionIndexEntry[]> {
+    assertStorageAvailable();
     const versionDir = getRuleVersionsDir(ruleId);
     const stagingDir = await createSiblingTempDirectory(
       versionDir,
@@ -569,6 +574,7 @@ export function createRulesWorkspaceService(
     content: string,
     source: RuleVersionSnapshot["source"],
   ): Promise<AppendRuleVersionResult> {
+    assertStorageAvailable();
     const previousWrite =
       pendingRuleVersionWrites.get(ruleId) ??
       Promise.resolve<AppendRuleVersionResult>({
@@ -645,6 +651,7 @@ export function createRulesWorkspaceService(
     meta: StoredRuleMeta,
     content: string,
   ): Promise<void> {
+    assertStorageAvailable();
     await writeTextFileAtomic(meta.managedPath, content);
   }
 
@@ -652,6 +659,7 @@ export function createRulesWorkspaceService(
     meta: StoredRuleMeta,
     content: string,
   ): Promise<RuleSyncStatus> {
+    assertStorageAvailable();
     try {
       await fsp.mkdir(path.dirname(meta.targetPath), { recursive: true });
       await fsp.writeFile(meta.targetPath, content, "utf-8");
@@ -668,6 +676,7 @@ export function createRulesWorkspaceService(
   }
 
   async function writeMeta(meta: StoredRuleMeta): Promise<void> {
+    assertStorageAvailable();
     await writeJsonFile(getRuleMetaPath(meta.managedPath), meta);
   }
 
@@ -835,6 +844,7 @@ export function createRulesWorkspaceService(
   }
 
   async function syncRuleIndex(meta: StoredRuleMeta): Promise<void> {
+    assertStorageAvailable();
     const db = getRuleDb();
     const content = (await fileExists(meta.managedPath))
       ? await fsp.readFile(meta.managedPath, "utf-8")
@@ -854,6 +864,7 @@ export function createRulesWorkspaceService(
     content: string,
     versionIndex: StoredRuleVersionIndexEntry[],
   ): Promise<void> {
+    assertStorageAvailable();
     const db = getRuleDb();
     db.upsert(toRuleRecord(meta, versionIndex.length, hashContent(content)));
     db.replaceVersions(meta.id, toRuleVersionRecords(meta.id, versionIndex));
@@ -1318,12 +1329,14 @@ export function createRulesWorkspaceService(
   }
 
   async function bootstrapRuleWorkspace(): Promise<void> {
+    assertStorageAvailable();
     await fsp.mkdir(deps.getRulesDir(), { recursive: true });
     await fsp.mkdir(getRuleProjectsRoot(), { recursive: true });
     await fsp.mkdir(getRuleVersionsRoot(), { recursive: true });
   }
 
   async function removeProjectRule(projectId: string): Promise<void> {
+    assertStorageAvailable();
     const ruleId: ProjectRuleId = `project:${projectId}`;
     const records = await Promise.all(
       (await listProjectMetaPaths()).map(async (metaPath) => ({
@@ -1472,27 +1485,3 @@ export function createRulesWorkspaceService(
     importRuleBackupRecords,
   };
 }
-
-export const coreRulesWorkspaceService = createRulesWorkspaceService({
-  getRulesDir,
-  createRuleDb: () => new RuleDB(initDatabase()),
-  getPlatformGlobalRulePath: getDefaultPlatformGlobalRulePath,
-  getPlatformRootDir: getDefaultPlatformRootDir,
-});
-
-export const {
-  listRuleDescriptors,
-  listCachedRuleDescriptors,
-  scanRuleDescriptors,
-  getProjectMetaById,
-  resolveRuleMeta,
-  readRuleContent,
-  saveRuleContent,
-  deleteRuleVersion,
-  createProjectRule,
-  bootstrapRuleWorkspace,
-  removeProjectRule,
-  removeMissingProjectRules,
-  exportRuleBackupRecords,
-  importRuleBackupRecords,
-} = coreRulesWorkspaceService;

@@ -22,7 +22,6 @@ import {
   TARGET_PLUGIN_MARKER_PATHS,
   ensureInsideDirectory,
   getManagedPluginsDir,
-  getPluginLibraryFilePath,
   getPluginLocalPackagePath,
   normalizeDistributedTargetIds,
   normalizeRelativePosixPath,
@@ -600,6 +599,7 @@ export function getPluginTargetMatrix(): PluginTargetCompatibility[] {
 
 interface DistributionContext {
   readLibrary: () => PluginLibraryFile;
+  persistLibrary: (library: PluginLibraryFile) => PluginLibraryFile;
   resolveTargetPath?: PluginTargetPathResolver;
 }
 
@@ -627,6 +627,7 @@ function requireTargetResolver(
 }
 
 function persistDistributedPlugin(
+  context: DistributionContext,
   library: PluginLibraryFile,
   plugin: PluginLibraryEntry,
 ): PluginLibraryFile {
@@ -637,8 +638,7 @@ function persistDistributedPlugin(
       entry.id === plugin.id ? plugin : entry,
     ),
   };
-  writeJsonFileAtomic(getPluginLibraryFilePath(), nextLibrary);
-  return nextLibrary;
+  return context.persistLibrary(nextLibrary);
 }
 
 function resolveDistributionTargets(
@@ -707,7 +707,7 @@ export function distributePlugin(
   };
   return {
     plugin: nextPlugin,
-    library: persistDistributedPlugin(library, nextPlugin),
+    library: persistDistributedPlugin(context, library, nextPlugin),
     targets,
   };
 }
@@ -768,7 +768,7 @@ export function removePluginDistribution(
   };
   return {
     plugin: nextPlugin,
-    library: persistDistributedPlugin(library, nextPlugin),
+    library: persistDistributedPlugin(context, library, nextPlugin),
     ...result,
   };
 }

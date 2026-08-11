@@ -4,7 +4,8 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import DatabaseAdapter from "../../../src/main/database/sqlite";
 
 import {
   createUpgradeDataSnapshot,
@@ -16,6 +17,26 @@ import { restoreFromUpgradeBackupAsync } from "../../../src/main/services/upgrad
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+function writeTestDatabase(databasePath: string, value: string): void {
+  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  for (const suffix of ["", "-wal", "-shm"]) {
+    fs.rmSync(`${databasePath}${suffix}`, { force: true });
+  }
+  const database = new DatabaseAdapter(databasePath);
+  database.exec("CREATE TABLE restore_marker (value TEXT NOT NULL)");
+  database.prepare("INSERT INTO restore_marker (value) VALUES (?)").run(value);
+  database.close();
+}
+
+function readTestDatabase(databasePath: string): string {
+  const database = new DatabaseAdapter(databasePath, { readOnly: true });
+  try {
+    return (database.get("SELECT value FROM restore_marker") as { value: string }).value;
+  } finally {
+    database.close();
+  }
 }
 
 describe("upgrade-backup-restore", () => {
@@ -32,7 +53,7 @@ describe("upgrade-backup-restore", () => {
   it("replaces current userData content while preserving the backups root", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "old-db");
+    writeTestDatabase(path.join(userDataPath, "prompthub.db"), "old-db");
     fs.writeFileSync(path.join(userDataPath, "shortcut-mode.json"), '{"mode":"old"}');
     fs.mkdirSync(path.join(userDataPath, "workspace"), { recursive: true });
     fs.writeFileSync(path.join(userDataPath, "workspace", "prompt-1.md"), "old prompt");
@@ -43,7 +64,7 @@ describe("upgrade-backup-restore", () => {
     });
 
     // Mutate current state after snapshot so restore has something to roll back.
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "new-db");
+    writeTestDatabase(path.join(userDataPath, "prompthub.db"), "new-db");
     fs.rmSync(path.join(userDataPath, "workspace"), { recursive: true, force: true });
     fs.mkdirSync(path.join(userDataPath, "images"), { recursive: true });
     fs.writeFileSync(path.join(userDataPath, "images", "new.png"), "png");
@@ -57,11 +78,11 @@ describe("upgrade-backup-restore", () => {
     expect(result.needsRestart).toBe(true);
     expect(result.currentStateBackupPath).toBeTruthy();
 
-    expect(fs.readFileSync(path.join(userDataPath, "data", "prompthub.db"), "utf8")).toBe(
+    expect(readTestDatabase(path.join(userDataPath, "data", "prompthub.db"))).toBe(
       "old-db",
     );
     expect(
-      fs.readFileSync(path.join(userDataPath, "workspace", "prompt-1.md"), "utf8"),
+      fs.readFileSync(path.join(userDataPath, "data", "prompt-1.md"), "utf8"),
     ).toBe("old prompt");
     expect(fs.existsSync(path.join(userDataPath, "images"))).toBe(false);
 
@@ -69,7 +90,11 @@ describe("upgrade-backup-restore", () => {
     // the insurance backup live there.
     const backupRoot = getUpgradeBackupRoot(userDataPath);
     expect(fs.existsSync(backupRoot)).toBe(true);
-    expect(result.currentStateBackupPath?.startsWith(backupRoot)).toBe(true);
+    expect(
+      result.currentStateBackupPath?.startsWith(
+        path.join(userDataPath, "backups", "recovery"),
+      ),
+    ).toBe(true);
   });
 
   it("returns an error for an unknown backup id", async () => {
@@ -91,7 +116,7 @@ describe("upgrade-backup-restore", () => {
   it("ignores runtime cache directories during restore", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "old-db");
+    writeTestDatabase(path.join(userDataPath, "prompthub.db"), "old-db");
 
     const snapshot = await createUpgradeDataSnapshot(userDataPath, {
       fromVersion: "0.5.3",
@@ -118,14 +143,14 @@ describe("upgrade-backup-restore", () => {
   it("moves a legacy root database into data/prompthub.db during restore", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "old-db");
+    writeTestDatabase(path.join(userDataPath, "prompthub.db"), "old-db");
 
     const snapshot = await createUpgradeDataSnapshot(userDataPath, {
       fromVersion: "0.5.6",
       toVersion: "0.5.7",
     });
 
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "new-db");
+    writeTestDatabase(path.join(userDataPath, "prompthub.db"), "new-db");
 
     const result = await restoreFromUpgradeBackupAsync(
       userDataPath,
@@ -135,14 +160,14 @@ describe("upgrade-backup-restore", () => {
     expect(result.success).toBe(true);
     expect(fs.existsSync(path.join(userDataPath, "prompthub.db"))).toBe(false);
     expect(
-      fs.readFileSync(path.join(userDataPath, "data", "prompthub.db"), "utf8"),
+      readTestDatabase(path.join(userDataPath, "data", "prompthub.db")),
     ).toBe("old-db");
   });
 
   it("rolls back to the insurance snapshot when restore fails mid-flight", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "old-db");
+    writeTestDatabase(path.join(userDataPath, "prompthub.db"), "old-db");
     fs.writeFileSync(path.join(userDataPath, "shortcut-mode.json"), '{"mode":"old"}');
 
     const snapshot = await createUpgradeDataSnapshot(userDataPath, {
@@ -150,39 +175,23 @@ describe("upgrade-backup-restore", () => {
       toVersion: "0.5.4",
     });
 
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "new-db");
+    writeTestDatabase(path.join(userDataPath, "prompthub.db"), "new-db");
     fs.writeFileSync(path.join(userDataPath, "shortcut-mode.json"), '{"mode":"new"}');
 
-    const originalCpSync = fs.cpSync;
-    const cpSpy = vi
-      .spyOn(fs, "cpSync")
-      .mockImplementation(((source: fs.PathLike, destination: fs.PathLike, options?: fs.CopySyncOptions) => {
-        const sourceText = source.toString();
-        const destinationText = destination.toString();
-        if (
-          sourceText.includes(snapshot.backupId) &&
-          destinationText.endsWith(path.join("PromptHub", "shortcut-mode.json"))
-        ) {
-          throw new Error("simulated restore failure");
-        }
-        return originalCpSync(source, destination, options);
-      }) as typeof fs.cpSync);
+    fs.writeFileSync(
+      path.join(snapshot.backupPath, "prompthub.db"),
+      Buffer.alloc(8192, 0xff),
+    );
 
     const result = await restoreFromUpgradeBackupAsync(
       userDataPath,
       snapshot.backupId,
     );
 
-    cpSpy.mockRestore();
-
-    expect(result).toEqual({
-      success: false,
-      needsRestart: false,
-      error: "simulated restore failure",
-    });
-    expect(fs.readFileSync(path.join(userDataPath, "data", "prompthub.db"), "utf8")).toBe(
-      "new-db",
-    );
+    expect(result.success).toBe(false);
+    expect(result.needsRestart).toBe(false);
+    expect(result.error).toMatch(/database|sqlite|malformed|file is not/i);
+    expect(readTestDatabase(path.join(userDataPath, "prompthub.db"))).toBe("new-db");
     expect(
       fs.readFileSync(path.join(userDataPath, "shortcut-mode.json"), "utf8"),
     ).toBe('{"mode":"new"}');
@@ -194,7 +203,10 @@ describe("upgrade-backup-restore", () => {
     const backupPath = path.join(getUpgradeBackupRoot(userDataPath), backupId);
     const externalPath = path.join(tmpBase, "outside-restore-secret.txt");
     fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "data", "prompthub.db"), "current-db");
+    writeTestDatabase(
+      path.join(userDataPath, "data", "prompthub.db"),
+      "current-db",
+    );
     fs.mkdirSync(path.join(userDataPath, "workspace"), { recursive: true });
     fs.writeFileSync(
       path.join(userDataPath, "workspace", "current.md"),
@@ -238,7 +250,7 @@ describe("upgrade-backup-restore", () => {
   it("prunes old snapshots after restore while keeping source and insurance backups", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "seed-db");
+    writeTestDatabase(path.join(userDataPath, "prompthub.db"), "seed-db");
 
     const snapshots = [] as Array<{ backupId: string }>;
     for (let index = 0; index < MAX_UPGRADE_BACKUP_SNAPSHOTS - 1; index += 1) {
@@ -249,7 +261,7 @@ describe("upgrade-backup-restore", () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
 
-    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "latest-db");
+    writeTestDatabase(path.join(userDataPath, "prompthub.db"), "latest-db");
 
     const restoreTarget = snapshots[0];
     const result = await restoreFromUpgradeBackupAsync(userDataPath, restoreTarget.backupId);
@@ -258,10 +270,9 @@ describe("upgrade-backup-restore", () => {
     const backups = await listUpgradeBackups(userDataPath);
     expect(backups.length).toBeLessThanOrEqual(MAX_UPGRADE_BACKUP_SNAPSHOTS);
     expect(backups.some((entry) => entry.backupId === restoreTarget.backupId)).toBe(true);
-    expect(
-      backups.some(
-        (entry) => entry.backupPath === result.currentStateBackupPath,
-      ),
-    ).toBe(true);
+    expect(fs.existsSync(result.currentStateBackupPath!)).toBe(true);
+    expect(result.currentStateBackupPath).toContain(
+      path.join("backups", "recovery"),
+    );
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import Database from "../../../src/main/database/sqlite";
 
 import {
   createUpgradeDataSnapshot,
@@ -20,12 +21,14 @@ function makeTmpDir(prefix: string): string {
 
 function seedUserData(userDataPath: string): void {
   fs.mkdirSync(userDataPath, { recursive: true });
-  fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "db-bytes");
+  const database = new Database(path.join(userDataPath, "prompthub.db"));
+  database.exec("CREATE TABLE snapshot_marker (value TEXT NOT NULL)");
+  database.exec("INSERT INTO snapshot_marker (value) VALUES ('db-bytes')");
+  database.close();
   fs.writeFileSync(
     path.join(userDataPath, "prompthub.db.backup-2026-05-27T02-46-52-983Z"),
     "db-backup",
   );
-  fs.writeFileSync(path.join(userDataPath, "prompthub.db.lock"), "db-lock");
   fs.mkdirSync(path.join(userDataPath, "skills", "demo-skill"), {
     recursive: true,
   });
@@ -61,12 +64,17 @@ describe("upgrade-backup", () => {
   });
 
   describe("getUpgradeBackupRoot", () => {
-    it("resolves to <userData>/backups (new location, inside userData)", () => {
+    it("resolves to the managed upgrade safety-point directory", () => {
       const userDataPath = path.join(tmpBase, "PromptHub");
       fs.mkdirSync(userDataPath, { recursive: true });
 
       expect(getUpgradeBackupRoot(userDataPath)).toBe(
-        path.join(path.resolve(userDataPath), "backups"),
+        path.join(
+          path.resolve(userDataPath),
+          "backups",
+          "safety-points",
+          "upgrades",
+        ),
       );
     });
 
@@ -84,7 +92,7 @@ describe("upgrade-backup", () => {
   });
 
   describe("createUpgradeDataSnapshot", () => {
-    it("copies the entire user data payload into <userData>/backups with a v2 manifest", async () => {
+    it("copies the durable user data allowlist into a managed v3 snapshot", async () => {
       const userDataPath = path.join(tmpBase, "PromptHub");
       seedUserData(userDataPath);
 
@@ -95,8 +103,10 @@ describe("upgrade-backup", () => {
 
       expect(snapshot.manifest.fromVersion).toBe("0.5.1");
       expect(snapshot.manifest.toVersion).toBe("0.5.4");
-      expect(snapshot.manifest.schemaVersion).toBe(2);
+      expect(snapshot.manifest.schemaVersion).toBe(3);
       expect(snapshot.manifest.kind).toBe("prompthub-upgrade-backup");
+      expect(snapshot.manifest.databaseCaptureMode).toBe("consistent-image");
+      expect(snapshot.manifest.databaseImageSha256).toMatch(/^[a-f0-9]{64}$/);
       expect(
         snapshot.backupPath.startsWith(getUpgradeBackupRoot(userDataPath)),
       ).toBe(true);
@@ -129,9 +139,14 @@ describe("upgrade-backup", () => {
         false,
       );
       expect(fs.existsSync(path.join(snapshot.backupPath, "SingletonLock"))).toBe(false);
-      expect(
-        fs.readFileSync(path.join(snapshot.backupPath, "prompthub.db"), "utf8"),
-      ).toBe("db-bytes");
+      const snapshotDatabase = new Database(
+        path.join(snapshot.backupPath, "prompthub.db"),
+        { readOnly: true },
+      );
+      expect(snapshotDatabase.get("SELECT value FROM snapshot_marker")).toEqual({
+        value: "db-bytes",
+      });
+      snapshotDatabase.close();
       expect(
         fs.readFileSync(
           path.join(snapshot.backupPath, "skills", "demo-skill", "SKILL.md"),
@@ -195,7 +210,7 @@ describe("upgrade-backup", () => {
       const userDataPath = path.join(tmpBase, "PromptHub");
       seedUserData(userDataPath);
 
-      // First snapshot lives under <userData>/backups. A second snapshot must
+      // First snapshot lives under the managed safety-point root. A second must
       // not copy it into itself or we'd explode in size over time.
       const first = await createUpgradeDataSnapshot(userDataPath, {
         fromVersion: "0.5.1",
@@ -229,6 +244,49 @@ describe("upgrade-backup", () => {
       expect(
         fs.readFileSync(path.join(externalPath, "external.md"), "utf8"),
       ).toBe("external prompt");
+    });
+
+    it("fails capacity preflight before creating a database image or stage", async () => {
+      const userDataPath = path.join(tmpBase, "PromptHub");
+      seedUserData(userDataPath);
+
+      await expect(
+        createUpgradeDataSnapshot(userDataPath, {
+          fromVersion: "0.5.1",
+          getAvailableBytes: () => 0,
+        }),
+      ).rejects.toThrow(/Insufficient space/);
+
+      const backupRoot = getUpgradeBackupRoot(userDataPath);
+      expect(fs.existsSync(backupRoot) ? fs.readdirSync(backupRoot) : []).toEqual(
+        [],
+      );
+    });
+
+    it("preserves a non-SQLite legacy database as explicit recovery evidence", async () => {
+      const userDataPath = path.join(tmpBase, "PromptHub-invalid-legacy-db");
+      fs.mkdirSync(userDataPath, { recursive: true });
+      fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "legacy-bytes");
+
+      const snapshot = await createUpgradeDataSnapshot(userDataPath, {
+        fromVersion: "0.4.7-pre-layout-migration",
+      });
+
+      expect(snapshot.manifest.databaseCaptureMode).toBe(
+        "raw-recovery-evidence",
+      );
+      expect(snapshot.manifest.databaseImageSha256).toBeUndefined();
+      expect(snapshot.manifest.databaseRawEvidenceSha256).toMatch(
+        /^[a-f0-9]{64}$/,
+      );
+      expect(
+        fs.readFileSync(path.join(snapshot.backupPath, "prompthub.db"), "utf8"),
+      ).toBe("legacy-bytes");
+
+      const listed = await getUpgradeBackup(userDataPath, snapshot.backupId);
+      expect(listed?.manifest.databaseCaptureMode).toBe(
+        "raw-recovery-evidence",
+      );
     });
 
     it("keeps only the latest five upgrade snapshots", async () => {
@@ -418,7 +476,7 @@ describe("upgrade-backup", () => {
   });
 
   describe("migrateLegacyUpgradeBackups", () => {
-    it("moves legacy snapshots into <userData>/backups and writes a marker", async () => {
+    it("moves legacy snapshots into the managed safety-point root", async () => {
       const userDataPath = path.join(tmpBase, "PromptHub");
       seedUserData(userDataPath);
 
@@ -459,7 +517,7 @@ describe("upgrade-backup", () => {
       const migratedManifest = JSON.parse(
         fs.readFileSync(path.join(migratedPath, "backup-manifest.json"), "utf8"),
       );
-      expect(migratedManifest.schemaVersion).toBe(2);
+      expect(migratedManifest.schemaVersion).toBe(3);
       expect(migratedManifest.fromVersion).toBe("0.5.1");
       expect(migratedManifest.legacyMigratedFrom).toBe(legacyBackup);
 
@@ -469,6 +527,44 @@ describe("upgrade-backup", () => {
         ".legacy-migrated",
       );
       expect(fs.existsSync(markerPath)).toBe(true);
+    });
+
+    it("migrates snapshots from the previous in-root backup location", async () => {
+      const userDataPath = path.join(tmpBase, "PromptHub");
+      fs.mkdirSync(userDataPath, { recursive: true });
+      const id = "v0.5.9-2026-08-11T00-00-00-000Z";
+      const previousPath = path.join(userDataPath, "backups", id);
+      fs.mkdirSync(previousPath, { recursive: true });
+      fs.writeFileSync(path.join(previousPath, "prompthub.db"), "old-layout");
+      fs.writeFileSync(
+        path.join(previousPath, "backup-manifest.json"),
+        JSON.stringify({
+          kind: "prompthub-upgrade-backup",
+          schemaVersion: 3,
+          createdAt: "2026-08-11T00:00:00.000Z",
+          fromVersion: "0.5.9",
+          sourcePath: userDataPath,
+          copiedItems: ["prompthub.db"],
+          platform: "darwin",
+        }),
+      );
+
+      const result = await migrateLegacyUpgradeBackups(userDataPath);
+
+      expect(result.migrated).toBe(1);
+      expect(fs.existsSync(previousPath)).toBe(false);
+      const migratedPath = path.join(getUpgradeBackupRoot(userDataPath), id);
+      expect(fs.readFileSync(path.join(migratedPath, "prompthub.db"), "utf8")).toBe(
+        "old-layout",
+      );
+      expect(
+        JSON.parse(
+          fs.readFileSync(
+            path.join(migratedPath, "backup-manifest.json"),
+            "utf8",
+          ),
+        ).legacyMigratedFrom,
+      ).toBe(previousPath);
     });
 
     it("is idempotent once the marker is present", async () => {
@@ -593,6 +689,13 @@ describe("upgrade-backup", () => {
       expect(
         fs.readFileSync(path.join(externalPath, "external.md"), "utf8"),
       ).toBe("external prompt");
+      expect(
+        fs.existsSync(path.join(getUpgradeBackupRoot(userDataPath), ".legacy-migrated")),
+      ).toBe(false);
+
+      fs.rmSync(path.join(legacyBackup, "workspace", "linked"));
+      const retried = await migrateLegacyUpgradeBackups(userDataPath);
+      expect(retried.migrated).toBe(1);
       expect(
         fs.existsSync(path.join(getUpgradeBackupRoot(userDataPath), ".legacy-migrated")),
       ).toBe(true);

@@ -60,6 +60,21 @@ export const IPC_CHANNELS = {
   // Settings
   SETTINGS_GET: "settings:get",
   SETTINGS_SET: "settings:set",
+  SETTINGS_RENDERER_PERSISTENCE_MIGRATE:
+    "settings:rendererPersistence:migrate",
+  SETTINGS_RENDERER_PERSISTENCE_GET: "settings:rendererPersistence:get",
+  SETTINGS_RENDERER_PERSISTENCE_REPLACE_SETTINGS:
+    "settings:rendererPersistence:replaceSettings",
+  SETTINGS_RENDERER_PERSISTENCE_REPLACE_SOURCES:
+    "settings:rendererPersistence:replaceSources",
+  SETTINGS_RENDERER_PERSISTENCE_REPLACE_RECOVERY_PATHS:
+    "settings:rendererPersistence:replaceRecoveryPaths",
+  SETTINGS_RENDERER_PERSISTENCE_DEVICE_ID:
+    "settings:rendererPersistence:deviceId",
+  SETTINGS_RENDERER_PERSISTENCE_IDB_STATUS:
+    "settings:rendererPersistence:idbStatus",
+  SETTINGS_RENDERER_PERSISTENCE_IDB_DONE:
+    "settings:rendererPersistence:idbDone",
 
   // PromptHub Cloud account and Store
   CLOUD_AUTH_GET_STATE: "cloud:auth:getState",
@@ -356,6 +371,9 @@ export const IPC_CHANNELS = {
   DATA_PERFORM_RECOVERY: "data:performRecovery",
   DATA_DISMISS_RECOVERY: "data:dismissRecovery",
   DATA_EXPORT_ZIP: "data:exportZip",
+  DATA_PORTABLE_PREVIEW: "data:portablePreview",
+  DATA_PORTABLE_RESTORE: "data:portableRestore",
+  DATA_PORTABLE_LOGICAL_RESTORE: "data:portableLogicalRestore",
   UPGRADE_BACKUP_LIST: "upgradeBackup:list",
   UPGRADE_BACKUP_CREATE: "upgradeBackup:create",
   UPGRADE_BACKUP_RESTORE: "upgradeBackup:restore",

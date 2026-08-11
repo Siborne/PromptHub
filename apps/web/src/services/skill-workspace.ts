@@ -509,8 +509,12 @@ export function importSkillWorkspaceIntoDatabase(
       instructions: content,
     };
 
-    skillDb.insertSkillDirect(skill);
-    updateSkillOwnership(db, skill);
+    const importedSkill = {
+      ...skill,
+      ownerUserId: resolveOwnerUserId(db, skill.ownerUserId),
+    };
+    skillDb.insertSkillDirect(importedSkill);
+    updateSkillOwnership(db, importedSkill);
 
     const versions = readSkillVersions(skillDir);
     for (const version of versions) {

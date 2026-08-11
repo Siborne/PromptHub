@@ -2,7 +2,6 @@ import { ipcMain } from "electron";
 import fs from "fs";
 import path from "path";
 import {
-  CoreMcpLibraryService,
   CorePluginLibraryService,
   emptyPluginInventory,
   getPluginLibraryFilePath,
@@ -26,6 +25,7 @@ import {
   getPlatformPluginDir,
   getPlatformRootDir,
 } from "../services/skill-installer-utils";
+import { createDesktopMcpLibraryService } from "../services/desktop-mcp-library";
 import {
   exportAgentAssetDirectorySnapshot,
   restoreAgentAssetDirectorySnapshot,
@@ -349,7 +349,7 @@ export function importChildMcpServersForPlugin(
   }
 
   const scannedFiles = collectChildMcpConfigFiles(packagePath);
-  const mcpService = new CoreMcpLibraryService();
+  const mcpService = createDesktopMcpLibraryService();
   const result: PluginImportChildMcpResult = {
     imported: [],
     skipped: [],

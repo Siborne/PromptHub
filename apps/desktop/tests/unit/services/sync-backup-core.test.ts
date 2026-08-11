@@ -32,7 +32,7 @@ vi.mock("../../../src/renderer/services/database-backup", () => ({
 }));
 
 vi.mock("../../../src/renderer/services/settings-snapshot", () => ({
-  getSettingsStateSnapshot: (...args: unknown[]) =>
+  getCanonicalSettingsStateSnapshot: (...args: unknown[]) =>
     getSettingsStateSnapshotMock(...args),
   restoreAiConfigSnapshot: (...args: unknown[]) =>
     restoreAiConfigSnapshotMock(...args),

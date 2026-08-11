@@ -151,14 +151,16 @@ describe("upgrade-backup-startup", () => {
     );
 
     const legacyRoot = getLegacyUpgradeBackupRoot(userDataPath);
-    const legacyBackup = path.join(legacyRoot, "v0.5.2-2026-01-01T00-00-00-000Z");
+    const legacyCreatedAt = new Date().toISOString();
+    const legacyBackupId = `v0.5.2-${legacyCreatedAt.replace(/[:.]/g, "-")}`;
+    const legacyBackup = path.join(legacyRoot, legacyBackupId);
     fs.mkdirSync(legacyBackup, { recursive: true });
     fs.writeFileSync(path.join(legacyBackup, "prompthub.db"), "legacy-db");
     fs.writeFileSync(
       path.join(legacyBackup, "backup-manifest.json"),
       JSON.stringify({
         kind: "prompthub-upgrade-backup",
-        createdAt: "2026-01-01T00:00:00.000Z",
+        createdAt: legacyCreatedAt,
         version: "0.5.2",
         sourcePath: userDataPath,
         copiedItems: ["prompthub.db"],
@@ -172,9 +174,7 @@ describe("upgrade-backup-startup", () => {
     expect(result.migration.migrated).toBe(1);
     expect(result.status).toBe("snapshot-created");
     expect(
-      fs.existsSync(
-        path.join(getUpgradeBackupRoot(userDataPath), "v0.5.2-2026-01-01T00-00-00-000Z"),
-      ),
+      fs.existsSync(path.join(getUpgradeBackupRoot(userDataPath), legacyBackupId)),
     ).toBe(true);
     expect(fs.existsSync(legacyBackup)).toBe(false);
   });

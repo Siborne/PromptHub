@@ -26,7 +26,7 @@ const PROMPT_GRAPH_RELATION_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 export class PromptRelationDB {
-  constructor(private db: Database.Database) {}
+  constructor(protected readonly db: Database.Database) {}
 
   create(data: CreatePromptRelationDTO): PromptRelation {
     const normalized = this.normalizeCreateInput(data);
@@ -156,8 +156,12 @@ export class PromptRelationDB {
         relation.targetPromptId,
         relation.kind,
         relation.note ?? null,
-        relation.createdAt ? new Date(relation.createdAt).getTime() : Date.now(),
-        relation.updatedAt ? new Date(relation.updatedAt).getTime() : Date.now(),
+        relation.createdAt
+          ? new Date(relation.createdAt).getTime()
+          : Date.now(),
+        relation.updatedAt
+          ? new Date(relation.updatedAt).getTime()
+          : Date.now(),
       );
   }
 
@@ -172,8 +176,14 @@ export class PromptRelationDB {
       throw new Error("Prompt relation cannot point to itself");
     }
 
-    this.assertPromptExists(data.sourcePromptId, "Source prompt does not exist");
-    this.assertPromptExists(data.targetPromptId, "Target prompt does not exist");
+    this.assertPromptExists(
+      data.sourcePromptId,
+      "Source prompt does not exist",
+    );
+    this.assertPromptExists(
+      data.targetPromptId,
+      "Target prompt does not exist",
+    );
 
     const endpoints = this.normalizeEndpoints(
       data.sourcePromptId,
@@ -235,7 +245,9 @@ export class PromptRelationDB {
     }
   }
 
-  private assertRelationKind(kind: string): asserts kind is PromptGraphRelationKind {
+  private assertRelationKind(
+    kind: string,
+  ): asserts kind is PromptGraphRelationKind {
     if (!PROMPT_GRAPH_RELATION_KINDS.has(kind)) {
       throw new Error("Unsupported prompt relation kind");
     }

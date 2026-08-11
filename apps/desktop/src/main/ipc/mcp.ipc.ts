@@ -1,7 +1,6 @@
 import { ipcMain } from "electron";
 import path from "path";
 import {
-  CoreMcpLibraryService,
   getMcpLibraryFilePath,
   getMcpTargetPresets,
   type McpTargetPreset,
@@ -41,6 +40,7 @@ import type {
   McpTargetScope,
 } from "@prompthub/shared/types/mcp";
 import type { AgentAssetFileSnapshot } from "@prompthub/shared/types/sync";
+import { createDesktopMcpLibraryService } from "../services/desktop-mcp-library";
 
 const MCP_TARGET_SCOPES = new Set<McpTargetScope>([
   "global",
@@ -207,7 +207,9 @@ function redactMcpMarketUpdateResult(
   return { ...result, server: redactMcpServerConfig(result.server) };
 }
 
-export function registerMcpIPC(service = new CoreMcpLibraryService()): void {
+export function registerMcpIPC(
+  service = createDesktopMcpLibraryService(),
+): void {
   ipcMain.handle(IPC_CHANNELS.MCP_LIBRARY_GET, async () =>
     redactMcpLibraryForTransport(service.read()),
   );

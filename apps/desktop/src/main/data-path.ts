@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 const CONFIG_DIR_NAME = "PromptHub";
 const CONFIG_FILE_NAME = "data-path.json";
@@ -88,6 +89,22 @@ function getConfigFilePath(appDataPath: string): string {
   return path.join(appDataPath, CONFIG_DIR_NAME, CONFIG_FILE_NAME);
 }
 
+function flushDirectory(directoryPath: string): void {
+  let descriptor: number | null = null;
+  try {
+    descriptor = fs.openSync(directoryPath, "r");
+    fs.fsyncSync(descriptor);
+  } catch {
+    // Directory fsync is unavailable on some supported filesystems.
+  } finally {
+    if (descriptor !== null) fs.closeSync(descriptor);
+  }
+}
+
+export function getStorageOperationControlDirectory(appDataPath: string): string {
+  return path.join(appDataPath, CONFIG_DIR_NAME, "operations");
+}
+
 export function getHistoricalDefaultUserDataPath(
   appDataPath: string,
   platform: NodeJS.Platform,
@@ -122,18 +139,32 @@ export function writeConfiguredDataPath(
 ): void {
   const configPath = getConfigFilePath(appDataPath);
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify(
-      {
-        dataPath: path.resolve(dataPath),
-        updatedAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
-    "utf8",
-  );
+  const temporaryPath = `${configPath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  const descriptor = fs.openSync(temporaryPath, "wx", 0o600);
+  try {
+    fs.writeFileSync(
+      descriptor,
+      `${JSON.stringify(
+        {
+          dataPath: path.resolve(dataPath),
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  try {
+    fs.renameSync(temporaryPath, configPath);
+    flushDirectory(path.dirname(configPath));
+  } catch (error) {
+    fs.rmSync(temporaryPath, { force: true });
+    throw error;
+  }
 }
 
 function readLinkSafeStats(targetPath: string): fs.Stats | null {

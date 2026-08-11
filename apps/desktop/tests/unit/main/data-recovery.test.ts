@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { listDatabaseSafetyPoints } from "@prompthub/db";
 import DatabaseAdapter from "../../../src/main/database/sqlite";
 import {
   SCHEMA_TABLES,
@@ -615,7 +616,50 @@ describe("Data Recovery", () => {
       expect(result.success).toBe(true);
       expect(result.backupPath).toBeDefined();
       expect(fs.existsSync(result.backupPath!)).toBe(true);
+      expect(path.basename(result.backupPath!)).toBe("database.sqlite");
+      expect(
+        listDatabaseSafetyPoints(path.join(targetDir, "prompthub.db")).map(
+          (point) => point.manifest.reason,
+        ),
+      ).toEqual(["pre-recovery"]);
+      expect(
+        fs
+          .readdirSync(targetDir)
+          .filter((entry) => entry.includes(".pre-recovery-")),
+      ).toEqual([]);
     });
+
+    it.skipIf(process.platform === "win32")(
+      "does not overwrite the target when its recovery safety point cannot be created",
+      () => {
+        const sourceDir = path.join(tmpBase, "source");
+        fs.mkdirSync(sourceDir);
+        createTestDatabase(sourceDir, { prompts: 3 });
+
+        const targetDir = path.join(tmpBase, "target");
+        fs.mkdirSync(targetDir);
+        createTestDatabase(targetDir, { prompts: 1 });
+        const outsideDir = path.join(tmpBase, "outside-backups");
+        fs.mkdirSync(outsideDir);
+        fs.symlinkSync(outsideDir, path.join(targetDir, "backups"));
+
+        const result = performDatabaseRecovery(sourceDir, targetDir);
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain(
+          "symbolic link in database safety point path",
+        );
+        const target = new DatabaseAdapter(
+          path.join(targetDir, "prompthub.db"),
+          { readOnly: true },
+        );
+        expect(target.get("SELECT COUNT(*) AS count FROM prompts")).toEqual({
+          count: 1,
+        });
+        target.close();
+        expect(fs.readdirSync(outsideDir)).toEqual([]);
+      },
+    );
 
     it("merges asset directories from source", () => {
       const sourceDir = path.join(tmpBase, "source");

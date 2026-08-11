@@ -6,11 +6,18 @@ import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { writeRuntimeLayoutState } from "@prompthub/core/runtime-paths";
+
 import {
   configureRuntimePaths,
+  getDataDir,
   getDatabasePath,
   getGeneratedImagesDir,
   getImagesDir,
+  getPromptsWorkspaceDir,
+  getRuntimeStorageContext,
+  getSkillsDir,
+  getVideosDir,
   resetRuntimePaths,
 } from "../../../src/main/runtime-paths";
 
@@ -30,7 +37,7 @@ describe("runtime-paths database selection", () => {
     fs.rmSync(tmpBase, { recursive: true, force: true });
   });
 
-  it("uses unified data db when partial migration left a legacy root residual", () => {
+  it("rejects a partial migration that left both database layouts active", () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
     fs.writeFileSync(
@@ -55,9 +62,7 @@ describe("runtime-paths database selection", () => {
 
     configureRuntimePaths({ userDataPath });
 
-    expect(getDatabasePath()).toBe(
-      path.join(userDataPath, "data", "prompthub.db"),
-    );
+    expect(() => getDatabasePath()).toThrow("mixed PromptHub storage layout");
   });
 
   it("uses unified data db after db migration marker is complete", () => {
@@ -87,6 +92,34 @@ describe("runtime-paths database selection", () => {
 
     expect(getDatabasePath()).toBe(
       path.join(userDataPath, "data", "prompthub.db"),
+    );
+  });
+
+  it("rejects a completed database marker when a legacy domain still failed", () => {
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
+    fs.writeFileSync(
+      path.join(userDataPath, "data", "prompthub.db"),
+      "data-db",
+      "utf8",
+    );
+    fs.mkdirSync(path.join(userDataPath, "skills"), { recursive: true });
+    fs.writeFileSync(path.join(userDataPath, "skills", "legacy.md"), "legacy");
+    fs.writeFileSync(
+      path.join(userDataPath, ".data-layout-v0.5.5.json"),
+      JSON.stringify({
+        version: "0.5.5",
+        movedEntries: ["prompthub.db"],
+        failedEntries: ["skills"],
+        dbLayoutVersion: "0.5.7",
+      }),
+      "utf8",
+    );
+
+    configureRuntimePaths({ userDataPath });
+
+    expect(() => getRuntimeStorageContext()).toThrow(
+      "mixed PromptHub storage layout",
     );
   });
 
@@ -154,4 +187,113 @@ describe("runtime-paths database selection", () => {
 
     expect(getImagesDir()).toBe(unifiedImagesDir);
   });
+
+  it("rejects mixed canonical and legacy domain paths", () => {
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
+    fs.writeFileSync(
+      path.join(userDataPath, "data", "prompthub.db"),
+      "data-db",
+      "utf8",
+    );
+    fs.mkdirSync(path.join(userDataPath, "skills"), { recursive: true });
+    fs.mkdirSync(path.join(userDataPath, "workspace", "prompts"), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.join(userDataPath, "images"), { recursive: true });
+    fs.mkdirSync(path.join(userDataPath, "videos"), { recursive: true });
+    fs.writeFileSync(path.join(userDataPath, "skills", "legacy.md"), "legacy");
+    fs.writeFileSync(
+      path.join(userDataPath, "workspace", "prompts", "legacy.md"),
+      "legacy",
+    );
+
+    configureRuntimePaths({ userDataPath });
+
+    expect(() => getRuntimeStorageContext()).toThrow(
+      "mixed PromptHub storage layout",
+    );
+  });
+
+  it("keeps the resolved layout immutable when files appear later", () => {
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    fs.mkdirSync(userDataPath, { recursive: true });
+    fs.writeFileSync(
+      path.join(userDataPath, "prompthub.db"),
+      "legacy-db",
+      "utf8",
+    );
+    configureRuntimePaths({ userDataPath });
+
+    const firstContext = getRuntimeStorageContext();
+    expect(firstContext.layoutEpoch).toBe(0);
+    expect(getDatabasePath()).toBe(path.join(userDataPath, "prompthub.db"));
+
+    fs.mkdirSync(getDataDir(), { recursive: true });
+    fs.writeFileSync(
+      path.join(getDataDir(), "prompthub.db"),
+      "canonical-db",
+      "utf8",
+    );
+
+    expect(getRuntimeStorageContext()).toBe(firstContext);
+    expect(getDatabasePath()).toBe(path.join(userDataPath, "prompthub.db"));
+  });
+
+  it("rejects layout markers created by a newer client", () => {
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    const dataDir = path.join(userDataPath, "data");
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dataDir, ".layout-state.json"),
+      JSON.stringify({
+        formatVersion: 1,
+        layoutEpoch: 2,
+        state: "complete",
+        rootIdentity: "future-root",
+        verifiedAt: new Date().toISOString(),
+      }),
+      "utf8",
+    );
+    configureRuntimePaths({ userDataPath });
+
+    expect(() => getRuntimeStorageContext()).toThrow(
+      "newer storage layout epoch",
+    );
+  });
+
+  it("rejects a layout marker copied from a different root", () => {
+    const sourceRoot = path.join(tmpBase, "source");
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    writeRuntimeLayoutState(sourceRoot);
+    fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
+    fs.copyFileSync(
+      path.join(sourceRoot, "data", ".layout-state.json"),
+      path.join(userDataPath, "data", ".layout-state.json"),
+    );
+    configureRuntimePaths({ userDataPath });
+
+    expect(() => getRuntimeStorageContext()).toThrow(
+      "storage layout root identity mismatch",
+    );
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "rejects symlinked layout markers",
+    () => {
+      const userDataPath = path.join(tmpBase, "PromptHub");
+      const outsideRoot = path.join(tmpBase, "outside");
+      writeRuntimeLayoutState(outsideRoot);
+      fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
+      fs.symlinkSync(
+        path.join(outsideRoot, "data", ".layout-state.json"),
+        path.join(userDataPath, "data", ".layout-state.json"),
+      );
+      configureRuntimePaths({ userDataPath });
+
+      expect(() => getRuntimeStorageContext()).toThrow(
+        "symbolic link in PromptHub storage path",
+      );
+    },
+  );
 });

@@ -100,7 +100,7 @@ function parsePublicObject(
 }
 
 export class AgentProviderProfileDB {
-  constructor(private readonly db: Database.Database) {}
+  constructor(protected readonly db: Database.Database) {}
 
   createProfile(input: CreateAgentProviderProfileInput): AgentProviderProfile {
     const id = uuidv4();
@@ -441,6 +441,47 @@ export class AgentProviderProfileDB {
           snapshot.operation,
           snapshot.result,
           snapshot.createdAt,
+        );
+      }
+    })();
+  }
+
+  insertProfileGraphDirect(
+    profile: AgentProviderProfile,
+    mappings: AgentProviderModelMapping[],
+  ): void {
+    this.db.transaction(() => {
+      this.db.run(
+        `INSERT INTO agent_provider_profiles (
+          id, platform_id, name, provider_kind, protocol, endpoint, config_json,
+          secret_ref, source, archived, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        profile.id,
+        requireText(profile.platformId, "platformId"),
+        requireText(profile.name, "name"),
+        requireText(profile.providerKind, "providerKind"),
+        requireText(profile.protocol, "protocol"),
+        normalizeAgentProviderEndpoint(profile.endpoint),
+        serializeObject(profile.config, "config", true),
+        profile.secretRef?.trim() || null,
+        profile.source,
+        profile.archived ? 1 : 0,
+        profile.createdAt,
+        profile.updatedAt,
+      );
+      for (const mapping of mappings) {
+        if (mapping.providerProfileId !== profile.id) {
+          throw new Error("Provider model mapping does not belong to profile");
+        }
+        this.db.run(
+          `INSERT INTO agent_provider_model_mappings (
+            id, provider_profile_id, route_key, model_id, parameters_json
+          ) VALUES (?, ?, ?, ?, ?)`,
+          mapping.id,
+          profile.id,
+          requireText(mapping.routeKey, "routeKey"),
+          requireText(mapping.modelId, "modelId"),
+          serializeObject(mapping.parameters, "parameters", true),
         );
       }
     })();

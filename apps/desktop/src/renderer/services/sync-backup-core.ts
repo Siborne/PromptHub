@@ -4,7 +4,7 @@ import { getAllFolders, getAllPrompts } from "./database";
 import { exportDatabase, restoreFromBackup } from "./database-backup";
 import type { DatabaseBackup } from "./database-backup-format";
 import {
-  getSettingsStateSnapshot,
+  getCanonicalSettingsStateSnapshot,
   restoreAiConfigSnapshot,
   restoreSettingsStateSnapshot,
   SENSITIVE_SETTINGS_FIELDS,
@@ -566,11 +566,11 @@ async function restoreVerifiedMedia(
 
 async function restoreSharedSnapshots(data: BackupData): Promise<void> {
   if (data.aiConfig) {
-    restoreAiConfigSnapshot(data.aiConfig);
+    await restoreAiConfigSnapshot(data.aiConfig);
   }
 
   if (data.settings) {
-    restoreSettingsStateSnapshot(data.settings, {
+    await restoreSettingsStateSnapshot(data.settings, {
       preserveLocalFields: SENSITIVE_SETTINGS_FIELDS,
     });
   }
@@ -630,7 +630,7 @@ async function getLocalLatestTimestamp(): Promise<Date> {
     localLatestTime = maxTimestamp(localLatestTime, value);
   }
 
-  const settingsSnapshot = getSettingsStateSnapshot();
+  const settingsSnapshot = await getCanonicalSettingsStateSnapshot();
   if (settingsSnapshot?.settingsUpdatedAt) {
     localLatestTime = maxTimestamp(
       localLatestTime,

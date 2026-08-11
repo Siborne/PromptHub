@@ -21,7 +21,7 @@ interface FolderRow {
 }
 
 export class FolderDB {
-  constructor(private db: Database.Database) {}
+  constructor(protected readonly db: Database.Database) {}
 
   /**
    * Create folder
@@ -135,7 +135,9 @@ export class FolderDB {
       updatedAt: new Date(now).toISOString(),
       ...(data.name !== undefined && { name: data.name }),
       ...(data.icon !== undefined && { icon: data.icon }),
-      ...(data.parentId !== undefined && { parentId: data.parentId ?? undefined }),
+      ...(data.parentId !== undefined && {
+        parentId: data.parentId ?? undefined,
+      }),
       ...(data.order !== undefined && { order: data.order }),
       ...(data.isPrivate !== undefined && { isPrivate: data.isPrivate }),
     };
@@ -173,13 +175,15 @@ export class FolderDB {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO folders (
-          id, name, icon, parent_id, sort_order, is_private, created_at, updated_at
+          id, owner_user_id, visibility, name, icon, parent_id, sort_order, is_private, created_at, updated_at
         ) VALUES (
-          @id, @name, @icon, @parent_id, @sort_order, @is_private, @created_at, @updated_at
+          @id, @owner_user_id, @visibility, @name, @icon, @parent_id, @sort_order, @is_private, @created_at, @updated_at
         )`,
       )
       .run({
         "@id": folder.id,
+        "@owner_user_id": folder.ownerUserId ?? null,
+        "@visibility": folder.visibility ?? "private",
         "@name": folder.name,
         "@icon": folder.icon ?? null,
         "@parent_id": folder.parentId ?? null,

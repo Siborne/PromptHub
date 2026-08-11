@@ -16,7 +16,9 @@ describe("SkillDB source id uniqueness", () => {
   let skillDb: SkillDB;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-skill-source-id-"));
+    tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-skill-source-id-"),
+    );
     db = new Database(path.join(tempDir, "prompthub.db"));
     db.exec(SCHEMA);
     skillDb = new SkillDB(db);
@@ -42,10 +44,12 @@ describe("SkillDB source id uniqueness", () => {
     });
 
     expect(stable.id).not.toBe(dev.id);
-    expect(skillDb.getAll().map((skill) => skill.source_id).sort()).toEqual([
-      "source-writer-dev",
-      "source-writer-main",
-    ]);
+    expect(
+      skillDb
+        .getAll()
+        .map((skill) => skill.source_id)
+        .sort(),
+    ).toEqual(["source-writer-dev", "source-writer-main"]);
   });
 
   it("rejects a second skill when the source id matches an existing variant", () => {
@@ -74,6 +78,8 @@ describe("SkillDB source id uniqueness", () => {
       source_branch: "main",
       source_directory: "skills/.curated/writer",
       canonical_skill_path: "skills/.curated/writer/SKILL.md",
+      logical_name: "writer",
+      variant_key: "openai-main",
       protocol_type: "skill",
       is_favorite: false,
     });
@@ -86,7 +92,51 @@ describe("SkillDB source id uniqueness", () => {
         source_branch: "main",
         source_directory: "skills/.curated/writer",
         canonical_skill_path: "skills/.curated/writer/SKILL.md",
+        logical_name: "writer",
+        variant_key: "openai-main",
       }),
     );
+  });
+
+  it("preserves ownership and visibility across create, update, and direct restore", () => {
+    db.prepare(
+      "INSERT INTO users (id, username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("user-1", "owner", "hash", 1, 1);
+    const created = skillDb.create({
+      ownerUserId: "user-1",
+      visibility: "shared",
+      name: "owned-skill",
+      protocol_type: "skill",
+      is_favorite: false,
+    });
+    expect(created).toMatchObject({
+      ownerUserId: "user-1",
+      visibility: "shared",
+    });
+    expect(skillDb.update(created.id, { visibility: "private" })).toMatchObject(
+      {
+        ownerUserId: "user-1",
+        visibility: "private",
+      },
+    );
+
+    skillDb.insertSkillDirect({
+      id: "restored-skill",
+      ownerUserId: "user-1",
+      visibility: "shared",
+      name: "restored",
+      logical_name: "restored-logical",
+      variant_key: "restored-variant",
+      protocol_type: "skill",
+      is_favorite: false,
+      created_at: 1,
+      updated_at: 1,
+    });
+    expect(skillDb.getById("restored-skill")).toMatchObject({
+      ownerUserId: "user-1",
+      visibility: "shared",
+      logical_name: "restored-logical",
+      variant_key: "restored-variant",
+    });
   });
 });

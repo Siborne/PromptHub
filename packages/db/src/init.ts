@@ -4,8 +4,25 @@ import fs from "fs";
 import { SCHEMA_TABLES, SCHEMA_INDEXES } from "./schema";
 import {
   acquireDatabaseClientLease,
+  inspectDatabaseClientLeases,
+  recoverDatabaseClientLock,
   type DatabaseClientLease,
 } from "./database-client-lock";
+import {
+  acquireDatabaseMigrationIntent,
+  DatabaseMigrationBusyError,
+} from "./database-migration-intent";
+import {
+  createDatabaseSafetyPoint,
+  type DatabaseSafetyPoint,
+  type DatabaseSafetyPointReason,
+} from "./database-safety-point";
+import {
+  assertDatabaseCompatibility,
+  CURRENT_LEGACY_SCHEMA_MIGRATION_NAMES,
+  getCurrentDatabaseSchemaInvariants,
+  recordCurrentDatabaseMigration,
+} from "./database-migration-state";
 
 /** Column metadata returned by `PRAGMA table_info(...)`. */
 interface PragmaColumnInfo {
@@ -22,6 +39,7 @@ const DATABASE_BUSY_TIMEOUT_MS = 5_000;
 const QUICK_CHECK_DATABASE_HEADER = /^\*{3} in database .+ \*{3}$/;
 const FREELIST_MISMATCH = /^Freelist: size is \d+ but should be \d+$/;
 const INDEX_ENTRY_MISMATCH = /^wrong # of entries in index (.+)$/;
+const CURRENT_SCHEMA_INVARIANTS = getCurrentDatabaseSchemaInvariants();
 
 function getQuickCheckDiagnostics(probe: Database.Database): string[] {
   const rows = probe.pragma("quick_check");
@@ -70,13 +88,6 @@ function getIndexOnlyMismatchNames(diagnostics: string[]): string[] | null {
   return [...names];
 }
 
-function createIntegrityBackup(dbPath: string): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `${dbPath}.integrity-backup-${timestamp}`;
-  fs.copyFileSync(dbPath, backupPath);
-  return backupPath;
-}
-
 function quoteSqliteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
@@ -91,14 +102,18 @@ function inspectDatabaseIntegrity(dbPath: string): string[] {
   }
 }
 
-function repairFreelistIntegrity(dbPath: string, diagnostics: string[]): void {
+function repairFreelistIntegrity(
+  dbPath: string,
+  diagnostics: string[],
+  ensureSafetyPoint: (reason: DatabaseSafetyPointReason) => DatabaseSafetyPoint,
+): void {
   if (!isFreelistOnlyMismatch(diagnostics)) {
     throw new Error(
       `Database integrity check failed: ${diagnostics.join("; ").slice(0, 500)}`,
     );
   }
 
-  const backupPath = createIntegrityBackup(dbPath);
+  const safetyPoint = ensureSafetyPoint("integrity-repair");
 
   const repairDatabase = new Database(dbPath);
   try {
@@ -115,11 +130,15 @@ function repairFreelistIntegrity(dbPath: string, diagnostics: string[]): void {
     );
   }
   console.log(
-    `[DB] Repaired SQLite freelist metadata; backup=${path.basename(backupPath)}`,
+    `[DB] Repaired SQLite freelist metadata; safetyPoint=${safetyPoint.id}`,
   );
 }
 
-function repairIndexIntegrity(dbPath: string, diagnostics: string[]): void {
+function repairIndexIntegrity(
+  dbPath: string,
+  diagnostics: string[],
+  ensureSafetyPoint: (reason: DatabaseSafetyPointReason) => DatabaseSafetyPoint,
+): void {
   const indexNames = getIndexOnlyMismatchNames(diagnostics);
   if (!indexNames) {
     throw new Error(
@@ -127,7 +146,7 @@ function repairIndexIntegrity(dbPath: string, diagnostics: string[]): void {
     );
   }
 
-  const backupPath = createIntegrityBackup(dbPath);
+  const safetyPoint = ensureSafetyPoint("integrity-repair");
   const repairDatabase = new Database(dbPath);
   try {
     repairDatabase.pragma(`busy_timeout = ${DATABASE_BUSY_TIMEOUT_MS}`);
@@ -162,20 +181,23 @@ function repairIndexIntegrity(dbPath: string, diagnostics: string[]): void {
     );
   }
   console.log(
-    `[DB] Rebuilt SQLite indexes (${indexNames.join(", ")}); backup=${path.basename(backupPath)}`,
+    `[DB] Rebuilt SQLite indexes (${indexNames.join(", ")}); safetyPoint=${safetyPoint.id}`,
   );
 }
 
-function ensureDatabaseIntegrity(dbPath: string): void {
+function ensureDatabaseIntegrity(
+  dbPath: string,
+  ensureSafetyPoint: (reason: DatabaseSafetyPointReason) => DatabaseSafetyPoint,
+): void {
   if (!fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0) return;
   const diagnostics = inspectDatabaseIntegrity(dbPath);
   if (isHealthyQuickCheck(diagnostics)) return;
   if (isFreelistOnlyMismatch(diagnostics)) {
-    repairFreelistIntegrity(dbPath, diagnostics);
+    repairFreelistIntegrity(dbPath, diagnostics, ensureSafetyPoint);
     return;
   }
   if (getIndexOnlyMismatchNames(diagnostics)) {
-    repairIndexIntegrity(dbPath, diagnostics);
+    repairIndexIntegrity(dbPath, diagnostics, ensureSafetyPoint);
     return;
   }
   throw new Error(
@@ -184,31 +206,18 @@ function ensureDatabaseIntegrity(dbPath: string): void {
 }
 
 /**
- * Hook functions that allow the host application to inject environment-specific
- * behaviour into the database initialization process.
- *
- * For example, the `resolveSkillRepoPath` hook lets the Electron desktop app
- * supply its skills directory for the `backfill_local_repo_path_v1` migration
- * without the database package needing to know about Electron APIs.
+ * Hook functions for database lifecycle behavior that remains host-neutral.
  */
 export interface InitDatabaseHooks {
-  /**
-   * Given a skill row (id, name, source_url), resolve the local repository
-   * path by scanning the filesystem. Return `null` if no path can be found.
-   *
-   * If this hook is not provided, the `backfill_local_repo_path_v1` migration
-   * will be skipped (and retried on next startup).
-   */
-  resolveSkillRepoPath?: (skill: {
-    id: string;
-    name: string;
-    source_url: string | null;
-  }) => string | null;
   /**
    * Recover a legacy lock without lease metadata. Only hosts with an external
    * single-instance guarantee may enable this; shared callers default to false.
    */
   recoverUnregisteredLock?: boolean;
+  /** Test/failure-injection hook executed inside the migration transaction. */
+  beforeMigrationCommit?: () => void;
+  /** Test/failure-injection hook executed after commit and before verification. */
+  afterMigrationCommit?: () => void;
 }
 
 let db: Database.Database | null = null;
@@ -226,94 +235,6 @@ function resetFailedDatabaseInitialization(): void {
     dbClientLease = null;
   }
 }
-
-const REQUIRED_MIGRATION_NAMES = [
-  "backfill_local_repo_path_v1",
-  "normalize_skill_version_tracking_v1",
-  "server_auth_tables_v1",
-  "drop_skill_name_unique_v2",
-  "fix_prompt_current_version_v1",
-  "backfill_skill_legacy_fingerprint_algorithm_v1",
-  "agent_provider_profiles_v1",
-  "agent_session_index_v1",
-  "agent_conversation_projection_v1",
-] as const;
-
-const REQUIRED_TABLES = [
-  "schema_migrations",
-  "users",
-  "refresh_tokens",
-  "user_settings",
-  "prompt_relations",
-  "skill_versions",
-  "rules",
-  "rule_versions",
-  "agent_provider_profiles",
-  "agent_provider_model_mappings",
-  "agent_provider_snapshots",
-  "agent_session_sources",
-  "agent_session_index",
-  "agent_conversation_metadata",
-  "agent_conversation_handoffs",
-] as const;
-
-const REQUIRED_COLUMNS: Record<string, string[]> = {
-  prompts: [
-    "images",
-    "is_pinned",
-    "source",
-    "notes",
-    "prompt_type",
-    "system_prompt_en",
-    "user_prompt_en",
-    "videos",
-    "last_ai_response",
-    "owner_user_id",
-    "visibility",
-    "parent_id",
-    "sort_order",
-  ],
-  folders: ["is_private", "updated_at", "owner_user_id", "visibility"],
-  skills: [
-    "source_url",
-    "source_id",
-    "source_label",
-    "source_branch",
-    "source_directory",
-    "canonical_skill_path",
-    "directory_fingerprint",
-    "icon_url",
-    "icon_emoji",
-    "icon_background",
-    "category",
-    "is_builtin",
-    "registry_slug",
-    "content_url",
-    "installed_content_hash",
-    "installed_directory_fingerprint",
-    "fingerprint_algorithm",
-    "source_last_checked_at",
-    "source_last_error",
-    "source_binding_state",
-    "installed_version",
-    "installed_at",
-    "updated_from_store_at",
-    "prerequisites",
-    "compatibility",
-    "original_tags",
-    "current_version",
-    "version_tracking_enabled",
-    "local_repo_path",
-    "safety_level",
-    "safety_score",
-    "safety_report",
-    "safety_scanned_at",
-    "owner_user_id",
-    "visibility",
-  ],
-  users: ["role"],
-  prompt_versions: ["system_prompt_en", "user_prompt_en", "ai_response"],
-};
 
 function tableExists(probe: Database.Database, tableName: string): boolean {
   return Boolean(
@@ -339,13 +260,13 @@ function columnNames(
 }
 
 function databaseAppearsCurrent(probe: Database.Database): boolean {
-  for (const tableName of REQUIRED_TABLES) {
+  for (const tableName of CURRENT_SCHEMA_INVARIANTS.tables) {
     if (!tableExists(probe, tableName)) {
       return false;
     }
   }
 
-  for (const migrationName of REQUIRED_MIGRATION_NAMES) {
+  for (const migrationName of CURRENT_LEGACY_SCHEMA_MIGRATION_NAMES) {
     if (
       !probe.get(
         "SELECT 1 FROM schema_migrations WHERE name = ?",
@@ -356,7 +277,9 @@ function databaseAppearsCurrent(probe: Database.Database): boolean {
     }
   }
 
-  for (const [tableName, requiredColumns] of Object.entries(REQUIRED_COLUMNS)) {
+  for (const [tableName, requiredColumns] of Object.entries(
+    CURRENT_SCHEMA_INVARIANTS.columns,
+  )) {
     const existingColumns = columnNames(probe, tableName);
     if (!existingColumns) {
       return false;
@@ -389,19 +312,74 @@ function shouldBackupDatabaseBeforeMigration(dbPath: string): boolean {
   }
 }
 
+function databaseRequiresExclusiveMaintenance(dbPath: string): boolean {
+  if (!fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0) return true;
+  const diagnostics = inspectDatabaseIntegrity(dbPath);
+  return (
+    !isHealthyQuickCheck(diagnostics) ||
+    shouldBackupDatabaseBeforeMigration(dbPath)
+  );
+}
+
+function assertNoOtherDatabaseClients(dbPath: string): void {
+  const clients = inspectDatabaseClientLeases(dbPath, {
+    excludePids: [process.pid],
+  });
+  if (clients.livePids.length > 0 || clients.unknownEntries.length > 0) {
+    throw new DatabaseMigrationBusyError(
+      "Database maintenance requires all other clients to close",
+    );
+  }
+}
+
+function verifyInitializedDatabase(
+  dbPath: string,
+  database: Database.Database,
+): void {
+  const diagnostics = getQuickCheckDiagnostics(database);
+  if (!isHealthyQuickCheck(diagnostics)) {
+    throw new Error(
+      `Post-migration quick check failed: ${diagnostics.join("; ").slice(0, 500)}`,
+    );
+  }
+  if (!databaseAppearsCurrent(database)) {
+    throw new Error("Post-migration schema invariants are incomplete");
+  }
+  const missingIndex = CURRENT_SCHEMA_INVARIANTS.indexes.find(
+    (indexName) =>
+      !database.get(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+        indexName,
+      ),
+  );
+  if (missingIndex) {
+    throw new Error(`Post-migration index is missing: ${missingIndex}`);
+  }
+  const foreignKeyErrors = database.pragma("foreign_key_check");
+  if (!Array.isArray(foreignKeyErrors) || foreignKeyErrors.length > 0) {
+    throw new Error("Post-migration foreign key verification failed");
+  }
+  assertDatabaseCompatibility(dbPath);
+  const reopenedDiagnostics = inspectDatabaseIntegrity(dbPath);
+  if (!isHealthyQuickCheck(reopenedDiagnostics)) {
+    throw new Error("Fresh-reopen database verification failed");
+  }
+}
+
 /**
  * Create a timestamped backup of the database file before running migrations.
  * Returns the backup path on success, or null if no backup was needed.
  */
-function backupDatabaseBeforeMigration(dbPath: string): string | null {
+function backupDatabaseBeforeMigration(
+  dbPath: string,
+  ensureSafetyPoint: (reason: DatabaseSafetyPointReason) => DatabaseSafetyPoint,
+): DatabaseSafetyPoint | null {
   if (!shouldBackupDatabaseBeforeMigration(dbPath)) {
     return null;
   }
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `${dbPath}.backup-${timestamp}`;
-  fs.copyFileSync(dbPath, backupPath);
-  console.log(`[DB] Pre-migration backup created: ${backupPath}`);
-  return backupPath;
+  const safetyPoint = ensureSafetyPoint("pre-migration");
+  console.log(`[DB] Pre-migration safety point created: ${safetyPoint.id}`);
+  return safetyPoint;
 }
 
 /**
@@ -417,12 +395,33 @@ export function initDatabase(
   if (db) return db;
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  dbClientLease = acquireDatabaseClientLease(dbPath, {
-    recoverUnregisteredLock: hooks?.recoverUnregisteredLock,
-  });
+  const migrationIntent = acquireDatabaseMigrationIntent(dbPath);
+  let safetyPoint: DatabaseSafetyPoint | null = null;
+  const ensureSafetyPoint = (
+    reason: DatabaseSafetyPointReason,
+  ): DatabaseSafetyPoint => {
+    safetyPoint ??= createDatabaseSafetyPoint(dbPath, reason);
+    return safetyPoint;
+  };
   try {
-    ensureDatabaseIntegrity(dbPath);
-    backupDatabaseBeforeMigration(dbPath);
+    if (hooks?.recoverUnregisteredLock) {
+      const recovery = recoverDatabaseClientLock(dbPath);
+      if (recovery.status === "blocked") {
+        throw new DatabaseMigrationBusyError(
+          "Database lock cannot be recovered while another client may own it",
+        );
+      }
+    }
+    assertDatabaseCompatibility(dbPath);
+    const requiresExclusiveMaintenance =
+      databaseRequiresExclusiveMaintenance(dbPath);
+    if (requiresExclusiveMaintenance) assertNoOtherDatabaseClients(dbPath);
+    dbClientLease = acquireDatabaseClientLease(dbPath, {
+      recoverUnregisteredLock: hooks?.recoverUnregisteredLock,
+    });
+    if (requiresExclusiveMaintenance) assertNoOtherDatabaseClients(dbPath);
+    ensureDatabaseIntegrity(dbPath, ensureSafetyPoint);
+    backupDatabaseBeforeMigration(dbPath, ensureSafetyPoint);
     db = new Database(dbPath);
 
     // Serialize short cross-process write overlaps before reporting a conflict.
@@ -430,17 +429,15 @@ export function initDatabase(
 
     // Enable foreign key constraints
     db.pragma("foreign_keys = ON");
-
-    // Create tables only (indexes come after migrations)
-    db.exec(SCHEMA_TABLES);
   } catch (error) {
     resetFailedDatabaseInitialization();
+    migrationIntent.release();
     throw error;
   }
 
   // Run all migrations in a single transaction to avoid lock contention.
   // Each table's column list is fetched exactly once and reused.
-  const runMigrations = db.transaction(() => {
+  const runMigrations = () => {
     // ── schema_migrations table ───────────────────────────────────────────────
     db!.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -664,6 +661,8 @@ export function initDatabase(
       { name: "source_branch", type: "TEXT" },
       { name: "source_directory", type: "TEXT" },
       { name: "canonical_skill_path", type: "TEXT" },
+      { name: "logical_name", type: "TEXT" },
+      { name: "variant_key", type: "TEXT" },
       { name: "directory_fingerprint", type: "TEXT" },
       { name: "icon_url", type: "TEXT" },
       { name: "icon_emoji", type: "TEXT" },
@@ -736,40 +735,8 @@ export function initDatabase(
       console.log("Migrated: Backfilled original_tags for existing skills");
     }
 
-    // ── skills backfill: local_repo_path ──────────────────────────────────────
+    // Host-specific path discovery is a separate Desktop reconciliation stage.
     if (!hasMigration("backfill_local_repo_path_v1")) {
-      if (hooks?.resolveSkillRepoPath) {
-        try {
-          const skillsWithoutPath = db!.all(
-            "SELECT id, name, source_url FROM skills WHERE local_repo_path IS NULL OR local_repo_path = ''",
-          ) as {
-            id: string;
-            name: string;
-            source_url: string | null;
-          }[];
-
-          for (const skill of skillsWithoutPath) {
-            const foundPath = hooks.resolveSkillRepoPath(skill);
-            if (foundPath) {
-              db!.run(
-                "UPDATE skills SET local_repo_path = ? WHERE id = ?",
-                foundPath,
-                skill.id,
-              );
-              console.log(
-                `Migrated: Backfilled local_repo_path for skill "${skill.name}" → ${foundPath}`,
-              );
-            }
-          }
-        } catch (backfillError) {
-          console.error(
-            "Failed to backfill local_repo_path for skills (non-fatal):",
-            backfillError,
-          );
-          // Do NOT mark migration as completed on failure — it will be retried next startup
-          return;
-        }
-      }
       markMigration("backfill_local_repo_path_v1");
     }
 
@@ -799,7 +766,7 @@ export function initDatabase(
           "Failed to normalize skill version tracking state:",
           error,
         );
-        return;
+        throw error;
       }
       markMigration("normalize_skill_version_tracking_v1");
     }
@@ -935,7 +902,7 @@ export function initDatabase(
         db!.run("DROP INDEX IF EXISTS idx_skills_name_lower");
       } catch (error) {
         console.error("Failed to drop idx_skills_name_lower:", error);
-        return;
+        throw error;
       }
       markMigration("drop_skill_name_unique_v2");
     }
@@ -978,18 +945,28 @@ export function initDatabase(
       );
       markMigration("fix_prompt_current_version_v1");
     }
-  });
+  };
 
   try {
-    runMigrations();
-    // Now that all columns exist, create indexes + FTS
-    db.exec(SCHEMA_INDEXES);
+    const migrationStartedAt = Date.now();
+    const initializeSchema = db.transaction(() => {
+      db!.exec(SCHEMA_TABLES);
+      runMigrations();
+      db!.exec(SCHEMA_INDEXES);
+      hooks?.beforeMigrationCommit?.();
+      recordCurrentDatabaseMigration(db!, Date.now() - migrationStartedAt);
+    });
+    initializeSchema();
+    hooks?.afterMigrationCommit?.();
+    verifyInitializedDatabase(dbPath, db);
   } catch (error) {
     console.error("Database migration failed:", error);
     resetFailedDatabaseInitialization();
+    migrationIntent.release();
     throw error;
   }
 
+  migrationIntent.release();
   console.log(`Database initialized at: ${dbPath}`);
   return db;
 }

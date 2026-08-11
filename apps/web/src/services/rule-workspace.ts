@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CreateRuleProjectInput, RuleBackupRecord, RuleVersionSnapshot } from '@prompthub/shared';
-import { getRulesDir } from '../runtime-paths.js';
+import { getRulesDir, getUserRulesDir } from '../runtime-paths.js';
 
 const RULE_VERSION_LIMIT = 20;
 const RULE_META_FILE_NAME = '_rule.json';
@@ -91,7 +91,7 @@ function assertRuleWorkspacePathFits(targetPath: string, label: string): void {
 }
 
 function getUserRulesRoot(userId: string): string {
-  return path.join(getRulesDir(), userId);
+  return getUserRulesDir(userId);
 }
 
 function getUserRulesGlobalRoot(userId: string): string {

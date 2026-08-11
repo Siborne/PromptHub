@@ -2,11 +2,11 @@
 
 ## Phase And Status
 
-- Phase: clarify
-- Status: decision-required; local persistence authority is confirmed, while
-  production implementation remains blocked on the two unresolved compatibility
-  decisions in `Decision Gate`
-- Primary requirements: `FR-DATA-001` through `FR-DATA-011` and
+- Phase: converge
+- Status: local storage authority and compatibility implementation complete;
+  final automated gates, submission, and archive pending
+- Decision date: 2026-08-11
+- Primary requirements: `FR-DATA-001` through `FR-DATA-013` and
   `FR-DBMIG-001` through `FR-DBMIG-009`
 - Related issues: #89, #97, #98
 - Related changes: `legacy-upgrade-recovery-audit`,
@@ -136,15 +136,15 @@ have different ownership and lifecycle rules.
 
 ## Decision Gate
 
-Three material conflicts are recorded rather than silently resolved:
+The three material conflicts are resolved as follows:
 
-1. `[待确认] Layout compatibility`: stable v0.5.5 documentation promises
+1. `[confirmed 2026-08-11] Layout compatibility`: stable v0.5.5 documentation promises
    per-domain dual-read fallbacks until v0.7, while the current version is 0.6.0.
-   The recommended compatible transition is to detect the legacy layout once,
+   The approved compatible transition is to detect the legacy layout once,
    bind the process to that complete layout epoch, and migrate to the canonical
    epoch through staging. It preserves legacy readability without allowing a
    mixed new/legacy process.
-2. `[待确认] Secret safety policy`: same-device safety points should include only
+2. `[confirmed 2026-08-11] Secret safety policy`: same-device safety points include only
    encrypted, device-bound credential blobs; portable export/sync should exclude
    secrets by default and report required reauthentication. Existing plaintext
    API keys in `config/ai-models.json` must move to the secret store or be
@@ -159,10 +159,11 @@ Three material conflicts are recorded rather than silently resolved:
    remote service state remain database-authoritative exceptions rather than
    being forced into user-editable files.
 
-Production implementation must not begin by changing path or secret ownership
-until the two unresolved consequences are accepted. File-first schema and
-fixture design may proceed, but authority remains unchanged until its staged
-rebuild and rollback gates pass.
+The decisions no longer block implementation. Production authority changes only
+through the implemented startup coordinator after canonical schemas, historical
+fixtures, shadow rebuild, renderer migration, restart, failure injection, and
+rollback gates pass; active user data is never rewritten in place without a
+verified stage and bounded safety point.
 
 ## Deferred And Non-Goals
 

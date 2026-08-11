@@ -1,5 +1,13 @@
 import type Database from "../database/sqlite";
 
+let canonicalGithubTokenReader: (() => string | null) | null = null;
+
+export function configureCanonicalGithubTokenReader(
+  reader: (() => string | null) | null,
+): void {
+  canonicalGithubTokenReader = reader;
+}
+
 export function readBooleanSetting(
   db: Database.Database,
   key: string,
@@ -24,6 +32,8 @@ export function getMinimizeOnLaunchSetting(db: Database.Database): boolean {
 
 export function readGithubTokenSetting(db: Database.Database): string | null {
   try {
+    const canonical = canonicalGithubTokenReader?.();
+    if (canonical) return canonical;
     const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(
       "githubToken",
     ) as { value: string } | undefined;

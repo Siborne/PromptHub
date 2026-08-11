@@ -255,6 +255,8 @@ Stable knowledge is updated only after implementation. At convergence it must:
 | `TEST-DATA-011` | Diagnostics against canonical/legacy/migrating/recovery states                                                                    | Reported path and stage match runtime truth                             |
 | `TEST-DATA-012` | Legacy renderer fixtures containing settings, credentials, store sources, device IDs, variable history, and IndexedDB data        | One-time migration, secret isolation, restart, and browser-clear safety |
 | `TEST-DATA-013` | Delete/stage-rebuild the local SQLite catalog from canonical files and compare domain identities, relations, versions, and hashes | Local database is reproducibly rebuildable without data loss            |
+| `TEST-DATA-014` | Copy only `data/` into a fresh root, rebuild the catalog, and compare all user-owned assets, versions, graph records, and media   | Durable asset completeness independent of cache/browser/database state  |
+| `TEST-DATA-015` | Old/current/newer resource schemas, unknown additive fields, future-domain registration, downgrade, and interrupted conversion    | Independent, lossless, fail-closed resource evolution                   |
 
 ## `DES-DATA-011`: File-First Authority And Renderer Demotion
 
@@ -297,6 +299,139 @@ SQLite tables are classified per table before cutover. Content/catalog tables
 must be reproducible from canonical files; migration journals, leases, and other
 operational tables remain database-owned; self-hosted authentication and remote
 service tables remain explicit server-authoritative exceptions.
+
+## `DES-DATA-012`: Final Local Durable Asset Topology
+
+The approved target keeps the existing canonical database path to avoid a
+cosmetic migration, but makes every PromptHub-owned user asset recoverable from
+versioned files below `data/`:
+
+```text
+<PromptHubRoot>/
+  data/
+    .layout-state.json
+    prompthub.db
+    prompts/<resource-id>/
+    skills/<resource-id>/
+    rules/<resource-id>/
+    mcp/<resource-id>/
+    plugins/<resource-id>/
+    agents/<resource-id>/
+    generations/<resource-id>/
+    conversations/<resource-id>/       # imported or explicitly managed only
+    folders/<resource-id>.json
+    tags/<resource-id>.json
+    relations/<resource-id>.json
+    output-formats/<resource-id>.json
+    assets/objects/sha256/<prefix>/<content-hash>
+    operations/journals/
+    operations/migrations/
+  config/
+    app.json
+    providers.json
+    sync-providers.json
+    marketplace-sources.json
+    devices/
+  secrets/
+    vault.enc                           # encrypted fallback; OS facility first
+  backups/
+    safety-points/
+    recovery/
+  cache/
+  logs/
+```
+
+`data/` is the durable asset boundary, not a dump of every application file.
+Copying its canonical records to a valid fresh root is sufficient to rebuild
+the user library. Non-secret device/application configuration lives in
+`config/`; credentials live in an OS facility or encrypted vault; managed
+recovery artifacts live under `backups/`; caches and logs are disposable and
+bounded. Portable exports are explicit user artifacts and are not accumulated
+inside the root by default.
+
+The on-disk paths above are target contracts. Current `images`, `videos`,
+`attachments`, legacy workspaces, and database-only domains remain readable
+through the bound legacy epoch until their staged converters and comparison
+fixtures pass. No implementation may create empty target directories and call
+the migration complete.
+
+## `DES-DATA-013`: Resource Bundle And Future Feature Evolution
+
+Each directory-backed domain uses a self-describing bundle. The shared manifest
+contains stable identity, resource type, schema version, user revision,
+timestamps, content hashes, provenance, referenced object hashes, and declared
+payload files. Domain-native payloads remain domain-owned: for example Prompt
+structured content, `SKILL.md` plus Skill files, Rule Markdown, MCP JSON, Plugin
+packages, and generation manifests/results.
+
+The first shared contract is `manifest.json` with
+`kind: "prompthub-resource-bundle"` and `manifestVersion: 1`. It declares one
+normalized relative path, byte size, SHA-256 digest, and optional domain role
+for every payload file. The manifest also carries a deterministic aggregate
+`contentHash`, while content-addressed objects are referenced by lower-case
+SHA-256 values and remain outside the resource directory. Readers reject
+undeclared files, duplicate or non-normalized paths, symlinks, control
+characters, size/hash mismatches, and configured entry/byte/manifest limits.
+Unknown additive manifest fields are retained in the parsed result so a
+supported reader does not erase newer optional metadata. This contract is
+introduced as validation/materialization infrastructure only; the active
+SQLite authority does not change until domain schemas and shadow comparison
+complete.
+
+Prompt schema v1 uses `prompt.json` plus ordered
+`versions/<six-digit-version>.json` payloads inside
+`data/prompts/<resource-id>/`. `prompt.json` retains every current Prompt field,
+stable tag references derived from normalized tag labels, and explicit legacy
+image/video references until the content-addressed object migration publishes
+object hashes. Each version payload retains the complete PromptVersion row and
+must match the owning Prompt identity and numeric version in its filename.
+Folders, tag definitions, graph relations, and output-format items remain
+independent top-level records so one graph edge or taxonomy edit does not
+rewrite unrelated Prompt bundles. A Prompt bundle is invalid when identities,
+version numbers, current-version bounds, tag references, or media references do
+not validate; malformed bundles never reach catalog projection.
+
+Generation schema v1 keeps the existing `prompthub-generation-batch` document
+as the single `batch.json` payload in `data/generations/<batch-id>/`. Every
+succeeded slot identifies one immutable output by lower-case SHA-256 and byte
+size. Bundle `objectHashes` must equal the deduplicated output hash set, and
+each object must verify under
+`data/assets/objects/sha256/<prefix>/<hash>`. Other slot states cannot carry an
+output. Slot indexes, target count, aggregate counts, bundle identity, payload
+role, object size, and object digest must agree before catalog projection.
+
+Skill schema v1 uses `skill.json`, ordered
+`versions/<six-digit-version>.json`, and the complete managed package tree below
+`files/` in `data/skills/<skill-id>/`. `skill.json` retains portable Skill
+metadata but never persists `local_repo_path`; reload derives that machine-local
+path from the verified bundle. Non-HTTP source/content/icon paths are removed
+from the portable record. Version identity, owner, number, file snapshot paths,
+current-version bounds, package paths, payload roles, and bundle identity must
+validate. VCS and package-lifecycle internals are excluded from package payloads.
+
+Version axes are independent:
+
+| Axis                        | Changes when                                     |
+| --------------------------- | ------------------------------------------------ |
+| `layoutEpoch`               | root-level physical topology changes             |
+| domain `schemaVersion`      | one resource family changes shape                |
+| resource `revision`         | a user-visible edit creates domain history       |
+| local catalog version       | rebuildable SQLite schema/index behavior changes |
+| portable envelope version   | export/backup representation changes             |
+| sync/API protocol version   | remote capability or contract changes            |
+| encryption envelope version | key/algorithm metadata changes                   |
+
+Adding a future durable feature normally registers `data/<domain>/`, a bundle
+schema, converter registry, catalog projector, portable policy, retention, and
+tests. It does not bump `layoutEpoch` or move existing domains. Additive readers
+preserve unknown fields; ordered immutable converters upgrade supported older
+schemas; unknown newer schemas are never rewritten and open read-only or fail
+with an upgrade requirement.
+
+Large immutable bytes use content-addressed objects and logical references so
+versions, exports, backups, and SaaS imports do not duplicate unchanged media.
+Reference deletion is transactional at the logical layer and physical cleanup
+uses a bounded, resumable reachability job after retention.
 
 ## Current Mechanism Audit
 
@@ -493,12 +628,12 @@ existing freelist and verified-index cases.
   separate owners: `packages/db` never moves roots, and Desktop never implements
   private schema migration logic.
 - The stable v0.5.5 per-getter fallback and the proposed process-wide layout
-  epoch materially differ. `COMPAT-DATA-001` remains `[待确认]`; production path
-  changes are blocked until the compatibility consequence is accepted.
+  epoch materially differ. `COMPAT-DATA-001` was confirmed on 2026-08-11;
+  legacy readability remains, but a process may bind only one complete epoch.
 - Stable docs say configuration is safely backupable, while current
-  `config/ai-models.json` can contain plaintext keys. `COMPAT-DATA-002` remains
-  `[待确认]`; portable config inclusion is blocked until secret ownership is
-  corrected.
+  `config/ai-models.json` can contain plaintext keys. `COMPAT-DATA-002` was
+  confirmed on 2026-08-11; portable config inclusion remains blocked until
+  secret extraction, redaction, and restart verification are implemented.
 - Stable docs and current code treat SQLite as authoritative for local relational
   data, while the requested hierarchy makes files authoritative and renderer
   storage disposable. `COMPAT-DATA-003` was confirmed on 2026-08-10. Production
@@ -535,6 +670,8 @@ existing freelist and verified-index cases.
 | `FR-DATA-009` | `DES-DATA-003`                 | `TEST-DATA-010`                  | `T-DATA-009`                             |
 | `FR-DATA-010` | `DES-DATA-009`                 | `TEST-DATA-011`                  | `T-DATA-011`                             |
 | `FR-DATA-011` | `DES-DATA-011`                 | `TEST-DATA-012`, `TEST-DATA-013` | `T-DATA-015`, `T-DATA-016`, `T-DATA-017` |
+| `FR-DATA-012` | `DES-DATA-012`                 | `TEST-DATA-013`, `TEST-DATA-014` | `T-DATA-015`, `T-DATA-017`               |
+| `FR-DATA-013` | `DES-DATA-013`                 | `TEST-DATA-015`                  | `T-DATA-018`                             |
 
 ## Database Migration Traceability
 

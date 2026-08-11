@@ -83,7 +83,27 @@ export function loadManualRecoveryPaths(): string[] {
   }
 }
 
+export async function loadCanonicalManualRecoveryPaths(): Promise<string[]> {
+  const getCanonical = window.api?.settings?.rendererPersistence?.get;
+  if (!getCanonical) return loadManualRecoveryPaths();
+  const state = await getCanonical();
+  return Array.isArray(state?.recoveryPaths)
+    ? state.recoveryPaths.filter(
+        (value: unknown): value is string => typeof value === "string",
+      )
+    : [];
+}
+
 export function persistManualRecoveryPaths(paths: string[]): void {
+  const replaceCanonical =
+    window.api?.settings?.rendererPersistence?.replaceRecoveryPaths;
+  if (replaceCanonical) {
+    localStorage.removeItem(MANUAL_RECOVERY_PATHS_STORAGE_KEY);
+    void replaceCanonical(paths).catch((error: unknown) => {
+      console.warn("Failed to persist recovery path registry:", error);
+    });
+    return;
+  }
   try {
     localStorage.setItem(
       MANUAL_RECOVERY_PATHS_STORAGE_KEY,

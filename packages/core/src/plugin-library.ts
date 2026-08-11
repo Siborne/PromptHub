@@ -6,6 +6,7 @@ export {
   getPluginLibraryFilePath,
   getPluginMarketCacheFilePath,
   getPluginVersionFilePath,
+  normalizeSlug,
 } from "./plugin-library/shared";
 export type { CorePluginLibraryServiceOptions } from "./plugin-library/shared";
 export {

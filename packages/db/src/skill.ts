@@ -11,6 +11,8 @@ import type {
 
 interface SkillRow {
   id: string;
+  owner_user_id: string | null;
+  visibility: Skill["visibility"];
   name: string;
   description: string | null;
   content: string | null;
@@ -27,6 +29,8 @@ interface SkillRow {
   source_branch: string | null;
   source_directory: string | null;
   canonical_skill_path: string | null;
+  logical_name: string | null;
+  variant_key: string | null;
   local_repo_path: string | null;
   directory_fingerprint: string | null;
   installed_content_hash: string | null;
@@ -78,7 +82,7 @@ function parseJsonArray<T>(value: string | null | undefined): T[] | undefined {
 }
 
 export class SkillDB {
-  constructor(private db: Database.Database) {}
+  constructor(protected db: Database.Database) {}
 
   /**
    * Get Skill by name (case-insensitive)
@@ -150,17 +154,17 @@ export class SkillDB {
 
     const stmt = this.db.prepare(`
       INSERT INTO skills (
-        id, name, description, content, mcp_config,
+        id, owner_user_id, visibility, name, description, content, mcp_config,
         protocol_type, version, author, tags, original_tags, is_favorite,
-        source_url, source_id, source_label, source_branch, source_directory, canonical_skill_path, local_repo_path, directory_fingerprint, icon_url, icon_emoji, icon_background, category, is_builtin,
+        source_url, source_id, source_label, source_branch, source_directory, canonical_skill_path, logical_name, variant_key, local_repo_path, directory_fingerprint, icon_url, icon_emoji, icon_background, category, is_builtin,
         registry_slug, content_url, installed_content_hash, installed_directory_fingerprint, fingerprint_algorithm, source_last_checked_at, source_last_error, source_binding_state, installed_version, installed_at,
         updated_from_store_at, prerequisites, compatibility, current_version,
         version_tracking_enabled, safety_level, safety_score, safety_report, safety_scanned_at,
         created_at, updated_at
       ) VALUES (
-        @id, @name, @description, @content, @mcp_config,
+        @id, @owner_user_id, @visibility, @name, @description, @content, @mcp_config,
         @protocol_type, @version, @author, @tags, @original_tags, @is_favorite,
-        @source_url, @source_id, @source_label, @source_branch, @source_directory, @canonical_skill_path, @local_repo_path, @directory_fingerprint, @icon_url, @icon_emoji, @icon_background, @category, @is_builtin,
+        @source_url, @source_id, @source_label, @source_branch, @source_directory, @canonical_skill_path, @logical_name, @variant_key, @local_repo_path, @directory_fingerprint, @icon_url, @icon_emoji, @icon_background, @category, @is_builtin,
         @registry_slug, @content_url, @installed_content_hash, @installed_directory_fingerprint, @fingerprint_algorithm, @source_last_checked_at, @source_last_error, @source_binding_state, @installed_version, @installed_at,
         @updated_from_store_at, @prerequisites, @compatibility, @current_version,
         @version_tracking_enabled, @safety_level, @safety_score, @safety_report, @safety_scanned_at,
@@ -172,6 +176,8 @@ export class SkillDB {
 
     stmt.run({
       "@id": id,
+      "@owner_user_id": data.ownerUserId ?? null,
+      "@visibility": data.visibility ?? "private",
       "@name": normalizedName,
       "@description": data.description || null,
       "@content": data.content || data.instructions || null,
@@ -190,6 +196,8 @@ export class SkillDB {
       "@source_branch": data.source_branch || null,
       "@source_directory": data.source_directory || null,
       "@canonical_skill_path": data.canonical_skill_path || null,
+      "@logical_name": data.logical_name || null,
+      "@variant_key": data.variant_key || null,
       "@local_repo_path": data.local_repo_path || null,
       "@directory_fingerprint": data.directory_fingerprint || null,
       "@icon_url": data.icon_url || null,
@@ -288,6 +296,15 @@ export class SkillDB {
     const updates: string[] = ["updated_at = ?"];
     const values: Array<string | number | null> = [now];
 
+    if (data.ownerUserId !== undefined) {
+      updates.push("owner_user_id = ?");
+      values.push(data.ownerUserId);
+    }
+    if (data.visibility !== undefined) {
+      updates.push("visibility = ?");
+      values.push(data.visibility);
+    }
+
     if (data.name !== undefined) {
       if (normalizedName === undefined) {
         throw new Error("Skill name cannot be empty");
@@ -355,6 +372,14 @@ export class SkillDB {
     if (data.canonical_skill_path !== undefined) {
       updates.push("canonical_skill_path = ?");
       values.push(data.canonical_skill_path);
+    }
+    if (data.logical_name !== undefined) {
+      updates.push("logical_name = ?");
+      values.push(data.logical_name);
+    }
+    if (data.variant_key !== undefined) {
+      updates.push("variant_key = ?");
+      values.push(data.variant_key);
     }
     if (data.local_repo_path !== undefined) {
       updates.push("local_repo_path = ?");
@@ -473,6 +498,10 @@ export class SkillDB {
     const updatedSkill: Skill = {
       ...existingSkill,
       updated_at: now,
+      ...(data.ownerUserId !== undefined && {
+        ownerUserId: data.ownerUserId,
+      }),
+      ...(data.visibility !== undefined && { visibility: data.visibility }),
       ...(data.name !== undefined && { name: data.name.trim() }),
       ...(data.description !== undefined && { description: data.description }),
       ...((data.content !== undefined || data.instructions !== undefined) && {
@@ -501,6 +530,10 @@ export class SkillDB {
       ...(data.canonical_skill_path !== undefined && {
         canonical_skill_path: data.canonical_skill_path,
       }),
+      ...(data.logical_name !== undefined && {
+        logical_name: data.logical_name,
+      }),
+      ...(data.variant_key !== undefined && { variant_key: data.variant_key }),
       ...(data.local_repo_path !== undefined && {
         local_repo_path: data.local_repo_path,
       }),
@@ -812,17 +845,17 @@ export class SkillDB {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO skills (
-          id, name, description, content, mcp_config,
+          id, owner_user_id, visibility, name, description, content, mcp_config,
           protocol_type, version, author, tags, original_tags, is_favorite,
-          source_url, source_id, source_label, source_branch, source_directory, canonical_skill_path, local_repo_path, directory_fingerprint, icon_url, icon_emoji, icon_background, category, is_builtin,
+          source_url, source_id, source_label, source_branch, source_directory, canonical_skill_path, logical_name, variant_key, local_repo_path, directory_fingerprint, icon_url, icon_emoji, icon_background, category, is_builtin,
           registry_slug, content_url, installed_content_hash, installed_directory_fingerprint, fingerprint_algorithm, source_last_checked_at, source_last_error, source_binding_state, installed_version, installed_at,
           updated_from_store_at, prerequisites, compatibility, current_version,
           version_tracking_enabled, safety_level, safety_score, safety_report, safety_scanned_at,
           created_at, updated_at
         ) VALUES (
-          @id, @name, @description, @content, @mcp_config,
+          @id, @owner_user_id, @visibility, @name, @description, @content, @mcp_config,
           @protocol_type, @version, @author, @tags, @original_tags, @is_favorite,
-          @source_url, @source_id, @source_label, @source_branch, @source_directory, @canonical_skill_path, @local_repo_path, @directory_fingerprint, @icon_url, @icon_emoji, @icon_background, @category, @is_builtin,
+          @source_url, @source_id, @source_label, @source_branch, @source_directory, @canonical_skill_path, @logical_name, @variant_key, @local_repo_path, @directory_fingerprint, @icon_url, @icon_emoji, @icon_background, @category, @is_builtin,
           @registry_slug, @content_url, @installed_content_hash, @installed_directory_fingerprint, @fingerprint_algorithm, @source_last_checked_at, @source_last_error, @source_binding_state, @installed_version, @installed_at,
           @updated_from_store_at, @prerequisites, @compatibility, @current_version,
           @version_tracking_enabled, @safety_level, @safety_score, @safety_report, @safety_scanned_at,
@@ -831,6 +864,8 @@ export class SkillDB {
       )
       .run({
         "@id": skill.id,
+        "@owner_user_id": skill.ownerUserId ?? null,
+        "@visibility": skill.visibility ?? "private",
         "@name": skill.name,
         "@description": skill.description ?? null,
         "@content": skill.content ?? skill.instructions ?? null,
@@ -849,6 +884,8 @@ export class SkillDB {
         "@source_branch": skill.source_branch ?? null,
         "@source_directory": skill.source_directory ?? null,
         "@canonical_skill_path": skill.canonical_skill_path ?? null,
+        "@logical_name": skill.logical_name ?? null,
+        "@variant_key": skill.variant_key ?? null,
         "@local_repo_path": skill.local_repo_path ?? null,
         "@directory_fingerprint": skill.directory_fingerprint ?? null,
         "@icon_url": skill.icon_url ?? null,
@@ -934,6 +971,8 @@ export class SkillDB {
     }
     return {
       id: row.id,
+      ownerUserId: row.owner_user_id ?? undefined,
+      visibility: row.visibility ?? "private",
       name: row.name,
       ...(row.description !== null && { description: row.description }),
       ...(row.content !== null && { content: row.content }),
@@ -954,6 +993,8 @@ export class SkillDB {
       source_branch: row.source_branch || undefined,
       source_directory: row.source_directory || undefined,
       canonical_skill_path: row.canonical_skill_path || undefined,
+      logical_name: row.logical_name || undefined,
+      variant_key: row.variant_key || undefined,
       local_repo_path: row.local_repo_path || undefined,
       directory_fingerprint: row.directory_fingerprint || undefined,
       icon_url: row.icon_url || undefined,

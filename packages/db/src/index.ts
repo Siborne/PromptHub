@@ -15,17 +15,56 @@ export {
 } from "./init";
 export type { InitDatabaseHooks } from "./init";
 export {
+  createDatabaseSafetyPoint,
+  createConsistentDatabaseImage,
+  getDatabaseSafetyPointRoot,
+  listDatabaseSafetyPoints,
+  pruneDatabaseSafetyPoints,
+} from "./database-safety-point";
+export type {
+  DatabaseSafetyPoint,
+  DatabaseSafetyPointFile,
+  DatabaseSafetyPointManifest,
+  DatabaseSafetyPointReason,
+  DatabaseSafetyPointRetention,
+} from "./database-safety-point";
+export {
+  CURRENT_DATABASE_SCHEMA_VERSION,
+  CURRENT_LEGACY_SCHEMA_MIGRATION_NAMES,
+  DATABASE_MIGRATION_MANIFEST,
+  getCurrentDatabaseSchemaInvariants,
+} from "./database-migration-state";
+export {
+  recordCurrentDatabaseMigration,
+  recordCurrentLegacySchemaMigrations,
+} from "./database-migration-state";
+export type {
+  DatabaseLegacyMigrationManifestEntry,
+  DatabaseMigrationManifestEntry,
+  DatabaseSchemaInvariants,
+} from "./database-migration-state";
+export {
   acquireDatabaseClientLease,
+  inspectDatabaseClientLeases,
   inspectDatabaseClientLock,
   recoverDatabaseClientLock,
 } from "./database-client-lock";
 export type {
   DatabaseClientLease,
+  DatabaseClientLeaseInspection,
   DatabaseClientLeaseOptions,
   DatabaseLockInspection,
   DatabaseLockRecoveryReason,
   DatabaseLockRecoveryResult,
 } from "./database-client-lock";
+export {
+  acquireDatabaseMigrationIntent,
+  DatabaseMigrationBusyError,
+} from "./database-migration-intent";
+export type {
+  DatabaseMigrationIntent,
+  DatabaseMigrationIntentOptions,
+} from "./database-migration-intent";
 
 // DB classes
 export { PromptDB } from "./prompt";
@@ -35,5 +74,9 @@ export { FolderDB } from "./folder";
 export { SkillDB } from "./skill";
 export { RuleDB } from "./rule";
 export { AgentProviderProfileDB } from "./agent-provider-profile";
+export {
+  CanonicalResourceDB,
+  type CanonicalResourceRecord,
+} from "./canonical-resource";
 export { AgentSessionIndexDB } from "./agent-session-index";
 export { AgentConversationDB } from "./agent-conversation";

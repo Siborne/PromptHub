@@ -10,7 +10,7 @@ import type {
   Skill,
 } from "@prompthub/shared/types";
 import { isRuleFileId } from "@prompthub/shared/types";
-import { coreRulesWorkspaceService } from "../rules-workspace";
+import { coreRulesWorkspaceService } from "../rules-workspace-default";
 import {
   CliError,
   EXIT_CODES,

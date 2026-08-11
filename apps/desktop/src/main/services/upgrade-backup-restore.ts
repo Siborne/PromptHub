@@ -1,37 +1,21 @@
 import fs from "fs";
 import path from "path";
 
+import {
+  copyStorageInventory,
+  createStorageInventory,
+  runJournaledStorageRestore,
+  writeRuntimeLayoutState,
+} from "@prompthub/core";
 import type { UpgradeBackupRestoreResult } from "@prompthub/shared/types";
+import Database from "../database/sqlite";
 
 import {
-  createUpgradeDataSnapshot,
   getUpgradeBackup,
-  getUpgradeBackupRoot,
   pruneUpgradeBackups,
-  RUNTIME_CACHE_ENTRIES,
 } from "./upgrade-backup";
+import { migrateLegacyDataLayout } from "./data-layout-migration";
 import { writeRestoreMarker } from "./prompt-workspace";
-
-function unique<T>(values: T[]): T[] {
-  return [...new Set(values)];
-}
-
-function getRestoreCandidates(currentDataPath: string, backupPath: string): string[] {
-  const snapshotEntries = fs.readdirSync(backupPath, { withFileTypes: true });
-  const currentEntries = fs.existsSync(currentDataPath)
-    ? fs.readdirSync(currentDataPath, { withFileTypes: true })
-    : [];
-
-  return unique([
-    ...snapshotEntries.map((entry) => entry.name),
-    ...currentEntries.map((entry) => entry.name),
-  ]).filter(
-    (name) =>
-      name !== "backup-manifest.json" &&
-      name !== path.basename(getUpgradeBackupRoot(currentDataPath)) &&
-      !RUNTIME_CACHE_ENTRIES.has(name),
-  );
-}
 
 function ensureLegacyDbCompatibility(currentDataPath: string): void {
   const legacyDbPath = path.join(currentDataPath, "prompthub.db");
@@ -59,55 +43,60 @@ function readLinkSafeStats(targetPath: string): fs.Stats | null {
   }
 }
 
-function assertRestoreSourceIsNotSymlink(sourcePath: string): fs.Stats | null {
-  const stats = readLinkSafeStats(sourcePath);
-  if (stats?.isSymbolicLink()) {
-    throw new Error(`Cannot restore upgrade backup from symbolic link: ${sourcePath}`);
+function verifyRestoreDatabase(rootPath: string): void {
+  const databasePath = path.join(rootPath, "data", "prompthub.db");
+  const stats = readLinkSafeStats(databasePath);
+  if (!stats?.isFile() || stats.isSymbolicLink()) {
+    throw new Error(`Restore candidate has no regular database: ${databasePath}`);
   }
-  return stats;
-}
-
-function shouldCopyRestorePath(sourcePath: string): boolean {
-  assertRestoreSourceIsNotSymlink(sourcePath);
-  return true;
-}
-
-function removePathIfExists(targetPath: string): void {
-  if (!readLinkSafeStats(targetPath)) {
-    return;
+  const database = new Database(databasePath, { readOnly: true });
+  try {
+    const result = database.pragma("quick_check") as Array<{
+      quick_check?: unknown;
+    }>;
+    if (result.length !== 1 || result[0]?.quick_check !== "ok") {
+      throw new Error(`Restore candidate database failed quick_check: ${databasePath}`);
+    }
+  } finally {
+    database.close();
   }
-  fs.rmSync(targetPath, { recursive: true, force: true });
 }
 
-function restoreEntry(sourcePath: string, targetPath: string): void {
-  if (!assertRestoreSourceIsNotSymlink(sourcePath)) {
-    removePathIfExists(targetPath);
-    return;
-  }
-
-  fs.cpSync(sourcePath, targetPath, {
-    recursive: true,
-    preserveTimestamps: true,
-    force: false,
-    errorOnExist: true,
-    filter: shouldCopyRestorePath,
-  });
-}
-
-function restoreSnapshotIntoCurrentData(
-  currentDataPath: string,
+async function prepareUpgradeRestoreCandidate(
+  activeRoot: string,
   backupPath: string,
-): void {
-  const restoreCandidates = getRestoreCandidates(currentDataPath, backupPath);
-
-  for (const entryName of restoreCandidates) {
-    const sourcePath = path.join(backupPath, entryName);
-    const targetPath = path.join(currentDataPath, entryName);
-    removePathIfExists(targetPath);
-    restoreEntry(sourcePath, targetPath);
+  stageRoot: string,
+  fromVersion: string,
+): Promise<void> {
+  const canonicalDatabase = path.join(backupPath, "data", "prompthub.db");
+  const detachedLayoutEpoch = fs.existsSync(canonicalDatabase) ? 1 : 0;
+  const inventory = createStorageInventory(backupPath, {
+    detachedLayoutEpoch,
+    includeSecrets: true,
+  });
+  copyStorageInventory(inventory, stageRoot);
+  if (detachedLayoutEpoch === 0) {
+    const migration = await migrateLegacyDataLayout(stageRoot, fromVersion);
+    if (migration.status === "partial-failure") {
+      throw new Error(
+        `Legacy restore candidate migration failed: ${migration.failedEntries.join(", ")}`,
+      );
+    }
   }
-
-  ensureLegacyDbCompatibility(currentDataPath);
+  ensureLegacyDbCompatibility(stageRoot);
+  for (const excludedEntry of ["backups", "logs", "cache"]) {
+    fs.rmSync(path.join(stageRoot, excludedEntry), {
+      recursive: true,
+      force: true,
+    });
+  }
+  fs.rmSync(path.join(stageRoot, ".data-layout-v0.5.5.json"), {
+    force: true,
+  });
+  writeRuntimeLayoutState(stageRoot, {
+    identityRoot: activeRoot,
+    lastVerifiedOperation: `restore-upgrade-${path.basename(backupPath)}`,
+  });
 }
 
 export async function restoreFromUpgradeBackupAsync(
@@ -140,44 +129,36 @@ export async function restoreFromUpgradeBackupAsync(
   }
 
   try {
-    const insuranceBackup = await createUpgradeDataSnapshot(currentDataPath, {
-      fromVersion: "pre-restore-current-state",
-      toVersion: backupEntry.manifest.fromVersion,
-      skipRetentionPrune: true,
+    const restore = await runJournaledStorageRestore({
+      activeRoot: currentDataPath,
+      entryNames: [
+        "data",
+        "config",
+        "secrets",
+        "prompthub.db",
+        "workspace",
+        "skills",
+        "images",
+        "videos",
+        "shortcuts.json",
+        "shortcut-mode.json",
+      ],
+      prepareCandidate: (stageRoot) =>
+        prepareUpgradeRestoreCandidate(
+          currentDataPath,
+          backupEntry.backupPath,
+          stageRoot,
+          backupEntry.manifest.fromVersion,
+        ),
+      verifyCandidate: verifyRestoreDatabase,
+      verifyActive: verifyRestoreDatabase,
     });
-
-    try {
-      restoreSnapshotIntoCurrentData(currentDataPath, backupEntry.backupPath);
-    } catch (restoreError) {
-      try {
-        restoreSnapshotIntoCurrentData(currentDataPath, insuranceBackup.backupPath);
-      } catch (rollbackError) {
-        const restoreMessage =
-          restoreError instanceof Error ? restoreError.message : String(restoreError);
-        const rollbackMessage =
-          rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-        return {
-          success: false,
-          needsRestart: false,
-          error:
-            `Restore failed and automatic rollback also failed. ` +
-            `restore=${restoreMessage}; rollback=${rollbackMessage}`,
-        };
-      }
-
-      return {
-        success: false,
-        needsRestart: false,
-        error:
-          restoreError instanceof Error ? restoreError.message : String(restoreError),
-      };
-    }
 
     writeRestoreMarker(currentDataPath);
 
     try {
       await pruneUpgradeBackups(currentDataPath, {
-        protectedBackupIds: [backupId, insuranceBackup.backupId],
+        protectedBackupIds: [backupId],
       });
     } catch (pruneError) {
       console.warn("[upgrade-backup] Failed to prune snapshots after restore:", pruneError);
@@ -187,7 +168,7 @@ export async function restoreFromUpgradeBackupAsync(
       success: true,
       needsRestart: true,
       restoredBackupId: backupId,
-      currentStateBackupPath: insuranceBackup.backupPath,
+      currentStateBackupPath: restore.recoveryArtifactPath,
     };
   } catch (error) {
     return {

@@ -269,12 +269,24 @@ contextBridge.exposeInMainWorld("electron", {
       videos?: boolean;
       skills: boolean;
       rules?: boolean;
+      mcp?: boolean;
+      plugins?: boolean;
+      agents?: boolean;
       config: boolean;
       aiConfigJson?: string;
       settingsJson?: string;
       exportJson?: string;
     };
   }) => ipcRenderer.invoke("data:exportZip", params),
+  previewPortableBackup: (archivePath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DATA_PORTABLE_PREVIEW, archivePath),
+  restorePortableBackup: (archivePath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DATA_PORTABLE_RESTORE, archivePath),
+  restorePortableLogicalBackup: (logicalText: string) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.DATA_PORTABLE_LOGICAL_RESTORE,
+      logicalText,
+    ),
   // Updater
   // 更新器
   updater: {
@@ -573,12 +585,36 @@ declare global {
           videos?: boolean;
           skills: boolean;
           rules?: boolean;
+          mcp?: boolean;
+          plugins?: boolean;
+          agents?: boolean;
           config: boolean;
           aiConfigJson?: string;
           settingsJson?: string;
           exportJson?: string;
         };
       }) => Promise<{ canceled: boolean; filePath?: string; error?: string }>;
+      previewPortableBackup?: (archivePath: string) => Promise<{
+        success: boolean;
+        text?: string;
+        consistencyId?: string;
+        scopes?: string[];
+        error?: string;
+      }>;
+      restorePortableBackup?: (archivePath: string) => Promise<{
+        success: boolean;
+        needsRestart: boolean;
+        consistencyId?: string;
+        recoveryArtifactPath?: string;
+        error?: string;
+      }>;
+      restorePortableLogicalBackup?: (logicalText: string) => Promise<{
+        success: boolean;
+        needsRestart: boolean;
+        consistencyId?: string;
+        recoveryArtifactPath?: string;
+        error?: string;
+      }>;
       updater?: {
         check: (
           options?:

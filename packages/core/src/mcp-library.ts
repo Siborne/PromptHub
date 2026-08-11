@@ -60,7 +60,18 @@ import {
   sanitizeMcpServerName,
 } from "@prompthub/shared/utils/mcp-config";
 
-import { getConfigDir, getDataDir } from "./runtime-paths";
+import {
+  getConfigDir,
+  getDataDir,
+  getRuntimeStorageContext,
+  getUserDataPath,
+} from "./runtime-paths";
+import {
+  readCanonicalMcpLibrary,
+  writeCanonicalMcpLibrary,
+  type CanonicalMcpLibraryOptions,
+} from "./canonical-mcp-library";
+import { assertStorageMaintenanceAvailable } from "./storage-maintenance-intent";
 import { inferMcpSource } from "./mcp-source";
 import { buildMcpEnvImportResult } from "./mcp-env-import";
 import {
@@ -127,6 +138,7 @@ function defaultLibrary(): McpLibraryFile {
 }
 
 function writeJsonFileAtomic(filePath: string, data: unknown): void {
+  assertStorageMaintenanceAvailable(getUserDataPath());
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
   fs.writeFileSync(tempPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
@@ -1039,7 +1051,21 @@ function readTargetServers(
 }
 
 export class CoreMcpLibraryService {
+  constructor(
+    private readonly canonicalOptions: CanonicalMcpLibraryOptions = {},
+  ) {}
+
   read(): McpLibraryFile {
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      try {
+        return normalizeLibrary(readCanonicalMcpLibrary(this.canonicalOptions));
+      } catch (error) {
+        throw new CoreMcpError(
+          "INVALID_LIBRARY",
+          error instanceof Error ? error.message : "MCP 配置库无法解析",
+        );
+      }
+    }
     const primaryPath = getMcpLibraryFilePath();
     try {
       if (fs.existsSync(primaryPath)) {
@@ -1067,7 +1093,11 @@ export class CoreMcpLibraryService {
       ...library,
       updatedAt: nowIso(),
     });
-    writeJsonFileAtomic(getMcpLibraryFilePath(), next);
+    if (getRuntimeStorageContext().localAuthority === "canonical-files") {
+      writeCanonicalMcpLibrary(next, this.canonicalOptions);
+    } else {
+      writeJsonFileAtomic(getMcpLibraryFilePath(), next);
+    }
     return next;
   }
 

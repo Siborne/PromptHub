@@ -23,6 +23,7 @@
 - `spec/rules/agent-boundary-guardrails.md`
 - `spec/rules/tdd-design-gate.md`
 - `spec/rules/code-quality-architecture.md`
+- `spec/rules/storage-evolution-rules.md`
 - `spec/rules/submission-traceability-rules.md`
 
 Phase and lifecycle rules:

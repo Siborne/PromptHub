@@ -7,6 +7,9 @@
       v0.4.7, v0.4.8, v0.5.1, and v0.5.2 without committing user data
       (`FR-LEGACYREC-001`, `TEST-LEGACYREC-089`, `TEST-LEGACYREC-097`,
       `TEST-LEGACYREC-098`).
+  - Implemented database slice: tag/commit-anchored synthetic SQLite builders
+    cover all four versions with Prompt and Skill history. Pending: Windows path,
+    browser storage, portable JSON, and upgrade-snapshot artifact fixtures.
 - [ ] `T-LEGACYREC-003` Write the failing-or-falsifying #89 Windows path
       transition tests before production changes, including cancellation,
       locking, corruption, explicit selection, restart, and no-write assertions

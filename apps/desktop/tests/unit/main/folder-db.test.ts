@@ -80,6 +80,28 @@ describe("FolderDB (in-memory SQLite)", () => {
   // getById
   // ─────────────────────────────────────────────
   describe("getById", () => {
+    it("preserves ownership and visibility during direct restore", () => {
+      rawDb
+        .prepare(
+          "INSERT INTO users (id, username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("user-1", "owner", "hash", 1, 1);
+      db.insertFolderDirect({
+        id: "shared-folder",
+        ownerUserId: "user-1",
+        visibility: "shared",
+        name: "Shared folder",
+        order: 0,
+        createdAt: "2026-08-11T00:00:00.000Z",
+        updatedAt: "2026-08-11T00:00:00.000Z",
+      });
+
+      expect(db.getById("shared-folder")).toMatchObject({
+        ownerUserId: "user-1",
+        visibility: "shared",
+      });
+    });
+
     it("returns null for non-existent id", () => {
       expect(db.getById("no-such-id")).toBeNull();
     });

@@ -56,13 +56,10 @@ function readStoredSettings():
   }
 }
 
-export function getAiConfigSnapshot(options?: {
-  includeRootApiKey?: boolean;
-}): AIConfigSnapshot | undefined {
-  const stored = readStoredSettings();
-  const state = stored?.data?.state;
-  if (!state) return undefined;
-
+function buildAiConfigSnapshot(
+  state: any,
+  options?: { includeRootApiKey?: boolean },
+): AIConfigSnapshot | undefined {
   try {
     const filteredProviders = (state.aiProviders || []).map((provider: any) => {
       const { apiKey, ...rest } = provider || {};
@@ -90,6 +87,23 @@ export function getAiConfigSnapshot(options?: {
   }
 }
 
+export function getAiConfigSnapshot(options?: {
+  includeRootApiKey?: boolean;
+}): AIConfigSnapshot | undefined {
+  const stored = readStoredSettings();
+  const state = stored?.data?.state;
+  return state ? buildAiConfigSnapshot(state, options) : undefined;
+}
+
+export async function getCanonicalAiConfigSnapshot(options?: {
+  includeRootApiKey?: boolean;
+}): Promise<AIConfigSnapshot | undefined> {
+  const canonicalApi = window.api?.settings?.rendererPersistence;
+  if (!canonicalApi) return getAiConfigSnapshot(options);
+  const state = await canonicalApi.get();
+  return buildAiConfigSnapshot(state?.settings, options);
+}
+
 export function getSettingsStateSnapshot(options?: {
   excludeFields?: readonly string[];
   updatedAt?: string;
@@ -114,10 +128,79 @@ export function getSettingsStateSnapshot(options?: {
   }
 }
 
-export function restoreAiConfigSnapshot(
+export async function getCanonicalSettingsStateSnapshot(options?: {
+  excludeFields?: readonly string[];
+  updatedAt?: string;
+}): Promise<SettingsStateSnapshot | undefined> {
+  const canonicalApi = window.api?.settings?.rendererPersistence;
+  if (!canonicalApi) return getSettingsStateSnapshot(options);
+  const canonical = await canonicalApi.get();
+  if (!canonical?.settings) return undefined;
+  const filteredState = { ...canonical.settings };
+  for (const field of options?.excludeFields || []) delete filteredState[field];
+  return {
+    state: filteredState,
+    settingsUpdatedAt:
+      options?.updatedAt ?? canonical.settings.settingsUpdatedAt,
+  };
+}
+
+function mergeCanonicalAIEntries(
+  current: unknown,
+  incoming: any[] | undefined,
+): any[] | undefined {
+  if (!incoming) return undefined;
+  const currentById = new Map(
+    (Array.isArray(current) ? current : []).flatMap((entry: any) =>
+      typeof entry?.id === "string" ? [[entry.id, entry] as const] : [],
+    ),
+  );
+  return incoming.map((entry: any) => {
+    const { apiKey: _apiKey, ...safeEntry } = entry || {};
+    const local = currentById.get(safeEntry.id);
+    return typeof local?.apiKey === "string" && local.apiKey
+      ? { ...safeEntry, apiKey: local.apiKey }
+      : safeEntry;
+  });
+}
+
+export async function restoreAiConfigSnapshot(
   aiConfig: AIConfigSnapshot | undefined,
-): void {
+): Promise<void> {
   if (!aiConfig) return;
+
+  const canonicalApi = window.api?.settings?.rendererPersistence;
+  if (canonicalApi) {
+    const current = await canonicalApi.get();
+    const currentSettings = current?.settings ?? {};
+    const aiProviders = mergeCanonicalAIEntries(
+      currentSettings.aiProviders,
+      aiConfig.aiProviders,
+    );
+    const aiModels = mergeCanonicalAIEntries(
+      currentSettings.aiModels,
+      aiConfig.aiModels,
+    );
+    await canonicalApi.replaceSettings({
+      ...currentSettings,
+      ...(aiProviders ? { aiProviders } : {}),
+      ...(aiModels ? { aiModels } : {}),
+      ...(aiConfig.scenarioModelDefaults
+        ? { scenarioModelDefaults: aiConfig.scenarioModelDefaults }
+        : {}),
+      ...(aiConfig.modelRouteDefaults
+        ? { modelRouteDefaults: aiConfig.modelRouteDefaults }
+        : {}),
+      ...(aiConfig.aiProvider ? { aiProvider: aiConfig.aiProvider } : {}),
+      ...(aiConfig.aiApiProtocol
+        ? { aiApiProtocol: aiConfig.aiApiProtocol }
+        : {}),
+      ...(aiConfig.aiApiKey ? { aiApiKey: aiConfig.aiApiKey } : {}),
+      ...(aiConfig.aiApiUrl ? { aiApiUrl: aiConfig.aiApiUrl } : {}),
+      ...(aiConfig.aiModel ? { aiModel: aiConfig.aiModel } : {}),
+    });
+    return;
+  }
 
   try {
     const stored = readStoredSettings();
@@ -155,11 +238,24 @@ export function restoreAiConfigSnapshot(
   }
 }
 
-export function restoreSettingsStateSnapshot(
+export async function restoreSettingsStateSnapshot(
   snapshot: SettingsStateSnapshot | undefined,
   options?: { preserveLocalFields?: readonly string[] },
-): void {
+): Promise<void> {
   if (!snapshot?.state) return;
+
+  const canonicalApi = window.api?.settings?.rendererPersistence;
+  if (canonicalApi) {
+    const current = await canonicalApi.get();
+    const nextState = { ...snapshot.state };
+    for (const field of options?.preserveLocalFields || []) {
+      if (current?.settings?.[field] !== undefined) {
+        nextState[field] = current.settings[field];
+      }
+    }
+    await canonicalApi.replaceSettings(nextState);
+    return;
+  }
 
   try {
     const stored = readStoredSettings();

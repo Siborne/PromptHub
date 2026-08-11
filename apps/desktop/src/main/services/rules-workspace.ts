@@ -1,7 +1,10 @@
-import { createRulesWorkspaceService } from "@prompthub/core";
+import {
+  assertStorageMaintenanceAvailable,
+  createRulesWorkspaceService,
+} from "@prompthub/core";
 
 import { initDatabase, RuleDB } from "../database";
-import { getRulesDir } from "../runtime-paths";
+import { getRulesDir, getUserDataPath } from "../runtime-paths";
 import {
   getPlatformGlobalRulePath,
   getPlatformRootDir,
@@ -11,6 +14,8 @@ import {
 
 export const desktopRulesWorkspaceService = createRulesWorkspaceService({
   getRulesDir,
+  assertStorageAvailable: () =>
+    assertStorageMaintenanceAvailable(getUserDataPath()),
   createRuleDb: () => new RuleDB(initDatabase()),
   getPlatformGlobalRulePath,
   getPlatformRootDir,

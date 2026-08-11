@@ -4,6 +4,7 @@ import type { RecoveryCandidate } from "@prompthub/shared/types";
 import { useToast } from "../../ui/Toast";
 import {
   getErrorMessage,
+  loadCanonicalManualRecoveryPaths,
   loadManualRecoveryPaths,
   persistManualRecoveryPaths,
 } from "./data-settings-controller-utils";
@@ -13,7 +14,19 @@ function useManualRecoveryPathState(webRuntime: boolean) {
   const [manualPathInputValue, setManualPathInputValue] = useState("");
 
   useEffect(() => {
-    if (!webRuntime) setManualRecoveryPaths(loadManualRecoveryPaths());
+    if (webRuntime) return;
+    let disposed = false;
+    setManualRecoveryPaths(loadManualRecoveryPaths());
+    void loadCanonicalManualRecoveryPaths()
+      .then((paths) => {
+        if (!disposed) setManualRecoveryPaths(paths);
+      })
+      .catch((error: unknown) => {
+        console.warn("Failed to load recovery path registry:", error);
+      });
+    return () => {
+      disposed = true;
+    };
   }, [webRuntime]);
 
   return {

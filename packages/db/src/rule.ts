@@ -1,8 +1,5 @@
 import Database from "./adapter";
-import {
-  isRuleFileId,
-  isRulePlatformId,
-} from "@prompthub/shared";
+import { isRuleFileId, isRulePlatformId } from "@prompthub/shared";
 import type { RuleRecord, RuleVersionRecord } from "@prompthub/shared";
 
 interface RuleRow {
@@ -34,7 +31,7 @@ interface RuleVersionRow {
 }
 
 export class RuleDB {
-  constructor(private db: Database.Database) {}
+  constructor(protected db: Database.Database) {}
 
   getAll(): RuleRecord[] {
     const rows = this.db
@@ -44,7 +41,9 @@ export class RuleDB {
   }
 
   getById(id: string): RuleRecord | null {
-    const row = this.db.prepare("SELECT * FROM rules WHERE id = ?").get(id) as RuleRow | undefined;
+    const row = this.db.prepare("SELECT * FROM rules WHERE id = ?").get(id) as
+      | RuleRow
+      | undefined;
     return row ? this.rowToRule(row) : null;
   }
 
@@ -91,7 +90,9 @@ export class RuleDB {
 
   replaceVersions(ruleId: string, versions: RuleVersionRecord[]): void {
     const transaction = this.db.transaction(() => {
-      this.db.prepare("DELETE FROM rule_versions WHERE rule_id = ?").run(ruleId);
+      this.db
+        .prepare("DELETE FROM rule_versions WHERE rule_id = ?")
+        .run(ruleId);
       const stmt = this.db.prepare(
         `INSERT INTO rule_versions (
           id, rule_id, version, file_path, source, created_at
@@ -115,7 +116,9 @@ export class RuleDB {
 
   getVersions(ruleId: string): RuleVersionRecord[] {
     const rows = this.db
-      .prepare("SELECT * FROM rule_versions WHERE rule_id = ? ORDER BY version DESC")
+      .prepare(
+        "SELECT * FROM rule_versions WHERE rule_id = ? ORDER BY version DESC",
+      )
       .all(ruleId) as RuleVersionRow[];
     return rows.map((row) => this.rowToRuleVersion(row));
   }
@@ -126,7 +129,9 @@ export class RuleDB {
     }
 
     if (!isRulePlatformId(row.platform_id)) {
-      throw new Error(`Invalid rule platform id in database: ${row.platform_id}`);
+      throw new Error(
+        `Invalid rule platform id in database: ${row.platform_id}`,
+      );
     }
 
     return {
@@ -151,7 +156,9 @@ export class RuleDB {
 
   private rowToRuleVersion(row: RuleVersionRow): RuleVersionRecord {
     if (!isRuleFileId(row.rule_id)) {
-      throw new Error(`Invalid rule version rule id in database: ${row.rule_id}`);
+      throw new Error(
+        `Invalid rule version rule id in database: ${row.rule_id}`,
+      );
     }
 
     return {
