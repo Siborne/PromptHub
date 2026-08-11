@@ -1184,6 +1184,7 @@
     "noMcpDetected": "Für diesen Agent wurden keine MCP-Server erkannt.",
     "noRulesDetected": "Für diesen Agent wurde keine Regeldatei erkannt.",
     "createRuleFileTitle": "{{fileName}} erstellen?",
+    "selectRuleProject": "Projekt auswählen",
     "createRuleFileDescription": "Für {{agentName}} ist diese Regeldatei noch nicht vorhanden. Am festgelegten Speicherort erstellen?",
     "createRuleFile": "{{fileName}} erstellen",
     "creatingRuleFile": "{{fileName}} wird erstellt...",

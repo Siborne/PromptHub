@@ -1183,6 +1183,7 @@
     "noMcpDetected": "未偵測到此 Agent 的 MCP 服務。",
     "noRulesDetected": "未偵測到此 Agent 的規則檔案。",
     "createRuleFileTitle": "建立 {{fileName}}？",
+    "selectRuleProject": "選擇專案",
     "createRuleFileDescription": "{{agentName}} 尚無此規則檔案。是否在宣告的位置建立？",
     "createRuleFile": "建立 {{fileName}}",
     "creatingRuleFile": "正在建立 {{fileName}}...",

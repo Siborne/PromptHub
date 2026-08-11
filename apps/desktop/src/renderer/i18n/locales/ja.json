@@ -1183,6 +1183,7 @@
     "noMcpDetected": "この Agent の MCP サーバーは検出されませんでした。",
     "noRulesDetected": "この Agent のルールファイルは検出されませんでした。",
     "createRuleFileTitle": "{{fileName}} を作成しますか？",
+    "selectRuleProject": "プロジェクトを選択",
     "createRuleFileDescription": "{{agentName}} にはこのルールファイルがまだありません。宣言された場所に作成しますか？",
     "createRuleFile": "{{fileName}} を作成",
     "creatingRuleFile": "{{fileName}} を作成中...",

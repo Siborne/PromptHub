@@ -5,7 +5,7 @@ import {
   filterVisibleMcpTargetPresets,
   mergeMcpTargetPresets,
 } from "../../../src/renderer/services/mcp-target-presets";
-import type { McpTargetPreset } from "@prompthub/core";
+import { getMcpTargetPresets, type McpTargetPreset } from "@prompthub/core";
 
 describe("mcp target presets", () => {
   it("derives one workspace MCP target per agent from registered projects", () => {
@@ -117,7 +117,85 @@ describe("mcp target presets", () => {
         path: "/workspace/docs/.pi/mcp.json",
         platformId: "pi",
       },
+      {
+        id: "project:project_docs:qoder-local",
+        target: "qoder",
+        scope: "workspace",
+        label: "Docs / Qoder (local)",
+        path: "/workspace/docs/.qoder/settings.local.json",
+        platformId: "qoder",
+      },
+      {
+        id: "project:project_docs:qoder",
+        target: "qoder",
+        scope: "workspace",
+        label: "Docs / Qoder",
+        path: "/workspace/docs/.mcp.json",
+        platformId: "qoder",
+      },
+      {
+        id: "project:project_docs:grok",
+        target: "grok",
+        scope: "workspace",
+        label: "Docs / Grok Build",
+        path: "/workspace/docs/.grok/config.toml",
+        platformId: "grok",
+      },
+      {
+        id: "project:project_docs:antigravity",
+        target: "antigravity",
+        scope: "workspace",
+        label: "Docs / Antigravity",
+        path: "/workspace/docs/.agents/mcp_config.json",
+        platformId: "antigravity",
+      },
+      {
+        id: "project:project_docs:reasonix",
+        target: "reasonix",
+        scope: "workspace",
+        label: "Docs / Reasonix",
+        path: "/workspace/docs/.mcp.json",
+        platformId: "reasonix",
+      },
     ]);
+  });
+
+  it("includes verified OpenClaw, Qoder, and Grok global targets", () => {
+    const presets = getMcpTargetPresets("/Users/test", "darwin", {});
+    expect(
+      presets
+        .filter((preset) => ["openclaw", "qoder", "grok"].includes(preset.id))
+        .map(({ id, target, path }) => ({ id, target, path })),
+    ).toEqual([
+      {
+        id: "grok",
+        target: "grok",
+        path: "/Users/test/.grok/config.toml",
+      },
+      {
+        id: "openclaw",
+        target: "openclaw",
+        path: "/Users/test/.openclaw/openclaw.json",
+      },
+      {
+        id: "qoder",
+        target: "qoder",
+        path: "/Users/test/.qoder/settings.json",
+      },
+    ]);
+  });
+
+  it("includes the verified Antigravity global MCP target", () => {
+    expect(
+      getMcpTargetPresets("/Users/test", "darwin", {}).find(
+        (preset) => preset.id === "antigravity",
+      ),
+    ).toMatchObject({
+      target: "antigravity",
+      scope: "global",
+      path: "/Users/test/.gemini/config/mcp_config.json",
+      platformId: "antigravity",
+    });
   });
 
   it("filters MCP targets by the Settings disabled platform source of truth", () => {

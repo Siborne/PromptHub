@@ -1184,6 +1184,7 @@
     "noMcpDetected": "未检测到此 Agent 的 MCP 服务。",
     "noRulesDetected": "未检测到此 Agent 的规则文件。",
     "createRuleFileTitle": "创建 {{fileName}}？",
+    "selectRuleProject": "选择项目",
     "createRuleFileDescription": "{{agentName}} 尚无此规则文件。是否在声明的位置创建？",
     "createRuleFile": "创建 {{fileName}}",
     "creatingRuleFile": "正在创建 {{fileName}}...",

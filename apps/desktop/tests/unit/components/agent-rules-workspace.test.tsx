@@ -67,6 +67,33 @@ const claudeAgent: ManagedAgentSummary = {
   },
 };
 
+const cursorAgent: ManagedAgentSummary = {
+  ...claudeAgent,
+  id: "cursor",
+  name: "Cursor",
+  paths: {
+    root: "/Users/test/.cursor",
+    skills: "/Users/test/.cursor/skills",
+    projectRules: ".cursor/rules/prompthub.mdc",
+    configFiles: [],
+    configFileRelativePaths: [],
+  },
+};
+
+const qoderAgent: ManagedAgentSummary = {
+  ...claudeAgent,
+  id: "qoder",
+  name: "Qoder",
+  paths: {
+    root: "/Users/test/.qoder",
+    skills: "/Users/test/.qoder/skills",
+    projectRules: "AGENTS.md",
+    projectRuleKind: "workspace",
+    configFiles: [],
+    configFileRelativePaths: [],
+  },
+};
+
 function descriptor(
   overrides: Partial<RuleFileDescriptor> = {},
 ): RuleFileDescriptor {
@@ -118,7 +145,7 @@ describe("AgentRulesWorkspace", () => {
   beforeEach(() => {
     showToast.mockReset();
     resetRulesStore();
-    useSettingsStore.setState({ disabledPlatformIds: [] });
+    useSettingsStore.setState({ disabledPlatformIds: [], skillProjects: [] });
   });
 
   it("selects by resolved path and reuses the complete Rules editor save flow", async () => {
@@ -481,6 +508,131 @@ describe("AgentRulesWorkspace", () => {
     ).toHaveValue("# Claude rules");
     expect(list).toHaveBeenCalledTimes(1);
     expect(api.rules.read).toHaveBeenCalledWith("claude-global");
+  });
+
+  it("registers and creates a Cursor project rule from the selected project", async () => {
+    const cursorDescriptor = descriptor({
+      id: "project:docs.cursor",
+      platformId: "cursor",
+      platformName: "Docs / Cursor",
+      name: "prompthub.mdc",
+      path: "/workspace/docs/.cursor/rules/prompthub.mdc",
+      targetPath: "/workspace/docs/.cursor/rules/prompthub.mdc",
+      projectRootPath: "/workspace/docs",
+      exists: false,
+      group: "workspace",
+    });
+    const created = content({
+      ...cursorDescriptor,
+      exists: true,
+      content: "",
+    });
+    useSettingsStore.setState({
+      skillProjects: [
+        {
+          id: "docs",
+          name: "Docs",
+          rootPath: "/workspace/docs",
+          scanPaths: [],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    useRulesStore.setState({ hasLoadedFiles: true });
+    const addProject = vi.fn().mockResolvedValue(cursorDescriptor);
+    const read = vi.fn().mockResolvedValue({
+      ...created,
+      exists: false,
+    });
+    const save = vi.fn().mockResolvedValue(created);
+    installWindowMocks({
+      api: {
+        rules: {
+          addProject,
+          list: vi.fn().mockResolvedValue([cursorDescriptor]),
+          read,
+          save,
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<AgentRulesWorkspace agent={cursorAgent} />, {
+        language: "en",
+      });
+    });
+
+    expect(screen.getByLabelText("Select project")).toHaveValue("docs");
+    expect(
+      screen.getByRole("heading", { name: "Create prompthub.mdc?" }),
+    ).toBeVisible();
+    expect(addProject).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create prompthub.mdc" }),
+    );
+
+    await waitFor(() => {
+      expect(addProject).toHaveBeenCalledWith({
+        id: "docs.cursor",
+        kind: "cursor",
+        name: "Docs",
+        rootPath: "/workspace/docs",
+      });
+      expect(save).toHaveBeenCalledWith("project:docs.cursor", "");
+    });
+    expect(
+      await screen.findByRole("textbox", { name: "Rule Content" }),
+    ).toHaveValue("");
+  });
+
+  it("reuses a registered AGENTS.md project rule for Qoder", async () => {
+    const qoderDescriptor = descriptor({
+      id: "project:docs",
+      platformId: "workspace",
+      platformName: "Docs",
+      name: "AGENTS.md",
+      path: "/workspace/docs/AGENTS.md",
+      targetPath: "/workspace/docs/AGENTS.md",
+      projectRootPath: "/workspace/docs",
+      exists: true,
+      group: "workspace",
+    });
+    useSettingsStore.setState({
+      skillProjects: [
+        {
+          id: "docs",
+          name: "Docs",
+          rootPath: "/workspace/docs",
+          scanPaths: [],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    useRulesStore.setState({
+      hasLoadedFiles: true,
+      availableFiles: [qoderDescriptor],
+    });
+    const read = vi.fn().mockResolvedValue(
+      content({
+        ...qoderDescriptor,
+        content: "# Shared project guidance\n",
+      }),
+    );
+    installWindowMocks({ api: { rules: { read } } });
+
+    await act(async () => {
+      await renderWithI18n(<AgentRulesWorkspace agent={qoderAgent} />, {
+        language: "en",
+      });
+    });
+
+    expect(
+      await screen.findByRole("textbox", { name: "Rule Content" }),
+    ).toHaveValue("# Shared project guidance\n");
+    expect(read).toHaveBeenCalledWith("project:docs");
   });
 
   it("shows a scoped read failure and retries the known descriptor without rescanning", async () => {

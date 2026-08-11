@@ -90,6 +90,12 @@ describe("Agent workspace tab availability", () => {
         AGENT_WORKSPACE_TABS.find((tab) => tab.key === "provider")!,
       ),
     ).toBe(false);
+
+    const cursor = agent("cursor");
+    cursor.paths.projectRules = ".cursor/rules/prompthub.mdc";
+    const rules = AGENT_WORKSPACE_TABS.find((tab) => tab.key === "rules")!;
+    expect(getAgentTabStatus(cursor, rules)).toBe("partial");
+    expect(isAgentTabEnabled(cursor, rules)).toBe(true);
   });
 
   it("identifies asset tabs and returns explicit capability guidance", () => {

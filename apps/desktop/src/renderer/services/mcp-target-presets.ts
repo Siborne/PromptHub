@@ -125,6 +125,46 @@ export function deriveProjectMcpTargetPresets(
         path: joinProjectPath(rootPath, ".pi/mcp.json"),
         platformId: "pi",
       },
+      {
+        id: `project:${project.id}:qoder-local`,
+        target: "qoder",
+        scope: "workspace",
+        label: `${project.name} / Qoder (local)`,
+        path: joinProjectPath(rootPath, ".qoder/settings.local.json"),
+        platformId: "qoder",
+      },
+      {
+        id: `project:${project.id}:qoder`,
+        target: "qoder",
+        scope: "workspace",
+        label: `${project.name} / Qoder`,
+        path: joinProjectPath(rootPath, ".mcp.json"),
+        platformId: "qoder",
+      },
+      {
+        id: `project:${project.id}:grok`,
+        target: "grok",
+        scope: "workspace",
+        label: `${project.name} / Grok Build`,
+        path: joinProjectPath(rootPath, ".grok/config.toml"),
+        platformId: "grok",
+      },
+      {
+        id: `project:${project.id}:antigravity`,
+        target: "antigravity",
+        scope: "workspace",
+        label: `${project.name} / Antigravity`,
+        path: joinProjectPath(rootPath, ".agents/mcp_config.json"),
+        platformId: "antigravity",
+      },
+      {
+        id: `project:${project.id}:reasonix`,
+        target: "reasonix",
+        scope: "workspace",
+        label: `${project.name} / Reasonix`,
+        path: joinProjectPath(rootPath, ".mcp.json"),
+        platformId: "reasonix",
+      },
     ];
   });
 }

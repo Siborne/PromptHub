@@ -57,6 +57,8 @@ export interface ManagedAgentPaths {
   mcp?: string;
   plugins?: string;
   rules?: string;
+  projectRules?: string;
+  projectRuleKind?: "workspace" | "cursor";
   configFiles: string[];
   configFileRelativePaths: string[];
 }

@@ -7,7 +7,10 @@ import {
   getPlatformById,
   type SkillPlatform,
 } from "@prompthub/shared/constants/platforms";
-import { KNOWN_RULE_FILE_TEMPLATES } from "@prompthub/shared/constants/rules";
+import {
+  KNOWN_RULE_FILE_TEMPLATES,
+  PROJECT_RULE_FILE_TEMPLATES,
+} from "@prompthub/shared/constants/rules";
 import type {
   CustomRuleFileId,
   CreateRuleProjectInput,
@@ -1236,34 +1239,39 @@ export function createRulesWorkspaceService(
       throw new Error("Rule project name and rootPath are required");
     }
 
+    const template = PROJECT_RULE_FILE_TEMPLATES[input.kind ?? "workspace"];
+    const targetPath = path.join(rootPath, ...template.relativePath.split("/"));
     const existingProjectMeta = await Promise.all(
       (await listProjectMetaPaths()).map((metaPath) =>
         readStoredMeta(metaPath),
       ),
     );
     const duplicate = existingProjectMeta.find(
-      (meta) => meta?.projectRootPath?.toLowerCase() === rootPath.toLowerCase(),
+      (meta) => meta && pathsEqual(meta.targetPath, targetPath),
     );
     if (duplicate) {
-      throw new Error("Rule project root path already exists");
+      throw new Error("Rule project target path already exists");
     }
 
     const projectId = input.id ?? crypto.randomUUID();
     assertSafeProjectId(projectId);
     const ruleId = `project:${projectId}` as RuleFileId;
     const dirName = `${slugify(name)}__${projectId}`;
-    const managedPath = path.join(getRuleProjectsRoot(), dirName, "AGENTS.md");
-    const targetPath = path.join(rootPath, "AGENTS.md");
+    const managedPath = path.join(
+      getRuleProjectsRoot(),
+      dirName,
+      template.canonicalFileName,
+    );
     const now = new Date().toISOString();
     const meta: StoredRuleMeta = {
       id: ruleId,
       scope: "project",
-      platformId: "workspace",
-      platformName: name,
-      platformIcon: "FolderRoot",
+      platformId: template.platformId,
+      platformName: input.kind === "cursor" ? `${name} / Cursor` : name,
+      platformIcon: template.platformIcon,
       platformDescription: `Project rules from ${rootPath}`,
-      canonicalFileName: "AGENTS.md",
-      description: "Project rule file loaded from a user-managed directory.",
+      canonicalFileName: template.canonicalFileName,
+      description: template.description,
       managedPath,
       targetPath,
       projectRootPath: rootPath,
@@ -1420,7 +1428,11 @@ export function createRulesWorkspaceService(
         if (!existing) {
           await createProjectRule({
             id: projectId,
-            name: record.platformName,
+            kind: record.platformId === "cursor" ? "cursor" : "workspace",
+            name:
+              record.platformId === "cursor"
+                ? record.platformName.replace(/ \/ Cursor$/u, "")
+                : record.platformName,
             rootPath:
               record.projectRootPath ??
               path.dirname(record.targetPath ?? record.path),

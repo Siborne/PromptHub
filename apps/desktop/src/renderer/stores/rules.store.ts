@@ -401,6 +401,8 @@ export const useRulesStore = create<RulesState>((set, get) => ({
       const created = availableFiles.find(
         (file) =>
           file.id.startsWith("project:") &&
+          file.platformId ===
+            (input.kind === "cursor" ? "cursor" : "workspace") &&
           file.projectRootPath?.toLowerCase() === input.rootPath.toLowerCase(),
       );
       set({

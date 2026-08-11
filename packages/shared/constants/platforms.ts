@@ -50,6 +50,8 @@ export interface SkillPlatform {
   agentsRelativePath?: string;
   commandsRelativePath?: string;
   globalRuleFile?: string;
+  projectRuleFile?: string;
+  projectRuleKind?: "workspace" | "cursor";
   configFiles?: string[];
   cli?: AgentCliDescriptor;
   isCustom?: boolean;
@@ -285,6 +287,8 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.cursor",
     },
     skillsRelativePath: "skills",
+    projectRuleFile: ".cursor/rules/prompthub.mdc",
+    projectRuleKind: "cursor",
     agentsRelativePath: "agents",
     mcpRelativePath: "mcp.json",
     pluginsRelativePath: "plugins",
@@ -465,6 +469,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     },
     rootEnvironmentVariable: "PI_CODING_AGENT_DIR",
     skillsRelativePath: "skills",
+    mcpRelativePath: "mcp.json",
     pluginsRelativePath: "extensions",
     globalRuleFile: "AGENTS.md",
     configFiles: ["settings.json", "models.json", "AGENTS.md"],
@@ -725,6 +730,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.openclaw",
     },
     skillsRelativePath: "skills",
+    mcpRelativePath: "openclaw.json",
     globalRuleFile: "workspace/SOUL.md",
     configFiles: ["openclaw.json"],
     cli: {
@@ -806,6 +812,9 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.qoder",
     },
     skillsRelativePath: "skills",
+    mcpRelativePath: "settings.json",
+    projectRuleFile: "AGENTS.md",
+    projectRuleKind: "workspace",
     configFiles: ["settings.json"],
   },
   {

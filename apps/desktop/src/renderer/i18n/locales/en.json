@@ -1184,6 +1184,7 @@
     "noMcpDetected": "No MCP servers were detected for this Agent.",
     "noRulesDetected": "No rules file was detected for this Agent.",
     "createRuleFileTitle": "Create {{fileName}}?",
+    "selectRuleProject": "Select project",
     "createRuleFileDescription": "{{agentName}} does not have this rules file yet. Create it at the declared location?",
     "createRuleFile": "Create {{fileName}}",
     "creatingRuleFile": "Creating {{fileName}}...",

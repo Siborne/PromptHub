@@ -120,7 +120,11 @@ export function getAgentTabStatus(
   if (tab.platformIds && !tab.platformIds.includes(agent.id)) {
     return "unsupported";
   }
-  if (tab.assetDomain && !agent.paths[tab.assetDomain]) {
+  if (
+    tab.assetDomain &&
+    !agent.paths[tab.assetDomain] &&
+    !(tab.assetDomain === "rules" && agent.paths.projectRules)
+  ) {
     return "unsupported";
   }
   return agent.capabilities[tab.capability].status;

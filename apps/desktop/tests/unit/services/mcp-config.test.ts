@@ -16,6 +16,7 @@ import {
   listMcpServerNamesInJson,
   listMcpServerNamesInToml,
   mergeCodexMcpToml,
+  mergeMcpToml,
   mergeMcpServersJson,
   normalizeMcpServerDraft,
   parseMcpJsonConfigContent,
@@ -375,6 +376,99 @@ describe("mcp-config", () => {
         servers: { existing: { command: "node" } },
       },
     });
+  });
+
+  it("projects OpenClaw MCP servers under mcp.servers with canonical transports", () => {
+    const remote: McpServerConfig = {
+      ...baseServer,
+      id: "mcp_remote",
+      name: "remote",
+      transport: "streamable-http",
+      command: undefined,
+      args: undefined,
+      env: undefined,
+      url: "https://example.test/mcp",
+      headers: { Authorization: "Bearer token" },
+    };
+
+    expect(buildMcpTargetJson("openclaw", [baseServer, remote])).toEqual({
+      mcp: {
+        servers: {
+          playwright: {
+            command: "npx",
+            args: ["@playwright/mcp@latest", "--headless"],
+            env: { CI: "1" },
+          },
+          remote: {
+            url: "https://example.test/mcp",
+            transport: "streamable-http",
+            headers: { Authorization: "Bearer token" },
+          },
+        },
+      },
+    });
+
+    expect(
+      mergeMcpServersJson(
+        { channel: "stable", mcp: { oauth: { enabled: true } } },
+        "openclaw",
+        [baseServer],
+      ),
+    ).toMatchObject({
+      channel: "stable",
+      mcp: {
+        oauth: { enabled: true },
+        servers: { playwright: { command: "npx" } },
+      },
+    });
+  });
+
+  it("projects Antigravity remote servers with its required serverUrl field", () => {
+    const remote: McpServerConfig = {
+      ...baseServer,
+      id: "mcp_remote",
+      name: "remote",
+      transport: "streamable-http",
+      command: undefined,
+      args: undefined,
+      env: undefined,
+      url: "https://example.test/mcp",
+      headers: { Authorization: "Bearer token" },
+    };
+
+    expect(buildMcpTargetJson("antigravity", [remote])).toEqual({
+      mcpServers: {
+        remote: {
+          serverUrl: "https://example.test/mcp",
+          headers: { Authorization: "Bearer token" },
+        },
+      },
+    });
+  });
+
+  it("projects Qoder JSON and Grok TOML without crossing target schemas", () => {
+    expect(buildMcpTargetJson("qoder", [baseServer])).toMatchObject({
+      mcpServers: { playwright: { command: "npx" } },
+    });
+
+    const remote: McpServerConfig = {
+      ...baseServer,
+      id: "mcp_remote",
+      name: "remote",
+      transport: "streamable-http",
+      command: undefined,
+      args: undefined,
+      env: undefined,
+      url: "https://example.test/mcp",
+      headers: { Authorization: "Bearer token" },
+    };
+    const grok = mergeMcpToml('model = "grok-4"\n', "grok", [remote]);
+    expect(grok).toContain('headers = { Authorization = "Bearer token" }');
+    expect(grok).not.toContain("http_headers");
+    expect(mergeCodexMcpToml("", [remote])).toContain(
+      'http_headers = { Authorization = "Bearer token" }',
+    );
+    expect(redactMcpConfigContent("grok", grok)).not.toContain("Bearer token");
   });
 
   it("projects Kimi, Augment and Qwen MCP servers with the documented mcpServers shape", () => {

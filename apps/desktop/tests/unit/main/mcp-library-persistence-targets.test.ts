@@ -501,6 +501,109 @@ describe("CoreMcpLibraryService", () => {
     expect(written.mcpServers.fetch.command).toBe("uvx");
   });
 
+  it("applies OpenClaw and Grok targets through their verified native schemas", () => {
+    const service = new CoreMcpLibraryService();
+    const server = service.createServer({
+      name: "fetch",
+      displayName: "Fetch",
+      transport: "streamable-http",
+      url: "https://example.test/mcp",
+      headers: { Authorization: "Bearer token" },
+    });
+    const openClawPath = path.join(userDataPath, "openclaw.json");
+    fs.writeFileSync(
+      openClawPath,
+      JSON.stringify({ channel: "stable", mcp: { oauth: { enabled: true } } }),
+      "utf8",
+    );
+    service.apply({
+      target: "openclaw",
+      scope: "global",
+      path: openClawPath,
+      serverIds: [server.id],
+    });
+    const openClaw = JSON.parse(fs.readFileSync(openClawPath, "utf8"));
+    expect(openClaw).toMatchObject({
+      channel: "stable",
+      mcp: {
+        oauth: { enabled: true },
+        servers: {
+          fetch: {
+            url: "https://example.test/mcp",
+            transport: "streamable-http",
+          },
+        },
+      },
+    });
+
+    const grokPath = path.join(userDataPath, "config.toml");
+    fs.writeFileSync(grokPath, 'model = "grok-4"\n', "utf8");
+    const grokResult = service.apply({
+      target: "grok",
+      scope: "global",
+      path: grokPath,
+      serverIds: [server.id],
+    });
+    const grok = fs.readFileSync(grokPath, "utf8");
+    expect(grok).toContain('model = "grok-4"');
+    expect(grok).toContain('headers = { Authorization = "Bearer token" }');
+    expect(grok).not.toContain("http_headers");
+    expect(grokResult.content).not.toContain("Bearer token");
+  });
+
+  it("round-trips Antigravity serverUrl entries without exposing secrets", () => {
+    const service = new CoreMcpLibraryService();
+    const server = service.createServer({
+      name: "remote",
+      displayName: "Remote",
+      transport: "streamable-http",
+      url: "https://example.test/mcp",
+      headers: { Authorization: "Bearer token" },
+    });
+    const targetPath = path.join(userDataPath, "mcp_config.json");
+    fs.writeFileSync(
+      targetPath,
+      JSON.stringify({ mcpServers: {}, ui: { compact: true } }),
+      "utf8",
+    );
+
+    const result = service.apply({
+      target: "antigravity",
+      scope: "global",
+      path: targetPath,
+      serverIds: [server.id],
+    });
+
+    expect(JSON.parse(fs.readFileSync(targetPath, "utf8"))).toMatchObject({
+      ui: { compact: true },
+      mcpServers: {
+        remote: {
+          serverUrl: "https://example.test/mcp",
+          headers: { Authorization: "Bearer token" },
+        },
+      },
+    });
+    expect(result.content).not.toContain("Bearer token");
+    expect(
+      service.getTargetStatus([
+        {
+          id: "antigravity-test",
+          target: "antigravity",
+          scope: "global",
+          label: "Antigravity",
+          path: targetPath,
+          platformId: "antigravity",
+        },
+      ])[0]?.servers,
+    ).toEqual([
+      expect.objectContaining({
+        name: "remote",
+        url: "https://example.test/mcp",
+        transport: "streamable-http",
+      }),
+    ]);
+  });
+
   it("does not write target files or bindings when applying only disabled servers", () => {
     const service = new CoreMcpLibraryService();
     const server = service.createServer({

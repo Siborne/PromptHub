@@ -8,7 +8,7 @@ export function redactMcpTomlConfigContent(
   content: string,
   options: McpTomlRedactionOptions,
 ): string {
-  const assignmentPattern = /(?:env|http_headers)\s*=\s*\{/g;
+  const assignmentPattern = /(?:env|headers|http_headers)\s*=\s*\{/g;
   let output = "";
   let cursor = 0;
   let match = assignmentPattern.exec(content);

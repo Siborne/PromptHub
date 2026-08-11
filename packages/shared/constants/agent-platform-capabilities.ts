@@ -219,7 +219,9 @@ export function getAgentPlatformCapabilityInventory(
     providerModel: depth.providerModel,
     skills: declaration("partial", "skills-relative-path"),
     mcp: pathCapability(platform.mcpRelativePath, "mcp-relative-path"),
-    rules: pathCapability(platform.globalRuleFile, "global-rule-path"),
+    rules: platform.globalRuleFile
+      ? pathCapability(platform.globalRuleFile, "global-rule-path")
+      : pathCapability(platform.projectRuleFile, "project-rule-path"),
     plugins: pathCapability(
       platform.pluginsRelativePath,
       "plugins-relative-path",

@@ -40,6 +40,10 @@ export const MCP_JSON_TARGETS: McpTargetKind[] = [
   "pi",
   "oh-my-pi",
   "zcode",
+  "openclaw",
+  "qoder",
+  "antigravity",
+  "reasonix",
   "custom-json",
 ];
 
@@ -249,7 +253,7 @@ export function getMcpServersJsonKey(
   if (target === "opencode" || target === "kilo") {
     return "mcp";
   }
-  if (target === "zcode") {
+  if (target === "zcode" || target === "openclaw") {
     return "servers";
   }
   return "mcpServers";
@@ -272,7 +276,7 @@ export function getMcpJsonServerEntries(
 
   const root = existing as Record<string, unknown>;
   const container =
-    target === "zcode"
+    target === "zcode" || target === "openclaw"
       ? root.mcp && typeof root.mcp === "object" && !Array.isArray(root.mcp)
         ? (root.mcp as Record<string, unknown>)
         : undefined
@@ -296,7 +300,7 @@ export function setMcpJsonServerEntries(
       ? { ...(existing as Record<string, unknown>) }
       : {};
 
-  if (target === "zcode") {
+  if (target === "zcode" || target === "openclaw") {
     const mcp =
       root.mcp && typeof root.mcp === "object" && !Array.isArray(root.mcp)
         ? { ...(root.mcp as Record<string, unknown>) }
@@ -758,9 +762,49 @@ function toCodexTomlMcpEntry(
 
   return stripUndefined({
     url: server.url,
-    http_headers: projectMcpValues(
+    [target === "grok" ? "headers" : "http_headers"]: projectMcpValues(
       server,
       target,
+      "headers",
+      options.redactValues,
+    ),
+  });
+}
+
+function toOpenClawMcpEntry(
+  server: McpServerConfig,
+  options: { redactValues?: boolean } = {},
+): Record<string, unknown> {
+  if (server.transport === "stdio") {
+    return toMcpServerEntry(server, "openclaw", options);
+  }
+
+  return stripUndefined({
+    url: server.url,
+    transport:
+      server.transport === "streamable-http" ? "streamable-http" : undefined,
+    headers: projectMcpValues(
+      server,
+      "openclaw",
+      "headers",
+      options.redactValues,
+    ),
+  });
+}
+
+function toAntigravityMcpEntry(
+  server: McpServerConfig,
+  options: { redactValues?: boolean } = {},
+): Record<string, unknown> {
+  if (server.transport === "stdio") {
+    return toMcpServerEntry(server, "antigravity", options);
+  }
+
+  return stripUndefined({
+    serverUrl: server.url,
+    headers: projectMcpValues(
+      server,
+      "antigravity",
       "headers",
       options.redactValues,
     ),
@@ -775,7 +819,13 @@ export function getMcpTargetEntryObject(
   if (target === "opencode" || target === "kilo") {
     return toOpenCodeMcpEntry(server, target, options);
   }
-  if (target === "codex" || target === "custom-toml") {
+  if (target === "openclaw") {
+    return toOpenClawMcpEntry(server, options);
+  }
+  if (target === "antigravity") {
+    return toAntigravityMcpEntry(server, options);
+  }
+  if (target === "codex" || target === "custom-toml" || target === "grok") {
     return toCodexTomlMcpEntry(server, target, options);
   }
   return toMcpServerEntry(server, target, options);
@@ -996,7 +1046,8 @@ export function buildMcpTargetJson(
   );
 }
 
-export function buildCodexMcpToml(
+export function buildMcpToml(
+  target: "codex" | "custom-toml" | "grok",
   servers: McpServerConfig[],
   options: { redactValues?: boolean } = {},
 ): string {
@@ -1014,7 +1065,7 @@ export function buildCodexMcpToml(
         }
         const env = projectMcpValues(
           server,
-          "codex",
+          target,
           "env",
           options.redactValues,
         );
@@ -1025,12 +1076,13 @@ export function buildCodexMcpToml(
         lines.push(`url = ${tomlString(server.url)}`);
         const headers = projectMcpValues(
           server,
-          "codex",
+          target,
           "headers",
           options.redactValues,
         );
         if (headers && Object.keys(headers).length > 0) {
-          lines.push(`http_headers = ${tomlInlineTable(headers)}`);
+          const headersKey = target === "grok" ? "headers" : "http_headers";
+          lines.push(`${headersKey} = ${tomlInlineTable(headers)}`);
         }
       }
       return lines.join("\n");
@@ -1038,12 +1090,19 @@ export function buildCodexMcpToml(
     .join("\n\n");
 }
 
+export function buildCodexMcpToml(
+  servers: McpServerConfig[],
+  options: { redactValues?: boolean } = {},
+): string {
+  return buildMcpToml("codex", servers, options);
+}
+
 export function buildMcpConfigPreview(
   target: McpTargetKind,
   servers: McpServerConfig[],
 ): string {
-  if (target === "codex" || target === "custom-toml") {
-    return `${buildCodexMcpToml(servers, { redactValues: true })}\n`;
+  if (target === "codex" || target === "custom-toml" || target === "grok") {
+    return `${buildMcpToml(target, servers, { redactValues: true })}\n`;
   }
   return `${JSON.stringify(
     buildMcpTargetJson(target, servers, { redactValues: true }),
@@ -1058,7 +1117,7 @@ export function redactMcpConfigContent(
   content: string,
 ): string {
   if (!content.trim()) return content;
-  if (target === "codex" || target === "custom-toml") {
+  if (target === "codex" || target === "custom-toml" || target === "grok") {
     return redactMcpTomlConfigContent(content, {
       redactedValue: MCP_REDACTED_VALUE,
       isReference: hasMcpEnvReference,
@@ -1285,6 +1344,14 @@ export function mergeCodexMcpToml(
   existingContent: string,
   servers: McpServerConfig[],
 ): string {
+  return mergeMcpToml(existingContent, "codex", servers);
+}
+
+export function mergeMcpToml(
+  existingContent: string,
+  target: "codex" | "custom-toml" | "grok",
+  servers: McpServerConfig[],
+): string {
   const withoutManaged = existingContent
     .replace(
       new RegExp(
@@ -1296,7 +1363,7 @@ export function mergeCodexMcpToml(
     .trimEnd();
   const block = [
     MANAGED_BLOCK_START,
-    buildCodexMcpToml(servers).trim(),
+    buildMcpToml(target, servers).trim(),
     MANAGED_BLOCK_END,
   ]
     .filter(Boolean)

@@ -49,7 +49,7 @@ import {
   installMcpTemplate,
   listMcpServerNamesInJson,
   listMcpServerNamesInToml,
-  mergeCodexMcpToml,
+  mergeMcpToml,
   mergeMcpServersJson,
   normalizeMcpServerDraft,
   parseMcpJsonConfigContent,
@@ -249,8 +249,10 @@ function selectServers(
   return servers;
 }
 
-function isTomlTarget(target: McpTargetKind): boolean {
-  return target === "codex" || target === "custom-toml";
+function isTomlTarget(
+  target: McpTargetKind,
+): target is Extract<McpTargetKind, "codex" | "custom-toml" | "grok"> {
+  return target === "codex" || target === "custom-toml" || target === "grok";
 }
 
 function createBindingId(target: McpApplyTarget): string {
@@ -764,6 +766,7 @@ function importServerEntry(
   name: string,
   entry: unknown,
   now: number,
+  target?: McpTargetKind,
 ): McpServerConfig | null {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
     return null;
@@ -774,7 +777,12 @@ function importServerEntry(
     : [];
   const command =
     typeof record.command === "string" ? record.command : commandParts[0];
-  const url = typeof record.url === "string" ? record.url : undefined;
+  const url =
+    target === "antigravity" && typeof record.serverUrl === "string"
+      ? record.serverUrl
+      : typeof record.url === "string"
+        ? record.url
+        : undefined;
   if (!command && !url) {
     return null;
   }
@@ -795,9 +803,13 @@ function importServerEntry(
         typeof record.description === "string" ? record.description : undefined,
       transport: command
         ? "stdio"
-        : record.type === "sse"
-          ? "sse"
-          : "streamable-http",
+        : target === "openclaw"
+          ? record.transport === "streamable-http"
+            ? "streamable-http"
+            : "sse"
+          : record.type === "sse"
+            ? "sse"
+            : "streamable-http",
       command,
       args,
       cwd: typeof record.cwd === "string" ? record.cwd : undefined,
@@ -812,7 +824,10 @@ function importServerEntry(
         !Array.isArray(headersRecord)
           ? (headersRecord as Record<string, string>)
           : undefined,
-      enabled: record.enable !== false && record.enabled !== false,
+      enabled:
+        record.enable !== false &&
+        record.enabled !== false &&
+        record.disabled !== true,
       source: { type: "import" },
     },
     now,
@@ -907,7 +922,7 @@ function parseCodexTomlServers(
     const value = line.slice(separatorIndex + 1).trim();
     if (key === "args") {
       current.args = parseTomlStringArray(value);
-    } else if (key === "env" || key === "http_headers") {
+    } else if (key === "env" || key === "http_headers" || key === "headers") {
       current[key === "env" ? "env" : "headers"] = parseTomlInlineTable(value);
     } else if (key === "command" || key === "cwd" || key === "url") {
       current[key] = parseTomlString(value);
@@ -1015,7 +1030,7 @@ function readTargetServers(
     return [];
   }
   return Object.entries(source)
-    .map(([name, entry]) => importServerEntry(name, entry, now))
+    .map(([name, entry]) => importServerEntry(name, entry, now, target))
     .filter((server): server is McpServerConfig => Boolean(server))
     .map((server) => ({
       ...server,
@@ -1270,7 +1285,7 @@ export class CoreMcpLibraryService {
         ? removeCodexMcpTomlServers(existingContent, externalConflicts)
         : existingContent;
     const content = isTomlTarget(target.target)
-      ? mergeCodexMcpToml(tomlBaseContent, servers)
+      ? mergeMcpToml(tomlBaseContent, target.target, servers)
       : `${JSON.stringify(
           mergeMcpServersJson(
             parseMcpJsonConfigContent(existingContent),

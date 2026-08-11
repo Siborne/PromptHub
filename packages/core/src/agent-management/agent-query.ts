@@ -266,6 +266,8 @@ export function buildManagedAgents({
               root,
               override.rulesRelativePath || platform.globalRuleFile,
             ),
+            projectRules: platform.projectRuleFile,
+            projectRuleKind: platform.projectRuleKind,
             configFiles: configRelativePaths
               .map((relativePath) => joinPath(root, relativePath))
               .filter((path): path is string => Boolean(path)),

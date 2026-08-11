@@ -21,6 +21,11 @@ export const MCP_TARGET_KINDS = [
   "pi",
   "oh-my-pi",
   "zcode",
+  "grok",
+  "openclaw",
+  "qoder",
+  "antigravity",
+  "reasonix",
   "custom-json",
   "custom-toml",
 ] as const;

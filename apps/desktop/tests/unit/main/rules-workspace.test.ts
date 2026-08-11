@@ -108,6 +108,59 @@ describe("rules workspace storage", () => {
     );
   });
 
+  it("manages Cursor project MDC rules beside an independent AGENTS.md rule", async () => {
+    const projectRoot = path.join(tempDir, "cursor-project");
+    const cursorTarget = path.join(
+      projectRoot,
+      ".cursor",
+      "rules",
+      "prompthub.mdc",
+    );
+    fs.mkdirSync(path.dirname(cursorTarget), { recursive: true });
+    fs.writeFileSync(
+      cursorTarget,
+      "---\ndescription: Existing Cursor rule\nalwaysApply: true\n---\n\n# Existing\n",
+      "utf8",
+    );
+
+    await createProjectRule({
+      id: "cursor-project",
+      name: "Cursor Project",
+      rootPath: projectRoot,
+    });
+    const cursor = await createProjectRule({
+      id: "cursor-project.cursor",
+      kind: "cursor",
+      name: "Cursor Project",
+      rootPath: projectRoot,
+    });
+
+    expect(cursor).toMatchObject({
+      id: "project:cursor-project.cursor",
+      platformId: "cursor",
+      name: "prompthub.mdc",
+      path: cursorTarget,
+      projectRootPath: projectRoot,
+      exists: true,
+    });
+    expect((await readRuleContent(cursor.id)).content).toContain("# Existing");
+
+    await saveRuleContent(cursor.id, "# Updated Cursor rule\n");
+    expect(fs.readFileSync(cursorTarget, "utf8")).toBe(
+      "# Updated Cursor rule\n",
+    );
+    expect(fs.existsSync(path.join(projectRoot, "AGENTS.md"))).toBe(false);
+
+    await expect(
+      createProjectRule({
+        id: "cursor-project.cursor-copy",
+        kind: "cursor",
+        name: "Cursor Project Copy",
+        rootPath: projectRoot,
+      }),
+    ).rejects.toThrow("Rule project target path already exists");
+  });
+
   it("persists a missing project target across a rescan and fresh cached read", async () => {
     const projectRoot = path.join(tempDir, "missing-site");
     const targetPath = path.join(projectRoot, "AGENTS.md");

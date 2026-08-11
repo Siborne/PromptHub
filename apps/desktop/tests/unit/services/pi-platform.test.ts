@@ -21,6 +21,7 @@ describe("Pi platform support", () => {
         linux: "~/.pi/agent",
       },
       skillsRelativePath: "skills",
+      mcpRelativePath: "mcp.json",
       pluginsRelativePath: "extensions",
       globalRuleFile: "AGENTS.md",
       configFiles: ["settings.json", "models.json", "AGENTS.md"],
@@ -30,7 +31,6 @@ describe("Pi platform support", () => {
         evidence: "official-pi-cli",
       },
     });
-    expect(getPlatformById("pi")?.mcpRelativePath).toBeUndefined();
     expect(getPlatformById("oh-my-pi")?.rootDir.darwin).toBe("~/.omp/agent");
     expect(DEFAULT_SKILL_PLATFORM_ORDER).toEqual(
       expect.arrayContaining(["pi", "oh-my-pi"]),
@@ -70,7 +70,7 @@ describe("Pi platform support", () => {
       paths: {
         root: "~/.pi/agent",
         skills: "~/.pi/agent/skills",
-        mcp: undefined,
+        mcp: "~/.pi/agent/mcp.json",
         plugins: "~/.pi/agent/extensions",
         rules: "~/.pi/agent/AGENTS.md",
         configFiles: [
@@ -81,6 +81,7 @@ describe("Pi platform support", () => {
       },
       capabilities: {
         provider: { status: "partial", reason: "model-config-only" },
+        assets: { status: "partial", reason: "asset-paths-only" },
         sessions: { status: "supported" },
       },
     });
