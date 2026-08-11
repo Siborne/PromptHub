@@ -119,6 +119,57 @@ describe("portable canonical consistency", () => {
     ).not.toThrow();
   });
 
+  it("rejects a partial durable scope before reading canonical storage", () => {
+    const value = JSON.parse(logicalEnvelope()) as Record<string, any>;
+    value.scope.images = false;
+
+    expect(() =>
+      assertPortableLogicalMatchesCanonicalStorage(
+        JSON.stringify(value),
+        "/path/that-must-not-be-read",
+      ),
+    ).toThrow("requires a complete portable logical scope");
+  });
+
+  it("treats omitted optional empty collections as an empty durable inventory", () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-portable-optional-empty-"),
+    );
+    roots.push(root);
+    const canonicalPath = path.join(root, "canonical");
+    materializeCanonicalStorageShadow({
+      targetPath: canonicalPath,
+      prompts: {
+        prompts: [],
+        promptVersions: [],
+        folders: [],
+        promptRelations: [],
+        outputFormatItems: [],
+      },
+      mcpLibrary: {
+        kind: "prompthub-mcp-library",
+        version: 1,
+        updatedAt: "2026-08-11T00:00:00.000Z",
+        servers: [],
+        bindings: [],
+      },
+    });
+    const value = JSON.parse(logicalEnvelope()) as Record<string, any>;
+    delete value.payload.promptRelations;
+    delete value.payload.outputFormatItems;
+    delete value.payload.skills;
+    delete value.payload.skillVersions;
+    delete value.payload.rules;
+    delete value.payload.pluginLibrary.plugins;
+
+    expect(() =>
+      assertPortableLogicalMatchesCanonicalStorage(
+        JSON.stringify(value),
+        canonicalPath,
+      ),
+    ).not.toThrow();
+  });
+
   it("rejects a renderer envelope captured from a different durable revision", () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "prompthub-portable-stale-"),
@@ -176,6 +227,8 @@ describe("portable canonical consistency", () => {
       versionTrackingEnabled: true,
       local_repo_path: "/device-a/skills/writer",
       source_url: "https://example.com/writer.git",
+      content_url: "not a URL",
+      icon_url: "https://user:password@example.com/icon.png",
       created_at: 1,
       updated_at: 2,
     };
@@ -248,8 +301,12 @@ describe("portable canonical consistency", () => {
       source: {
         kind: "local",
         localPackagePath: "/device-a/plugins/plugin",
+        repository: "ftp://example.com/plugin.git",
+        rawJsonUrl: "not a URL",
+        url: "https://user:password@example.com/plugin",
       },
       localPackagePath: "/device-a/plugins/plugin",
+      author: { name: "Maintainer", url: "ftp://example.com/author" },
       installedAt: 1,
       updatedAt: 2,
     };
@@ -291,6 +348,13 @@ describe("portable canonical consistency", () => {
         {
           profile,
           modelMappings: [
+            {
+              id: "mapping-2",
+              providerProfileId: "profile-1",
+              routeKey: "secondary",
+              modelId: "gpt-4.1",
+              parameters: { reasoning: "high" },
+            },
             {
               id: "mapping-1",
               providerProfileId: "profile-1",
@@ -345,6 +409,11 @@ describe("portable canonical consistency", () => {
                 source: "manual",
               },
               modelMappings: [
+                {
+                  routeKey: "secondary",
+                  modelId: "gpt-4.1",
+                  parameters: { reasoning: "high" },
+                },
                 {
                   routeKey: "primary",
                   modelId: "gpt-5",

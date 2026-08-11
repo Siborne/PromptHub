@@ -303,56 +303,59 @@ storage-authority or converter boundary.
 
 ## 2026-08-12 Final Storage Verification
 
-- Complete Core suite and V8 instrumentation: 48 files and 292 tests passed.
-  The 1,000-Prompt fixture measured 27.9 seconds for initial publication,
-  2.1 seconds for one incremental mutation, 50,288 KiB maximum RSS increase,
-  and 2,861,387 canonical bytes. Resource bundle and content-addressed object
-  store remain at 100% line/function/branch coverage; the combined Core report
-  is 48.3% statements and 78.88% branches because it instruments unrelated
-  untested CLI and legacy modules too. Several new storage orchestrators remain
-  below 100% whole-file branch coverage, so `T-DATA-012` stays open rather than
-  converting focused adversarial evidence into a false coverage claim.
-- Database migration TypeScript passed. The migration lock suite passed 22 tests,
-  including immutable manifest identity, numeric/current invariants, destructive
-  classification, safety-point gating, finalization rollback, and injected DDL,
-  data, destructive-index, history, and post-commit failures.
-- The accumulated focused Desktop storage matrix passed 24 files and 240 tests;
-  its renderer/jsdom subset passed 3 files and 7 tests from the Desktop root.
-  CLI passed 14 files and 123 tests; self-hosted Web storage topology passed 16
-  files and 89 tests. Core, DB, Shared, CLI, Desktop, Web, Worker, and Mobile
-  TypeScript checks passed in the release harness.
-- The quick release harness ran all 22 configured checks after disabling pnpm
-  11's automatic dependency reinstall. Core, CLI, Web, Worker, Mobile, Shared,
-  DB, lint, and typecheck checks passed. The Desktop full unit surface failed on
-  unrelated concurrent Agent changes and sandbox-denied local listeners; the
-  file-size gate also reports an unrelated 1,575-line Agent workbench test. The
-  initially stale spec index was regenerated and `pnpm spec:test` then passed
-  all governance and 23-change traceability checks. The full release harness was
-  not run because the quick profile has unresolved non-storage failures.
-- Focused Prettier and `git diff --check` passed. No dependency tree, user data,
-  network configuration, or long-running process was changed or retained.
+- The final review closed five concrete persistence defects before convergence:
+  root-operation journals now validate absolute, distinct, operation-owned
+  stage/prior paths; malformed operation IDs and unrecognized sources fail
+  before maintenance acquisition; prepared rollback preserves an unrelated
+  target while still recognizing the stage-renamed crash window by digest;
+  sparse valid Prompt resources are normalized to SQLite defaults before graph
+  comparison; and every canonical child-domain root is preflighted before the
+  Prompt graph is read.
+- The critical Core gate covers 17 production storage modules with 234 tests and
+  reports 100% statements, branches, functions, and lines. It includes authority,
+  maintenance intent, recovery registry, diagnostics, logical and portable
+  snapshots, consistency, restore/publication journals, runtime context,
+  inventory, root migration, canonical projection, renderer migration, Prompt
+  catalog rebuild, and resource-schema registry/conversion.
+- The complete Core suite passes 50 files and 457 tests. The 1,000-Prompt fixture
+  measured 28.5 seconds for initial publication, 2.05 seconds for one incremental
+  mutation, 53,072 KiB maximum RSS increase, and 2,861,387 canonical bytes. The
+  full-package report still includes uncovered legacy and unrelated modules; the
+  required changed critical boundary, rather than the entire legacy package, is
+  the 100% gate.
+- `packages/db` TypeScript passes. The focused Desktop database/storage matrix
+  passes 8 files and 68 tests across migration locking, safety points, tagged
+  historical fixtures and canonical rebuilds, journaled recovery, data-layout
+  migration, authority checkpoints, and portable restore. Desktop TypeScript
+  also passes after the new test fixtures were type-corrected.
+- The 22-check quick profile and 31-check release profile were both executed.
+  Shared, DB, Core, CLI, Desktop lint/typecheck/build/performance/bundle budget,
+  Web lint/typecheck/test/build, Worker lint/typecheck/test/build, and Mobile
+  typecheck/test pass. The release profile additionally confirms the CLI,
+  Desktop, self-hosted Web, and Worker builds.
+- Non-storage release failures are recorded without being hidden: a parallel
+  Agent test is 1,575 lines; Agent platform expectations are stale against the
+  concurrently edited capability catalog; local-listener and Electron smoke
+  tests are denied by the execution sandbox; and the complete Desktop
+  integration worker exhausted its 4 GiB heap after 34 passing tests. Focused
+  storage suites and the Core 1,000-Prompt budget do not reproduce the heap
+  failure.
+- No dependency tree, user data, credentials, network configuration, or
+  long-running process was changed or retained by this work.
 
 ## Known Current Production Risks
 
 - Publication is bounded by explicit inventory, file-size, total-byte, RSS, and
-  timeout guards, but the catalog projector still holds bounded metadata arrays
-  in memory rather than using an external sort. The 1,000-Prompt fixture is the
-  current measured capacity baseline; materially larger supported limits require
-  another benchmark before raising configured bounds.
+  timeout guards, but the catalog projector holds bounded metadata arrays in
+  memory rather than using an external sort. The 1,000-Prompt fixture is the
+  measured capacity baseline; supported limits must not be raised without a new
+  benchmark.
 - Unknown newer domain schemas are intentionally not writable. They remain
-  readable only where the domain reader can preserve them without mutation;
-  otherwise startup or mutation fails closed until a newer client is installed.
-- Critical boundaries have adversarial focused suites. Final combined coverage
-  and release harness results are recorded during submission convergence rather
-  than inferred from individual passing suites.
-
-## Remaining Work
-
-- Raise the remaining changed-orchestrator coverage recorded by `T-DATA-012`
-  and rerun the full release harness after the unrelated Desktop/Agent failures
-  in the quick profile are resolved.
-- Complete submission traceability, archive this change after convergence, and
-  keep related GitHub issues open until the containing version is published.
+  readable only when the registered domain reader can preserve them without
+  mutation; otherwise startup or mutation fails closed until upgrade.
+- Remaining release-profile failures belong to active Agent work, sandboxed GUI
+  or listener execution, and legacy Desktop test-runner capacity. They are not
+  treated as passing and are not included in this storage change's commit.
 
 ## File Size Decisions
 
@@ -365,10 +368,16 @@ storage-authority or converter boundary.
   crosses the mandatory 2,000-line limit; follow-up extraction should be driven
   by a new independent responsibility rather than line count alone.
 
-## Convergence Conditions
+## Convergence Result
 
-M0 local storage foundation, file-first runtime authority, converter chain, and
-measured local scale baseline are converged and can be consumed by separately
-scoped official backup work. This change remains active only for final automated
-gates and submission. After those pass it moves to the dated archive; related
-GitHub issues remain open until the containing release is published.
+M0 local storage foundation is converged: canonical files are the local durable
+authority, renderer-owned durable state has canonical owners, SQLite catalogs
+are staged and rebuildable, root migration and restore are journaled and atomic,
+recovery artifacts are bounded, and portable/cloud transports can consume one
+versioned logical snapshot contract without becoming a second authority.
+
+Requirements, design, tests, tasks, implementation, stable storage knowledge,
+and runtime behavior agree. This change is archived in the dated change archive.
+Issues #89, #97, and #98 remain open because their release and historical
+upgrade work is tracked independently and the containing version is not yet
+publicly available.

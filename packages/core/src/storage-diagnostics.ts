@@ -83,7 +83,7 @@ export function getStorageDiagnostic(
       : ({
           userVersion: null,
           migrationCount: null,
-          quickCheck: databaseSize === null ? "unavailable" : "unavailable",
+          quickCheck: "unavailable",
         } satisfies StorageDatabaseDiagnostic);
   const artifacts = listRecoveryArtifacts(context.activeRoot);
   const artifactTypes: Record<string, number> = {};

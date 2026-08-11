@@ -12,7 +12,7 @@ import {
   initDatabase,
 } from "@prompthub/db";
 import type { Folder, Prompt, PromptVersion } from "@prompthub/shared/types";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   collectPromptCanonicalGraph,
@@ -81,6 +81,7 @@ function folder(): Folder {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   closeDatabase();
   for (const root of roots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
@@ -358,5 +359,155 @@ describe("prompt canonical export", () => {
       /already exists/u,
     );
     expect(fs.readFileSync(databasePath, "utf8")).toBe("keep");
+  });
+
+  it("normalizes optional catalog values and deterministic graph ordering", () => {
+    const root = createRoot();
+    const firstPrompt = {
+      ...prompt("prompt-1", "folder-1"),
+      promptType: undefined,
+      order: undefined,
+      images: undefined,
+      videos: undefined,
+      version: 2,
+      currentVersion: 2,
+    };
+    const secondVersion: PromptVersion = {
+      ...version("prompt-1"),
+      id: "version-prompt-1-2",
+      version: 2,
+      userPrompt: "Body prompt-1 v2",
+      systemPrompt: "System",
+      systemPromptEn: "System EN",
+      userPromptEn: "Body EN",
+      note: "note",
+      aiResponse: "response",
+    };
+    const secondFolder: Folder = {
+      ...folder(),
+      id: "folder-2",
+      name: "Second",
+      visibility: "private",
+      icon: "folder",
+      parentId: "folder-1",
+      isPrivate: true,
+    };
+    const sparseFolder = {
+      ...folder(),
+      visibility: undefined,
+      icon: undefined,
+      parentId: undefined,
+      order: 0,
+      isPrivate: undefined,
+    } as unknown as Folder;
+    const target = path.join(root, "canonical-data");
+    materializePromptCanonicalGraph(target, {
+      prompts: [prompt("prompt-2"), firstPrompt],
+      promptVersions: [version("prompt-2"), secondVersion, version("prompt-1")],
+      folders: [secondFolder, sparseFolder],
+      promptRelations: [
+        {
+          id: "relation-2",
+          sourcePromptId: "prompt-2",
+          targetPromptId: "prompt-1",
+          kind: "related_to",
+          note: "linked",
+          createdAt: "2026-08-11T00:00:00.000Z",
+          updatedAt: "2026-08-11T00:00:00.000Z",
+        },
+        {
+          id: "relation-1",
+          sourcePromptId: "prompt-1",
+          targetPromptId: "prompt-2",
+          kind: "depends_on",
+          createdAt: "2026-08-11T00:00:00.000Z",
+          updatedAt: "2026-08-11T00:00:00.000Z",
+        },
+      ],
+      outputFormatItems: [
+        {
+          id: "format-2",
+          sourcePromptId: "prompt-2",
+          targetPromptId: "prompt-1",
+          sortOrder: 1,
+          createdAt: "2026-08-11T00:00:00.000Z",
+          updatedAt: "2026-08-11T00:00:00.000Z",
+        },
+        {
+          id: "format-1",
+          sourcePromptId: "prompt-1",
+          targetPromptId: "prompt-2",
+          sortOrder: 0,
+          createdAt: "2026-08-11T00:00:00.000Z",
+          updatedAt: "2026-08-11T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(
+      stagePromptCanonicalDatabase(target, path.join(root, "normalized.db"))
+        .counts,
+    ).toEqual({
+      prompts: 2,
+      promptVersions: 3,
+      folders: 2,
+      tags: 3,
+      relations: 2,
+      outputFormatItems: 2,
+    });
+  });
+
+  it("cleans catalog stages after quick-check, hash, and destination race failures", () => {
+    const root = createRoot();
+    const target = path.join(root, "canonical-data");
+    materializePromptCanonicalGraph(target, {
+      prompts: [prompt("prompt-1")],
+      promptVersions: [version("prompt-1")],
+      folders: [],
+      promptRelations: [],
+      outputFormatItems: [],
+    });
+    const originalPragma = DatabaseAdapter.prototype.pragma;
+    for (const [index, result] of [
+      [],
+      [undefined],
+      [{ quick_check: "not ok" }],
+    ].entries()) {
+      vi.spyOn(DatabaseAdapter.prototype, "pragma").mockImplementation(
+        function (this: InstanceType<typeof DatabaseAdapter>, pragma: string) {
+          if (pragma === "quick_check") return result as never;
+          return originalPragma.call(this, pragma);
+        },
+      );
+      const databasePath = path.join(root, `quick-check-${index}.db`);
+      expect(() => stagePromptCanonicalDatabase(target, databasePath)).toThrow(
+        /quick_check/,
+      );
+      expect(fs.existsSync(databasePath)).toBe(false);
+      vi.restoreAllMocks();
+    }
+
+    vi.spyOn(PromptDB.prototype, "getAll").mockReturnValue([]);
+    const hashPath = path.join(root, "hash.db");
+    expect(() => stagePromptCanonicalDatabase(target, hashPath)).toThrow(
+      /does not match source graph/,
+    );
+    expect(fs.existsSync(hashPath)).toBe(false);
+    vi.restoreAllMocks();
+
+    const racePath = path.join(root, "race.db");
+    const originalExists = fs.existsSync.bind(fs);
+    let raceChecks = 0;
+    vi.spyOn(fs, "existsSync").mockImplementation((candidate) => {
+      if (path.resolve(String(candidate)) === racePath) {
+        raceChecks += 1;
+        return raceChecks > 1;
+      }
+      return originalExists(candidate);
+    });
+    expect(() => stagePromptCanonicalDatabase(target, racePath)).toThrow(
+      /destination already exists/,
+    );
+    expect(originalExists(racePath)).toBe(false);
   });
 });

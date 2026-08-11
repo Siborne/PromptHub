@@ -330,23 +330,21 @@ function childBundlePaths(rootPath: string, domain: string): string[] {
 export function readCanonicalStorageShadow(
   rootPath: string,
 ): ReadCanonicalStorageShadowResult {
+  const skillPaths = childBundlePaths(rootPath, "skills");
+  const rulePaths = childBundlePaths(rootPath, "rules");
+  const mcpPaths = childBundlePaths(rootPath, "mcp");
+  const pluginPaths = childBundlePaths(rootPath, "plugins");
+  const agentPaths = childBundlePaths(rootPath, "agents");
+  const generationPaths = childBundlePaths(rootPath, "generations");
   const promptGraph = readPromptCanonicalGraph(rootPath);
-  const skills = childBundlePaths(rootPath, "skills").map(
-    readSkillResourceBundle,
-  );
-  const rules = childBundlePaths(rootPath, "rules").map(readRuleResourceBundle);
-  const mcpServers = childBundlePaths(rootPath, "mcp").map(
-    readMcpServerResourceBundle,
-  );
-  const plugins = childBundlePaths(rootPath, "plugins").map(
-    readPluginResourceBundle,
-  );
-  const agentProviders = childBundlePaths(rootPath, "agents").map(
-    readAgentProviderResourceBundle,
-  );
+  const skills = skillPaths.map(readSkillResourceBundle);
+  const rules = rulePaths.map(readRuleResourceBundle);
+  const mcpServers = mcpPaths.map(readMcpServerResourceBundle);
+  const plugins = pluginPaths.map(readPluginResourceBundle);
+  const agentProviders = agentPaths.map(readAgentProviderResourceBundle);
   const objectsRoot = path.join(rootPath, "assets", "objects");
-  const generations = childBundlePaths(rootPath, "generations").map(
-    (bundlePath) => readGenerationResourceBundle(bundlePath, objectsRoot),
+  const generations = generationPaths.map((bundlePath) =>
+    readGenerationResourceBundle(bundlePath, objectsRoot),
   );
   const domainCounts = {
     skills: skills.length,

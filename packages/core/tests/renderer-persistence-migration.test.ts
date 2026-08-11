@@ -2,17 +2,21 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createRendererPersistenceStore,
+  readRendererPersistenceMigrationMarker,
+  resolveOwnedPath,
   type RendererPersistenceEncryption,
 } from "../src/renderer-persistence-migration";
 
 const roots: string[] = [];
 
 function createRoot(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-renderer-state-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "prompthub-renderer-state-"),
+  );
   roots.push(root);
   return root;
 }
@@ -32,6 +36,7 @@ function persisted(state: Record<string, unknown>): string {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -40,7 +45,10 @@ afterEach(() => {
 describe("renderer persistence migration", () => {
   it("moves durable settings, sources, device identity, recovery paths, and secrets to canonical owners", async () => {
     const root = createRoot();
-    const store = createRendererPersistenceStore({ rootPath: root, encryption });
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
 
     const result = await store.migrate({
       settings: persisted({
@@ -178,7 +186,10 @@ describe("renderer persistence migration", () => {
 
   it("survives an empty renderer snapshot after browser storage is cleared", async () => {
     const root = createRoot();
-    const store = createRendererPersistenceStore({ rootPath: root, encryption });
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
     await store.migrate({
       settings: persisted({ language: "ja", s3SecretAccessKey: "secret" }),
       skillStore: persisted({ customStoreSources: [] }),
@@ -195,7 +206,10 @@ describe("renderer persistence migration", () => {
 
   it("imports and redacts the legacy AI config when renderer storage has no provider copy", async () => {
     const root = createRoot();
-    const store = createRendererPersistenceStore({ rootPath: root, encryption });
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
     await store.migrate({
       settings: persisted({ language: "en" }),
       legacyAIConfig: {
@@ -232,7 +246,10 @@ describe("renderer persistence migration", () => {
 
   it("fails closed on malformed sources without publishing a completion marker", async () => {
     const root = createRoot();
-    const store = createRendererPersistenceStore({ rootPath: root, encryption });
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
 
     await expect(
       store.migrate({
@@ -260,9 +277,9 @@ describe("renderer persistence migration", () => {
         ),
       ),
     ).toBe(false);
-    expect(fs.existsSync(path.join(root, "config", "marketplace-sources.json"))).toBe(
-      false,
-    );
+    expect(
+      fs.existsSync(path.join(root, "config", "marketplace-sources.json")),
+    ).toBe(false);
   });
 
   it("rolls back every canonical file when publication fails", async () => {
@@ -283,7 +300,9 @@ describe("renderer persistence migration", () => {
       }),
     ).rejects.toThrow(/injected|publication/iu);
 
-    expect(fs.readFileSync(appConfigPath, "utf8")).toBe("previous-app-config\n");
+    expect(fs.readFileSync(appConfigPath, "utf8")).toBe(
+      "previous-app-config\n",
+    );
     expect(fs.existsSync(path.join(root, "secrets", "vault.enc"))).toBe(false);
     expect(
       fs.existsSync(
@@ -300,7 +319,10 @@ describe("renderer persistence migration", () => {
 
   it("moves the IndexedDB completion marker outside renderer storage", async () => {
     const root = createRoot();
-    const store = createRendererPersistenceStore({ rootPath: root, encryption });
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
     await store.migrate({ settings: persisted({ language: "en" }) });
 
     expect(await store.isIndexedDbMigrationDone()).toBe(false);
@@ -311,7 +333,10 @@ describe("renderer persistence migration", () => {
 
   it("keeps canonical settings, sources, recovery paths, and device identity current", async () => {
     const root = createRoot();
-    const store = createRendererPersistenceStore({ rootPath: root, encryption });
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
     await store.migrate({ settings: persisted({ language: "en" }) });
 
     await store.replaceSettings({ language: "de", githubToken: "next-token" });
@@ -342,5 +367,568 @@ describe("renderer persistence migration", () => {
     expect(
       fs.readFileSync(path.join(root, "secrets", "vault.enc"), "utf8"),
     ).not.toContain("next-token");
+  });
+
+  it("normalizes direct state, agent device settings, and all marketplace source types", async () => {
+    const root = createRoot();
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+      now: () => new Date("2026-08-12T00:00:00.000Z"),
+    });
+    await store.migrate({
+      settings: {
+        language: "en",
+        aiProviders: [],
+        aiModels: [],
+        modelRouteDefaults: { chat: "model-1" },
+        builtinAgentOverrides: { codex: { enabled: true } },
+        customAgents: [],
+        disabledPlatformIds: ["claude"],
+        agentIdentityPreferences: {
+          codex: { name: "codex", icon: "chatgpt" },
+        },
+        networkProxy: { mode: "system" },
+      },
+      legacyAIConfig: {
+        providers: [{ id: "ignored-provider" }],
+        models: [{ id: "ignored-model" }],
+        modelRouteDefaults: { chat: "ignored" },
+      },
+      skillStore: {
+        customStoreSources: [
+          {
+            id: "local-source",
+            name: " Local ",
+            type: "local-dir",
+            url: "/tmp/local-source",
+            directory: "nested\\skills",
+            enabled: false,
+            order: 9999,
+            createdAt: -1,
+          },
+          {
+            id: "git-source",
+            name: "Git",
+            type: "git-repo",
+            url: "https://example.test/repo.git",
+          },
+        ],
+      },
+      selfHostedDeviceId: "",
+      recoveryPaths: ["/one", "/two"],
+    });
+
+    const state = store.readHydratedStateSync();
+    expect(state.settings).toMatchObject({
+      modelRouteDefaults: { chat: "model-1" },
+      builtinAgentOverrides: { codex: {} },
+      disabledPlatformIds: ["claude"],
+      agentIdentityPreferences: {
+        codex: { name: "codex", icon: "chatgpt" },
+      },
+    });
+    expect(state.marketplaceSources.skill).toEqual([
+      expect.objectContaining({
+        name: "Local",
+        directory: "nested/skills",
+        enabled: false,
+        order: 0,
+        createdAt: 0,
+      }),
+      expect.objectContaining({
+        id: "git-source",
+        enabled: true,
+        order: 1,
+        createdAt: 0,
+      }),
+    ]);
+    expect(state.selfHostedDeviceId).toMatch(/^desktop-/u);
+    expect(readRendererPersistenceMigrationMarker(root)?.completedAt).toBe(
+      "2026-08-12T00:00:00.000Z",
+    );
+
+    fs.rmSync(path.join(root, "config", "devices", "agents.json"));
+    const withoutAgents = store.readHydratedStateSync();
+    expect(withoutAgents.settings.builtinAgentOverrides).toBeUndefined();
+  });
+
+  it("rejects malformed snapshots, settings, providers, recovery paths, and devices", async () => {
+    const cases: Array<{
+      input: Record<string, unknown>;
+      pattern: RegExp;
+    }> = [
+      { input: { settings: "{" }, pattern: /Invalid renderer settings/ },
+      {
+        input: { settings: { language: () => "en" } },
+        pattern: /Invalid renderer setting language/,
+      },
+      {
+        input: { settings: { aiProviders: {} } },
+        pattern: /Invalid AI provider collection/,
+      },
+      {
+        input: { settings: { aiModels: new Array(513).fill({}) } },
+        pattern: /Invalid AI model collection/,
+      },
+      {
+        input: { settings: { aiProviders: [{ id: "../provider" }] } },
+        pattern: /Invalid renderer provider id/,
+      },
+      {
+        input: { recoveryPaths: {} },
+        pattern: /Invalid renderer recovery path registry/,
+      },
+      {
+        input: { recoveryPaths: new Array(129).fill("/recovery") },
+        pattern: /Invalid renderer recovery path registry/,
+      },
+      {
+        input: { recoveryPaths: ["relative/path"] },
+        pattern: /Invalid renderer recovery path/,
+      },
+      {
+        input: { recoveryPaths: ["/safe\0unsafe"] },
+        pattern: /Invalid renderer recovery path/,
+      },
+      {
+        input: { selfHostedDeviceId: "../device" },
+        pattern: /Invalid renderer device id/,
+      },
+    ];
+    for (const [index, testCase] of cases.entries()) {
+      const root = createRoot();
+      const store = createRendererPersistenceStore({
+        rootPath: root,
+        encryption,
+      });
+      await expect(store.migrate(testCase.input)).rejects.toThrow(
+        testCase.pattern,
+      );
+      expect(readRendererPersistenceMigrationMarker(root)).toBeNull();
+      expect(index).toBeGreaterThanOrEqual(0);
+    }
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const circularStore = createRendererPersistenceStore({
+      rootPath: createRoot(),
+      encryption,
+    });
+    await expect(circularStore.migrate({ settings: circular })).rejects.toThrow(
+      /Invalid renderer persistence snapshot/,
+    );
+
+    const largeStore = createRendererPersistenceStore({
+      rootPath: createRoot(),
+      encryption,
+    });
+    await expect(
+      largeStore.migrate({
+        settings: { language: "x".repeat(8 * 1024 * 1024) },
+      }),
+    ).rejects.toThrow(/snapshot exceeds byte limit/);
+  });
+
+  it("rejects duplicate, oversized, malformed, and unsafe marketplace sources", async () => {
+    const valid = {
+      id: "source-1",
+      name: "Source",
+      type: "marketplace-json",
+      url: "https://example.test/source.json",
+    };
+    const invalidCollections: Array<unknown> = [
+      {},
+      new Array(513).fill(valid),
+      [valid, valid],
+      [{ ...valid, type: "unknown" }],
+      [{ ...valid, name: "" }],
+      [{ ...valid, url: "not a url" }],
+      [{ ...valid, url: "ftp://example.test/file" }],
+      [{ ...valid, url: "https://user:pass@example.test/file" }],
+      [{ ...valid, type: "local-dir", url: "relative/path" }],
+      [{ ...valid, type: "local-dir", url: "/safe\0unsafe" }],
+      [{ ...valid, branch: "bad\nbranch" }],
+      [{ ...valid, directory: "/absolute" }],
+      [{ ...valid, directory: "nested//empty" }],
+      [{ ...valid, directory: "nested/../escape" }],
+    ];
+    for (const collection of invalidCollections) {
+      const root = createRoot();
+      const store = createRendererPersistenceStore({
+        rootPath: root,
+        encryption,
+      });
+      await expect(
+        store.migrate({
+          skillStore: { customStoreSources: collection },
+        }),
+      ).rejects.toThrow(/source|marketplace|unsafe|invalid/iu);
+    }
+
+    const noSources = createRendererPersistenceStore({
+      rootPath: createRoot(),
+      encryption,
+    });
+    await noSources.migrate({ skillStore: {} });
+    expect(
+      (await noSources.readHydratedState()).marketplaceSources.skill,
+    ).toEqual([]);
+  });
+
+  it("requires encryption for secrets and fails closed on corrupt vaults and references", async () => {
+    const unavailable: RendererPersistenceEncryption = {
+      ...encryption,
+      isEncryptionAvailable: () => false,
+    };
+    const root = createRoot();
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption: unavailable,
+    });
+    await expect(
+      store.migrate({ settings: persisted({ githubToken: "secret" }) }),
+    ).rejects.toThrow("RENDERER_SECRET_VAULT_UNAVAILABLE");
+    await expect(
+      store.migrate({ settings: persisted({ language: "en" }) }),
+    ).resolves.toMatchObject({
+      status: "migrated",
+    });
+
+    const corruptCases: Array<{
+      mutate(rootPath: string): void;
+      encryption?: RendererPersistenceEncryption;
+      pattern: RegExp;
+    }> = [
+      {
+        mutate(rootPath) {
+          const vaultPath = path.join(rootPath, "secrets", "vault.enc");
+          const vault = JSON.parse(fs.readFileSync(vaultPath, "utf8"));
+          vault.kind = "wrong-vault";
+          fs.writeFileSync(vaultPath, JSON.stringify(vault));
+        },
+        pattern: /Invalid renderer secret vault/,
+      },
+      {
+        mutate(rootPath) {
+          const vaultPath = path.join(rootPath, "secrets", "vault.enc");
+          const vault = JSON.parse(fs.readFileSync(vaultPath, "utf8"));
+          vault.secrets["renderer:githubToken"] = 123;
+          fs.writeFileSync(vaultPath, JSON.stringify(vault));
+        },
+        pattern: /Invalid renderer secret vault/,
+      },
+      {
+        mutate() {},
+        encryption: unavailable,
+        pattern: /RENDERER_SECRET_VAULT_UNAVAILABLE/,
+      },
+      {
+        mutate(rootPath) {
+          const appPath = path.join(rootPath, "config", "app.json");
+          const app = JSON.parse(fs.readFileSync(appPath, "utf8"));
+          app.secretRefs.githubToken = 123;
+          fs.writeFileSync(appPath, JSON.stringify(app));
+        },
+        pattern: /Invalid renderer secret reference/,
+      },
+      {
+        mutate(rootPath) {
+          const appPath = path.join(rootPath, "config", "app.json");
+          const app = JSON.parse(fs.readFileSync(appPath, "utf8"));
+          app.secretRefs.githubToken = "renderer:missing";
+          fs.writeFileSync(appPath, JSON.stringify(app));
+        },
+        pattern: /Missing renderer secret/,
+      },
+      {
+        mutate(rootPath) {
+          const providersPath = path.join(rootPath, "config", "providers.json");
+          const providers = JSON.parse(fs.readFileSync(providersPath, "utf8"));
+          providers.providers[0].apiKeyRef = "renderer:missing";
+          fs.writeFileSync(providersPath, JSON.stringify(providers));
+        },
+        pattern: /Missing renderer secret/,
+      },
+      {
+        mutate(rootPath) {
+          const appPath = path.join(rootPath, "config", "app.json");
+          const app = JSON.parse(fs.readFileSync(appPath, "utf8"));
+          app.settings.networkProxy.usernameRef = "renderer:missing";
+          fs.writeFileSync(appPath, JSON.stringify(app));
+        },
+        pattern: /Missing renderer secret/,
+      },
+    ];
+    for (const corruptCase of corruptCases) {
+      const caseRoot = createRoot();
+      const initial = createRendererPersistenceStore({
+        rootPath: caseRoot,
+        encryption,
+      });
+      await initial.migrate({
+        settings: persisted({
+          githubToken: "secret",
+          aiProviders: [{ id: "provider-1", apiKey: "provider-secret" }],
+          networkProxy: { mode: "manual", username: "proxy-user" },
+        }),
+      });
+      corruptCase.mutate(caseRoot);
+      const reader = createRendererPersistenceStore({
+        rootPath: caseRoot,
+        encryption: corruptCase.encryption ?? encryption,
+      });
+      expect(() => reader.readHydratedStateSync()).toThrow(corruptCase.pattern);
+    }
+  });
+
+  it("rejects unsafe canonical files, unsupported versions, and invalid markers", async () => {
+    const invalidFileRoot = createRoot();
+    const invalidFileStore = createRendererPersistenceStore({
+      rootPath: invalidFileRoot,
+      encryption,
+    });
+    await invalidFileStore.migrate({});
+    const appPath = path.join(invalidFileRoot, "config", "app.json");
+    fs.rmSync(appPath);
+    fs.mkdirSync(appPath);
+    expect(() => invalidFileStore.readHydratedStateSync()).toThrow(
+      /Invalid renderer persistence file/,
+    );
+
+    const versionRoot = createRoot();
+    const versionStore = createRendererPersistenceStore({
+      rootPath: versionRoot,
+      encryption,
+    });
+    await versionStore.migrate({});
+    const versionAppPath = path.join(versionRoot, "config", "app.json");
+    const app = JSON.parse(fs.readFileSync(versionAppPath, "utf8"));
+    app.version = 2;
+    fs.writeFileSync(versionAppPath, JSON.stringify(app));
+    expect(() => versionStore.readHydratedStateSync()).toThrow(/Unsupported/);
+
+    const agentRoot = createRoot();
+    const agentStore = createRendererPersistenceStore({
+      rootPath: agentRoot,
+      encryption,
+    });
+    await agentStore.migrate({});
+    const agentPath = path.join(agentRoot, "config", "devices", "agents.json");
+    fs.rmSync(agentPath);
+    fs.mkdirSync(agentPath);
+    expect(() => agentStore.readHydratedStateSync()).toThrow(
+      /Invalid renderer persistence file/,
+    );
+
+    const markerFields: Array<[string, unknown]> = [
+      ["kind", "wrong"],
+      ["version", 2],
+      ["state", "pending"],
+      ["completedAt", 1],
+      ["indexedDbMigrationDone", "yes"],
+    ];
+    for (const [field, value] of markerFields) {
+      const markerRoot = createRoot();
+      const markerStore = createRendererPersistenceStore({
+        rootPath: markerRoot,
+        encryption,
+      });
+      await markerStore.migrate({});
+      const markerPath = path.join(
+        markerRoot,
+        "data",
+        "operations",
+        "migrations",
+        "renderer-persistence-v1.json",
+      );
+      const marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+      marker[field] = value;
+      fs.writeFileSync(markerPath, JSON.stringify(marker));
+      expect(() => readRendererPersistenceMigrationMarker(markerRoot)).toThrow(
+        /Invalid renderer persistence migration marker/,
+      );
+    }
+
+    const invalidJsonRoot = createRoot();
+    const invalidJsonStore = createRendererPersistenceStore({
+      rootPath: invalidJsonRoot,
+      encryption,
+    });
+    await invalidJsonStore.migrate({});
+    fs.writeFileSync(path.join(invalidJsonRoot, "config", "app.json"), "{");
+    expect(() => invalidJsonStore.readHydratedStateSync()).toThrow(
+      /Invalid renderer config\/app.json/,
+    );
+  });
+
+  it("blocks symlinked publication targets and restores settings after replacement failure", async () => {
+    if (process.platform !== "win32") {
+      const parentRoot = createRoot();
+      const outside = createRoot();
+      fs.symlinkSync(outside, path.join(parentRoot, "config"));
+      const parentStore = createRendererPersistenceStore({
+        rootPath: parentRoot,
+        encryption,
+      });
+      await expect(parentStore.migrate({})).rejects.toThrow(
+        /Unsafe renderer persistence target/,
+      );
+
+      const targetRoot = createRoot();
+      const targetOutside = path.join(createRoot(), "app.json");
+      fs.writeFileSync(targetOutside, "outside");
+      fs.mkdirSync(path.join(targetRoot, "config"));
+      fs.symlinkSync(
+        targetOutside,
+        path.join(targetRoot, "config", "app.json"),
+      );
+      const targetStore = createRendererPersistenceStore({
+        rootPath: targetRoot,
+        encryption,
+      });
+      await expect(targetStore.migrate({})).rejects.toThrow(
+        /Unsafe renderer persistence target/,
+      );
+    }
+
+    const root = createRoot();
+    const initial = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
+    await initial.migrate({ settings: persisted({ language: "en" }) });
+    const failing = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+      failPublicationAt: "config/providers.json",
+    });
+    await expect(
+      failing.replaceSettings({ language: "fr", githubToken: "new-secret" }),
+    ).rejects.toThrow(/publication failure/);
+    expect((await initial.readHydratedState()).settings.language).toBe("en");
+  });
+
+  it("handles IndexedDB marker preconditions, idempotence, verification, and atomic failure", async () => {
+    const incomplete = createRendererPersistenceStore({
+      rootPath: createRoot(),
+      encryption,
+    });
+    await expect(incomplete.markIndexedDbMigrationDone()).rejects.toThrow(
+      "RENDERER_PERSISTENCE_MIGRATION_INCOMPLETE",
+    );
+    expect(await incomplete.isIndexedDbMigrationDone()).toBe(false);
+
+    const root = createRoot();
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
+    await store.migrate({});
+    await store.markIndexedDbMigrationDone();
+    await expect(store.markIndexedDbMigrationDone()).resolves.toBeUndefined();
+
+    const verifyRoot = createRoot();
+    const verifyStore = createRendererPersistenceStore({
+      rootPath: verifyRoot,
+      encryption,
+    });
+    await verifyStore.migrate({});
+    const originalRename = fs.renameSync.bind(fs);
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      const result = originalRename(from, to);
+      if (String(to).endsWith("renderer-persistence-v1.json")) {
+        const marker = JSON.parse(fs.readFileSync(String(to), "utf8"));
+        marker.indexedDbMigrationDone = false;
+        fs.writeFileSync(String(to), JSON.stringify(marker));
+      }
+      return result;
+    });
+    await expect(verifyStore.markIndexedDbMigrationDone()).rejects.toThrow(
+      "INDEXEDDB_MIGRATION_MARKER_VERIFY_FAILED",
+    );
+    vi.restoreAllMocks();
+
+    const atomicRoot = createRoot();
+    const atomicStore = createRendererPersistenceStore({
+      rootPath: atomicRoot,
+      encryption,
+    });
+    await atomicStore.migrate({});
+    vi.spyOn(fs, "renameSync").mockImplementation(() => {
+      throw new Error("atomic rename failed");
+    });
+    await expect(atomicStore.markIndexedDbMigrationDone()).rejects.toThrow(
+      "atomic rename failed",
+    );
+    expect(
+      fs
+        .readdirSync(path.join(atomicRoot, "data", "operations", "migrations"))
+        .some((entry) => entry.endsWith(".tmp")),
+    ).toBe(false);
+  });
+
+  it("hydrates pre-migration and partially missing renderer documents safely", async () => {
+    const root = createRoot();
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
+    expect(store.readHydratedStateSync()).toEqual({
+      migrationComplete: false,
+      settings: { aiProviders: [], aiModels: [] },
+      marketplaceSources: { skill: [], mcp: [], plugin: [] },
+      recoveryPaths: [],
+      selfHostedDeviceId: null,
+      indexedDbMigrationDone: false,
+    });
+    const createdDeviceId = await store.getOrCreateSelfHostedDeviceId();
+    expect(createdDeviceId).toMatch(/^desktop-/u);
+    expect(await store.getOrCreateSelfHostedDeviceId()).toBe(createdDeviceId);
+
+    const migratedRoot = createRoot();
+    const migrated = createRendererPersistenceStore({
+      rootPath: migratedRoot,
+      encryption,
+    });
+    await migrated.migrate({ settings: persisted({ language: "en" }) });
+    const devicesPath = path.join(
+      migratedRoot,
+      "config",
+      "devices",
+      "renderer.json",
+    );
+    const devices = JSON.parse(fs.readFileSync(devicesPath, "utf8"));
+    devices.selfHostedDeviceId = 123;
+    fs.writeFileSync(devicesPath, JSON.stringify(devices));
+    const providersPath = path.join(migratedRoot, "config", "providers.json");
+    const providers = JSON.parse(fs.readFileSync(providersPath, "utf8"));
+    providers.providers = {};
+    providers.models = null;
+    fs.writeFileSync(providersPath, JSON.stringify(providers));
+    const recoveryPath = path.join(
+      migratedRoot,
+      "config",
+      "recovery-paths.json",
+    );
+    const recovery = JSON.parse(fs.readFileSync(recoveryPath, "utf8"));
+    recovery.paths = ["/valid", 123, null];
+    fs.writeFileSync(recoveryPath, JSON.stringify(recovery));
+
+    const hydrated = migrated.readHydratedStateSync();
+    expect(hydrated.selfHostedDeviceId).toBeNull();
+    expect(hydrated.settings.aiProviders).toEqual([]);
+    expect(hydrated.settings.aiModels).toEqual([]);
+    expect(hydrated.recoveryPaths).toEqual(["/valid"]);
+
+    await migrated.markIndexedDbMigrationDone();
+    await migrated.replaceSettings({ language: "fr" });
+    expect((await migrated.readHydratedState()).indexedDbMigrationDone).toBe(
+      true,
+    );
+
+    expect(() => resolveOwnedPath(root, "../escape")).toThrow(
+      /path escapes root/,
+    );
   });
 });

@@ -20,6 +20,13 @@ export interface ResourceSchemaResolution {
   document: ResourceSchemaDocument;
 }
 
+type NormalizedResourceSchemaRegistration = Omit<
+  ResourceSchemaRegistration,
+  "converters"
+> & {
+  converters: readonly ResourceSchemaConverter[];
+};
+
 function positiveVersion(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new Error(`${label} must be a positive safe integer`);
@@ -28,17 +35,17 @@ function positiveVersion(value: number, label: string): number {
 }
 
 function resourceType(value: string): string {
-  if (
-    typeof value !== "string" ||
-    !/^[a-z][a-z0-9-]{0,63}$/u.test(value)
-  ) {
+  if (typeof value !== "string" || !/^[a-z][a-z0-9-]{0,63}$/u.test(value)) {
     throw new Error(`Invalid resource schema type: ${value}`);
   }
   return value;
 }
 
 export class ResourceSchemaRegistry {
-  private readonly registrations = new Map<string, ResourceSchemaRegistration>();
+  private readonly registrations = new Map<
+    string,
+    NormalizedResourceSchemaRegistration
+  >();
 
   constructor(registrations: readonly ResourceSchemaRegistration[] = []) {
     for (const registration of registrations) this.register(registration);
@@ -58,7 +65,10 @@ export class ResourceSchemaRegistry {
     );
     const seen = new Set<number>();
     for (const converter of converters) {
-      const from = positiveVersion(converter.fromVersion, `${type} fromVersion`);
+      const from = positiveVersion(
+        converter.fromVersion,
+        `${type} fromVersion`,
+      );
       const to = positiveVersion(converter.toVersion, `${type} toVersion`);
       if (to !== from + 1 || to > currentVersion || seen.has(from)) {
         throw new Error(`Resource schema converter chain is invalid: ${type}`);
@@ -82,11 +92,13 @@ export class ResourceSchemaRegistry {
 
   list(): ResourceSchemaRegistration[] {
     return [...this.registrations.values()]
-      .sort((left, right) => left.resourceType.localeCompare(right.resourceType))
+      .sort((left, right) =>
+        left.resourceType.localeCompare(right.resourceType),
+      )
       .map((entry) => ({
         resourceType: entry.resourceType,
         currentVersion: entry.currentVersion,
-        converters: [...(entry.converters ?? [])],
+        converters: [...entry.converters],
       }));
   }
 
@@ -112,14 +124,9 @@ export class ResourceSchemaRegistry {
     let version = sourceVersion;
     let document = original;
     while (version < registration.currentVersion) {
-      const converter = registration.converters?.find(
+      const converter = registration.converters.find(
         (candidate) => candidate.fromVersion === version,
-      );
-      if (!converter) {
-        throw new Error(
-          `Resource schema converter is missing: ${type} v${version} -> v${version + 1}`,
-        );
-      }
+      )!;
       document = structuredClone(converter.convert(structuredClone(document)));
       version = converter.toVersion;
     }

@@ -169,7 +169,29 @@ function parseJournal(value: unknown): StorageRootOperationJournal | null {
   ) {
     return null;
   }
-  return value as unknown as StorageRootOperationJournal;
+  const journal = value as unknown as StorageRootOperationJournal;
+  if (
+    path.resolve(journal.sourceRoot) !== journal.sourceRoot ||
+    path.resolve(journal.targetRoot) !== journal.targetRoot
+  ) {
+    return null;
+  }
+  try {
+    assertDistinctRoots(journal.sourceRoot, journal.targetRoot);
+  } catch {
+    return null;
+  }
+  if (journal.action === "switch") {
+    if (journal.stagePath !== null || journal.priorPath !== null) return null;
+  } else if (
+    journal.stagePath !==
+      makeSiblingPath(journal.targetRoot, "stage", journal.operationId) ||
+    journal.priorPath !==
+      makeSiblingPath(journal.targetRoot, "prior", journal.operationId)
+  ) {
+    return null;
+  }
+  return journal;
 }
 
 export function readStorageRootOperationJournal(
@@ -249,11 +271,6 @@ function defaultAvailableBytes(targetParent: string): number {
     : Number(available);
 }
 
-function getDatabasePath(rootPath: string): string | null {
-  const classification = classifyStorageRoot(rootPath);
-  return classification.databasePath ?? null;
-}
-
 async function verifyPublishedRoot(
   rootPath: string,
   verifyDatabase?: (databasePath: string) => void | Promise<void>,
@@ -288,14 +305,34 @@ function removeOwnedPath(targetPath: string): void {
   }
 }
 
+function targetMatchesSourceDigest(
+  journal: StorageRootOperationJournal,
+): boolean {
+  if (!journal.sourceDigest) return false;
+  try {
+    return (
+      createStorageInventory(journal.targetRoot).digest === journal.sourceDigest
+    );
+  } catch {
+    return false;
+  }
+}
+
 function rollbackTargetPublication(journal: StorageRootOperationJournal): void {
   if (journal.action === "switch") return;
   const targetExists = fs.existsSync(journal.targetRoot);
+  const stageExists = Boolean(
+    journal.stagePath && fs.existsSync(journal.stagePath),
+  );
   const priorExists = Boolean(
     journal.priorPath && fs.existsSync(journal.priorPath),
   );
-  if (targetExists) removeOwnedPath(journal.targetRoot);
-  if (priorExists && journal.priorPath) {
+  const publicationStarted =
+    journal.state !== "prepared" ||
+    priorExists ||
+    (!stageExists && targetExists && targetMatchesSourceDigest(journal));
+  if (publicationStarted && targetExists) removeOwnedPath(journal.targetRoot);
+  if (publicationStarted && priorExists && journal.priorPath) {
     fs.renameSync(journal.priorPath, journal.targetRoot);
   }
   if (journal.stagePath) removeOwnedPath(journal.stagePath);
@@ -334,6 +371,17 @@ function preservePriorAsRecoveryArtifact(
     validatedAt: new Date().toISOString(),
   });
   return artifactPath;
+}
+
+function pruneCommittedRecoveryArtifacts(
+  targetRoot: string,
+  operationId: string,
+): void {
+  try {
+    pruneRecoveryArtifacts(targetRoot, {}, new Set([operationId]));
+  } catch {
+    // Retention cleanup cannot undo an already committed root publication.
+  }
 }
 
 async function applyStorageRootChangeWithIntent(
@@ -465,11 +513,7 @@ async function applyStorageRootChangeWithIntent(
     const recoveryArtifactPath = preservePriorAsRecoveryArtifact(journal);
     removeJournal(options.controlDirectory);
     if (recoveryArtifactPath) {
-      try {
-        pruneRecoveryArtifacts(targetRoot, {}, new Set([operationId]));
-      } catch {
-        // Retention cleanup is not part of the committed root publication.
-      }
+      pruneCommittedRecoveryArtifacts(targetRoot, operationId);
     }
     return {
       status: "committed",
@@ -506,7 +550,10 @@ export async function applyStorageRootChange(
   options: ApplyStorageRootChangeOptions,
 ): Promise<StorageRootChangeResult> {
   const operationId = options.operationId ?? crypto.randomUUID();
-  const maintenance = acquireStorageMaintenanceIntent(options.sourceRoot, {
+  assertOperationId(operationId);
+  const sourceRoot = path.resolve(options.sourceRoot);
+  assertRecognizedRoot(classifyStorageRoot(sourceRoot), "Source");
+  const maintenance = acquireStorageMaintenanceIntent(sourceRoot, {
     operationId,
     operationKind: `root-${options.action}`,
   });
@@ -528,15 +575,7 @@ async function completeRecoverablePublication(
     writeJournal(options.controlDirectory, journal, "committed");
     preservePriorAsRecoveryArtifact(journal);
     removeJournal(options.controlDirectory);
-    try {
-      pruneRecoveryArtifacts(
-        journal.targetRoot,
-        {},
-        new Set([journal.operationId]),
-      );
-    } catch {
-      // The root is already committed and the recovery point stays protected.
-    }
+    pruneCommittedRecoveryArtifacts(journal.targetRoot, journal.operationId);
     return true;
   } catch {
     return false;
@@ -550,6 +589,10 @@ export async function recoverPendingStorageRootChange(
     options.controlDirectory,
   );
   if (!pendingJournal) return { status: "none" };
+  assertRecognizedRoot(
+    classifyStorageRoot(pendingJournal.sourceRoot),
+    "Recovery source",
+  );
   const maintenance = acquireStorageMaintenanceIntent(
     pendingJournal.sourceRoot,
     {
@@ -558,7 +601,10 @@ export async function recoverPendingStorageRootChange(
     },
   );
   try {
-    return await recoverPendingStorageRootChangeWithIntent(options);
+    return await recoverPendingStorageRootChangeWithIntent(
+      options,
+      pendingJournal,
+    );
   } finally {
     maintenance.release();
   }
@@ -566,9 +612,8 @@ export async function recoverPendingStorageRootChange(
 
 async function recoverPendingStorageRootChangeWithIntent(
   options: RecoverStorageRootChangeOptions,
+  journal: StorageRootOperationJournal,
 ): Promise<StorageRootRecoveryResult> {
-  const journal = readStorageRootOperationJournal(options.controlDirectory);
-  if (!journal) return { status: "none" };
   if (
     journal.state !== "prepared" &&
     (await completeRecoverablePublication(journal, options))
@@ -596,6 +641,10 @@ export function recoverPendingStorageRootChangeSync(
     options.controlDirectory,
   );
   if (!pendingJournal) return { status: "none" };
+  assertRecognizedRoot(
+    classifyStorageRoot(pendingJournal.sourceRoot),
+    "Recovery source",
+  );
   const maintenance = acquireStorageMaintenanceIntent(
     pendingJournal.sourceRoot,
     {
@@ -604,7 +653,10 @@ export function recoverPendingStorageRootChangeSync(
     },
   );
   try {
-    return recoverPendingStorageRootChangeSyncWithIntent(options);
+    return recoverPendingStorageRootChangeSyncWithIntent(
+      options,
+      pendingJournal,
+    );
   } finally {
     maintenance.release();
   }
@@ -612,9 +664,8 @@ export function recoverPendingStorageRootChangeSync(
 
 function recoverPendingStorageRootChangeSyncWithIntent(
   options: RecoverStorageRootChangeSyncOptions,
+  journal: StorageRootOperationJournal,
 ): StorageRootRecoveryResult {
-  const journal = readStorageRootOperationJournal(options.controlDirectory);
-  if (!journal) return { status: "none" };
   if (journal.state !== "prepared" && fs.existsSync(journal.targetRoot)) {
     try {
       const classification = classifyStorageRoot(journal.targetRoot);
@@ -627,15 +678,7 @@ function recoverPendingStorageRootChangeSyncWithIntent(
       writeJournal(options.controlDirectory, journal, "committed");
       preservePriorAsRecoveryArtifact(journal);
       removeJournal(options.controlDirectory);
-      try {
-        pruneRecoveryArtifacts(
-          journal.targetRoot,
-          {},
-          new Set([journal.operationId]),
-        );
-      } catch {
-        // The root is already committed and the recovery point stays protected.
-      }
+      pruneCommittedRecoveryArtifacts(journal.targetRoot, journal.operationId);
       return { status: "committed", operationId: journal.operationId };
     } catch {
       // Fall through to deterministic rollback.

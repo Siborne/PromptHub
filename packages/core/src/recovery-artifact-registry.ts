@@ -31,6 +31,11 @@ export interface RecoveryArtifactRetention {
   maxBytes?: number;
 }
 
+export interface RecoveryArtifactScanLimits {
+  maxEntries?: number;
+  maxDepth?: number;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -53,31 +58,42 @@ export function getRecoveryArtifactRoot(activeRoot: string): string {
   return path.join(path.resolve(activeRoot), "backups", "recovery");
 }
 
-function measureTree(rootPath: string): { payloadBytes: number; totalBytes: number } {
+function measureTree(
+  rootPath: string,
+  limits: { maxEntries: number; maxDepth: number },
+): { payloadBytes: number; totalBytes: number } {
   let entries = 0;
   let payloadBytes = 0;
   let totalBytes = 0;
   const visit = (targetPath: string, depth: number): void => {
-    if (depth > MAX_SCAN_DEPTH) throw new Error("Recovery artifact exceeds depth limit");
+    if (depth > limits.maxDepth)
+      throw new Error("Recovery artifact exceeds depth limit");
     const stats = fs.lstatSync(targetPath);
-    if (stats.isSymbolicLink()) throw new Error("Recovery artifact contains symbolic link");
+    if (stats.isSymbolicLink())
+      throw new Error("Recovery artifact contains symbolic link");
     entries += 1;
-    if (entries > MAX_SCAN_ENTRIES) throw new Error("Recovery artifact exceeds entry limit");
+    if (entries > limits.maxEntries)
+      throw new Error("Recovery artifact exceeds entry limit");
     if (stats.isDirectory()) {
       for (const entry of fs.readdirSync(targetPath, { withFileTypes: true })) {
         visit(path.join(targetPath, entry.name), depth + 1);
       }
       return;
     }
-    if (!stats.isFile()) throw new Error("Recovery artifact contains special file");
+    if (!stats.isFile())
+      throw new Error("Recovery artifact contains special file");
     totalBytes += stats.size;
-    if (path.basename(targetPath) !== "manifest.json") payloadBytes += stats.size;
+    if (path.basename(targetPath) !== "manifest.json")
+      payloadBytes += stats.size;
   };
   visit(rootPath, 0);
   return { payloadBytes, totalBytes };
 }
 
-function parseArtifact(directoryPath: string): RecoveryArtifactRecord | null {
+function parseArtifact(
+  directoryPath: string,
+  limits: { maxEntries: number; maxDepth: number },
+): RecoveryArtifactRecord | null {
   try {
     const manifestPath = path.join(directoryPath, "manifest.json");
     const stats = fs.lstatSync(manifestPath);
@@ -94,23 +110,27 @@ function parseArtifact(directoryPath: string): RecoveryArtifactRecord | null {
       typeof value.operationId !== "string" ||
       typeof value.artifactType !== "string" ||
       typeof value.sourceRoot !== "string" ||
-      (value.targetRoot !== undefined && typeof value.targetRoot !== "string") ||
+      (value.targetRoot !== undefined &&
+        typeof value.targetRoot !== "string") ||
       typeof value.createdAt !== "string" ||
       !Number.isFinite(Date.parse(value.createdAt)) ||
       typeof value.validatedAt !== "string" ||
       !Number.isFinite(Date.parse(value.validatedAt)) ||
-      (value.pinnedReason !== undefined && typeof value.pinnedReason !== "string")
+      (value.pinnedReason !== undefined &&
+        typeof value.pinnedReason !== "string")
     ) {
       return null;
     }
-    const size = measureTree(directoryPath);
+    const size = measureTree(directoryPath, limits);
     return {
       id: value.id,
       operationId: value.operationId,
       artifactType: value.artifactType,
       directoryPath,
       sourceRoot: value.sourceRoot,
-      ...(typeof value.targetRoot === "string" ? { targetRoot: value.targetRoot } : {}),
+      ...(typeof value.targetRoot === "string"
+        ? { targetRoot: value.targetRoot }
+        : {}),
       createdAt: value.createdAt,
       validatedAt: value.validatedAt,
       ...(typeof value.pinnedReason === "string"
@@ -123,11 +143,25 @@ function parseArtifact(directoryPath: string): RecoveryArtifactRecord | null {
   }
 }
 
-export function listRecoveryArtifacts(activeRoot: string): RecoveryArtifactRecord[] {
+export function listRecoveryArtifacts(
+  activeRoot: string,
+  limits: RecoveryArtifactScanLimits = {},
+): RecoveryArtifactRecord[] {
+  const resolvedLimits = {
+    maxEntries: assertPositiveInteger(
+      limits.maxEntries ?? MAX_SCAN_ENTRIES,
+      "maxEntries",
+    ),
+    maxDepth: assertPositiveInteger(
+      limits.maxDepth ?? MAX_SCAN_DEPTH,
+      "maxDepth",
+    ),
+  };
   const registryRoot = getRecoveryArtifactRoot(activeRoot);
   try {
     const registryStats = fs.lstatSync(registryRoot);
-    if (registryStats.isSymbolicLink() || !registryStats.isDirectory()) return [];
+    if (registryStats.isSymbolicLink() || !registryStats.isDirectory())
+      return [];
     return fs
       .readdirSync(registryRoot, { withFileTypes: true })
       .filter(
@@ -138,7 +172,10 @@ export function listRecoveryArtifacts(activeRoot: string): RecoveryArtifactRecor
           !entry.name.startsWith("."),
       )
       .flatMap((entry) => {
-        const artifact = parseArtifact(path.join(registryRoot, entry.name));
+        const artifact = parseArtifact(
+          path.join(registryRoot, entry.name),
+          resolvedLimits,
+        );
         return artifact ? [artifact] : [];
       })
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
@@ -154,12 +191,22 @@ export function pruneRecoveryArtifacts(
   protectedIds: ReadonlySet<string> = new Set(),
   now = Date.now(),
 ): string[] {
-  const maxCount = assertPositiveInteger(retention.maxCount ?? DEFAULT_MAX_COUNT, "maxCount");
-  const maxAgeMs = assertPositiveNumber(retention.maxAgeMs ?? DEFAULT_MAX_AGE_MS, "maxAgeMs");
-  const maxBytes = assertPositiveNumber(retention.maxBytes ?? DEFAULT_MAX_BYTES, "maxBytes");
+  const maxCount = assertPositiveInteger(
+    retention.maxCount ?? DEFAULT_MAX_COUNT,
+    "maxCount",
+  );
+  const maxAgeMs = assertPositiveNumber(
+    retention.maxAgeMs ?? DEFAULT_MAX_AGE_MS,
+    "maxAgeMs",
+  );
+  const maxBytes = assertPositiveNumber(
+    retention.maxBytes ?? DEFAULT_MAX_BYTES,
+    "maxBytes",
+  );
   const artifacts = listRecoveryArtifacts(activeRoot);
   const protectedArtifacts = artifacts.filter(
-    (artifact) => protectedIds.has(artifact.id) || Boolean(artifact.pinnedReason),
+    (artifact) =>
+      protectedIds.has(artifact.id) || Boolean(artifact.pinnedReason),
   );
   const kept = new Set(protectedArtifacts.map((artifact) => artifact.id));
   let keptCount = protectedArtifacts.length;

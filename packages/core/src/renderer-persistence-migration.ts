@@ -973,7 +973,10 @@ function assertSafeTarget(rootPath: string, targetPath: string): void {
   }
 }
 
-function resolveOwnedPath(rootPath: string, relativePath: string): string {
+export function resolveOwnedPath(
+  rootPath: string,
+  relativePath: string,
+): string {
   const target = path.resolve(rootPath, relativePath);
   const relative = path.relative(path.resolve(rootPath), target);
   if (

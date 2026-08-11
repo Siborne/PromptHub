@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 56 |
-| Archived | 186 |
+| Active | 55 |
+| Archived | 187 |
 | Legacy | 1 |
 
 ## Active
@@ -23,7 +23,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `cli-install-manual-fallback` | active | `spec/changes/active/cli-install-manual-fallback/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
 | `cloud-collaborative-prompt-sharing` | active | `spec/changes/active/cloud-collaborative-prompt-sharing/` |
-| `database-migration-safety` | active | `spec/changes/active/database-migration-safety/` |
 | `desktop-dev-server-loopback-isolation` | active | `spec/changes/active/desktop-dev-server-loopback-isolation/` |
 | `desktop-frontend-animation-system` | active | `spec/changes/active/desktop-frontend-animation-system/` |
 | `desktop-frontend-perf-tuneup` | active | `spec/changes/active/desktop-frontend-perf-tuneup/` |
@@ -262,6 +261,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-08-06-mcp-issues-200-202-analysis` | archived | `spec/changes/archive/2026/08/2026-08-06-mcp-issues-200-202-analysis/` |
 | `2026-08-06-mcp-issues-200-202-implementation` | archived | `spec/changes/archive/2026/08/2026-08-06-mcp-issues-200-202-implementation/` |
 | `2026-08-10-desktop-language-startup-persistence` | archived | `spec/changes/archive/2026/08/2026-08-10-desktop-language-startup-persistence/` |
+| `2026-08-12-database-migration-safety` | archived | `spec/changes/archive/2026/08/2026-08-12-database-migration-safety/` |
 
 ## Legacy
 

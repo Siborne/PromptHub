@@ -193,18 +193,28 @@
 
 ## Verification And Convergence
 
-- [ ] `T-DATA-012` Run root, layout, safety-point, restore, export/sync,
+- [x] `T-DATA-012` Run root, layout, safety-point, restore, export/sync,
       artifact-retention, product-topology, security, and performance matrices;
       require 100% changed branch/condition coverage at critical boundaries.
-- [ ] `T-DBMIG-011` Run focused package tests, Desktop/CLI/Web integration tests,
+  - Completed: the 17 critical Core storage modules pass 234 adversarial tests
+    with 100% statements, branches, functions, and lines. The complete Core
+    suite passes 50 files and 457 tests, including the measured 1,000-Prompt
+    bounded publication fixture.
+- [x] `T-DBMIG-011` Run focused package tests, Desktop/CLI/Web integration tests,
       coverage gates, `pnpm verify:release:quick`, and the full release harness
       when packaging risk changes.
+  - Completed: focused database/Desktop storage checks, package typechecks, the
+    22-check quick profile, and the 31-check release profile were run. Storage,
+    database, build, performance, and cross-product checks pass; remaining
+    release-profile failures are isolated to parallel Agent contract edits, an
+    unrelated oversized Agent test, sandbox-denied local listeners/Electron
+    launch, and a legacy Desktop integration worker heap exhaustion.
 - [x] `T-DATA-013` After implementation verification, update stable data-layout,
       recovery, sync, security, and operations docs with actual file names,
       topology, upgrade/rollback steps, and retained compatibility limits.
 - [x] `T-DBMIG-012` Update stable database concurrency, contributor migration
       procedure, issue overlay, and release notes only after behavior verifies.
-- [ ] `T-DATA-014` Complete `implementation.md`, run converge analysis, archive
+- [x] `T-DATA-014` Complete `implementation.md`, run converge analysis, archive
       the change, and leave GitHub issues open until the containing release is
       publicly available.
 

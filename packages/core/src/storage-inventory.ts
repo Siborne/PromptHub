@@ -100,7 +100,9 @@ function directoryContainsMeaningfulEntry(directoryPath: string): boolean {
   return meaningfulEntries(directoryPath).length > 0;
 }
 
-export function classifyStorageRoot(rootPath: string): StorageRootClassification {
+export function classifyStorageRoot(
+  rootPath: string,
+): StorageRootClassification {
   const root = path.resolve(rootPath);
   const stats = readStats(root);
   if (!stats) return { rootPath: root, kind: "missing", unknownEntries: [] };
@@ -244,8 +246,12 @@ export function createStorageInventory(
   const maxDepth = assertLimit(options.maxDepth ?? 32, "maxDepth");
   const topLevel =
     layoutEpoch === 1
-      ? CANONICAL_TOP_LEVEL.filter((entry) => entry !== "secrets" || options.includeSecrets)
-      : LEGACY_TOP_LEVEL.filter((entry) => entry !== "secrets" || options.includeSecrets);
+      ? CANONICAL_TOP_LEVEL.filter(
+          (entry) => entry !== "secrets" || options.includeSecrets,
+        )
+      : LEGACY_TOP_LEVEL.filter(
+          (entry) => entry !== "secrets" || options.includeSecrets,
+        );
   const files: StorageInventoryEntry[] = [];
   const excludedPaths = new Set(
     (options.excludeRelativePaths ?? []).map((entry) =>
@@ -255,10 +261,13 @@ export function createStorageInventory(
   let totalBytes = 0;
 
   const visit = (targetPath: string, depth: number): void => {
-    if (depth > maxDepth) throw new Error(`Storage inventory exceeds maxDepth at ${targetPath}`);
+    if (depth > maxDepth)
+      throw new Error(`Storage inventory exceeds maxDepth at ${targetPath}`);
     const stats = fs.lstatSync(targetPath);
     if (stats.isSymbolicLink()) {
-      throw new Error(`Refusing symbolic link in storage inventory: ${targetPath}`);
+      throw new Error(
+        `Refusing symbolic link in storage inventory: ${targetPath}`,
+      );
     }
     if (stats.isDirectory()) {
       for (const entry of fs.readdirSync(targetPath, { withFileTypes: true })) {
@@ -268,17 +277,26 @@ export function createStorageInventory(
       return;
     }
     if (!stats.isFile()) {
-      throw new Error(`Refusing special file in storage inventory: ${targetPath}`);
+      throw new Error(
+        `Refusing special file in storage inventory: ${targetPath}`,
+      );
     }
     const relativePath = normalizeRelativePath(root, targetPath);
-    if (isExcludedCanonicalPath(relativePath) || excludedPaths.has(relativePath))
+    if (
+      isExcludedCanonicalPath(relativePath) ||
+      excludedPaths.has(relativePath)
+    )
       return;
     if (stats.size > maxFileBytes) {
-      throw new Error(`Storage inventory file exceeds maxFileBytes: ${targetPath}`);
+      throw new Error(
+        `Storage inventory file exceeds maxFileBytes: ${targetPath}`,
+      );
     }
     totalBytes += stats.size;
-    if (totalBytes > maxTotalBytes) throw new Error("Storage inventory exceeds maxTotalBytes");
-    if (files.length >= maxEntries) throw new Error("Storage inventory exceeds maxEntries");
+    if (totalBytes > maxTotalBytes)
+      throw new Error("Storage inventory exceeds maxTotalBytes");
+    if (files.length >= maxEntries)
+      throw new Error("Storage inventory exceeds maxEntries");
     files.push({
       relativePath,
       sizeBytes: stats.size,
@@ -291,12 +309,16 @@ export function createStorageInventory(
     const targetPath = path.join(root, entry);
     if (readStats(targetPath)) visit(targetPath, 1);
   }
-  files.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+  files.sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath),
+  );
   const digest = crypto
     .createHash("sha256")
     .update(
       files
-        .map((file) => `${file.relativePath}\0${file.sizeBytes}\0${file.sha256}\n`)
+        .map(
+          (file) => `${file.relativePath}\0${file.sizeBytes}\0${file.sha256}\n`,
+        )
         .join(""),
     )
     .digest("hex");
@@ -309,15 +331,6 @@ export function createStorageInventory(
   };
 }
 
-function flushFile(filePath: string): void {
-  const descriptor = fs.openSync(filePath, "r");
-  try {
-    fs.fsyncSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-}
-
 export function copyStorageInventory(
   inventory: StorageInventory,
   destinationRoot: string,
@@ -326,13 +339,22 @@ export function copyStorageInventory(
   fs.mkdirSync(destination, { recursive: true, mode: 0o700 });
   const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
   for (const entry of inventory.files) {
-    const sourcePath = path.join(inventory.rootPath, ...entry.relativePath.split("/"));
-    const destinationPath = path.join(destination, ...entry.relativePath.split("/"));
+    const sourcePath = path.join(
+      inventory.rootPath,
+      ...entry.relativePath.split("/"),
+    );
+    const destinationPath = path.join(
+      destination,
+      ...entry.relativePath.split("/"),
+    );
     const before = fs.lstatSync(sourcePath);
     if (before.isSymbolicLink() || !before.isFile()) {
       throw new Error(`Storage inventory source changed type: ${sourcePath}`);
     }
-    fs.mkdirSync(path.dirname(destinationPath), { recursive: true, mode: 0o700 });
+    fs.mkdirSync(path.dirname(destinationPath), {
+      recursive: true,
+      mode: 0o700,
+    });
     const source = fs.openSync(sourcePath, "r");
     const target = fs.openSync(destinationPath, "wx", 0o600);
     const digest = crypto.createHash("sha256");
@@ -360,7 +382,9 @@ export function copyStorageInventory(
       before.mtimeMs !== after.mtimeMs ||
       digest.digest("hex") !== entry.sha256
     ) {
-      throw new Error(`Storage inventory source changed during copy: ${sourcePath}`);
+      throw new Error(
+        `Storage inventory source changed during copy: ${sourcePath}`,
+      );
     }
   }
 }

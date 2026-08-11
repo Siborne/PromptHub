@@ -52,6 +52,53 @@ function sortSnapshot(snapshot: PromptCanonicalGraphSnapshot) {
   };
 }
 
+function normalizeSnapshotForCatalog(
+  snapshot: PromptCanonicalGraphSnapshot,
+): PromptCanonicalGraphSnapshot {
+  return {
+    prompts: snapshot.prompts.map((prompt) => ({
+      ...prompt,
+      ownerUserId: prompt.ownerUserId ?? undefined,
+      visibility: prompt.visibility ?? "private",
+      description: prompt.description ?? null,
+      promptType: prompt.promptType ?? "text",
+      systemPrompt: prompt.systemPrompt ?? null,
+      systemPromptEn: prompt.systemPromptEn ?? null,
+      userPromptEn: prompt.userPromptEn ?? null,
+      folderId: prompt.folderId ?? null,
+      parentId: prompt.parentId ?? null,
+      order: prompt.order ?? 0,
+      images: prompt.images!,
+      videos: prompt.videos!,
+      source: prompt.source ?? null,
+      notes: prompt.notes ?? null,
+      lastAiResponse: prompt.lastAiResponse ?? null,
+    })),
+    promptVersions: snapshot.promptVersions.map((version) => ({
+      ...version,
+      systemPrompt: version.systemPrompt ?? null,
+      systemPromptEn: version.systemPromptEn ?? null,
+      userPromptEn: version.userPromptEn ?? null,
+      note: version.note ?? null,
+      aiResponse: version.aiResponse ?? null,
+    })),
+    folders: snapshot.folders.map((folder) => ({
+      ...folder,
+      ownerUserId: folder.ownerUserId ?? undefined,
+      visibility: folder.visibility ?? "private",
+      icon: folder.icon ?? undefined,
+      parentId: folder.parentId ?? undefined,
+      order: folder.order,
+      isPrivate: folder.isPrivate ?? false,
+    })),
+    promptRelations: snapshot.promptRelations.map((relation) => ({
+      ...relation,
+      note: relation.note ?? null,
+    })),
+    outputFormatItems: snapshot.outputFormatItems.map((item) => ({ ...item })),
+  };
+}
+
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
   if (value && typeof value === "object") {
@@ -189,8 +236,9 @@ export function stagePromptCanonicalDatabase(
     );
   }
   const source = readPromptCanonicalGraph(canonicalRoot);
-  assertLocalOwnership(source.snapshot);
-  const graphHash = calculatePromptCanonicalGraphHash(source.snapshot);
+  const normalizedSnapshot = normalizeSnapshotForCatalog(source.snapshot);
+  assertLocalOwnership(normalizedSnapshot);
+  const graphHash = calculatePromptCanonicalGraphHash(normalizedSnapshot);
   const parentPath = path.dirname(targetDatabasePath);
   fs.mkdirSync(parentPath, { recursive: true });
   const stagePath = path.join(
@@ -198,7 +246,7 @@ export function stagePromptCanonicalDatabase(
     `.${path.basename(targetDatabasePath)}.stage-${process.pid}-${crypto.randomUUID()}`,
   );
   try {
-    createStageDatabase(stagePath, source.snapshot);
+    createStageDatabase(stagePath, normalizedSnapshot);
     const rebuilt = verifyStageDatabase(stagePath, graphHash);
     if (fs.existsSync(targetDatabasePath)) {
       throw new Error(

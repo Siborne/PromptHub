@@ -172,11 +172,6 @@ export function convertResourceBundleSchema(
           manifest.schemaVersion,
           document,
         );
-        if (resolved.mode !== "converted") {
-          throw new Error(
-            "Resource schema converter did not reach currentness",
-          );
-        }
         convertedDocuments += 1;
         return {
           path: payload.path,

@@ -87,6 +87,7 @@ function getSafePathStats(
 
   const segments = relativePath ? relativePath.split(path.sep) : [];
   let currentPath = root;
+  let result: fs.Stats | null = null;
   for (let index = -1; index < segments.length; index += 1) {
     if (index >= 0) {
       currentPath = path.join(currentPath, segments[index]);
@@ -111,10 +112,10 @@ function getSafePathStats(
       );
     }
     if (index === segments.length - 1) {
-      return stats;
+      result = stats;
     }
   }
-  return null;
+  return result;
 }
 
 function regularFileExists(activeRoot: string, filePath: string): boolean {

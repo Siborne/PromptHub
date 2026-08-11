@@ -69,12 +69,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function requireArray<T>(
-  value: unknown,
-  label: string,
-  required: boolean,
-): T[] {
-  if (value === undefined && !required) return [];
+function requireArray<T>(value: unknown, label: string): T[] {
   if (!Array.isArray(value) || value.length > MAX_LOGICAL_RECORDS) {
     throw new Error(`Portable logical snapshot has invalid ${label}`);
   }
@@ -83,7 +78,7 @@ function requireArray<T>(
 
 function optionalArray<T>(value: unknown, label: string): T[] | undefined {
   if (value === undefined) return undefined;
-  return requireArray<T>(value, label, true);
+  return requireArray<T>(value, label);
 }
 
 function requireScope(value: unknown): PortableLogicalScope {
@@ -153,7 +148,9 @@ function assertSelectedPayload(
     throw new Error("Portable logical snapshot is missing settings data");
   }
   if (scope.aiConfig && payload.aiConfig === undefined) {
-    throw new Error("Portable logical snapshot is missing AI configuration data");
+    throw new Error(
+      "Portable logical snapshot is missing AI configuration data",
+    );
   }
 }
 
@@ -172,7 +169,10 @@ export function parsePortableLogicalEnvelope(
   }
   const scope = requireScope(raw.scope);
   const value = raw.payload;
-  const settings = optionalRecord<{ state?: unknown }>(value.settings, "settings");
+  const settings = optionalRecord<{ state?: unknown }>(
+    value.settings,
+    "settings",
+  );
   if (settings && !isRecord(settings.state)) {
     throw new Error("Portable logical snapshot settings state is invalid");
   }
@@ -187,9 +187,9 @@ export function parsePortableLogicalEnvelope(
         : 1,
     exportedAt:
       typeof value.exportedAt === "string" ? value.exportedAt : raw.exportedAt,
-    prompts: requireArray<Prompt>(value.prompts, "prompts", true),
-    folders: requireArray<Folder>(value.folders, "folders", true),
-    versions: requireArray<PromptVersion>(value.versions, "versions", true),
+    prompts: requireArray<Prompt>(value.prompts, "prompts"),
+    folders: requireArray<Folder>(value.folders, "folders"),
+    versions: requireArray<PromptVersion>(value.versions, "versions"),
     promptRelations: optionalArray<PromptRelation>(
       value.promptRelations,
       "prompt relations",
@@ -221,10 +221,7 @@ export function parsePortableLogicalEnvelope(
       value.skillFiles,
       "skill files",
     ),
-    mcpLibrary: optionalRecord<McpLibraryFile>(
-      value.mcpLibrary,
-      "MCP library",
-    ),
+    mcpLibrary: optionalRecord<McpLibraryFile>(value.mcpLibrary, "MCP library"),
     pluginLibrary: optionalRecord<PluginLibraryFile>(
       value.pluginLibrary,
       "Plugin library",

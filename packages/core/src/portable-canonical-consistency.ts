@@ -14,7 +14,7 @@ import { calculatePromptCanonicalGraphHash } from "./prompt-canonical-catalog";
 import { ruleGroupForKnownId } from "./rules-workspace-support";
 
 function compareText(left: string, right: string): number {
-  return left === right ? 0 : left < right ? -1 : 1;
+  return Number(left > right) - Number(left < right);
 }
 
 function stableValue(value: unknown): unknown {
@@ -190,7 +190,7 @@ export function assertPortableLogicalMatchesCanonicalStorage(
   assertEquivalent(
     "Plugins",
     sortedById(canonical.plugins.map((entry) => normalizePlugin(entry.plugin))),
-    sortedById((payload.pluginLibrary?.plugins ?? []).map(normalizePlugin)),
+    sortedById((payload.pluginLibrary!.plugins ?? []).map(normalizePlugin)),
   );
   assertEquivalent(
     "Agent profiles",
@@ -203,9 +203,7 @@ export function assertPortableLogicalMatchesCanonicalStorage(
       }),
     ),
     sortedById(
-      (payload.agentManagement?.providerProfiles ?? []).map(
-        normalizeAgentProfile,
-      ),
+      payload.agentManagement!.providerProfiles.map(normalizeAgentProfile),
     ),
   );
   assertEquivalent(
@@ -225,8 +223,8 @@ export function assertPortableLogicalMatchesCanonicalStorage(
           `${right.profileId}\0${right.routeKey}`,
         ),
       ),
-    (payload.agentManagement?.providerProfiles ?? [])
-      .flatMap((entry) =>
+    payload
+      .agentManagement!.providerProfiles.flatMap((entry) =>
         entry.modelMappings.map(({ routeKey, modelId, parameters }) => ({
           profileId: entry.id,
           routeKey,

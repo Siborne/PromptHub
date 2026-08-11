@@ -69,6 +69,24 @@ describe("resource schema registry", () => {
     expect(result.document).not.toBe(document);
   });
 
+  it("returns an independent current document without invoking converters", () => {
+    const registry = new ResourceSchemaRegistry([
+      { resourceType: "workflow", currentVersion: 1 },
+    ]);
+    const document = { name: "Daily" };
+
+    const result = registry.resolve("workflow", 1, document);
+
+    expect(result).toMatchObject({
+      resourceType: "workflow",
+      sourceVersion: 1,
+      currentVersion: 1,
+      mode: "current",
+      document,
+    });
+    expect(result.document).not.toBe(document);
+  });
+
   it("rejects gaps, duplicate registrations, and unknown schemas", () => {
     expect(
       () =>
@@ -90,6 +108,39 @@ describe("resource schema registry", () => {
     ).toThrow(/already registered/);
     expect(() => registry.resolve("missing", 1, {})).toThrow(
       /Unknown resource schema/,
+    );
+  });
+
+  it("rejects invalid names, versions, and incomplete converter chains", () => {
+    expect(
+      () =>
+        new ResourceSchemaRegistry([
+          { resourceType: "Workflow", currentVersion: 1 },
+        ]),
+    ).toThrow(/Invalid resource schema type/);
+    expect(
+      () =>
+        new ResourceSchemaRegistry([
+          { resourceType: "workflow", currentVersion: 0 },
+        ]),
+    ).toThrow(/positive safe integer/);
+    expect(
+      () =>
+        new ResourceSchemaRegistry([
+          {
+            resourceType: "workflow",
+            currentVersion: 3,
+            converters: [
+              { fromVersion: 1, toVersion: 2, convert: (value) => value },
+            ],
+          },
+        ]),
+    ).toThrow(/converter chain is invalid/);
+    const registry = new ResourceSchemaRegistry([
+      { resourceType: "workflow", currentVersion: 1 },
+    ]);
+    expect(() => registry.resolve("workflow", 0, {})).toThrow(
+      /positive safe integer/,
     );
   });
 });

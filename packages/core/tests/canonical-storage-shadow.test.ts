@@ -16,9 +16,14 @@ import {
   SCHEMA_TABLES,
   SkillDB,
 } from "@prompthub/db";
-import type { GenerationBatchManifest, Skill } from "@prompthub/shared/types";
+import type {
+  GenerationBatchManifest,
+  Prompt,
+  PromptVersion,
+  Skill,
+} from "@prompthub/shared/types";
 import type { RuleFileContent } from "@prompthub/shared/types/rules";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   materializeCanonicalStorageShadow,
@@ -50,6 +55,52 @@ function skill(): Skill {
     versionTrackingEnabled: true,
     created_at: Date.parse("2026-08-11T00:00:00.000Z"),
     updated_at: Date.parse("2026-08-11T01:00:00.000Z"),
+  };
+}
+
+function prompt(id = "prompt-1"): Prompt {
+  return {
+    id,
+    title: `Prompt ${id}`,
+    promptType: "text",
+    systemPrompt: null,
+    userPrompt: `Body ${id}`,
+    variables: [],
+    tags: ["Shared", id],
+    folderId: null,
+    parentId: null,
+    order: 0,
+    images: [],
+    videos: [],
+    isFavorite: false,
+    isPinned: false,
+    version: 1,
+    currentVersion: 1,
+    usageCount: 0,
+    createdAt: "2026-08-11T00:00:00.000Z",
+    updatedAt: "2026-08-11T00:00:00.000Z",
+  };
+}
+
+function promptVersion(promptId = "prompt-1"): PromptVersion {
+  return {
+    id: `version-${promptId}`,
+    promptId,
+    version: 1,
+    systemPrompt: null,
+    userPrompt: `Body ${promptId}`,
+    variables: [],
+    createdAt: "2026-08-11T00:00:00.000Z",
+  };
+}
+
+function emptyPrompts() {
+  return {
+    prompts: [],
+    promptVersions: [],
+    folders: [],
+    promptRelations: [],
+    outputFormatItems: [],
   };
 }
 
@@ -458,5 +509,315 @@ describe("complete canonical storage shadow", () => {
       stageCanonicalStorageDatabase(targetPath, databasePath),
     ).toThrow(/server-owned Skill/u);
     expect(fs.existsSync(databasePath)).toBe(false);
+  });
+
+  it("materializes default empty domains and rejects duplicate domain identities", () => {
+    const base = root();
+    const emptyTarget = path.join(base, "empty-shadow");
+    const empty = materializeCanonicalStorageShadow({
+      targetPath: emptyTarget,
+      prompts: emptyPrompts(),
+    });
+    expect(empty.domainCounts).toEqual({
+      skills: 0,
+      rules: 0,
+      "mcp-servers": 0,
+      plugins: 0,
+      "agent-providers": 0,
+      generations: 0,
+    });
+    expect(empty.mcpBindingConfig).toBeUndefined();
+    expect(readCanonicalStorageShadow(emptyTarget).domainCounts).toEqual(
+      empty.domainCounts,
+    );
+
+    const duplicateInputs = [
+      {
+        skills: [
+          { skill: skill(), versions: [], packageFiles: [] },
+          { skill: skill(), versions: [], packageFiles: [] },
+        ],
+      },
+      { rules: [rule(), rule()] },
+      {
+        mcpLibrary: {
+          servers: [{ id: "mcp-1" }, { id: "mcp-1" }],
+          bindings: [],
+        },
+      },
+      {
+        plugins: [
+          { plugin: { id: "plugin-1" }, versions: [], packageFiles: [] },
+          { plugin: { id: "plugin-1" }, versions: [], packageFiles: [] },
+        ],
+      },
+      {
+        agentProviders: [
+          { profile: { id: "agent-1" }, modelMappings: [] },
+          { profile: { id: "agent-1" }, modelMappings: [] },
+        ],
+      },
+      {
+        generations: [
+          { manifest: { id: "generation-1" }, outputSources: {} },
+          { manifest: { id: "generation-1" }, outputSources: {} },
+        ],
+      },
+    ];
+    for (const [index, duplicateInput] of duplicateInputs.entries()) {
+      expect(() =>
+        materializeCanonicalStorageShadow({
+          targetPath: path.join(base, `duplicate-${index}`),
+          prompts: emptyPrompts(),
+          ...duplicateInput,
+        } as never),
+      ).toThrow(/duplicate canonical/);
+    }
+  });
+
+  it("rejects invalid canonical domain roots and entries", () => {
+    const base = root();
+    const fileRoot = path.join(base, "file-root");
+    materializeCanonicalStorageShadow({
+      targetPath: fileRoot,
+      prompts: emptyPrompts(),
+    });
+    fs.writeFileSync(path.join(fileRoot, "skills"), "invalid");
+    expect(() => readCanonicalStorageShadow(fileRoot)).toThrow(
+      /canonical skills root is invalid/,
+    );
+
+    const fileEntry = path.join(base, "file-entry");
+    materializeCanonicalStorageShadow({
+      targetPath: fileEntry,
+      prompts: emptyPrompts(),
+    });
+    fs.mkdirSync(path.join(fileEntry, "skills"));
+    fs.writeFileSync(path.join(fileEntry, "skills", "not-a-bundle"), "invalid");
+    expect(() => readCanonicalStorageShadow(fileEntry)).toThrow(
+      /canonical skills entry is invalid/,
+    );
+
+    if (process.platform !== "win32") {
+      const linkedRoot = path.join(base, "linked-root");
+      materializeCanonicalStorageShadow({
+        targetPath: linkedRoot,
+        prompts: emptyPrompts(),
+      });
+      fs.symlinkSync(base, path.join(linkedRoot, "skills"));
+      expect(() => readCanonicalStorageShadow(linkedRoot)).toThrow(
+        /canonical skills root is invalid/,
+      );
+
+      const linkedEntry = path.join(base, "linked-entry");
+      materializeCanonicalStorageShadow({
+        targetPath: linkedEntry,
+        prompts: emptyPrompts(),
+      });
+      fs.mkdirSync(path.join(linkedEntry, "skills"));
+      fs.symlinkSync(base, path.join(linkedEntry, "skills", "linked"));
+      expect(() => readCanonicalStorageShadow(linkedEntry)).toThrow(
+        /canonical skills entry is invalid/,
+      );
+    }
+  });
+
+  it("rebuilds project rules and generation slots linked to a canonical Prompt", () => {
+    const base = root();
+    const outputFile = path.join(base, "output.png");
+    const outputBytes = Buffer.from("output");
+    fs.writeFileSync(outputFile, outputBytes);
+    const sourceGeneration = generation(outputBytes);
+    const manifest: GenerationBatchManifest = {
+      ...sourceGeneration,
+      sourcePromptId: "prompt-1",
+      targetCount: 2,
+      slots: [
+        { index: 0, status: "pending" },
+        {
+          ...sourceGeneration.slots[0],
+          index: 1,
+          output: {
+            ...sourceGeneration.slots[0]!.output!,
+            slotIndex: 1,
+            favorite: true,
+          },
+        },
+      ],
+      counts: {
+        ...sourceGeneration.counts,
+        total: 2,
+        pending: 1,
+      },
+      completedAt: undefined,
+    };
+    const globalRule = rule();
+    const projectRule: RuleFileContent = {
+      ...rule(),
+      id: "project:demo",
+      name: "PROJECT.md",
+      versions: [
+        {
+          ...rule().versions[0]!,
+          id: "project-rule-version-1",
+        },
+      ],
+    };
+    const secondSkill = { ...skill(), id: "skill-2", name: "reviewer" };
+    const targetPath = path.join(base, "rich-shadow");
+    materializeCanonicalStorageShadow({
+      targetPath,
+      prompts: {
+        ...emptyPrompts(),
+        prompts: [prompt(), prompt("prompt-2")],
+        promptVersions: [promptVersion(), promptVersion("prompt-2")],
+      },
+      skills: [
+        { skill: skill(), versions: [], packageFiles: [] },
+        { skill: secondSkill, versions: [], packageFiles: [] },
+      ],
+      rules: [globalRule, projectRule],
+      generations: [{ manifest, outputSources: { "output.png": outputFile } }],
+    });
+
+    const databasePath = path.join(base, "rich.db");
+    const rebuilt = stageCanonicalStorageDatabase(targetPath, databasePath);
+    expect(rebuilt.resourceCount).toBe(7);
+    expect(rebuilt.preservedDatabaseCounts).toEqual({});
+    const database = new DatabaseAdapter(databasePath, { readOnly: true });
+    try {
+      expect(new RuleDB(database).getById("project:demo")?.scope).toBe(
+        "project",
+      );
+      expect(
+        database.get(
+          "SELECT source_prompt_id, completed_at FROM generation_batches WHERE id = ?",
+          "batch-1",
+        ),
+      ).toEqual({ source_prompt_id: "prompt-1", completed_at: null });
+      expect(
+        database.get(
+          "SELECT status, file_name, favorite, created_at FROM generation_outputs WHERE batch_id = ? AND slot_index = 0",
+          "batch-1",
+        ),
+      ).toEqual({
+        status: "pending",
+        file_name: null,
+        favorite: 0,
+        created_at: null,
+      });
+      expect(
+        database.get(
+          "SELECT favorite FROM generation_outputs WHERE batch_id = ? AND slot_index = 1",
+          "batch-1",
+        ),
+      ).toEqual({ favorite: 1 });
+    } finally {
+      database.close();
+    }
+  });
+
+  it("rejects incompatible or miscounted preserved database state", () => {
+    const base = root();
+    const targetPath = path.join(base, "shadow");
+    materializeCanonicalStorageShadow({
+      targetPath,
+      prompts: emptyPrompts(),
+    });
+
+    const emptySource = path.join(base, "empty-source.db");
+    new DatabaseAdapter(emptySource).close();
+    expect(() =>
+      stageCanonicalStorageDatabase(
+        targetPath,
+        path.join(base, "empty-copy.db"),
+        {
+          operationalSourceDatabasePath: emptySource,
+        },
+      ),
+    ).toThrow(/incompatible table: settings/);
+
+    const incompatibleSource = path.join(base, "incompatible-source.db");
+    const incompatible = new DatabaseAdapter(incompatibleSource);
+    incompatible.exec("CREATE TABLE settings (key TEXT PRIMARY KEY)");
+    incompatible.close();
+    expect(() =>
+      stageCanonicalStorageDatabase(
+        targetPath,
+        path.join(base, "incompatible-copy.db"),
+        { operationalSourceDatabasePath: incompatibleSource },
+      ),
+    ).toThrow(/incompatible table: settings/);
+
+    const sourcePath = path.join(base, "source.db");
+    const source = new DatabaseAdapter(sourcePath);
+    source.exec(SCHEMA_TABLES);
+    source.exec(SCHEMA_INDEXES);
+    recordCurrentLegacySchemaMigrations(source, 1);
+    recordCurrentDatabaseMigration(source, 0);
+    source.run(
+      "INSERT INTO settings (key, value) VALUES (?, ?)",
+      "key",
+      "value",
+    );
+    source.close();
+    const originalPrepare = DatabaseAdapter.prototype.prepare;
+    vi.spyOn(DatabaseAdapter.prototype, "prepare").mockImplementation(function (
+      this: InstanceType<typeof DatabaseAdapter>,
+      sql: string,
+    ) {
+      if (sql === "SELECT COUNT(*) AS count FROM settings") {
+        return { get: () => ({ count: 999 }) } as never;
+      }
+      return originalPrepare.call(this, sql);
+    });
+    expect(() =>
+      stageCanonicalStorageDatabase(
+        targetPath,
+        path.join(base, "miscounted-copy.db"),
+        { operationalSourceDatabasePath: sourcePath },
+      ),
+    ).toThrow(/preserved table count mismatch: settings/);
+  });
+
+  it("removes staged databases after quick-check or reload-hash failure", () => {
+    const base = root();
+    const targetPath = path.join(base, "shadow");
+    materializeCanonicalStorageShadow({
+      targetPath,
+      prompts: {
+        ...emptyPrompts(),
+        prompts: [prompt()],
+        promptVersions: [promptVersion()],
+      },
+    });
+    const originalPragma = DatabaseAdapter.prototype.pragma;
+    for (const [index, result] of [
+      [],
+      [undefined],
+      [{ quick_check: "not ok" }],
+    ].entries()) {
+      const databasePath = path.join(base, `quick-check-${index}.db`);
+      let quickCheckCalls = 0;
+      vi.spyOn(DatabaseAdapter.prototype, "pragma").mockImplementation(
+        function (this: InstanceType<typeof DatabaseAdapter>, pragma: string) {
+          if (pragma === "quick_check" && ++quickCheckCalls >= 3)
+            return result as never;
+          return originalPragma.call(this, pragma);
+        },
+      );
+      expect(() =>
+        stageCanonicalStorageDatabase(targetPath, databasePath),
+      ).toThrow(/canonical storage staged database failed quick_check/);
+      expect(fs.existsSync(databasePath)).toBe(false);
+      vi.restoreAllMocks();
+    }
+
+    const hashDatabasePath = path.join(base, "hash.db");
+    vi.spyOn(CanonicalResourceDB.prototype, "list").mockReturnValue([]);
+    expect(() =>
+      stageCanonicalStorageDatabase(targetPath, hashDatabasePath),
+    ).toThrow(/reload hash mismatch/);
+    expect(fs.existsSync(hashDatabasePath)).toBe(false);
   });
 });

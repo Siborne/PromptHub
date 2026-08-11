@@ -1,7 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   acquireStorageMaintenanceIntent,
@@ -15,6 +15,7 @@ describe("storage maintenance intent", () => {
   const roots: string[] = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const root of roots.splice(0)) {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -107,4 +108,45 @@ describe("storage maintenance intent", () => {
       "malformed or unsafe",
     );
   });
+
+  it("treats permission-denied owners as alive and removes missing owners", () => {
+    const root = createRoot();
+    const intent = acquireStorageMaintenanceIntent(
+      root,
+      { operationId: "owner-check", operationKind: "restore" },
+      { pid: 101, token: "c".repeat(32), isProcessAlive: () => true },
+    );
+    vi.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("not permitted"), { code: "EPERM" });
+    });
+    expect(() => assertStorageMaintenanceAvailable(root)).toThrow(
+      StorageMaintenanceBusyError,
+    );
+
+    vi.mocked(process.kill).mockImplementation(() => {
+      throw Object.assign(new Error("missing"), { code: "ESRCH" });
+    });
+    expect(() => assertStorageMaintenanceAvailable(root)).not.toThrow();
+    expect(fs.existsSync(intent.intentPath)).toBe(false);
+  });
+
+  it.each([
+    ["EEXIST", StorageMaintenanceBusyError],
+    ["EIO", Error],
+  ] as const)(
+    "classifies an atomic intent write failure with code %s",
+    (code, type) => {
+      const root = createRoot();
+      vi.spyOn(fs, "writeFileSync").mockImplementation(() => {
+        throw Object.assign(new Error(`write failed: ${code}`), { code });
+      });
+
+      expect(() =>
+        acquireStorageMaintenanceIntent(root, {
+          operationId: "write-failure",
+          operationKind: "restore",
+        }),
+      ).toThrow(type);
+    },
+  );
 });

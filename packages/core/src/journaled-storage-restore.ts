@@ -58,6 +58,13 @@ export interface RunJournaledStorageRestoreOptions {
   injectFailure?: (stage: StorageRestorePublicationStage) => void;
   now?: Date;
   maintenanceOperationId?: string;
+  candidateLimits?: StorageRestoreCandidateLimits;
+}
+
+export interface StorageRestoreCandidateLimits {
+  maxEntries?: number;
+  maxBytes?: number;
+  maxDepth?: number;
 }
 
 export interface RecoverJournaledStorageRestoreOptions {
@@ -80,6 +87,13 @@ export interface StorageRestoreRecoveryResult {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function positiveInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive safe integer`);
+  }
+  return value;
 }
 
 function flushDirectory(directoryPath: string): void {
@@ -163,6 +177,8 @@ function parseJournal(
   ) {
     return null;
   }
+  assertOwnedOperationPath(activeRoot, value.stageRoot);
+  assertOwnedOperationPath(activeRoot, value.priorRoot);
   return value as unknown as StorageRestoreJournal;
 }
 
@@ -225,6 +241,12 @@ function assertEntryNames(entryNames: string[]): string[] {
   return unique;
 }
 
+function assertOperationId(operationId: string): void {
+  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(operationId)) {
+    throw new Error(`Invalid storage restore operation id: ${operationId}`);
+  }
+}
+
 function assertOwnedOperationPath(
   activeRoot: string,
   targetPath: string,
@@ -239,11 +261,14 @@ function assertOwnedOperationPath(
   }
 }
 
-function validateCandidateTree(stageRoot: string): void {
+function validateCandidateTree(
+  stageRoot: string,
+  limits: { maxEntries: number; maxBytes: number; maxDepth: number },
+): void {
   let entries = 0;
   let bytes = 0;
   const visit = (targetPath: string, depth: number): void => {
-    if (depth > MAX_RESTORE_DEPTH) {
+    if (depth > limits.maxDepth) {
       throw new Error(
         `Storage restore candidate exceeds depth limit: ${targetPath}`,
       );
@@ -255,7 +280,7 @@ function validateCandidateTree(stageRoot: string): void {
       );
     }
     entries += 1;
-    if (entries > MAX_RESTORE_ENTRIES) {
+    if (entries > limits.maxEntries) {
       throw new Error("Storage restore candidate exceeds entry limit");
     }
     if (stats.isDirectory()) {
@@ -270,7 +295,7 @@ function validateCandidateTree(stageRoot: string): void {
       );
     }
     bytes += stats.size;
-    if (bytes > MAX_RESTORE_BYTES) {
+    if (bytes > limits.maxBytes) {
       throw new Error("Storage restore candidate exceeds byte limit");
     }
   };
@@ -367,21 +392,41 @@ function shouldLeaveForRecovery(error: unknown): boolean {
   return isRecord(error) && error.leaveOperationForRecovery === true;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function assertSafeActiveRoot(activeRoot: string): string {
+  const root = path.resolve(activeRoot);
+  const stats = fs.lstatSync(root);
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw new Error(`Storage restore active root is unsafe: ${root}`);
+  }
+  return root;
+}
+
 async function runJournaledStorageRestoreWithIntent(
   options: RunJournaledStorageRestoreOptions,
   operationId: string,
 ): Promise<StorageRestoreResult> {
   const activeRoot = path.resolve(options.activeRoot);
-  const rootStats = fs.lstatSync(activeRoot);
-  if (rootStats.isSymbolicLink() || !rootStats.isDirectory()) {
-    throw new Error(`Storage restore active root is unsafe: ${activeRoot}`);
-  }
   if (readJournal(activeRoot))
     throw new Error("A storage restore is already pending");
-  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(operationId)) {
-    throw new Error(`Invalid storage restore operation id: ${operationId}`);
-  }
   const entryNames = assertEntryNames(options.entryNames);
+  const candidateLimits = {
+    maxEntries: positiveInteger(
+      options.candidateLimits?.maxEntries ?? MAX_RESTORE_ENTRIES,
+      "maxEntries",
+    ),
+    maxBytes: positiveInteger(
+      options.candidateLimits?.maxBytes ?? MAX_RESTORE_BYTES,
+      "maxBytes",
+    ),
+    maxDepth: positiveInteger(
+      options.candidateLimits?.maxDepth ?? MAX_RESTORE_DEPTH,
+      "maxDepth",
+    ),
+  };
   const { stageRoot, priorRoot } = operationPaths(activeRoot, operationId);
   assertOwnedOperationPath(activeRoot, stageRoot);
   assertOwnedOperationPath(activeRoot, priorRoot);
@@ -401,7 +446,7 @@ async function runJournaledStorageRestoreWithIntent(
         );
       }
     }
-    validateCandidateTree(stageRoot);
+    validateCandidateTree(stageRoot, candidateLimits);
     await options.verifyCandidate(stageRoot);
     const createdAt = (options.now ?? new Date()).toISOString();
     journal = writeJournal({
@@ -466,10 +511,13 @@ export async function runJournaledStorageRestore(
       "Storage restore operation does not own maintenance intent",
     );
   }
+  assertSafeActiveRoot(options.activeRoot);
   const operationId =
     options.operationId ??
     options.maintenanceOperationId ??
     crypto.randomUUID();
+  assertOperationId(operationId);
+  assertEntryNames(options.entryNames);
   if (options.maintenanceOperationId) {
     assertStorageMaintenanceIntentHeld(
       options.activeRoot,
@@ -519,6 +567,7 @@ function completeEntry(
 export async function recoverJournaledStorageRestore(
   options: RecoverJournaledStorageRestoreOptions,
 ): Promise<StorageRestoreRecoveryResult> {
+  assertSafeActiveRoot(options.activeRoot);
   const pendingJournal = readJournal(options.activeRoot);
   if (!pendingJournal) return { status: "none" };
   const maintenance = acquireStorageMaintenanceIntent(options.activeRoot, {
@@ -582,7 +631,7 @@ async function recoverJournaledStorageRestoreWithIntent(
       return {
         status: "recovery-required",
         operationId: journal.operationId,
-        reason: new AggregateError([error, rollbackError]).message,
+        reason: `Recovery failed: ${errorMessage(error)}; rollback failed: ${errorMessage(rollbackError)}`,
       };
     }
   }

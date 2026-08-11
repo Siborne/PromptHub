@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   getResourceBundlePublicationJournalPath,
@@ -12,6 +12,7 @@ import {
   readResourceBundle,
   recoverCanonicalResourcePublications,
   recoverResourceBundlePublication,
+  resolveResourceBundleWriteRevision,
   type ResourceBundlePublicationStage,
   writeResourceBundle,
 } from "../src";
@@ -57,6 +58,7 @@ function input(
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const value of roots.splice(0)) {
     fs.rmSync(value, { recursive: true, force: true });
   }
@@ -304,6 +306,286 @@ describe("resource bundle publication", () => {
       ).toBe(true);
       expect(fs.existsSync(bundlePath)).toBe(false);
     }
+  });
+
+  it("treats identical content as an idempotent no-op and rejects schema downgrade", () => {
+    const base = root();
+    const bundlePath = path.join(base, "data", "prompts", "prompt-1");
+    const initial = input(base, bundlePath, 1);
+    initial.schemaVersion = 2;
+    publishResourceBundle(initial);
+
+    const identical = publishResourceBundle({
+      ...initial,
+      payloads: [
+        {
+          path: "prompt.json",
+          sourcePath: source(base, '{"revision":1}\n'),
+          role: "current",
+        },
+      ],
+    });
+    expect(identical.replacedRevision).toBe(1);
+    expect(identical.manifest.revision).toBe(1);
+
+    expect(() => publishResourceBundle(input(base, bundlePath, 2))).toThrow(
+      /schema downgrade is not allowed/,
+    );
+  });
+
+  it("validates explicit revision policies and detects exhausted revisions", () => {
+    const base = root();
+    const bundlePath = path.join(base, "data", "prompts", "prompt-1");
+    expect(
+      resolveResourceBundleWriteRevision(bundlePath, "prompt", "prompt-1", 1, {
+        revision: 7,
+      }),
+    ).toBe(7);
+    expect(
+      resolveResourceBundleWriteRevision(bundlePath, "prompt", "prompt-1", 3),
+    ).toBe(3);
+    expect(
+      resolveResourceBundleWriteRevision(bundlePath, "prompt", "prompt-1", 4, {
+        mode: "replace",
+      }),
+    ).toBe(4);
+    expect(() =>
+      resolveResourceBundleWriteRevision(bundlePath, "prompt", "prompt-1", 1, {
+        revision: 0,
+      }),
+    ).toThrow(/revision is invalid/);
+
+    writeResourceBundle({
+      ...input(base, bundlePath, Number.MAX_SAFE_INTEGER),
+      updatedAt: "2026-08-12T00:00:00.000Z",
+    });
+    expect(() =>
+      getNextResourceBundleRevision(bundlePath, {
+        resourceType: "prompt",
+        resourceId: "prompt-1",
+      }),
+    ).toThrow(/revision is exhausted/);
+  });
+
+  it("rolls back a failed first publication with no prior bundle", () => {
+    const base = root();
+    const bundlePath = path.join(base, "data", "prompts", "prompt-1");
+
+    expect(() =>
+      publishResourceBundle(input(base, bundlePath, 1), {
+        injectFailure: (stage) => {
+          if (stage === "prior-moved") throw new Error("first publish failed");
+        },
+      }),
+    ).toThrow("first publish failed");
+    expect(fs.existsSync(bundlePath)).toBe(false);
+    expect(
+      fs.existsSync(getResourceBundlePublicationJournalPath(bundlePath)),
+    ).toBe(false);
+  });
+
+  it("cleans a temporary journal when an atomic journal update fails", () => {
+    const base = root();
+    const bundlePath = path.join(base, "data", "prompts", "prompt-1");
+    const originalRename = fs.renameSync.bind(fs);
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(from).includes(".publish.json.tmp-")) {
+        throw new Error("journal rename failed");
+      }
+      return originalRename(from, to);
+    });
+
+    expect(() => publishResourceBundle(input(base, bundlePath, 1))).toThrow(
+      "journal rename failed",
+    );
+    expect(
+      fs
+        .readdirSync(path.dirname(bundlePath))
+        .some((entry) => entry.includes(".publish.json.tmp-")),
+    ).toBe(false);
+  });
+
+  it("continues when directory fsync is unavailable", () => {
+    const base = root();
+    const bundlePath = path.join(base, "data", "prompts", "prompt-1");
+    const parentPath = path.dirname(bundlePath);
+    const originalOpen = fs.openSync.bind(fs);
+    vi.spyOn(fs, "openSync").mockImplementation((target, flags, mode) => {
+      if (path.resolve(String(target)) === parentPath && flags === "r") {
+        throw Object.assign(new Error("directory fsync unavailable"), {
+          code: "EINVAL",
+        });
+      }
+      return originalOpen(target, flags, mode);
+    });
+
+    expect(
+      publishResourceBundle(input(base, bundlePath, 1)).manifest.revision,
+    ).toBe(1);
+  });
+
+  it("restores a prior bundle when a prepared journal outlives an unrecorded move", () => {
+    const base = root();
+    const bundlePath = path.join(base, "data", "prompts", "prompt-1");
+    publishResourceBundle(input(base, bundlePath, 1));
+    const interruption = Object.assign(new Error("interrupted"), {
+      leaveOperationForRecovery: true,
+    });
+    expect(() =>
+      publishResourceBundle(input(base, bundlePath, 2), {
+        injectFailure: (stage) => {
+          if (stage === "prepared") throw interruption;
+        },
+      }),
+    ).toThrow("interrupted");
+    const journalPath = getResourceBundlePublicationJournalPath(bundlePath);
+    const journal = JSON.parse(fs.readFileSync(journalPath, "utf8"));
+    fs.renameSync(bundlePath, journal.priorPath);
+
+    expect(recoverResourceBundlePublication(bundlePath)).toBe("rolled-back");
+    expect(readResourceBundle(bundlePath).manifest.revision).toBe(1);
+  });
+
+  it("rolls back a prior-moved journal when its staged destination disappeared", () => {
+    const base = root();
+    const dataPath = path.join(base, "data");
+    const bundlePath = path.join(dataPath, "prompts", "prompt-1");
+    publishResourceBundle(input(base, bundlePath, 1));
+    const interruption = Object.assign(new Error("interrupted"), {
+      leaveOperationForRecovery: true,
+    });
+    expect(() =>
+      publishResourceBundle(input(base, bundlePath, 2), {
+        injectFailure: (stage) => {
+          if (stage === "prior-moved") throw interruption;
+        },
+      }),
+    ).toThrow("interrupted");
+    const journal = JSON.parse(
+      fs.readFileSync(
+        getResourceBundlePublicationJournalPath(bundlePath),
+        "utf8",
+      ),
+    );
+    fs.rmSync(journal.stagePath, { recursive: true });
+
+    expect(recoverCanonicalResourcePublications(dataPath)).toEqual({
+      scannedJournals: 1,
+      committed: 0,
+      rolledBack: 1,
+    });
+    expect(readResourceBundle(bundlePath).manifest.revision).toBe(1);
+  });
+
+  it("fails closed when a journal has no recoverable bundle, stage, or prior", () => {
+    const base = root();
+    const bundlePath = path.join(base, "data", "prompts", "prompt-1");
+    const interruption = Object.assign(new Error("interrupted"), {
+      leaveOperationForRecovery: true,
+    });
+    expect(() =>
+      publishResourceBundle(input(base, bundlePath, 1), {
+        injectFailure: (stage) => {
+          if (stage === "prior-moved") throw interruption;
+        },
+      }),
+    ).toThrow("interrupted");
+    const journal = JSON.parse(
+      fs.readFileSync(
+        getResourceBundlePublicationJournalPath(bundlePath),
+        "utf8",
+      ),
+    );
+    fs.rmSync(journal.stagePath, { recursive: true });
+    fs.rmSync(journal.priorPath, { recursive: true, force: true });
+
+    expect(() => recoverResourceBundlePublication(bundlePath)).toThrow(
+      /no recoverable state/,
+    );
+  });
+
+  it("rejects journal path ownership and target revision mismatches", () => {
+    const invalidBase = root();
+    const invalidBundle = path.join(invalidBase, "data", "prompts", "prompt-1");
+    const interruption = Object.assign(new Error("interrupted"), {
+      leaveOperationForRecovery: true,
+    });
+    expect(() =>
+      publishResourceBundle(input(invalidBase, invalidBundle, 1), {
+        injectFailure: (stage) => {
+          if (stage === "prepared") throw interruption;
+        },
+      }),
+    ).toThrow("interrupted");
+    const invalidJournalPath =
+      getResourceBundlePublicationJournalPath(invalidBundle);
+    const invalidJournal = JSON.parse(
+      fs.readFileSync(invalidJournalPath, "utf8"),
+    );
+    invalidJournal.stagePath = path.join(invalidBase, "outside-stage");
+    fs.writeFileSync(invalidJournalPath, JSON.stringify(invalidJournal));
+    expect(() => recoverResourceBundlePublication(invalidBundle)).toThrow(
+      /Invalid resource bundle publication operation path/,
+    );
+
+    const mismatchBase = root();
+    const mismatchBundle = path.join(
+      mismatchBase,
+      "data",
+      "prompts",
+      "prompt-1",
+    );
+    expect(() =>
+      publishResourceBundle(input(mismatchBase, mismatchBundle, 1), {
+        injectFailure: (stage) => {
+          if (stage === "destination-published") throw interruption;
+        },
+      }),
+    ).toThrow("interrupted");
+    const mismatchJournalPath =
+      getResourceBundlePublicationJournalPath(mismatchBundle);
+    const mismatchJournal = JSON.parse(
+      fs.readFileSync(mismatchJournalPath, "utf8"),
+    );
+    mismatchJournal.targetRevision = 2;
+    fs.writeFileSync(mismatchJournalPath, JSON.stringify(mismatchJournal));
+    expect(() => recoverResourceBundlePublication(mismatchBundle)).toThrow(
+      /revision does not match journal/,
+    );
+  });
+
+  it("rejects unsafe canonical domains, journal entries, and scan errors", () => {
+    const unsafeBase = root();
+    const unsafeData = path.join(unsafeBase, "data");
+    fs.mkdirSync(unsafeData);
+    fs.writeFileSync(path.join(unsafeData, "prompts"), "unsafe");
+    expect(() => recoverCanonicalResourcePublications(unsafeData)).toThrow(
+      /domain is unsafe/,
+    );
+
+    const journalBase = root();
+    const journalData = path.join(journalBase, "data");
+    const promptDomain = path.join(journalData, "prompts");
+    fs.mkdirSync(path.join(promptDomain, ".prompt-1.publish.json"), {
+      recursive: true,
+    });
+    expect(() => recoverCanonicalResourcePublications(journalData)).toThrow(
+      /journal is unsafe/,
+    );
+
+    const deniedBase = root();
+    const deniedData = path.join(deniedBase, "data");
+    const deniedDomain = path.join(deniedData, "prompts");
+    const originalLstat = fs.lstatSync.bind(fs);
+    vi.spyOn(fs, "lstatSync").mockImplementation((target, options) => {
+      if (path.resolve(String(target)) === deniedDomain) {
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
+      }
+      return originalLstat(target, options as never);
+    });
+    expect(() => recoverCanonicalResourcePublications(deniedData)).toThrow(
+      "denied",
+    );
   });
 
   it("rejects malformed and symbolic-link publication journals", () => {
