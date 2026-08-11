@@ -173,7 +173,7 @@
 
 - Claude 会话正文只投影原生可见的 User、Assistant 与 `tool_result` 内容；`isMeta`、`system`、`mode`、`file-history-snapshot`、`attachment`、`last-prompt`、`ai-title`、空内容及已知本地命令 wrapper 不得显示为“事件”、用户消息或标题来源。合法但隐藏的记录不计为 parse error，畸形 JSON 或非对象记录仍计错。
 - Claude `projects/<encoded-key>/` 目录名只是原生存储键。只要有界 JSONL 元数据提供安全绝对 `cwd`，项目 identity 必须保留该精确路径，界面 label 使用其 basename，项目筛选与原生 resume cwd 使用同一值；只有缺少有效 cwd 时才回退显示 encoded key。
-- live reader 与可选本地索引必须使用同一 Claude 项目和标题投影。本地索引只存有界、可重建的脱敏元数据；投影规则升级通过 adapter version 重扫，不迁移或修改 Claude transcript，也不新增 PromptHub schema。
+- live reader 与本地索引必须使用同一 Claude 项目和标题投影。本地索引由“设置 → 应用设置 → 加速 Agent 历史搜索”统一控制并默认开启，Agent 历史页不再暴露单独开关。本地索引只存有界、可重建的脱敏元数据；投影规则升级通过 adapter version 重扫，不迁移或修改 Claude transcript，也不新增 PromptHub schema。
 
 ### 9.12 Gemini And Cursor Conversation Projection
 
@@ -181,6 +181,12 @@
 - Gemini 非空 native `summary` 优先于第一条可见 User 作为标题。`user`、`gemini` 分别投影为 User、Assistant；纯 `functionResponse.response.output` 投影为 Agent 侧 Tool；`info`、未知及空的合法记录隐藏且不计 parse error；原生 `error` 文本保留为 System，畸形文档与非对象 message 仍计错。
 - Cursor encoded project key 只有在配置 home 下通过真实、非软链接目录组件得到唯一匹配时才成为精确 `projectPath`、basename label 和 resume cwd。解析全程最多打开 64 个目录、每目录流式接受 4,096 个 entry；零匹配、歧义、软链接、目录拒绝或上限命中都必须保持 null path。
 - 对无法精确解析但确认属于 home 前缀的 Cursor key，只能剥离唯一匹配的既有目录前缀，并把剩余 literal tail 作为紧凑 label；不得把 tail 中的连字符猜成目录分隔符。Cursor 私有数据库、外部路径和 transcript 内容不得参与项目路径推断。
+
+### 9.13 Agent History Acceleration And First-Page Navigation
+
+- 会话元数据索引是系统级应用设置，默认开启。支持索引的 Agent 在首个有界列表完成后自动协调 enabled 状态；五分钟内完成的 fresh index 直接复用，缺失或过期时才启动一个 per-Agent 去重的后台刷新。离开 History 不取消应用级 warmup，但 renderer window 销毁仍由 IPC lifecycle 中止。
+- 后台刷新完成时在已有列表上替换有界元数据，不得重新进入全屏 blocking loader。关闭加速后使用 live reader，不启动刷新。历史页不得显示索引开关、手动刷新或实现说明。
+- 对话分页最左侧必须提供“第一页”图标按钮，与最右侧“最新消息”按钮形成对称边界导航。位于第一页或加载中时禁用；从深页返回第一页只切换已加载的 renderer 分页，不增加 native transcript I/O。
 
 ### 10. Renderer List Virtualization
 

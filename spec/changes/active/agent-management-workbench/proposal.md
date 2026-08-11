@@ -713,3 +713,31 @@ non-symlink directory below the configured user home through a bounded
 component walk. Ambiguous, external, oversized or missing mappings remain
 unresolved and keep a compact unresolved-tail label with no project path;
 PromptHub must not invent an absolute path by replacing hyphens with separators.
+
+## Scope Addendum 2026-08-11: System History Acceleration And Symmetric Paging
+
+Local session metadata indexing is an application preference rather than a
+per-Agent History control. It is enabled by default, lives in App Settings and
+is applied automatically when a supported Agent history is opened. History
+keeps the native transcript as source of truth and does not expose an indexing
+toggle, refresh button or implementation-oriented explanation inside the
+conversation browser.
+
+Transcript pagination uses symmetric boundary navigation. The existing latest
+messages command keeps its bounded native-cursor behavior, and a matching
+leftmost command returns directly to the first loaded message page without
+re-reading or eagerly loading the transcript.
+
+## Scope Addendum 2026-08-11: Stale-While-Revalidate History Cache
+
+Opening a supported Agent History must reuse a completed local metadata index
+instead of starting another full scan on every tab mount. A missing or stale
+index may refresh in the background only after the first bounded list has
+settled, so native directory enumeration does not compete with the initial
+screen. Background refresh survives History tab and Agent navigation, is
+deduplicated per Agent, and remains cancellable when the renderer itself exits.
+
+Cached rows remain visible while a background refresh completes. A completed
+refresh replaces the bounded list without returning the entire History panel
+to its blocking loading screen. No transcript body cache, watcher, timer,
+network request or unbounded background worker is added.

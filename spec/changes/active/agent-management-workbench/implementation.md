@@ -3230,3 +3230,95 @@ clientWidth`, the table wrapper owned horizontal overflow, and the inspected
 - The production build still reports the pre-existing renderer chunk-size and
   mixed static/dynamic `fflate` warnings. Those warnings are not introduced or
   suppressed by this change.
+
+### Pi Compatible MCP Capability Correction
+
+- Completed `FR-AGENT-111` / `DES-AGENT-129` / `TEST-AGENT-189` /
+  `T-AGENT-198`. The built-in Pi declaration now exposes
+  `<PI_CODING_AGENT_DIR>/mcp.json`, defaulting to
+  `~/.pi/agent/mcp.json`, so the shared capability and Agent path projections
+  enable the MCP tab as partial support.
+- The Agent workspace reuses the existing owning MCP target inventory for Pi's
+  primary, shared-adapter and project candidates. Pi and Oh My Pi retain
+  independent platform identities and roots. No renderer branch, IPC, parser,
+  writer, target-preset copy or eager config-file creation was added.
+- Product copy and stable references continue to describe this as compatible
+  MCP configuration management rather than claiming that base Pi includes a
+  native MCP runtime.
+- Test-first verification reproduced the disabled MCP tab before the registry
+  correction. The focused registry/path/capability/preset/tab suite passed 5
+  files / 46 tests; affected ESLint, desktop typecheck, traceability and diff
+  checks passed. An isolated-HOME Electron Playwright flow verified that Pi's
+  MCP tab is enabled, the exact primary path is visible, Add MCP is available,
+  and opening the workspace does not create `mcp.json` eagerly.
+
+### System History Acceleration And First-Page Navigation
+
+- Completed `FR-AGENT-112` / `DES-AGENT-130` / `TEST-AGENT-190` /
+  `T-AGENT-199`. The local session metadata index preference now belongs to
+  App Settings, defaults to enabled and persists through the existing renderer
+  settings store. Conversation History no longer exposes per-Agent indexing,
+  refresh, progress or cancellation controls.
+- Opening a supported Agent history reconciles its existing native index state
+  with the application preference and performs one bounded refresh. Disabling
+  the preference restores live reads. Failed automatic refreshes also fall
+  back to the native live reader instead of showing stale or empty indexed
+  results. Unsupported adapters remain unchanged.
+- Transcript pagination now includes a far-left first-page command before the
+  previous-page command. It is disabled on page one and returns from a deep
+  page using the already loaded transcript slice without another session read.
+- Test-first verification passed 4 files / 43 tests. Desktop typecheck,
+  affected ESLint, the file-size gate and the production build passed. The
+  build retains the existing renderer chunk-size and mixed static/dynamic
+  `fflate` warnings.
+
+### Project Rules And Expanded MCP Targets
+
+- Completed `FR-AGENT-113` / `DES-AGENT-131` / `TEST-AGENT-191` /
+  `T-AGENT-200`. Cursor now exposes its documented project rule target
+  `.cursor/rules/prompthub.mdc` without inventing a user-global file. Agent
+  Rules selects from registered projects, requires explicit creation for a
+  missing target, and reuses the existing atomic save, version, conflict and
+  backup flows. A project's Cursor MDC rule and `AGENTS.md` remain independent.
+  Qoder uses the same project selector to reuse its documented root
+  `AGENTS.md` compatibility rather than registering a second copy.
+- OpenClaw, Qoder, Grok Build and Antigravity now participate in the shared MCP
+  target and preset registries. OpenClaw projects into `mcp.servers`; Qoder
+  supports its user target and both documented project JSON targets; Grok uses
+  native `headers`; Antigravity writes its required `serverUrl` to global and
+  workspace targets. Reasonix exposes its documented project `.mcp.json`, while
+  its modern global `[[plugins]]` TOML remains native-owned until a lossless
+  array-table adapter exists. Unknown native fields remain preserved; native
+  OAuth and Qoder WebSocket declarations remain Agent-owned.
+- Verification passed 8 focused files / 127 tests, desktop typecheck, affected
+  ESLint, the production build, traceability validation and `git diff --check`.
+  The production build retains the existing renderer chunk-size and mixed
+  static/dynamic `fflate` warnings. The repository file-size gate is currently
+  blocked by the concurrently modified
+  `apps/desktop/tests/unit/components/agent-sessions-panel.test.tsx` at 1,527
+  lines; none of the files in this follow-up exceed the project hard limit.
+- No Electron visual E2E was run for this follow-up. Component behavior covers
+  project selection and explicit creation, while filesystem integration covers
+  real Cursor target writes and native MCP schema preservation.
+
+### Session Index Cache Reuse And Background Warmup
+
+- Completed `FR-AGENT-114` / `DES-AGENT-132` / `TEST-AGENT-192` /
+  `T-AGENT-201`. Supported Agent History now reuses an index refreshed within
+  five minutes and starts stale or missing warmup only after the initial
+  bounded list settles. This removes the previous mount-time full scan that
+  competed with Gemini and Claude's native directory reads.
+- Automatic refreshes are deduplicated by Agent in a bounded in-flight map.
+  Leaving History no longer cancels application-owned warmup, so reopening the
+  same Agent joins the running request and can use the completed persistent
+  index afterward. Renderer-window destruction still cancels work through the
+  existing IPC sender lifecycle; foreground hook refresh remains explicitly
+  cancellable.
+- A completed background refresh reloads bounded metadata without restoring
+  the panel's blocking loader or hiding already visible rows. The change adds
+  no schema, IPC, watcher, polling timer, network request or transcript-body
+  cache.
+- The focused cache/index/session suite passed 5 files / 47 tests. Desktop
+  typecheck, affected ESLint, the file-size gate, production build,
+  traceability, spec-index and diff checks passed. The build retains the
+  existing renderer chunk-size and mixed static/dynamic `fflate` warnings.

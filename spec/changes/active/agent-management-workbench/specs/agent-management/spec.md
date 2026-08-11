@@ -245,7 +245,11 @@ failure.
 
 ### `FR-AGENT-010`: Session Browser And Resume
 
-For platforms with verified session formats, the system MUST support opt-in metadata indexing, search, read-only transcript viewing, project association, and a platform-specific resume command. Source sessions remain platform-owned.
+For platforms with verified session formats, the system MUST support
+application-configurable metadata indexing, search, read-only transcript
+viewing, project association, and a platform-specific resume command. The
+application preference is enabled by default under `FR-AGENT-112`; source
+sessions remain platform-owned.
 
 #### Scenario: Source transcript disappears
 
@@ -1759,10 +1763,10 @@ MUST remain fixed at the toolbar's right edge in every asset domain.
   plus-icon button anatomy used by the other two asset domains
 - And long localized filters scroll within their own bounded strip instead of
   moving Refresh or Add onto another row
-- And Add Skill opens the Agent-scoped My Skills picker, Add MCP opens MCP
-  target management, and Add Plugin opens the Plugin store
-- And Add MCP remains available when the current Agent has no existing target,
-  because creating the first target is the purpose of that action
+- And Add Skill, Add MCP, and Add Plugin open Agent-scoped library pickers over
+  the current workspace instead of navigating to a standalone manager
+- And Add MCP remains visible when the current Agent has no verified target,
+  but reports that boundary without creating or guessing a target
 - And cards and detail views may still show a relevant source path for an
   explicit inspect or open-folder workflow
 
@@ -3594,3 +3598,145 @@ history capability as complete.
 - When permanent delete is invoked
 - Then the operation fails with a stable error
 - And no native file, directory, database row or PromptHub metadata is removed
+
+### `FR-AGENT-111`: Pi Compatible MCP Workspace Entry
+
+The installed `pi` Agent MUST expose the MCP tab as a partial compatibility
+capability. Its Agent summary MUST derive the primary user target from
+`<PI_CODING_AGENT_DIR>/mcp.json`, defaulting to `~/.pi/agent/mcp.json`, while
+the owning MCP domain continues to expose the existing Pi user, shared-adapter,
+and project target presets independently.
+
+PromptHub MUST describe this as compatible configuration management rather
+than native MCP runtime support. It MUST NOT merge Pi with Oh My Pi, install an
+MCP extension into Pi, or claim that the base Pi executable loads these files
+without an adapter. A missing target MUST still leave Add MCP available through
+the owning MCP workflow.
+
+#### Scenario: Open Pi MCP management
+
+- Given Pi is installed and its primary `mcp.json` does not exist
+- When the user opens the Pi Agent workspace
+- Then the MCP tab is enabled as a partial capability
+- And its primary path resolves to the Pi Agent root rather than the Oh My Pi root
+- When the user opens MCP
+- Then Add MCP remains available and the existing Pi-compatible target presets are used
+
+### `FR-AGENT-112`: System-Level History Acceleration And First-Page Navigation
+
+PromptHub MUST own local session metadata indexing as one application setting,
+enabled by default for a new or previously unset preference. The setting MUST
+be shown in App Settings rather than inside an individual Agent History panel.
+When enabled, opening a supported history MUST reconcile that source to enabled
+and run one bounded refresh automatically. When disabled, supported histories
+MUST use their live-reader fallback and MUST NOT start an index refresh.
+
+The History panel MUST NOT expose a per-Agent indexing toggle, manual refresh
+button or indexing implementation copy. Transcript pagination MUST place a
+first-page command before the previous-page command, mirroring the latest
+messages command on the right. The first-page command MUST be disabled on page
+one and MUST return to the already loaded first page without native I/O.
+
+#### Scenario: Apply the default application preference
+
+- Given the user has never changed history acceleration
+- When a supported Agent History opens
+- Then the application preference is enabled
+- And PromptHub enables and refreshes that source automatically
+- And no indexing control appears inside History
+
+#### Scenario: Disable history acceleration in App Settings
+
+- Given the user turns off history acceleration in App Settings
+- When a supported Agent History opens
+- Then PromptHub disables the source and uses bounded live reads
+- And no metadata refresh starts
+
+#### Scenario: Return directly to the first message page
+
+- Given the reader is on a later transcript page
+- When the leftmost first-page button is activated
+- Then page one is displayed from already loaded entries
+- And the button becomes disabled
+- And no additional native transcript page is read
+
+### `FR-AGENT-113`: Verified Project Rules And Expanded MCP Targets
+
+PromptHub MUST expose Cursor Rules through Cursor's documented project rule
+file rather than inventing a user-global file. A registered project MUST be
+able to manage `.cursor/rules/prompthub.mdc` independently from that project's
+`AGENTS.md`; a missing target MUST require explicit creation and an existing
+empty target MUST open normally.
+
+Qoder MUST expose its documented project-root `AGENTS.md` compatibility through
+the same project Rules workflow. If that target is already registered for
+another compatible Agent, Qoder MUST reuse it rather than create a duplicate
+managed record for the same path.
+
+PromptHub MUST expose verified MCP targets for OpenClaw, Qoder, Grok Build and
+Antigravity.
+OpenClaw MUST preserve unrelated `openclaw.json` data while managing
+`mcp.servers`; Qoder MUST support its user and documented project JSON targets;
+Grok MUST preserve unrelated TOML while writing `mcp_servers` with Grok's
+`headers` key; Antigravity MUST support its global and workspace JSON targets
+and write remote endpoints as `serverUrl`. Reasonix MAY expose its documented
+project `.mcp.json` compatibility, but its modern global `[[plugins]]` TOML
+remains native-owned until a lossless target adapter exists. Unsupported
+target-specific fields and transports MUST remain owned by the native Agent
+rather than being fabricated or discarded.
+
+#### Scenario: Manage a Cursor project rule
+
+- Given Cursor is installed and a PromptHub project is registered
+- When the user opens Cursor Rules and confirms creation
+- Then PromptHub manages `.cursor/rules/prompthub.mdc` for that project
+- And a sibling `AGENTS.md` registration remains independent
+
+#### Scenario: Apply MCP without damaging native settings
+
+- Given an OpenClaw, Qoder, Grok or Antigravity configuration has unrelated native fields
+- When PromptHub applies one supported MCP server
+- Then the supported entry is merged at the documented location
+- And unrelated fields and unmanaged servers remain intact
+
+#### Scenario: Reuse Qoder AGENTS.md compatibility
+
+- Given a registered project already manages its root `AGENTS.md`
+- When the user opens Qoder Rules for that project
+- Then the existing project rule opens in the shared editor
+- And PromptHub does not create a duplicate project rule record
+
+### `FR-AGENT-114`: Reuse Session Index Without Reblocking History
+
+PromptHub MUST reuse a completed supported-source metadata index while it is
+fresh and MUST NOT launch a full refresh on every History mount. Initial source
+enablement and stale metadata MAY start one background refresh after the first
+bounded session list settles. Reopening or switching back to the same Agent
+while that refresh is running MUST join the existing refresh rather than start
+another scan.
+
+Leaving History MUST NOT cancel an application-owned automatic refresh. Window
+destruction MUST still cancel it through the existing IPC sender lifecycle.
+The panel MUST keep an already loaded session list visible while a refresh
+revision is applied; only an Agent with no completed initial list may use the
+blocking loading state.
+
+#### Scenario: Reopen a freshly indexed History
+
+- Given a supported Agent has a successful index refreshed within the freshness window
+- When the user leaves and reopens its History
+- Then PromptHub lists cached metadata without starting another native scan
+- And the History panel does not return to a long blocking loading state
+
+#### Scenario: Leave while initial cache warmup runs
+
+- Given a supported Agent has no completed index and its first live list is visible
+- When automatic cache warmup starts and the user opens another Agent
+- Then the warmup continues as one application-owned request
+- And reopening the original Agent joins that request instead of restarting it
+
+#### Scenario: Apply a completed background refresh
+
+- Given History already displays cached or live session rows
+- When a stale background refresh completes
+- Then PromptHub reloads the bounded metadata page without hiding the existing rows

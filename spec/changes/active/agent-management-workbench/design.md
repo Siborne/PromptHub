@@ -1158,7 +1158,7 @@ Batch confirmed on 2026-07-21; implements `FR-AGENT-028`.
 
 ### Composition (renderer-only, no new main-process surface)
 
-- The Skills domain of `AgentAssetsWorkspace` renders `AgentSkillAssetPanel`: toolbar (search, managed/unmanaged/symlink/copy filter chips, refresh, "Add Skill") plus a responsive card grid. Skills, MCP and Plugins now render through the same `AgentAssetManagementSurface`, `AgentAssetPrimaryAction`, `AgentAssetCard` and `AgentAssetActionButton` primitives rather than duplicating visually similar toolbar, primary action, grid, card and action markup. The shared toolbar never renders a raw asset path; locale-specific filter labels and Add labels come from each domain's seven-locale resource tree. It remains one non-wrapping row: the filter strip owns bounded horizontal overflow while refresh and the shared Add action remain fixed on the right. Add Skill opens the Agent-scoped picker, Add MCP routes to MCP target management even when no target exists, and Add Plugin routes to the Plugin store. Domain panels retain only scoped selectors, card body content, detail routes and owning-store actions; Rules retain their editor workspace.
+- The Skills domain of `AgentAssetsWorkspace` renders `AgentSkillAssetPanel`: toolbar (search, managed/unmanaged/symlink/copy filter chips, refresh, "Add Skill") plus a responsive card grid. Skills, MCP and Plugins now render through the same `AgentAssetManagementSurface`, `AgentAssetPrimaryAction`, `AgentAssetCard` and `AgentAssetActionButton` primitives rather than duplicating visually similar toolbar, primary action, grid, card and action markup. The shared toolbar never renders a raw asset path; locale-specific filter labels and Add labels come from each domain's seven-locale resource tree. It remains one non-wrapping row: the filter strip owns bounded horizontal overflow while refresh and the shared Add action remain fixed on the right. Add Skill, Add MCP and Add Plugin each open an Agent-scoped library dialog over the current workspace; MCP and Plugin dialogs write only through the owning stores to verified targets already scoped to that Agent. Domain panels retain only scoped selectors, card body content, detail routes and owning-store actions; Rules retain their editor workspace.
 - Rows reuse `agentScanState[agent.id]` from the skill store and `getSkillScanStatus` for badge semantics — the same source of truth as `SkillAgentsView`; `AgentAssetItem` is not extended; the panel consumes `AgentScannedSkill` directly via a dedicated hook.
 - Actions map one-to-one to existing flows: open folder (`window.electron.openPath`), adopt (`useSkillStore.importScannedSkills` with the `handleImportAgentSkill` hydration pattern), open managed skill (jump to the Skills module my-skills view), install from library (`SkillLibraryImportModal` with the agent's skills dir as fixed target), uninstall (`skillApi.uninstallPlatformSkill` + `ConfirmDialog`, built-in blocked).
 - Card click opens `SkillFullDetailPage` with `overrideSkill` + `agentContext` + `agentActions` (the `buildProjectDetailSkill` adapter), replacing the right pane with a back action — the same drill-in contract as the Skills module, embedded in the workspace shell.
@@ -2872,3 +2872,136 @@ save IPC and one existing save-sync schedule.
 | Requirement    | Design          | Verification     | Task          |
 | -------------- | --------------- | ---------------- | ------------- |
 | `FR-AGENT-109` | `DES-AGENT-128` | `TEST-AGENT-188` | `T-AGENT-197` |
+
+## `DES-AGENT-129`: Pi MCP Capability Registry Correction
+
+Pi's MCP target presets and stable platform reference already define the
+compatible primary target at `<root>/mcp.json` plus separate shared and project
+candidates. The built-in `pi` platform declaration therefore adds only
+`mcpRelativePath: "mcp.json"`. The existing managed-Agent query derives
+`paths.mcp`, and the machine-readable capability inventory changes MCP from
+`planned` to `partial` through its existing path-backed policy. No renderer
+branch, IPC channel, storage model, parser, writer, or target-preset duplication
+is introduced.
+
+The Agent MCP workspace continues to filter the owning MCP preset inventory by
+the stable `pi` platform id. This keeps `~/.pi/agent/mcp.json`, shared adapter
+files, and project candidates independently visible while preserving the
+separate `oh-my-pi` identity. Registry projection remains linear in the bounded
+platform and preset counts; opening Pi adds no scan or network request beyond
+the existing MCP workspace load.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-111` | `DES-AGENT-129` | `TEST-AGENT-189` | `T-AGENT-198` |
+
+## `DES-AGENT-130`: Application-Owned Session Index Preference And Paging Boundary
+
+The renderer settings store owns one boolean history-acceleration preference.
+Its default is `true`, it persists through the existing bounded Zustand
+settings snapshot, and General Settings exposes the only user-facing toggle.
+No new database schema, IPC channel or native Agent setting is introduced.
+
+`AgentSessionsPanel` passes the preference to the existing session-index hook.
+On each supported History mount the hook reads native index state once,
+reconciles an enabled-state mismatch and performs one refresh only when the
+application preference is enabled. Existing renderer-scoped request ids,
+progress filtering, cancellation on unmount, 10,000-record scan ceiling and
+live-reader fallback remain authoritative. The panel removes its indexing
+controls; refresh progress stays internal and the completed revision triggers
+the existing bounded list reload.
+
+The transcript pager adds one `ChevronsLeft` icon command before Previous. It
+sets the current display page to zero using the already loaded entry array and
+is disabled while loading or already on page zero. Latest retains the existing
+bounded cursor traversal. First-page navigation is therefore `O(1)` state work
+and zero I/O; index refresh remains `O(n)` in the bounded native session count
+with one scan in flight.
+
+Analyze gate: this intentionally replaces the earlier per-source opt-in UI in
+`DES-AGENT-047`. Native transcript files remain authoritative, index metadata
+remains local and rebuildable, and disabling preserves the existing live-reader
+path. The user explicitly selected a system setting with default-on behavior,
+so no unresolved source-of-truth or privacy decision remains.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-112` | `DES-AGENT-130` | `TEST-AGENT-190` | `T-AGENT-199` |
+
+## `DES-AGENT-131`: Project Rule Kind And Target-Specific MCP Projection
+
+Cursor user rules remain Cursor-settings-owned because the official product
+does not publish a canonical user rule file. The platform registry declares
+only the project target `.cursor/rules/prompthub.mdc`. Managed Agent projection
+adds a separate `projectRules` path so global and project scopes cannot be
+confused. The existing Rules workspace gains a bounded rule kind registry:
+`workspace` continues to target `AGENTS.md`, while `cursor` targets the MDC
+file. Duplicate detection uses the resolved target path, allowing both files
+under one project root. Existing atomic write, version, conflict and backup
+flows remain authoritative.
+
+Qoder declares the same `workspace` project-rule kind at `AGENTS.md`, so its
+Agent Rules view reuses an existing workspace descriptor by resolved target
+path. The renderer is parameterized by rule kind and platform id; it does not
+add a Qoder-only editor or duplicate managed file.
+
+The Agent Rules panel derives projects from the existing `skillProjects`
+setting, selects one bounded project, and registers the Cursor target only
+after explicit confirmation. No new IPC, schema or renderer filesystem write
+is introduced.
+
+MCP support extends the shared target registry rather than adding Agent UI
+branches. OpenClaw gets a nested JSON projector for `mcp.servers` and canonical
+remote transport output; Qoder reuses the top-level `mcpServers` JSON projector;
+Grok reuses bounded TOML section scanning with target-aware `headers` output;
+Antigravity uses the same top-level container with a target-specific
+`serverUrl` remote projection. Reasonix exposes only its documented project
+`.mcp.json` through the generic JSON contract. Its modern global `[[plugins]]`
+array remains excluded because the current Codex-style TOML merger cannot
+preserve and reconcile that schema losslessly.
+Global presets add the documented user files and project presets add Qoder's
+two documented scopes plus Grok and Antigravity project files. Unknown
+JSON/TOML siblings are preserved. WebSocket-only Qoder declarations, OpenClaw
+and Antigravity OAuth state and other unknown native fields are not modeled.
+
+Registry lookup is `O(P)` in the bounded platform/preset count. Rule descriptor
+lookup is `O(R)` and MCP JSON/TOML merge is `O(S)` / `O(file lines)` with no
+new network request, background process or unbounded cache.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-113` | `DES-AGENT-131` | `TEST-AGENT-191` | `T-AGENT-200` |
+
+## `DES-AGENT-132`: Fresh Session Index Reuse And Background Warmup
+
+`useAgentSessionIndex` treats a completed scan timestamp as a freshness lease.
+A source refreshed within five minutes is reused directly; a missing or stale
+lease starts one module-scoped background refresh per Agent. The bounded map
+contains only currently running promises and removes each entry on settlement,
+so it cannot grow with historical requests. A background request is owned by
+the application renderer window rather than the mounted History component:
+tab/Agent navigation does not cancel it, while the existing main IPC binding
+still aborts it when the sender window is destroyed.
+
+Automatic enablement updates source state without invoking the foreground
+refresh path, then joins or starts background warmup. The existing explicit
+hook refresh remains component-scoped and cancellable for tests and future
+commands. Freshness checking is `O(1)`; deduplication is expected `O(1)` map
+lookup; the existing bounded scan remains `O(n)` filesystem metadata work and
+`O(n)` validation memory only when stale.
+
+`AgentSessionsPanel` delays automatic reconciliation until its first bounded
+list settles. The initial load therefore performs one native/index list instead
+of racing that list against a full scan. Index revisions and submitted searches
+reuse the visible panel and never reactivate its initial blocking loader. The
+existing bounded list result atomically replaces visible metadata when ready.
+
+Analyze gate: this supersedes `DES-AGENT-130` only where that design refreshed
+on every mount and cancelled automatic work on unmount. It does not change the
+SQLite schema, IPC contract, native transcript ownership, scan ceiling, live
+fallback or user preference. The user explicitly requested real cache reuse
+after observing repeated long Gemini scans, so no material decision remains.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-114` | `DES-AGENT-132` | `TEST-AGENT-192` | `T-AGENT-201` |

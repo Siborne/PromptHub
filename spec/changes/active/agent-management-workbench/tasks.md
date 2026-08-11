@@ -501,3 +501,23 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 
 - [x] `TEST-AGENT-188` 先复现缺失规则被误当作空文件直接打开的问题；覆盖完整 descriptor inventory、缺失文件零预写入、显式创建成功/失败、已存在空文件直接编辑、不同 Agent canonical 文件名和无 descriptor 的有界重试。
 - [x] `T-AGENT-197` 按 `FR-AGENT-109` / `DES-AGENT-128` 保留完整规则描述符清单，为 Agent Rules 增加居中创建确认并复用现有 save IPC；不得硬编码 `AGENTS.md`、新增 renderer 写路径或改变 standalone Rules 对缺失全局文件的隐藏语义。
+
+## Pi MCP Capability Follow-up
+
+- [x] `TEST-AGENT-189` 先复现 Pi 的 MCP 目标预设已经存在，但平台注册表缺少 MCP 路径、导致 Agent MCP 标签被误禁用的问题；覆盖平台注册表、Managed Agent 路径、partial capability、Pi/Oh My Pi 身份隔离和现有目标预设。
+- [x] `T-AGENT-198` 按 `FR-AGENT-111` / `DES-AGENT-129` 将 Pi 的兼容 MCP 主入口接回共享平台注册表，复用 owning MCP 工作区和现有 Pi 目标预设；不得伪装为 Pi 原生 MCP runtime、复制 preset 或新增 renderer 分支。
+
+## System History Acceleration And First-Page Follow-up
+
+- [x] `TEST-AGENT-190` 先复现本地索引开关错误占用单个 Agent History、默认关闭，以及深页缺少返回第一页按钮的问题；覆盖系统设置默认值与持久化、支持/不支持 adapter、自动启用刷新、关闭时 live fallback、History 无索引控件、首屏禁用和深页零 I/O 返回。
+- [x] `T-AGENT-199` 按 `FR-AGENT-112` / `DES-AGENT-130` 将历史加速迁移到 App Settings 并默认开启，由现有 hook 自动协调支持来源；同时补齐分页最左侧第一页按钮，不新增 schema、IPC、后台常驻任务或 transcript 读取。
+
+## Cursor Rules And Expanded MCP Targets Follow-up
+
+- [x] `TEST-AGENT-191` 先复现 Cursor Rules 因缺少用户全局文件而被禁用、Qoder 无法复用项目 `AGENTS.md`、同一项目无法并存 `AGENTS.md` 与 MDC 规则，以及 OpenClaw/Qoder/Grok/Antigravity 缺少可写 MCP 目标的问题；覆盖显式创建、空文件、重复 target、未知字段保留、OpenClaw transport、Qoder 双项目 scope、Grok headers、Antigravity `serverUrl` 和 Reasonix 项目 `.mcp.json`。
+- [x] `T-AGENT-200` 按 `FR-AGENT-113` / `DES-AGENT-131` 增加项目规则 kind 与共享项目选择流程，并将 OpenClaw/Qoder/Grok/Antigravity 及 Reasonix 项目目标接入共享 MCP target/preset；不伪造 Cursor 全局规则、不覆盖 Reasonix 现代全局 TOML、不接管原生 OAuth/未知字段、不新增 IPC/schema/background process。
+
+## Session Index Cache Reuse Follow-up
+
+- [x] `TEST-AGENT-192` 先复现 fresh index 每次 mount 仍刷新、初始 live list 与 full scan 竞争、离开 History 取消 warmup、同 Agent 重入重复扫描，以及 refresh revision 重新遮住已有列表的问题；覆盖五分钟 freshness、stale/missing 后台刷新、per-Agent in-flight dedupe、window-owned lifecycle 和非阻塞列表替换。
+- [x] `T-AGENT-201` 按 `FR-AGENT-114` / `DES-AGENT-132` 实现 stale-while-revalidate 会话元数据缓存：初始列表完成后才启动有界 warmup，fresh cache 直接复用，后台请求跨 History mount 复用且完成时不回到 blocking loader；不新增 schema、IPC、watcher、timer 或 transcript 正文缓存。

@@ -40,18 +40,20 @@ records and `O(n)` validation memory; listing is `O(page size)` result memory.
 No transcript directory traversal, network request, unbounded retry or
 renderer exposure is introduced by this storage batch.
 
-## `DES-AGENT-046`: Opt-In Session Index Orchestration
+## `DES-AGENT-046`: Application-Configured Session Index Orchestration
 
 The desktop main process owns one orchestration service between verified
 read-only session adapters and `AgentSessionIndexDB`. The first persistent
 index adapters are Claude Code and Gemini CLI because both already have
 bounded local readers and stable PromptHub root resolution.
 
-Opening the Sessions view alone does not persist metadata. Until the user
-explicitly enables indexing for a source, list and detail requests keep using
-the live read-only adapter and no `agent_session_sources` row is created.
-Enabling creates or updates exactly one source registration and an explicit
-refresh performs the scan.
+The application-level history acceleration preference controls supported
+sources and defaults to enabled under `DES-AGENT-130`. Opening a supported
+History reconciles exactly one source registration. Under `DES-AGENT-132`, a
+fresh completed index is reused, while a missing or stale source performs one
+deduplicated bounded background refresh only after the first list settles.
+Disabling the application preference reconciles the source to disabled and
+keeps list/detail requests on the live read-only adapter.
 
 Each scan enumerates only the adapter's bounded session directory shape, never
 the whole Agent root. It compares source path, mtime, size, stored digest and
@@ -77,7 +79,7 @@ For `n` source files, enumeration and validation are `O(n)` time with
 is at most 256 KiB, scan concurrency is one, and SQLite commit is one
 transaction. List/search result memory is `O(page size)` with a 200-row cap.
 
-## `DES-AGENT-047`: Session Index IPC And Renderer Control
+## `DES-AGENT-047`: Session Index IPC And Renderer Coordination
 
 The renderer receives only a redacted index state: supported, enabled,
 last scan status/time and stable error code. Source ids, root paths, cursors,
@@ -85,11 +87,11 @@ digests and indexed device-local paths remain main-process data. Existing
 session list/detail contracts remain compatible; list gains an optional search
 argument and detail still reads the external source on demand.
 
-Enabling is an explicit binary control shown only for adapters with verified
-index support. Enabling registers the source and starts one scoped refresh.
-Disabling stops persistent refreshes but retains the rebuildable device-local
-index so annotations are not discarded. A separate refresh icon is available
-only while enabled.
+General Settings owns the explicit binary preference. Supported History views
+apply it automatically: enabling registers the source and starts one scoped
+refresh, while disabling stops persistent refreshes but retains the
+rebuildable device-local index so annotations are not discarded. Individual
+History panels expose no indexing toggle or manual refresh icon.
 
 Each refresh has a renderer-generated request id. Main scopes its
 `AbortController` by renderer sender id plus request id, rejects duplicate
@@ -99,10 +101,10 @@ bounded processed/total counts. Cancellation from another renderer cannot
 affect the request.
 
 The Sessions page subscribes once, filters progress by its active request and
-Agent, and unsubscribes on unmount. While indexing, it shows determinate
-progress and one cancel action. Indexed search runs through SQLite only after
-the user submits the draft with Enter; typing performs no list request. Search
-matches only session title and project identity, while disabled sources preserve
+Agent, cancels an in-flight scan on unmount and unsubscribes. Index progress is
+not a conversation-browser control. Indexed search runs through SQLite only
+after the user submits the draft with Enter; typing performs no list request.
+Search matches only session title and project identity, while disabled sources preserve
 the existing live-reader fallback with the same final metadata predicate. Agent
 changes invalidate late list, refresh and progress results.
 

@@ -88,20 +88,25 @@ installation source and all installation workflows remain diagnostic-only.
 
 PromptHub MCP 管理第一版建模为“配置库 + 目标文件投影”，不运行 MCP 网关、代理或统一 endpoint。
 
-| Target      | PromptHub Target ID | Default Scope Paths                                                  | Config Shape                        | Evidence / Notes                                    |
-| ----------- | ------------------- | -------------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------- |
-| Codex       | `codex`             | `~/.codex/config.toml`; project `.codex/config.toml`                 | TOML `[mcp_servers.<name>]`         | Officially documented                               |
-| Claude Code | `claude`            | `~/.claude.json`; project `.mcp.json`                                | JSON `mcpServers`                   | Officially documented; scopes include user/project  |
-| Cursor      | `cursor`            | `~/.cursor/mcp.json`; project `.cursor/mcp.json`                     | JSON `mcpServers`                   | Officially documented                               |
-| VS Code     | `vscode`            | project `.vscode/mcp.json`; user profile path varies by VS Code UI   | JSON `servers`                      | Officially documented                               |
-| Cline       | `cline`             | `~/.cline/data/settings/cline_mcp_settings.json`                     | JSON `mcpServers`-style settings    | Officially documented                               |
-| WorkBuddy   | `workbuddy`         | `~/.workbuddy/mcp.json`; project `.workbuddy/mcp.json`               | JSON `mcpServers`                   | Officially documented                               |
-| CodeBuddy   | `codebuddy`         | `~/.codebuddy/.mcp.json`; project `.mcp.json`                        | JSON / JSONC `mcpServers`           | Officially documented                               |
-| ZCode Agent | `zcode`             | `~/.zcode/cli/config.json`; project `.zcode/config.json`             | JSON `mcp.servers`                  | Officially documented                               |
-| Oh My Pi    | `oh-my-pi`          | `~/.omp/agent/mcp.json`; project `.omp/mcp.json`                     | JSON `mcpServers`                   | Officially documented; native Oh My Pi target       |
-| Pi          | `pi`                | `~/.pi/agent/mcp.json`; project `.pi/mcp.json`; adapter shared files | JSON `mcpServers`                   | Compatible writer; runtime/adapter remains Pi-owned |
-| Custom JSON | `custom-json`       | user-selected file path                                              | JSON `mcpServers`                   | PromptHub generic projection                        |
-| Custom TOML | `custom-toml`       | user-selected file path                                              | Codex-compatible managed TOML block | PromptHub generic projection                        |
+| Target      | PromptHub Target ID | Default Scope Paths                                                          | Config Shape                            | Evidence / Notes                                                             |
+| ----------- | ------------------- | ---------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------- |
+| Codex       | `codex`             | `~/.codex/config.toml`; project `.codex/config.toml`                         | TOML `[mcp_servers.<name>]`             | Officially documented                                                        |
+| Claude Code | `claude`            | `~/.claude.json`; project `.mcp.json`                                        | JSON `mcpServers`                       | Officially documented; scopes include user/project                           |
+| Cursor      | `cursor`            | `~/.cursor/mcp.json`; project `.cursor/mcp.json`                             | JSON `mcpServers`                       | Officially documented                                                        |
+| VS Code     | `vscode`            | project `.vscode/mcp.json`; user profile path varies by VS Code UI           | JSON `servers`                          | Officially documented                                                        |
+| Cline       | `cline`             | `~/.cline/data/settings/cline_mcp_settings.json`                             | JSON `mcpServers`-style settings        | Officially documented                                                        |
+| WorkBuddy   | `workbuddy`         | `~/.workbuddy/mcp.json`; project `.workbuddy/mcp.json`                       | JSON `mcpServers`                       | Officially documented                                                        |
+| CodeBuddy   | `codebuddy`         | `~/.codebuddy/.mcp.json`; project `.mcp.json`                                | JSON / JSONC `mcpServers`               | Officially documented                                                        |
+| ZCode Agent | `zcode`             | `~/.zcode/cli/config.json`; project `.zcode/config.json`                     | JSON `mcp.servers`                      | Officially documented                                                        |
+| Oh My Pi    | `oh-my-pi`          | `~/.omp/agent/mcp.json`; project `.omp/mcp.json`                             | JSON `mcpServers`                       | Officially documented; native Oh My Pi target                                |
+| Pi          | `pi`                | `~/.pi/agent/mcp.json`; project `.pi/mcp.json`; adapter shared files         | JSON `mcpServers`                       | Compatible writer; runtime/adapter remains Pi-owned                          |
+| Grok Build  | `grok`              | `~/.grok/config.toml`; project `.grok/config.toml`                           | TOML `[mcp_servers.<name>]` + `headers` | Officially documented                                                        |
+| OpenClaw    | `openclaw`          | `~/.openclaw/openclaw.json`                                                  | JSON `mcp.servers`                      | Officially documented; native OAuth remains Agent-owned                      |
+| Qoder       | `qoder`             | `~/.qoder/settings.json`; project `.qoder/settings.local.json` / `.mcp.json` | JSON `mcpServers`                       | Officially documented; stdio/SSE/HTTP projection                             |
+| Antigravity | `antigravity`       | `~/.gemini/config/mcp_config.json`; project `.agents/mcp_config.json`        | JSON `mcpServers`; remote `serverUrl`   | Officially documented                                                        |
+| Reasonix    | `reasonix`          | project `.mcp.json`                                                          | JSON `mcpServers`                       | Project compatibility only; modern global `[[plugins]]` remains native-owned |
+| Custom JSON | `custom-json`       | user-selected file path                                                      | JSON `mcpServers`                       | PromptHub generic projection                                                 |
+| Custom TOML | `custom-toml`       | user-selected file path                                                      | Codex-compatible managed TOML block     | PromptHub generic projection                                                 |
 
 Stable product rule:
 
@@ -129,6 +134,18 @@ Stable product rule:
   `.mcp.json`, then `.pi/mcp.json`. PromptHub keeps those layers as separate
   selectable targets rather than merging them in the library or owning Pi's
   effective-runtime resolution.
+- OpenClaw projection owns only supported fields under `mcp.servers`, preserves
+  unrelated root, `mcp`, OAuth, filter and timeout fields, and writes explicit
+  `transport: "streamable-http"` only for Streamable HTTP. Qoder WebSocket-only
+  declarations remain native-owned because PromptHub's normalized transport
+  contract currently covers stdio, SSE and Streamable HTTP. Grok uses `headers`
+  rather than Codex's `http_headers` while sharing the bounded managed TOML
+  block and conflict safeguards.
+- Antigravity projection writes its required `serverUrl` key and keeps native
+  OAuth, disabled-tool and authentication-provider fields Agent-owned. Reasonix
+  project `.mcp.json` uses the documented field-for-field JSON compatibility;
+  PromptHub does not project the modern global `[[plugins]]` TOML array through
+  a Codex-style table writer.
 - My MCP detail, distribution counts, quick deploy, batch deploy, and target
   dialogs use one merged global/project target projection. Agent and Project
   workspaces remain separately navigable, while registered project files can
@@ -200,8 +217,11 @@ Stable product rule:
   `steering/AGENTS.md` 与 CLI rules 目录中的 `AGENTS.md`；同目录 sibling
   files 仍由原平台管理。`Augment` 只暴露官方用户指南入口
   `user-guidelines.md`。
-- `Cursor`、`Qoder`、`Roo Code` 已在资产文档中建模，但当前仍未进入
-  `Rules` 运行时全局规则白名单。
+- `Cursor` 不伪造用户级规则文件：官方 User Rules 仍由 Cursor Settings
+  管理。Agent Rules 通过已登记项目显式管理
+  `<project>/.cursor/rules/prompthub.mdc`，可与同项目 `AGENTS.md` 独立并存。
+  `Qoder` 不伪造用户级规则文件，但通过官方兼容入口复用已登记项目根
+  `AGENTS.md`。`Roo Code` 当前仍未进入 Rules 运行时全局规则白名单。
 - `Reasonix` 不进入当前白名单：它使用项目层级或记忆文件合并。Cherry Studio 与 TRAE 系列也没有已验证的用户级规则文件入口。
 - `Qwen Code` 已进入全局 Rules 运行时白名单，使用解析后的 `<QWEN_HOME>/QWEN.md`。项目 `QWEN.md` 与个人覆盖 `.qwen/QWEN.local.md` 的专用 scope UI 仍属于后续门禁，当前不得把 auto-memory 当作 Rule 导入。
 - 这些平台未进入白名单的主要原因是缺少已确认的用户级本地文件入口，或其协议只提供 repository-scoped 文件；PromptHub 不为这些平台发明不会被读取的全局文件。
@@ -210,6 +230,8 @@ Stable product rule:
 
 - 当前项目：`<repo>/AGENTS.md`
 - 用户手动添加目录：`<selected-project>/AGENTS.md`
+- Cursor 项目：`<selected-project>/.cursor/rules/prompthub.mdc`
+- Qoder 项目兼容：`<selected-project>/AGENTS.md`
 
 ## Special Filenames
 
@@ -666,7 +688,7 @@ Current support boundary:
   - built-in id `antigravity` uses the display name `Antigravity` and represents the shared Antigravity customization surface used by both current clients
   - built-in id `gemini` uses the display name `Gemini`, remains independent as an enterprise/legacy compatibility target, and keeps the Gemini CLI configuration/session adapters
   - both built-in display names omit the `CLI` suffix; lifecycle badges carry availability differences
-  - PromptHub exposes the Antigravity MCP path for discovery, but does not claim a generic writer until its `serverUrl` schema and secret-bearing headers have a dedicated adapter
+  - PromptHub uses a dedicated Antigravity MCP adapter for global and workspace targets: remote entries write `serverUrl`, while secret-bearing headers are redacted from previews and preserved only in native configuration
 
 ### OpenCode
 
