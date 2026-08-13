@@ -230,6 +230,22 @@ export async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+export async function coalesceInFlight<K, V>(
+  pending: Map<K, Promise<V>>,
+  key: K,
+  create: () => Promise<V>,
+): Promise<V> {
+  const current = pending.get(key);
+  if (current) return current;
+  const operation = create();
+  pending.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    if (pending.get(key) === operation) pending.delete(key);
+  }
+}
+
 export async function readJsonFile<T>(filePath: string): Promise<T | null> {
   try {
     const raw = await fsp.readFile(filePath, "utf-8");

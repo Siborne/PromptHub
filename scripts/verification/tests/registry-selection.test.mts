@@ -35,6 +35,19 @@ test("the maintained registry is valid and includes previously omitted gates", (
     "governance-spec",
     "shared-test",
     "core-test",
+    "core-performance",
+    "desktop-unit-1",
+    "desktop-unit-2",
+    "desktop-unit-3",
+    "desktop-unit-4",
+    "desktop-unit-5",
+    "desktop-unit-6",
+    "desktop-unit-7",
+    "desktop-unit-8",
+    "desktop-integration-1",
+    "desktop-integration-2",
+    "desktop-integration-3",
+    "desktop-integration-4",
     "mobile-test",
     "web-smoke",
     "web-cloudflare-build",
@@ -43,6 +56,80 @@ test("the maintained registry is valid and includes previously omitted gates", (
   ]) {
     assert.equal(ids.has(required), true, `missing ${required}`);
   }
+});
+
+test("core storage performance remains an isolated release gate", () => {
+  const performanceCheck = VERIFICATION_CHECKS.find(
+    (item) => item.id === "core-performance",
+  );
+
+  assert.ok(performanceCheck);
+  assert.deepEqual(performanceCheck.profiles, ["release", "package"]);
+  assert.deepEqual(performanceCheck.dependsOn, ["core-test"]);
+  assert.equal(performanceCheck.resourceGroup, "test-heavy");
+  assert.deepEqual(performanceCheck.command.args, [
+    "--filter",
+    "@prompthub/core",
+    "test:performance",
+  ]);
+});
+
+test("desktop unit coverage uses bounded serial shards", () => {
+  const shards = VERIFICATION_CHECKS.filter((item) =>
+    item.id.startsWith("desktop-unit-"),
+  );
+
+  assert.deepEqual(
+    shards.map((item) => item.id),
+    [
+      "desktop-unit-1",
+      "desktop-unit-2",
+      "desktop-unit-3",
+      "desktop-unit-4",
+      "desktop-unit-5",
+      "desktop-unit-6",
+      "desktop-unit-7",
+      "desktop-unit-8",
+    ],
+  );
+  for (const [index, shard] of shards.entries()) {
+    assert.equal(shard.resourceGroup, "test-heavy");
+    assert.equal(shard.command.args.includes(`${index + 1}/8`), true);
+    assert.equal(shard.command.args.at(-1), "2");
+  }
+});
+
+test("desktop integration coverage uses single-worker release shards", () => {
+  const shards = VERIFICATION_CHECKS.filter((item) =>
+    item.id.startsWith("desktop-integration-"),
+  );
+
+  assert.deepEqual(
+    shards.map((item) => item.id),
+    [
+      "desktop-integration-1",
+      "desktop-integration-2",
+      "desktop-integration-3",
+      "desktop-integration-4",
+    ],
+  );
+  for (const [index, shard] of shards.entries()) {
+    assert.deepEqual(shard.profiles, ["release", "package"]);
+    assert.equal(shard.resourceGroup, "test-heavy");
+    assert.equal(shard.command.args.includes(`${index + 1}/4`), true);
+    assert.equal(shard.command.args.at(-1), "1");
+  }
+});
+
+test("Cloudflare dry-run disables nonessential Wrangler telemetry", () => {
+  const build = VERIFICATION_CHECKS.find(
+    (item) => item.id === "web-cloudflare-build",
+  );
+
+  assert.deepEqual(build?.command.environment, {
+    CI: "true",
+    WRANGLER_SEND_METRICS: "false",
+  });
 });
 
 test("complete registry validation rejects a missing required risk layer", () => {

@@ -35,6 +35,7 @@ import {
 } from "./runtime-paths";
 
 const OPERATION_KEY = "rule-library";
+const reconciledRuleDatabases = new WeakSet<DatabaseAdapter.Database>();
 
 interface RuleSnapshot {
   rule: RuleRecord | null;
@@ -322,16 +323,22 @@ export class CanonicalRuleDB extends BaseRuleDB {
   }
 
   reconcileCanonicalWorkspaces(): void {
-    if (!this.canonical()) return;
-    for (const record of super.getAll()) {
-      if (!fs.existsSync(bundlePath(record.id))) continue;
-      const hydrated = hydrateWorkspace(record);
-      this.db.transaction(() => {
-        this.db
-          .prepare("UPDATE rules SET managed_path = ? WHERE id = ?")
-          .run(hydrated.managedPath, record.id);
-        super.replaceVersions(record.id, hydrated.versions);
-      })();
+    if (!this.canonical() || reconciledRuleDatabases.has(this.db)) return;
+    try {
+      for (const record of super.getAll()) {
+        if (!fs.existsSync(bundlePath(record.id))) continue;
+        const hydrated = hydrateWorkspace(record);
+        this.db.transaction(() => {
+          this.db
+            .prepare("UPDATE rules SET managed_path = ? WHERE id = ?")
+            .run(hydrated.managedPath, record.id);
+          super.replaceVersions(record.id, hydrated.versions);
+        })();
+      }
+      reconciledRuleDatabases.add(this.db);
+    } catch (error) {
+      reconciledRuleDatabases.delete(this.db);
+      throw error;
     }
   }
 }

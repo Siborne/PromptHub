@@ -7,6 +7,7 @@ import https from "https";
 import { createUpgradeDataSnapshot } from "./services/upgrade-backup";
 import { getHttpRequestAgent } from "./services/network-proxy";
 import { compareVersions, isPrereleaseVersion } from "../utils/version";
+import desktopPackage from "../../package.json";
 
 // Simplified update info type (for IPC transmission)
 // 简化的更新信息类型（用于 IPC 传输）
@@ -26,6 +27,17 @@ interface ProgressInfo {
 export type MacInstallSource = "direct" | "homebrew" | "unknown";
 
 type UpdateChannel = "stable" | "preview";
+
+export function resolveDesktopVersion(
+  isPackaged = app.isPackaged,
+  runtimeVersion = app.getVersion(),
+  packageVersion = desktopPackage.version,
+): string {
+  if (isPackaged || !packageVersion?.trim()) {
+    return runtimeVersion;
+  }
+  return packageVersion.trim();
+}
 
 interface UpdateRequestOptions {
   useMirror?: boolean;
@@ -682,7 +694,7 @@ export function registerUpdaterIPC() {
   // Get current version - always available
   // 获取当前版本 - 总是可用
   ipcMain.handle("updater:version", () => {
-    return app.getVersion();
+    return resolveDesktopVersion();
   });
 
   ipcMain.handle("updater:installSource", () => {

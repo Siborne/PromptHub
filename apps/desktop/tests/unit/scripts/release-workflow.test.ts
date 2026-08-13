@@ -19,6 +19,12 @@ function getIfLines(source: string): string[] {
 }
 
 describe("release workflow secret guards", () => {
+  it("requires the full release gate before platform packaging starts", () => {
+    expect(workflowSource).toContain("  verify:\n");
+    expect(workflowSource).toContain("pnpm verify:release");
+    expect(workflowSource).toContain("  build:\n    needs: verify\n");
+  });
+
   it("does not read secret values from if expressions", () => {
     const unsafeIfLines = getIfLines(workflowSource).filter((line) =>
       /\b(?:env|secrets)\.(CLOUDFLARE_API_TOKEN|CLOUDFLARE_ACCOUNT_ID|HOMEBREW_TAP_TOKEN)\b/.test(

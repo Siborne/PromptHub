@@ -89,5 +89,5 @@ describe("canonical storage scale", () => {
     console.info(
       `[storage-scale] prompts=${PROMPT_COUNT} elapsedMs=${elapsedMs.toFixed(1)} incrementalMs=${incrementalElapsedMs.toFixed(1)} maxRssDeltaKiB=${rssDeltaKiB} dataBytes=${dataBytes}`,
     );
-  }, 60_000);
+  });
 });

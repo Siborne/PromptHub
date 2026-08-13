@@ -55,6 +55,7 @@
 - agent 边界保护：`spec/rules/agent-boundary-guardrails.md`
 - TDD 和设计门禁：`spec/rules/tdd-design-gate.md`
 - 代码质量和架构边界：`spec/rules/code-quality-architecture.md`
+- 持久化所有权、布局、迁移、备份和云存储演进：`spec/rules/storage-evolution-rules.md`
 - 提交、编号、PR 和发布引用：`spec/rules/submission-traceability-rules.md`
 - 记录 ID、索引、生命周期目录和年月归档：`spec/rules/document-archive-rules.md`
 

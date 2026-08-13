@@ -65,10 +65,14 @@ export type SelectionOptions = {
 };
 
 function commandKey(check: VerificationCheck): string {
+  const environment = Object.entries(check.command.environment ?? {}).sort(
+    ([left], [right]) => left.localeCompare(right),
+  );
   return JSON.stringify([
     check.command.cwd ?? "",
     check.command.executable,
     ...check.command.args,
+    environment,
   ]);
 }
 

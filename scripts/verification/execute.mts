@@ -43,16 +43,27 @@ function appendBounded(
   };
 }
 
-function terminateOwnedProcess(child: ChildProcess, force: boolean): void {
-  if (!child.pid || child.exitCode !== null || child.signalCode !== null) {
+function terminateOwnedProcess(
+  child: ChildProcess,
+  force: boolean,
+  includeExitedProcessGroup = false,
+): void {
+  if (!child.pid) {
     return;
   }
 
   const signal: NodeJS.Signals = force ? "SIGKILL" : "SIGTERM";
   try {
     if (process.platform === "win32") {
+      if (child.exitCode !== null || child.signalCode !== null) return;
       child.kill(signal);
     } else {
+      if (
+        !includeExitedProcessGroup &&
+        (child.exitCode !== null || child.signalCode !== null)
+      ) {
+        return;
+      }
       process.kill(-child.pid, signal);
     }
   } catch (error) {
@@ -69,7 +80,7 @@ function spawnCheck(check: VerificationCheck): ChildProcess {
       : check.command.executable;
   return spawn(executable, check.command.args, {
     cwd: check.command.cwd,
-    env: process.env,
+    env: { ...process.env, ...check.command.environment },
     detached: process.platform !== "win32",
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
@@ -191,6 +202,9 @@ class ChildCheckRun {
   async run(): Promise<VerificationResult> {
     const cleanup = this.startLifecycle();
     const close = await this.waitForClose();
+    if (close.code !== 0 || close.processSignal || this.spawnError) {
+      terminateOwnedProcess(this.child, true, true);
+    }
     cleanup();
     const endedAt = Date.now();
     const status = this.timedOut

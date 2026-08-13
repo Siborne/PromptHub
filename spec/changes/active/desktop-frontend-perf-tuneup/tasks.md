@@ -134,6 +134,14 @@
 
 ## Cross-cutting
 
+## P13 — App shell 与 Agent 工作台面板按需加载（2026-08-11 follow-up）
+
+- [x] 以源码边界红测锁定 `App` 不再静态拉入布局/DnD/背景桥接，以及 `AgentsWorkspace` 不再静态拉入各标签页面板
+- [x] 提取可懒加载的应用 UI shell，保留 App 初始化、同步、恢复和弹窗编排语义
+- [x] 将 Agent Overview/Assets/Provider/Appearance/Config/Sessions 与设置弹窗改为按需加载，并提供稳定 loading surface
+- [x] 用 `build:analyze` 对比 App、AgentsWorkspace 和新拆分 chunks，补充可执行 bundle budget
+- [x] 复跑边界测试、Agent workspace 组件测试、typecheck、构建与 bundle budget
+
 - [x] 每完成一个阶段，更新 `implementation.md` 中对应小节，记录实际数据与偏差
 - [x] 把"桌面端长列表虚拟化"、"bundle 预算"作为稳定行为同步到 `spec/knowledge/behavior/desktop.md`
 - [x] 在 `spec/knowledge/structure/` 下新增 `desktop-frontend-performance.md` 描述桌面端 renderer 性能策略

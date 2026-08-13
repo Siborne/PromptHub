@@ -106,6 +106,14 @@ describe("canonical Rule database adapter", () => {
       fs.readFileSync(ruleDb.getVersions("codex-global")[0].filePath, "utf8"),
     ).toBe("# Rules\n");
 
+    const inFlightWritePath = path.join(
+      path.dirname(restored.managedPath),
+      "._rule.json.in-flight.tmp",
+    );
+    fs.writeFileSync(inFlightWritePath, "pending");
+    new CanonicalRuleDB(database).reconcileCanonicalWorkspaces();
+    expect(fs.readFileSync(inFlightWritePath, "utf8")).toBe("pending");
+
     ruleDb.delete("codex-global");
     expect(fs.existsSync(bundlePath)).toBe(false);
   });

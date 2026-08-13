@@ -10,8 +10,14 @@ const externalModules = new Set([
 
 export default defineConfig({
   test: {
-    // CLI tests share process-wide runtime paths, database handles, cwd, and HOME.
-    fileParallelism: false,
+    // Each test file runs in its own worker, so process-wide runtime paths, cwd,
+    // HOME, and database handles stay isolated while independent files run in
+    // parallel. Tests inside a file remain serial.
+    fileParallelism: true,
+    // Keep enough parallelism to amortize the database template while leaving
+    // headroom for the release harness' concurrent static check.
+    maxWorkers: 4,
+    minWorkers: 2,
     globalSetup: "./tests/global-setup.ts",
     // Real subprocess and SQLite workflows routinely exceed Vitest's 5s default.
     testTimeout: 30_000,

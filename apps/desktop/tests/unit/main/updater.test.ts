@@ -97,6 +97,7 @@ import {
   detectMacInstallSource,
   initUpdater,
   registerUpdaterIPC,
+  resolveDesktopVersion,
 } from "../../../src/main/updater";
 
 describe("Updater Service (Main Process)", () => {
@@ -144,6 +145,15 @@ describe("Updater Service (Main Process)", () => {
     expect(autoUpdater.autoInstallOnAppQuit).toBe(false);
   });
 
+  it("reports the product package version when Electron is unpackaged", () => {
+    expect(resolveDesktopVersion(false, "33.4.11", "0.6.0-beta.1")).toBe(
+      "0.6.0-beta.1",
+    );
+    expect(resolveDesktopVersion(true, "0.6.0-beta.1", "0.6.0-beta.1")).toBe(
+      "0.6.0-beta.1",
+    );
+  });
+
   it("should not mutate autoUpdater.channel on Windows x64", () => {
     Object.defineProperty(process, "platform", { value: "win32" });
     Object.defineProperty(process, "arch", { value: "x64" });
@@ -180,11 +190,16 @@ describe("Updater Service (Main Process)", () => {
     initUpdater(mockWindow);
     registerUpdaterIPC();
 
-    const downloadHandler = vi.mocked(ipcMain.handle).mock.calls.find(
-      ([channel]) => channel === "updater:download",
-    )?.[1] as ((options: { useMirror: boolean; channel: "stable" }) => Promise<{
+    const downloadHandler = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.find(
+        ([channel]) => channel === "updater:download",
+      )?.[1] as (options: {
+      useMirror: boolean;
+      channel: "stable";
+    }) => Promise<{
       success: boolean;
-    }>);
+    }>;
 
     const result = await downloadHandler({
       useMirror: false,
@@ -370,5 +385,4 @@ describe("Updater Service (Main Process)", () => {
       ),
     ).toBe("direct");
   });
-
 });

@@ -8,6 +8,8 @@ import type {
 const SECRET_ASSIGNMENT =
   /\b(TOKEN|PASSWORD|SECRET|API_KEY|ACCESS_KEY|PRIVATE_KEY)=([^\s]+)/gi;
 const BEARER_TOKEN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const SECRET_ENVIRONMENT_KEY =
+  /(?:TOKEN|PASSWORD|SECRET|API_KEY|ACCESS_KEY|PRIVATE_KEY)/i;
 
 export function redactDiagnostic(
   value: string | undefined,
@@ -27,6 +29,16 @@ function safeResult(result: VerificationResult): VerificationResult {
         (argument) => redactDiagnostic(argument) ?? "",
       ),
       cwd: redactDiagnostic(result.command.cwd),
+      environment: result.command.environment
+        ? Object.fromEntries(
+            Object.entries(result.command.environment).map(([key, value]) => [
+              key,
+              SECRET_ENVIRONMENT_KEY.test(key)
+                ? "[REDACTED]"
+                : (redactDiagnostic(value) ?? ""),
+            ]),
+          )
+        : undefined,
     },
     outputTail: redactDiagnostic(result.outputTail),
     error: redactDiagnostic(result.error),

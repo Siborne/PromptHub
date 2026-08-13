@@ -27,6 +27,7 @@ export type VerificationCommand = {
   executable: string;
   args: string[];
   cwd?: string;
+  environment?: Record<string, string>;
 };
 
 export type VerificationCheck = {

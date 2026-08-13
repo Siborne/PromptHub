@@ -849,12 +849,29 @@ describe("rules workspace storage", () => {
       "utf8",
     );
 
+    const originalWriteFile = fsp.writeFile.bind(fsp);
+    let claudeMetaWrites = 0;
+    vi.spyOn(fsp, "writeFile").mockImplementation(
+      async (file, data, options) => {
+        if (
+          path.basename(String(file)).startsWith("._rule.json.") &&
+          String(file).includes(`${path.sep}global${path.sep}claude${path.sep}`)
+        ) {
+          claudeMetaWrites += 1;
+        }
+
+        return originalWriteFile(file, data, options);
+      },
+    );
+
     await Promise.all([
       service.listRuleDescriptors(),
+      service.readRuleContent("claude-global"),
       service.readRuleContent("claude-global"),
     ]);
 
     const content = await service.readRuleContent("claude-global");
+    expect(claudeMetaWrites).toBe(2);
     expect(content.versions).toHaveLength(1);
     expect(content.versions[0]).toEqual(
       expect.objectContaining({

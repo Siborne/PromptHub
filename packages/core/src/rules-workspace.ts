@@ -46,6 +46,7 @@ import {
   RULE_VERSION_STAGING_PREFIX,
   SAFE_PROJECT_ID_PATTERN,
   assertSafeProjectId,
+  coalesceInFlight,
   createSiblingTempDirectory,
   encodeRuleId,
   ensureDir,
@@ -85,13 +86,15 @@ interface ReadRuleVersionsResult {
   versions: RuleVersionSnapshot[];
   repaired: boolean;
 }
-
 export function createRulesWorkspaceService(
   deps: RulesWorkspaceServiceDeps,
 ): RulesWorkspaceService {
   const pendingRuleVersionWrites = new Map<
     RuleFileId,
     Promise<AppendRuleVersionResult>
+  >();
+  const pendingGlobalRuleMaterializations = new Map<
+    KnownRuleFileId | CustomRuleFileId, Promise<StoredRuleMeta>
   >();
 
   function assertStorageAvailable(): void {
@@ -870,7 +873,7 @@ export function createRulesWorkspaceService(
     db.replaceVersions(meta.id, toRuleVersionRecords(meta.id, versionIndex));
   }
 
-  async function ensureGlobalRuleMaterialized(
+  async function materializeGlobalRule(
     ruleId: KnownRuleFileId | CustomRuleFileId,
   ): Promise<StoredRuleMeta> {
     const customTemplate = deps
@@ -926,6 +929,16 @@ export function createRulesWorkspaceService(
     await writeMeta(meta);
     await syncRuleIndex(meta);
     return meta;
+  }
+
+  async function ensureGlobalRuleMaterialized(
+    ruleId: KnownRuleFileId | CustomRuleFileId,
+  ): Promise<StoredRuleMeta> {
+    return coalesceInFlight(
+      pendingGlobalRuleMaterializations,
+      ruleId,
+      () => materializeGlobalRule(ruleId),
+    );
   }
 
   async function listProjectMetaPaths(): Promise<string[]> {

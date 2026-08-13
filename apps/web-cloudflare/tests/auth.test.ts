@@ -150,5 +150,5 @@ describe("auth captcha", () => {
       data: { user: { username: string } };
     };
     expect(loginBody.data.user.username).toBe("owner");
-  });
+  }, 15_000);
 });

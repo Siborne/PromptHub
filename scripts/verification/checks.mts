@@ -24,7 +24,7 @@ function pnpmCheck(
       VerificationCheck,
       "profiles" | "dependsOn" | "timeoutMs" | "resourceGroup"
     >
-  > = {},
+  > & { environment?: Record<string, string> } = {},
 ): VerificationCheck {
   return {
     id,
@@ -32,7 +32,7 @@ function pnpmCheck(
     surfaces,
     layers,
     profiles: options.profiles ?? QUICK_PROFILES,
-    command: { executable: "pnpm", args },
+    command: { executable: "pnpm", args, environment: options.environment },
     dependsOn: options.dependsOn,
     timeoutMs: options.timeoutMs ?? 120_000,
     resourceGroup: options.resourceGroup,
@@ -97,7 +97,20 @@ export const VERIFICATION_CHECKS: VerificationCheck[] = [
     ["core"],
     ["unit", "contract"],
     ["--filter", "@prompthub/core", "test"],
-    { timeoutMs: 300_000 },
+    { timeoutMs: 300_000, resourceGroup: "test-heavy" },
+  ),
+  pnpmCheck(
+    "core-performance",
+    "Core canonical storage performance budget",
+    ["core"],
+    ["performance"],
+    ["--filter", "@prompthub/core", "test:performance"],
+    {
+      profiles: RELEASE_PROFILES,
+      dependsOn: ["core-test"],
+      timeoutMs: 120_000,
+      resourceGroup: "test-heavy",
+    },
   ),
   pnpmCheck(
     "cli-lint",
@@ -119,7 +132,7 @@ export const VERIFICATION_CHECKS: VerificationCheck[] = [
     ["cli"],
     ["unit", "contract", "security"],
     ["--filter", "@prompthub/cli", "test"],
-    { timeoutMs: 180_000 },
+    { timeoutMs: 180_000, resourceGroup: "test-heavy" },
   ),
   pnpmCheck(
     "cli-build",
@@ -156,26 +169,57 @@ export const VERIFICATION_CHECKS: VerificationCheck[] = [
     ["desktop"],
     ["static", "contract"],
     ["--filter", "@prompthub/desktop", "typecheck"],
-    { timeoutMs: 180_000 },
+    { timeoutMs: 360_000 },
   ),
-  pnpmCheck(
-    "desktop-unit",
-    "Desktop unit tests",
-    ["desktop", "database"],
-    ["unit", "contract", "security"],
-    ["--filter", "@prompthub/desktop", "test:unit"],
-    { timeoutMs: 600_000 },
+  ...Array.from({ length: 8 }, (_, shard) =>
+    pnpmCheck(
+      `desktop-unit-${shard + 1}`,
+      `Desktop unit tests (shard ${shard + 1}/8)`,
+      ["desktop", "database"],
+      ["unit", "contract", "security"],
+      [
+        "--filter",
+        "@prompthub/desktop",
+        "exec",
+        "vitest",
+        "run",
+        "tests/unit",
+        "--shard",
+        `${shard + 1}/8`,
+        "--minWorkers",
+        "2",
+        "--maxWorkers",
+        "2",
+      ],
+      { timeoutMs: 600_000, resourceGroup: "test-heavy" },
+    ),
   ),
-  pnpmCheck(
-    "desktop-integration",
-    "Desktop integration tests",
-    ["desktop", "database"],
-    ["integration", "contract"],
-    ["--filter", "@prompthub/desktop", "test:integration"],
-    {
-      profiles: RELEASE_PROFILES,
-      timeoutMs: 300_000,
-    },
+  ...Array.from({ length: 4 }, (_, shard) =>
+    pnpmCheck(
+      `desktop-integration-${shard + 1}`,
+      `Desktop integration tests (shard ${shard + 1}/4)`,
+      ["desktop", "database"],
+      ["integration", "contract"],
+      [
+        "--filter",
+        "@prompthub/desktop",
+        "exec",
+        "vitest",
+        "run",
+        "tests/integration",
+        "--shard",
+        `${shard + 1}/4`,
+        "--minWorkers",
+        "1",
+        "--maxWorkers",
+        "1",
+      ],
+      {
+        profiles: RELEASE_PROFILES,
+        timeoutMs: 300_000,
+        resourceGroup: "test-heavy",
+      },
+    ),
   ),
   pnpmCheck(
     "desktop-performance",
@@ -258,7 +302,7 @@ export const VERIFICATION_CHECKS: VerificationCheck[] = [
     ["web-self-hosted", "database"],
     ["unit", "contract", "security"],
     ["--filter", "@prompthub/web", "test"],
-    { timeoutMs: 360_000 },
+    { timeoutMs: 360_000, resourceGroup: "test-heavy" },
   ),
   pnpmCheck(
     "web-build",
@@ -307,7 +351,7 @@ export const VERIFICATION_CHECKS: VerificationCheck[] = [
     ["web-cloudflare"],
     ["unit", "contract", "security"],
     ["--filter", "@prompthub/web-cloudflare", "test"],
-    { timeoutMs: 300_000 },
+    { timeoutMs: 300_000, resourceGroup: "test-heavy" },
   ),
   pnpmCheck(
     "web-cloudflare-build",
@@ -328,6 +372,10 @@ export const VERIFICATION_CHECKS: VerificationCheck[] = [
       profiles: RELEASE_PROFILES,
       timeoutMs: 300_000,
       resourceGroup: "package-artifact",
+      environment: {
+        CI: "true",
+        WRANGLER_SEND_METRICS: "false",
+      },
     },
   ),
   pnpmCheck(

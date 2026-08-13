@@ -74,6 +74,30 @@ test("executor blocks dependants after failure", async () => {
   );
 });
 
+test("executor applies bounded command environment overrides", async () => {
+  const summary = await executeChecks(
+    [
+      nodeCheck(
+        "environment",
+        'process.exit(process.env.PROMPTHUB_GATE_VALUE === "expected" ? 0 : 7)',
+        {
+          command: {
+            executable: process.execPath,
+            args: [
+              "-e",
+              'process.exit(process.env.PROMPTHUB_GATE_VALUE === "expected" ? 0 : 7)',
+            ],
+            environment: { PROMPTHUB_GATE_VALUE: "expected" },
+          },
+        },
+      ),
+    ],
+    { concurrency: 1, quiet: true },
+  );
+
+  assert.equal(summary.exitCode, 0);
+});
+
 test("timeout terminates the task-owned process group", async () => {
   const root = mkdtempSync(
     path.join(os.tmpdir(), "prompthub-harness-timeout-"),
@@ -99,6 +123,32 @@ test("timeout terminates the task-owned process group", async () => {
       { concurrency: 1, quiet: true, terminationGraceMs: 25 },
     );
     assert.equal(summary.results[0]?.status, "timed_out");
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    assert.equal(existsSync(marker), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("failed parents cannot leave task-owned workers running", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "prompthub-harness-failed-"));
+  const marker = path.join(root, "orphan.txt");
+  const childSource = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(
+    marker,
+  )}, "orphan"), 250)`;
+  const parentSource = [
+    `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(
+      childSource,
+    )}], { stdio: "ignore" });`,
+    "process.exit(7);",
+  ].join("");
+
+  try {
+    const summary = await executeChecks(
+      [nodeCheck("failed-parent", parentSource)],
+      { concurrency: 1, quiet: true, terminationGraceMs: 25 },
+    );
+    assert.equal(summary.results[0]?.status, "failed");
     await new Promise((resolve) => setTimeout(resolve, 350));
     assert.equal(existsSync(marker), false);
   } finally {
@@ -143,9 +193,18 @@ test("JSON report is deterministic, bounded, and redacts secrets", async () => {
       terminationGraceMs: 25,
     },
   );
+  if (summary.results[0]) {
+    summary.results[0].command.environment = {
+      API_KEY: "environment-secret-value",
+      CI: "true",
+    };
+  }
   const report = createJsonReport("quick", ["shared"], summary);
   const serialized = JSON.stringify(report);
 
   assert.equal(serialized.includes("super-secret-value"), false);
+  assert.equal(serialized.includes("environment-secret-value"), false);
+  assert.equal(report.results[0]?.command.environment?.API_KEY, "[REDACTED]");
+  assert.equal(report.results[0]?.command.environment?.CI, "true");
   assert.ok(serialized.length < 4_000);
 });

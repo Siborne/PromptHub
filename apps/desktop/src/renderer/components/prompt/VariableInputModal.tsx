@@ -10,6 +10,10 @@ import {
   type ParsedPromptVariable,
 } from './prompt-modal-utils';
 import { copyTextToClipboard } from './prompt-copy-utils';
+import {
+  loadPromptVariableCache,
+  savePromptVariableCache,
+} from '../../services/prompt-variable-cache';
 
 type ModalMode = 'copy' | 'aiTest';
 
@@ -77,8 +81,7 @@ const SYSTEM_VARIABLES: Record<string, () => string> = {
 // 从 localStorage 获取历史变量值
 function getVariableHistory(promptId: string): Record<string, string> {
   try {
-    const history = localStorage.getItem(`prompt_vars_${promptId}`);
-    return history ? JSON.parse(history) : {};
+    return loadPromptVariableCache(promptId);
   } catch {
     return {};
   }
@@ -88,7 +91,7 @@ function getVariableHistory(promptId: string): Record<string, string> {
 // 保存变量值到历史
 function saveVariableHistory(promptId: string, variables: Record<string, string>) {
   try {
-    localStorage.setItem(`prompt_vars_${promptId}`, JSON.stringify(variables));
+    savePromptVariableCache(promptId, variables);
   } catch {
     // ignore
   }

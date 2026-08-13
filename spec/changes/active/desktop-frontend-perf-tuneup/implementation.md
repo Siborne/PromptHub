@@ -390,6 +390,45 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - `pnpm --filter @prompthub/desktop build:analyze` ✅（renderer 不再出现 Vite chunk-size warning）
   - `pnpm --filter @prompthub/desktop bundle:budget` ✅（main entry 122.96 KB gzip / 150 KB budget；SkillFileEditor 127.31 KB gzip / 150 KB budget）
 
+### P13 — App shell 与 Agent 工作台面板按需加载（2026-08-11 follow-up）
+
+- 状态：已完成（2026-08-11）
+- 背景：生产构建中 `App-*.js` 为 555.88 KB raw / 153.48 KB gzip，
+  `AgentsWorkspace-*.js` 为 266.56 KB raw / 62.76 KB gzip。应用启动路径静态
+  聚合布局、DnD、背景桥接和 Agent 全部标签页实现，导致用户未进入对应功能也要
+  下载并解析这些代码。
+- 做了什么：
+  - 新增可懒加载的 `AppWorkspaceShell`，承接 DnD、布局、背景、命令桥和 overlay
+    组合；`App` 继续拥有初始化、同步、恢复、快捷键和弹窗状态编排。
+  - `AgentsWorkspace` 将 Overview、Assets、Provider、Appearance、Config、Sessions、
+    MCP entry、definitions 和设置弹窗改为面板级 lazy import，并复用稳定的加载面。
+  - 新增源码边界测试，禁止上述重依赖重新静态回流到 `App` 或
+    `AgentsWorkspace`。
+  - 为 App、App shell、AgentsWorkspace 及三个最重 Agent 面板增加 gzip bundle
+    budget。
+- 实测数字：
+
+| chunk | P13 前 | P13 后 | 预算 |
+| --- | --- | --- | --- |
+| `App-*.js` | 555.88 KB raw / 153.48 KB gzip | 238.29 KB raw / 72.78 KB gzip | 80 KB gzip |
+| `AppWorkspaceShell-*.js` | 打进 `App` | 300.92 KB raw / 76.63 KB gzip | 84 KB gzip |
+| `AgentsWorkspace-*.js` | 266.56 KB raw / 62.76 KB gzip | 13.47 KB raw / 4.75 KB gzip | 6 KB gzip |
+| `AgentProviderModelWorkbench-*.js` | 打进 `AgentsWorkspace` | 83.42 KB raw / 18.15 KB gzip | 22 KB gzip |
+| `AgentAssetsWorkspace-*.js` | 打进 `AgentsWorkspace` | 54.79 KB raw / 14.79 KB gzip | 18 KB gzip |
+| `AgentSessionsPanel-*.js` | 打进 `AgentsWorkspace` | 42.43 KB raw / 11.46 KB gzip | 14 KB gzip |
+
+- 验证：
+  - lazy 边界、Agent workspace、Plugin inventory 和 target matrix 定向回归：
+    4 files / 68 tests passed。
+  - Desktop 与 Core TypeScript 检查通过。
+  - 受影响 Desktop 文件 ESLint 通过；Core 包当前没有可直接调用的 ESLint flat
+    config，因此其本次单文件使用 TypeScript 与定向测试覆盖。
+  - `BUILD_ANALYZE=1 vite build` 通过，renderer 不再出现大于 500 KB 的 chunk
+    警告。现存 `fflate` static/dynamic import 提示来自 main 构建，不属于本次
+    renderer lazy 边界。
+  - bundle budget 通过：App 71.07 KB、App shell 74.84 KB、AgentsWorkspace
+    4.64 KB、Provider 17.72 KB、Assets 14.44 KB、Sessions 11.19 KB gzip。
+
 ## Verification
 
 - 每阶段完成时记录：lint / typecheck / unit / integration / e2e:smoke / perf 的实际结果。

@@ -41,6 +41,42 @@
       "$baseline": "6.89 KB after 2026-06-06 route-level settings section lazy loading."
     },
     {
+      "name": "app route coordinator",
+      "pattern": "assets/App-*.js",
+      "maxGzipBytes": 81920,
+      "$baseline": "71.07 KB after 2026-08-11 extraction of the lazy App workspace shell."
+    },
+    {
+      "name": "app workspace shell",
+      "pattern": "assets/AppWorkspaceShell-*.js",
+      "maxGzipBytes": 86016,
+      "$baseline": "74.84 KB after 2026-08-11 extraction of layout, DnD, backdrop, and command-bridge composition."
+    },
+    {
+      "name": "agent workspace coordinator",
+      "pattern": "assets/AgentsWorkspace-*.js",
+      "maxGzipBytes": 6144,
+      "$baseline": "4.64 KB after 2026-08-11 tab-panel lazy loading."
+    },
+    {
+      "name": "agent provider workbench",
+      "pattern": "assets/AgentProviderModelWorkbench-*.js",
+      "maxGzipBytes": 22528,
+      "$baseline": "17.72 KB after 2026-08-11 Agent panel lazy loading."
+    },
+    {
+      "name": "agent assets workspace",
+      "pattern": "assets/AgentAssetsWorkspace-*.js",
+      "maxGzipBytes": 18432,
+      "$baseline": "14.44 KB after 2026-08-11 Agent panel lazy loading."
+    },
+    {
+      "name": "agent sessions panel",
+      "pattern": "assets/AgentSessionsPanel-*.js",
+      "maxGzipBytes": 14336,
+      "$baseline": "11.19 KB after 2026-08-11 Agent panel lazy loading."
+    },
+    {
       "name": "skill file editor",
       "pattern": "assets/SkillFileEditor-*.js",
       "maxGzipBytes": 153600,
