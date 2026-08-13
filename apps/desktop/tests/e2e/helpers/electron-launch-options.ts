@@ -4,6 +4,6 @@ export function getElectronLaunchArgs(
   isCi = Boolean(process.env.CI),
 ): string[] {
   return platform === "linux" && isCi
-    ? ["--no-sandbox", mainEntry]
+    ? ["--no-sandbox", "--password-store=basic", mainEntry]
     : [mainEntry];
 }

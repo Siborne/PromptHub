@@ -49,6 +49,12 @@
   focused four-test suite passes.
 - Hosted Linux Electron launch and the complete release profile remain for the
   replacement tag-triggered workflow to prove.
+- Replacement run `31708660993` passed 41 of 42 full release checks. Its Linux
+  Electron smoke launched and passed four scenarios; three settings scenarios
+  then failed because the headless runner had no desktop keyring for Electron
+  `safeStorage`. Linux CI E2E now opts into Chromium's basic test password
+  store while production launch and production secret-vault behavior remain
+  unchanged.
 
 ## Remaining Publication Boundary
 

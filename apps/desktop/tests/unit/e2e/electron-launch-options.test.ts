@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { getElectronLaunchArgs } from "../../e2e/helpers/electron-launch-options";
 
 describe("Electron E2E launch options", () => {
-  it("disables the Chromium sandbox only on hosted Linux CI", () => {
+  it("uses headless-safe Chromium services only on hosted Linux CI", () => {
     expect(getElectronLaunchArgs("/app/main.js", "linux", true)).toEqual([
       "--no-sandbox",
+      "--password-store=basic",
       "/app/main.js",
     ]);
     expect(getElectronLaunchArgs("/app/main.js", "linux", false)).toEqual([
