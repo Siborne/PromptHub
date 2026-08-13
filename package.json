@@ -1,6 +1,6 @@
 {
   "name": "prompthub-monorepo",
-  "version": "0.6.0",
+  "version": "0.6.0-beta.1",
   "private": true,
   "description": "PromptHub monorepo - AI Prompt management platform",
   "license": "AGPL-3.0",
@@ -47,7 +47,7 @@
     "test:perf": "pnpm --filter @prompthub/desktop test:perf",
     "test:web": "pnpm --filter @prompthub/web test",
     "test:mobile": "pnpm --filter @prompthub/mobile test",
-    "test:ci-config": "node --test scripts/detect-ci-surfaces.test.mjs",
+    "test:ci-config": "node --test scripts/detect-ci-surfaces.test.mjs scripts/version-alignment.test.mjs",
     "test:verification-harness": "node --experimental-strip-types --test scripts/verification/tests/*.test.mts",
     "start:web": "pnpm --filter @prompthub/web start",
     "spec:index": "node scripts/generate-spec-change-index.mjs",

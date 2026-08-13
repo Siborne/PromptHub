@@ -1,9 +1,31 @@
 ## [Unreleased]
 
+## [0.6.0-beta.1] - Unreleased
+
+### 新功能 / Features
+
+- **统一 Agent 管理工作台**：集中管理 Agent 的 Skills、MCP、Plugins、Rules、供应商与模型、配置文件和历史会话，并扩展 Claude Code、Codex、Antigravity、Kimi Code、OpenCode、Pi、Grok Build、Qoder 等平台适配
+  - **Unified Agent Management Workbench**: Centralized Skills, MCP, Plugins, Rules, providers and models, configuration files, and session history, with broader support for Claude Code, Codex, Antigravity, Kimi Code, OpenCode, Pi, Grok Build, Qoder, and related platforms
+- **供应商、模型与官方账号工作流**：统一自定义供应商表单、原生连接/模型检测和激活流程，并为 Codex 增加加密的官方 `auth.json` 快照与快速切换
+  - **Provider, Model, and Official Account Workflows**: Unified custom-provider forms, native connection/model probes, and activation flows, plus encrypted official `auth.json` snapshots and fast account switching for Codex
+- **Agent 资产就地安装**：Agent 页面中的 Skill、MCP 与 Plugin 添加操作改为选择弹窗，复用库资产并保留目标平台的原生配置语义
+  - **In-place Agent Asset Installation**: Skill, MCP, and Plugin add actions now use selection dialogs inside the Agent workspace while preserving each target platform's native configuration semantics
+- **文件优先本地数据权威**：Prompt、Skill、Rule、MCP、Plugin 与 Agent 等本地资源采用版本化 canonical 文件作为持久权威，SQLite 作为可重建目录，并强化迁移、恢复和原子发布流程
+  - **File-first Local Data Authority**: Versioned canonical files now own durable local Prompt, Skill, Rule, MCP, Plugin, and Agent resources, with SQLite acting as a rebuildable catalog and stronger migration, recovery, and atomic publication workflows
+
+### 问题修复 / Fixes
+
+- **Agent 平台适配补齐**：统一额度窗口展示、会员等级、规则文件缺失状态、历史会话解析与大小、MCP/Plugin 目标矩阵和 Pi/Kimi/Grok 等平台边界
+  - **Agent Platform Parity**: Unified quota windows, membership tiers, missing-rule states, session parsing and sizes, MCP/Plugin target matrices, and Pi/Kimi/Grok platform boundaries
+- **网络代理和安装错误说明**：Plugin、MCP 与远程安装复用设置中的代理策略，并把网络、代理、目标缺失和供应商响应错误转换为可操作说明
+  - **Proxy-aware Installation Errors**: Plugin, MCP, and remote installs now reuse the configured proxy policy and translate network, proxy, missing-target, and provider-response failures into actionable messages
+- **开发与发布稳定性**：修复 Electron 开发主进程重建后退出、测试运行时路径污染、Kimi OAuth 锁心跳竞态和大型会话分页测试超时
+  - **Development and Release Stability**: Fixed Electron development exits after main-process rebuilds, test runtime-path leakage, Kimi OAuth lock-heartbeat races, and large session-pagination test timeouts
+
 ### 维护 / Maintenance
 
-- **0.6.0 版本准备**：统一 Desktop、CLI、自部署 Web、Cloudflare Worker 与 Mobile 的构建版本；在正式发布前，官网稳定版徽标和下载链接继续指向已发布的 `0.5.9`
-  - **0.6.0 Release Preparation**: Aligned Desktop, CLI, self-hosted Web, Cloudflare Worker, and Mobile build versions while keeping public stable badges and downloads on the published `0.5.9` release until publication
+- **0.6.0-beta.1 预览版准备**：Desktop、CLI、自部署 Web、Cloudflare Worker 与 Mobile 使用明确的 prerelease 版本；官网稳定版徽标和下载链接继续指向已发布的 `0.5.9`
+  - **0.6.0-beta.1 Preview Preparation**: Desktop, CLI, self-hosted Web, Cloudflare Worker, and Mobile now use an explicit prerelease version while public stable badges and downloads remain on the published `0.5.9`
 
 ## [0.5.9] - 2026-07-14
 

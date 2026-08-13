@@ -304,6 +304,7 @@ folder    list / get / create / update / delete / reorder
 
 agent     list / get / enable / disable
           add / update / configure / reset / delete
+          config list|read（只读检查并脱敏敏感值）
           identity get|set
 
 rules     list / scan / read / save / rewrite

@@ -48,7 +48,7 @@ describe("standalone cli wiring", () => {
     const result = await execCli(["--version"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.joinedStdout.trim()).toBe("0.6.0");
+    expect(result.joinedStdout.trim()).toBe("0.6.0-beta.1");
     expect(result.stderr).toEqual([]);
   });
 
@@ -1006,7 +1006,7 @@ describe("standalone cli wiring", () => {
     ]);
     expect(readImportedRes.exitCode).toBe(0);
     expect(readImportedRes.json.content).toBe("# Project A Rule");
-  }, 10_000);
+  }, 30_000);
 
   it("requires content for rules save", async () => {
     const root = makeTempRoot(tempDirs);

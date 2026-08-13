@@ -285,6 +285,7 @@ folder    list / get / create / update / delete / reorder
 
 agent     list / get / enable / disable
           add / update / configure / reset / delete
+          config list|read (read-only inspection with secret redaction)
           identity get|set
 
 rules     list / scan / read / save / rewrite
