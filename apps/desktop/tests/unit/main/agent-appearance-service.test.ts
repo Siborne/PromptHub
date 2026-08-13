@@ -195,6 +195,64 @@ describe("AgentAppearanceService", () => {
     ).toBe("1\n");
   });
 
+  it("serializes bundled theme seeding across concurrent service instances", async () => {
+    const bundled = path.join(root, "runtime", "themes", "dream-portal");
+    await writeTheme(bundled);
+    engine.getBundledThemeDirectories = () => [bundled];
+    const nowSpy = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(1_786_516_002_633);
+    const firstService = new AgentAppearanceService({
+      dataRoot,
+      codexRoot,
+      engine,
+    });
+    const secondService = new AgentAppearanceService({
+      dataRoot,
+      codexRoot,
+      engine,
+    });
+
+    try {
+      const [first, second] = await Promise.all([
+        firstService.getOverview(),
+        secondService.getOverview(),
+      ]);
+
+      expect(first.themes).toHaveLength(1);
+      expect(second.themes).toEqual(first.themes);
+      expect(first.invalidThemeCount).toBe(0);
+      expect(second.invalidThemeCount).toBe(0);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("allows bundled theme seeding to retry after a failed attempt", async () => {
+    const bundled = path.join(root, "runtime", "themes", "dream-portal");
+    await writeTheme(bundled);
+    engine.getBundledThemeDirectories = () => [bundled];
+    engine.readThemePackage = vi
+      .fn<(directoryPath: string) => Promise<DreamSkinThemePackage>>()
+      .mockRejectedValueOnce(new Error("temporary seed failure"))
+      .mockImplementation(async (directoryPath) =>
+        themePackage(directoryPath),
+      );
+    const service = new AgentAppearanceService({
+      dataRoot,
+      codexRoot,
+      engine,
+    });
+
+    await expect(service.getOverview()).rejects.toThrow(
+      "temporary seed failure",
+    );
+    await expect(service.getOverview()).resolves.toMatchObject({
+      themes: [expect.objectContaining({ id: "midnight" })],
+      invalidThemeCount: 0,
+    });
+  });
+
   it("atomically replaces a re-imported inactive theme and allows deletion", async () => {
     const source = path.join(root, "theme-source");
     await writeTheme(source);

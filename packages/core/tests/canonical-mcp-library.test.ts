@@ -191,4 +191,27 @@ describe("canonical MCP library", () => {
       false,
     );
   });
+
+  it("coexists with the independently managed MCP market source registry", () => {
+    const registryPath = path.join(
+      root,
+      "data",
+      "mcp",
+      "market-sources.json",
+    );
+    fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+    fs.writeFileSync(
+      registryPath,
+      `${JSON.stringify({ kind: "prompthub-mcp-market-sources", version: 1 })}\n`,
+      "utf8",
+    );
+
+    expect(readCanonicalMcpLibrary({ secretStore }).servers).toEqual([]);
+
+    fs.rmSync(registryPath);
+    fs.mkdirSync(registryPath);
+    expect(() => readCanonicalMcpLibrary({ secretStore })).toThrow(
+      /Canonical MCP market source registry path is unsafe/u,
+    );
+  });
 });

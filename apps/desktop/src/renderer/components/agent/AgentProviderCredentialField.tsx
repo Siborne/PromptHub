@@ -106,7 +106,7 @@ export function AgentProviderCredentialField({
                   ? "agents.providerProfiles.form.credentialReplacement"
                   : "agents.providerProfiles.form.credentialOptional",
               )}
-              className={`h-10 w-full rounded-xl border-0 bg-muted/50 px-4 pr-11 text-sm placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+              className={`h-10 w-full rounded-md border border-input bg-background px-3 pr-11 text-sm shadow-sm placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-muted/40 disabled:shadow-none ${
                 error ? "ring-2 ring-destructive/50" : ""
               }`}
             />

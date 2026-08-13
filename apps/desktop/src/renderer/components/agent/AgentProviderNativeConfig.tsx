@@ -1,14 +1,15 @@
-import {
-  ArrowUpRightIcon,
-  CheckCircle2Icon,
-  Loader2Icon,
-  PencilIcon,
-  RotateCcwIcon,
-} from "lucide-react";
+import { CheckCircle2Icon, Loader2Icon, RotateCcwIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { AgentProviderNativeConfigSummary } from "@prompthub/shared/types";
+import type {
+  AgentProviderConnectionTestResult,
+  AgentProviderModelTestResult,
+  AgentProviderNativeConfigSummary,
+} from "@prompthub/shared/types";
 import { Button } from "../ui";
+import { AgentProviderActivationSwitch } from "./AgentProviderActivationSwitch";
+import { AgentProviderConnectionCheck } from "./AgentProviderConnectionCheck";
+import { AgentCodexAccountManager } from "./AgentCodexAccountManager";
 import {
   AgentProviderDetailHeader,
   AgentProviderDetailRow,
@@ -39,52 +40,78 @@ export function AgentProviderNativeListItem({
   const { t } = useTranslation();
   return (
     <div className="p-1">
-      <button
-        type="button"
+      <div
         data-testid="provider-native-card"
-        onClick={onSelect}
-        aria-current={selected}
         className={providerWorkbenchListItemClass(
           selected,
-          "flex items-center gap-3 px-3 py-2.5",
+          "flex items-center overflow-hidden",
         )}
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <CheckCircle2Icon className="h-4 w-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="min-w-0 truncate text-sm font-semibold text-foreground">
-              {t("agents.providerProfiles.currentNative.title")}
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-current={selected}
+          className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+            <CheckCircle2Icon className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2">
+              <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                {t("agents.providerProfiles.currentNative.title")}
+              </span>
+              <span
+                className={`shrink-0 text-xs font-medium ${classificationClass(summary.classification)}`}
+              >
+                {t(
+                  `agents.providerProfiles.currentNative.classification.${summary.classification}`,
+                )}
+              </span>
             </span>
-            <span
-              className={`shrink-0 text-xs font-medium ${classificationClass(summary.classification)}`}
-            >
-              {t(
-                `agents.providerProfiles.currentNative.classification.${summary.classification}`,
-              )}
+            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+              {summary.model ?? summary.name}
             </span>
           </span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-            {summary.model ?? summary.name}
-          </span>
-        </span>
-        <ArrowUpRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/50" />
-      </button>
+        </button>
+        <div className="pr-3">
+          <AgentProviderActivationSwitch
+            checked
+            disabled
+            loading={false}
+            label={t("agents.providerProfiles.activation.currentLabel", {
+              name: summary.name,
+            })}
+            onActivate={() => undefined}
+          />
+        </div>
+      </div>
     </div>
   );
 }
 
 export function AgentProviderNativeDetail({
+  platformId,
   summary,
   busyAction,
-  onImport,
+  connectionResult,
+  modelTestResult,
+  supportsConnectionTest,
   onRestoreOfficial,
+  onTestConnection,
+  onTestModel,
+  onCancelModelTest,
 }: {
+  platformId: string;
   summary: AgentProviderNativeConfigSummary;
   busyAction: string | null;
-  onImport: () => void;
+  connectionResult: AgentProviderConnectionTestResult | null;
+  modelTestResult: AgentProviderModelTestResult | null;
+  supportsConnectionTest: boolean;
   onRestoreOfficial: () => void;
+  onTestConnection: () => void;
+  onTestModel: () => void;
+  onCancelModelTest: () => void;
 }) {
   const { t } = useTranslation();
   const busy = busyAction !== null;
@@ -110,14 +137,6 @@ export function AgentProviderNativeDetail({
             </p>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={onImport} disabled={busy}>
-              {busyAction === "import" ? (
-                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <PencilIcon className="h-3.5 w-3.5" />
-              )}
-              {t("agents.providerProfiles.currentNative.manage")}
-            </Button>
             {summary.officialRestoreAvailable ? (
               <Button
                 size="sm"
@@ -170,6 +189,23 @@ export function AgentProviderNativeDetail({
           </dl>
         </div>
       </AgentProviderDetailSection>
+      {supportsConnectionTest ? (
+        <div className="mt-4">
+          <AgentProviderConnectionCheck
+            busy={busy}
+            testing={busyAction === "test-current-connection"}
+            modelTesting={busyAction === "test-current-model"}
+            connectionResult={connectionResult}
+            modelTestResult={modelTestResult}
+            onTestConnection={onTestConnection}
+            onTestModel={onTestModel}
+            onCancelModelTest={onCancelModelTest}
+          />
+        </div>
+      ) : null}
+      {platformId === "codex" && summary.classification === "official" ? (
+        <AgentCodexAccountManager />
+      ) : null}
     </AgentProviderDetailSurface>
   );
 }

@@ -19,6 +19,12 @@ import {
   AgentProviderCredentialField,
   type AgentProviderCredentialAction,
 } from "./AgentProviderCredentialField";
+import {
+  AgentProviderFormSelect,
+  primaryModelExample,
+  protocolOptions,
+  providerKindOptions,
+} from "./AgentProviderFormSelect";
 
 interface AgentProviderProfileFormDialogProps {
   isOpen: boolean;
@@ -42,6 +48,11 @@ interface FormState {
   protocol: string;
   endpoint: string;
   primaryModel: string;
+  reasoningEffort: string;
+  sonnetModel: string;
+  opusModel: string;
+  haikuModel: string;
+  subagentModel: string;
   upstreamModel: string;
   maxContextSize: string;
   secondaryModel: string;
@@ -162,17 +173,29 @@ function initialForm(
                     : "platform-native"),
     endpoint: profile?.endpoint ?? "",
     primaryModel: model("primary"),
+    reasoningEffort:
+      typeof primary?.parameters.reasoningEffort === "string"
+        ? primary.parameters.reasoningEffort
+        : "",
+    sonnetModel: model("sonnet"),
+    opusModel: model("opus"),
+    haikuModel: model("haiku"),
+    subagentModel: model("subagent"),
     upstreamModel:
       typeof primary?.parameters.upstreamModelId === "string"
         ? primary.parameters.upstreamModelId
         : "",
     maxContextSize:
       typeof primary?.parameters[
-        platformId === "grok" ? "contextWindow" : "maxContextSize"
+        platformId === "grok" || platformId === "codex"
+          ? "contextWindow"
+          : "maxContextSize"
       ] === "number"
         ? String(
             primary.parameters[
-              platformId === "grok" ? "contextWindow" : "maxContextSize"
+              platformId === "grok" || platformId === "codex"
+                ? "contextWindow"
+                : "maxContextSize"
             ],
           )
         : "",
@@ -192,13 +215,24 @@ function modelMappings(form: FormState, platformId: string) {
       routeKey: "primary",
       modelId: form.primaryModel.trim(),
       parameters:
-        platformId === "kimi" || platformId === "grok"
+        platformId === "codex"
           ? {
-              upstreamModelId: form.upstreamModel.trim(),
-              [platformId === "grok" ? "contextWindow" : "maxContextSize"]:
-                Number(form.maxContextSize),
+              ...(form.reasoningEffort &&
+              (form.protocol === "openai-responses" ||
+                form.protocol === "platform-native")
+                ? { reasoningEffort: form.reasoningEffort }
+                : {}),
+              ...(form.maxContextSize.trim()
+                ? { contextWindow: Number(form.maxContextSize) }
+                : {}),
             }
-          : {},
+          : platformId === "kimi" || platformId === "grok"
+            ? {
+                upstreamModelId: form.upstreamModel.trim(),
+                [platformId === "grok" ? "contextWindow" : "maxContextSize"]:
+                  Number(form.maxContextSize),
+              }
+            : {},
     },
     ...(platformId === "opencode" && form.secondaryModel.trim()
       ? [
@@ -208,6 +242,20 @@ function modelMappings(form: FormState, platformId: string) {
             parameters: {},
           },
         ]
+      : []),
+    ...(platformId === "claude"
+      ? (
+          [
+            ["sonnet", form.sonnetModel],
+            ["opus", form.opusModel],
+            ["haiku", form.haikuModel],
+            ["subagent", form.subagentModel],
+          ] as const
+        ).flatMap(([routeKey, value]) =>
+          value.trim()
+            ? [{ routeKey, modelId: value.trim(), parameters: {} }]
+            : [],
+        )
       : []),
   ];
 }
@@ -289,12 +337,16 @@ export function AgentProviderProfileFormDialog({
     (platformId === "kimi" || platformId === "grok") &&
     !form.upstreamModel.trim();
   const upstreamModelMissing = submitted && upstreamModelValueMissing;
+  const hasContextSize = Boolean(form.maxContextSize.trim());
   const maxContextSizeValueInvalid =
-    (platformId === "kimi" || platformId === "grok") &&
-    (!form.maxContextSize.trim() ||
-      !Number.isSafeInteger(Number(form.maxContextSize)) ||
-      Number(form.maxContextSize) < 1 ||
-      Number(form.maxContextSize) > 10_000_000);
+    (platformId === "kimi" ||
+      platformId === "grok" ||
+      platformId === "codex") &&
+    ((platformId !== "codex" && !hasContextSize) ||
+      (hasContextSize &&
+        (!Number.isSafeInteger(Number(form.maxContextSize)) ||
+          Number(form.maxContextSize) < 1 ||
+          Number(form.maxContextSize) > 10_000_000)));
   const maxContextSizeInvalid = submitted && maxContextSizeValueInvalid;
   const acceptsManagedCredential =
     platformId === "codex"
@@ -428,14 +480,23 @@ export function AgentProviderProfileFormDialog({
   const title = profile
     ? t("agents.providerProfiles.form.editTitle")
     : t("agents.providerProfiles.form.addTitle");
+  const platformNativeLabel = t("agents.providerProfiles.form.platformNative");
+  const protocolSelectOptions = protocolOptions(platformId, {
+    platformNative: platformNativeLabel,
+    anthropicMessages: t("agents.providerProfiles.form.anthropicMessages"),
+    googleGenerativeAi: t("agents.providerProfiles.form.googleGenerativeAi"),
+  });
+  const modelPlaceholder = t("agents.providerProfiles.form.modelPlaceholder", {
+    model: primaryModelExample(platformId),
+  });
 
   return (
     <div
       role="region"
       aria-label={title}
-      className="flex h-full min-h-0 flex-col bg-background"
+      className="flex h-full min-h-0 flex-col bg-muted/30"
     >
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-5 py-4">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-5 py-4 shadow-sm">
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold text-foreground">
             {title}
@@ -462,39 +523,55 @@ export function AgentProviderProfileFormDialog({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-5xl space-y-5 p-5">
-          <section className="border-b border-border pb-5">
-            <div className="mb-4 flex items-center gap-2">
-              <KeyRoundIcon className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold text-foreground">
-                {t("agents.providerProfiles.form.sections.identity")}
-              </h3>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input
-                label={t("agents.providerProfiles.form.name")}
-                value={form.name}
-                onChange={(event) => update("name", event.target.value)}
-                disabled={busy}
-                error={
-                  nameMissing
-                    ? t("agents.providerProfiles.form.required")
-                    : undefined
-                }
-              />
-              {platformId === "kimi" ||
-              platformId === "grok" ||
-              platformId === "qwen" ||
-              platformId === "opencode" ? (
-                <label className="block space-y-1.5">
-                  <span className="block text-sm font-medium text-foreground">
-                    {t("agents.providerProfiles.form.providerKind")}
-                  </span>
-                  <select
+      <div className="min-h-0 flex-1 overflow-y-auto bg-muted/30">
+        <div className="w-full p-5">
+          <div
+            data-testid="agent-provider-form-surface"
+            className="overflow-hidden rounded-md border border-border bg-card shadow-sm"
+          >
+            <section
+              data-testid="agent-provider-form-section"
+              className="border-b border-border/70 p-5"
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <KeyRoundIcon className="h-4 w-4" />
+                </span>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {t("agents.providerProfiles.form.sections.identity")}
+                </h3>
+              </div>
+              <div
+                data-testid="agent-provider-form-fields"
+                className="grid grid-cols-1 gap-5"
+              >
+                <Input
+                  variant="outlined"
+                  label={t("agents.providerProfiles.form.name")}
+                  value={form.name}
+                  onChange={(event) => update("name", event.target.value)}
+                  disabled={busy}
+                  placeholder={t(
+                    "agents.providerProfiles.form.namePlaceholder",
+                  )}
+                  error={
+                    nameMissing
+                      ? t("agents.providerProfiles.form.required")
+                      : undefined
+                  }
+                />
+                {platformId === "kimi" ||
+                platformId === "grok" ||
+                platformId === "qwen" ||
+                platformId === "opencode" ? (
+                  <AgentProviderFormSelect
+                    label={t("agents.providerProfiles.form.providerKind")}
                     value={form.providerKind}
-                    onChange={(event) => {
-                      const providerKind = event.target.value;
+                    options={providerKindOptions(
+                      platformId,
+                      platformNativeLabel,
+                    )}
+                    onChange={(providerKind) => {
                       setForm((current) => ({
                         ...current,
                         providerKind,
@@ -517,267 +594,372 @@ export function AgentProviderProfileFormDialog({
                     disabled={
                       busy || openCodeNativeReadOnly || grokNativeReadOnly
                     }
-                    className="h-10 w-full rounded-xl border-0 bg-muted/50 px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    {Object.keys(
-                      platformId === "kimi"
-                        ? KIMI_PROVIDER_PROTOCOLS
-                        : platformId === "grok"
-                          ? GROK_PROVIDER_PROTOCOLS
-                          : platformId === "qwen"
-                            ? QWEN_PROVIDER_PROTOCOLS
-                            : OPENCODE_PROVIDER_PROTOCOLS,
-                    ).map((providerKind) => (
-                      <option key={providerKind} value={providerKind}>
-                        {providerKind}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <Input
-                  label={t("agents.providerProfiles.form.providerKind")}
-                  value={form.providerKind}
-                  onChange={(event) =>
-                    update("providerKind", event.target.value)
-                  }
-                  disabled={busy}
-                  error={
-                    providerMissing
-                      ? t("agents.providerProfiles.form.required")
-                      : undefined
-                  }
-                />
-              )}
-              {platformId === "codex" ||
-              platformId === "kimi" ||
-              platformId === "grok" ||
-              platformId === "opencode" ||
-              platformId === "qwen" ? (
-                <Input
-                  label={t("agents.providerProfiles.form.providerId")}
-                  value={form.providerId}
-                  onChange={(event) => update("providerId", event.target.value)}
-                  disabled={
-                    busy || openCodeNativeReadOnly || grokNativeReadOnly
-                  }
-                  placeholder="work-gateway"
-                  error={
-                    providerIdMissing
-                      ? t("agents.providerProfiles.form.required")
-                      : providerIdInvalid
-                        ? t(
-                            platformId === "kimi" ||
-                              platformId === "grok" ||
-                              platformId === "qwen" ||
-                              platformId === "opencode"
-                              ? "agents.providerProfiles.form.kimiProviderIdInvalid"
-                              : "agents.providerProfiles.form.providerIdInvalid",
-                          )
+                  />
+                ) : (
+                  <Input
+                    variant="outlined"
+                    label={t("agents.providerProfiles.form.providerKind")}
+                    value={form.providerKind}
+                    onChange={(event) =>
+                      update("providerKind", event.target.value)
+                    }
+                    disabled={busy}
+                    placeholder={t(
+                      "agents.providerProfiles.form.providerKindPlaceholder",
+                    )}
+                    error={
+                      providerMissing
+                        ? t("agents.providerProfiles.form.required")
                         : undefined
-                  }
-                />
-              ) : null}
-            </div>
-          </section>
+                    }
+                  />
+                )}
+                {platformId === "codex" ||
+                platformId === "kimi" ||
+                platformId === "grok" ||
+                platformId === "opencode" ||
+                platformId === "qwen" ? (
+                  <Input
+                    variant="outlined"
+                    label={t("agents.providerProfiles.form.providerId")}
+                    value={form.providerId}
+                    onChange={(event) =>
+                      update("providerId", event.target.value)
+                    }
+                    disabled={
+                      busy || openCodeNativeReadOnly || grokNativeReadOnly
+                    }
+                    placeholder={t(
+                      "agents.providerProfiles.form.providerIdPlaceholder",
+                    )}
+                    error={
+                      providerIdMissing
+                        ? t("agents.providerProfiles.form.required")
+                        : providerIdInvalid
+                          ? t(
+                              platformId === "kimi" ||
+                                platformId === "grok" ||
+                                platformId === "qwen" ||
+                                platformId === "opencode"
+                                ? "agents.providerProfiles.form.kimiProviderIdInvalid"
+                                : "agents.providerProfiles.form.providerIdInvalid",
+                            )
+                          : undefined
+                    }
+                  />
+                ) : null}
+              </div>
+            </section>
 
-          <section className="border-b border-border pb-5">
-            <div className="mb-4 flex items-center gap-2">
-              <NetworkIcon className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold text-foreground">
-                {t("agents.providerProfiles.form.sections.connection")}
-              </h3>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block space-y-1.5">
-                <span className="block text-sm font-medium text-foreground">
-                  {t("agents.providerProfiles.form.protocol")}
+            <section
+              data-testid="agent-provider-form-section"
+              className="border-b border-border/70 p-5"
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <NetworkIcon className="h-4 w-4" />
                 </span>
-                <select
+                <h3 className="text-sm font-semibold text-foreground">
+                  {t("agents.providerProfiles.form.sections.connection")}
+                </h3>
+              </div>
+              <div
+                data-testid="agent-provider-form-fields"
+                className="grid grid-cols-1 gap-5"
+              >
+                <AgentProviderFormSelect
+                  label={t("agents.providerProfiles.form.protocol")}
                   value={form.protocol}
-                  onChange={(event) => update("protocol", event.target.value)}
+                  options={protocolSelectOptions}
+                  onChange={(protocol) => update("protocol", protocol)}
                   disabled={
                     busy ||
                     platformId === "grok" ||
                     platformId === "qwen" ||
                     platformId === "opencode"
                   }
-                  className="h-10 w-full rounded-xl border-0 bg-muted/50 px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="platform-native">
-                    {t("agents.providerProfiles.form.platformNative")}
-                  </option>
-                  {platformId === "claude" ? (
-                    <option value="anthropic-messages">
-                      {t("agents.providerProfiles.form.anthropicMessages")}
-                    </option>
-                  ) : platformId === "gemini" ? (
-                    <option value="google-generative-ai">
-                      {t("agents.providerProfiles.form.googleGenerativeAi")}
-                    </option>
-                  ) : platformId === "kimi" ||
-                    platformId === "grok" ||
-                    platformId === "qwen" ? (
-                    <>
-                      <option value="openai-chat">
-                        OpenAI Chat Completions
-                      </option>
-                      {platformId === "kimi" || platformId === "grok" ? (
-                        <option value="openai-responses">
-                          OpenAI Responses
-                        </option>
-                      ) : null}
-                      <option value="anthropic-messages">
-                        {t("agents.providerProfiles.form.anthropicMessages")}
-                      </option>
-                      {platformId === "qwen" ? (
-                        <option value="google-generative-ai">
-                          {t("agents.providerProfiles.form.googleGenerativeAi")}
-                        </option>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      <option value="openai-chat">
-                        OpenAI Chat Completions
-                      </option>
-                      <option value="openai-responses">OpenAI Responses</option>
-                    </>
-                  )}
-                </select>
-              </label>
-              {platformId !== "qwen" || qwenManaged ? (
-                <Input
-                  label={t(
-                    platformId === "qwen" || openCodeDirect || codexCustom
-                      ? "agents.providerProfiles.form.endpointRequired"
-                      : platformId === "grok"
+                />
+                {platformId !== "qwen" || qwenManaged ? (
+                  <Input
+                    variant="outlined"
+                    label={t(
+                      platformId === "qwen" || openCodeDirect || codexCustom
                         ? "agents.providerProfiles.form.endpointRequired"
-                        : "agents.providerProfiles.form.endpoint",
-                  )}
-                  value={form.endpoint}
-                  onChange={(event) => update("endpoint", event.target.value)}
+                        : platformId === "grok"
+                          ? "agents.providerProfiles.form.endpointRequired"
+                          : "agents.providerProfiles.form.endpoint",
+                    )}
+                    value={form.endpoint}
+                    onChange={(event) => update("endpoint", event.target.value)}
+                    disabled={
+                      busy || openCodeNativeReadOnly || grokNativeReadOnly
+                    }
+                    placeholder={t(
+                      platformId === "codex" ||
+                        platformId === "kimi" ||
+                        platformId === "grok" ||
+                        platformId === "opencode" ||
+                        form.protocol === "openai-chat" ||
+                        form.protocol === "openai-responses"
+                        ? "agents.providerProfiles.form.endpointV1Placeholder"
+                        : "agents.providerProfiles.form.endpointPlaceholder",
+                    )}
+                    error={
+                      endpointMissing
+                        ? t("agents.providerProfiles.form.required")
+                        : endpointInvalid
+                          ? t("agents.providerProfiles.form.endpointInvalid")
+                          : undefined
+                    }
+                  />
+                ) : null}
+              </div>
+            </section>
+
+            <section
+              data-testid="agent-provider-form-section"
+              className="border-b border-border/70 p-5"
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <CableIcon className="h-4 w-4" />
+                </span>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {t("agents.providerProfiles.form.sections.models")}
+                </h3>
+              </div>
+              <div
+                data-testid="agent-provider-form-fields"
+                className="grid grid-cols-1 gap-5"
+              >
+                <Input
+                  variant="outlined"
+                  label={t("agents.providerProfiles.form.primaryModel")}
+                  value={form.primaryModel}
+                  onChange={(event) =>
+                    update("primaryModel", event.target.value)
+                  }
+                  placeholder={modelPlaceholder}
                   disabled={
                     busy || openCodeNativeReadOnly || grokNativeReadOnly
                   }
-                  placeholder="https://api.example.com/v1"
                   error={
-                    endpointMissing
+                    modelMissing
                       ? t("agents.providerProfiles.form.required")
-                      : endpointInvalid
-                        ? t("agents.providerProfiles.form.endpointInvalid")
-                        : undefined
+                      : undefined
                   }
                 />
-              ) : null}
-            </div>
-          </section>
-
-          <section className="border-b border-border pb-5">
-            <div className="mb-4 flex items-center gap-2">
-              <CableIcon className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold text-foreground">
-                {t("agents.providerProfiles.form.sections.models")}
-              </h3>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input
-                label={t("agents.providerProfiles.form.primaryModel")}
-                value={form.primaryModel}
-                onChange={(event) => update("primaryModel", event.target.value)}
-                disabled={busy || openCodeNativeReadOnly || grokNativeReadOnly}
-                error={
-                  modelMissing
-                    ? t("agents.providerProfiles.form.required")
-                    : undefined
-                }
-              />
-              {platformId === "kimi" || platformId === "grok" ? (
-                <>
+                {platformId === "claude" ? (
+                  <>
+                    <Input
+                      variant="outlined"
+                      label={t("agents.providerProfiles.form.sonnetModel")}
+                      value={form.sonnetModel}
+                      onChange={(event) =>
+                        update("sonnetModel", event.target.value)
+                      }
+                      placeholder={t(
+                        "agents.providerProfiles.form.modelPlaceholder",
+                        { model: "claude-sonnet-4-6" },
+                      )}
+                      disabled={busy}
+                    />
+                    <Input
+                      variant="outlined"
+                      label={t("agents.providerProfiles.form.opusModel")}
+                      value={form.opusModel}
+                      onChange={(event) =>
+                        update("opusModel", event.target.value)
+                      }
+                      placeholder={t(
+                        "agents.providerProfiles.form.modelPlaceholder",
+                        { model: "claude-opus-4-6" },
+                      )}
+                      disabled={busy}
+                    />
+                    <Input
+                      variant="outlined"
+                      label={t("agents.providerProfiles.form.haikuModel")}
+                      value={form.haikuModel}
+                      onChange={(event) =>
+                        update("haikuModel", event.target.value)
+                      }
+                      placeholder={t(
+                        "agents.providerProfiles.form.modelPlaceholder",
+                        { model: "claude-haiku-4-5" },
+                      )}
+                      disabled={busy}
+                    />
+                    <Input
+                      variant="outlined"
+                      label={t("agents.providerProfiles.form.subagentModel")}
+                      value={form.subagentModel}
+                      onChange={(event) =>
+                        update("subagentModel", event.target.value)
+                      }
+                      placeholder={t(
+                        "agents.providerProfiles.form.modelPlaceholder",
+                        { model: "claude-haiku-4-5" },
+                      )}
+                      disabled={busy}
+                    />
+                  </>
+                ) : null}
+                {platformId === "codex" ? (
+                  <>
+                    <AgentProviderFormSelect
+                      label={t("agents.providerProfiles.form.reasoningEffort")}
+                      value={form.reasoningEffort}
+                      onChange={(reasoningEffort) =>
+                        update("reasoningEffort", reasoningEffort)
+                      }
+                      disabled={
+                        busy ||
+                        (form.protocol !== "openai-responses" &&
+                          form.protocol !== "platform-native")
+                      }
+                      options={[
+                        {
+                          value: "",
+                          label: t(
+                            "agents.providerProfiles.form.reasoningEfforts.default",
+                          ),
+                        },
+                        ...(
+                          ["minimal", "low", "medium", "high", "xhigh"] as const
+                        ).map((value) => ({
+                          value,
+                          label: t(
+                            `agents.providerProfiles.form.reasoningEfforts.${value}`,
+                          ),
+                        })),
+                      ]}
+                    />
+                    <Input
+                      variant="outlined"
+                      type="number"
+                      min={1}
+                      max={10_000_000}
+                      step={1}
+                      label={t(
+                        "agents.providerProfiles.form.contextWindowOptional",
+                      )}
+                      value={form.maxContextSize}
+                      onChange={(event) =>
+                        update("maxContextSize", event.target.value)
+                      }
+                      placeholder={t(
+                        "agents.providerProfiles.form.maxContextSizePlaceholder",
+                      )}
+                      disabled={busy}
+                      error={
+                        maxContextSizeInvalid
+                          ? t("agents.providerProfiles.form.positiveInteger")
+                          : undefined
+                      }
+                    />
+                  </>
+                ) : platformId === "kimi" || platformId === "grok" ? (
+                  <>
+                    <Input
+                      variant="outlined"
+                      label={t("agents.providerProfiles.form.upstreamModel")}
+                      value={form.upstreamModel}
+                      onChange={(event) =>
+                        update("upstreamModel", event.target.value)
+                      }
+                      placeholder={modelPlaceholder}
+                      disabled={busy || grokNativeReadOnly}
+                      error={
+                        upstreamModelMissing
+                          ? t("agents.providerProfiles.form.required")
+                          : undefined
+                      }
+                    />
+                    <Input
+                      variant="outlined"
+                      type="number"
+                      min={1}
+                      max={10_000_000}
+                      step={1}
+                      label={t("agents.providerProfiles.form.maxContextSize")}
+                      value={form.maxContextSize}
+                      onChange={(event) =>
+                        update("maxContextSize", event.target.value)
+                      }
+                      placeholder={t(
+                        "agents.providerProfiles.form.maxContextSizePlaceholder",
+                      )}
+                      disabled={busy || grokNativeReadOnly}
+                      error={
+                        maxContextSizeInvalid
+                          ? t("agents.providerProfiles.form.positiveInteger")
+                          : undefined
+                      }
+                    />
+                  </>
+                ) : platformId === "opencode" ? (
                   <Input
-                    label={t("agents.providerProfiles.form.upstreamModel")}
-                    value={form.upstreamModel}
+                    variant="outlined"
+                    label={t("agents.providerProfiles.form.secondaryModel")}
+                    value={form.secondaryModel}
                     onChange={(event) =>
-                      update("upstreamModel", event.target.value)
+                      update("secondaryModel", event.target.value)
                     }
-                    disabled={busy || grokNativeReadOnly}
-                    error={
-                      upstreamModelMissing
-                        ? t("agents.providerProfiles.form.required")
-                        : undefined
-                    }
+                    placeholder={modelPlaceholder}
+                    disabled={busy || openCodeNativeReadOnly}
                   />
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10_000_000}
-                    step={1}
-                    label={t("agents.providerProfiles.form.maxContextSize")}
-                    value={form.maxContextSize}
-                    onChange={(event) =>
-                      update("maxContextSize", event.target.value)
-                    }
-                    disabled={busy || grokNativeReadOnly}
-                    error={
-                      maxContextSizeInvalid
-                        ? t("agents.providerProfiles.form.positiveInteger")
-                        : undefined
-                    }
-                  />
-                </>
-              ) : platformId === "opencode" ? (
-                <Input
-                  label={t("agents.providerProfiles.form.secondaryModel")}
-                  value={form.secondaryModel}
-                  onChange={(event) =>
-                    update("secondaryModel", event.target.value)
-                  }
-                  disabled={busy || openCodeNativeReadOnly}
-                />
-              ) : null}
-            </div>
-          </section>
+                ) : null}
+              </div>
+            </section>
 
-          <section>
-            <div className="mb-4 flex items-center gap-2">
-              <KeyRoundIcon className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold text-foreground">
-                {t("agents.providerProfiles.form.sections.authentication")}
-              </h3>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {platformId === "claude" &&
-              form.protocol === "anthropic-messages" ? (
-                <label className="block space-y-1.5">
-                  <span className="block text-sm font-medium text-foreground">
-                    {t("agents.providerProfiles.form.credentialKind")}
-                  </span>
-                  <select
+            <section data-testid="agent-provider-form-section" className="p-5">
+              <div className="mb-4 flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <KeyRoundIcon className="h-4 w-4" />
+                </span>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {t("agents.providerProfiles.form.sections.authentication")}
+                </h3>
+              </div>
+              <div
+                data-testid="agent-provider-form-fields"
+                className="grid grid-cols-1 gap-5"
+              >
+                {platformId === "claude" &&
+                form.protocol === "anthropic-messages" ? (
+                  <AgentProviderFormSelect
+                    label={t("agents.providerProfiles.form.credentialKind")}
                     value={form.credentialEnvKey}
-                    onChange={(event) =>
-                      update("credentialEnvKey", event.target.value)
+                    onChange={(credentialEnvKey) =>
+                      update("credentialEnvKey", credentialEnvKey)
                     }
                     disabled={busy}
-                    className="h-10 w-full rounded-xl border-0 bg-muted/50 px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="ANTHROPIC_API_KEY">
-                      {t("agents.providerProfiles.form.anthropicApiKey")}
-                    </option>
-                    <option value="ANTHROPIC_AUTH_TOKEN">
-                      {t("agents.providerProfiles.form.anthropicAuthToken")}
-                    </option>
-                  </select>
-                </label>
-              ) : null}
-              {platformId === "codex" && form.protocol !== "platform-native" ? (
-                <label className="block space-y-1.5">
-                  <span className="block text-sm font-medium text-foreground">
-                    {t("agents.providerProfiles.form.authenticationSource")}
-                  </span>
-                  <select
+                    options={[
+                      {
+                        value: "ANTHROPIC_API_KEY",
+                        label: t(
+                          "agents.providerProfiles.form.anthropicApiKey",
+                        ),
+                      },
+                      {
+                        value: "ANTHROPIC_AUTH_TOKEN",
+                        label: t(
+                          "agents.providerProfiles.form.anthropicAuthToken",
+                        ),
+                      },
+                    ]}
+                  />
+                ) : null}
+                {platformId === "codex" &&
+                form.protocol !== "platform-native" ? (
+                  <AgentProviderFormSelect
+                    label={t(
+                      "agents.providerProfiles.form.authenticationSource",
+                    )}
                     value={form.credentialSource}
-                    onChange={(event) => {
-                      const credentialSource = event.target.value as
+                    onChange={(value) => {
+                      const credentialSource = value as
                         | "managed"
                         | "environment";
                       setForm((current) => ({
@@ -795,71 +977,76 @@ export function AgentProviderProfileFormDialog({
                       }));
                     }}
                     disabled={busy}
-                    className="h-10 w-full rounded-xl border-0 bg-muted/50 px-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="managed">
-                      {t(
-                        "agents.providerProfiles.form.authenticationSources.managed",
-                      )}
-                    </option>
-                    <option value="environment">
-                      {t(
-                        "agents.providerProfiles.form.authenticationSources.environment",
-                      )}
-                    </option>
-                  </select>
-                </label>
-              ) : null}
-              {qwenManaged || grokManaged || codexEnvironment ? (
-                <Input
-                  label={t("agents.providerProfiles.form.environmentVariable")}
-                  value={form.credentialEnvKey}
-                  onChange={(event) =>
-                    update("credentialEnvKey", event.target.value)
-                  }
+                    options={[
+                      {
+                        value: "managed",
+                        label: t(
+                          "agents.providerProfiles.form.authenticationSources.managed",
+                        ),
+                      },
+                      {
+                        value: "environment",
+                        label: t(
+                          "agents.providerProfiles.form.authenticationSources.environment",
+                        ),
+                      },
+                    ]}
+                  />
+                ) : null}
+                {qwenManaged || grokManaged || codexEnvironment ? (
+                  <Input
+                    variant="outlined"
+                    label={t(
+                      "agents.providerProfiles.form.environmentVariable",
+                    )}
+                    value={form.credentialEnvKey}
+                    onChange={(event) =>
+                      update("credentialEnvKey", event.target.value)
+                    }
+                    disabled={busy}
+                    placeholder={
+                      platformId === "grok"
+                        ? "XAI_API_KEY"
+                        : platformId === "qwen"
+                          ? "DASHSCOPE_API_KEY"
+                          : "OPENAI_API_KEY"
+                    }
+                    error={
+                      envKeyInvalid
+                        ? t(
+                            "agents.providerProfiles.form.environmentVariableInvalid",
+                          )
+                        : undefined
+                    }
+                  />
+                ) : null}
+              </div>
+
+              {acceptsManagedCredential ? (
+                <AgentProviderCredentialField
+                  profileSecretState={profile?.secretState ?? null}
+                  action={form.credentialAction}
+                  value={form.secret}
                   disabled={busy}
-                  placeholder={
-                    platformId === "grok"
-                      ? "XAI_API_KEY"
-                      : platformId === "qwen"
-                        ? "DASHSCOPE_API_KEY"
-                        : "OPENAI_API_KEY"
-                  }
                   error={
-                    envKeyInvalid
+                    credentialReplacementMissing
                       ? t(
-                          "agents.providerProfiles.form.environmentVariableInvalid",
+                          "agents.providerProfiles.form.credentialReplacementRequired",
                         )
                       : undefined
                   }
+                  onActionChange={(credentialAction) => {
+                    update("credentialAction", credentialAction);
+                  }}
+                  onValueChange={(secret) => update("secret", secret)}
                 />
-              ) : null}
-            </div>
-
-            {acceptsManagedCredential ? (
-              <AgentProviderCredentialField
-                profileSecretState={profile?.secretState ?? null}
-                action={form.credentialAction}
-                value={form.secret}
-                disabled={busy}
-                error={
-                  credentialReplacementMissing
-                    ? t(
-                        "agents.providerProfiles.form.credentialReplacementRequired",
-                      )
-                    : undefined
-                }
-                onActionChange={(credentialAction) => {
-                  update("credentialAction", credentialAction);
-                }}
-                onValueChange={(secret) => update("secret", secret)}
-              />
-            ) : (
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                {t("agents.providerProfiles.form.platformCredentialHint")}
-              </p>
-            )}
-          </section>
+              ) : (
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                  {t("agents.providerProfiles.form.platformCredentialHint")}
+                </p>
+              )}
+            </section>
+          </div>
         </div>
       </div>
     </div>

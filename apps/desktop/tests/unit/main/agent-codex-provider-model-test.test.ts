@@ -154,7 +154,7 @@ describe("Codex Provider Profile streaming model test", () => {
     );
   });
 
-  it("fails closed for unavailable credentials, invalid profiles, and native providers", async () => {
+  it("fails closed for unavailable credentials and invalid profiles", async () => {
     const testModel = vi.fn();
     const missingSecretAdapter = createAgentCodexProviderAdapter(
       adapterOptions({
@@ -188,6 +188,21 @@ describe("Codex Provider Profile streaming model test", () => {
       ),
     ).resolves.toMatchObject({ status: "unsupported" });
 
+    expect(testModel).not.toHaveBeenCalled();
+  });
+
+  it("delegates official profiles to the native Codex model probe", async () => {
+    const testModel = vi.fn();
+    const testNativeModel = vi.fn().mockResolvedValue(
+      modelResult({
+        protocol: "platform-native",
+        endpointOrigin: null,
+        model: "gpt-5.6-sol",
+      }),
+    );
+    const adapter = createAgentCodexProviderAdapter(
+      adapterOptions({ testModel, testNativeModel }),
+    );
     const nativeProfile = profile({
       providerKind: "openai",
       protocol: "platform-native",
@@ -195,16 +210,27 @@ describe("Codex Provider Profile streaming model test", () => {
       config: { providerId: "openai" },
       secretRef: null,
     });
+    const signal = new AbortController().signal;
+
     await expect(
-      invalidAdapter.testModel?.(
+      adapter.testModel?.(
         context,
-        { profile: nativeProfile, modelMappings: mappings() },
-        new AbortController().signal,
+        { profile: nativeProfile, modelMappings: mappings("gpt-5.6-sol") },
+        signal,
       ),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
+      platformId: "codex",
+      profileId: "profile-1",
+      ...modelResult({
       protocol: "platform-native",
-      status: "unsupported",
       endpointOrigin: null,
+        model: "gpt-5.6-sol",
+      }),
+    });
+    expect(testNativeModel).toHaveBeenCalledWith({
+      codexHome: "/tmp/codex-model-test",
+      model: "gpt-5.6-sol",
+      signal,
     });
     expect(testModel).not.toHaveBeenCalled();
   });

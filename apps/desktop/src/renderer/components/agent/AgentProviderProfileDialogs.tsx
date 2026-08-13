@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangleIcon,
   CheckCircle2Icon,
   Loader2Icon,
   RotateCcwIcon,
@@ -13,7 +12,6 @@ import type {
   AgentProviderActivationPlan,
   AgentProviderComparableValue,
   AgentProviderFieldResolution,
-  AgentProviderImportPreview,
 } from "@prompthub/shared/types";
 import { Button, Modal } from "../ui";
 
@@ -22,82 +20,6 @@ function displayValue(value: AgentProviderComparableValue | undefined): string {
   if (value === null) return "null";
   if (typeof value === "string") return value || "—";
   return JSON.stringify(value);
-}
-
-function warningLabel(warning: string, t: (key: string) => string): string {
-  return warning === "native-formatting-may-change"
-    ? t("agents.providerProfiles.import.formattingWarning")
-    : warning;
-}
-
-export function AgentProviderImportDialog({
-  preview,
-  busy,
-  onClose,
-  onAdopt,
-}: {
-  preview: AgentProviderImportPreview | null;
-  busy: boolean;
-  onClose: () => void;
-  onAdopt: () => Promise<unknown>;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Modal
-      isOpen={preview !== null}
-      onClose={onClose}
-      title={t("agents.providerProfiles.import.title")}
-      subtitle={preview?.profile.name}
-      size="xl"
-      closeOnBackdrop={!busy}
-      closeOnEscape={!busy}
-    >
-      {preview ? (
-        <>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            {Object.entries(preview.state.values).map(([field, value]) => (
-              <div
-                key={field}
-                className="rounded-md border border-border bg-muted/20 px-3 py-2.5"
-              >
-                <dt className="text-xs font-semibold text-muted-foreground">
-                  {field}
-                </dt>
-                <dd className="mt-1 break-all text-sm text-foreground">
-                  {displayValue(value)}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          {preview.warnings.length > 0 ? (
-            <div className="mt-4 space-y-2">
-              {preview.warnings.map((warning) => (
-                <p
-                  key={warning}
-                  className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5 text-xs text-muted-foreground"
-                >
-                  <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-500" />
-                  {warningLabel(warning, t)}
-                </p>
-              ))}
-            </div>
-          ) : null}
-          <p className="mt-4 text-xs leading-5 text-muted-foreground">
-            {t("agents.providerProfiles.import.explicitHint")}
-          </p>
-          <div className="mt-6 flex justify-end gap-3 border-t border-border/60 pt-4">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={() => void onAdopt()} disabled={busy}>
-              {busy ? <Loader2Icon className="h-4 w-4 animate-spin" /> : null}
-              {t("agents.providerProfiles.import.create")}
-            </Button>
-          </div>
-        </>
-      ) : null}
-    </Modal>
-  );
 }
 
 const REVIEW_STATUSES = new Set(["backfill", "external-modified", "conflict"]);

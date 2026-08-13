@@ -58,14 +58,17 @@ function profile(
   };
 }
 
-function mappings(model = "gpt-5.4"): AgentProviderModelMapping[] {
+function mappings(
+  model = "gpt-5.4",
+  parameters: Record<string, unknown> = {},
+): AgentProviderModelMapping[] {
   return [
     {
       id: "mapping-primary",
       providerProfileId: "profile-1",
       routeKey: "primary",
       modelId: model,
-      parameters: {},
+      parameters,
     },
   ];
 }
@@ -141,6 +144,90 @@ describe("Codex unified Provider Profile adapter", () => {
     });
     expect(imported.warnings).toContain("native-credential-not-imported");
     expect(JSON.stringify(imported)).not.toContain("native-secret");
+  });
+
+  it("round-trips Codex reasoning effort and context window with the primary model", async () => {
+    const root = await temporaryRoot();
+    const target = path.join(root, "config.toml");
+    await fs.writeFile(
+      target,
+      [
+        'model = "gpt-5.4"',
+        'model_provider = "legacy"',
+        'model_reasoning_effort = "medium"',
+        "model_context_window = 262144",
+        "",
+        "[model_providers.legacy]",
+        'name = "Legacy Gateway"',
+        'base_url = "https://legacy.example.com/v1"',
+        'wire_api = "responses"',
+        'env_key = "LEGACY_API_KEY"',
+        "",
+      ].join("\n"),
+    );
+    const adapter = createAgentCodexProviderAdapter({
+      backupRoot: path.join(root, "backups"),
+      backupEncryption: backupEncryption(),
+      secretStore: secretStore(),
+    });
+
+    await expect(adapter.inspect(context(root))).resolves.toMatchObject({
+      values: {
+        reasoningEffort: "medium",
+        contextWindow: 262144,
+      },
+    });
+    await expect(adapter.importCurrent(context(root))).resolves.toMatchObject({
+      modelMappings: [
+        {
+          routeKey: "primary",
+          modelId: "gpt-5.4",
+          parameters: {
+            reasoningEffort: "medium",
+            contextWindow: 262144,
+          },
+        },
+      ],
+    });
+
+    const activation = {
+      context: context(root),
+      profile: profile(),
+      modelMappings: mappings("gpt-5.6-sol", {
+        reasoningEffort: "high",
+        contextWindow: 400000,
+      }),
+      baseline: await adapter.inspect(context(root)),
+    };
+    const plan = await adapter.planActivation(activation);
+    const receipt = await adapter.apply(context(root), plan, {
+      profile: activation.profile,
+      modelMappings: activation.modelMappings,
+    });
+    await expect(
+      adapter.verify(context(root), plan, receipt),
+    ).resolves.toMatchObject({ verified: true });
+    await expect(fs.readFile(target, "utf8")).resolves.toContain(
+      'model_reasoning_effort = "high"',
+    );
+    await expect(fs.readFile(target, "utf8")).resolves.toContain(
+      "model_context_window = 400000",
+    );
+
+    const clearActivation = {
+      context: context(root),
+      profile: profile(),
+      modelMappings: mappings("gpt-5.6-sol"),
+      baseline: await adapter.inspect(context(root)),
+    };
+    const clearPlan = await adapter.planActivation(clearActivation);
+    await adapter.apply(context(root), clearPlan, {
+      profile: clearActivation.profile,
+      modelMappings: clearActivation.modelMappings,
+    });
+    const cleared = await fs.readFile(target, "utf8");
+    expect(cleared).not.toContain("model_reasoning_effort");
+    expect(cleared).not.toContain("model_context_window");
   });
 
   it("plans all Codex provider fields without returning a secret reference", async () => {
@@ -229,9 +316,9 @@ describe("Codex unified Provider Profile adapter", () => {
       protocol: "responses",
     });
     expect(secrets.read).toHaveBeenCalledWith("agent-provider:profile-1");
-    await expect(fs.readFile(path.join(root, "config.toml"), "utf8")).resolves.toBe(
-      original,
-    );
+    await expect(
+      fs.readFile(path.join(root, "config.toml"), "utf8"),
+    ).resolves.toBe(original);
   });
 
   it("fails closed for unsupported connection profiles and resolves environment credentials", async () => {
@@ -248,6 +335,18 @@ describe("Codex unified Provider Profile adapter", () => {
       modelCount: 1,
       modelAvailable: true,
     });
+    const nativeConnection = vi.fn().mockResolvedValue({
+      protocol: "platform-native",
+      endpointOrigin: null,
+      model: "gpt-5.4",
+      status: "ok",
+      startedAt: 20,
+      finishedAt: 25,
+      totalMs: 5,
+      retryCount: 0,
+      modelCount: null,
+      modelAvailable: null,
+    });
     const adapter = createAgentCodexProviderAdapter({
       backupRoot: path.join(root, "backups"),
       backupEncryption: backupEncryption(),
@@ -255,6 +354,7 @@ describe("Codex unified Provider Profile adapter", () => {
       env: { CODEX_PROVIDER_KEY: "environment-secret" },
       now: () => 25,
       testConnection: connection,
+      testNativeConnection: nativeConnection,
     });
 
     await expect(
@@ -302,9 +402,13 @@ describe("Codex unified Provider Profile adapter", () => {
         modelMappings: mappings(),
       }),
     ).resolves.toMatchObject({
-      status: "unsupported",
+      status: "ok",
       protocol: "platform-native",
-      startedAt: 25,
+      startedAt: 20,
+    });
+    expect(nativeConnection).toHaveBeenCalledWith({
+      codexHome: root,
+      model: "gpt-5.4",
     });
     await expect(
       adapter.testConnection?.(context(root), {
@@ -325,6 +429,59 @@ describe("Codex unified Provider Profile adapter", () => {
       credential: "environment-secret",
       model: "gpt-5.4",
       protocol: "chat",
+    });
+  });
+
+  it("routes an official model test through the native Codex probe", async () => {
+    const root = await temporaryRoot();
+    const signal = new AbortController().signal;
+    const nativeModel = vi.fn().mockResolvedValue({
+      protocol: "platform-native",
+      endpointOrigin: null,
+      model: "gpt-5.4",
+      status: "ok",
+      startedAt: 30,
+      finishedAt: 45,
+      totalMs: 15,
+      firstTokenMs: null,
+      retryCount: 0,
+      inputTokens: null,
+      outputTokens: null,
+      outputPreview: "OK",
+    });
+    const adapter = createAgentCodexProviderAdapter({
+      backupRoot: path.join(root, "backups"),
+      backupEncryption: backupEncryption(),
+      secretStore: secretStore(null),
+      testNativeModel: nativeModel,
+    });
+
+    await expect(
+      adapter.testModel?.(
+        context(root),
+        {
+          profile: profile({
+            name: "OpenAI",
+            providerKind: "openai",
+            protocol: "platform-native",
+            endpoint: null,
+            config: { providerId: "openai" },
+            secretRef: null,
+          }),
+          modelMappings: mappings(),
+        },
+        signal,
+      ),
+    ).resolves.toMatchObject({
+      platformId: "codex",
+      profileId: "profile-1",
+      status: "ok",
+      outputPreview: "OK",
+    });
+    expect(nativeModel).toHaveBeenCalledWith({
+      codexHome: root,
+      model: "gpt-5.4",
+      signal,
     });
   });
 
@@ -527,6 +684,21 @@ describe("Codex unified Provider Profile adapter", () => {
           },
         ],
         reason: "primary-model-required",
+      },
+      {
+        candidate: profile(),
+        mappings: mappings("gpt-5.4", { reasoningEffort: "max" }),
+        reason: "primary-model-required",
+      },
+      {
+        candidate: profile(),
+        mappings: mappings("gpt-5.4", { contextWindow: 0 }),
+        reason: "primary-model-required",
+      },
+      {
+        candidate: profile({ protocol: "openai-chat" }),
+        mappings: mappings("gpt-5.4", { reasoningEffort: "high" }),
+        reason: "model-reasoning-effort-unsupported",
       },
       {
         candidate: profile({ secretRef: null }),

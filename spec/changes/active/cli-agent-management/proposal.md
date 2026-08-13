@@ -18,11 +18,13 @@
 - 新增 custom Agent `add|update|delete`。
 - 新增 built-in/custom Agent 资产路径配置；built-in 支持 reset，custom Agent 保持 root 必填。
 - 新增 Codex/ChatGPT identity preference 的读取和更新。
+- 新增 Agent 原生配置文件的只读清单与安全读取，复用桌面端已经下沉到 `packages/core` 的发现、路径校验和脱敏能力。
 - 输出安装/配置状态、resolved paths、lifecycle 和 capability inventory，未实现的深度 adapter 必须保持 partial/planned/unsupported。
 
 ## Non-goals
 
 - 不在本轮把 Electron-only Provider Profile、secret store、session transcript、usage quota、appearance、GUI launch 或 CLI 自动升级 adapter 迁移到 `packages/core`。
+- 不通过 CLI 写入 Agent 原生配置。安全写入依赖加密备份和 secret ownership，在 standalone CLI 具备可复用密钥存储前保持只读。
 - 不删除 Agent 根目录、Skill、MCP、Plugin、Rules、配置文件或平台运行时数据。
 - 不新增数据库 schema 或第二份 Agent 配置文件。
 
@@ -37,4 +39,5 @@
 - Stable docs and code agree that Agent identity comes from the platform registry.
 - `cli-feature-completeness` can stand on its own and is review-pending; this new objective therefore uses a separate active change.
 - No schema, sync payload, filesystem layout, or secret-ownership change is required.
-- No blocking `[待确认]` remains for the registry-management slice.
+- Desktop and CLI now share a bounded, redacting config-file reader in `packages/core`; exposing that read-only adapter does not change the filesystem source of truth.
+- No blocking `[待确认]` remains for the registry-management or native-config inspection slices.

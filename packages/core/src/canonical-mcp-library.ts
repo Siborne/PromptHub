@@ -131,17 +131,24 @@ function listBundlePaths(): string[] {
     throw new Error("Canonical MCP library path is unsafe");
   }
   const entries = fs.readdirSync(root, { withFileTypes: true });
-  if (entries.length > MAX_RESOURCES) {
-    throw new Error("Canonical MCP resource limit exceeded");
-  }
-  return entries.flatMap((entry) => {
+  const bundlePaths = entries.flatMap((entry) => {
     if (entry.name.startsWith(".")) return [];
+    if (entry.name === "market-sources.json") {
+      if (!entry.isFile() || entry.isSymbolicLink()) {
+        throw new Error("Canonical MCP market source registry path is unsafe");
+      }
+      return [];
+    }
     assertId(entry.name, "resource path");
     if (!entry.isDirectory() || entry.isSymbolicLink()) {
       throw new Error("Canonical MCP resource path is unsafe");
     }
     return [path.join(root, entry.name)];
   });
+  if (bundlePaths.length > MAX_RESOURCES) {
+    throw new Error("Canonical MCP resource limit exceeded");
+  }
+  return bundlePaths;
 }
 
 function hasSecretReferences(resource: ReadMcpServerResourceResult): boolean {

@@ -8,7 +8,9 @@ import {
   AgentSettingsError,
   AgentSettingsRepository,
   buildCliManagedAgentInventory,
+  createAgentUserConfigFileService,
   validateAgentRelativePath,
+  type AgentConfigContext,
   type AgentManagementSettings,
   type CliManagedAgent,
 } from "../agent-management";
@@ -47,6 +49,12 @@ interface AgentAssetOptions {
   commandsRelativePath?: string;
   configRelativePaths?: string[];
 }
+
+const agentConfigFileService = createAgentUserConfigFileService({
+  createBackup: async () => {
+    throw new Error("AGENT_CONFIG_WRITE_UNAVAILABLE");
+  },
+});
 
 function toCliSettingsError(error: AgentSettingsError): CliError {
   const conflict =
@@ -196,6 +204,50 @@ function agentRows(agents: CliManagedAgent[]): Array<Record<string, unknown>> {
   }));
 }
 
+function toAgentConfigContext(agent: CliManagedAgent): AgentConfigContext {
+  return {
+    agentId: agent.id,
+    rootPath: agent.paths.root,
+    relativePaths: agent.paths.configFileRelativePaths,
+  };
+}
+
+function toCliAgentConfigError(error: unknown): CliError | null {
+  if (!(error instanceof Error)) return null;
+  if (
+    error.message === "AGENT_CONFIG_PATH_INVALID" ||
+    error.message === "AGENT_CONFIG_PATH_EXCLUDED"
+  ) {
+    return new CliError(error.message, error.message, EXIT_CODES.USAGE);
+  }
+  if (error.message === "AGENT_CONFIG_FILE_NOT_DISCOVERED") {
+    return new CliError(
+      "AGENT_CONFIG_FILE_NOT_FOUND",
+      "Agent 配置文件不存在或不在可读取清单中",
+      EXIT_CODES.NOT_FOUND,
+    );
+  }
+  if (
+    error.message === "AGENT_CONFIG_ROOT_INVALID" ||
+    error.message === "AGENT_CONFIG_SYMLINK_REJECTED" ||
+    error.message === "AGENT_CONFIG_FILE_INVALID"
+  ) {
+    return new CliError(error.message, error.message, EXIT_CODES.IO);
+  }
+  return null;
+}
+
+function ensureNoUnexpectedPositionals(args: string[]): void {
+  ensureNoUnknownOptions(args);
+  if (args.length > 0) {
+    throw new CliError(
+      "USAGE_ERROR",
+      `多余参数: ${args.join(", ")}`,
+      EXIT_CODES.USAGE,
+    );
+  }
+}
+
 function getBuiltinPlatforms(context: CliContext) {
   return context.skills
     .getSupportedPlatforms()
@@ -264,6 +316,68 @@ async function handleGet(
   ensureNoUnknownOptions(queryArgs);
   const agents = await getInventory(context, settings, { includeDisabled });
   emitSuccess(context, resolveAgent(agents, identifier));
+}
+
+async function handleConfig(
+  args: string[],
+  context: CliContext,
+  settings: AgentManagementSettings,
+): Promise<void> {
+  const action = requirePositional(args, 1, "config 子命令");
+  if (action !== "list" && action !== "read") {
+    throw new CliError(
+      "USAGE_ERROR",
+      `不支持的 agent config 子命令: ${action}`,
+      EXIT_CODES.USAGE,
+    );
+  }
+  const identifier = requirePositional(args, 2, "agent id、name 或 query");
+  const relativePath =
+    action === "read"
+      ? requirePositional(args, 3, "Agent 配置文件相对路径")
+      : undefined;
+  const optionArgs = args.slice(action === "read" ? 4 : 3);
+  const includeDisabled = takeFlag(optionArgs, "--include-disabled");
+  ensureNoUnexpectedPositionals(optionArgs);
+  const agent = resolveAgent(
+    await getInventory(context, settings, { includeDisabled }),
+    identifier,
+  );
+  const configContext = toAgentConfigContext(agent);
+
+  try {
+    if (action === "list") {
+      const entries = await agentConfigFileService.list(configContext);
+      emitSuccess(
+        context,
+        entries,
+        entries.map((entry) => ({
+          path: entry.path,
+          type: entry.isDirectory ? "directory" : "file",
+          size: entry.size,
+        })),
+      );
+      return;
+    }
+
+    const entry = await agentConfigFileService.read(
+      configContext,
+      relativePath!,
+    );
+    if (!entry) {
+      throw new CliError(
+        "AGENT_CONFIG_FILE_NOT_FOUND",
+        `Agent 配置文件不存在: ${relativePath}`,
+        EXIT_CODES.NOT_FOUND,
+      );
+    }
+    emitSuccess(context, entry);
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    const cliError = toCliAgentConfigError(error);
+    if (cliError) throw cliError;
+    throw error;
+  }
 }
 
 async function handleVisibility(
@@ -535,6 +649,9 @@ async function dispatchAgentCommand(
   const repository = new AgentSettingsRepository(databaseHooks.initDatabase());
   if (action === "list") return handleList(args, context, repository.read());
   if (action === "get") return handleGet(args, context, repository.read());
+  if (action === "config") {
+    return handleConfig(args, context, repository.read());
+  }
   if (action === "enable" || action === "disable") {
     return handleVisibility(action, args, context, repository);
   }

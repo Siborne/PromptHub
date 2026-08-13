@@ -117,6 +117,7 @@ const CHILD_MCP_SCAN_IGNORED_DIRS = new Set([
 const CHILD_MCP_SCAN_MAX_DEPTH = 5;
 const CHILD_MCP_SCAN_MAX_FILES = 40;
 const CHILD_MCP_CONFIG_MAX_BYTES = 1024 * 1024;
+const PLUGIN_JSON_MAX_BYTES = 1024 * 1024;
 
 const PLUGIN_DIR_INVENTORY: Array<{
   key: PluginCapabilityKind;
@@ -140,7 +141,7 @@ interface PluginTargetScanConfig {
     "platform-plugin-dir" | "root-plugin-cache" | "root-plugins"
   >;
   manualRoot?: boolean;
-  registry?: "claude-installed-plugins";
+  registry?: "claude-installed-plugins" | "oh-my-pi-installed-plugins";
 }
 
 const PLUGIN_TARGET_SCAN_CONFIGS: PluginTargetScanConfig[] = [
@@ -192,6 +193,17 @@ const PLUGIN_TARGET_SCAN_CONFIGS: PluginTargetScanConfig[] = [
     markerPaths: ["qwen-extension.json"],
     recursiveRoots: ["platform-plugin-dir"],
   },
+  {
+    targetId: "oh-my-pi",
+    platformId: "oh-my-pi",
+    markerPaths: [
+      ".omp-plugin/plugin.json",
+      ".claude-plugin/plugin.json",
+      "plugin.json",
+    ],
+    recursiveRoots: [],
+    registry: "oh-my-pi-installed-plugins",
+  },
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -204,7 +216,14 @@ function safeString(value: unknown): string | undefined {
 
 function readJsonObject(filePath: string): Record<string, unknown> | null {
   try {
-    if (!fs.existsSync(filePath)) return null;
+    const stat = fs.lstatSync(filePath);
+    if (
+      stat.isSymbolicLink() ||
+      !stat.isFile() ||
+      stat.size > PLUGIN_JSON_MAX_BYTES
+    ) {
+      return null;
+    }
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
     return isRecord(parsed) ? parsed : null;
   } catch {
@@ -619,17 +638,17 @@ function collectMarkerPackages(
 
 function addTargetPluginPackage(params: {
   allowManualPackage: boolean;
+  containmentRootDir: string;
   fallbackName: string;
   markerPaths: string[];
   packageDir: string;
   plugins: PluginTargetInstalledPlugin[];
-  rootDir: string;
   seenRealPaths: Set<string>;
   targetId: string;
 }): void {
   const realPackageDir = safeRealPath(params.packageDir);
   if (!realPackageDir) return;
-  if (!isInsideDirectory(params.rootDir, realPackageDir)) return;
+  if (!isInsideDirectory(params.containmentRootDir, realPackageDir)) return;
   if (params.seenRealPaths.has(realPackageDir)) return;
   const plugin = buildTargetPlugin(
     params.targetId,
@@ -707,15 +726,44 @@ export function scanInstalledPluginsForTarget(
         if (installPath) {
           addTargetPluginPackage({
             allowManualPackage: false,
+            containmentRootDir: rootDir,
             fallbackName: getClaudePluginNameFromRegistryKey(registryKey),
             markerPaths: config.markerPaths,
             packageDir: installPath,
             plugins,
-            rootDir,
             seenRealPaths,
             targetId,
           });
         }
+      }
+    }
+  }
+
+  if (config.registry === "oh-my-pi-installed-plugins") {
+    const realPluginDir = safeRealPath(pluginDir);
+    const installedRegistry = realPluginDir
+      ? readJsonObject(path.join(realPluginDir, "installed_plugins.json"))
+      : null;
+    const registryPlugins =
+      installedRegistry?.version === 2 && isRecord(installedRegistry.plugins)
+        ? installedRegistry.plugins
+        : {};
+    for (const [registryKey, installs] of Object.entries(registryPlugins)) {
+      if (!realPluginDir || !Array.isArray(installs)) continue;
+      for (const install of installs) {
+        if (!isRecord(install) || install.scope !== "user") continue;
+        const installPath = safeString(install.installPath);
+        if (!installPath) continue;
+        addTargetPluginPackage({
+          allowManualPackage: true,
+          containmentRootDir: realPluginDir,
+          fallbackName: getClaudePluginNameFromRegistryKey(registryKey),
+          markerPaths: config.markerPaths,
+          packageDir: installPath,
+          plugins,
+          seenRealPaths,
+          targetId,
+        });
       }
     }
   }
@@ -728,11 +776,11 @@ export function scanInstalledPluginsForTarget(
     )) {
       addTargetPluginPackage({
         allowManualPackage: false,
+        containmentRootDir: rootDir,
         fallbackName: path.basename(packageDir),
         markerPaths: config.markerPaths,
         packageDir,
         plugins,
-        rootDir,
         seenRealPaths,
         targetId,
       });
@@ -751,11 +799,11 @@ export function scanInstalledPluginsForTarget(
       if (COMMON_ROOT_IGNORED_DIRS.has(entry.name)) continue;
       addTargetPluginPackage({
         allowManualPackage: true,
+        containmentRootDir: rootDir,
         fallbackName: entry.name,
         markerPaths: config.markerPaths,
         packageDir: path.join(rootDir, entry.name),
         plugins,
-        rootDir,
         seenRealPaths,
         targetId,
       });

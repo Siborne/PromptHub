@@ -184,6 +184,231 @@ describe("agent CLI", () => {
     });
   });
 
+  it("lists and reads Agent-native config with redaction and path boundaries", async () => {
+    const root = makeTempRoot(tempDirs);
+
+    await withTempHome(root, async (homeDir) => {
+      const agentRoot = path.join(homeDir, "config-agent");
+      const configPath = path.join(agentRoot, "settings", "config.toml");
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(
+        configPath,
+        ['model = "gpt-5"', 'api_key = "sk-test-secret-value"', ""].join("\n"),
+      );
+      const outsideConfigDir = path.join(homeDir, "outside-config");
+      fs.mkdirSync(outsideConfigDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(outsideConfigDir, "config.toml"),
+        'model = "must-not-be-readable"\n',
+      );
+      fs.symlinkSync(outsideConfigDir, path.join(agentRoot, "linked"), "dir");
+      fs.mkdirSync(path.join(agentRoot, "broken.toml"));
+
+      const added = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "add",
+        "--id",
+        "config-agent",
+        "--name",
+        "Config Agent",
+        "--root",
+        agentRoot,
+        "--config-paths",
+        "settings/config.toml,profiles/missing.json,linked/config.toml,broken.toml",
+      ]);
+      expect(added.exitCode).toBe(0);
+
+      const list = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "list",
+        "config-agent",
+      ]);
+      expect(list.exitCode).toBe(0);
+      expect(list.json).toEqual(
+        expect.arrayContaining([
+          { path: "profiles", isDirectory: true },
+          { path: "profiles/missing.json", isDirectory: false, size: 0 },
+          { path: "settings", isDirectory: true },
+          expect.objectContaining({
+            path: "settings/config.toml",
+            isDirectory: false,
+          }),
+        ]),
+      );
+
+      const table = await execCli([
+        ...withDataDir(root),
+        "--output",
+        "table",
+        "agent",
+        "config",
+        "list",
+        "config-agent",
+      ]);
+      expect(table.exitCode).toBe(0);
+      expect(table.joinedStdout).toContain("settings/config.toml");
+      expect(table.joinedStdout).toContain("file");
+
+      const read = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "read",
+        "Config Agent",
+        "settings/config.toml",
+      ]);
+      expect(read.exitCode).toBe(0);
+      expect(read.json).toMatchObject({
+        path: "settings/config.toml",
+        encoding: "text",
+        redacted: true,
+      });
+      expect(read.json.revision).toMatch(/^[a-f0-9]{64}$/);
+      expect(read.json.content).toContain("__PROMPTHUB_REDACTED_SECRET_1__");
+      expect(read.json.content).not.toContain("sk-test-secret-value");
+      expect(fs.readFileSync(configPath, "utf8")).toContain(
+        "sk-test-secret-value",
+      );
+
+      const missing = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "read",
+        "config-agent",
+        "profiles/missing.json",
+      ]);
+      expect(missing.exitCode).toBe(3);
+      expect(missing.errorJson.error.code).toBe("AGENT_CONFIG_FILE_NOT_FOUND");
+
+      const traversal = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "read",
+        "config-agent",
+        "../outside.toml",
+      ]);
+      expect(traversal.exitCode).toBe(2);
+      expect(traversal.errorJson.error.code).toBe("AGENT_CONFIG_PATH_INVALID");
+
+      const excluded = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "read",
+        "config-agent",
+        "sessions/session.json",
+      ]);
+      expect(excluded.exitCode).toBe(2);
+      expect(excluded.errorJson.error.code).toBe("AGENT_CONFIG_PATH_EXCLUDED");
+
+      const symlink = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "read",
+        "config-agent",
+        "linked/config.toml",
+      ]);
+      expect(symlink.exitCode).toBe(5);
+      expect(symlink.errorJson.error.code).toBe(
+        "AGENT_CONFIG_SYMLINK_REJECTED",
+      );
+
+      const invalidFile = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "read",
+        "config-agent",
+        "broken.toml",
+      ]);
+      expect(invalidFile.exitCode).toBe(5);
+      expect(invalidFile.errorJson.error.code).toBe(
+        "AGENT_CONFIG_FILE_INVALID",
+      );
+
+      const unsupportedAction = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "write",
+        "config-agent",
+      ]);
+      expect(unsupportedAction.exitCode).toBe(2);
+      expect(unsupportedAction.errorJson.error.code).toBe("USAGE_ERROR");
+
+      const extraArgument = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "list",
+        "config-agent",
+        "unexpected",
+      ]);
+      expect(extraArgument.exitCode).toBe(2);
+      expect(extraArgument.errorJson.error.code).toBe("USAGE_ERROR");
+
+      const invalidRoot = path.join(homeDir, "invalid-root");
+      fs.writeFileSync(invalidRoot, "not a directory\n");
+      const invalidRootAgent = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "add",
+        "--id",
+        "invalid-root-agent",
+        "--name",
+        "Invalid Root Agent",
+        "--root",
+        invalidRoot,
+        "--config-paths",
+        "config.toml",
+      ]);
+      expect(invalidRootAgent.exitCode).toBe(0);
+      const invalidRootRead = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "read",
+        "invalid-root-agent",
+        "config.toml",
+      ]);
+      expect(invalidRootRead.exitCode).toBe(5);
+      expect(invalidRootRead.errorJson.error.code).toBe(
+        "AGENT_CONFIG_ROOT_INVALID",
+      );
+
+      await execCli([...withDataDir(root), "agent", "disable", "config-agent"]);
+      const hidden = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "list",
+        "config-agent",
+      ]);
+      expect(hidden.exitCode).toBe(3);
+
+      const included = await execCli([
+        ...withDataDir(root),
+        "agent",
+        "config",
+        "list",
+        "config-agent",
+        "--include-disabled",
+      ]);
+      expect(included.exitCode).toBe(0);
+      expect(included.json).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: "settings/config.toml" }),
+        ]),
+      );
+    });
+  });
+
   it("adds, updates, disables, and deletes custom Agents without touching roots", async () => {
     const root = makeTempRoot(tempDirs);
 

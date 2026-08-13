@@ -11,7 +11,11 @@ import type {
   AgentProviderSourceCandidate,
   ImportAgentProviderSourceRequest,
 } from "@prompthub/shared";
-import { Button, Modal } from "../ui";
+import { Button, Modal, Select, getCategoryIcon } from "../ui";
+import {
+  getModelCategory,
+  getProviderIconCategory,
+} from "../settings/ai-workbench/helpers";
 
 interface AgentProviderSourceDialogProps {
   isOpen: boolean;
@@ -31,7 +35,20 @@ function defaultSelection(candidates: AgentProviderSourceCandidate[]) {
   const model =
     provider?.models.find((candidate) => candidate.isDefault) ??
     provider?.models[0];
-  return { sourceId: provider?.sourceId ?? "", modelId: model?.id ?? "" };
+  return {
+    sourceId: provider?.sourceId ?? "",
+    modelId: model?.id ?? "",
+    protocol: provider?.protocol ?? provider?.protocols[0] ?? "",
+  };
+}
+
+function protocolLabel(
+  protocol: string,
+  t: (key: string, options?: { defaultValue?: string }) => string,
+): string {
+  return t(`agents.providerProfiles.sourceImport.protocols.${protocol}`, {
+    defaultValue: protocol,
+  });
 }
 
 export function AgentProviderSourceDialog({
@@ -47,6 +64,7 @@ export function AgentProviderSourceDialog({
   const { t } = useTranslation();
   const [sourceId, setSourceId] = useState("");
   const [modelId, setModelId] = useState("");
+  const [protocol, setProtocol] = useState("");
 
   useEffect(() => {
     if (isOpen) void onLoad(platformId);
@@ -56,6 +74,7 @@ export function AgentProviderSourceDialog({
     const selection = defaultSelection(candidates);
     setSourceId(selection.sourceId);
     setModelId(selection.modelId);
+    setProtocol(selection.protocol);
   }, [candidates]);
 
   const selected = useMemo(
@@ -64,16 +83,16 @@ export function AgentProviderSourceDialog({
   );
 
   function select(candidate: AgentProviderSourceCandidate): void {
-    if (!candidate.compatible) return;
     const model =
       candidate.models.find((item) => item.isDefault) ?? candidate.models[0];
     setSourceId(candidate.sourceId);
     setModelId(model?.id ?? "");
+    setProtocol(candidate.protocol ?? candidate.protocols[0] ?? "");
   }
 
   async function submit(): Promise<void> {
-    if (!sourceId || !modelId) return;
-    const result = await onImport({ platformId, sourceId, modelId });
+    if (!sourceId || !modelId || !protocol) return;
+    const result = await onImport({ platformId, sourceId, modelId, protocol });
     if (result) onClose();
   }
 
@@ -113,12 +132,24 @@ export function AgentProviderSourceDialog({
               } disabled:cursor-not-allowed disabled:opacity-60`}
             >
               <span className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                  {candidate.compatible ? (
-                    <CheckCircle2Icon className="h-4 w-4" />
-                  ) : (
-                    <AlertCircleIcon className="h-4 w-4" />
+                <span className="relative mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted/60">
+                  {getCategoryIcon(
+                    getProviderIconCategory(candidate.providerKind),
+                    28,
                   )}
+                  <span
+                    className={`absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-background bg-card ${
+                      candidate.compatible
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-amber-600 dark:text-amber-400"
+                    }`}
+                  >
+                    {candidate.compatible ? (
+                      <CheckCircle2Icon className="h-3 w-3" />
+                    ) : (
+                      <AlertCircleIcon className="h-3 w-3" />
+                    )}
+                  </span>
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-2">
@@ -155,23 +186,59 @@ export function AgentProviderSourceDialog({
         )}
       </div>
       {selected ? (
-        <label className="mt-4 block space-y-1.5">
-          <span className="text-sm font-medium text-foreground">
-            {t("agents.providerProfiles.sourceImport.model")}
-          </span>
-          <select
-            value={modelId}
-            onChange={(event) => setModelId(event.target.value)}
-            disabled={importing}
-            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
-          >
-            {selected.models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name} ({model.model})
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="block min-w-0 space-y-1.5">
+            <span className="text-sm font-medium text-foreground">
+              {t("agents.providerProfiles.sourceImport.model")}
+            </span>
+            <Select
+              value={modelId}
+              onChange={setModelId}
+              disabled={importing}
+              ariaLabel={t("agents.providerProfiles.sourceImport.model")}
+              options={selected.models.map((model) => ({
+                value: model.id,
+                labelText: `${model.name} (${model.model})`,
+                label: (
+                  <span className="flex min-w-0 items-center gap-2">
+                    {getCategoryIcon(
+                      getModelCategory({
+                        model: model.model,
+                      }),
+                      22,
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">
+                        {model.name}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {model.model}
+                      </span>
+                    </span>
+                  </span>
+                ),
+              }))}
+              triggerClassName="flex min-h-12 w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-left focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+            />
+          </label>
+          <label className="block min-w-0 space-y-1.5">
+            <span className="text-sm font-medium text-foreground">
+              {t("agents.providerProfiles.sourceImport.protocol")}
+            </span>
+            <Select
+              value={protocol}
+              onChange={setProtocol}
+              disabled={importing || selected.protocols.length <= 1}
+              ariaLabel={t("agents.providerProfiles.sourceImport.protocol")}
+              options={selected.protocols.map((item) => ({
+                value: item,
+                label: protocolLabel(item, t),
+                labelText: protocolLabel(item, t),
+              }))}
+              triggerClassName="flex min-h-12 w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 text-left text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-default disabled:opacity-70"
+            />
+          </label>
+        </div>
       ) : null}
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose} disabled={importing}>
@@ -179,7 +246,7 @@ export function AgentProviderSourceDialog({
         </Button>
         <Button
           onClick={() => void submit()}
-          disabled={!sourceId || !modelId || loading || importing}
+          disabled={!sourceId || !modelId || !protocol || loading || importing}
         >
           {importing ? <Loader2Icon className="h-4 w-4 animate-spin" /> : null}
           {t("agents.providerProfiles.sourceImport.confirm")}

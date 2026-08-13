@@ -8,7 +8,10 @@ import { copyTextToClipboard } from "../../utils/clipboard";
 import { useToast } from "../ui/Toast";
 import type { PluginManagerBindings } from "./usePluginManagerBindings";
 import type { PluginManagerState } from "./usePluginManagerState";
-import { getErrorMessage } from "./plugin-manager-utils";
+import {
+  getErrorMessage,
+  getPluginInstallErrorMessage,
+} from "./plugin-manager-utils";
 
 interface PluginManagerMarketActionOptions {
   bindings: PluginManagerBindings;
@@ -30,7 +33,7 @@ function useMarketInstallAction(options: PluginManagerMarketActionOptions) {
         }),
       );
     } catch (error) {
-      showToast(getErrorMessage(error), "error");
+      showToast(getPluginInstallErrorMessage(error, t), "error");
     } finally {
       state.setInstallingId(null);
     }
@@ -69,7 +72,7 @@ function useTargetPluginImportAction(
         }),
       );
     } catch (error) {
-      showToast(getErrorMessage(error), "error");
+      showToast(getPluginInstallErrorMessage(error, t), "error");
     } finally {
       state.setImportingTargetPluginId(null);
     }

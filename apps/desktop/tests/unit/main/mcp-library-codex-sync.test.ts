@@ -436,7 +436,12 @@ describe("CoreMcpLibraryService", () => {
     );
 
     expect(byId.roo).toBeUndefined();
-    expect(byId.grok).toBeUndefined();
+    expect(byId.grok).toMatchObject({
+      target: "grok",
+      platformId: "grok",
+      scope: "global",
+      path: "/Users/test/.grok/config.toml",
+    });
     expect(byId.reasonix).toBeUndefined();
     expect(byId.kimi.path).toBe("/Users/test/.kimi/mcp.json");
     expect(byId.augment.path).toBe("/Users/test/.augment/settings.json");

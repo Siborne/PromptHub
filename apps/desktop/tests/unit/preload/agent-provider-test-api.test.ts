@@ -30,6 +30,30 @@ describe("Agent Provider test preload API", () => {
     );
   });
 
+  it("routes current-native tests without inventing a persisted profile id", async () => {
+    const [{ agentApi }, { IPC_CHANNELS }] = await Promise.all([
+      import("../../../src/preload/api/agent"),
+      import("@prompthub/shared/constants/ipc-channels"),
+    ]);
+
+    await agentApi.testCurrentProviderConnection({ agentId: "codex" });
+    await agentApi.testCurrentProviderModel({
+      agentId: "codex",
+      requestId: "native-request-1234",
+    });
+
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      1,
+      IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_CONNECTION,
+      { agentId: "codex" },
+    );
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      2,
+      IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_MODEL,
+      { agentId: "codex", requestId: "native-request-1234" },
+    );
+  });
+
   it("routes cancellable model tests without reshaping their identity", async () => {
     const [{ agentApi }, { IPC_CHANNELS }] = await Promise.all([
       import("../../../src/preload/api/agent"),

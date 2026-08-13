@@ -38,9 +38,17 @@ agent reset <id|name|query>
 agent delete <custom-id|name|query>
 agent identity get
 agent identity set --name codex|chatgpt [--icon codex|chatgpt]
+agent config list <id|name|query> [--include-disabled]
+agent config read <id|name|query> <relative-path> [--include-disabled]
 ```
 
 `get/list` expose capability truth; they do not synthesize deep Provider/session/usage support. Deep Electron-only adapters remain a recorded follow-up boundary.
+
+## `DES-CLI-AGENT-005`: Read-Only Native Config Adapter
+
+The command resolves an Agent from the shared inventory, then builds `AgentConfigContext` from `paths.root` and `paths.configFileRelativePaths`. It delegates discovery and reads to `createAgentUserConfigFileService`, which owns bounded traversal, editable-extension policy, exclusion rules, symlink rejection, file-size limits, revision hashing, and secret redaction.
+
+The CLI does not expose the service's write method. A rejecting backup callback is supplied only to satisfy the shared service construction contract and must remain unreachable from the read-only command surface. Native config write support requires a separate design for standalone encrypted backups and secret ownership.
 
 ## Traceability
 
@@ -50,4 +58,5 @@ agent identity set --name codex|chatgpt [--icon codex|chatgpt]
 | `FR-CLI-AGENT-002`  | `DES-CLI-AGENT-002`, `004`        | `TEST-CLI-AGENT-002`        | `T-CLI-AGENT-002`, `003` |
 | `FR-CLI-AGENT-003`  | `DES-CLI-AGENT-002`, `003`, `004` | `TEST-CLI-AGENT-002`, `003` | `T-CLI-AGENT-001`..`003` |
 | `FR-CLI-AGENT-004`  | `DES-CLI-AGENT-003`, `004`        | `TEST-CLI-AGENT-002`        | `T-CLI-AGENT-002`, `003` |
-| `NFR-CLI-AGENT-001` | `DES-CLI-AGENT-001`..`004`        | `TEST-CLI-AGENT-004`        | `T-CLI-AGENT-004`        |
+| `FR-CLI-AGENT-005`  | `DES-CLI-AGENT-004`, `005`        | `TEST-CLI-AGENT-005`        | `T-CLI-AGENT-005`, `006` |
+| `NFR-CLI-AGENT-001` | `DES-CLI-AGENT-001`..`005`        | `TEST-CLI-AGENT-004`, `005` | `T-CLI-AGENT-004`..`006` |

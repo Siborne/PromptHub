@@ -30,7 +30,7 @@ describe("Grok Build Provider Profile form", () => {
     const view = renderDialog();
     await view.render;
     const dialog = screen.getByRole("region", {
-      name: "Add provider profile",
+      name: "Add provider",
     });
 
     for (const [label, value] of [
@@ -47,7 +47,7 @@ describe("Grok Build Provider Profile form", () => {
       });
     }
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     expect(
@@ -62,14 +62,14 @@ describe("Grok Build Provider Profile form", () => {
     const view = renderDialog();
     await view.render;
     const dialog = screen.getByRole("region", {
-      name: "Add provider profile",
+      name: "Add provider",
     });
 
-    expect(within(dialog).getByLabelText("Provider kind")).toHaveValue(
-      "openai-compatible",
+    expect(within(dialog).getByLabelText("Provider kind")).toHaveTextContent(
+      "OpenAI Compatible",
     );
-    expect(within(dialog).getByLabelText("Protocol")).toHaveValue(
-      "openai-chat",
+    expect(within(dialog).getByLabelText("Protocol")).toHaveTextContent(
+      "OpenAI Chat",
     );
     expect(
       within(dialog).queryByLabelText("Credential (write-only)"),
@@ -89,7 +89,7 @@ describe("Grok Build Provider Profile form", () => {
       });
     }
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -153,7 +153,7 @@ describe("Grok Build Provider Profile form", () => {
     const view = renderDialog(imported);
     await view.render;
     const dialog = screen.getByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
 
     expect(
@@ -162,7 +162,7 @@ describe("Grok Build Provider Profile form", () => {
     expect(within(dialog).getByLabelText("Provider kind")).toBeDisabled();
     expect(within(dialog).getByLabelText("Provider ID")).toBeDisabled();
     expect(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     ).toBeDisabled();
     expect(view.onUpdate).not.toHaveBeenCalled();
   });

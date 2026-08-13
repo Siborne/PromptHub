@@ -1,4 +1,10 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { expect, vi } from "vitest";
 
 import type {
@@ -8,9 +14,19 @@ import type {
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
 import { AgentProviderProfileWorkbench } from "../../../src/renderer/components/agent/AgentProviderProfileWorkbench";
+import { ToastProvider } from "../../../src/renderer/components/ui";
 import { useAgentProviderStore } from "../../../src/renderer/stores/agent-provider.store";
 import { renderWithI18n } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
+
+export function chooseProviderFormOption(
+  scope: HTMLElement,
+  label: string,
+  option: string,
+): void {
+  fireEvent.click(within(scope).getByRole("button", { name: label }));
+  fireEvent.click(screen.getByRole("option", { name: option }));
+}
 
 export function createAgent(id = "claude"): ManagedAgentSummary {
   return {
@@ -205,7 +221,9 @@ export async function renderWorkbench(agent = createAgent()) {
   }
 
   const view = await renderWithI18n(
-    <AgentProviderProfileWorkbench agent={agent} />,
+    <ToastProvider>
+      <AgentProviderProfileWorkbench agent={agent} />
+    </ToastProvider>,
   );
   await ready;
   await act(async () => {
@@ -213,7 +231,7 @@ export async function renderWorkbench(agent = createAgent()) {
     await finished;
     await Promise.resolve();
   });
-  await screen.findByRole("navigation", { name: "Provider profiles" });
+  await screen.findByRole("navigation", { name: "Providers" });
   await waitFor(() =>
     expect(useAgentProviderStore.getState().busyAction).toBeNull(),
   );

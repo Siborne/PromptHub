@@ -1180,7 +1180,7 @@ ipcMain.handle("data:dismissRecovery", () => {
   return { success: true };
 });
 
-registerPortableSnapshotIPC(scheduleAppRelaunch);
+registerPortableSnapshotIPC(isE2E ? () => undefined : scheduleAppRelaunch);
 
 /**
  * Build the list of candidate paths where a previous database might reside.
@@ -1720,6 +1720,14 @@ app.whenReady().then(async () => {
       const authorityStartup = await ensureCanonicalStorageAuthorityOnStartup({
         activeRoot,
         sourceDatabasePath: getDatabasePath(),
+        prepareSourceDatabase: () => {
+          const sourceDatabase = initDatabase();
+          try {
+            applyE2ESeed(sourceDatabase);
+          } finally {
+            closeDatabase();
+          }
+        },
         deviceId: rendererPersistence.selfHostedDeviceId ?? undefined,
         persistExtractedMcpSecrets: (secrets) =>
           createMcpResourceSecretStore({

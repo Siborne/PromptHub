@@ -70,6 +70,40 @@ function mappings(model = "claude-sonnet-4-6"): AgentProviderModelMapping[] {
   ];
 }
 
+function roleMappings(): AgentProviderModelMapping[] {
+  return [
+    ...mappings(),
+    {
+      id: "mapping-sonnet",
+      providerProfileId: "profile-claude",
+      routeKey: "sonnet",
+      modelId: "claude-sonnet-4-6",
+      parameters: {},
+    },
+    {
+      id: "mapping-opus",
+      providerProfileId: "profile-claude",
+      routeKey: "opus",
+      modelId: "claude-opus-4-6",
+      parameters: {},
+    },
+    {
+      id: "mapping-haiku",
+      providerProfileId: "profile-claude",
+      routeKey: "haiku",
+      modelId: "claude-haiku-4-5",
+      parameters: {},
+    },
+    {
+      id: "mapping-subagent",
+      providerProfileId: "profile-claude",
+      routeKey: "subagent",
+      modelId: "claude-haiku-4-5",
+      parameters: {},
+    },
+  ];
+}
+
 function secretStore(secret: string | null = "secret-token") {
   return {
     read: vi.fn().mockResolvedValue(secret),
@@ -97,6 +131,106 @@ function options(root: string) {
 }
 
 describe("Claude Code unified Provider Profile adapter", () => {
+  it("round-trips Claude role models and clears stale managed routes", async () => {
+    const root = await temporaryRoot();
+    const targetPath = path.join(root, "settings.json");
+    await fs.writeFile(
+      targetPath,
+      JSON.stringify({
+        model: "old-primary",
+        permissions: { allow: ["Read"] },
+        env: {
+          ANTHROPIC_DEFAULT_SONNET_MODEL: "old-sonnet",
+          ANTHROPIC_DEFAULT_OPUS_MODEL: "old-opus",
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: "old-haiku",
+          CLAUDE_CODE_SUBAGENT_MODEL: "old-subagent",
+          UNRELATED_ENV: "preserve-me",
+        },
+      }),
+    );
+    const adapter = createAgentClaudeProviderAdapter(options(root));
+    const baseline = await adapter.inspect(context(root));
+    expect(baseline.values).toMatchObject({
+      model: "old-primary",
+      sonnetModel: "old-sonnet",
+      opusModel: "old-opus",
+      haikuModel: "old-haiku",
+      subagentModel: "old-subagent",
+    });
+
+    const routeInput = {
+      context: context(root),
+      profile: profile(),
+      modelMappings: roleMappings(),
+      baseline,
+    };
+    const routePlan = await adapter.planActivation(routeInput);
+    expect(routePlan.canApply).toBe(true);
+    const routeReceipt = await adapter.apply(context(root), routePlan, {
+      profile: routeInput.profile,
+      modelMappings: routeInput.modelMappings,
+    });
+    const routed = JSON.parse(await fs.readFile(targetPath, "utf8"));
+    expect(routed).toMatchObject({
+      model: "claude-sonnet-4-6",
+      permissions: { allow: ["Read"] },
+      env: {
+        ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-sonnet-4-6",
+        ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-4-6",
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: "claude-haiku-4-5",
+        CLAUDE_CODE_SUBAGENT_MODEL: "claude-haiku-4-5",
+        UNRELATED_ENV: "preserve-me",
+      },
+    });
+    await expect(
+      adapter.verify(context(root), routePlan, routeReceipt),
+    ).resolves.toMatchObject({ verified: true });
+    await expect(adapter.importCurrent(context(root))).resolves.toMatchObject({
+      modelMappings: expect.arrayContaining([
+        expect.objectContaining({
+          routeKey: "primary",
+          modelId: "claude-sonnet-4-6",
+        }),
+        expect.objectContaining({
+          routeKey: "sonnet",
+          modelId: "claude-sonnet-4-6",
+        }),
+        expect.objectContaining({
+          routeKey: "opus",
+          modelId: "claude-opus-4-6",
+        }),
+        expect.objectContaining({
+          routeKey: "haiku",
+          modelId: "claude-haiku-4-5",
+        }),
+        expect.objectContaining({
+          routeKey: "subagent",
+          modelId: "claude-haiku-4-5",
+        }),
+      ]),
+    });
+
+    const primaryOnlyInput = {
+      context: context(root),
+      profile: profile(),
+      modelMappings: mappings("claude-opus-4-6"),
+      baseline: await adapter.inspect(context(root)),
+    };
+    const primaryOnlyPlan = await adapter.planActivation(primaryOnlyInput);
+    await adapter.apply(context(root), primaryOnlyPlan, {
+      profile: primaryOnlyInput.profile,
+      modelMappings: primaryOnlyInput.modelMappings,
+    });
+    const primaryOnly = JSON.parse(await fs.readFile(targetPath, "utf8"));
+    expect(primaryOnly.env.UNRELATED_ENV).toBe("preserve-me");
+    expect(primaryOnly.env).not.toHaveProperty(
+      "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    );
+    expect(primaryOnly.env).not.toHaveProperty("ANTHROPIC_DEFAULT_OPUS_MODEL");
+    expect(primaryOnly.env).not.toHaveProperty("ANTHROPIC_DEFAULT_HAIKU_MODEL");
+    expect(primaryOnly.env).not.toHaveProperty("CLAUDE_CODE_SUBAGENT_MODEL");
+  });
+
   it("imports settings.json without exposing native credentials or unknown fields", async () => {
     const root = await temporaryRoot();
     await fs.writeFile(
@@ -573,6 +707,33 @@ describe("Claude Code unified Provider Profile adapter", () => {
             routeKey: "secondary",
             modelId: "other",
             parameters: {},
+          },
+        ],
+        reason: "primary-model-required",
+      },
+      {
+        candidate: profile(),
+        mappings: [roleMappings()[0]!, roleMappings()[1]!, roleMappings()[1]!],
+        reason: "primary-model-required",
+      },
+      {
+        candidate: profile(),
+        mappings: [
+          roleMappings()[0]!,
+          {
+            ...roleMappings()[1]!,
+            parameters: { temperature: 0 },
+          },
+        ],
+        reason: "primary-model-required",
+      },
+      {
+        candidate: profile(),
+        mappings: [
+          roleMappings()[0]!,
+          {
+            ...roleMappings()[1]!,
+            modelId: `bad${String.fromCharCode(0)}model`,
           },
         ],
         reason: "primary-model-required",

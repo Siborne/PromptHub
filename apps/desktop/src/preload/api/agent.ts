@@ -5,9 +5,6 @@ import type {
   AgentLaunchResult,
   AgentManagementBackup,
   AgentManagementBackupRestoreResult,
-  AgentCliDiagnostic,
-  AgentCliLifecyclePlan,
-  AgentCliLifecycleResult,
   AgentAppearanceOverview,
   AgentDesktopThemeSummary,
   AgentDefinitionListRequest,
@@ -27,7 +24,9 @@ import type {
   AgentProviderActivationPlan,
   AgentProviderConnectionTestRequest,
   AgentProviderConnectionTestResult,
+  AgentProviderCurrentConnectionTestRequest,
   AgentProviderCurrentState,
+  AgentProviderCurrentModelTestRequest,
   AgentProviderImportCurrentRequest,
   AgentProviderImportPreview,
   AgentProviderModelTestCancelRequest,
@@ -58,6 +57,9 @@ import type {
   AgentConversationResumeRequest,
   ContinueAgentConversationRequest,
   AgentUsageQuota,
+  AgentCodexAccountSummary,
+  AgentCodexAccountActivationResult,
+  ImportAgentCodexAccountRequest,
   AgentUsageQueryOptions,
   SkillLocalFileEntry,
   SkillLocalFileTreeEntry,
@@ -74,12 +76,6 @@ import type {
 export const agentApi = {
   launch: (agentId: string): Promise<AgentLaunchResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_LAUNCH, agentId),
-  diagnoseCli: (agentId: string): Promise<AgentCliDiagnostic> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CLI_DIAGNOSE, agentId),
-  planCliUpdate: (agentId: string): Promise<AgentCliLifecyclePlan> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CLI_UPDATE_PLAN, agentId),
-  applyCliUpdate: (planId: string): Promise<AgentCliLifecycleResult> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CLI_UPDATE_APPLY, planId),
   listConfigFiles: (agentId: string): Promise<SkillLocalFileTreeEntry[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_CONFIG_FILES_LIST, agentId),
   readConfigFile: (
@@ -260,6 +256,20 @@ export const agentApi = {
     options?: AgentUsageQueryOptions,
   ): Promise<AgentUsageQuota> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_USAGE_GET, agentId, options),
+  listCodexAccounts: (): Promise<AgentCodexAccountSummary[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CODEX_ACCOUNTS_LIST),
+  saveCurrentCodexAccount: (label: string): Promise<AgentCodexAccountSummary> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CODEX_ACCOUNT_SAVE_CURRENT, label),
+  importCodexAccount: (
+    request: ImportAgentCodexAccountRequest,
+  ): Promise<AgentCodexAccountSummary> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CODEX_ACCOUNT_IMPORT, request),
+  activateCodexAccount: (
+    id: string,
+  ): Promise<AgentCodexAccountActivationResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CODEX_ACCOUNT_ACTIVATE, id),
+  deleteCodexAccount: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_CODEX_ACCOUNT_DELETE, id),
   listProviderProfiles: (options?: {
     platformId?: string;
     includeArchived?: boolean;
@@ -337,6 +347,17 @@ export const agentApi = {
     request: AgentProviderConnectionTestRequest,
   ): Promise<AgentProviderConnectionTestResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_TEST_CONNECTION, request),
+  testCurrentProviderConnection: (
+    request: AgentProviderCurrentConnectionTestRequest,
+  ): Promise<AgentProviderConnectionTestResult> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_CONNECTION,
+      request,
+    ),
+  testCurrentProviderModel: (
+    request: AgentProviderCurrentModelTestRequest,
+  ): Promise<AgentProviderModelTestResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_MODEL, request),
   testProviderModel: (
     request: AgentProviderModelTestRequest,
   ): Promise<AgentProviderModelTestResult> =>

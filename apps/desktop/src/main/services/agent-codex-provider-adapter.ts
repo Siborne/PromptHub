@@ -48,7 +48,18 @@ import {
   testOpenAICompatibleProviderModel,
   type OpenAICompatibleModelTestInput,
 } from "./agent-provider-model-test";
-import { setTopLevelString, upsertTableEntries } from "./codex-toml-editor";
+import {
+  testCodexNativeProviderConnection,
+  testCodexNativeProviderModel,
+  type CodexNativeConnectionInput,
+  type CodexNativeModelTestInput,
+} from "./agent-codex-native-provider-probe";
+import {
+  removeTopLevelScalar,
+  setTopLevelNumber,
+  setTopLevelString,
+  upsertTableEntries,
+} from "./codex-toml-editor";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -64,6 +75,14 @@ interface CodexProviderAdapterOptions {
   >;
   testModel?: (
     input: OpenAICompatibleModelTestInput,
+  ) => Promise<Omit<AgentProviderModelTestResult, "platformId" | "profileId">>;
+  testNativeConnection?: (
+    input: CodexNativeConnectionInput,
+  ) => Promise<
+    Omit<AgentProviderConnectionTestResult, "platformId" | "profileId">
+  >;
+  testNativeModel?: (
+    input: CodexNativeModelTestInput,
   ) => Promise<Omit<AgentProviderModelTestResult, "platformId" | "profileId">>;
   now?: () => number;
   hooks?: {
@@ -84,12 +103,22 @@ interface DesiredCodexProvider {
   endpoint: string | null;
   protocol: "chat" | "responses" | "platform-native";
   model: string;
+  reasoningEffort: CodexReasoningEffort | null;
+  contextWindow: number | null;
   envKey: string | null;
   secret: string | null;
   credentialStatus: "configured" | "environment" | "platform-managed";
 }
 
-const ADAPTER_VERSION = "codex-provider-profile-v1";
+type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+
+interface ParsedCodexModelMapping {
+  modelId: string;
+  reasoningEffort: CodexReasoningEffort | null;
+  contextWindow: number | null;
+}
+
+const ADAPTER_VERSION = "codex-provider-profile-v2";
 const CONFIG_FILE_NAME = "config.toml";
 const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9-_]*$/;
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -97,6 +126,14 @@ const RESERVED_CUSTOM_PROVIDER_IDS = new Set(["openai", "ollama", "lmstudio"]);
 const MAX_PROVIDER_ID_LENGTH = 64;
 const MAX_NAME_LENGTH = 80;
 const MAX_MODEL_LENGTH = 512;
+const MAX_CONTEXT_WINDOW = 10_000_000;
+const REASONING_EFFORTS = new Set<CodexReasoningEffort>([
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+]);
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -110,6 +147,17 @@ function getRecord(value: unknown, key: string): JsonRecord | undefined {
 function getString(value: unknown, key: string): string | null {
   if (!isRecord(value) || typeof value[key] !== "string") return null;
   return (value[key] as string).trim() || null;
+}
+
+function getPositiveInteger(value: unknown, key: string): number | null {
+  if (!isRecord(value)) return null;
+  const candidate = value[key];
+  return typeof candidate === "number" &&
+    Number.isSafeInteger(candidate) &&
+    candidate > 0 &&
+    candidate <= MAX_CONTEXT_WINDOW
+    ? candidate
+    : null;
 }
 
 function parseConfig(raw: string): JsonRecord {
@@ -174,6 +222,8 @@ function comparableState(
     protocol,
     model:
       getString(active.profile, "model") ?? getString(data, "model") ?? null,
+    reasoningEffort: getString(data, "model_reasoning_effort"),
+    contextWindow: getPositiveInteger(data, "model_context_window"),
     credentialStatus:
       active.providerId === "openai" && !active.provider
         ? "platform-managed"
@@ -262,19 +312,39 @@ function normalizedEndpoint(value: string | null): string | null {
 
 function primaryMapping(
   mappings: AgentProviderModelMapping[],
-): AgentProviderModelMapping | null {
+): ParsedCodexModelMapping | null {
   const primary = mappings.filter((mapping) => mapping.routeKey === "primary");
   if (primary.length !== 1) return null;
+  if (mappings.some((mapping) => mapping.routeKey !== "primary")) return null;
+  const parameters = primary[0].parameters;
   if (
-    mappings.some(
-      (mapping) =>
-        mapping.routeKey !== "primary" ||
-        Object.keys(mapping.parameters).length > 0,
+    Object.keys(parameters).some(
+      (key) => key !== "reasoningEffort" && key !== "contextWindow",
     )
-  ) {
+  )
     return null;
-  }
-  return primary[0];
+  const reasoningEffort = parameters.reasoningEffort;
+  if (
+    reasoningEffort !== undefined &&
+    (typeof reasoningEffort !== "string" ||
+      !REASONING_EFFORTS.has(reasoningEffort as CodexReasoningEffort))
+  )
+    return null;
+  const contextWindow = parameters.contextWindow;
+  if (
+    contextWindow !== undefined &&
+    (typeof contextWindow !== "number" ||
+      !Number.isSafeInteger(contextWindow) ||
+      contextWindow < 1 ||
+      contextWindow > MAX_CONTEXT_WINDOW)
+  )
+    return null;
+  return {
+    modelId: primary[0].modelId,
+    reasoningEffort:
+      (reasoningEffort as CodexReasoningEffort | undefined) ?? null,
+    contextWindow: (contextWindow as number | undefined) ?? null,
+  };
 }
 
 function publicDesiredValues(
@@ -285,6 +355,8 @@ function publicDesiredValues(
     endpoint: desired.endpoint,
     protocol: desired.protocol,
     model: desired.model,
+    reasoningEffort: desired.reasoningEffort,
+    contextWindow: desired.contextWindow,
     credentialStatus: desired.credentialStatus,
   };
 }
@@ -313,6 +385,13 @@ async function resolveDesired(
     /[\u0000-\u001f\u007f]/.test(mapping.modelId)
   ) {
     blockedReasons.push("primary-model-invalid");
+  }
+  if (
+    mapping?.reasoningEffort &&
+    protocol !== "responses" &&
+    !(providerId === "openai" && protocol === "platform-native")
+  ) {
+    blockedReasons.push("model-reasoning-effort-unsupported");
   }
   if (
     !input.profile.name.trim() ||
@@ -378,6 +457,8 @@ async function resolveDesired(
       endpoint,
       protocol,
       model: mapping.modelId.trim(),
+      reasoningEffort: mapping.reasoningEffort,
+      contextWindow: mapping.contextWindow,
       envKey,
       secret,
       credentialStatus:
@@ -423,6 +504,12 @@ function renderConfig(
     desired.providerId,
   );
   next = setTopLevelString(next, "model", desired.model);
+  next = desired.reasoningEffort
+    ? setTopLevelString(next, "model_reasoning_effort", desired.reasoningEffort)
+    : removeTopLevelScalar(next, "model_reasoning_effort");
+  next = desired.contextWindow
+    ? setTopLevelNumber(next, "model_context_window", desired.contextWindow)
+    : removeTopLevelScalar(next, "model_context_window");
   if (desired.providerId === "openai") return next;
 
   const set: Array<[string, string]> = [
@@ -472,11 +559,15 @@ export function createAgentCodexProviderAdapter(
   const testConnection =
     options.testConnection ?? testOpenAICompatibleProviderConnection;
   const testModel = options.testModel ?? testOpenAICompatibleProviderModel;
+  const testNativeConnection =
+    options.testNativeConnection ?? testCodexNativeProviderConnection;
+  const testNativeModel =
+    options.testNativeModel ?? testCodexNativeProviderModel;
 
   return {
     platformId: "codex",
     version: ADAPTER_VERSION,
-    async testConnection(_context, target) {
+    async testConnection(context, target) {
       if (target.profile.platformId !== "codex") {
         throw new Error("AGENT_PROVIDER_PROFILE_PLATFORM_MISMATCH");
       }
@@ -510,20 +601,13 @@ export function createAgentCodexProviderAdapter(
       const credential =
         desired.secret ?? (desired.envKey ? env[desired.envKey] : null) ?? null;
       if (desired.protocol === "platform-native") {
-        const timestamp = now();
         return {
           platformId: "codex",
           profileId: target.profile.id,
-          protocol: desired.protocol,
-          endpointOrigin: null,
-          model: desired.model,
-          status: "unsupported",
-          startedAt: timestamp,
-          finishedAt: timestamp,
-          totalMs: 0,
-          retryCount: 0,
-          modelCount: null,
-          modelAvailable: null,
+          ...(await testNativeConnection({
+            codexHome: path.dirname(requireContext(context)),
+            model: desired.model,
+          })),
         };
       }
       return {
@@ -537,7 +621,7 @@ export function createAgentCodexProviderAdapter(
         })),
       };
     },
-    async testModel(_context, target, signal) {
+    async testModel(context, target, signal) {
       if (target.profile.platformId !== "codex") {
         throw new Error("AGENT_PROVIDER_PROFILE_PLATFORM_MISMATCH");
       }
@@ -573,22 +657,14 @@ export function createAgentCodexProviderAdapter(
       const credential =
         desired.secret ?? (desired.envKey ? env[desired.envKey] : null) ?? null;
       if (desired.protocol === "platform-native") {
-        const timestamp = now();
         return {
           platformId: "codex",
           profileId: target.profile.id,
-          protocol: desired.protocol,
-          endpointOrigin: null,
-          model: desired.model,
-          status: "unsupported",
-          startedAt: timestamp,
-          finishedAt: timestamp,
-          totalMs: 0,
-          firstTokenMs: null,
-          retryCount: 0,
-          inputTokens: null,
-          outputTokens: null,
-          outputPreview: null,
+          ...(await testNativeModel({
+            codexHome: path.dirname(requireContext(context)),
+            model: desired.model,
+            signal,
+          })),
         };
       }
       return {
@@ -617,6 +693,11 @@ export function createAgentCodexProviderAdapter(
       const envKey = getString(active.provider, "env_key");
       const model =
         getString(active.profile, "model") ?? getString(native.data, "model");
+      const reasoningEffort = getString(native.data, "model_reasoning_effort");
+      const contextWindow = getPositiveInteger(
+        native.data,
+        "model_context_window",
+      );
       return {
         state: native.state,
         profile: {
@@ -636,7 +717,19 @@ export function createAgentCodexProviderAdapter(
           source: "native-import",
         },
         modelMappings: model
-          ? [{ routeKey: "primary", modelId: model, parameters: {} }]
+          ? [
+              {
+                routeKey: "primary",
+                modelId: model,
+                parameters: {
+                  ...(reasoningEffort &&
+                  REASONING_EFFORTS.has(reasoningEffort as CodexReasoningEffort)
+                    ? { reasoningEffort }
+                    : {}),
+                  ...(contextWindow ? { contextWindow } : {}),
+                },
+              },
+            ]
           : [],
         warnings: inlineCredential ? ["native-credential-not-imported"] : [],
       };
@@ -664,6 +757,8 @@ export function createAgentCodexProviderAdapter(
           "endpoint",
           "protocol",
           "model",
+          "reasoningEffort",
+          "contextWindow",
           "credentialStatus",
         ],
         blockedReasons: resolved.blockedReasons,

@@ -44,6 +44,143 @@ export function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isPluginDownloadNetworkError(message: string): boolean {
+  return (
+    /CONNECT tunnel failed/i.test(message) ||
+    /could not resolve host/i.test(message) ||
+    /failed to connect/i.test(message) ||
+    /network is unreachable/i.test(message) ||
+    /connection (?:reset|timed out)/i.test(message) ||
+    /proxy(?:connect| connection)?[^.]{0,80}(?:502|503|504)/i.test(message)
+  );
+}
+
+function isPluginSourceAccessError(message: string): boolean {
+  return /authentication failed|access denied|could not read username|repository .*not found|fatal: repository|401 unauthorized|403 forbidden|MISSING_SOURCE|INVALID_SOURCE|来源不存在|source (?:is )?(?:missing|invalid)/i.test(
+    message,
+  );
+}
+
+function isPluginPackageValidationError(message: string): boolean {
+  return /MISSING_MANIFEST|INVALID_(?:JSON|PATH|PACKAGE)|PACKAGE_TOO_LARGE|manifest (?:is )?invalid|manifest.*(?:not found|missing|regular file|exceeds)|没有找到.*manifest|下载后没有找到|不是 JSON|路径不安全|unsafe path|package too large/i.test(
+    message,
+  );
+}
+
+function sanitizePluginInstallReason(message: string): string {
+  return message
+    .replace(/^Error invoking remote method ['"][^'"]+['"]:\s*/i, "")
+    .replace(/^CorePluginError:\s*/i, "")
+    .replace(/https?:\/\/\S+/gi, "[Plugin source]")
+    .replace(/(?:\/Users\/|\/home\/|[A-Za-z]:\\).*$/g, "[local path]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+
+type PluginInstallFailureKind =
+  | "duplicate"
+  | "git"
+  | "network"
+  | "package"
+  | "source"
+  | "storage"
+  | "unexpected";
+
+function classifyPluginInstallFailure(
+  message: string,
+): PluginInstallFailureKind {
+  if (isPluginDownloadNetworkError(message)) return "network";
+  if (
+    /DUPLICATE_PLUGIN|Plugin 已(?:安装|导入)|already installed/i.test(message)
+  ) {
+    return "duplicate";
+  }
+  if (
+    /ENOSPC|no space left|read-only file system|EACCES|EPERM/i.test(message)
+  ) {
+    return "storage";
+  }
+  if (isPluginSourceAccessError(message)) return "source";
+  if (isPluginPackageValidationError(message)) return "package";
+  if (
+    /GIT_FAILED|Git 命令执行失败|Git command failed|spawn git/i.test(message)
+  ) {
+    return "git";
+  }
+  return "unexpected";
+}
+
+const PLUGIN_INSTALL_ERROR_COPY = {
+  duplicate: [
+    "plugin.installDuplicateError",
+    "This Plugin is already installed. Open My Plugins to manage it.",
+  ],
+  git: [
+    "plugin.installGitError",
+    "PromptHub could not run Git to download the Plugin. Check that Git is available and the source can be reached.",
+  ],
+  network: [
+    "plugin.installNetworkError",
+    "Could not download the Plugin. Check the proxy mode in Settings > Network Settings, then try again.",
+  ],
+  package: [
+    "plugin.installPackageError",
+    "The Plugin package failed validation. Its manifest, size, or file paths are invalid; choose another source or report the store item.",
+  ],
+  source: [
+    "plugin.installSourceError",
+    "Plugin source is unavailable or access was denied. Check the repository address and permissions, then try again.",
+  ],
+  storage: [
+    "plugin.installStorageError",
+    "PromptHub could not save the Plugin locally. Check disk space and folder permissions, then try again.",
+  ],
+} as const;
+
+export function getPluginInstallErrorMessage(
+  error: unknown,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  const message = getErrorMessage(error);
+  const kind = classifyPluginInstallFailure(message);
+  if (kind !== "unexpected") {
+    const [key, defaultValue] = PLUGIN_INSTALL_ERROR_COPY[kind];
+    return t(key, { defaultValue });
+  }
+  return t("plugin.installUnexpectedError", {
+    defaultValue:
+      "Could not complete this Plugin operation. Reason: {{reason}}. Review the reason and try again.",
+    reason:
+      sanitizePluginInstallReason(message) || t("common.unknown", "Unknown"),
+  });
+}
+
+export function getPluginBatchInstallResultMessage({
+  failed,
+  firstFailure,
+  succeeded,
+  t,
+}: {
+  failed: number;
+  firstFailure: string;
+  succeeded: number;
+  t: ReturnType<typeof useTranslation>["t"];
+}): string {
+  const summary = t("plugin.batchInstallResult", {
+    defaultValue:
+      "Batch install finished: {{succeeded}} succeeded, {{failed}} failed",
+    failed,
+    succeeded,
+  });
+  if (!firstFailure) return summary;
+  return t("plugin.batchInstallFirstFailure", {
+    defaultValue: "{{summary}}. First failure: {{reason}}",
+    reason: firstFailure,
+    summary,
+  });
+}
+
 export function getPluginLibraryGalleryGridStyle(
   columns: PluginLibraryGalleryColumnMode,
 ): CSSProperties {

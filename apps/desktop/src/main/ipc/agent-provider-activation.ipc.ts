@@ -15,6 +15,13 @@ import type {
 } from "@prompthub/shared";
 
 interface AgentProviderActivationOperations {
+  testCurrentConnection(input: {
+    context: AgentProviderAdapterContext;
+  }): Promise<AgentProviderConnectionTestResult>;
+  testCurrentModel(
+    input: { context: AgentProviderAdapterContext },
+    signal: AbortSignal,
+  ): Promise<AgentProviderModelTestResult>;
   testConnection(input: {
     context: AgentProviderAdapterContext;
     profileId: string;
@@ -81,6 +88,21 @@ function readModelTestRequest(value: unknown): AgentProviderModelTestRequest {
   return {
     agentId: requireText(request.agentId),
     profileId: requireText(request.profileId),
+    requestId,
+  };
+}
+
+function readCurrentModelTestRequest(value: unknown): {
+  agentId: string;
+  requestId: string;
+} {
+  const request = requireRecord(value);
+  const requestId = requireText(request.requestId);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(requestId)) {
+    throw new Error("AGENT_PROVIDER_REQUEST_INVALID");
+  }
+  return {
+    agentId: requireText(request.agentId),
     requestId,
   };
 }
@@ -169,6 +191,50 @@ export function registerAgentProviderActivationIPC(
   resolveContext: ResolveAgentProviderContext,
 ): void {
   const activeModelTests = new Map<string, AbortController>();
+  const runModelTest = async <T>(
+    event: unknown,
+    requestId: string,
+    operation: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> => {
+    const key = `${senderId(event)}:${requestId}`;
+    if (activeModelTests.has(key)) {
+      throw new Error("AGENT_PROVIDER_MODEL_TEST_IN_PROGRESS");
+    }
+    const controller = new AbortController();
+    const unbindSenderDestroyed = bindSenderDestroyed(event, () =>
+      controller.abort("renderer-destroyed"),
+    );
+    activeModelTests.set(key, controller);
+    try {
+      return await operation(controller.signal);
+    } finally {
+      unbindSenderDestroyed();
+      activeModelTests.delete(key);
+    }
+  };
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_CONNECTION,
+    async (_, input: unknown) =>
+      invoke(async () => {
+        const request = readImportRequest(input);
+        return service.testCurrentConnection({
+          context: resolveContext(request.agentId),
+        });
+      }),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_MODEL,
+    async (event, input: unknown) =>
+      invoke(async () => {
+        const request = readCurrentModelTestRequest(input);
+        return runModelTest(event, request.requestId, (signal) =>
+          service.testCurrentModel(
+            { context: resolveContext(request.agentId) },
+            signal,
+          ),
+        );
+      }),
+  );
   ipcMain.handle(
     IPC_CHANNELS.AGENT_PROVIDER_TEST_CONNECTION,
     async (_, input: unknown) =>
@@ -185,27 +251,15 @@ export function registerAgentProviderActivationIPC(
     async (event, input: unknown) =>
       invoke(async () => {
         const request = readModelTestRequest(input);
-        const key = `${senderId(event)}:${request.requestId}`;
-        if (activeModelTests.has(key)) {
-          throw new Error("AGENT_PROVIDER_MODEL_TEST_IN_PROGRESS");
-        }
-        const controller = new AbortController();
-        const unbindSenderDestroyed = bindSenderDestroyed(event, () =>
-          controller.abort("renderer-destroyed"),
-        );
-        activeModelTests.set(key, controller);
-        try {
-          return await service.testModel(
+        return runModelTest(event, request.requestId, (signal) =>
+          service.testModel(
             {
               context: resolveContext(request.agentId),
               profileId: request.profileId,
             },
-            controller.signal,
-          );
-        } finally {
-          unbindSenderDestroyed();
-          activeModelTests.delete(key);
-        }
+            signal,
+          ),
+        );
       }),
   );
   ipcMain.handle(

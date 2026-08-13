@@ -7,7 +7,7 @@ import type {
 import { usePluginStore } from "../../stores/plugin.store";
 import { useToast } from "../ui/Toast";
 import {
-  getErrorMessage,
+  getPluginInstallErrorMessage,
   normalizeDroppedPluginPath,
 } from "./plugin-manager-utils";
 
@@ -67,7 +67,7 @@ export function usePluginSourceImport({
         "success",
       );
     } catch (error) {
-      showToast(getErrorMessage(error), "error");
+      showToast(getPluginInstallErrorMessage(error, t), "error");
     } finally {
       setIsImportingLocalPlugin(false);
     }
@@ -116,7 +116,7 @@ export function usePluginSourceImport({
         "success",
       );
     } catch (error) {
-      showToast(getErrorMessage(error), "error");
+      showToast(getPluginInstallErrorMessage(error, t), "error");
     } finally {
       setIsImportingLocalPlugin(false);
     }
@@ -162,7 +162,7 @@ export function usePluginSourceImport({
       setSourceImportPreview({ preview, request });
       setIsSourceImportOpen(false);
     } catch (error) {
-      showToast(getErrorMessage(error), "error");
+      showToast(getPluginInstallErrorMessage(error, t), "error");
     } finally {
       setIsPreviewingSourcePlugin(false);
     }
@@ -195,7 +195,7 @@ export function usePluginSourceImport({
         "success",
       );
     } catch (error) {
-      showToast(getErrorMessage(error), "error");
+      showToast(getPluginInstallErrorMessage(error, t), "error");
     } finally {
       setIsImportingSourcePlugin(false);
     }

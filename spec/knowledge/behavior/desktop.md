@@ -47,8 +47,10 @@
 
 ### 5.1 Agent Provider And Model Configuration
 
-- Agent 的 Provider & Model 页面必须复用同一套 Profile workbench 布局和 normalized model contract；平台差异只能存在于 main-process native adapter，不得为每个 Agent 复制 renderer 页面。
-- 共享 Provider 侧栏的“导入当前配置”和“从 PromptHub 导入”必须同时显示图标与本地化文字，不能依赖用户猜测图标；固定宽度侧栏允许纵向滚动，但列表行、内边距和 focus state 不得制造横向滚动条。
+- Agent 的 Provider & Model 页面必须复用同一套供应商 workbench 布局和 normalized model contract；平台差异只能存在于 main-process native adapter，不得为每个 Agent 复制 renderer 页面。
+- 用户侧统一使用“供应商”术语；内部 `ProviderProfile` 类型、存储和 IPC 名称仅作为兼容合同保留，不得直接成为界面文案。
+- Agent 当前原生配置是只读投影，不得提供“导入当前配置”或“转为可编辑配置”入口。供应商侧栏保留“从 PromptHub 导入”和新增供应商操作；两者必须显示图标与本地化文字，固定宽度侧栏允许纵向滚动，但列表行、内边距和 focus state 不得制造横向滚动条。
+- 从 PromptHub 导入供应商时必须复用 Model Services 的供应商图标，并按模型标识推断模型家族图标；协议选项由 main process 计算 PromptHub 上游协议与目标 Agent 可写协议的直接交集。界面必须显示并提交所选协议，main 必须重新验证；官方 OpenAI 直连优先 Responses，第三方兼容端点优先 Chat/Completions，不得通过本地代理伪装协议转换。
 - 当前平台级 native model adapter 覆盖 Claude Code、Codex、Gemini、Antigravity、Grok、Kimi Code、OpenCode、Pi、Oh My Pi、Qwen Code、GitHub Copilot、Kiro、OpenClaw、CoPaw、AutoClaw、QClaw、Qoder 与 Hermes。`supported` 表示完整 Provider adapter，`partial` 表示只投影原生模型字段；两者都必须明确声明 capability evidence。
 - Antigravity 的 Skills/MCP root 仍是 `~/.gemini/config`，模型设置单独解析到 `~/.gemini/antigravity-cli/settings.json`。Claw family 只用于展示分组，各成员继续使用自己的 root、文件格式和安全边界，不得继承 OpenClaw adapter。
 - native model adapter 只能向 renderer 返回 model、provider、脱敏 endpoint、可用模型与 credential status；API key、token 和独立 secret store 不得进入 IPC。写入只更新模型选择字段，并使用 2 MiB 有界读取、symlink/路径 containment 校验、私有备份、并发修改检测、原子替换、语义重读和失败回滚。
@@ -187,6 +189,17 @@
 - 会话元数据索引是系统级应用设置，默认开启。支持索引的 Agent 在首个有界列表完成后自动协调 enabled 状态；五分钟内完成的 fresh index 直接复用，缺失或过期时才启动一个 per-Agent 去重的后台刷新。离开 History 不取消应用级 warmup，但 renderer window 销毁仍由 IPC lifecycle 中止。
 - 后台刷新完成时在已有列表上替换有界元数据，不得重新进入全屏 blocking loader。关闭加速后使用 live reader，不启动刷新。历史页不得显示索引开关、手动刷新或实现说明。
 - 对话分页最左侧必须提供“第一页”图标按钮，与最右侧“最新消息”按钮形成对称边界导航。位于第一页或加载中时禁用；从深页返回第一页只切换已加载的 renderer 分页，不增加 native transcript I/O。
+
+### 9.14 Agent Provider Sidebar Actions
+
+- Provider & Model 的 PromptHub 导入与新增自定义供应商必须共同位于供应商侧栏顶部，均使用加号图标；侧栏底部不得保留重复新增入口。
+- 供应商列表行和空白区域的右键菜单必须复用相同的导入与新增流程，不得复制 IPC 或持久化逻辑。Web 等不支持本地 PromptHub 导入的运行时只显示新增自定义供应商。
+
+### 9.15 Codex Official Account Switching
+
+- Codex 官方供应商继续只有一个原生 `auth.json`。PromptHub 可以在应用数据目录保存多份 main-process-only 的系统加密快照，但不得把账号数组写回 Codex 文件或改变 Codex 认证 schema。
+- 用户可保存当前登录、以 write-only 方式新增完整 `auth.json`、查看脱敏账号摘要并切换账号。切换只允许原子替换 `auth.json`，必须在成功前重读校验，失败时恢复此前原始字节；当前登录被 Codex 刷新或尚未保存时必须先更新或保留对应快照。
+- 账号管理不得返回或记录 token，不得修改 `config.toml`、供应商档案、模型、MCP、会话或其他 Codex 文件，也不得隐式联网验证。当前账号不可删除。
 
 ### 10. Renderer List Virtualization
 

@@ -10,40 +10,17 @@ vi.mock("electron", () => ({
   },
 }));
 
-describe("Agent CLI preload API", () => {
+describe("Agent CLI internal boundary", () => {
   beforeEach(() => {
     invokeMock.mockReset();
   });
 
-  it("exposes only ids for diagnostics and lifecycle operations", async () => {
-    const [{ agentApi }, { IPC_CHANNELS }] = await Promise.all([
-      import("../../../src/preload/api/agent"),
-      import("@prompthub/shared/constants/ipc-channels"),
-    ]);
+  it("does not expose CLI diagnostics or lifecycle commands to the renderer", async () => {
+    const { agentApi } = await import("../../../src/preload/api/agent");
 
-    agentApi.diagnoseCli("codex");
-    agentApi.planCliUpdate("opencode");
-    agentApi.applyCliUpdate("plan-1");
-
-    expect(invokeMock).toHaveBeenCalledWith(
-      IPC_CHANNELS.AGENT_CLI_DIAGNOSE,
-      "codex",
-    );
-    expect(invokeMock).not.toHaveBeenCalledWith(
-      IPC_CHANNELS.AGENT_CLI_DIAGNOSE,
-      expect.objectContaining({ command: expect.anything() }),
-    );
-    expect(invokeMock).toHaveBeenCalledWith(
-      IPC_CHANNELS.AGENT_CLI_UPDATE_PLAN,
-      "opencode",
-    );
-    expect(invokeMock).toHaveBeenCalledWith(
-      IPC_CHANNELS.AGENT_CLI_UPDATE_APPLY,
-      "plan-1",
-    );
-    expect(invokeMock).not.toHaveBeenCalledWith(
-      IPC_CHANNELS.AGENT_CLI_UPDATE_APPLY,
-      expect.objectContaining({ args: expect.anything() }),
-    );
+    expect(agentApi).not.toHaveProperty("diagnoseCli");
+    expect(agentApi).not.toHaveProperty("planCliUpdate");
+    expect(agentApi).not.toHaveProperty("applyCliUpdate");
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });

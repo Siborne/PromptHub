@@ -12,6 +12,7 @@ import type {
 
 const DEFAULT_MAX_PET_IMAGE_BYTES = 20 * 1024 * 1024;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const bundledThemeSeedTasks = new Map<string, Promise<void>>();
 
 interface AppearanceState {
   activeThemeId: string | null;
@@ -515,6 +516,23 @@ export class AgentAppearanceService {
   }
 
   private async seedBundledThemes(): Promise<void> {
+    const seedKey = path.resolve(this.themeDir);
+    const activeTask = bundledThemeSeedTasks.get(seedKey);
+    if (activeTask) {
+      await activeTask;
+      return;
+    }
+
+    const task = this.seedBundledThemesOnce();
+    bundledThemeSeedTasks.set(seedKey, task);
+    try {
+      await task;
+    } finally {
+      bundledThemeSeedTasks.delete(seedKey);
+    }
+  }
+
+  private async seedBundledThemesOnce(): Promise<void> {
     const sources = this.options.engine.getBundledThemeDirectories?.() ?? [];
     if (!sources.length) return;
     const marker = path.join(this.themeDir, ".dream-skin-bundled-v1");

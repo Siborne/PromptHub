@@ -869,6 +869,26 @@ export interface AgentProviderCurrentState {
   checkedAt: number;
 }
 
+export interface AgentCodexAccountSummary {
+  id: string;
+  label: string;
+  maskedAccountId: string | null;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ImportAgentCodexAccountRequest {
+  label: string;
+  /** Write-only. Main process responses must never echo this value. */
+  authJson: string;
+}
+
+export interface AgentCodexAccountActivationResult {
+  account: AgentCodexAccountSummary;
+  preservedCurrent: boolean;
+}
+
 export interface CreateAgentProviderProfileRequest {
   profile: Omit<CreateAgentProviderProfileInput, "secretRef">;
   modelMappings: CreateAgentProviderModelMappingInput[];
@@ -911,7 +931,10 @@ export interface AgentProviderSourceCandidate {
   sourceId: string;
   name: string;
   providerKind: string;
+  /** Recommended direct mapping for the destination Agent. */
   protocol: string | null;
+  /** Ordered writable protocol choices for the destination Agent. */
+  protocols: string[];
   endpoint: string;
   credentialReady: boolean;
   compatible: boolean;
@@ -923,6 +946,7 @@ export interface ImportAgentProviderSourceRequest {
   platformId: string;
   sourceId: string;
   modelId: string;
+  protocol: string;
 }
 
 export type AgentProviderMigrationCredentialSource =
@@ -1121,6 +1145,9 @@ export interface AgentProviderActivateRequest extends AgentProviderPreviewReques
 
 export type AgentProviderConnectionTestRequest = AgentProviderPreviewRequest;
 
+export type AgentProviderCurrentConnectionTestRequest =
+  AgentProviderImportCurrentRequest;
+
 export type AgentProviderConnectionTestStatus =
   | "ok"
   | "model-not-found"
@@ -1152,6 +1179,10 @@ export interface AgentProviderConnectionTestResult {
 }
 
 export interface AgentProviderModelTestRequest extends AgentProviderPreviewRequest {
+  requestId: string;
+}
+
+export interface AgentProviderCurrentModelTestRequest extends AgentProviderImportCurrentRequest {
   requestId: string;
 }
 

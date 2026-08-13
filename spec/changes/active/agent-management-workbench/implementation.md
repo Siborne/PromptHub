@@ -495,7 +495,7 @@
   - Focused verification passed: core activation service 19 tests at 100% statement/branch/function/line coverage; model adapter, activation IPC, platform-context service, renderer store, Profile IPC and public-config validator each reached 100% focused coverage. The combined desktop boundary suite passed 11 files / 85 tests; core reconciliation/activation passed 2 files / 26 tests. Shared, core, DB and desktop typechecks plus affected ESLint passed. Full desktop, integration, Electron E2E and release-quick gates remain open until the Provider Profile UI and priority full adapters are complete.
 
 - Provider Profile renderer workbench batch (2026-07-28, `FR-AGENT-003` to `FR-AGENT-006`, `DES-AGENT-004` to `DES-AGENT-006`, `TEST-AGENT-046`, `T-AGENT-080`; advances `T-AGENT-079`):
-  - Added a non-Codex Provider & Model split view backed only by the existing Provider Profile IPC/store boundary. The renderer lists public Profile records, exposes `none` / `available` / `missing` credential readiness, and supports create, edit, duplicate, archive, delete and credential-free export without storing a second durable copy.
+  - Added a non-Codex Provider & Model split view backed only by the existing Provider Profile IPC/store boundary. The renderer lists public Profile records, exposes `none` / `available` / `missing` credential readiness, and supports create, edit, rename, create copy, confirmed delete and credential-free text copy without storing a second durable copy. The detail action bar no longer exposes archive; the existing storage primitive remains outside this renderer workflow.
   - Profile editing supports platform protocol, endpoint, primary/secondary model routes and write-only credential replace/preserve/clear actions. Editing now preserves adapter-owned validated `config` rather than replacing imported extension data with an empty object; existing secret values and `secretRef` never return to the form.
   - Native import remains an explicit preview/confirm flow. Activation renders current versus desired values, requires a decision for each backfill/external/conflict field, blocks incomplete or unsupported plans, and keeps verified, restored or rollback-unverified diagnostics visible. Renderer failures are collapsed to stable public messages.
   - Seven locales share the complete `agents.providerProfiles` key tree. The new component test harness gates async Profile loading inside React `act`, so this batch adds no new asynchronous state warnings; existing warnings in the legacy Codex provider panel remain migration debt.
@@ -1673,10 +1673,10 @@
     confirmation, while external-only packages remain import/open-only instead
     of receiving an unsafe raw filesystem delete operation.
     Skills, MCP and Plugins also share `AgentAssetPrimaryAction`, placing one
-    localized plus-icon action at the same right edge: Add Skill opens the
-    Agent-scoped picker, Add MCP opens target management and Add Plugin opens
-    the Plugin store. Add MCP stays enabled for an empty Agent inventory so it
-    can create the first target. The Add labels exist in all seven locale
+    localized plus-icon action at the same right edge. This batch originally
+    handed Add MCP and Add Plugin to their standalone managers; that navigation
+    behavior is superseded by `FR-AGENT-115`, which keeps all three Add flows
+    inside Agent-scoped dialogs. The Add labels exist in all seven locale
     bundles, while Chinese and Traditional Chinese keep `Plugin` as the stable
     product term.
   - Focused `agent-assets-workspace.test.tsx` passes 23 tests, including the
@@ -3322,3 +3322,323 @@ clientWidth`, the table wrapper owned horizontal overflow, and the inspected
   typecheck, affected ESLint, the file-size gate, production build,
   traceability, spec-index and diff checks passed. The build retains the
   existing renderer chunk-size and mixed static/dynamic `fflate` warnings.
+
+### Agent-Scoped MCP And Plugin Add Dialogs
+
+- Completed `FR-AGENT-115` / `DES-AGENT-133` / `TEST-AGENT-193` /
+  `T-AGENT-202`. Add MCP and Add Plugin now keep the current Agent workspace
+  mounted and open selection dialogs consistent with the existing Add Skill
+  flow. Neither action changes the application module or active Agent tab.
+- MCP reuses the canonical My MCP deployment dialog and applies the selected
+  servers through the existing MCP store to the first verified preset scoped
+  to the current Agent. Existing entries remain disabled, target conflicts
+  require explicit confirmation, and successful deployment refreshes target
+  status in place.
+- Plugin uses a fixed-target My Plugins dialog with search, multi-select,
+  already-installed disabling, and copy/symlink mode selection. Distribution
+  continues through the existing Plugin store for the enabled targets scoped
+  to the current Agent, followed by one in-place inventory refresh. No IPC,
+  schema, persistent state, background process or alternate installation path
+  was added.
+- Test-first verification reproduced the navigation regression before the
+  implementation. The focused component and locale suite passed 3 files / 32
+  tests. Desktop typecheck, affected ESLint and the production build passed.
+  The build retains the existing renderer chunk-size and mixed static/dynamic
+  `fflate` warnings. No Electron visual E2E was run for this focused follow-up.
+
+### Plugin Empty State And Download Proxy Authority
+
+- Completed `FR-AGENT-117` / `DES-AGENT-135` / `TEST-AGENT-195` /
+  `T-AGENT-204`. An empty Agent Plugin workspace now says only that no Plugins
+  exist. Add Plugin always opens the in-context picker; an empty library shows
+  a plain empty result, while a populated library without an enabled Agent
+  destination explains that installation is unsupported and disables actions.
+- Official-market Git materialization now follows the existing Network Settings
+  authority without an installer-specific fallback. System mode restores the
+  proxy environment captured at startup, direct mode removes inherited proxy
+  variables, and manual mode applies the validated configured proxy and bypass
+  rules. Git performs one bounded attempt with that effective environment.
+- Plugin operation failures now share one renderer policy across market,
+  local/source import, Agent deployment and batch install. Network/proxy, source
+  access, invalid package, duplicate, local storage and Git availability each
+  explain the likely cause and next action in all seven locales. Unexpected
+  failures retain only a bounded sanitized reason, batch results append the
+  first explained failure, and post-install refresh failures report partial
+  success rather than claiming installation failed. Raw IPC wrappers, source
+  URLs, local paths, Git commands and temporary-path diagnostics are hidden.
+- Test-first verification reproduced the targeted empty-state, proxy-authority
+  and Plugin error-presentation failures before implementation.
+  The focused regression set passed 7 files / 59 tests. Core typecheck,
+  affected desktop ESLint and the production build passed. The final desktop
+  typecheck is blocked by an unrelated provider-import contract mismatch in
+  `AgentProviderSourceDialog.tsx:76`, where the current request omits required
+  `protocol`. The build retains the existing renderer chunk-size and mixed
+  static/dynamic `fflate` warnings. A real external install was not run because
+  network access was unavailable to the verification environment;
+  deterministic main-process and child-process regressions cover proxy-mode
+  ownership and Git inheritance.
+
+### Provider Terminology And Native Ownership
+
+- Completed `FR-AGENT-116` / `DES-AGENT-134` / `TEST-AGENT-194` /
+  `T-AGENT-203`. Agent Provider & Model now presents one supplier-oriented
+  workbench across the shared adapter and Pi catalog. Native configuration is
+  a read-only projection and no longer exposes “Import current configuration”
+  or “Create editable profile”; Add provider, PromptHub import and explicit
+  official restore remain available where supported.
+- Seven locale bundles now use supplier/provider terminology throughout the
+  list, forms, connection tests, activation, deletion, source import and deep
+  link flows. Internal `ProviderProfile` types, persistence and IPC identifiers
+  remain unchanged as compatibility contracts; no schema, migration, IPC or
+  native Agent file write was added.
+- Test-first verification reproduced the obsolete native import actions and
+  Profile terminology before implementation. The focused component and locale
+  suite passed 7 files / 86 tests; the focused Electron Playwright flow passed
+  for Claude Code and Pi. Desktop typecheck, affected ESLint, Prettier, the
+  production build, file-size gate, traceability and spec-index checks passed.
+
+### Rich Provider Import And Agent-Aware Protocols
+
+- Completed `FR-AGENT-118` / `DES-AGENT-136` / `TEST-AGENT-196` /
+  `T-AGENT-205`. PromptHub source rows now reuse the existing Model Services
+  provider icon registry, while the shared model selector derives and renders
+  the model-family icon from the selected model id. The dialog uses the shared
+  custom Select for both model and protocol instead of a native text-only menu.
+- `AgentProviderSourceCandidate` now carries a bounded ordered protocol list and
+  the import request carries the explicit selected protocol. Main recomputes the
+  source-by-Agent intersection before either Profile creation or Pi native
+  writing and rejects stale, missing or tampered choices. Codex and OpenCode
+  expose Chat/Responses, Pi exposes Chat Completions/Responses, and Claude,
+  Gemini and Qwen keep their direct single-protocol mappings. Official OpenAI
+  direct endpoints recommend Responses; third-party compatible endpoints
+  recommend Chat/Completions. No conversion proxy, icon registry, persistence
+  state or migration was added.
+- Test-first verification reproduced all four failures before implementation.
+  The final focused regression passed 4 files / 86 tests. The source service
+  reached 100% statement, branch, function and line coverage; the dialog reached
+  100% statements, functions and lines, with remaining uncovered branches only
+  in structurally defensive empty/stale selection fallbacks. Desktop TypeScript,
+  affected ESLint, Prettier, production build, file-size, traceability,
+  spec-index and diff checks passed. A real Electron test passed and visually
+  verified the DeepSeek provider icon, GPT model icon, protocol menu and selected
+  Responses state in dark mode at 1440 x 900. The full release harness was not
+  run because the worktree also contains unrelated concurrent changes; the
+  package-script wrapper additionally could not verify the requested pnpm 9.15.0
+  signature without registry access, so verification used the installed local
+  binaries through `pnpm exec`.
+
+### Provider Sidebar Creation And Import Entries
+
+- Completed `FR-AGENT-119` / `DES-AGENT-137` / `TEST-AGENT-197` /
+  `T-AGENT-206`. Import from PromptHub and Add custom provider now share the
+  top sidebar action area and both use the add icon. The previous fixed bottom
+  add action was removed from the shared layout.
+- Right-clicking a provider row or empty list space opens the same two commands
+  and delegates to the existing import/create dialogs. The Profile-backed
+  workbench and Pi catalog share one presentation component; Web keeps only
+  custom creation because local PromptHub import is unavailable there.
+- Test-first verification reproduced the old bottom-only add entry, database
+  import icon and missing context commands before implementation. The focused
+  component suite passed 2 files / 66 tests, and the shared action component
+  reached 100% statement, branch, function and line coverage. Desktop
+  TypeScript, affected ESLint, Prettier, production build and the focused
+  Electron Playwright flow passed. Visual inspection at 1440 x 900 confirmed
+  the two top add-icon actions, removed bottom action and unchanged rich import
+  dialog in light and dark themes.
+
+### Internal CLI Maintenance Boundary
+
+- Completed `FR-AGENT-120` / `DES-AGENT-138` / `TEST-AGENT-198` /
+  `T-AGENT-207`. The Agent overflow menu no longer presents CLI Diagnostics,
+  and the standalone diagnostics and update-review UI has been removed while
+  Refresh and Edit Agent remain available.
+- The renderer preload no longer exposes diagnostic, update-plan or
+  update-apply methods. Their shared IPC channels and main-process handlers
+  were removed, so the internal services cannot be reached through arbitrary
+  renderer input.
+- The bounded diagnostic and lifecycle services remain in the main-process
+  codebase for explicitly designed internal or future platform-specific use.
+  Their allowlisted commands, shell-free execution, timeout/output limits,
+  plan ownership, expiry and rollback behavior remain service-tested. No
+  persistence, migration, network request or background process was added.
+- Test-first verification captured the former preload exposure before the
+  removal. The final focused regression passed 4 files / 66 tests, desktop
+  typecheck, affected ESLint, production build, file-size, traceability,
+  spec-index and diff checks passed. The production build retained only its
+  existing renderer chunk-size and mixed static/dynamic `fflate` warnings.
+
+### Inline Provider Form Visual Hierarchy
+
+- Completed `FR-AGENT-121` / `DES-AGENT-139` / `TEST-AGENT-199` /
+  `T-AGENT-208`. The Add/Edit provider right pane now separates its muted page
+  background, white action header and one bordered white form surface. Identity,
+  connection, models and authentication render as divided bands with compact
+  icon-backed headings rather than four nested cards.
+- Provider text inputs, custom selectors and the write-only credential input now
+  share an outlined, card-colored, small-radius control treatment with aligned
+  focus and disabled states. The shared Input exposes an explicit outlined
+  presentation variant. Every field group now uses one full-width column across
+  the available right pane, removing half-width controls and empty grid cells;
+  form data, validation and save behavior are unchanged.
+- Follow-up removed the remaining four native selects. Provider kind, protocol,
+  Claude credential type and Codex authentication source now share the existing
+  portal-backed themed Select through `AgentProviderFormSelect`; human-readable
+  labels do not alter the exact adapter values. The form now supplies concrete
+  CC Switch-aligned examples for provider name/id, endpoint, model, context size
+  and API key, including Agent-specific model ids. Unsupported bridge protocols
+  and unstored CC Switch-only fields remain absent. The form-select presentation
+  also aligns the portal listbox to the full-width trigger and uses a restrained
+  radius, border, shadow and neutral selected row instead of the shared Select's
+  larger floating-menu treatment.
+- Test-first verification reproduced the missing form surface and remaining
+  native menu before implementation. The final provider component regression
+  passed 4 files / 40 tests, and the extracted form-select module reached 100%
+  statement, branch, function and line coverage. Desktop typecheck, affected
+  ESLint, Prettier, production build and file-size checks passed. The focused
+  Electron Playwright flow passed and visually verified the open themed
+  protocol listbox, selected check state, field examples, single white form
+  surface, four divided bands and absence of horizontal overflow at 1440 x 900.
+  The production build retained only its existing renderer chunk-size and mixed
+  static/dynamic `fflate` warnings.
+- The full-width follow-up first reproduced the four responsive two-column field
+  groups and the oversized shared dropdown treatment. Final Select and provider
+  form regressions passed 2 files / 10 tests. The focused Electron Playwright
+  flow then measured every visible Codex text/select control above 90% of the
+  form-surface width, verified the compact trigger-width listbox, and passed
+  without horizontal overflow at 1440 x 900. A fresh renderer/main/preload
+  production build, affected ESLint and Prettier checks also passed.
+
+### Provider Activation Switch And Current Native Testing
+
+- Completed `FR-AGENT-123` / `DES-AGENT-141` / `TEST-AGENT-201` /
+  `T-AGENT-210`. Each managed provider now owns a compact activation switch in
+  the left list. The native-verified provider is checked and cannot be switched
+  off into an undefined state; selecting another provider enters the existing
+  activation preview, review, atomic apply, verification and rollback path.
+  The duplicate detail-pane activation command was removed.
+- Current native configuration now exposes the shared connection and explicit
+  model-test controls. Main/core derive a validated in-memory
+  `native:<platformId>` target from `importCurrent` and reuse the registered
+  adapter probe without creating a Provider Profile, copying credentials or
+  writing Agent files. Platform-managed transports that cannot be probed report
+  unsupported, and model cancellation remains scoped to the requesting renderer.
+- Test-first verification reproduced the missing current-native test boundary
+  and detail-only activation command before implementation. The final focused
+  regression passed 5 files / 64 tests; the core activation service reached
+  100% statements, branches, functions and lines. Core and desktop TypeScript,
+  affected desktop ESLint, Prettier, production build and `git diff --check`
+  passed. The isolated Electron Playwright flow passed and visually verified
+  the checked left-list switch plus current-provider connection/model controls
+  at 1440 x 900. The build retained only its existing renderer chunk-size and
+  mixed static/dynamic `fflate` warnings.
+
+### Claude Code Native Model Routes
+
+- Completed `FR-AGENT-122` / `DES-AGENT-140` / `TEST-AGENT-200` /
+  `T-AGENT-209`. Claude custom-provider profiles now use the existing typed
+  model-mapping boundary for primary, Sonnet, Opus, Haiku and subagent routes.
+  Native import, activation planning, atomic write, verification and rollback
+  all read the same route set.
+- Activation writes the optional routes to Claude Code's documented environment
+  keys and clears stale PromptHub-managed route values when a later profile
+  omits them. Unrelated JSON and environment values remain unchanged. Unknown,
+  duplicate or parameterized mappings fail before any write.
+- The shared provider form exposes five model inputs and saves only non-empty
+  optional routes. Endpoint model discovery remains deferred because draft
+  credentials are write-only and main-process owned; no renderer HTTP path,
+  schema, IPC, cache or background process was added.
+
+### Codex Native Model Runtime Options
+
+- Completed `FR-AGENT-124` / `DES-AGENT-142` / `TEST-AGENT-203` /
+  `T-AGENT-212`. Codex provider profiles can now carry optional reasoning effort
+  and context window values on the primary model mapping. The adapter imports,
+  plans, writes, verifies and clears `model_reasoning_effort` and
+  `model_context_window` without creating parallel profile state.
+- Reasoning accepts the current official `minimal`, `low`, `medium`, `high` and
+  `xhigh` values and is limited to Responses or the native OpenAI path. Context
+  window accepts a positive bounded integer. Unknown parameters, invalid enum
+  values and invalid scalar shapes fail closed; the TOML editor preserves
+  comments, tables and unrelated settings.
+- The form adds themed optional controls and seven-locale copy. It intentionally
+  does not copy CC Switch's legacy response-storage field, global goals toggle,
+  promotional metadata or credential-ownership switches that do not map to this
+  provider boundary.
+- Test-first verification reproduced the missing route and runtime fields before
+  implementation. The combined Claude, Codex and form suite passed 3 files / 34
+  tests; locale parity, affected ESLint, Prettier and the production
+  renderer/main/preload build also passed. The focused Electron Playwright flow
+  passed and visually verified the Claude role inputs plus the Codex reasoning
+  and context controls without horizontal overflow at 1440 x 900. The final
+  desktop TypeScript rerun is blocked by the separately added
+  `packages/core/tests/rule-resource-schema.test.ts`, whose production module is
+  currently absent and whose fixture values do not match the shared rule types.
+  The repository
+  file-size gate remains blocked by the separately modified 1,575-line
+  `agent-provider-profile-workbench.test.tsx`; no changed production file in
+  this batch exceeds the hard 2,000-line limit.
+
+### Oh My Pi Official Plugin Inventory
+
+- Completed `FR-AGENT-033` / `DES-AGENT-029` / `TEST-AGENT-202` /
+  `T-AGENT-211`. The shared target matrix now recognizes Oh My Pi as a native,
+  read-only Plugin inventory target while keeping distribution disabled.
+- Main reads only the official version 2 user registry at the sibling plugin
+  data root, normally `~/.omp/plugins/installed_plugins.json`. It projects
+  user-scoped package paths, accepts registry-authoritative multi-capability
+  packages, deduplicates real package paths and ignores project entries,
+  missing packages, invalid versions, malformed or oversized JSON and paths
+  that escape through traversal or symlinks.
+- Registry reads are capped at 1 MiB and package containment uses the real
+  plugin data root rather than the Agent root. No renderer-only branch, new
+  IPC, native install/update action, `agent.db` read or auth-broker access was
+  introduced.
+- The implementation follows Oh My Pi's published marketplace contract in
+  `docs/marketplace.md`, `marketplace/types.ts` and `marketplace/registry.ts`.
+  Focused Plugin inventory and target-matrix regression passed 2 files / 30
+  tests; the combined App/Agent/Plugin boundary suite passed 4 files / 68
+  tests. Desktop and Core TypeScript checks, affected Desktop ESLint, production
+  build and bundle budget passed.
+
+### Codex Official Account Switching
+
+- Completed `FR-AGENT-125` / `DES-AGENT-143` / `TEST-AGENT-204` /
+  `T-AGENT-213`. Codex's official provider detail now saves the current login,
+  accepts a named write-only `auth.json` snapshot, lists only masked account
+  metadata, switches accounts and deletes inactive snapshots.
+- PromptHub stores at most 32 exact authentication snapshots in a main-only,
+  system-encrypted vault under the application user-data root. Switching
+  serializes mutations, refreshes a saved snapshot when Codex has rotated the
+  current account's tokens, replaces only the single native `auth.json` through
+  a same-directory `0600` temporary file, re-reads the digest and restores the
+  previous bytes on failure. `config.toml`, Provider Profiles, models, MCP and
+  sessions are not written.
+- Focused main, IPC, preload and renderer regressions passed 4 files / 16 tests;
+  the provider workbench integration suite passed 27 tests. Desktop TypeScript,
+  affected ESLint, seven-locale smoke tests, Prettier, `git diff --check` and the
+  production renderer/main/preload build passed. The build retained only the
+  existing mixed static/dynamic `fflate` warning.
+
+### Codex Official Native Provider Tests
+
+- Completed `FR-AGENT-123` / `DES-AGENT-141` / `TEST-AGENT-205` /
+  `T-AGENT-214`. The official Codex provider again exposes the shared connection
+  and explicit model-test controls instead of displaying an unsupported result.
+- Connection testing resolves the installed Codex CLI without a shell and runs
+  `codex login status` with the validated Agent root as `CODEX_HOME`; it sends no
+  model request. Explicit model testing retains the quota confirmation and runs
+  a bounded `codex exec` with ephemeral sessions, ignored user config and rules,
+  read-only sandboxing, a selected model and temporary output that is always
+  removed. The probe uses the current Codex CLI surface and does not pass the
+  removed `--ask-for-approval` option.
+- The native probe returns only typed, redacted statuses for missing CLI,
+  signed-out/authentication, timeout, cancellation, quota, rate limit, model and
+  network failures. It never returns CLI stdout/stderr or authentication data
+  and does not write `config.toml`, Provider Profiles or account snapshots.
+- Focused main tests passed 3 files / 36 tests and the Provider workbench passed
+  28 tests. Desktop TypeScript, affected ESLint and `git diff --check` passed;
+  Prettier was applied to the touched code. Live Electron inspection confirmed
+  the official Provider detail renders both test controls and the login-status
+  connection check succeeds. One explicitly confirmed live model probe reached
+  the official CLI and ended at the bounded 60-second timeout without exposing
+  command output or leaving temporary state.

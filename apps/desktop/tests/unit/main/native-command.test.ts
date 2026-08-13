@@ -169,6 +169,35 @@ describe("native command resolution", () => {
     ).rejects.toBeTruthy();
   });
 
+  it("passes an isolated environment and supports aborting a running command", async () => {
+    const runner = createNativeCommandRunner();
+
+    await expect(
+      runner.run(
+        process.execPath,
+        ["-e", "process.stdout.write(process.env.PROMPTHUB_NATIVE_TEST || '')"],
+        {
+          timeout: 5_000,
+          maxBuffer: 4_096,
+          env: { PROMPTHUB_NATIVE_TEST: "isolated" },
+        },
+      ),
+    ).resolves.toMatchObject({ stdout: "isolated" });
+
+    const controller = new AbortController();
+    const pending = runner.run(
+      process.execPath,
+      ["-e", "setInterval(() => {}, 1_000)"],
+      {
+        timeout: 5_000,
+        maxBuffer: 4_096,
+        signal: controller.signal,
+      },
+    );
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   it("uses the default filesystem resolver for the current Node executable", async () => {
     const runner = createNativeCommandRunner({
       platform: process.platform,

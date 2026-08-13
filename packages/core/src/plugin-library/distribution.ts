@@ -529,6 +529,17 @@ const PLUGIN_TARGET_MATRIX: PluginTargetCompatibility[] = [
       "PromptHub currently discovers native Qwen extensions but leaves installation and updates to Qwen Code.",
   },
   {
+    id: "oh-my-pi",
+    displayName: "Oh My Pi",
+    status: "native",
+    enabled: false,
+    nativeMarker:
+      ".omp-plugin/plugin.json / .claude-plugin/plugin.json / plugin.json",
+    installSurface: "~/.omp/plugins/installed_plugins.json",
+    unsupportedReason:
+      "PromptHub reads installed Oh My Pi plugin inventory but leaves installation and updates to Oh My Pi.",
+  },
+  {
     id: "opencode",
     displayName: "OpenCode",
     status: "runtime-only",

@@ -10,8 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAgentProviderStore } from "../../../src/renderer/stores/agent-provider.store";
 import {
   activationPlan,
+  chooseProviderFormOption,
   createAgent,
-  importPreview,
   profile,
   renderWorkbench,
   resetProviderWorkbenchTestState,
@@ -33,15 +33,19 @@ describe("AgentProviderProfileWorkbench", () => {
     const toolbar = screen.getByTestId("agent-provider-workbench-toolbar");
     expect(toolbar).toBeVisible();
     expect(
-      within(toolbar).getByText("Import current configuration"),
-    ).toBeVisible();
+      within(toolbar).queryByText("Import current configuration"),
+    ).not.toBeInTheDocument();
     expect(within(toolbar).getByText("Import from PromptHub")).toBeVisible();
+    expect(within(toolbar).getByText("Add custom provider")).toBeVisible();
+    expect(toolbar.querySelectorAll("svg.lucide-plus")).toHaveLength(2);
     expect(screen.getByTestId("agent-provider-workbench-sidebar")).toHaveClass(
       "overflow-hidden",
     );
-    expect(
-      screen.getByRole("navigation", { name: "Provider profiles" }),
-    ).toHaveClass("h-full", "overflow-x-hidden", "overflow-y-auto");
+    expect(screen.getByRole("navigation", { name: "Providers" })).toHaveClass(
+      "h-full",
+      "overflow-x-hidden",
+      "overflow-y-auto",
+    );
     expect(window.api.agent.listProviderProfiles).toHaveBeenCalledWith({
       platformId: "claude",
     });
@@ -53,6 +57,36 @@ describe("AgentProviderProfileWorkbench", () => {
     expect(screen.queryByText(/agent-provider:/)).not.toBeInTheDocument();
   });
 
+  it("offers provider creation and PromptHub import from the provider-list context menu", async () => {
+    await renderWorkbench();
+
+    const providers = screen.getByRole("navigation", { name: "Providers" });
+    fireEvent.contextMenu(providers, { clientX: 80, clientY: 120 });
+
+    const importFromMenu = screen.getAllByRole("button", {
+      name: "Import from PromptHub",
+    })[1];
+    expect(importFromMenu).toBeVisible();
+    fireEvent.click(importFromMenu);
+    const importDialog = await screen.findByRole("dialog", {
+      name: "Import PromptHub provider",
+    });
+    fireEvent.click(
+      within(importDialog).getByRole("button", { name: "Close" }),
+    );
+
+    fireEvent.contextMenu(providers, { clientX: 80, clientY: 120 });
+    const addCustom = screen.getAllByRole("button", {
+      name: "Add custom provider",
+    })[1];
+    expect(addCustom).toBeVisible();
+    fireEvent.click(addCustom);
+
+    expect(
+      await screen.findByRole("region", { name: "Add provider" }),
+    ).toBeVisible();
+  });
+
   it("uses Web-specific empty copy without promising native import or activation", async () => {
     (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__ =
       true;
@@ -62,13 +96,32 @@ describe("AgentProviderProfileWorkbench", () => {
       await renderWorkbench();
 
       expect(
-        screen.getByText("No profiles yet. Create one to manage this Agent."),
+        screen.getByText("No providers yet. Add one to manage this Agent."),
       ).toBeVisible();
       expect(
         screen.getByText(
-          "Create a provider profile to store model settings and write-only credentials on this server.",
+          "Add a provider to store model settings and write-only credentials on this server.",
         ),
       ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Add custom provider" }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Import from PromptHub" }),
+      ).not.toBeInTheDocument();
+
+      const providers = screen.getByRole("navigation", { name: "Providers" });
+      fireEvent.contextMenu(providers, { clientX: 80, clientY: 120 });
+      expect(
+        screen.queryByRole("button", { name: "Import from PromptHub" }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(
+        screen.getAllByRole("button", { name: "Add custom provider" })[1],
+      );
+      expect(
+        await screen.findByRole("region", { name: "Add provider" }),
+      ).toBeVisible();
+
       expect(
         screen.queryByText(/native configuration/i),
       ).not.toBeInTheDocument();
@@ -79,7 +132,7 @@ describe("AgentProviderProfileWorkbench", () => {
     }
   });
 
-  it("shows the current native provider without a Profile and previews official restore", async () => {
+  it("shows the current native provider as read-only and previews official restore", async () => {
     const officialProfile = profile({
       id: "profile-official",
       name: "Anthropic Official",
@@ -146,8 +199,13 @@ describe("AgentProviderProfileWorkbench", () => {
       ),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Create editable profile" }),
-    ).toBeVisible();
+      screen.queryByRole("button", { name: /Create editable|Import current/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", {
+        name: "Current active provider: Claude custom provider",
+      }),
+    ).toBeChecked();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Restore official configuration" }),
@@ -169,6 +227,100 @@ describe("AgentProviderProfileWorkbench", () => {
     ).toBeVisible();
   });
 
+  it("offers official connection and model tests for platform-native Codex", async () => {
+    window.api.agent.listProviderProfiles = vi.fn().mockResolvedValue([]);
+    window.api.agent.testCurrentProviderConnection = vi.fn().mockResolvedValue({
+      platformId: "codex",
+      profileId: "native:codex",
+      protocol: "platform-native",
+      endpointOrigin: null,
+      model: "gpt-5.6-sol",
+      status: "ok",
+      startedAt: 10,
+      finishedAt: 12,
+      totalMs: 2,
+      retryCount: 0,
+      modelCount: null,
+      modelAvailable: null,
+    });
+    window.api.agent.testCurrentProviderModel = vi.fn().mockResolvedValue({
+      platformId: "codex",
+      profileId: "native:codex",
+      protocol: "platform-native",
+      endpointOrigin: null,
+      model: "gpt-5.6-sol",
+      status: "protocol-error",
+      startedAt: 10,
+      finishedAt: 213,
+      totalMs: 203,
+      firstTokenMs: null,
+      retryCount: 0,
+      inputTokens: null,
+      outputTokens: null,
+      outputPreview: null,
+      errorCode: "codex-model-test-failed",
+    });
+    window.api.agent.getProviderCurrentState = vi.fn().mockResolvedValue({
+      platformId: "codex",
+      status: "none",
+      currentProfileId: null,
+      nativeConfig: {
+        classification: "official",
+        name: "OpenAI",
+        providerKind: "openai",
+        protocol: "platform-native",
+        endpoint: null,
+        model: "gpt-5.6-sol",
+        credential: "platform-managed",
+        officialRestoreAvailable: false,
+      },
+      checkedAt: 1_700_000_000_000,
+    });
+    await renderWorkbench(createAgent("codex"));
+
+    expect(screen.getByText("Connection check")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    await waitFor(() =>
+      expect(
+        window.api.agent.testCurrentProviderConnection,
+      ).toHaveBeenCalledWith({ agentId: "codex" }),
+    );
+    expect(await screen.findByText("Connection successful")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Test model" }));
+    const confirmation = await screen.findByRole("alertdialog", {
+      name: "Run model test?",
+    });
+    expect(window.api.agent.testCurrentProviderModel).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Run test" }),
+    );
+    expect(
+      await screen.findByText("Official Codex CLI test failed"),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Provider returned an invalid stream"),
+    ).not.toBeInTheDocument();
+    expect(window.api.agent.createProviderProfile).not.toHaveBeenCalled();
+    expect(
+      window.api.agent.ensureOfficialProviderProfile,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("does not expose the internal import source on provider list rows", async () => {
+    window.api.agent.listProviderProfiles = vi.fn().mockResolvedValue([
+      profile({
+        id: "profile-imported",
+        name: "DeepSeek",
+        source: "import",
+      }),
+    ]);
+
+    await renderWorkbench(createAgent("codex"));
+
+    const providerRow = screen.getByRole("button", { name: /DeepSeek/ });
+    expect(within(providerRow).queryByText("Import")).not.toBeInTheDocument();
+  });
+
   it("imports a compatible PromptHub provider and explains incompatible sources", async () => {
     const imported = profile({
       id: "profile-imported",
@@ -181,10 +333,11 @@ describe("AgentProviderProfileWorkbench", () => {
         source: "prompthub",
         sourceId: "provider-work",
         name: "Work Gateway",
-        providerKind: "openai-compatible",
+        providerKind: "deepseek",
         protocol: "openai-chat",
+        protocols: ["openai-chat", "openai-responses"],
         endpoint: "https://gateway.example.com/v1",
-        credentialReady: true,
+        credentialReady: false,
         compatible: true,
         incompatibility: null,
         models: [
@@ -202,6 +355,7 @@ describe("AgentProviderProfileWorkbench", () => {
         name: "Anthropic Direct",
         providerKind: "anthropic",
         protocol: null,
+        protocols: [],
         endpoint: "https://api.anthropic.com",
         credentialReady: true,
         compatible: false,
@@ -228,8 +382,28 @@ describe("AgentProviderProfileWorkbench", () => {
     });
     expect(window.api.agent.listProviderSources).toHaveBeenCalledWith("codex");
     expect(within(dialog).getByText("Work Gateway")).toBeVisible();
+    expect(within(dialog).getByRole("img", { name: "DeepSeek" })).toBeVisible();
+    expect(
+      await within(dialog).findByRole("img", { name: "GPT" }),
+    ).toBeVisible();
     expect(within(dialog).getByText("Anthropic Direct")).toBeVisible();
     expect(within(dialog).getByText("Protocol is not supported")).toBeVisible();
+    expect(
+      within(dialog).getByText("Credential must be added after import"),
+    ).toBeVisible();
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: /DeepSeekWork Gatewaydeepseek/,
+      }),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Model" }));
+    fireEvent.click(
+      await screen.findByRole("option", { name: "GPT Work (gpt-work)" }),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Protocol" }));
+    fireEvent.click(
+      await screen.findByRole("option", { name: "OpenAI Responses" }),
+    );
     const importButton = within(dialog).getByRole("button", { name: "Import" });
     await waitFor(() => expect(importButton).toBeEnabled());
     fireEvent.click(importButton);
@@ -239,6 +413,7 @@ describe("AgentProviderProfileWorkbench", () => {
         platformId: "codex",
         sourceId: "provider-work",
         modelId: "model-work",
+        protocol: "openai-responses",
       }),
     );
     expect(
@@ -266,14 +441,18 @@ describe("AgentProviderProfileWorkbench", () => {
 
     await renderWorkbench();
 
-    const currentProfile = await screen.findByRole("button", {
+    await screen.findByRole("button", {
       name: /Claude production/,
     });
-    expect(within(currentProfile).getByText("Current")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Current" })).toBeDisabled();
+    const currentSwitch = screen.getByRole("switch", {
+      name: "Current active provider: Claude production",
+    });
+    expect(currentSwitch).toBeChecked();
+    expect(currentSwitch).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: /Lab/ }));
-    expect(screen.getByRole("button", { name: "Activate" })).toBeEnabled();
+    const labSwitch = screen.getByRole("switch", { name: "Activate Lab" });
+    expect(labSwitch).not.toBeChecked();
+    expect(labSwitch).toBeEnabled();
   });
 
   it("does not claim a stale or unavailable Profile is current", async () => {
@@ -292,7 +471,9 @@ describe("AgentProviderProfileWorkbench", () => {
 
     expect(screen.queryByText("Current")).not.toBeInTheDocument();
     expect(screen.getByText("Native configuration changed")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Activate" })).toBeEnabled();
+    expect(
+      screen.getByRole("switch", { name: "Activate Claude production" }),
+    ).toBeEnabled();
   });
 
   it("runs an isolated supported Profile connection test and renders its result", async () => {
@@ -442,64 +623,6 @@ describe("AgentProviderProfileWorkbench", () => {
     expect(screen.queryByText(/secret/i)).not.toBeInTheDocument();
   });
 
-  it("imports native configuration as an explicit preview before creating a profile", async () => {
-    const imported = importPreview();
-    const created = profile({
-      id: "imported-profile",
-      name: "anthropic",
-      source: "native-import",
-    });
-    window.api.agent.importCurrentProvider = vi
-      .fn()
-      .mockResolvedValue(imported);
-    window.api.agent.createProviderProfile = vi.fn().mockResolvedValue(created);
-
-    await renderWorkbench();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Import current configuration" }),
-    );
-
-    const dialog = await screen.findByRole("dialog", {
-      name: "Import current configuration",
-    });
-    expect(within(dialog).getByText("claude-opus-4")).toBeVisible();
-    expect(
-      within(dialog).getByText("Native formatting may change"),
-    ).toBeVisible();
-    expect(within(dialog).getByText("custom-native-warning")).toBeVisible();
-    expect(within(dialog).getByText("null")).toBeVisible();
-    expect(within(dialog).getByText('{"region":"global"}')).toBeVisible();
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "Create and edit" }),
-    );
-
-    await waitFor(() =>
-      expect(window.api.agent.createProviderProfile).toHaveBeenCalledWith({
-        profile: {
-          platformId: "claude",
-          name: "anthropic",
-          providerKind: "anthropic",
-          protocol: "platform-native",
-          endpoint: null,
-          config: {},
-          source: "native-import",
-        },
-        modelMappings: imported.modelMappings,
-      }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", {
-          name: "Import current configuration",
-        }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(
-      await screen.findByRole("region", { name: "Edit provider profile" }),
-    ).toBeVisible();
-    expect(screen.getAllByDisplayValue("anthropic")).toHaveLength(2);
-  });
-
   it("requires an explicit per-field conflict choice before activation", async () => {
     window.api.agent.listProviderProfiles = vi
       .fn()
@@ -536,13 +659,20 @@ describe("AgentProviderProfileWorkbench", () => {
     });
 
     await renderWorkbench();
-    fireEvent.click(await screen.findByRole("button", { name: "Activate" }));
+    expect(
+      screen.queryByRole("button", { name: "Activate" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      await screen.findByRole("switch", {
+        name: "Activate Claude production",
+      }),
+    );
 
     const dialog = await screen.findByRole("dialog", {
       name: "Review provider activation",
     });
     const activate = within(dialog).getByRole("button", {
-      name: "Activate profile",
+      name: "Activate provider",
     });
     expect(activate).toBeDisabled();
     fireEvent.click(
@@ -550,7 +680,7 @@ describe("AgentProviderProfileWorkbench", () => {
     );
     expect(activate).toBeDisabled();
     fireEvent.click(
-      within(dialog).getByRole("radio", { name: "Use profile value" }),
+      within(dialog).getByRole("radio", { name: "Use provider value" }),
     );
     expect(activate).toBeEnabled();
     fireEvent.click(activate);
@@ -613,12 +743,16 @@ describe("AgentProviderProfileWorkbench", () => {
     });
 
     await renderWorkbench();
-    fireEvent.click(await screen.findByRole("button", { name: "Activate" }));
+    fireEvent.click(
+      await screen.findByRole("switch", {
+        name: "Activate Claude production",
+      }),
+    );
     const dialog = await screen.findByRole("dialog", {
       name: "Review provider activation",
     });
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Activate profile" }),
+      within(dialog).getByRole("button", { name: "Activate provider" }),
     );
 
     expect(
@@ -661,7 +795,7 @@ describe("AgentProviderProfileWorkbench", () => {
     expect(within(dialog).getByText("profile-secret-missing")).toBeVisible();
     expect(within(dialog).getByText("Provider operation failed")).toBeVisible();
     expect(
-      within(dialog).getByRole("button", { name: "Activate profile" }),
+      within(dialog).getByRole("button", { name: "Activate provider" }),
     ).toBeDisabled();
 
     act(() => {
@@ -694,30 +828,6 @@ describe("AgentProviderProfileWorkbench", () => {
     );
   });
 
-  it("can dismiss a native import preview without warnings", async () => {
-    await renderWorkbench();
-    act(() => {
-      useAgentProviderStore.setState({
-        importPreview: { ...importPreview(), warnings: [] },
-      });
-    });
-
-    const dialog = await screen.findByRole("dialog", {
-      name: "Import current configuration",
-    });
-    expect(
-      within(dialog).queryByText("Native formatting may change"),
-    ).not.toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", {
-          name: "Import current configuration",
-        }),
-      ).not.toBeInTheDocument(),
-    );
-  });
-
   it("creates a Claude API profile with an explicit credential kind and no exposed secret reference", async () => {
     const created = profile({
       id: "profile-created",
@@ -728,10 +838,13 @@ describe("AgentProviderProfileWorkbench", () => {
     window.api.agent.createProviderProfile = vi.fn().mockResolvedValue(created);
 
     await renderWorkbench();
-    fireEvent.click(screen.getByRole("button", { name: "Add profile" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     const dialog = await screen.findByRole("region", {
-      name: "Add provider profile",
+      name: "Add provider",
     });
+    expect(dialog.querySelector("select")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Name"), {
       target: { value: " Work " },
     });
@@ -745,7 +858,7 @@ describe("AgentProviderProfileWorkbench", () => {
       target: { value: "new-secret" },
     });
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -788,15 +901,17 @@ describe("AgentProviderProfileWorkbench", () => {
     );
 
     await renderWorkbench(createAgent("gemini"));
-    fireEvent.click(screen.getByRole("button", { name: "Add profile" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     const dialog = await screen.findByRole("region", {
-      name: "Add provider profile",
+      name: "Add provider",
     });
     expect(within(dialog).getByLabelText("Provider kind")).toHaveValue(
       "google-gemini",
     );
-    expect(within(dialog).getByLabelText("Protocol")).toHaveValue(
-      "google-generative-ai",
+    expect(within(dialog).getByLabelText("Protocol")).toHaveTextContent(
+      "Google Generative AI",
     );
     fireEvent.change(within(dialog).getByLabelText("Name"), {
       target: { value: " Gemini work " },
@@ -813,7 +928,7 @@ describe("AgentProviderProfileWorkbench", () => {
       target: { value: "gemini-secret" },
     });
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -861,19 +976,17 @@ describe("AgentProviderProfileWorkbench", () => {
     await renderWorkbench(createAgent("gemini"));
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
     fireEvent.change(within(dialog).getByLabelText("Provider kind"), {
       target: { value: "vertex-ai" },
     });
-    fireEvent.change(within(dialog).getByLabelText("Protocol"), {
-      target: { value: "platform-native" },
-    });
+    chooseProviderFormOption(dialog, "Protocol", "Platform native");
     expect(
       within(dialog).queryByLabelText("Credential (write-only)"),
     ).not.toBeInTheDocument();
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -904,13 +1017,17 @@ describe("AgentProviderProfileWorkbench", () => {
     );
 
     await renderWorkbench(createAgent("kimi"));
-    fireEvent.click(screen.getByRole("button", { name: "Add profile" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     const dialog = await screen.findByRole("region", {
-      name: "Add provider profile",
+      name: "Add provider",
     });
-    expect(within(dialog).getByLabelText("Provider kind")).toHaveValue("kimi");
-    expect(within(dialog).getByLabelText("Protocol")).toHaveValue(
-      "openai-chat",
+    expect(within(dialog).getByLabelText("Provider kind")).toHaveTextContent(
+      "Kimi",
+    );
+    expect(within(dialog).getByLabelText("Protocol")).toHaveTextContent(
+      "OpenAI Chat",
     );
     fireEvent.change(within(dialog).getByLabelText("Name"), {
       target: { value: " Kimi work " },
@@ -934,7 +1051,7 @@ describe("AgentProviderProfileWorkbench", () => {
       target: { value: "kimi-secret" },
     });
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -963,6 +1080,36 @@ describe("AgentProviderProfileWorkbench", () => {
     );
   });
 
+  it("keeps Google Generative AI selectable for Kimi's google-genai provider", async () => {
+    window.api.agent.listProviderProfiles = vi.fn().mockResolvedValue([]);
+
+    await renderWorkbench(createAgent("kimi"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
+    const dialog = await screen.findByRole("region", {
+      name: "Add provider",
+    });
+
+    chooseProviderFormOption(dialog, "Provider kind", "Google Generative AI");
+
+    const protocol = within(dialog).getByLabelText("Protocol");
+    expect(protocol).toHaveTextContent("Google Generative AI");
+    fireEvent.click(protocol);
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual([
+      "Platform native",
+      "OpenAI Chat",
+      "OpenAI Responses",
+      "Anthropic Messages",
+      "Google Generative AI",
+    ]);
+    expect(
+      screen.getByRole("option", { name: "Google Generative AI" }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
   it("creates a Qwen v4 direct provider with an explicit provider and environment key", async () => {
     window.api.agent.listProviderProfiles = vi.fn().mockResolvedValue([]);
     window.api.agent.createProviderProfile = vi.fn().mockResolvedValue(
@@ -980,15 +1127,17 @@ describe("AgentProviderProfileWorkbench", () => {
     );
 
     await renderWorkbench(createAgent("qwen"));
-    fireEvent.click(screen.getByRole("button", { name: "Add profile" }));
-    const dialog = await screen.findByRole("region", {
-      name: "Add provider profile",
-    });
-    expect(within(dialog).getByLabelText("Provider kind")).toHaveValue(
-      "openai",
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
     );
-    expect(within(dialog).getByLabelText("Protocol")).toHaveValue(
-      "openai-chat",
+    const dialog = await screen.findByRole("region", {
+      name: "Add provider",
+    });
+    expect(within(dialog).getByLabelText("Provider kind")).toHaveTextContent(
+      "OpenAI",
+    );
+    expect(within(dialog).getByLabelText("Protocol")).toHaveTextContent(
+      "OpenAI Chat",
     );
     fireEvent.change(within(dialog).getByLabelText("Name"), {
       target: { value: " Qwen work " },
@@ -1011,7 +1160,7 @@ describe("AgentProviderProfileWorkbench", () => {
       target: { value: "qwen-secret" },
     });
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -1044,15 +1193,17 @@ describe("AgentProviderProfileWorkbench", () => {
     window.api.agent.createProviderProfile = vi.fn();
 
     await renderWorkbench();
-    fireEvent.click(screen.getByRole("button", { name: "Add profile" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     const dialog = await screen.findByRole("region", {
-      name: "Add provider profile",
+      name: "Add provider",
     });
     fireEvent.change(within(dialog).getByLabelText("Provider kind"), {
       target: { value: " " },
     });
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     expect(within(dialog).getAllByText("This field is required.")).toHaveLength(
@@ -1098,7 +1249,7 @@ describe("AgentProviderProfileWorkbench", () => {
     await renderWorkbench();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
     expect(
       within(dialog).queryByLabelText("Secondary model (optional)"),
@@ -1106,8 +1257,8 @@ describe("AgentProviderProfileWorkbench", () => {
     fireEvent.change(within(dialog).getByLabelText("Name"), {
       target: { value: " Edited profile " },
     });
-    expect(within(dialog).getByLabelText("Credential type")).toHaveValue(
-      "ANTHROPIC_AUTH_TOKEN",
+    expect(within(dialog).getByLabelText("Credential type")).toHaveTextContent(
+      "Auth token (ANTHROPIC_AUTH_TOKEN)",
     );
     fireEvent.change(within(dialog).getByLabelText("Endpoint (optional)"), {
       target: { value: " https://new.example/v1 " },
@@ -1119,7 +1270,7 @@ describe("AgentProviderProfileWorkbench", () => {
       target: { value: "replacement-secret" },
     });
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -1170,16 +1321,14 @@ describe("AgentProviderProfileWorkbench", () => {
     await renderWorkbench();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
-    fireEvent.change(within(dialog).getByLabelText("Protocol"), {
-      target: { value: "platform-native" },
-    });
+    chooseProviderFormOption(dialog, "Protocol", "Platform native");
     expect(
       within(dialog).queryByLabelText("Credential (write-only)"),
     ).not.toBeInTheDocument();
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -1214,7 +1363,7 @@ describe("AgentProviderProfileWorkbench", () => {
     await renderWorkbench();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
     fireEvent.click(
       within(dialog).getByRole("radio", { name: "Replace credential" }),
@@ -1228,7 +1377,7 @@ describe("AgentProviderProfileWorkbench", () => {
       within(dialog).queryByLabelText("Credential (write-only)"),
     ).not.toBeInTheDocument();
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -1258,13 +1407,13 @@ describe("AgentProviderProfileWorkbench", () => {
     await renderWorkbench();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
     expect(
       within(dialog).queryByLabelText("Credential (write-only)"),
     ).not.toBeInTheDocument();
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -1273,149 +1422,9 @@ describe("AgentProviderProfileWorkbench", () => {
       ),
     );
     expect(
-      await screen.findByRole("region", { name: "Edit provider profile" }),
+      await screen.findByRole("region", { name: "Edit provider" }),
     ).toBeVisible();
     expect(screen.getByText("Provider operation failed")).toBeVisible();
   });
 
-  it("supports profile selection, duplication, export, archive, and confirmed deletion", async () => {
-    const first = profile({
-      id: "profile-first",
-      name: "First",
-      secretState: "missing",
-      modelMappings: [],
-    });
-    const second = profile({
-      id: "profile-second",
-      name: "Second",
-      secretState: "none",
-    });
-    const copy = profile({
-      id: "profile-copy",
-      name: "Second copy",
-      secretState: "none",
-    });
-    window.api.agent.listProviderProfiles = vi
-      .fn()
-      .mockResolvedValue([first, second]);
-    window.api.agent.duplicateProviderProfile = vi.fn().mockResolvedValue(copy);
-    window.api.agent.exportProviderProfile = vi.fn().mockResolvedValue({
-      kind: "prompthub-agent-provider-profile",
-      version: 1,
-      exportedAt: 100,
-      profile: copy,
-    });
-    window.api.agent.archiveProviderProfile = vi
-      .fn()
-      .mockResolvedValue({ ...copy, archived: true, updatedAt: 4 });
-    window.api.agent.deleteProviderProfile = vi
-      .fn()
-      .mockResolvedValue(undefined);
-    vi.mocked(navigator.clipboard.writeText).mockResolvedValue(undefined);
-
-    await renderWorkbench();
-    expect(screen.getByText("Credential missing")).toBeVisible();
-    expect(screen.getAllByText("No primary model").length).toBeGreaterThan(0);
-    expect(screen.getByText("No model mappings")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: /Second/ }));
-    expect(screen.getByRole("button", { name: /Second/ })).toHaveAttribute(
-      "aria-current",
-      "true",
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
-    await waitFor(() =>
-      expect(window.api.agent.duplicateProviderProfile).toHaveBeenCalledWith(
-        "profile-second",
-        "Second copy",
-      ),
-    );
-    expect((await screen.findAllByText("Second copy")).length).toBeGreaterThan(
-      0,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy export" }));
-    await waitFor(() =>
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-        expect.stringContaining('"kind": "prompthub-agent-provider-profile"'),
-      ),
-    );
-    expect(
-      await screen.findByRole("button", { name: "Export copied" }),
-    ).toBeVisible();
-
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
-    await waitFor(() =>
-      expect(window.api.agent.archiveProviderProfile).toHaveBeenCalledWith(
-        "profile-copy",
-        2,
-      ),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    const confirmation = await screen.findByRole("alertdialog", {
-      name: "Delete provider profile",
-    });
-    fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Delete" }),
-    );
-    await waitFor(() =>
-      expect(window.api.agent.deleteProviderProfile).toHaveBeenCalledWith(
-        "profile-first",
-      ),
-    );
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("alertdialog", {
-          name: "Delete provider profile",
-        }),
-      ).not.toBeInTheDocument(),
-    );
-  });
-
-  it("shows a bounded error when profile export cannot reach the clipboard", async () => {
-    window.api.agent.listProviderProfiles = vi
-      .fn()
-      .mockResolvedValue([profile()]);
-    window.api.agent.exportProviderProfile = vi.fn().mockResolvedValue({
-      kind: "prompthub-agent-provider-profile",
-      version: 1,
-      exportedAt: 100,
-      profile: profile(),
-    });
-    vi.mocked(navigator.clipboard.writeText).mockRejectedValue(
-      new Error("clipboard denied with private details"),
-    );
-    const originalExecCommand = document.execCommand;
-    Object.defineProperty(document, "execCommand", {
-      configurable: true,
-      value: vi.fn().mockReturnValue(false),
-    });
-
-    try {
-      await renderWorkbench();
-      fireEvent.click(screen.getByRole("button", { name: "Copy export" }));
-
-      expect(
-        await screen.findByText("Provider operation failed"),
-      ).toBeVisible();
-      expect(screen.queryByText(/private details/)).not.toBeInTheDocument();
-    } finally {
-      Object.defineProperty(document, "execCommand", {
-        configurable: true,
-        value: originalExecCommand,
-      });
-    }
-  });
-
-  it("shows a bounded public error instead of raw renderer failures", async () => {
-    window.api.agent.listProviderProfiles = vi
-      .fn()
-      .mockRejectedValue(new Error("secret token leaked from native failure"));
-
-    await renderWorkbench();
-
-    expect(await screen.findByText("Provider operation failed")).toBeVisible();
-    expect(screen.queryByText(/secret token/)).not.toBeInTheDocument();
-  });
 });

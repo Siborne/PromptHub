@@ -620,13 +620,12 @@ describe("managed Agent projection", () => {
       agentsRelativePath: "agents",
       mcpRelativePath: "settings/mcp.json",
       pluginsRelativePath: "powers",
+      globalRuleFile: "steering/AGENTS.md",
       configFiles: ["settings/cli.json"],
       launchPaths: {
         darwin: ["/Applications/Kiro.app", "~/Applications/Kiro.app"],
       },
     });
-    expect(kiro).not.toHaveProperty("globalRuleFile");
-
     const [agent] = buildManagedAgents({
       platforms: [kiro!],
       detectedPlatformIds: ["kiro"],
@@ -639,9 +638,9 @@ describe("managed Agent projection", () => {
       skills: "~/.kiro/skills",
       mcp: "~/.kiro/settings/mcp.json",
       plugins: "~/.kiro/powers",
+      rules: "~/.kiro/steering/AGENTS.md",
       configFileRelativePaths: ["settings/cli.json"],
     });
-    expect(agent.paths.rules).toBeUndefined();
     expect(agent.capabilities).toMatchObject({
       provider: { status: "partial", reason: "model-config-only" },
       sessions: {

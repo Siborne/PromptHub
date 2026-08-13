@@ -8,6 +8,8 @@ import type { PluginManagerBindings } from "./usePluginManagerBindings";
 import type { PluginManagerState } from "./usePluginManagerState";
 import type { PluginBatchTagMode } from "./plugin-manager-utils";
 import {
+  getPluginBatchInstallResultMessage,
+  getPluginInstallErrorMessage,
   getPluginUserTags,
   updatePluginUserTags,
 } from "./plugin-manager-utils";
@@ -54,14 +56,17 @@ function useBatchInstallAction(options: PluginManagerBatchActionOptions) {
     state.setIsBatchInstalling(true);
     let succeeded = 0;
     let failed = 0;
+    let firstFailure = "";
     for (const entry of selectedInstallEntries) {
       state.setInstallingId(entry.id);
       try {
         await bindings.pluginStore.installMarketPlugin(entry.id);
         succeeded += 1;
       } catch (error) {
-        console.error("Plugin batch install failed:", error);
+        const explainedFailure = getPluginInstallErrorMessage(error, t);
+        console.error("Plugin batch install failed:", explainedFailure);
         failed += 1;
+        firstFailure ||= explainedFailure;
       }
     }
     state.setInstallingId(null);
@@ -69,11 +74,11 @@ function useBatchInstallAction(options: PluginManagerBatchActionOptions) {
     state.setSelectedMarketEntryIds(new Set());
     bindings.pluginStore.setSelectedTab("market");
     showToast(
-      t("plugin.batchInstallResult", {
-        defaultValue:
-          "Batch install finished: {{succeeded}} succeeded, {{failed}} failed",
+      getPluginBatchInstallResultMessage({
         failed,
+        firstFailure,
         succeeded,
+        t,
       }),
       failed > 0 ? "error" : "success",
     );

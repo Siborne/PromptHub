@@ -7,7 +7,7 @@ import {
   Suspense,
 } from "react";
 import type { RecoveryCandidate } from "@prompthub/shared/types";
-import { Sidebar, TopBar, MainContent, TitleBar } from "./components/layout";
+import type { DragEndEvent } from "@dnd-kit/core";
 import { usePromptStore } from "./stores/prompt.store";
 import { useFolderStore } from "./stores/folder.store";
 import { useSettingsStore } from "./stores/settings.store";
@@ -46,17 +46,14 @@ import {
   type AutoSyncReason,
 } from "./services/sync-history";
 import { useToast } from "./components/ui/Toast";
-import { DndContext, pointerWithin, type DragEndEvent } from "@dnd-kit/core";
 import i18n from "./i18n";
 import { useTranslation } from "react-i18next";
 import type { UpdateStatus } from "./components/UpdateDialog";
-import { BackgroundImageBackdrop } from "./components/ui/BackgroundImageBackdrop";
 import { Spinner } from "./components/ui/Spinner";
 import { isWebRuntime } from "./runtime";
 import { useBackupImportController } from "./hooks/useBackupImportController";
 import { waitForPersistHydration } from "./utils/persist-hydration";
 import { createLocalDataRefreshController } from "./services/local-data-refresh";
-import { DesktopAppCommandBridge } from "./components/app/DesktopAppCommandBridge";
 import { migrateRendererPersistence } from "./services/renderer-persistence";
 
 // Lazy load heavy components for better initial load performance
@@ -64,6 +61,11 @@ import { migrateRendererPersistence } from "./services/renderer-persistence";
 const SettingsPage = lazy(() =>
   import("./components/settings/SettingsPage").then((m) => ({
     default: m.SettingsPage,
+  })),
+);
+const AppWorkspaceShell = lazy(() =>
+  import("./components/app/AppWorkspaceShell").then((m) => ({
+    default: m.AppWorkspaceShell,
   })),
 );
 const UpdateDialog = lazy(() =>
@@ -1150,6 +1152,19 @@ function App() {
         return;
       }
 
+      const initialVisibility = await window.electron?.isVisible?.();
+      if (disposed) {
+        return;
+      }
+      if (typeof initialVisibility === "boolean") {
+        isWindowVisibleRef.current = initialVisibility;
+      }
+
+      document.addEventListener("visibilitychange", handleBackgroundTaskResume);
+      window.api?.on?.("window:visibility-changed", handleBackgroundTaskResume);
+      window.addEventListener("focus", handleBackgroundTaskResume);
+      window.addEventListener("online", handleBackgroundTaskResume);
+
       await init();
       if (disposed) {
         return;
@@ -1169,11 +1184,6 @@ function App() {
         },
         log: (message) => logWhenDebugEnabled(`🔄 ${message}`),
       }).dispose;
-
-      document.addEventListener("visibilitychange", handleBackgroundTaskResume);
-      window.api?.on?.("window:visibility-changed", handleBackgroundTaskResume);
-      window.addEventListener("focus", handleBackgroundTaskResume);
-      window.addEventListener("online", handleBackgroundTaskResume);
     })();
 
     return () => {
@@ -1208,160 +1218,122 @@ function App() {
     );
   }
 
-  return (
-    <DndContext onDragEnd={handleDragEnd} collisionDetection={pointerWithin}>
-      <div
-        className={`relative flex flex-col h-screen bg-background text-foreground overflow-hidden ${
-          hasBackgroundImage ? "app-background-mode-image" : ""
-        }`}
-      >
-        {hasBackgroundImage ? (
-          <BackgroundImageBackdrop
-            src={normalizedBackgroundImageFileName!}
-            alt=""
-            opacity={renderedBackgroundImageOpacity}
-            blur={renderedBackgroundBlur}
-          />
-        ) : null}
-
-        <div
-          className={`relative z-10 flex flex-col h-screen overflow-hidden ${
-            hasBackgroundImage ? "app-wallpaper-shell" : ""
-          }`}
-        >
-          {/* Windows title bar */}
-          {/* Windows 标题栏 */}
-          {!webRuntime && <TitleBar />}
-          {!webRuntime && (
-            <DesktopAppCommandBridge
-              currentPage={currentPage}
-              onNavigate={setCurrentPage}
-              onOpenUpdater={openUpdateDialog}
-            />
-          )}
-
-          <div className="flex flex-1 overflow-y-hidden overflow-x-visible">
-            <Sidebar
-              currentPage={currentPage}
-              onNavigate={setCurrentPage}
-              layout="rail"
-            />
-
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-              <TopBar
-                onOpenSettings={() => setCurrentPage("settings")}
-                updateAvailable={updateAvailable}
-                onShowUpdateDialog={openUpdateDialog}
-              />
-
-              <div className="flex min-h-0 flex-1 overflow-hidden">
-                {currentPage === "home" ? (
-                  <Sidebar
-                    currentPage={currentPage}
-                    onNavigate={setCurrentPage}
-                    layout="panel"
-                  />
-                ) : null}
-
-                <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                  {/* Page content */}
-                  {/* 页面内容 */}
-                  {currentPage === "home" ? (
-                    <MainContent />
-                  ) : (
-                    <Suspense
-                      fallback={
-                        <div className="flex-1 flex items-center justify-center">
-                          <Spinner />
-                        </div>
-                      }
-                    >
-                      <SettingsPage
-                        onBack={() => setCurrentPage("home")}
-                        backupImportController={backupImportController}
-                      />
-                    </Suspense>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {showUpdateDialog ? (
-            <Suspense fallback={null}>
-              <UpdateDialog
-                isOpen={showUpdateDialog}
-                onClose={() => setShowUpdateDialog(false)}
-                initialStatus={initialUpdateStatus}
-              />
-            </Suspense>
-          ) : null}
-
-          {/* Windows close dialog */}
-          {/* Windows 关闭对话框 */}
-          {showCloseDialog ? (
-            <Suspense fallback={null}>
-              <CloseDialog
-                isOpen={showCloseDialog}
-                onClose={() => setShowCloseDialog(false)}
-              />
-            </Suspense>
-          ) : null}
-
-          {/* Data recovery dialog */}
-          {showRecoveryDialog ? (
-            <Suspense fallback={null}>
-              <DataRecoveryDialog
-                isOpen={showRecoveryDialog}
-                onClose={() => setShowRecoveryDialog(false)}
-                databases={recoverableDatabases}
-              />
-            </Suspense>
-          ) : null}
-
-          {backupImportController.importPreview ? (
-            <Suspense fallback={null}>
-              <BackupImportConfirmDialog
-                importPreview={backupImportController.importPreview}
-                confirmingImport={backupImportController.confirmingImport}
-                onClose={backupImportController.closeImportPreview}
-                onConfirm={() => {
-                  void backupImportController.confirmImport();
-                }}
-              />
-            </Suspense>
-          ) : null}
-
-          {/* Use EditPromptModal for importing, passing clipboard data as initialData */}
-          {showImportModal && (
-            <Suspense fallback={null}>
-              <EditPromptModal
-                isOpen={showImportModal}
-                onClose={() => {
-                  setShowImportModal(false);
-                  setImportData(null);
-                }}
-                initialData={
-                  importData
-                    ? {
-                        title: importData.name || importData.title,
-                        description: importData.description,
-                        promptType: importData.promptType,
-                        userPrompt: importData.userPrompt,
-                        systemPrompt: importData.systemPrompt,
-                        userPromptEn: importData.userPromptEn,
-                        systemPromptEn: importData.systemPromptEn,
-                        tags: importData.tags,
-                        source: importData.source || "clipboard",
-                      }
-                    : undefined
-                }
-              />
-            </Suspense>
-          )}
+  const settingsContent = (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center">
+          <Spinner />
         </div>
-      </div>
-    </DndContext>
+      }
+    >
+      <SettingsPage
+        onBack={() => setCurrentPage("home")}
+        backupImportController={backupImportController}
+      />
+    </Suspense>
+  );
+
+  const overlayContent = (
+    <>
+      {showUpdateDialog ? (
+        <Suspense fallback={null}>
+          <UpdateDialog
+            isOpen={showUpdateDialog}
+            onClose={() => setShowUpdateDialog(false)}
+            initialStatus={initialUpdateStatus}
+          />
+        </Suspense>
+      ) : null}
+
+      {/* Windows close dialog */}
+      {/* Windows 关闭对话框 */}
+      {showCloseDialog ? (
+        <Suspense fallback={null}>
+          <CloseDialog
+            isOpen={showCloseDialog}
+            onClose={() => setShowCloseDialog(false)}
+          />
+        </Suspense>
+      ) : null}
+
+      {/* Data recovery dialog */}
+      {showRecoveryDialog ? (
+        <Suspense fallback={null}>
+          <DataRecoveryDialog
+            isOpen={showRecoveryDialog}
+            onClose={() => setShowRecoveryDialog(false)}
+            databases={recoverableDatabases}
+          />
+        </Suspense>
+      ) : null}
+
+      {backupImportController.importPreview ? (
+        <Suspense fallback={null}>
+          <BackupImportConfirmDialog
+            importPreview={backupImportController.importPreview}
+            confirmingImport={backupImportController.confirmingImport}
+            onClose={backupImportController.closeImportPreview}
+            onConfirm={() => {
+              void backupImportController.confirmImport();
+            }}
+          />
+        </Suspense>
+      ) : null}
+
+      {/* Use EditPromptModal for importing, passing clipboard data as initialData */}
+      {showImportModal ? (
+        <Suspense fallback={null}>
+          <EditPromptModal
+            isOpen={showImportModal}
+            onClose={() => {
+              setShowImportModal(false);
+              setImportData(null);
+            }}
+            initialData={
+              importData
+                ? {
+                    title: importData.name || importData.title,
+                    description: importData.description,
+                    promptType: importData.promptType,
+                    userPrompt: importData.userPrompt,
+                    systemPrompt: importData.systemPrompt,
+                    userPromptEn: importData.userPromptEn,
+                    systemPromptEn: importData.systemPromptEn,
+                    tags: importData.tags,
+                    source: importData.source || "clipboard",
+                  }
+                : undefined
+            }
+          />
+        </Suspense>
+      ) : null}
+    </>
+  );
+
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-background">
+          <Spinner size="lg" />
+        </div>
+      }
+    >
+      <AppWorkspaceShell
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        onDragEnd={handleDragEnd}
+        onOpenUpdater={openUpdateDialog}
+        updateAvailable={updateAvailable}
+        webRuntime={webRuntime}
+        backgroundImageFileName={
+          hasBackgroundImage ? normalizedBackgroundImageFileName : undefined
+        }
+        backgroundImageOpacity={renderedBackgroundImageOpacity}
+        backgroundImageBlur={renderedBackgroundBlur}
+        settingsContent={settingsContent}
+        overlayContent={overlayContent}
+      />
+    </Suspense>
   );
 }
 

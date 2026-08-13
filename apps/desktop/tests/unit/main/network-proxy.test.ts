@@ -126,13 +126,37 @@ describe("network proxy service", () => {
     }
   });
 
-  it("restores direct proxy mode", async () => {
+  it("clears inherited proxy environment in direct mode", async () => {
     const mod = await import("../../../src/main/services/network-proxy");
     process.env.HTTP_PROXY = "http://old.proxy:8080";
+    process.env.HTTPS_PROXY = "http://old.proxy:8080";
+    process.env.ALL_PROXY = "http://old.proxy:8080";
+    process.env.http_proxy = "http://old.proxy:8080";
 
     await mod.applyNetworkProxySettings({ mode: "direct" });
 
     expect(setProxyMock).toHaveBeenLastCalledWith({ mode: "direct" });
-    expect(process.env.HTTP_PROXY).toBe(originalEnv.HTTP_PROXY);
+    expect(process.env.HTTP_PROXY).toBeUndefined();
+    expect(process.env.HTTPS_PROXY).toBeUndefined();
+    expect(process.env.ALL_PROXY).toBeUndefined();
+    expect(process.env.http_proxy).toBeUndefined();
+  });
+
+  it("restores the inherited proxy environment in system mode", async () => {
+    process.env.HTTP_PROXY = "http://system.proxy:8080";
+    process.env.HTTPS_PROXY = "http://system.proxy:8080";
+    const mod = await import("../../../src/main/services/network-proxy");
+
+    await mod.applyNetworkProxySettings({
+      mode: "manual",
+      protocol: "http",
+      host: "127.0.0.1",
+      port: 7890,
+    });
+    await mod.applyNetworkProxySettings({ mode: "system" });
+
+    expect(setProxyMock).toHaveBeenLastCalledWith({ mode: "system" });
+    expect(process.env.HTTP_PROXY).toBe("http://system.proxy:8080");
+    expect(process.env.HTTPS_PROXY).toBe("http://system.proxy:8080");
   });
 });

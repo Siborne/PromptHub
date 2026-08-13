@@ -7,18 +7,16 @@ export function providerWorkbenchListItemClass(
   const state = selected
     ? "border-primary/30 bg-card shadow-sm ring-1 ring-primary/10"
     : "border-border/70 bg-card hover:border-primary/20 hover:shadow-sm";
-  return `block w-full rounded-lg border text-left transition-all ${state} ${className}`.trim();
+  return `w-full rounded-lg border text-left transition-all ${state} ${className}`.trim();
 }
 
 export function AgentProviderWorkbenchLayout({
   toolbar,
   sidebar,
-  footer,
   children,
 }: {
   toolbar: ReactNode;
   sidebar: ReactNode;
-  footer: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -36,7 +34,6 @@ export function AgentProviderWorkbenchLayout({
         >
           {sidebar}
         </div>
-        <div className="border-t border-border p-3">{footer}</div>
       </aside>
       <section
         data-testid="agent-provider-workbench-detail"

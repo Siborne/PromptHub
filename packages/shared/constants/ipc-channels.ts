@@ -60,8 +60,7 @@ export const IPC_CHANNELS = {
   // Settings
   SETTINGS_GET: "settings:get",
   SETTINGS_SET: "settings:set",
-  SETTINGS_RENDERER_PERSISTENCE_MIGRATE:
-    "settings:rendererPersistence:migrate",
+  SETTINGS_RENDERER_PERSISTENCE_MIGRATE: "settings:rendererPersistence:migrate",
   SETTINGS_RENDERER_PERSISTENCE_GET: "settings:rendererPersistence:get",
   SETTINGS_RENDERER_PERSISTENCE_REPLACE_SETTINGS:
     "settings:rendererPersistence:replaceSettings",
@@ -196,9 +195,6 @@ export const IPC_CHANNELS = {
   // Agent native configuration files
   AGENT_CONFIG_FILES_LIST: "agent:configFiles:list",
   AGENT_LAUNCH: "agent:launch",
-  AGENT_CLI_DIAGNOSE: "agent:cli:diagnose",
-  AGENT_CLI_UPDATE_PLAN: "agent:cli:update:plan",
-  AGENT_CLI_UPDATE_APPLY: "agent:cli:update:apply",
   AGENT_CONFIG_FILE_READ: "agent:configFile:read",
   AGENT_CONFIG_FILE_WRITE: "agent:configFile:write",
   AGENT_DEFINITIONS_LIST: "agent:definitions:list",
@@ -243,9 +239,17 @@ export const IPC_CHANNELS = {
   AGENT_MANAGEMENT_BACKUP_EXPORT: "agent:managementBackup:export",
   AGENT_MANAGEMENT_BACKUP_RESTORE: "agent:managementBackup:restore",
   AGENT_PROVIDER_CURRENT_STATE: "agent:provider:currentState",
+  AGENT_CODEX_ACCOUNTS_LIST: "agent:codexAccounts:list",
+  AGENT_CODEX_ACCOUNT_SAVE_CURRENT: "agent:codexAccounts:saveCurrent",
+  AGENT_CODEX_ACCOUNT_IMPORT: "agent:codexAccounts:import",
+  AGENT_CODEX_ACCOUNT_ACTIVATE: "agent:codexAccounts:activate",
+  AGENT_CODEX_ACCOUNT_DELETE: "agent:codexAccounts:delete",
   AGENT_PROVIDER_MIGRATION_PREVIEW: "agent:providerMigration:preview",
   AGENT_PROVIDER_MIGRATION_APPLY: "agent:providerMigration:apply",
   AGENT_PROVIDER_IMPORT_CURRENT: "agent:provider:importCurrent",
+  AGENT_PROVIDER_TEST_CURRENT_CONNECTION:
+    "agent:provider:testCurrentConnection",
+  AGENT_PROVIDER_TEST_CURRENT_MODEL: "agent:provider:testCurrentModel",
   AGENT_PROVIDER_TEST_CONNECTION: "agent:provider:testConnection",
   AGENT_PROVIDER_TEST_MODEL: "agent:provider:testModel",
   AGENT_PROVIDER_CANCEL_MODEL_TEST: "agent:provider:cancelModelTest",

@@ -117,6 +117,210 @@ describe("Agent Plugin target inventory scan", () => {
     expect(plugins.some((plugin) => plugin.name === "sessions")).toBe(false);
   });
 
+  it("reads the official Oh My Pi user plugin registry from the sibling plugin data root", () => {
+    const ompHome = agentRoot;
+    const ompAgentRoot = path.join(ompHome, "agent");
+    const installedPlugin = path.join(
+      ompHome,
+      "plugins",
+      "cache",
+      "plugins",
+      "official",
+      "review-kit",
+      "1.0.0",
+    );
+    fs.mkdirSync(ompAgentRoot, { recursive: true });
+    writeJson(path.join(installedPlugin, ".omp-plugin", "plugin.json"), {
+      name: "review-kit",
+      displayName: "Review Kit",
+      version: "1.0.0",
+      skills: ["./skills/review/SKILL.md"],
+      commands: ["./commands/review.md"],
+    });
+    touch(path.join(installedPlugin, "skills", "review", "SKILL.md"));
+    touch(path.join(installedPlugin, "commands", "review.md"));
+    writeJson(path.join(ompHome, "plugins", "installed_plugins.json"), {
+      version: 2,
+      plugins: {
+        "review-kit@official": [
+          {
+            scope: "user",
+            installPath: installedPlugin,
+            version: "1.0.0",
+            installedAt: "2026-08-11T00:00:00.000Z",
+            lastUpdated: "2026-08-11T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const plugins = scanInstalledPluginsForTarget("oh-my-pi", ompAgentRoot);
+
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0]).toMatchObject({
+      name: "review-kit",
+      displayName: "Review Kit",
+      version: "1.0.0",
+      inventory: { skills: 1, commands: 1 },
+    });
+  });
+
+  it("ignores Oh My Pi project installs, duplicate paths, and packages outside its plugin data root", () => {
+    const ompHome = agentRoot;
+    const ompAgentRoot = path.join(ompHome, "agent");
+    const installedPlugin = path.join(
+      ompHome,
+      "plugins",
+      "cache",
+      "plugins",
+      "official",
+      "review-kit",
+      "1.0.0",
+    );
+    const externalPlugin = fs.mkdtempSync(
+      path.join(os.tmpdir(), "external-omp-plugin-"),
+    );
+    const missingPlugin = path.join(
+      ompHome,
+      "plugins",
+      "cache",
+      "plugins",
+      "official",
+      "missing",
+      "1.0.0",
+    );
+    fs.mkdirSync(ompAgentRoot, { recursive: true });
+    writeJson(path.join(installedPlugin, ".claude-plugin", "plugin.json"), {
+      name: "review-kit",
+      commands: ["./commands/review.md"],
+    });
+    touch(path.join(installedPlugin, "commands", "review.md"));
+    writeJson(path.join(externalPlugin, "plugin.json"), {
+      name: "outside",
+      commands: ["./commands/outside.md"],
+    });
+    touch(path.join(externalPlugin, "commands", "outside.md"));
+    writeJson(path.join(ompHome, "plugins", "installed_plugins.json"), {
+      version: 2,
+      plugins: {
+        "review-kit@official": [
+          { scope: "user", installPath: installedPlugin, version: "1.0.0" },
+          { scope: "user", installPath: installedPlugin, version: "1.0.0" },
+          {
+            scope: "project",
+            installPath: installedPlugin,
+            version: "1.0.0",
+          },
+        ],
+        "outside@official": [
+          { scope: "user", installPath: externalPlugin, version: "1.0.0" },
+        ],
+        "missing@official": [
+          { scope: "user", installPath: missingPlugin, version: "1.0.0" },
+        ],
+      },
+    });
+
+    try {
+      const plugins = scanInstalledPluginsForTarget("oh-my-pi", ompAgentRoot);
+
+      expect(plugins).toHaveLength(1);
+      expect(plugins[0]?.name).toBe("review-kit");
+    } finally {
+      fs.rmSync(externalPlugin, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "rejects Oh My Pi registry package symlinks that escape its plugin data root",
+    () => {
+      const ompHome = agentRoot;
+      const ompAgentRoot = path.join(ompHome, "agent");
+      const externalPlugin = fs.mkdtempSync(
+        path.join(os.tmpdir(), "external-omp-symlink-"),
+      );
+      const linkedPlugin = path.join(
+        ompHome,
+        "plugins",
+        "cache",
+        "plugins",
+        "official",
+        "linked",
+        "1.0.0",
+      );
+      fs.mkdirSync(path.dirname(linkedPlugin), { recursive: true });
+      writeJson(path.join(externalPlugin, ".omp-plugin", "plugin.json"), {
+        name: "linked",
+        commands: ["./commands/run.md"],
+      });
+      touch(path.join(externalPlugin, "commands", "run.md"));
+      fs.symlinkSync(externalPlugin, linkedPlugin, "dir");
+      writeJson(path.join(ompHome, "plugins", "installed_plugins.json"), {
+        version: 2,
+        plugins: {
+          "linked@official": [
+            { scope: "user", installPath: linkedPlugin, version: "1.0.0" },
+          ],
+        },
+      });
+
+      try {
+        expect(scanInstalledPluginsForTarget("oh-my-pi", ompAgentRoot)).toEqual(
+          [],
+        );
+      } finally {
+        fs.rmSync(externalPlugin, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("rejects malformed and oversized Oh My Pi registries without reading credentials", () => {
+    const ompHome = agentRoot;
+    const ompAgentRoot = path.join(ompHome, "agent");
+    const registryPath = path.join(
+      ompHome,
+      "plugins",
+      "installed_plugins.json",
+    );
+    const credentialPath = path.join(ompAgentRoot, "agent.db");
+    fs.mkdirSync(ompAgentRoot, { recursive: true });
+    touch(credentialPath);
+    const readFileSpy = vi.spyOn(fs, "readFileSync");
+
+    try {
+      writeJson(registryPath, { version: 1, plugins: {} });
+      expect(scanInstalledPluginsForTarget("oh-my-pi", ompAgentRoot)).toEqual(
+        [],
+      );
+
+      fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+      fs.writeFileSync(registryPath, "{invalid", "utf8");
+      expect(scanInstalledPluginsForTarget("oh-my-pi", ompAgentRoot)).toEqual(
+        [],
+      );
+
+      fs.writeFileSync(
+        registryPath,
+        JSON.stringify({
+          version: 2,
+          plugins: {},
+          padding: "x".repeat(1024 * 1024),
+        }),
+        "utf8",
+      );
+      expect(scanInstalledPluginsForTarget("oh-my-pi", ompAgentRoot)).toEqual(
+        [],
+      );
+      expect(
+        readFileSpy.mock.calls.some(([filePath]) =>
+          String(filePath).endsWith("agent.db"),
+        ),
+      ).toBe(false);
+    } finally {
+      readFileSpy.mockRestore();
+    }
+  });
+
   it("reads markerless multi-capability Claude bundles without package.json", () => {
     const manualPlugin = path.join(agentRoot, "get-shit-done");
     touch(path.join(manualPlugin, "commands", "ship.md"));

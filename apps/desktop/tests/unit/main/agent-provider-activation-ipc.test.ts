@@ -112,6 +112,14 @@ async function setup(overrides: Record<string, ReturnType<typeof vi.fn>> = {}) {
       import("@prompthub/shared/constants/ipc-channels"),
     ]);
   const service = {
+    testCurrentConnection: vi.fn(async () => ({
+      ...connectionResult,
+      profileId: "native:codex",
+    })),
+    testCurrentModel: vi.fn(async () => ({
+      ...modelTestResult,
+      profileId: "native:codex",
+    })),
     testConnection: vi.fn(async () => connectionResult),
     testModel: vi.fn(async () => modelTestResult),
     importCurrent: vi.fn(async () => importPreview),
@@ -139,6 +147,20 @@ describe("Agent Provider activation IPC", () => {
   it("resolves main-owned paths for test, import, preview, and activation", async () => {
     const { handlers, IPC_CHANNELS, resolveContext, service } = await setup();
 
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_CONNECTION](null, {
+        agentId: "codex",
+      }),
+    ).resolves.toMatchObject({ profileId: "native:codex" });
+    await expect(
+      handlers[IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_MODEL](
+        { sender: { id: 7 } },
+        {
+          agentId: "codex",
+          requestId: "native-model-test-1",
+        },
+      ),
+    ).resolves.toMatchObject({ profileId: "native:codex" });
     await expect(
       handlers[IPC_CHANNELS.AGENT_PROVIDER_TEST_CONNECTION](null, {
         agentId: "codex",
@@ -175,9 +197,14 @@ describe("Agent Provider activation IPC", () => {
       }),
     ).resolves.toEqual(activationResult);
 
-    expect(resolveContext).toHaveBeenCalledTimes(5);
+    expect(resolveContext).toHaveBeenCalledTimes(7);
     expect(resolveContext).toHaveBeenNthCalledWith(1, "codex");
     expect(resolveContext).toHaveBeenNthCalledWith(2, "codex");
+    expect(service.testCurrentConnection).toHaveBeenCalledWith({ context });
+    expect(service.testCurrentModel).toHaveBeenCalledWith(
+      { context },
+      expect.any(AbortSignal),
+    );
     expect(service.testConnection).toHaveBeenCalledWith({
       context,
       profileId: "profile-1",
@@ -280,6 +307,11 @@ describe("Agent Provider activation IPC", () => {
     const { handlers, IPC_CHANNELS, resolveContext, service } = await setup();
     const invalidRequests: Array<[string, unknown]> = [
       [IPC_CHANNELS.AGENT_PROVIDER_IMPORT_CURRENT, null],
+      [IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_CONNECTION, { agentId: "" }],
+      [
+        IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_MODEL,
+        { agentId: "codex", requestId: "../bad" },
+      ],
       [
         IPC_CHANNELS.AGENT_PROVIDER_TEST_CONNECTION,
         { agentId: "codex", profileId: "" },

@@ -256,4 +256,72 @@ describe("Agent conversation projection migration", () => {
     closeDatabase();
     expect(() => initDatabase(dbPath)).not.toThrow();
   });
+
+  it("removes the legacy soft-delete column without reviving deleted metadata", () => {
+    const dbPath = path.join(tempDir, "prompthub.db");
+    const legacy = new Database(dbPath);
+    legacy.exec(`
+      CREATE TABLE agent_conversation_metadata (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        title TEXT,
+        project_id TEXT,
+        project_path TEXT,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        note TEXT,
+        is_favorite INTEGER NOT NULL DEFAULT 0 CHECK(is_favorite IN (0, 1)),
+        archived_at INTEGER,
+        deleted_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(agent_id, session_id)
+      );
+      INSERT INTO agent_conversation_metadata (
+        id, agent_id, session_id, title, tags_json, is_favorite,
+        deleted_at, created_at, updated_at
+      ) VALUES
+        ('active', 'claude', 'session-active', 'Keep me', '[]', 0, NULL, 1, 2),
+        ('deleted', 'claude', 'session-deleted', 'Do not revive', '[]', 0, 3, 1, 3);
+    `);
+    legacy.close();
+
+    const migrated = initDatabase(dbPath);
+    expect(
+      migrated
+        .pragma("table_info(agent_conversation_metadata)")
+        .map((column: { name: string }) => column.name),
+    ).not.toContain("deleted_at");
+    expect(
+      migrated.all(
+        `SELECT id, title
+         FROM agent_conversation_metadata
+         ORDER BY id ASC`,
+      ),
+    ).toEqual([{ id: "active", title: "Keep me" }]);
+    expect(
+      migrated.get(
+        "SELECT name FROM schema_migrations WHERE name = ?",
+        "drop_agent_conversation_metadata_deleted_at_v1",
+      ),
+    ).toEqual({ name: "drop_agent_conversation_metadata_deleted_at_v1" });
+    expect(
+      migrated.all(
+        `SELECT name
+         FROM sqlite_master
+         WHERE type = 'index'
+           AND name IN (
+             'idx_agent_conversation_metadata_agent_updated',
+             'idx_agent_conversation_metadata_project'
+           )
+         ORDER BY name ASC`,
+      ),
+    ).toEqual([
+      { name: "idx_agent_conversation_metadata_agent_updated" },
+      { name: "idx_agent_conversation_metadata_project" },
+    ]);
+
+    closeDatabase();
+    expect(() => initDatabase(dbPath)).not.toThrow();
+  });
 });

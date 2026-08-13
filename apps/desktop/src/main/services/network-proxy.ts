@@ -73,10 +73,18 @@ function setOrRestoreEnv(
 
 function applyProxyEnvironment(settings: NetworkProxySettings): void {
   const proxyUrl = buildProxyUrl(settings);
-  if (settings.mode !== "manual" || !proxyUrl) {
+  if (settings.mode === "direct") {
+    for (const key of PROXY_ENV_KEYS) delete process.env[key];
+    return;
+  }
+  if (settings.mode === "system") {
     for (const key of PROXY_ENV_KEYS) {
       setOrRestoreEnv(key);
     }
+    return;
+  }
+  if (!proxyUrl) {
+    for (const key of PROXY_ENV_KEYS) delete process.env[key];
     return;
   }
 

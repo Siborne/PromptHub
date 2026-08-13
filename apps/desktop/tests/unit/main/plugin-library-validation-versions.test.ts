@@ -621,6 +621,11 @@ describe("CorePluginLibraryService", () => {
       status: "runtime-only",
       enabled: false,
     });
+    expect(matrix.find((target) => target.id === "oh-my-pi")).toMatchObject({
+      status: "native",
+      enabled: false,
+      unsupportedReason: expect.stringMatching(/reads installed.*inventory/i),
+    });
     expect(matrix.find((target) => target.id === "windsurf")).toMatchObject({
       status: "composite",
       enabled: false,

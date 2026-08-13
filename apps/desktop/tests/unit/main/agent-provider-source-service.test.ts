@@ -120,6 +120,7 @@ describe("Agent Provider source service", () => {
         sourceId: "provider-work",
         name: "Work Gateway",
         protocol: "openai-chat",
+        protocols: ["openai-chat", "openai-responses"],
         compatible: true,
         credentialReady: true,
         models: [
@@ -147,6 +148,34 @@ describe("Agent Provider source service", () => {
     expect(JSON.stringify(candidates)).not.toContain("image-secret");
   });
 
+  it("recommends the native Responses protocol for the official OpenAI endpoint", () => {
+    const source = config();
+    source.providers[0].provider = "openai";
+    source.providers[0].apiUrl = "https://api.openai.com/v1";
+    source.models[0].provider = "openai";
+    source.models[0].apiUrl = "https://api.openai.com/v1";
+    const { service } = harness(vi.fn(() => source));
+
+    expect(service.list("codex")[0]).toEqual(
+      expect.objectContaining({
+        protocol: "openai-responses",
+        protocols: ["openai-responses", "openai-chat"],
+      }),
+    );
+    expect(service.list("opencode")[0]).toEqual(
+      expect.objectContaining({
+        protocol: "openai-responses",
+        protocols: ["openai-responses", "openai-chat"],
+      }),
+    );
+    expect(service.list("pi")[0]).toEqual(
+      expect.objectContaining({
+        protocol: "openai-responses",
+        protocols: ["openai-responses", "openai-completions"],
+      }),
+    );
+  });
+
   it("rejects stale linked models whose protocol or endpoint no longer matches", () => {
     const source = config();
     source.models.push(
@@ -170,6 +199,47 @@ describe("Agent Provider source service", () => {
     ]);
   });
 
+  it("accepts legacy model links by matching provider identity", () => {
+    const source = config();
+    delete source.models[0].providerId;
+    const { service } = harness(vi.fn(() => source));
+
+    expect(service.list("codex")[0].models).toEqual([
+      expect.objectContaining({ id: "model-chat" }),
+    ]);
+  });
+
+  it("keeps an invalid official OpenAI endpoint non-importable", () => {
+    const source = config();
+    source.providers[0].provider = "openai";
+    source.providers[0].apiUrl = "://invalid";
+    source.models[0].provider = "openai";
+    source.models[0].apiUrl = "://invalid";
+    const { service } = harness(vi.fn(() => source));
+
+    expect(service.list("codex")[0]).toEqual(
+      expect.objectContaining({
+        compatible: false,
+        incompatibility: "invalid-endpoint",
+      }),
+    );
+  });
+
+  it("falls back to provider identity when a source has no display name", () => {
+    const source = config();
+    delete source.providers[0].name;
+    const { service } = harness(vi.fn(() => source));
+
+    expect(service.list("claude")[0]).toEqual(
+      expect.objectContaining({
+        name: "openai-compatible",
+        protocol: null,
+        protocols: [],
+        incompatibility: "protocol-unsupported",
+      }),
+    );
+  });
+
   it("imports a compatible source as an independent Profile with a main-only secret", async () => {
     const { service, create, read } = harness();
 
@@ -177,6 +247,7 @@ describe("Agent Provider source service", () => {
       platformId: "codex",
       sourceId: "provider-work",
       modelId: "model-chat",
+      protocol: "openai-responses",
     });
 
     expect(read).toHaveBeenCalledTimes(1);
@@ -185,7 +256,7 @@ describe("Agent Provider source service", () => {
         platformId: "codex",
         name: "Work Gateway",
         providerKind: "openai-compatible",
-        protocol: "openai-chat",
+        protocol: "openai-responses",
         endpoint: "https://gateway.example.com/v1",
         config: { providerId: "provider-work" },
         source: "import",
@@ -198,6 +269,20 @@ describe("Agent Provider source service", () => {
     expect(result).toBe(CREATED_PROFILE);
   });
 
+  it("rejects a protocol that is not supported by the destination Agent", async () => {
+    const { service, create } = harness();
+
+    await expect(
+      service.importSource({
+        platformId: "codex",
+        sourceId: "provider-work",
+        modelId: "model-chat",
+        protocol: "anthropic-messages",
+      }),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_PROTOCOL_UNSUPPORTED");
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("uses the selected model credential when the provider has no key", async () => {
     const source = config();
     source.providers[0].apiKey = "";
@@ -208,11 +293,34 @@ describe("Agent Provider source service", () => {
       platformId: "codex",
       sourceId: "provider-work",
       modelId: "model-chat",
+      protocol: "openai-chat",
     });
 
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ secret: "model-secret" }),
     );
+  });
+
+  it("imports a credential-free source without synthesizing a secret", async () => {
+    const source = config();
+    delete source.providers[0].name;
+    source.providers[0].apiKey = "";
+    source.models[0].apiKey = "";
+    const { service, create } = harness(vi.fn(() => source));
+
+    await service.importSource({
+      platformId: "codex",
+      sourceId: "provider-work",
+      modelId: "model-chat",
+      protocol: "openai-chat",
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: expect.objectContaining({ name: "openai-compatible" }),
+      }),
+    );
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty("secret");
   });
 
   it("maps Anthropic, Gemini, OpenCode and Qwen platform fields explicitly", async () => {
@@ -237,25 +345,44 @@ describe("Agent Provider source service", () => {
     });
     const { service, create } = harness(vi.fn(() => source));
 
+    expect(
+      service.list("codex").find((item) => item.sourceId === "provider-gemini"),
+    ).toEqual(
+      expect.objectContaining({
+        compatible: false,
+        incompatibility: "protocol-unsupported",
+      }),
+    );
+
     await service.importSource({
       platformId: "claude",
       sourceId: "provider-anthropic",
       modelId: "model-anthropic",
+      protocol: "anthropic-messages",
     });
     await service.importSource({
       platformId: "gemini",
       sourceId: "provider-gemini",
       modelId: "model-gemini",
+      protocol: "google-generative-ai",
     });
     await service.importSource({
       platformId: "opencode",
       sourceId: "provider-work",
       modelId: "model-chat",
+      protocol: "openai-chat",
+    });
+    await service.importSource({
+      platformId: "opencode",
+      sourceId: "provider-work",
+      modelId: "model-chat",
+      protocol: "openai-responses",
     });
     await service.importSource({
       platformId: "qwen",
       sourceId: "provider-anthropic",
       modelId: "model-anthropic",
+      protocol: "anthropic-messages",
     });
 
     expect(create.mock.calls.map(([request]) => request.profile)).toEqual([
@@ -272,6 +399,14 @@ describe("Agent Provider source service", () => {
         config: {
           providerId: "provider-work",
           package: "@ai-sdk/openai-compatible",
+        },
+      }),
+      expect.objectContaining({
+        providerKind: "openai",
+        protocol: "openai-responses",
+        config: {
+          providerId: "provider-work",
+          package: "@ai-sdk/openai",
         },
       }),
       expect.objectContaining({
@@ -293,12 +428,14 @@ describe("Agent Provider source service", () => {
       expect.objectContaining({
         compatible: true,
         protocol: "openai-completions",
+        protocols: ["openai-completions", "openai-responses"],
       }),
     );
     const result = await service.importPiSource({
       platformId: "pi",
       sourceId: "provider-work",
       modelId: "model-chat",
+      protocol: "openai-completions",
     });
 
     expect(importPiProvider).toHaveBeenCalledWith({
@@ -312,6 +449,65 @@ describe("Agent Provider source service", () => {
     });
     expect(result).toEqual({ backupPath: null });
     expect(JSON.stringify(service.list("pi"))).not.toContain("provider-secret");
+  });
+
+  it("imports an OpenAI-compatible source through Pi Responses when selected", async () => {
+    const { service, importPiProvider } = harness();
+
+    await service.importPiSource({
+      platformId: "pi",
+      sourceId: "provider-work",
+      modelId: "model-chat",
+      protocol: "openai-responses",
+    });
+
+    expect(importPiProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: expect.objectContaining({ api: "openai-responses" }),
+      }),
+    );
+  });
+
+  it("normalizes a PromptHub source id into a safe Pi provider id", async () => {
+    const source = config();
+    source.providers[0].id = "My Provider!";
+    source.models[0].providerId = "My Provider!";
+    const { service, importPiProvider } = harness(vi.fn(() => source));
+
+    await service.importPiSource({
+      platformId: "pi",
+      sourceId: "My Provider!",
+      modelId: "model-chat",
+      protocol: "openai-completions",
+    });
+
+    expect(importPiProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: expect.objectContaining({ providerId: "my-provider" }),
+      }),
+    );
+  });
+
+  it("avoids overwriting Pi's reserved OpenAI provider id", async () => {
+    const source = config();
+    source.providers[0].id = "openai";
+    source.models[0].providerId = "openai";
+    const { service, importPiProvider } = harness(vi.fn(() => source));
+
+    await service.importPiSource({
+      platformId: "pi",
+      sourceId: "openai",
+      modelId: "model-chat",
+      protocol: "openai-completions",
+    });
+
+    expect(importPiProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: expect.objectContaining({
+          providerId: "openai-prompthub",
+        }),
+      }),
+    );
   });
 
   it("maps every supported PromptHub protocol to the Pi native API", () => {
@@ -352,6 +548,7 @@ describe("Agent Provider source service", () => {
         platformId: "codex",
         sourceId: "provider-work",
         modelId: "model-chat",
+        protocol: "openai-completions",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
     await expect(
@@ -359,6 +556,7 @@ describe("Agent Provider source service", () => {
         platformId: "pi",
         sourceId: "missing",
         modelId: "model-chat",
+        protocol: "openai-completions",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_NOT_FOUND");
     await expect(
@@ -366,13 +564,31 @@ describe("Agent Provider source service", () => {
         platformId: "pi",
         sourceId: "provider-work",
         modelId: "missing",
+        protocol: "openai-completions",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_MODEL_NOT_FOUND");
+    await expect(
+      service.importPiSource({
+        platformId: "pi",
+        sourceId: "provider-work",
+        modelId: "model-chat",
+        protocol: "openai-chat",
+      }),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_PROTOCOL_UNSUPPORTED");
+    await expect(
+      service.importPiSource({
+        platformId: "pi",
+        sourceId: "provider-empty",
+        modelId: "model-chat",
+        protocol: "openai-completions",
+      }),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
     await expect(
       service.importSource({
         platformId: "pi",
         sourceId: "provider-work",
         modelId: "model-chat",
+        protocol: "openai-completions",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
     expect(importPiProvider).not.toHaveBeenCalled();
@@ -389,6 +605,7 @@ describe("Agent Provider source service", () => {
         platformId: "pi",
         sourceId: "---",
         modelId: "model-chat",
+        protocol: "openai-completions",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
     expect(importPiProvider).not.toHaveBeenCalled();
@@ -402,6 +619,7 @@ describe("Agent Provider source service", () => {
         platformId: "codex",
         sourceId: "provider-anthropic",
         modelId: "model-anthropic",
+        protocol: "anthropic-messages",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
     await expect(
@@ -409,6 +627,7 @@ describe("Agent Provider source service", () => {
         platformId: "codex",
         sourceId: "missing",
         modelId: "model-chat",
+        protocol: "openai-chat",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_NOT_FOUND");
     await expect(
@@ -416,6 +635,7 @@ describe("Agent Provider source service", () => {
         platformId: "codex",
         sourceId: "provider-work",
         modelId: "missing",
+        protocol: "openai-chat",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_MODEL_NOT_FOUND");
     await expect(
@@ -423,6 +643,7 @@ describe("Agent Provider source service", () => {
         platformId: "kimi",
         sourceId: "provider-work",
         modelId: "model-chat",
+        protocol: "openai-chat",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INCOMPATIBLE");
     expect(create).not.toHaveBeenCalled();
@@ -458,6 +679,7 @@ describe("Agent Provider source service", () => {
         platformId: "codex\u0000",
         sourceId: "provider-work",
         modelId: "model-chat",
+        protocol: "openai-chat",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INPUT_INVALID");
     await expect(
@@ -465,6 +687,15 @@ describe("Agent Provider source service", () => {
         platformId: "codex",
         sourceId: "x".repeat(513),
         modelId: "model-chat",
+        protocol: "openai-chat",
+      }),
+    ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INPUT_INVALID");
+    await expect(
+      service.importSource({
+        platformId: "codex",
+        sourceId: "provider-work",
+        modelId: "model-chat",
+        protocol: "",
       }),
     ).rejects.toThrow("AGENT_PROVIDER_SOURCE_INPUT_INVALID");
     expect(read).not.toHaveBeenCalled();

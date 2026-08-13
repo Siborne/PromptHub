@@ -16,7 +16,9 @@ import {
 
 test.describe("E2E: Skill smoke", () => {
   test("launches with isolated test profile and opens the seeded skill workflow", async () => {
-    const { app, page, userDataDir } = await launchPromptHub("skills-smoke.seed.json");
+    const { app, page, userDataDir } = await launchPromptHub(
+      "skills-smoke.seed.json",
+    );
 
     try {
       await setAppLanguage(page, "en");
@@ -30,19 +32,21 @@ test.describe("E2E: Skill smoke", () => {
         .filter({ has: page.getByRole("heading", { name: "write" }) })
         .first();
       await expect(skillRow).toBeVisible();
-      await expect(
-        page.getByRole("heading", { name: "write" }),
-      ).toBeVisible();
+      await expect(page.getByRole("heading", { name: "write" })).toBeVisible();
 
       await skillRow.click();
-      await expect(page.getByRole("button", { name: "Snapshot" })).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Snapshot" }),
+      ).toBeVisible();
       await expect(page.getByText("Current Version v1")).toBeVisible();
 
       await page.getByRole("button", { name: "Snapshot" }).click();
-      await expect(page.getByRole("heading", { name: "Create Snapshot" })).toBeVisible();
-      await page.getByPlaceholder("Describe what changed...").fill(
-        "Smoke snapshot from Playwright",
-      );
+      await expect(
+        page.getByRole("heading", { name: "Create Snapshot" }),
+      ).toBeVisible();
+      await page
+        .getByPlaceholder("Describe what changed...")
+        .fill("Smoke snapshot from Playwright");
       await page
         .getByRole("button", { name: "Create Snapshot" })
         .evaluate((button) => {
@@ -55,7 +59,10 @@ test.describe("E2E: Skill smoke", () => {
         .poll(() =>
           page.evaluate(async () => {
             const skills = await window.api.skill.getAll();
-            return skills.find((skill) => skill.name === "write")?.currentVersion ?? -1;
+            return (
+              skills.find((skill) => skill.name === "write")?.currentVersion ??
+              -1
+            );
           }),
         )
         .toBe(1);
@@ -112,10 +119,36 @@ test.describe("E2E: Skill smoke", () => {
       await expect.poll(() => isAppWindowVisible(app)).toBe(true);
 
       await expect
+        .poll(
+          () =>
+            page.evaluate(async () => {
+              const settings = await window.api.settings.get();
+              return (
+                settings.autoSyncHistory?.find(
+                  (entry) => entry.provider === "webdav",
+                ) ?? null
+              );
+            }),
+          {
+            message:
+              "resumed WebDAV startup sync should reach a terminal state",
+          },
+        )
+        .toEqual(
+          expect.objectContaining({
+            provider: "webdav",
+            reason: "startup-resume",
+            status: "success",
+          }),
+        );
+
+      await expect
         .poll(async () => (await getE2EStats(page))?.webdav.upload ?? 0)
         .toBeGreaterThan(0);
       await expect
-        .poll(async () => (await getE2EStats(page))?.webdav.ensureDirectory ?? 0)
+        .poll(
+          async () => (await getE2EStats(page))?.webdav.ensureDirectory ?? 0,
+        )
         .toBeGreaterThan(0);
     } finally {
       await closePromptHub(app, userDataDir);
@@ -123,7 +156,9 @@ test.describe("E2E: Skill smoke", () => {
   });
 
   test("toggles app visibility from the local showApp shortcut", async () => {
-    const { app, page, userDataDir } = await launchPromptHub("skills-smoke.seed.json");
+    const { app, page, userDataDir } = await launchPromptHub(
+      "skills-smoke.seed.json",
+    );
 
     try {
       await expect(page).toHaveTitle(/PromptHub/);
@@ -202,9 +237,7 @@ test.describe("E2E: Skill smoke", () => {
         "deploy-checklist.md",
       );
 
-      await expect
-        .poll(() => fs.existsSync(promptFile))
-        .toBe(true);
+      await expect.poll(() => fs.existsSync(promptFile)).toBe(true);
 
       const raw = fs.readFileSync(promptFile, "utf8");
       expect(raw).toContain('title: "Deploy Checklist"');

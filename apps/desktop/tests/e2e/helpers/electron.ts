@@ -1,4 +1,9 @@
-import { _electron as electron, expect, type ElectronApplication, type Page } from "@playwright/test";
+import {
+  _electron as electron,
+  expect,
+  type ElectronApplication,
+  type Page,
+} from "@playwright/test";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -101,17 +106,7 @@ export async function launchPromptHub(
 }
 
 export async function setAppLanguage(page: Page, language: string) {
-  await waitForRendererReady(page);
-  await page.evaluate((nextLanguage) => {
-    localStorage.setItem(
-      "prompthub-settings",
-      JSON.stringify({
-        state: { language: nextLanguage },
-      }),
-    );
-  }, language);
-  await page.reload();
-  await waitForRendererReady(page);
+  await setAppSettings(page, { language });
 }
 
 export async function setAppSettings(
@@ -121,18 +116,29 @@ export async function setAppSettings(
   await waitForRendererReady(page);
   const mainSettingsPatch = buildMainSettingsPatch(nextSettings);
 
-  await page.evaluate(async ({ settingsPatch, persistedSettingsPatch }) => {
-    const raw = localStorage.getItem("prompthub-settings");
-    const parsed = raw ? JSON.parse(raw) : {};
-    parsed.state = {
-      ...(parsed.state || {}),
-      ...settingsPatch,
-    };
-    localStorage.setItem("prompthub-settings", JSON.stringify(parsed));
-    if (persistedSettingsPatch) {
-      await window.api.settings.set(persistedSettingsPatch);
-    }
-  }, { settingsPatch: nextSettings, persistedSettingsPatch: mainSettingsPatch });
+  await page.evaluate(
+    async ({ settingsPatch, persistedSettingsPatch }) => {
+      const persistence = window.api.settings.rendererPersistence;
+      if (persistence) {
+        const canonical = await persistence.get();
+        await persistence.replaceSettings({
+          ...(canonical?.settings ?? {}),
+          ...settingsPatch,
+        });
+      }
+      const raw = localStorage.getItem("prompthub-settings");
+      const parsed = raw ? JSON.parse(raw) : {};
+      parsed.state = {
+        ...(parsed.state || {}),
+        ...settingsPatch,
+      };
+      localStorage.setItem("prompthub-settings", JSON.stringify(parsed));
+      if (persistedSettingsPatch) {
+        await window.api.settings.set(persistedSettingsPatch);
+      }
+    },
+    { settingsPatch: nextSettings, persistedSettingsPatch: mainSettingsPatch },
+  );
   await page.reload();
   await waitForRendererReady(page);
 }

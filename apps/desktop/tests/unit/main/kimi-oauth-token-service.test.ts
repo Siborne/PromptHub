@@ -54,6 +54,7 @@ async function createRoot(raw = token()): Promise<string> {
 const roots: string[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   await Promise.all(
     roots
@@ -463,7 +464,12 @@ describe("Kimi OAuth token service", () => {
 
   it("keeps the upstream lock alive while a refresh is in flight", async () => {
     const root = await createRoot();
+    vi.useFakeTimers();
     let release: ((response: Response) => void) | undefined;
+    let signalFetchStarted: (() => void) | undefined;
+    const fetchStarted = new Promise<void>((resolve) => {
+      signalFetchStarted = resolve;
+    });
     let signalHeartbeat: (() => void) | undefined;
     const heartbeat = new Promise<void>((resolve) => {
       signalHeartbeat = resolve;
@@ -473,10 +479,12 @@ describe("Kimi OAuth token service", () => {
     });
     const service = createKimiOAuthTokenService({
       fetchImpl: vi.fn(
-        () =>
-          new Promise<Response>((resolve) => {
+        () => {
+          signalFetchStarted?.();
+          return new Promise<Response>((resolve) => {
             release = resolve;
-          }),
+          });
+        },
       ) as typeof fetch,
       lockHeartbeatMs: 1,
       now: () => NOW,
@@ -484,6 +492,8 @@ describe("Kimi OAuth token service", () => {
     });
 
     const pending = service.getAccessToken(root);
+    await fetchStarted;
+    await vi.advanceTimersByTimeAsync(1);
     await heartbeat;
     release?.(
       response(200, {

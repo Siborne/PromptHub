@@ -294,8 +294,8 @@ describe("Agent platform capability inventory", () => {
         evidence: "mcp-relative-path",
       },
       rules: {
-        status: "planned",
-        evidence: "protocol-evidence-pending",
+        status: "partial",
+        evidence: "project-rule-path",
       },
       plugins: {
         status: "partial",

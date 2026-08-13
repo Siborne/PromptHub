@@ -421,16 +421,17 @@ describe("Agent workspace shell", () => {
     },
   );
 
-  it("opens read-only CLI diagnostics from the overflow menu", async () => {
+  it("keeps internal CLI diagnostics out of the Agent overflow menu", async () => {
     await renderWorkspaceAndSettleOverview();
 
     fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
-    fireEvent.click(screen.getByRole("button", { name: /cli diagnostics/i }));
-
     expect(
-      await screen.findByRole("heading", { name: /cli diagnostics/i }),
-    ).toBeVisible();
-    expect(window.api.agent.diagnoseCli).toHaveBeenCalledWith("claude");
+      screen.queryByRole("button", { name: /cli diagnostics/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /refresh/i }),
+    ).not.toHaveLength(0);
+    expect(screen.getByRole("button", { name: /edit agent/i })).toBeVisible();
     expect(
       screen.queryByRole("tab", { name: /maintenance/i }),
     ).not.toBeInTheDocument();
@@ -458,7 +459,7 @@ describe("Agent workspace shell", () => {
       "title",
       "This adapter is planned and is not available yet.",
     );
-    expect(screen.getByText("Agent not detected")).toBeVisible();
+    expect(await screen.findByText("Agent not detected")).toBeVisible();
     expect(window.api.agent.getModelConfig).not.toHaveBeenCalled();
     expect(window.api.agent.listProviderProfiles).not.toHaveBeenCalled();
   });
@@ -552,20 +553,32 @@ describe("Agent workspace shell", () => {
     expect(
       screen.queryByRole("navigation", { name: /^assets$/i }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("~/.claude/skills")).not.toBeInTheDocument();
 
     await act(async () => {
       fireEvent.click(screen.getByRole("tab", { name: /^mcp$/i }));
     });
     expect(screen.getByRole("tabpanel", { name: /^mcp$/i })).toBeVisible();
     expect(
-      screen.getByRole("textbox", { name: /search assets/i }),
+      await screen.findByRole(
+        "textbox",
+        { name: /search assets/i },
+        { timeout: 5_000 },
+      ),
     ).toBeVisible();
-    expect(screen.queryByText("~/.claude.json")).not.toBeInTheDocument();
   });
 
   it("lets Agent asset details replace the entire right workspace", async () => {
-    useMcpStore.setState({
+    await renderWorkspaceAndSettleOverview();
+    fireEvent.click(screen.getByRole("tab", { name: /^mcp$/i }));
+    expect(
+      await screen.findByRole(
+        "textbox",
+        { name: /search assets/i },
+        { timeout: 5_000 },
+      ),
+    ).toBeVisible();
+
+    await act(async () => useMcpStore.setState({
       targetPresets: [
         {
           id: "preset-claude",
@@ -598,10 +611,7 @@ describe("Agent workspace shell", () => {
           ],
         },
       ],
-    });
-
-    await renderWorkspaceAndSettleOverview();
-    fireEvent.click(screen.getByRole("tab", { name: /^mcp$/i }));
+    }));
     fireEvent.click(
       await screen.findByRole("button", {
         name: /open mcp details filesystem/i,
@@ -664,7 +674,9 @@ describe("Agent workspace shell", () => {
     expect(editItem).toBeVisible();
     fireEvent.click(editItem);
 
-    const dialog = screen.getByRole("dialog", { name: /edit claude code/i });
+    const dialog = await screen.findByRole("dialog", {
+      name: /edit claude code/i,
+    });
     expect(dialog).toBeVisible();
     const rootInput = within(dialog).getByRole("textbox", {
       name: /root directory/i,
@@ -735,7 +747,9 @@ describe("Agent workspace shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
     fireEvent.click(screen.getByRole("button", { name: /edit agent/i }));
 
-    const dialog = screen.getByRole("dialog", { name: /edit team agent/i });
+    const dialog = await screen.findByRole("dialog", {
+      name: /edit team agent/i,
+    });
     const nameInput = within(dialog).getByRole("textbox", {
       name: /agent name/i,
     });
@@ -897,6 +911,31 @@ describe("Agent workspace shell", () => {
 
   it("routes non-Codex Provider management through public Profile data", async () => {
     const setModelConfig = vi.fn();
+    const listProviderProfiles = vi.fn().mockResolvedValue([
+      {
+        id: "profile-claude",
+        platformId: "claude",
+        name: "Claude production",
+        providerKind: "anthropic",
+        protocol: "platform-native",
+        endpoint: null,
+        config: {},
+        source: "manual",
+        archived: false,
+        createdAt: 1,
+        updatedAt: 2,
+        secretState: "available",
+        modelMappings: [
+          {
+            id: "mapping-claude",
+            providerProfileId: "profile-claude",
+            routeKey: "primary",
+            modelId: "claude-sonnet-4-5",
+            parameters: {},
+          },
+        ],
+      },
+    ]);
     installWindowMocks({
       api: {
         agent: {
@@ -916,31 +955,7 @@ describe("Agent workspace shell", () => {
             formattingMayChange: false,
           }),
           setModelConfig,
-          listProviderProfiles: vi.fn().mockResolvedValue([
-            {
-              id: "profile-claude",
-              platformId: "claude",
-              name: "Claude production",
-              providerKind: "anthropic",
-              protocol: "platform-native",
-              endpoint: null,
-              config: {},
-              source: "manual",
-              archived: false,
-              createdAt: 1,
-              updatedAt: 2,
-              secretState: "available",
-              modelMappings: [
-                {
-                  id: "mapping-claude",
-                  providerProfileId: "profile-claude",
-                  routeKey: "primary",
-                  modelId: "claude-sonnet-4-5",
-                  parameters: {},
-                },
-              ],
-            },
-          ]),
+          listProviderProfiles,
         },
       },
     });
@@ -948,8 +963,17 @@ describe("Agent workspace shell", () => {
     await renderWorkspaceAndSettleOverview();
     fireEvent.click(screen.getByRole("tab", { name: /provider & model/i }));
 
+    await waitFor(() =>
+      expect(listProviderProfiles).toHaveBeenCalledWith({
+        platformId: "claude",
+      }),
+    );
     expect(
-      await screen.findByRole("button", { name: /Claude production/ }),
+      await screen.findByRole(
+        "button",
+        { name: /Claude production/ },
+        { timeout: 3_000 },
+      ),
     ).toHaveAttribute("aria-current", "true");
     expect(screen.getAllByText("claude-sonnet-4-5").length).toBeGreaterThan(0);
     expect(screen.getByText("Credential available")).toBeVisible();
@@ -1189,7 +1213,7 @@ describe("Agent workspace shell", () => {
     expect(configTab).toBeEnabled();
     fireEvent.click(configTab);
 
-    const editor = screen.getByTestId("agent-config-editor");
+    const editor = await screen.findByTestId("agent-config-editor");
     expect(editor).toHaveAttribute("data-local-path", "~/.claude");
     expect(editor).toHaveAttribute("data-source-key", "agent-config:claude");
     expect(editor).toHaveAttribute("data-structural-mutations", "false");

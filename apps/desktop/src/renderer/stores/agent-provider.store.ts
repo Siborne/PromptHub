@@ -28,6 +28,8 @@ type AgentProviderAction =
   | "load-sources"
   | "import-source"
   | "restore-official"
+  | "test-current-connection"
+  | "test-current-model"
   | "test-connection"
   | "test-model"
   | "preview"
@@ -80,9 +82,15 @@ interface AgentProviderState {
     agentId: string,
     profileId: string,
   ) => Promise<AgentProviderConnectionTestResult | null>;
+  testCurrentConnection: (
+    agentId: string,
+  ) => Promise<AgentProviderConnectionTestResult | null>;
   testModel: (
     agentId: string,
     profileId: string,
+  ) => Promise<AgentProviderModelTestResult | null>;
+  testCurrentModel: (
+    agentId: string,
   ) => Promise<AgentProviderModelTestResult | null>;
   cancelModelTest: () => Promise<boolean>;
   previewActivation: (
@@ -217,7 +225,11 @@ export const useAgentProviderStore = create<AgentProviderState>((set, get) => ({
       connectionResult: null,
       modelTestResult: null,
       modelTestRequestId: null,
-      busyAction: state.busyAction === "test-model" ? null : state.busyAction,
+      busyAction:
+        state.busyAction === "test-model" ||
+        state.busyAction === "test-current-model"
+          ? null
+          : state.busyAction,
       errorCode: null,
     }));
   },
@@ -460,6 +472,23 @@ export const useAgentProviderStore = create<AgentProviderState>((set, get) => ({
       return null;
     }
   },
+  testCurrentConnection: async (agentId) => {
+    set({
+      busyAction: "test-current-connection",
+      errorCode: null,
+      connectionResult: null,
+    });
+    try {
+      const connectionResult =
+        await window.api.agent.testCurrentProviderConnection({ agentId });
+      if (get().platformId !== agentId) return connectionResult;
+      set({ busyAction: null, connectionResult });
+      return connectionResult;
+    } catch (error) {
+      set({ busyAction: null, errorCode: publicErrorCode(error) });
+      return null;
+    }
+  },
   testModel: async (agentId, profileId) => {
     const requestId = nextModelTestRequestId();
     set({
@@ -472,6 +501,36 @@ export const useAgentProviderStore = create<AgentProviderState>((set, get) => ({
       const modelTestResult = await window.api.agent.testProviderModel({
         agentId,
         profileId,
+        requestId,
+      });
+      if (get().modelTestRequestId !== requestId) return null;
+      set({
+        busyAction: null,
+        modelTestRequestId: null,
+        modelTestResult,
+      });
+      return modelTestResult;
+    } catch (error) {
+      if (get().modelTestRequestId !== requestId) return null;
+      set({
+        busyAction: null,
+        modelTestRequestId: null,
+        errorCode: publicErrorCode(error),
+      });
+      return null;
+    }
+  },
+  testCurrentModel: async (agentId) => {
+    const requestId = nextModelTestRequestId();
+    set({
+      busyAction: "test-current-model",
+      errorCode: null,
+      modelTestResult: null,
+      modelTestRequestId: requestId,
+    });
+    try {
+      const modelTestResult = await window.api.agent.testCurrentProviderModel({
+        agentId,
         requestId,
       });
       if (get().modelTestRequestId !== requestId) return null;
@@ -564,7 +623,11 @@ export const useAgentProviderStore = create<AgentProviderState>((set, get) => ({
       connectionResult: null,
       modelTestResult: null,
       modelTestRequestId: null,
-      busyAction: state.busyAction === "test-model" ? null : state.busyAction,
+      busyAction:
+        state.busyAction === "test-model" ||
+        state.busyAction === "test-current-model"
+          ? null
+          : state.busyAction,
       errorCode: null,
     }));
   },

@@ -163,7 +163,7 @@ bars. Detailed inventory, composition, capacity and verification rules live in
 
 1. 用户打开 Agents 工作区，只看到本机已检测安装的预置和自定义 Agent。
 2. 每个可管理 Agent 显示 installed、degraded 或 unsupported 状态。
-3. 用户进入 Claude Code 详情，查看当前供应商、模型、资产、配置文件、会话和版本诊断。
+3. 用户进入 Claude Code 详情，查看当前供应商、模型、资产、配置文件和会话；CLI 探测仅保留为主进程内部能力，不占用通用 Agent 菜单。
 4. 未安装或尚未创建目录的 Agent 不进入列表；旧选中状态只能落到只读概览，其他能力保持禁用且不读取配置。
 
 ### Flow B: Import And Switch A Provider
@@ -326,6 +326,23 @@ Confirmed with the maintainer on 2026-07-21:
 2. New adapters, all evidence-backed: Kimi (`~/.kimi-code/credentials/kimi-code.json` OAuth token -> `api.kimi.com/coding/v1/usages`, verified live 2026-07-21: weekly `usage` + rolling `limits[]` + `membership.level`), Antigravity (`~/.gemini/antigravity-cli/antigravity-oauth-token` -> cloudcode-pa `loadCodeAssist` + `fetchAvailableModels`, per-model remainingFraction + tier), Gemini CLI (`~/.gemini/oauth_creds.json` -> `loadCodeAssist` + `retrieveUserQuota` buckets), Copilot (GitHub OAuth token -> `api.github.com/copilot_internal/user`, premium/chat quota snapshots; verified against CodexBar).
 3. Cursor has no public quota API; its usage capability stays `planned` and this is recorded as a deliberate exclusion.
 4. Usage capability flips to `supported` for `kimi`, `antigravity`, `gemini`, `copilot` alongside existing `claude`/`codex`. Token isolation rules from `FR-AGENT-023` apply to every new adapter; expired tokens produce guided states without refresh in this phase.
+
+## Scope Addendum 2026-08-12: Codex Official Account Switching
+
+Confirmed with the maintainer on 2026-08-12:
+
+1. PromptHub may save multiple encrypted snapshots of Codex's official
+   `auth.json` and switch accounts by replacing the single active
+   `~/.codex/auth.json`; it must not invent a multi-account JSON shape.
+2. The current account is preserved automatically before replacement when it
+   is not already saved. Switching never edits `config.toml`, provider/model
+   profiles, MCP, sessions or any other Codex-owned file.
+3. Imported authentication JSON is write-only across IPC, validated in the
+   main process, encrypted with Electron `safeStorage`, stored in a private
+   PromptHub file and never returned to the renderer, logs, backups or sync.
+4. Replacement is serialized, written atomically with owner-only permissions,
+   re-read and verified. A failed verification restores the exact previous
+   `auth.json`; the active account cannot be deleted.
 
 ## Scope Addendum 2026-07-21: Rich Skill Asset Management In The Agent Workspace
 
@@ -741,3 +758,44 @@ Cached rows remain visible while a background refresh completes. A completed
 refresh replaces the bounded list without returning the entire History panel
 to its blocking loading screen. No transcript body cache, watcher, timer,
 network request or unbounded background worker is added.
+
+## Scope Addendum 2026-08-11: Provider Terminology And Native Ownership
+
+The Agent Provider & Model workspace calls user-managed entries providers,
+not configuration profiles. Internal `AgentProviderProfile` contracts remain
+unchanged because they describe the existing storage and activation boundary,
+but that implementation term must not leak into product copy.
+
+The detected native configuration remains Agent-owned and read-only. The
+workspace no longer offers to import it or convert it into an editable entry,
+including Pi's built-in-provider override shortcut. Users may add a provider
+or import one already managed by PromptHub. Existing low-level compatibility
+APIs are not removed by this UI-only follow-up.
+
+## Scope Addendum 2026-08-11: Rich Provider Import And Protocol Adaptation
+
+Import from PromptHub must preserve the visual identity already used by Model
+Services: provider rows show the matching local brand icon, and model choices
+show their inferred model-family icon rather than a text-only native select.
+Unknown providers and models use the existing themed fallback icons.
+
+Protocol is an explicit import choice. The destination Agent determines the
+bounded set of protocols it can actually write, while the source provider's
+API protocol determines which of those choices are compatible. The dialog
+preselects the direct/recommended mapping, submits the chosen protocol through
+the typed source-import contract, and the main process validates it again
+before creating a provider or writing Pi's native catalog. PromptHub does not
+promise protocol conversion or expose a protocol the selected Agent cannot
+persist.
+
+## Scope Addendum 2026-08-11: Provider Sidebar Entry Placement
+
+Provider creation and PromptHub import are peer actions. Both belong at the top
+of the provider sidebar, use the add icon and remain available through a list
+context menu. The prior bottom-only add placement is removed, and its label is
+made explicit as Add custom provider so it cannot be confused with importing
+an existing PromptHub provider.
+
+The visible buttons and context-menu commands invoke the same existing dialogs.
+This follow-up does not create another import path, write contract or durable
+state, and runtimes without local PromptHub import continue to omit that action.

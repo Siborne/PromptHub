@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
@@ -6,7 +6,6 @@ import {
   MoreHorizontalIcon,
   RefreshCwIcon,
   Settings2Icon,
-  StethoscopeIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -20,16 +19,7 @@ import { isWebRuntime } from "../../runtime";
 import { useSettingsStore } from "../../stores/settings.store";
 import { ContextMenu } from "../ui/ContextMenu";
 import { PlatformIcon } from "../ui/PlatformIcon";
-import { AgentAppearancePanel } from "./AgentAppearancePanel";
-import { AgentAssetsWorkspace } from "./AgentAssetsWorkspace";
-import { AgentConfigFilesPanel } from "./AgentConfigFilesPanel";
-import { AgentDefinitionsPanel } from "./AgentDefinitionsPanel";
-import { AgentCliDiagnosticDialog } from "./AgentCliDiagnosticDialog";
-import { AgentOverviewPanel } from "./AgentOverviewPanel";
-import { AgentProviderModelWorkbench } from "./AgentProviderModelWorkbench";
-import { AgentSessionsPanel } from "./AgentSessionsPanel";
-import { AgentSettingsDialog } from "./AgentSettingsDialog";
-import { WebAgentServicesWorkspace } from "./WebAgentServicesWorkspace";
+import { Spinner } from "../ui/Spinner";
 import {
   AGENT_WORKSPACE_TABS,
   getAgentWorkspaceTabs,
@@ -41,8 +31,64 @@ import {
   type AgentWorkspaceTabKey,
 } from "./agent-workspace-tabs";
 
+const AgentAppearancePanel = lazy(() =>
+  import("./AgentAppearancePanel").then((module) => ({
+    default: module.AgentAppearancePanel,
+  })),
+);
+const AgentAssetsWorkspace = lazy(() =>
+  import("./AgentAssetsWorkspace").then((module) => ({
+    default: module.AgentAssetsWorkspace,
+  })),
+);
+const AgentConfigFilesPanel = lazy(() =>
+  import("./AgentConfigFilesPanel").then((module) => ({
+    default: module.AgentConfigFilesPanel,
+  })),
+);
+const AgentDefinitionsPanel = lazy(() =>
+  import("./AgentDefinitionsPanel").then((module) => ({
+    default: module.AgentDefinitionsPanel,
+  })),
+);
+const AgentOverviewPanel = lazy(() =>
+  import("./AgentOverviewPanel").then((module) => ({
+    default: module.AgentOverviewPanel,
+  })),
+);
+const AgentProviderModelWorkbench = lazy(() =>
+  import("./AgentProviderModelWorkbench").then((module) => ({
+    default: module.AgentProviderModelWorkbench,
+  })),
+);
+const AgentSessionsPanel = lazy(() =>
+  import("./AgentSessionsPanel").then((module) => ({
+    default: module.AgentSessionsPanel,
+  })),
+);
+const AgentSettingsDialog = lazy(() =>
+  import("./AgentSettingsDialog").then((module) => ({
+    default: module.AgentSettingsDialog,
+  })),
+);
+const WebAgentServicesWorkspace = lazy(() =>
+  import("./WebAgentServicesWorkspace").then((module) => ({
+    default: module.WebAgentServicesWorkspace,
+  })),
+);
+
 interface AgentWorkspaceTarget {
   tab: AgentWorkspaceTabKey;
+}
+
+function AgentPanelFallback() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+      <Spinner size="sm" />
+      <span>{t("common.loading", "Loading...")}</span>
+    </div>
+  );
 }
 
 function isWorkspaceTabEnabled(
@@ -107,13 +153,9 @@ function AgentIdentity({ agent }: { agent: ManagedAgentSummary }) {
 }
 
 function AgentOverflowMenu({
-  diagnosticsEnabled,
-  onDiagnostics,
   onRefresh,
   onEdit,
 }: {
-  diagnosticsEnabled: boolean;
-  onDiagnostics: () => void;
   onRefresh: () => void;
   onEdit: () => void;
 }) {
@@ -145,15 +187,6 @@ function AgentOverflowMenu({
           y={position.y}
           onClose={() => setPosition(null)}
           items={[
-            ...(diagnosticsEnabled
-              ? [
-                  {
-                    label: t("agents.cliDiagnostics.title", "CLI diagnostics"),
-                    icon: <StethoscopeIcon className="h-4 w-4" />,
-                    onClick: onDiagnostics,
-                  },
-                ]
-              : []),
             {
               label: t("agents.refresh", "Refresh"),
               icon: <RefreshCwIcon className="h-4 w-4" />,
@@ -174,13 +207,11 @@ function AgentOverflowMenu({
 function AgentHeaderActions({
   agent,
   onLaunch,
-  onDiagnostics,
   onRefresh,
   onEdit,
 }: {
   agent: ManagedAgentSummary;
   onLaunch: () => void;
-  onDiagnostics: () => void;
   onRefresh: () => void;
   onEdit: () => void;
 }) {
@@ -208,15 +239,7 @@ function AgentHeaderActions({
         <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
       </button>
       {agent.isDetected || isWebRuntime() ? (
-        <AgentOverflowMenu
-          diagnosticsEnabled={
-            agent.capabilities.maintenance.status === "partial" ||
-            agent.capabilities.maintenance.status === "supported"
-          }
-          onDiagnostics={onDiagnostics}
-          onRefresh={onRefresh}
-          onEdit={onEdit}
-        />
+        <AgentOverflowMenu onRefresh={onRefresh} onEdit={onEdit} />
       ) : null}
     </div>
   );
@@ -341,55 +364,57 @@ function AgentWorkspacePanel({
         aria-labelledby={`agent-tab-${meta.key}`}
         className="flex h-full min-h-0 flex-col"
       >
-        {isWebRuntime() ? (
-          target.tab === "configFiles" ? (
-            <AgentConfigFilesPanel agent={agent} />
-          ) : target.tab === "provider" ? (
-            <AgentProviderModelWorkbench key={agent.id} agent={agent} />
-          ) : target.tab === "sessions" ? (
-            <AgentSessionsPanel
-              key={agent.id}
-              agent={agent}
-              agents={agents}
-              projects={projects}
-            />
-          ) : (
-            <WebAgentServicesWorkspace agent={agent} domain={webDomain} />
-          )
-        ) : (
-          <>
-            {target.tab === "overview" ? (
-              <AgentOverviewPanel agent={agent} onNavigate={onNavigate} />
-            ) : null}
-            {isAgentAssetDomain(target.tab) ? (
-              <AgentAssetsWorkspace
-                agent={agent}
-                domain={target.tab}
-                onDetailOpenChange={onAssetDetailOpenChange}
-              />
-            ) : null}
-            {target.tab === "definitions" ? (
-              <AgentDefinitionsPanel key={agent.id} agent={agent} />
-            ) : null}
-            {target.tab === "provider" ? (
-              <AgentProviderModelWorkbench key={agent.id} agent={agent} />
-            ) : null}
-            {target.tab === "appearance" ? (
-              <AgentAppearancePanel key={agent.id} agent={agent} />
-            ) : null}
-            {target.tab === "configFiles" ? (
+        <Suspense fallback={<AgentPanelFallback />}>
+          {isWebRuntime() ? (
+            target.tab === "configFiles" ? (
               <AgentConfigFilesPanel agent={agent} />
-            ) : null}
-            {target.tab === "sessions" ? (
+            ) : target.tab === "provider" ? (
+              <AgentProviderModelWorkbench key={agent.id} agent={agent} />
+            ) : target.tab === "sessions" ? (
               <AgentSessionsPanel
                 key={agent.id}
                 agent={agent}
                 agents={agents}
                 projects={projects}
               />
-            ) : null}
-          </>
-        )}
+            ) : (
+              <WebAgentServicesWorkspace agent={agent} domain={webDomain} />
+            )
+          ) : (
+            <>
+              {target.tab === "overview" ? (
+                <AgentOverviewPanel agent={agent} onNavigate={onNavigate} />
+              ) : null}
+              {isAgentAssetDomain(target.tab) ? (
+                <AgentAssetsWorkspace
+                  agent={agent}
+                  domain={target.tab}
+                  onDetailOpenChange={onAssetDetailOpenChange}
+                />
+              ) : null}
+              {target.tab === "definitions" ? (
+                <AgentDefinitionsPanel key={agent.id} agent={agent} />
+              ) : null}
+              {target.tab === "provider" ? (
+                <AgentProviderModelWorkbench key={agent.id} agent={agent} />
+              ) : null}
+              {target.tab === "appearance" ? (
+                <AgentAppearancePanel key={agent.id} agent={agent} />
+              ) : null}
+              {target.tab === "configFiles" ? (
+                <AgentConfigFilesPanel agent={agent} />
+              ) : null}
+              {target.tab === "sessions" ? (
+                <AgentSessionsPanel
+                  key={agent.id}
+                  agent={agent}
+                  agents={agents}
+                  projects={projects}
+                />
+              ) : null}
+            </>
+          )}
+        </Suspense>
       </div>
     </main>
   );
@@ -406,7 +431,6 @@ export function AgentsWorkspace() {
     tab: "overview",
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const [isAssetDetailOpen, setIsAssetDetailOpen] = useState(false);
   const agent = useMemo(
     () => agents.find((item) => item.id === selectedAgentId) || agents[0],
@@ -425,7 +449,6 @@ export function AgentsWorkspace() {
 
   useEffect(() => {
     setIsSettingsOpen(false);
-    setIsDiagnosticsOpen(false);
   }, [agent?.id]);
 
   useEffect(() => {
@@ -451,7 +474,6 @@ export function AgentsWorkspace() {
             <AgentHeaderActions
               agent={agent}
               onLaunch={() => void window.api.agent.launch(agent.id)}
-              onDiagnostics={() => setIsDiagnosticsOpen(true)}
               onRefresh={() => void refresh()}
               onEdit={() => setIsSettingsOpen(true)}
             />
@@ -471,16 +493,15 @@ export function AgentsWorkspace() {
         onNavigate={handleNavigate}
         onAssetDetailOpenChange={setIsAssetDetailOpen}
       />
-      <AgentSettingsDialog
-        agent={agent}
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
-      <AgentCliDiagnosticDialog
-        agent={agent}
-        isOpen={isDiagnosticsOpen}
-        onClose={() => setIsDiagnosticsOpen(false)}
-      />
+      {isSettingsOpen ? (
+        <Suspense fallback={null}>
+          <AgentSettingsDialog
+            agent={agent}
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

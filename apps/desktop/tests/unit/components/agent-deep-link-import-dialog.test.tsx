@@ -130,7 +130,7 @@ describe("AgentDeepLinkImportDialog", () => {
     await renderWithI18n(
       <AgentDeepLinkImportDialog command={previewCommand} onClose={onClose} />,
     );
-    const confirm = screen.getByRole("button", { name: "Import profile" });
+    const confirm = screen.getByRole("button", { name: "Import provider" });
     await act(async () => {
       confirm.click();
       confirm.click();
@@ -169,11 +169,11 @@ describe("AgentDeepLinkImportDialog", () => {
     await renderWithI18n(
       <AgentDeepLinkImportDialog command={previewCommand} onClose={vi.fn()} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Import profile" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import provider" }));
 
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "The profile could not be imported",
+        "The provider could not be imported",
       ),
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -213,11 +213,11 @@ describe("AgentDeepLinkImportDialog", () => {
     await renderWithI18n(
       <AgentDeepLinkImportDialog command={previewCommand} onClose={vi.fn()} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Import profile" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import provider" }));
 
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "The profile could not be imported",
+        "The provider could not be imported",
       ),
     );
   });

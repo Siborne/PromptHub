@@ -2,6 +2,7 @@
  * @vitest-environment node
  */
 import * as childProcess from "child_process";
+import { EventEmitter } from "events";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -388,6 +389,59 @@ describe("Plugin source reconciliation", () => {
     expect((error as Error).message).not.toContain("alice");
     expect((error as Error).message).not.toContain("secret");
     expect((error as Error).message).not.toContain("hidden");
+    expect(childProcess.spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not override the proxy mode selected by the desktop settings", async () => {
+    const originalProxyEnv = {
+      ALL_PROXY: process.env.ALL_PROXY,
+      HTTP_PROXY: process.env.HTTP_PROXY,
+      HTTPS_PROXY: process.env.HTTPS_PROXY,
+      all_proxy: process.env.all_proxy,
+      http_proxy: process.env.http_proxy,
+      https_proxy: process.env.https_proxy,
+    };
+    process.env.ALL_PROXY = "http://broken-proxy.test:8080";
+    process.env.HTTP_PROXY = "http://broken-proxy.test:8080";
+    process.env.HTTPS_PROXY = "http://broken-proxy.test:8080";
+    process.env.all_proxy = "http://broken-proxy.test:8080";
+    process.env.http_proxy = "http://broken-proxy.test:8080";
+    process.env.https_proxy = "http://broken-proxy.test:8080";
+
+    vi.mocked(childProcess.spawn).mockImplementation(() => {
+      const proc = new EventEmitter() as childProcess.ChildProcess;
+      const stderr = new EventEmitter();
+      Object.assign(proc, { stderr, kill: vi.fn() });
+      queueMicrotask(() => {
+        stderr.emit("data", Buffer.from("CONNECT tunnel failed, response 503"));
+        proc.emit("close", 128);
+      });
+      return proc;
+    });
+
+    try {
+      const request = normalizePluginSourceImportRequest({
+        url: "https://github.com/openai/plugins",
+      });
+      const error = await materializeGitSourcePackage(request).catch(
+        (reason: unknown) => reason,
+      );
+      const spawnOptions = vi.mocked(childProcess.spawn).mock.calls[0]?.[2] as
+        | childProcess.SpawnOptions
+        | undefined;
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("CONNECT tunnel failed");
+      expect(childProcess.spawn).toHaveBeenCalledTimes(1);
+      expect(spawnOptions?.env).toBeUndefined();
+      expect(process.env.HTTP_PROXY).toBe("http://broken-proxy.test:8080");
+      expect(process.env.http_proxy).toBe("http://broken-proxy.test:8080");
+    } finally {
+      for (const [key, value] of Object.entries(originalProxyEnv)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it("terminates a stalled Git source clone", async () => {

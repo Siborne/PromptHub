@@ -35,9 +35,6 @@ import { type AgentUsageService } from "../services/agent-usage-service";
 import { agentUsageService as defaultAgentUsageService } from "../services/agent-usage-runtime";
 import { validateKimiConfigFile } from "../services/agent-kimi-config-validator";
 import { launchAgentPlatform } from "../services/agent-launch-service";
-import { createNativeCommandRunner } from "../services/native-command";
-import { diagnoseAgentCli } from "../services/agent-cli-diagnostic-service";
-import { registerAgentCliLifecycleIPC } from "./agent-cli-lifecycle.ipc";
 
 interface RegisterAgentIPCOptions {
   usageService?: AgentUsageService;
@@ -226,8 +223,6 @@ export function registerAgentIPC(options: RegisterAgentIPCOptions = {}): void {
     backupRoot: path.join(app.getPath("userData"), "agent-config-backups"),
     encryption: safeStorage,
   });
-  registerAgentCliLifecycleIPC();
-
   ipcMain.handle(IPC_CHANNELS.AGENT_LAUNCH, async (_, agentId: unknown) => {
     if (typeof agentId !== "string" || !agentId.trim()) {
       return { success: false, errorCode: "unsupported" };
@@ -251,27 +246,6 @@ export function registerAgentIPC(options: RegisterAgentIPCOptions = {}): void {
       openPath: (candidate) => shell.openPath(candidate),
     });
   });
-
-  ipcMain.handle(
-    IPC_CHANNELS.AGENT_CLI_DIAGNOSE,
-    async (_, agentId: unknown) => {
-      if (typeof agentId !== "string" || !agentId.trim()) {
-        throw new Error("Agent CLI diagnostic requires a non-empty agentId");
-      }
-      const platform = SkillInstaller.getSupportedPlatforms().find(
-        (candidate) => candidate.id === agentId,
-      );
-      if (!platform) {
-        throw new Error(`Unknown Agent platform: ${agentId}`);
-      }
-      const runner = createNativeCommandRunner();
-      return diagnoseAgentCli(platform, {
-        now: Date.now,
-        resolve: runner.resolve,
-        run: runner.run,
-      });
-    },
-  );
 
   ipcMain.handle(
     IPC_CHANNELS.AGENT_CONFIG_FILES_LIST,

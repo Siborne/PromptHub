@@ -258,6 +258,129 @@ function service(
 }
 
 describe("AgentProviderActivationService", () => {
+  it("tests the current native provider without creating or reading a stored profile", async () => {
+    const nativePreview = importPreview();
+    const nativeProfileId = "native:codex";
+    const providerAdapter = adapter({
+      importCurrent: vi.fn().mockResolvedValue(nativePreview),
+      testConnection: vi
+        .fn()
+        .mockResolvedValue(connectionResult({ profileId: nativeProfileId })),
+    });
+    const activationRepository = repository();
+    const target = service(providerAdapter, activationRepository);
+
+    await expect(
+      target.service.testCurrentConnection({ context }),
+    ).resolves.toEqual(connectionResult({ profileId: nativeProfileId }));
+
+    expect(providerAdapter.testConnection).toHaveBeenCalledWith(context, {
+      profile: expect.objectContaining({
+        id: nativeProfileId,
+        platformId: "codex",
+        protocol: "platform-native",
+        secretRef: null,
+      }),
+      modelMappings: [
+        expect.objectContaining({
+          id: "native:codex:primary",
+          providerProfileId: nativeProfileId,
+          routeKey: "primary",
+          modelId: "gpt-5.4",
+        }),
+      ],
+    });
+    expect(activationRepository.getProfile).not.toHaveBeenCalled();
+    expect(activationRepository.listModelMappings).not.toHaveBeenCalled();
+    expect(activationRepository.recordSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("runs a cancellable current-native model test without persistence", async () => {
+    const signal = new AbortController().signal;
+    const nativeProfileId = "native:codex";
+    const providerAdapter = adapter({
+      importCurrent: vi.fn().mockResolvedValue(importPreview()),
+      testModel: vi
+        .fn()
+        .mockResolvedValue(modelTestResult({ profileId: nativeProfileId })),
+    });
+    const activationRepository = repository();
+    const target = service(providerAdapter, activationRepository);
+
+    await expect(
+      target.service.testCurrentModel({ context }, signal),
+    ).resolves.toEqual(modelTestResult({ profileId: nativeProfileId }));
+
+    expect(providerAdapter.testModel).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        profile: expect.objectContaining({ id: nativeProfileId }),
+      }),
+      signal,
+    );
+    expect(activationRepository.getProfile).not.toHaveBeenCalled();
+    expect(activationRepository.recordSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when current-native tests are unsupported, malformed, or fail", async () => {
+    const signal = new AbortController().signal;
+    const nativeProfileId = "native:codex";
+    const currentAdapter = (overrides: Partial<AgentProviderAdapter> = {}) =>
+      adapter({
+        importCurrent: vi.fn().mockResolvedValue(importPreview()),
+        ...overrides,
+      });
+
+    await expect(
+      service(currentAdapter()).service.testCurrentConnection({ context }),
+    ).rejects.toThrow("AGENT_PROVIDER_CONNECTION_TEST_UNSUPPORTED");
+    await expect(
+      service(currentAdapter()).service.testCurrentModel({ context }, signal),
+    ).rejects.toThrow("AGENT_PROVIDER_MODEL_TEST_UNSUPPORTED");
+    await expect(
+      service(
+        currentAdapter({
+          testConnection: vi
+            .fn()
+            .mockRejectedValue(new Error("native-secret-value")),
+        }),
+      ).service.testCurrentConnection({ context }),
+    ).rejects.toThrow("AGENT_PROVIDER_CONNECTION_TEST_FAILED");
+    await expect(
+      service(
+        currentAdapter({
+          testModel: vi
+            .fn()
+            .mockRejectedValue(new Error("native-secret-value")),
+        }),
+      ).service.testCurrentModel({ context }, signal),
+    ).rejects.toThrow("AGENT_PROVIDER_MODEL_TEST_FAILED");
+    await expect(
+      service(
+        currentAdapter({
+          testConnection: vi.fn().mockResolvedValue(
+            connectionResult({
+              profileId: nativeProfileId,
+              endpointOrigin: "https://user:secret@example.com",
+            }),
+          ),
+        }),
+      ).service.testCurrentConnection({ context }),
+    ).rejects.toThrow("AGENT_PROVIDER_CONNECTION_TEST_INVALID");
+    await expect(
+      service(
+        currentAdapter({
+          testModel: vi.fn().mockResolvedValue(
+            modelTestResult({
+              profileId: nativeProfileId,
+              outputPreview: "x".repeat(513),
+            }),
+          ),
+        }),
+      ).service.testCurrentModel({ context }, signal),
+    ).rejects.toThrow("AGENT_PROVIDER_MODEL_TEST_INVALID");
+  });
+
   it("tests a stored profile without inspecting or mutating native config", async () => {
     const providerAdapter = adapter({
       testConnection: vi.fn().mockResolvedValue(connectionResult()),

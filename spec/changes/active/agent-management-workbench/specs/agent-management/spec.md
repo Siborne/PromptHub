@@ -82,7 +82,17 @@ Each managed Agent MUST expose installation detection, executable version where 
 
 ### `FR-AGENT-003`: Per-Agent Provider Profiles And Model Mapping
 
-The user MUST be able to create, edit, duplicate, archive, import, export, test, and activate Provider Profiles for supported Agents. A Provider Profile MUST support platform-specific provider protocol, endpoint, model mappings, environment values, and validated non-secret configuration.
+The user MUST be able to create, edit, rename, duplicate, import, copy a text export, test, activate, and delete Provider Profiles for supported Agents. The Provider Profile detail action bar MUST expose the focused actions Rename, Create copy, Copy text, and Delete; it MUST NOT expose archive as a parallel lifecycle action. A Provider Profile MUST support platform-specific provider protocol, endpoint, model mappings, environment values, and validated non-secret configuration.
+
+#### Scenario: Focused Provider Profile actions
+
+- Given a custom Provider Profile is selected
+- When the user opens its detail actions
+- Then rename changes only the profile display name
+- And create copy produces a separately identified profile
+- And copy text writes the credential-free portable representation to the clipboard
+- And delete retains the existing destructive confirmation
+- And no archive action is shown
 
 #### Scenario: Duplicate display names
 
@@ -389,7 +399,15 @@ Full backup and Agent-selective export MUST include Provider Profiles, model map
 
 ### `FR-AGENT-014`: CLI Lifecycle Management
 
-For supported Agents, the system SHOULD provide CLI installation status, installed/latest version, update capability, executable path, package manager/source, and diagnostics. Automatic install or update MUST require explicit confirmation.
+For evidence-backed Agents, the main process MAY retain bounded CLI executable, version, installation-source and lifecycle services as internal infrastructure. The general Agent workspace MUST NOT expose a generic CLI diagnostics menu, standalone diagnostics modal, or renderer-callable diagnostic/update contract. Any future platform-specific install or update experience requires its own verified requirement, explicit confirmation and rollback contract before it can become user-facing.
+
+#### Scenario: Keep the internal probe out of the Agent workspace
+
+- Given an Agent has a verified CLI descriptor
+- When the user opens the Agent overflow menu
+- Then no generic CLI diagnostics command or modal is shown
+- And the renderer preload does not expose diagnostic, update-plan or update-apply methods
+- And the bounded main-process probe remains available for explicitly designed internal or future platform-specific workflows
 
 #### Scenario: Custom executable path
 
@@ -398,10 +416,10 @@ For supported Agents, the system SHOULD provide CLI installation status, install
 - Then adapter-specific path resolution can still locate it
 - And the UI reports the resolved source rather than only a boolean
 
-#### Scenario: Confirm and verify an OpenCode CLI update
+#### Scenario: Preserve the dormant OpenCode update safety contract
 
 - Given the installed OpenCode CLI is healthy and its current executable and semantic version are known
-- When the user requests an update
+- When a future verified platform-specific update flow invokes the internal lifecycle service
 - Then PromptHub shows a short-lived review plan containing the fixed official command and detected install source
 - And no command runs until the same renderer explicitly confirms that plan
 - And apply rechecks the executable and version before running the command without a shell
@@ -410,26 +428,43 @@ For supported Agents, the system SHOULD provide CLI installation status, install
 - And replayed, expired, foreign-renderer, mutated or stale plans fail without running an update
 - And command output, environment values, credentials and raw errors never cross IPC
 
-#### Scenario: Update an npm-managed Codex CLI
+#### Scenario: Preserve the dormant npm-managed Codex update safety contract
 
 - Given the active Codex executable resolves to an npm or Node version-manager installation
 - And the matching `npm` executable is available through the main-process command resolver
-- When the user reviews and confirms an update
+- When a future verified platform-specific update flow invokes the internal lifecycle service
 - Then PromptHub runs only the canonical `npm install -g @openai/codex@latest` argument array without a shell
 - And it rechecks the active Codex executable and version before mutation
 - And it verifies that the same active executable reports a new or unchanged semantic version
 - And a partial failure uses the captured prior version with `npm install -g @openai/codex@<version>` and verifies restoration
 - And Homebrew, standalone, system, unknown or ambiguous installations remain non-updatable because no exact rollback contract is claimed
 
-#### Scenario: Update an npm-managed Qwen Code CLI
+#### Scenario: Preserve the dormant npm-managed Qwen Code update safety contract
 
 - Given the active Qwen Code executable resolves to an npm or Node version-manager installation
 - And the matching `npm` executable is available through the main-process command resolver
-- When the user reviews and confirms an update
+- When a future verified platform-specific update flow invokes the internal lifecycle service
 - Then PromptHub runs only `npm install -g @qwen-code/qwen-code@latest` without a shell
 - And it verifies the same active executable after the command
 - And any changed or unhealthy post-state triggers exact-version npm recovery
 - And standalone, Homebrew, source, system and ambiguous installations remain diagnostic-only
+
+### `FR-AGENT-120`: Internal CLI Maintenance Boundary
+
+The generic Agent workspace MUST treat CLI probing and lifecycle machinery as
+internal infrastructure, not as a standalone user feature. It MUST retain
+Refresh and Edit Agent in the overflow menu while omitting CLI Diagnostics, and
+it MUST NOT expose generic diagnostic or update operations through renderer
+preload or IPC. Retained main-process services MUST preserve their existing
+bounded command, timeout, output and rollback controls.
+
+#### Scenario: Open Agent actions for a CLI-backed platform
+
+- Given a detected Agent has a verified CLI descriptor
+- When the user opens its overflow menu
+- Then Refresh and Edit Agent remain available
+- And CLI Diagnostics is absent
+- And no hidden renderer-callable diagnostic or update channel remains
 
 ### `FR-AGENT-015`: Usage And Quota Visibility
 
@@ -1020,6 +1055,13 @@ than executing a command or writing platform state. Provider switching, usage,
 credential management and plugin package installation MUST remain independently
 planned until their native contracts have dedicated adapters and tests.
 
+When the official version 2 `<root>/../plugins/installed_plugins.json` registry
+exists, the workspace MUST project its user-scoped installed packages into the
+shared Plugin inventory as read-only assets. It MUST bound registry reads,
+resolve package real paths below the plugin data root, deduplicate packages,
+and exclude project-scoped, missing, malformed, oversized, or escaping entries.
+It MUST NOT read or write `agent.db`, credentials, or native lifecycle state.
+
 #### Scenario: Manage Oh My Pi assets
 
 - Given Oh My Pi is enabled in the built-in registry
@@ -1027,6 +1069,8 @@ planned until their native contracts have dedicated adapters and tests.
 - Then it shows the native root, `skills/`, `RULES.md`, `mcp.json`, sibling
   `../plugins`, and the allowlisted config files
 - And the user can target the global MCP file or project `.omp/mcp.json`
+- And a valid user-scoped native plugin registry is shown as read-only Plugin
+  inventory without installation or update controls
 - And the UI does not invent provider, usage, or plugin-install support
 
 #### Scenario: Browse Oh My Pi history safely
@@ -3740,3 +3784,339 @@ blocking loading state.
 - Given History already displays cached or live session rows
 - When a stale background refresh completes
 - Then PromptHub reloads the bounded metadata page without hiding the existing rows
+
+### `FR-AGENT-115`: Install Agent Assets In Context
+
+The Add action in an Agent's MCP or Plugin workspace MUST keep the user in the
+current Agent workspace. It MUST open an in-context selection dialog, matching
+the existing Skill installation workflow, rather than navigating to the
+standalone MCP or Plugin manager.
+
+The MCP dialog MUST select one or more enabled entries from My MCP and apply
+them to the selected Agent's bounded target preset. Entries already present on
+that target MUST remain visible but unavailable for duplicate selection. The
+Plugin dialog MUST select one or more entries from My Plugins, choose copy or
+symlink installation, and distribute them only to enabled Plugin targets owned
+by the selected Agent. Successful installation MUST refresh the current asset
+inventory without changing the active app module or Agent tab.
+
+#### Scenario: Add MCP without leaving the Agent
+
+- Given an Agent has a writable MCP target and My MCP contains an enabled server
+- When the user selects Add MCP, chooses the server and confirms
+- Then PromptHub applies the server to that Agent target
+- And the MCP dialog closes after the current Agent inventory refreshes
+- And the standalone MCP manager is not opened
+
+#### Scenario: Add Plugins without leaving the Agent
+
+- Given an Agent has an enabled Plugin target and My Plugins contains packages
+- When the user selects Add Plugin, chooses packages and an install mode, then confirms
+- Then PromptHub distributes the packages only to the selected Agent targets
+- And the Plugin dialog closes after the current Agent inventory refreshes
+- And the standalone Plugin manager is not opened
+
+### `FR-AGENT-116`: Provider Terminology And Read-Only Native Configuration
+
+The Agent Provider & Model workspace MUST call user-managed entries providers
+in all user-visible labels, dialogs, empty states and activation copy. It MUST
+NOT call them profiles or configuration profiles. Internal compatibility type,
+database and IPC names MAY retain their existing Provider Profile identifiers.
+
+The workspace MUST NOT expose Import current configuration, Create editable
+profile or equivalent native-to-managed conversion commands. This applies to
+the shared Provider workspace and Pi's built-in provider catalog. The current
+native configuration remains visible as a read-only detected state, while Add
+provider and Import from PromptHub remain available.
+
+#### Scenario: Open an Agent with detected native configuration
+
+- Given PromptHub detects an Agent-owned native provider configuration
+- When the user opens Provider & Model
+- Then the native configuration is shown read-only
+- And no command imports or converts that native configuration
+- And the user may still add a provider or restore official configuration when supported
+
+### `FR-AGENT-117`: Clear Plugin Empty States And Network-Aware Market Downloads
+
+The Agent Plugin workspace MUST describe empty inventory without exposing
+target or distribution implementation terms. Add Plugin MUST open its
+in-context dialog even when My Plugins or writable targets are empty. Official
+market Git downloads MUST follow the effective proxy mode from Network
+Settings and MUST NOT bypass that mode with an installer-specific fallback.
+Download failures MUST be presented as a concise localized action that points
+back to Network Settings rather than raw IPC or Git diagnostics. Every Plugin
+install or import failure MUST state what failed, the likely failure category,
+and the next action. Source access, package validation, duplicate installation,
+local storage, Git availability, network/proxy and unexpected failures MUST use
+one shared renderer policy across market, local/source import, Agent deployment
+and batch-install surfaces. Unexpected details MUST be bounded and redact source
+URLs, local paths, IPC prefixes and internal error wrappers.
+
+#### Scenario: No Plugins are available
+
+- Given the current Agent has no My Plugins and no discovered Plugin packages
+- When the Plugin tab and Add Plugin dialog render
+- Then the workspace says only that no Plugins are available
+- And clicking Add Plugin opens the selection dialog without a target-error toast
+- And the dialog does not ask the user to understand targets or distribution
+
+#### Scenario: Plugins exist but the Agent cannot install them
+
+- Given My Plugins contains selectable packages
+- And the current Agent has no enabled Plugin destination
+- When Add Plugin opens
+- Then the dialog states that this Agent does not support Plugin installation
+- And package selection and confirmation remain disabled
+
+#### Scenario: Plugin download follows Network Settings
+
+- Given Network Settings selects system proxy, direct connection or a manual proxy
+- When Git downloads an official-market Plugin
+- Then the child process inherits the environment produced by that selected mode
+- And direct mode clears inherited proxy variables
+- And system mode restores the proxy environment captured at application startup
+- And manual mode applies only the configured proxy and bypass rules
+- And the Plugin installer does not silently switch modes or retry without proxy
+- And a proxy failure points the user to Network Settings without raw IPC,
+  temporary paths, command output or repository internals
+
+#### Scenario: Plugin failures explain the situation
+
+- Given a market, local, source, Agent deployment or batch Plugin operation fails
+- When PromptHub reports the failure
+- Then the message identifies the failure category and a corrective next step
+- And batch installation includes its aggregate counts and first explained failure
+- And a completed Agent deployment whose inventory refresh fails states that the
+  operation completed and asks the user to refresh before retrying installation
+- And source URLs, local paths, IPC prefixes, command output and internal wrappers
+  are not shown
+
+#### Scenario: Manage providers without profile terminology
+
+- Given the user opens a provider list, form, activation review or delete confirmation
+- When PromptHub renders user-facing copy
+- Then the managed entry is called a provider in the active locale
+- And internal Provider Profile identifiers are not shown as product terminology
+
+### `FR-AGENT-118`: Visual Provider Import And Agent-Aware Protocol Choice
+
+The PromptHub provider import dialog MUST show the existing themed provider
+icon for every source row and the inferred model-family icon for every model
+choice, with the existing Custom/Other fallback when no dedicated asset is
+available. It MUST use a bounded custom selector rather than a native text-only
+model menu.
+
+The dialog MUST expose a protocol selector whose options are derived from both
+the source provider API and the destination Agent's writable protocol
+capabilities. It MUST preselect the direct/recommended mapping and include the
+selected protocol in the import request. The main process MUST reject a stale,
+missing or destination-incompatible protocol instead of silently choosing a
+different one.
+
+#### Scenario: Import an OpenAI-compatible provider into Codex
+
+- Given PromptHub has an OpenAI-compatible provider with multiple chat models
+- When the user opens Import from PromptHub for Codex
+- Then the provider and each model display their matching local icons
+- And the protocol selector offers only Codex-compatible OpenAI Chat and OpenAI Responses choices
+- And OpenAI Chat is selected as the direct mapping for an OpenAI-protocol source
+- And importing persists the explicitly selected protocol
+
+#### Scenario: Import the same provider into Pi
+
+- Given the same PromptHub provider is selected for Pi
+- When the import dialog renders
+- Then protocol choices use Pi's native API names and capabilities
+- And a protocol that was valid for Codex but is not a Pi API value cannot be submitted
+
+### `FR-AGENT-119`: Provider Creation And Import Entry Placement
+
+The Provider & Model sidebar MUST place Import from PromptHub and Add custom
+provider together in the top action area, and both commands MUST use the add
+icon. The bottom of the sidebar MUST NOT retain a duplicate add command.
+
+Right-clicking anywhere inside the provider list MUST expose the same available
+commands. Desktop Agents expose both import and custom creation; runtimes that
+cannot import from the local PromptHub model service expose only custom
+creation. The context menu MUST reuse the same workflows and busy state as the
+visible toolbar commands.
+
+#### Scenario: Open provider actions from the list
+
+- Given the user is viewing a desktop Agent's provider list
+- When the user right-clicks a provider row or empty list space
+- Then the menu offers Import from PromptHub and Add custom provider
+- And either command opens the same dialog as its matching top action
+- And no add-provider action remains fixed to the bottom of the sidebar
+
+### `FR-AGENT-121`: Layered Inline Provider Editor
+
+The inline Add/Edit provider workspace MUST visually distinguish the page
+background, action header, form surface, sections and controls. The form MUST
+use one white/card-colored surface with section dividers rather than rendering
+every section as an independent nested card. Text inputs, secret inputs and
+custom dropdown triggers MUST share the same outlined control treatment and
+disabled state; the provider editor MUST NOT fall back to an operating-system
+native select menu. Every field group MUST use a single full-width column in
+the right pane; it MUST NOT leave a half-width control beside empty space. Form
+dropdowns MUST match their trigger width and use a restrained border, radius,
+shadow and selected state rather than a floating oversized menu treatment.
+
+Field labels, examples and placeholders MUST follow the corresponding
+CC Switch provider concepts where PromptHub already owns the same writable
+field: provider name, provider identifier, endpoint, model identifier, context
+size and API key. Examples MUST be specific to the destination Agent where the
+adapter has a known convention. This visual/content alignment MUST NOT invent
+new stored website, notes, icon, proxy or request-conversion fields.
+
+#### Scenario: Add a custom provider in the right pane
+
+- Given the user opens Add custom provider from Provider & Model
+- When the inline editor renders
+- Then the right pane has a muted page background and a distinct action header
+- And all form sections sit inside one bordered white form surface
+- And section headings, dividers and outlined controls create a visible hierarchy
+- And every input and dropdown trigger spans the available form width
+- And every dropdown opens a themed PromptHub listbox rather than a native menu
+- And the listbox aligns to its trigger without an oversized radius or shadow
+- And blank fields show actionable Agent-specific examples for endpoint, model and credentials
+- And the editor does not create a stack of decorative cards inside the form
+
+### `FR-AGENT-122`: Claude Code Native Model Routes
+
+The custom-provider editor for Claude Code MUST expose the model routes that
+Claude Code natively supports: the required primary model and optional Sonnet,
+Opus, Haiku and subagent models. These values MUST be stored as typed model
+mappings, included in activation planning and verification, and written to the
+matching Claude Code environment keys without exposing credentials.
+
+Importing the current Claude Code configuration MUST recover every supported
+route. Activating a profile MUST remove stale PromptHub-managed route values
+that are omitted by the selected profile while preserving unrelated native
+settings. Unknown routes, duplicate routes, parameters and invalid model ids
+MUST block activation.
+
+The editor MUST NOT add unsupported Fable, proxy, request-rewrite, website,
+icon or promotional metadata fields. Draft-time endpoint model discovery MUST
+not reuse the unrestricted renderer HTTP path or move write-only credentials
+out of the main process; it remains separately gated until a bounded main-only
+discovery contract exists.
+
+#### Scenario: Configure Claude role models
+
+- Given the user adds or edits a Claude Code custom provider
+- When the model section renders
+- Then the primary, Sonnet, Opus, Haiku and subagent model fields are available
+- And blank optional role fields are omitted from the saved model mappings
+- And activation writes each supplied route to its documented Claude Code key
+- And a later profile that omits a route removes that stale managed value
+- And unrelated settings and environment values remain unchanged
+
+### `FR-AGENT-124`: Codex Native Model Runtime Options
+
+The Codex custom-provider editor MUST expose the optional model reasoning effort
+and context window values that Codex currently documents in `config.toml`.
+Reasoning effort MUST accept only `minimal`, `low`, `medium`, `high` or `xhigh`
+and MUST be available only for the Responses path or the native OpenAI path.
+Context window MUST be a positive bounded integer. Both values MUST travel with
+the primary model mapping so profile import, activation, verification and later
+profile switching use one source of truth.
+
+Importing native Codex configuration MUST recover valid values. Activating a
+profile MUST write supplied values and remove stale PromptHub-managed values
+when the selected profile omits them, while preserving unrelated TOML comments,
+tables and settings. Invalid, unknown or misplaced mapping parameters MUST block
+activation.
+
+The editor MUST NOT copy CC Switch's legacy `disable_response_storage` field,
+global `goals` feature toggle, proxy conversion or promotional metadata into the
+provider profile. OpenAI-auth reuse and command-backed authentication remain
+separate security-sensitive contracts rather than cosmetic form toggles.
+
+#### Scenario: Configure Codex model runtime options
+
+- Given the user adds or edits a Codex provider
+- When the model section renders
+- Then optional reasoning effort and context window controls are available
+- And blank values preserve the Codex model defaults
+- And saved values are stored on the primary model mapping
+- And activation writes `model_reasoning_effort` and `model_context_window`
+- And selecting a profile without either value removes the stale managed keys
+- And unrelated `config.toml` content remains unchanged
+
+### `FR-AGENT-123`: Provider List Activation And Native Provider Testing
+
+The Provider & Model sidebar MUST expose activation as a compact switch on
+every managed provider row. The provider verified against the Agent's current
+native state MUST show a checked, non-destructive switch; selecting an inactive
+switch MUST enter the existing review, atomic apply, verification and rollback
+workflow. The detail pane MUST NOT retain a second activation command.
+
+The read-only current native provider, including an official platform-managed
+provider, MUST expose the same connection and explicit model-test surfaces as a
+stored provider. Testing MUST derive an ephemeral sanitized target from the
+Agent's current native configuration. It MUST NOT create a stored provider,
+persist credentials, activate a provider or write the Agent configuration.
+Platform-native subscription or OAuth transports that cannot be probed directly
+MUST return a truthful unsupported result rather than pretending that a remote
+connection succeeded.
+
+Codex's official OpenAI transport is probeable through the installed Codex CLI.
+Its connection check MUST use the CLI's native login-status command against the
+selected Codex root without sending a model request. Its explicit model test
+MUST use an ephemeral, user-config-free, rule-free, read-only `codex exec` run
+with the selected official model. The probe MUST NOT persist a session, expose
+authentication output or mutate `config.toml`; cancellation and bounded timeout
+failures MUST remain typed and redacted.
+
+#### Scenario: Activate another provider from the list
+
+- Given one provider is verified as current and another provider is inactive
+- When the user selects the inactive provider's switch
+- Then PromptHub opens the existing activation review for that provider
+- And only the current provider's switch remains checked until verification succeeds
+- And no duplicate activation button appears in the detail pane
+
+#### Scenario: Test the current official provider
+
+- Given an Agent has a detected official platform-managed native provider
+- When the user runs connection or model testing from its detail pane
+- Then PromptHub tests an ephemeral projection of that current provider
+- And no Provider Profile row, secret reference or Agent file is created or changed
+- And an official Codex connection check validates the CLI login without consuming model quota
+- And an official Codex model test uses an isolated ephemeral request only after confirmation
+- And an unprobeable native transport is reported as unsupported
+
+### `FR-AGENT-125`: Codex Official Account Snapshot Switching
+
+For Codex's built-in OpenAI provider, PromptHub MUST let the user save the
+current official login, import another complete `auth.json` as a write-only
+account snapshot, list sanitized account summaries and switch the active
+account by replacing the single native `~/.codex/auth.json`. PromptHub MUST NOT
+append an account array or otherwise change Codex's native authentication
+schema.
+
+Account snapshots MUST be encrypted at rest in a main-process-only PromptHub
+store. The renderer may receive only a user label, masked account identifier,
+timestamps and active state. Switching MUST preserve an unsaved current login,
+write the selected snapshot atomically with owner-only permissions, re-read and
+verify it, and restore the exact previous file on failure. It MUST NOT modify
+`config.toml`, Provider Profiles, models, MCP, sessions or unrelated Codex
+state. An active snapshot MUST NOT be deletable.
+
+#### Scenario: Switch between saved official accounts
+
+- Given the current official Codex login and another valid saved account
+- When the user switches to the saved account
+- Then the current login is retained as an encrypted snapshot if necessary
+- And the selected snapshot replaces `~/.codex/auth.json` atomically
+- And the replacement is re-read and verified before success is reported
+- And `config.toml` and all other Codex files remain unchanged
+
+#### Scenario: Reject invalid or unsafe authentication input
+
+- Given malformed JSON, an oversized payload or a payload without an official access token
+- When the user tries to add an account
+- Then no account metadata, ciphertext or Codex file is changed
+- And no token or raw authentication JSON appears in the returned error

@@ -65,7 +65,7 @@ UI screen structure, interaction states, responsive behavior and component bound
 - [x] `TEST-AGENT-042` Oh My Pi 回归：`PI_CODING_AGENT_DIR`/默认根解析、Skills/Rules/MCP/项目目标/派生 Plugin 路径、`mcpServers` key、直接项目 JSONL 会话、标题/模型/可见消息映射、畸形行统计、嵌套 subagent/软链接/不安全 id 拒绝和 `omp --resume` 元数据。
 - [x] `TEST-AGENT-043` Oh My Pi model 回归：`config.yml`/`config.yaml` 选择、`models.yml` provider/model 列表、endpoint 脱敏、apiKey/header/OAuth 不出 renderer、缺失/畸形/超限 YAML、备份/原子写/重读校验/回滚，以及未知字段保留；并发防护复用既有通用写入管线。
 - [x] `TEST-AGENT-045` 全量 capability inventory 回归：31 个平台注册项各声明一次；每项状态只能是 supported/partial/planned/unsupported 且 evidence 非空；provider/session/usage 的已实现集合与真实 adapters 一致；custom Agent 只派生路径能力，不伪造深度协议。
-- [x] `TEST-AGENT-046` Provider Profile renderer 回归：非 Codex 已支持平台使用统一 Profile split view；覆盖公共凭据就绪态、增删改/归档/复制/无凭据导出、结构化 config 编辑保留、write-only 凭据替换/清除/保留、显式原生导入、逐字段冲突选择、blocked/verified/rollback 结果、稳定错误脱敏和 7 locales；Codex 旧 provider 投影仍由 `T-AGENT-079` 迁移。
+- [x] `TEST-AGENT-046` Provider Profile renderer 回归：非 Codex 已支持平台使用统一 Profile split view；覆盖公共凭据就绪态、增删改、独立改名、创建副本、复制无凭据文本、确认删除且不显示归档、结构化 config 编辑保留、write-only 凭据替换/清除/保留、显式原生导入、逐字段冲突选择、blocked/verified/rollback 结果、稳定错误脱敏和 7 locales；Codex 旧 provider 投影仍由 `T-AGENT-079` 迁移。
 - [x] `TEST-AGENT-047` 工作台 capability 指引与键盘回归：planned/unsupported 页签保持禁用并显示具体说明，不触发 Provider IPC；tablist 使用 roving tabindex，ArrowLeft/ArrowRight/Home/End 仅在可用页签间循环，活动页签与 tabpanel 通过 `aria-labelledby` 关联；7 locales 提供 planned/unsupported 文案。
 - [x] `TEST-AGENT-048` Agent renderer 异步测试稳定性：Overview session/provider cell 与 legacy Codex Provider panel 的初始异步加载在 React `act` 生命周期内收敛；工作台切回 Overview 后再次等待加载完成；回归输出不再包含未包裹 `act(...)` 的状态更新警告。
 - [x] `TEST-AGENT-049` Codex Provider 凭据迁移：真实 TOML fixture 覆盖 legacy managed/env/native-inline 三类来源；preview 不含 secret/ref；未确认与 stale digest 零写入；确认后 Profile/映射/`agent-provider:<profileId>` 一致；批次中任一步失败恢复旧 ref 并清理新 Profile/ref；迁移不改 `config.toml`；重复执行幂等；7 locales、键盘/读屏和 Electron 同意/稍后流程。
@@ -149,7 +149,7 @@ UI screen structure, interaction states, responsive behavior and component bound
 - [x] `T-AGENT-077` 完成 Provider Profile main-only 安全 CRUD 批次：公共 JSON/映射敏感键拒绝、批量密钥存在性查询、write-only secret、稳定 main-owned secret ref、DB/密钥双写补偿、原子 profile+mapping 更新、duplicate 不复制凭据、无凭据 export、受控 IPC/preload 和数据库恢复后的 handler rebind。
 - [x] `T-AGENT-078` 完成 Provider 激活应用链路基础批次：原生 import preview 验证、字段级冲突选择、main-owned Agent 路径解析、受控 import/preview/activate IPC 与 preload、八个平台的 model-only adapter 注册、renderer query/action store、stale-load 隔离以及 verified/rollback 结果投影；endpoint/credential profile 在对应平台完整 adapter 落地前 fail-closed。
 - [x] `T-AGENT-079` 将 Provider Profile 列表、结构化编辑、原生导入确认、字段级 activation preview、verified/rollback 结果和无 adapter 指引接入 Provider & Model split view；迁移 Codex 旧 provider 管理投影，避免形成第二 Provider 事实源，并完成 7 locales、键盘/读屏和 UI 回归。Codex legacy 凭据同意迁移、统一 Profile 创建/激活、write-only secret 和真实 `config.toml` 投影已通过 Electron E2E。
-- [x] `T-AGENT-080` 完成非 Codex Provider Profile renderer 批次：统一列表/详情、公共凭据态、CRUD/归档/复制/无凭据导出、write-only 凭据动作、显式原生导入、逐字段 activation preview、verified/rollback 结果和稳定错误边界；编辑保留 adapter-owned `config`，不把 durable 状态复制进 renderer store。
+- [x] `T-AGENT-080` 完成非 Codex Provider Profile renderer 批次：统一列表/详情、公共凭据态、CRUD/创建副本/复制无凭据文本、独立改名、确认删除且移除详情归档操作、write-only 凭据动作、显式原生导入、逐字段 activation preview、verified/rollback 结果和稳定错误边界；编辑保留 adapter-owned `config`，不把 durable 状态复制进 renderer store。
 - [x] `T-AGENT-082` 完成 capability 指引与工作台 tab 可访问性批次：planned/unsupported 页签及概览入口显示状态对应说明；禁用页签不触发 Provider IPC；可用页签实现 roving tabindex、ArrowLeft/ArrowRight/Home/End 导航和 tab/tabpanel 关联；新增文案覆盖 7 locales。
 - [x] `T-AGENT-083` 完成 Agent renderer 异步测试 harness 收敛：`renderWithI18n` 提供显式、默认关闭的 effect settlement 选项；工作台和 legacy Codex Provider 测试仅在需要时启用，覆盖初始加载与重新进入 Overview，不改变生产组件或持久化边界。
 - [x] `T-AGENT-084` 以 CC Switch v3.18.0 公开协议和交互流程为参考，在 PromptHub 边界内独立实现 Codex legacy -> unified Profile 显式迁移、main-only 凭据复制与批次补偿、完整 Codex Provider activation adapter，并在回归通过后移除 legacy renderer 事实源。完成 `FR-AGENT-024`、`DES-AGENT-020`、`TEST-AGENT-049` 和 `T-AGENT-079`；推进但不替代仍需全平台验证的 `TEST-AGENT-004`、`TEST-AGENT-005`、`TEST-AGENT-007` 与 tray 尚未完成的 `TEST-AGENT-013`。
@@ -521,3 +521,65 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 
 - [x] `TEST-AGENT-192` 先复现 fresh index 每次 mount 仍刷新、初始 live list 与 full scan 竞争、离开 History 取消 warmup、同 Agent 重入重复扫描，以及 refresh revision 重新遮住已有列表的问题；覆盖五分钟 freshness、stale/missing 后台刷新、per-Agent in-flight dedupe、window-owned lifecycle 和非阻塞列表替换。
 - [x] `T-AGENT-201` 按 `FR-AGENT-114` / `DES-AGENT-132` 实现 stale-while-revalidate 会话元数据缓存：初始列表完成后才启动有界 warmup，fresh cache 直接复用，后台请求跨 History mount 复用且完成时不回到 blocking loader；不新增 schema、IPC、watcher、timer 或 transcript 正文缓存。
+
+## Agent-Scoped Add Dialog Follow-up
+
+- [x] `TEST-AGENT-193` 先复现 Agent 工作台的添加 MCP/Plugin 操作跳转到专项管理页的问题；覆盖弹窗打开、My MCP/My Plugins 多选、已安装项禁用、复制/软链接、确认后原地刷新，以及 App module/Agent tab 不变。
+- [x] `T-AGENT-202` 按 `FR-AGENT-115` / `DES-AGENT-133` 复用 MCP 库部署弹窗并新增 Agent Plugin 库选择弹窗，将写入限定到当前 Agent 的已验证 target；不得新增 IPC/schema、跳转专项页或复制安装业务逻辑到持久层之外。
+
+## Provider Terminology And Native Ownership Follow-up
+
+- [x] `TEST-AGENT-194` 先复现共享 Provider 工作台和 Pi 目录仍暴露“导入当前配置/转为可编辑配置”，以及列表、表单、激活和删除界面泄漏 Profile/配置档案术语；覆盖原生配置只读、PromptHub 导入保留和七语言供应商文案。
+- [x] `T-AGENT-203` 按 `FR-AGENT-116` / `DES-AGENT-134` 移除 renderer 原生配置导入入口与弹窗，统一用户侧供应商术语；保留内部 Provider Profile 类型、存储、IPC 兼容名和官方还原流程，不新增迁移或持久化状态。
+
+## Plugin Empty State And Download Proxy Authority Follow-up
+
+- [x] `TEST-AGENT-195` 先复现空 Agent Plugin 页点击添加连续提示“暂无目标”、直连模式仍继承启动代理、Plugin Git 下载绕过用户代理模式及安装/导入失败展示原始 IPC/Git 错误的问题；覆盖纯空态、无 target 但有库、system/direct/manual 环境语义、Git 单次继承、七语言错误分类、未知原因脱敏、批量首个失败和安装后刷新失败。
+- [x] `T-AGENT-204` 按 `FR-AGENT-117` / `DES-AGENT-135` 简化 Agent Plugin 空态、让 Add 始终进入当前页弹窗，让官方商店 Git 下载严格服从网络设置的 system/direct/manual 模式，并统一市场、本地/来源导入、Agent 安装与批量安装的可操作错误说明；不得猜测 target、安装器私自切换代理、无限重试、新增 IPC/schema 或泄露命令/临时路径。
+
+## Rich Provider Import Follow-up
+
+- [x] `TEST-AGENT-196` 先复现 PromptHub 供应商导入缺少供应商/模型图标、模型使用原生文字下拉、协议不可选择以及 main 静默固定协议的问题；覆盖 Codex/OpenCode/Pi 的双协议选择、Claude/Gemini/Qwen 的单协议约束、默认直连映射、篡改协议拒绝和暗色图标复用。
+- [x] `T-AGENT-205` 按 `FR-AGENT-118` / `DES-AGENT-136` 复用 Model Services 图标与共享 Select，扩展 source candidate/request 合同并由 main 按 source × Agent 交集验证所选协议；不得新增图标注册表、格式转换代理、无证据协议或存储迁移。
+
+## Provider Sidebar Entry Follow-up
+
+- [x] `TEST-AGENT-197` 先复现新增供应商仍固定在侧栏底部、PromptHub 导入仍用数据库图标且供应商列表右键没有创建/导入入口的问题；覆盖共享 Profile 工作台、Pi 原生目录、顶部双加号、右键复用和 Web 不暴露本地导入。
+- [x] `T-AGENT-206` 按 `FR-AGENT-119` / `DES-AGENT-137` 提取共享供应商操作展示，将新增自定义供应商移到顶部并为列表增加同流程右键入口；不得复制创建/导入业务逻辑、新增 IPC、持久化状态或后台任务。
+
+## Internal CLI Maintenance Boundary Follow-up
+
+- [x] `TEST-AGENT-198` 先复现 Agent 更多菜单仍显示 CLI 诊断、preload 仍公开诊断与更新方法的问题；覆盖菜单无诊断入口、刷新/编辑保留、renderer API 无诊断/update plan/apply 方法，以及内部诊断和生命周期服务回归。
+- [x] `T-AGENT-207` 按 `FR-AGENT-120` / `DES-AGENT-138` 移除 CLI 诊断菜单、弹窗、更新 review、renderer 状态、preload 方法、共享 IPC channel 和 main handler；保留有界 main-process 诊断与生命周期服务，不新增替代入口、持久化或后台任务。
+
+## Inline Provider Form Hierarchy Follow-up
+
+- [x] `TEST-AGENT-199` 先复现新增供应商右侧编辑器仍为整片灰底、表单无独立白色表面、输入框与背景缺少边界、半宽控件留下空白以及下拉仍调用系统原生/过重菜单的问题；覆盖单一表单表面、四个全宽单列分区、描边输入框、轻量等宽下拉、Agent 专属端点/模型示例和 API Key 提示。
+- [x] `T-AGENT-208` 按 `FR-AGENT-121` / `DES-AGENT-139` 为右侧新增/编辑供应商界面增加白色表单表面、分区层次、全宽单列字段和统一描边控件；全部选择项复用 portal-backed Select 的轻量表单样式，字段内容按已有 adapter 对齐 CC Switch 概念但不新增持久化字段、嵌套卡片、IPC 或后台任务。
+
+## Oh My Pi Official Plugin Inventory Follow-up
+
+- [x] `TEST-AGENT-202` 先复现 Oh My Pi 已安装插件清单存在于官方 `installed_plugins.json`，但 Agent Plugin 资产页因只扫描通用目录而为空的问题；覆盖合法用户/项目清单、重复项、缺失包、路径逃逸、软链接、畸形/超限 JSON 和零凭据读取。
+- [x] `T-AGENT-211` 按官方 marketplace 清单契约把 Oh My Pi 插件 inventory 接入共享 target matrix；仅做有界只读资产投影，不直接写 `agent.db`、不接管 auth broker、不新增 renderer 专用分支或隐式安装。
+
+## Claude Native Model Routes Follow-up
+
+- [x] `TEST-AGENT-200` 先复现 Claude 自定义供应商只能保存主模型、无法导入或激活 Sonnet/Opus/Haiku/Subagent 路由以及旧路由会残留的问题；覆盖可选字段省略、完整映射、未知/重复/参数化路由拒绝、原生导入、无关 JSON 保留、原子写入验证与回滚。
+- [x] `T-AGENT-209` 按 `FR-AGENT-122` / `DES-AGENT-140` 复用现有 model mapping 持久化边界补齐 Claude 五类原生模型路由；不得新增 schema、renderer 网络发现、代理转换、Fable 或供应商宣传元数据。
+- [x] `TEST-AGENT-203` 先复现 Codex 自定义供应商无法保存、导入、激活或清理推理强度与上下文窗口的问题；覆盖官方枚举、正整数边界、Responses 限制、原生导入、注释和无关 TOML 保留、旧值清理、验证与回滚。
+- [x] `T-AGENT-212` 按 `FR-AGENT-124` / `DES-AGENT-142` 将 Codex 推理强度和上下文窗口建模为主模型参数并补齐表单、adapter、原生配置和七语言文案；不得复制已不在官方参考中的字段或改变凭据所有权。
+
+## Provider Activation Switch And Native Test Follow-up
+
+- [x] `TEST-AGENT-201` 先复现激活命令只存在于详情页、左侧供应商列表没有当前/可激活开关，以及官方原生供应商没有连接与模型测试入口的问题；覆盖当前开关不可关闭、非当前开关进入既有 review、当前原生连接/模型测试、取消隔离、结果身份校验和零 Profile/Agent 写入。
+- [x] `T-AGENT-210` 按 `FR-AGENT-123` / `DES-AGENT-141` 将激活入口移到每个供应商列表行，并以经过校验的临时 native target 复用现有 adapter 测试能力；不得新增激活布尔状态、创建 Provider Profile、复制凭据、绕过 review/rollback 或伪造 platform-native 测试成功。
+
+## Codex Official Account Switching Follow-up
+
+- [x] `TEST-AGENT-204` 先复现 Codex 官方账号只能覆盖登录、无法保存当前账号和安全切回的问题；覆盖当前账号保存、write-only JSON 导入、密文落盘、脱敏列表、未保存当前账号自动保留、0600 原子替换、重读验证、失败回滚、并发串行、活动账号拒删、畸形/超限/缺 token 输入和零 `config.toml` 写入。
+- [x] `T-AGENT-213` 按 `FR-AGENT-125` / `DES-AGENT-143` 在 Codex 官方供应商详情增加账号快照管理，通过 main-only 加密 vault 替换单一 `auth.json`；不得发明多账号 JSON、返回 token、修改供应商/模型/MCP/会话、隐式网络验证或新增后台进程。
+
+## Codex Official Native Probe Follow-up
+
+- [x] `TEST-AGENT-205` 先复现官方 Codex 供应商被错误隐藏检测入口并返回 unsupported；覆盖 `codex login status` 零模型请求、隔离 `codex exec` 参数、选中模型、临时文件清理、取消、超时、缺少 CLI、未登录、认证/网络/额度/模型错误分类、结果脱敏和零 `config.toml`/Profile 写入。
+- [x] `T-AGENT-214` 按 `FR-AGENT-123` / `DES-AGENT-141` 为官方 Codex 恢复连接和模型检测，通过共享无 shell native runner 执行有界官方 CLI 探针；不得读取或返回 token、伪造成功、持久化会话、绕过模型测试确认或改变其他 platform-native 供应商语义。

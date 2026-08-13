@@ -37,11 +37,7 @@ interface TomlKeyEntry {
 function unquoteSegment(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  if (
-    trimmed.startsWith('"') &&
-    trimmed.endsWith('"') &&
-    trimmed.length >= 2
-  ) {
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
     try {
       // TOML basic-string escapes are JSON-compatible for key segments.
       const parsed: unknown = JSON.parse(trimmed);
@@ -50,11 +46,7 @@ function unquoteSegment(raw: string): string | null {
       return null;
     }
   }
-  if (
-    trimmed.startsWith("'") &&
-    trimmed.endsWith("'") &&
-    trimmed.length >= 2
-  ) {
+  if (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2) {
     return trimmed.slice(1, -1);
   }
   return /^[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : null;
@@ -195,9 +187,8 @@ function isValueComplete(text: string): boolean {
 }
 
 function matchKeyValue(line: string): { key: string; value: string } | null {
-  const match = /^\s*([A-Za-z0-9_-]+|"(?:[^"\\\n]|\\.)*"|'[^'\n]*')\s*=(.*)$/.exec(
-    line,
-  );
+  const match =
+    /^\s*([A-Za-z0-9_-]+|"(?:[^"\\\n]|\\.)*"|'[^'\n]*')\s*=(.*)$/.exec(line);
   if (!match) return null;
   const key = unquoteSegment(match[1]);
   if (key === null) return null;
@@ -286,9 +277,7 @@ function segmentsStartWith(segments: string[], prefix: string[]): boolean {
 }
 
 function renderSegment(segment: string): string {
-  return /^[A-Za-z0-9_-]+$/.test(segment)
-    ? segment
-    : JSON.stringify(segment);
+  return /^[A-Za-z0-9_-]+$/.test(segment) ? segment : JSON.stringify(segment);
 }
 
 function toTomlString(value: string): string {
@@ -333,6 +322,16 @@ function renderReplacementLine(
   return `${indent}${key} = ${toTomlString(value)}${comment ? ` ${comment}` : ""}`;
 }
 
+function renderNumberReplacementLine(
+  line: string,
+  key: string,
+  value: number,
+): string {
+  const indent = /^(\s*)/.exec(line)?.[1] ?? "";
+  const comment = extractTrailingComment(line);
+  return `${indent}${key} = ${value}${comment ? ` ${comment}` : ""}`;
+}
+
 function assertSingleLineStringValue(line: string): void {
   const keyValue = matchKeyValue(line);
   const trimmed = keyValue?.value.trim() ?? "";
@@ -345,7 +344,11 @@ function assertSingleLineStringValue(line: string): void {
   }
 }
 
-export function setTopLevelString(raw: string, key: string, value: string): string {
+export function setTopLevelString(
+  raw: string,
+  key: string,
+  value: string,
+): string {
   const structure = scanToml(raw);
   const lines = [...structure.lines];
   const existing = structure.topLevelKeys.find((entry) => entry.key === key);
@@ -362,6 +365,57 @@ export function setTopLevelString(raw: string, key: string, value: string): stri
   let insertAt = firstSectionStart;
   while (insertAt > 0 && !lines[insertAt - 1].trim()) insertAt -= 1;
   lines.splice(insertAt, 0, `${key} = ${toTomlString(value)}`);
+  return lines.join("\n");
+}
+
+export function setTopLevelNumber(
+  raw: string,
+  key: string,
+  value: number,
+): string {
+  if (!Number.isSafeInteger(value)) {
+    throw new AgentCodexProviderError("config-too-complex");
+  }
+  const structure = scanToml(raw);
+  const lines = [...structure.lines];
+  const existing = structure.topLevelKeys.find((entry) => entry.key === key);
+  if (existing) {
+    const keyValue = matchKeyValue(lines[existing.line]);
+    if (
+      !keyValue ||
+      !isValueComplete(keyValue.value) ||
+      !/^[+-]?\d(?:_?\d)*$/.test(keyValue.value.trim())
+    ) {
+      throw new AgentCodexProviderError("config-too-complex");
+    }
+    lines[existing.line] = renderNumberReplacementLine(
+      lines[existing.line],
+      key,
+      value,
+    );
+    return lines.join("\n");
+  }
+  const firstSectionStart = structure.sections[0]?.start ?? lines.length;
+  let insertAt = firstSectionStart;
+  while (insertAt > 0 && !lines[insertAt - 1].trim()) insertAt -= 1;
+  lines.splice(insertAt, 0, `${key} = ${value}`);
+  return lines.join("\n");
+}
+
+export function removeTopLevelScalar(raw: string, key: string): string {
+  const structure = scanToml(raw);
+  const existing = structure.topLevelKeys.find((entry) => entry.key === key);
+  if (!existing) return raw;
+  const lines = [...structure.lines];
+  const keyValue = matchKeyValue(lines[existing.line]);
+  if (
+    !keyValue ||
+    !isValueComplete(keyValue.value) ||
+    /^[{[]/.test(keyValue.value.trim())
+  ) {
+    throw new AgentCodexProviderError("config-too-complex");
+  }
+  lines.splice(existing.line, 1);
   return lines.join("\n");
 }
 

@@ -46,6 +46,12 @@ function piAgent(): ManagedAgentSummary {
   } as ManagedAgentSummary;
 }
 
+function collectStrings(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (!value || typeof value !== "object") return [];
+  return Object.values(value).flatMap(collectStrings);
+}
+
 function catalogProvider(
   overrides: Partial<AgentModelCatalogProvider> = {},
 ): AgentModelCatalogProvider {
@@ -121,9 +127,6 @@ describe("AgentPiModelCatalogPanel", () => {
         testModel: expect.any(String),
         testModelConfirmTitle: expect.any(String),
         testModelConfirmMessage: expect.any(String),
-        importCurrentTitle: expect.any(String),
-        importCurrentMessage: expect.any(String),
-        importCurrentConfirm: expect.any(String),
         form: expect.objectContaining({
           editProviderTitle: expect.any(String),
           editModelTitle: expect.any(String),
@@ -137,6 +140,30 @@ describe("AgentPiModelCatalogPanel", () => {
           missing: expect.any(String),
         },
       });
+    },
+  );
+
+  it.each([
+    ["de", de, /profil/i],
+    ["en", en, /profile/i],
+    ["es", es, /perfil/i],
+    ["fr", fr, /profil/i],
+    ["ja", ja, /プロファイル/],
+    ["zh-TW", zhTw, /設定檔/],
+    ["zh", zh, /配置档案/],
+  ] as const)(
+    "uses provider terminology and omits native import actions in %s",
+    (_locale, messages, legacyTerm) => {
+      const providerCopy = collectStrings(
+        messages.agents.providerProfiles,
+      ).join("\n");
+
+      expect(providerCopy).not.toMatch(legacyTerm);
+      expect(messages.agents.providerProfiles).not.toHaveProperty("import");
+      expect(messages.agents.providerProfiles.currentNative).not.toHaveProperty(
+        "manage",
+      );
+      expect(messages.agents.piModels).not.toHaveProperty("importCurrentTitle");
     },
   );
 
@@ -166,9 +193,11 @@ describe("AgentPiModelCatalogPanel", () => {
     const toolbar = screen.getByTestId("agent-provider-workbench-toolbar");
     expect(toolbar).toBeVisible();
     expect(
-      within(toolbar).getByText("Import current configuration"),
-    ).toBeVisible();
+      within(toolbar).queryByText("Import current configuration"),
+    ).not.toBeInTheDocument();
     expect(within(toolbar).getByText("Import from PromptHub")).toBeVisible();
+    expect(within(toolbar).getByText("Add custom provider")).toBeVisible();
+    expect(toolbar.querySelectorAll("svg.lucide-plus")).toHaveLength(2);
     expect(screen.getByTestId("agent-provider-workbench-sidebar")).toHaveClass(
       "overflow-hidden",
     );
@@ -181,47 +210,34 @@ describe("AgentPiModelCatalogPanel", () => {
     expect(screen.getByLabelText("Credential configured")).toBeInTheDocument();
     expect(screen.getByLabelText("Missing credential")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Import current configuration" }),
-    ).toBeEnabled();
-    expect(
       screen.getByRole("button", { name: "Import from PromptHub" }),
     ).toBeEnabled();
   });
 
-  it("imports the current built-in provider as an editable override", async () => {
-    const importCurrentPiProvider = vi.fn().mockResolvedValue({
-      backupPath: "/tmp/models.json.backup",
-    });
-    const getModelConfig = vi
-      .fn()
-      .mockResolvedValueOnce(modelConfig())
-      .mockResolvedValueOnce(
-        modelConfig({
-          modelCatalog: [catalogProvider({ source: "custom" })],
-        }),
-      );
+  it("opens provider creation from the provider-list context menu", async () => {
     installWindowMocks({
-      api: { agent: { getModelConfig, importCurrentPiProvider } },
+      api: {
+        agent: {
+          getModelConfig: vi.fn().mockResolvedValue(modelConfig()),
+        },
+      },
     });
 
     await renderPanel();
+    fireEvent.contextMenu(
+      screen.getByRole("navigation", { name: "Pi providers" }),
+      { clientX: 80, clientY: 120 },
+    );
     fireEvent.click(
-      screen.getByRole("button", { name: "Import current configuration" }),
+      screen.getAllByRole("button", { name: "Add custom provider" })[1],
     );
-    expect(
-      await screen.findByRole("alertdialog", {
-        name: "Make current provider editable",
-      }),
-    ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Create override" }));
 
-    await waitFor(() =>
-      expect(importCurrentPiProvider).toHaveBeenCalledWith({ agentId: "pi" }),
-    );
-    expect(getModelConfig).toHaveBeenCalledTimes(2);
+    expect(
+      await screen.findByRole("dialog", { name: "Add custom provider" }),
+    ).toBeVisible();
   });
 
-  it("does not offer current import for a custom or unconfigured provider", async () => {
+  it("does not offer native import for built-in, custom, or unconfigured providers", async () => {
     installWindowMocks({
       api: {
         agent: {
@@ -244,13 +260,13 @@ describe("AgentPiModelCatalogPanel", () => {
       { settleAsyncEffects: true },
     );
     expect(
-      screen.getByRole("button", { name: "Import current configuration" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: "Import current configuration" }),
+    ).not.toBeInTheDocument();
     unmount();
     await renderPanel();
     expect(
-      screen.getByRole("button", { name: "Import current configuration" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: "Import current configuration" }),
+    ).not.toBeInTheDocument();
   });
 
   it("imports a PromptHub provider into Pi and refreshes the native catalog", async () => {
@@ -277,6 +293,7 @@ describe("AgentPiModelCatalogPanel", () => {
         name: "Work Gateway",
         providerKind: "openai-compatible",
         protocol: "openai-completions",
+        protocols: ["openai-completions", "openai-responses"],
         endpoint: "https://gateway.example.com/v1",
         credentialReady: true,
         compatible: true,
@@ -323,6 +340,7 @@ describe("AgentPiModelCatalogPanel", () => {
         platformId: "pi",
         sourceId: "provider-work",
         modelId: "model-work",
+        protocol: "openai-completions",
       }),
     );
     await waitFor(() => expect(getModelConfig).toHaveBeenCalledTimes(2));
@@ -343,6 +361,7 @@ describe("AgentPiModelCatalogPanel", () => {
               name: "Work Gateway",
               providerKind: "openai-compatible",
               protocol: "openai-completions",
+              protocols: ["openai-completions", "openai-responses"],
               endpoint: "https://gateway.example.com/v1",
               credentialReady: true,
               compatible: true,
@@ -617,7 +636,9 @@ describe("AgentPiModelCatalogPanel", () => {
 
     await renderPanel();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     const dialog = await screen.findByRole("dialog", {
       name: "Add custom provider",
     });
@@ -671,7 +692,9 @@ describe("AgentPiModelCatalogPanel", () => {
     });
 
     await renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     await screen.findByRole("dialog", { name: "Add custom provider" });
 
     fireEvent.change(screen.getByLabelText("Provider ID"), {
@@ -715,7 +738,9 @@ describe("AgentPiModelCatalogPanel", () => {
     });
 
     await renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     await screen.findByRole("dialog", { name: "Add custom provider" });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
@@ -1031,7 +1056,9 @@ describe("AgentPiModelCatalogPanel", () => {
     });
 
     await renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     await screen.findByRole("dialog", { name: "Add custom provider" });
     fireEvent.change(screen.getByLabelText("Provider ID"), {
       target: { value: "env-provider" },
@@ -1123,7 +1150,9 @@ describe("AgentPiModelCatalogPanel", () => {
     expect(await screen.findByRole("alert")).toBeVisible();
 
     // API select drives the request payload.
-    fireEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     await screen.findByRole("dialog", { name: "Add custom provider" });
     fireEvent.change(screen.getByLabelText("API type"), {
       target: { value: "anthropic-messages" },
@@ -1150,7 +1179,9 @@ describe("AgentPiModelCatalogPanel", () => {
     );
 
     // Modal close button closes without side effects.
-    fireEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add custom provider" }),
+    );
     const dialog = await screen.findByRole("dialog", {
       name: "Add custom provider",
     });

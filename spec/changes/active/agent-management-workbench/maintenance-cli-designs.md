@@ -6,11 +6,10 @@ platform registry, executable inventory, or package-manager state store.
 
 ## `DES-AGENT-049`: Read-Only CLI Diagnostics
 
-The first maintenance batch is intentionally read-only. It detects an
+The retained maintenance service is intentionally internal and read-only. It detects an
 allowlisted Agent executable, runs only that platform's declared version
-command, and returns a bounded public diagnostic. Install and update commands
-remain unavailable until their separate plan/confirm/apply and rollback
-contracts are implemented.
+command, and returns a bounded typed diagnostic to main-process callers. The
+general Agent workspace does not expose this service as a product feature.
 
 ### Source Of Truth
 
@@ -20,9 +19,9 @@ contracts are implemented.
 - `packages/shared/constants/agent-platform-capabilities.ts` derives
   `maintenanceCli` from that descriptor. It must not maintain another platform
   id allowlist.
-- The main process owns command resolution and execution. Renderer code can
-  request a diagnostic by Agent id but cannot submit a command, arguments,
-  environment variables or shell text.
+- The main process owns command resolution and execution. Renderer code cannot
+  request a generic diagnostic or lifecycle operation: no matching IPC channel
+  or preload method is registered.
 - Custom Agents stay unsupported until a native file-picker-backed executable
   registration contract is designed. A renderer-provided arbitrary path is
   not an acceptable substitute.
@@ -44,7 +43,7 @@ wins. The public result includes only:
 - a stable error code and check timestamp.
 
 Raw stderr, thrown errors, environment values and command output beyond the
-normalized version line never cross IPC. Timeout, oversized output and
+normalized version line never leave the internal service boundary. Timeout, oversized output and
 non-zero exit are `unhealthy`; an unresolved executable is `not-installed`;
 platforms without a descriptor are `unsupported`.
 
@@ -61,15 +60,15 @@ PromptHub adapts the useful CC Switch v3.18.0 idea of checking the executable
 that is actually first in the user's environment rather than assuming the
 package-manager prefix is active. PromptHub does not copy CC Switch's Rust
 command layer, Tauri IPC, database schema or screens. The implementation uses
-PromptHub's canonical platform registry, Electron main-process boundary and
-typed preload API.
+PromptHub's canonical platform registry and Electron main-process boundary.
 
 ### Verification
 
-`TEST-AGENT-067` covers registry derivation, PATH and prefix-like resolved
+`TEST-AGENT-067` historically covered registry derivation, PATH and prefix-like resolved
 locations, version normalization, candidate fallback, unsupported platforms,
-missing executables, timeout/non-zero/oversized failures, redaction, IPC input
-validation and the renderer diagnostic dialog in all seven locales.
+missing executables, timeout/non-zero/oversized failures and redaction. The
+former IPC and renderer dialog coverage was retired when the user-facing
+diagnostics feature was withdrawn.
 
 `T-AGENT-103` delivers this read-only batch. It does not close
 `T-AGENT-029` or `TEST-AGENT-016`, which still require explicit install/update
@@ -246,3 +245,27 @@ Primary evidence:
 missing npm, immutable review, precondition changes, same-path verification,
 partial failure and exact rollback. `T-AGENT-120` implements only this npm
 update path; Qwen installation and non-npm updates remain unavailable.
+
+## `DES-AGENT-138`: Internal CLI Maintenance Boundary
+
+The Agent overflow menu keeps only product commands such as refresh and edit.
+The diagnostics dialog, update review UI, renderer state and localized UI
+entry are removed. The preload API and shared IPC channel registry expose no
+CLI diagnostic, update-plan or update-apply methods, and main startup registers
+no matching handlers.
+
+The existing diagnostic and lifecycle service modules remain main-process
+infrastructure. Their executable allowlist, shell-free argument arrays,
+timeouts, output limits, plan ownership, expiry and rollback checks remain
+covered by service-level tests. Reintroducing any user-facing update action
+requires a separate platform-specific design; the internal service is not
+itself evidence that a product action is available.
+
+Removing the UI and three constant-time IPC registrations changes no persisted
+state, starts no process and performs no filesystem or network work. Runtime
+and memory cost for the removed path become `O(0)` until an internal caller
+explicitly invokes the retained bounded service.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-120` | `DES-AGENT-138` | `TEST-AGENT-198` | `T-AGENT-207` |

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentProviderProfilePublic } from "@prompthub/shared/types";
 import { AgentProviderProfileFormDialog } from "../../../src/renderer/components/agent/AgentProviderProfileFormDialog";
 import { renderWithI18n } from "../../helpers/i18n";
+import { chooseProviderFormOption } from "./agent-provider-profile-workbench.harness";
 
 function renderDialog(profile: AgentProviderProfilePublic | null = null) {
   const onCreate = vi.fn().mockResolvedValue({ id: "created" });
@@ -61,14 +62,15 @@ describe("OpenCode Provider Profile form", () => {
     const view = renderDialog();
     await view.render;
     const dialog = screen.getByRole("region", {
-      name: "Add provider profile",
+      name: "Add provider",
     });
 
-    expect(within(dialog).getByLabelText("Provider kind")).toHaveValue(
-      "openai-compatible",
+    expect(dialog.querySelector("select")).toBeNull();
+    expect(within(dialog).getByLabelText("Provider kind")).toHaveTextContent(
+      "OpenAI Compatible",
     );
-    expect(within(dialog).getByLabelText("Protocol")).toHaveValue(
-      "openai-chat",
+    expect(within(dialog).getByLabelText("Protocol")).toHaveTextContent(
+      "OpenAI Chat",
     );
     fireEvent.change(within(dialog).getByLabelText("Name"), {
       target: { value: " Team gateway " },
@@ -90,7 +92,7 @@ describe("OpenCode Provider Profile form", () => {
       target: { value: "main-only-secret" },
     });
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -128,13 +130,11 @@ describe("OpenCode Provider Profile form", () => {
     const view = renderDialog();
     await view.render;
     const dialog = screen.getByRole("region", {
-      name: "Add provider profile",
+      name: "Add provider",
     });
-    fireEvent.change(within(dialog).getByLabelText("Provider kind"), {
-      target: { value: "openai" },
-    });
-    expect(within(dialog).getByLabelText("Protocol")).toHaveValue(
-      "openai-responses",
+    chooseProviderFormOption(dialog, "Provider kind", "OpenAI");
+    expect(within(dialog).getByLabelText("Protocol")).toHaveTextContent(
+      "OpenAI Responses",
     );
 
     for (const [label, value] of [
@@ -149,7 +149,7 @@ describe("OpenCode Provider Profile form", () => {
       });
     }
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -172,7 +172,7 @@ describe("OpenCode Provider Profile form", () => {
     const view = renderDialog(managedProfile());
     await view.render;
     const dialog = screen.getByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
 
     expect(
@@ -203,7 +203,7 @@ describe("OpenCode Provider Profile form", () => {
     expect(credential).toHaveAttribute("type", "password");
 
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
     await waitFor(() =>
       expect(view.onUpdate).toHaveBeenCalledWith(
@@ -221,7 +221,7 @@ describe("OpenCode Provider Profile form", () => {
     const view = renderDialog(managedProfile());
     await view.render;
     const dialog = screen.getByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
 
     fireEvent.click(
@@ -231,7 +231,7 @@ describe("OpenCode Provider Profile form", () => {
       within(dialog).queryByLabelText("Credential (write-only)"),
     ).toBeNull();
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     await waitFor(() =>
@@ -249,14 +249,14 @@ describe("OpenCode Provider Profile form", () => {
     const view = renderDialog(managedProfile("missing"));
     await view.render;
     const dialog = screen.getByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
 
     fireEvent.click(
       within(dialog).getByRole("radio", { name: "Replace credential" }),
     );
     fireEvent.click(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     );
 
     expect(
@@ -296,7 +296,7 @@ describe("OpenCode Provider Profile form", () => {
     const view = renderDialog(imported);
     await view.render;
     const dialog = screen.getByRole("region", {
-      name: "Edit provider profile",
+      name: "Edit provider",
     });
 
     expect(
@@ -306,7 +306,7 @@ describe("OpenCode Provider Profile form", () => {
     expect(within(dialog).getByLabelText("Provider ID")).toBeDisabled();
     expect(within(dialog).getByLabelText("Protocol")).toBeDisabled();
     expect(
-      within(dialog).getByRole("button", { name: "Save profile" }),
+      within(dialog).getByRole("button", { name: "Save provider" }),
     ).toBeDisabled();
     expect(view.onUpdate).not.toHaveBeenCalled();
   });

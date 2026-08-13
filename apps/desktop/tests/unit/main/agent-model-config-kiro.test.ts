@@ -58,7 +58,7 @@ describe("Kiro CLI model-only boundary", () => {
         darwin: ["/Applications/Kiro.app", "~/Applications/Kiro.app"],
       },
     });
-    expect(platform).not.toHaveProperty("globalRuleFile");
+    expect(platform.globalRuleFile).toBe("steering/AGENTS.md");
     expect(getAgentPlatformCapabilityInventory(platform)).toMatchObject({
       providerModel: {
         status: "partial",

@@ -19,6 +19,7 @@ describe("Agent Provider source preload API", () => {
       platformId: "codex",
       sourceId: "provider-work",
       modelId: "model-work",
+      protocol: "openai-chat",
     };
 
     await agentApi.listProviderSources("codex");

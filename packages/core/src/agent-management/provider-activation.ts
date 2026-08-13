@@ -442,6 +442,49 @@ export class AgentProviderActivationService {
     private readonly repository: AgentProviderActivationRepository,
   ) {}
 
+  async testCurrentConnection(
+    input: AgentProviderImportInput,
+  ): Promise<AgentProviderConnectionTestResult> {
+    const boundary = await this.resolveCurrentBoundary(input);
+    if (!boundary.adapter.testConnection) {
+      throw new Error("AGENT_PROVIDER_CONNECTION_TEST_UNSUPPORTED");
+    }
+    let result: AgentProviderConnectionTestResult;
+    try {
+      result = await boundary.adapter.testConnection(input.context, {
+        profile: boundary.profile,
+        modelMappings: boundary.modelMappings,
+      });
+    } catch {
+      throw new Error("AGENT_PROVIDER_CONNECTION_TEST_FAILED");
+    }
+    return validateConnectionResult(result, boundary);
+  }
+
+  async testCurrentModel(
+    input: AgentProviderImportInput,
+    signal: AbortSignal,
+  ): Promise<AgentProviderModelTestResult> {
+    const boundary = await this.resolveCurrentBoundary(input);
+    if (!boundary.adapter.testModel) {
+      throw new Error("AGENT_PROVIDER_MODEL_TEST_UNSUPPORTED");
+    }
+    let result: AgentProviderModelTestResult;
+    try {
+      result = await boundary.adapter.testModel(
+        input.context,
+        {
+          profile: boundary.profile,
+          modelMappings: boundary.modelMappings,
+        },
+        signal,
+      );
+    } catch {
+      throw new Error("AGENT_PROVIDER_MODEL_TEST_FAILED");
+    }
+    return validateModelTestResult(result, boundary);
+  }
+
   async testConnection(
     input: AgentProviderPreviewInput,
   ): Promise<AgentProviderConnectionTestResult> {
@@ -488,16 +531,7 @@ export class AgentProviderActivationService {
   async importCurrent(
     input: AgentProviderImportInput,
   ): Promise<AgentProviderImportPreview> {
-    validateContext(input.context);
-    const adapter = this.registry.get(input.context.platformId)?.provider;
-    if (!adapter) throw new Error("AGENT_PROVIDER_ADAPTER_UNSUPPORTED");
-    let preview: AgentProviderImportPreview;
-    try {
-      preview = await adapter.importCurrent(input.context);
-    } catch {
-      throw new Error("AGENT_PROVIDER_IMPORT_FAILED");
-    }
-    validateImportPreview(preview, input.context, adapter);
+    const { preview } = await this.readCurrentPreview(input);
     return structuredClone(preview);
   }
 
@@ -670,6 +704,46 @@ export class AgentProviderActivationService {
       throw new Error("AGENT_PROVIDER_BASELINE_INVALID");
     }
     return { adapter, baseline, modelMappings, profile };
+  }
+
+  private async resolveCurrentBoundary(
+    input: AgentProviderImportInput,
+  ): Promise<ActivationBoundary> {
+    const { adapter, preview } = await this.readCurrentPreview(input);
+    const profileId = `native:${input.context.platformId}`;
+    const profile: AgentProviderProfile = {
+      ...preview.profile,
+      endpoint: preview.profile.endpoint ?? null,
+      secretRef: null,
+      id: profileId,
+      archived: false,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const modelMappings: AgentProviderModelMapping[] =
+      preview.modelMappings.map((mapping) => ({
+        ...mapping,
+        id: `${profileId}:${mapping.routeKey}`,
+        providerProfileId: profileId,
+      }));
+    return { adapter, baseline: null, modelMappings, profile };
+  }
+
+  private async readCurrentPreview(input: AgentProviderImportInput): Promise<{
+    adapter: AgentProviderAdapter;
+    preview: AgentProviderImportPreview;
+  }> {
+    validateContext(input.context);
+    const adapter = this.registry.get(input.context.platformId)?.provider;
+    if (!adapter) throw new Error("AGENT_PROVIDER_ADAPTER_UNSUPPORTED");
+    let preview: AgentProviderImportPreview;
+    try {
+      preview = await adapter.importCurrent(input.context);
+    } catch {
+      throw new Error("AGENT_PROVIDER_IMPORT_FAILED");
+    }
+    validateImportPreview(preview, input.context, adapter);
+    return { adapter, preview };
   }
 
   private async rollbackAfterFailure(

@@ -14,6 +14,10 @@ import {
   type AgentManagementBackupService,
 } from "./agent-management-backup-service";
 import { createAgentCodexProviderAdapter } from "./agent-codex-provider-adapter";
+import {
+  createAgentCodexAccountService,
+  type AgentCodexAccountService,
+} from "./agent-codex-account-service";
 import { createAgentCodexProviderService } from "./agent-codex-provider-service";
 import { createAgentGeminiProviderAdapter } from "./agent-gemini-provider-adapter";
 import { createAgentGrokProviderAdapter } from "./agent-grok-provider-adapter";
@@ -47,6 +51,7 @@ interface CreateAgentProviderRuntimeOptions {
 
 export interface AgentProviderRuntime {
   activationService: AgentProviderActivationService;
+  codexAccountService: AgentCodexAccountService;
   backupService: AgentManagementBackupService;
   legacyProviderService: ReturnType<typeof createAgentCodexProviderService>;
   profileDb: CanonicalAgentProviderProfileDB;
@@ -68,6 +73,12 @@ export function createAgentProviderRuntime({
   const sessionIndexDb = new AgentSessionIndexDB(database);
   const secretStore = createAgentSecretStore({
     userDataPath,
+    encryption,
+  });
+  const codexRoot = resolveAgentProviderContext("codex").rootPath;
+  const codexAccountService = createAgentCodexAccountService({
+    authPath: path.join(codexRoot, "auth.json"),
+    vaultPath: path.join(userDataPath, "agent-codex-accounts.json"),
     encryption,
   });
   const profileService = new AgentProviderProfileService(
@@ -156,6 +167,7 @@ export function createAgentProviderRuntime({
 
   return {
     activationService,
+    codexAccountService,
     backupService,
     conversationDb,
     legacyProviderService,

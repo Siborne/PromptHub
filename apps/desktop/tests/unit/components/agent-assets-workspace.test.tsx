@@ -188,7 +188,20 @@ function seedStores() {
       kind: "prompthub-mcp-library",
       version: 1,
       updatedAt: "2026-01-01T00:00:00.000Z",
-      servers: [],
+      servers: [
+        {
+          id: "library-files",
+          name: "library-files",
+          displayName: "Library Files",
+          transport: "stdio",
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-filesystem"],
+          enabled: true,
+          source: { type: "manual" },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
       bindings: [],
     },
     targetPresets: [
@@ -423,7 +436,7 @@ describe("AgentAssetsWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("uses one localized add action across Skills, MCP, and Plugins", async () => {
+  it("opens localized in-context add dialogs for Skills, MCP, and Plugins", async () => {
     const view = await renderWithI18n(
       <AgentAssetsWorkspace agent={claudeAgent} domain="skills" />,
       { language: "zh" },
@@ -433,14 +446,38 @@ describe("AgentAssetsWorkspace", () => {
     fireEvent.click(skillAction);
     expect(screen.getByTestId("skill-library-import-modal")).toBeVisible();
 
-    useMcpStore.setState({ targetPresets: [], targetStatus: [] });
+    const applyTarget = vi.fn().mockResolvedValue({});
+    const refreshTargetStatus = vi.fn().mockResolvedValue(undefined);
+    useMcpStore.setState({ applyTarget, refreshTargetStatus });
     view.rerender(<AgentAssetsWorkspace agent={claudeAgent} domain="mcp" />);
     const mcpAction = screen.getByRole("button", { name: "添加 MCP" });
     expect(mcpAction.className).toBe(skillAction.className);
     expect(mcpAction).toBeEnabled();
     fireEvent.click(mcpAction);
-    expect(useUIStore.getState().appModule).toBe("mcp");
-    expect(useMcpStore.getState().selectedTab).toBe("targets");
+    const mcpDialog = screen.getByRole("dialog", {
+      name: "从我的 MCP 添加",
+    });
+    fireEvent.click(
+      within(mcpDialog).getByRole("button", { name: "Library Files" }),
+    );
+    fireEvent.click(
+      within(mcpDialog).getByRole("button", { name: /添加 1 个 MCP/ }),
+    );
+    await waitFor(() =>
+      expect(applyTarget).toHaveBeenCalledWith({
+        target: "claude",
+        scope: "global",
+        path: "~/.claude.json",
+        serverIds: ["library-files"],
+      }),
+    );
+    expect(refreshTargetStatus).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "从我的 MCP 添加" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(useUIStore.getState().appModule).toBe("agents");
 
     view.rerender(
       <AgentAssetsWorkspace agent={claudeAgent} domain="plugins" />,
@@ -448,8 +485,8 @@ describe("AgentAssetsWorkspace", () => {
     const pluginAction = screen.getByRole("button", { name: "添加 Plugin" });
     expect(pluginAction.className).toBe(skillAction.className);
     fireEvent.click(pluginAction);
-    expect(useUIStore.getState().appModule).toBe("plugin");
-    expect(usePluginStore.getState().selectedTab).toBe("market");
+    expect(screen.getByRole("dialog", { name: "添加 Plugin" })).toBeVisible();
+    expect(useUIStore.getState().appModule).toBe("agents");
   });
 
   it("keeps every asset Add action on the fixed toolbar right edge", async () => {

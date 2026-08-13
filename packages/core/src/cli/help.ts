@@ -68,6 +68,8 @@ export const AGENT_HELP = [
   "  prompthub agent delete <custom-agent>",
   "  prompthub agent identity get",
   "  prompthub agent identity set --name codex|chatgpt [--icon codex|chatgpt]",
+  "  prompthub agent config list <agent> [--include-disabled]",
+  "  prompthub agent config read <agent> <relative-path> [--include-disabled]",
   "",
   "filter:",
   "  all | installed | configured | custom | not-detected | needs-attention",
@@ -85,6 +87,7 @@ export const AGENT_HELP = [
   "说明:",
   "  Agent identity、custom Agent、禁用状态和 built-in override 与桌面端共享 SQLite settings。",
   "  delete 只删除 custom Agent 记录，不删除 Agent 根目录或平台运行时数据。",
+  "  config list/read 安全检查 Agent 原生配置；读取结果会脱敏，且不会修改源文件。",
   "  capability 状态来自共享 Agent inventory；planned/partial 不会被伪装成 supported。",
 ].join("\n");
 

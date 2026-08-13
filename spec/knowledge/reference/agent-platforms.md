@@ -57,10 +57,10 @@ Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加�
 - 文件内容跨 IPC 前必须遮罩嵌入的敏感值。直接编辑只允许保留遮罩占位符，不允许通过通用配置编辑器新增、删除或修改凭据。
 - 保存必须校验 expected revision 与 JSON/JSONC/TOML/YAML 格式，并使用加密设备本地备份、原子替换、重读验证和失败回滚。结构性新建、重命名和删除不属于当前能力。
 
-## Read-Only CLI Diagnostic Snapshot
+## Internal CLI Probe Snapshot
 
 `packages/shared/constants/platforms.ts` is the only executable-descriptor
-source of truth. PromptHub currently exposes a read-only version diagnostic
+source of truth. PromptHub retains an internal read-only version probe
 for the following evidence-backed built-ins:
 
 | Platform    | Executable | Version arguments | Capability |
@@ -75,14 +75,16 @@ for the following evidence-backed built-ins:
 
 The Electron main process resolves only those registry-owned executable names
 through a bounded PATH search and executes fixed argument arrays without a
-shell. Results expose only a canonical path, one bounded version line, coarse
-install-source classification, timestamp and stable error code. Raw output,
-environment values and process errors do not cross IPC. Platforms without a
+shell. The general Agent workspace does not expose a CLI Diagnostics menu or
+modal, and renderer preload/IPC has no generic diagnostic or update operation.
+Internal results contain only a canonical path, one bounded version line,
+coarse install-source classification, timestamp and stable error code. Raw output,
+environment values and process errors do not leave the internal service boundary. Platforms without a
 verified descriptor remain `planned`, and custom Agents do not accept
-renderer-provided executable paths. Install and update remain separate
-plan/confirm/apply work. OpenCode native updates and npm-managed Codex or Qwen
-Code updates additionally reuse the bounded main-owned lifecycle; every other
-installation source and all installation workflows remain diagnostic-only.
+renderer-provided executable paths. The bounded lifecycle service remains
+main-process infrastructure, but it is not registered as a user-facing action.
+Any future install or update UI requires a separate platform-specific verified
+design, explicit confirmation and rollback behavior.
 
 ## MCP Config Support Snapshot
 
@@ -411,6 +413,12 @@ Current support boundary:
     structurally and preserves unrelated JSON/JSONC content
   - the selected model is the top-level `model`; direct or compatible
     Anthropic endpoints use `env.ANTHROPIC_BASE_URL`
+  - optional Sonnet, Opus, Haiku and subagent routes use
+    `env.ANTHROPIC_DEFAULT_SONNET_MODEL`,
+    `env.ANTHROPIC_DEFAULT_OPUS_MODEL`,
+    `env.ANTHROPIC_DEFAULT_HAIKU_MODEL` and
+    `env.CLAUDE_CODE_SUBAGENT_MODEL`; the selected PromptHub profile owns these
+    four route keys during activation
   - PromptHub-managed credentials may project only
     `env.ANTHROPIC_API_KEY` or `env.ANTHROPIC_AUTH_TOKEN`
   - Bedrock, Vertex and Foundry flags are detected and imported as read-only
@@ -446,6 +454,16 @@ Current support boundary:
 - Config and profiles:
   - `~/.codex/config.toml`, `.codex/config.toml`, `/etc/codex/config.toml`
   - named profiles and enterprise `requirements.toml` documented
+  - PromptHub custom Provider Profiles project `model_provider`, `model`, the
+    selected `[model_providers.<id>]` endpoint/auth source and a matching named
+    profile while preserving unrelated TOML text
+  - optional primary-model parameters project the official
+    `model_reasoning_effort` enum and positive `model_context_window`; activating
+    a profile without either option removes the previous PromptHub-managed
+    scalar so Codex falls back to its model defaults
+  - current official Codex configuration documents Responses as the custom
+    provider wire API; PromptHub's older Chat compatibility remains a separate
+    legacy boundary rather than evidence for adding more form fields
 - Maintenance:
   - npm- and Node version-manager-managed installs may review and confirm the canonical `npm install -g @openai/codex@latest` update; PromptHub verifies the same active Codex executable and can restore the captured exact package version
   - Homebrew, standalone, system, user-local and ambiguous installs remain read-only diagnostics rather than being routed through the npm writer

@@ -336,7 +336,7 @@ describe("agent root paths", () => {
     });
   });
 
-  it("models Auggie's directory-based skills and rules without a fake global rule file", () => {
+  it("models Augment's verified user-guidelines entry without flattening its rules directory", () => {
     const platform = getPlatformById("augment");
     expect(platform).toBeDefined();
     expect(platform?.name).toBe("Augment");
@@ -350,10 +350,11 @@ describe("agent root paths", () => {
     expect(config.skillsRelativePath).toBe("skills");
     expect(config.mcpRelativePath).toBe("settings.json");
     expect(config.configRelativePaths).toEqual(["settings.json"]);
-    expect(config.rulesRelativePath).toBeUndefined();
+    expect(config.rulesRelativePath).toBe("user-guidelines.md");
     expect(buildAgentRootAssetPreview(config)).toMatchObject({
       skillScanPaths: ["~/.augment/skills"],
       mcpConfigPaths: ["~/.augment/settings.json"],
+      ruleCandidates: ["~/.augment/user-guidelines.md"],
       configCandidates: ["~/.augment/settings.json"],
     });
   });

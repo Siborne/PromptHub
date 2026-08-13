@@ -16,6 +16,7 @@ import type {
   McpTargetStatusEntry,
 } from "@prompthub/shared/types/mcp";
 import { isServerOnPreset } from "./mcp-form-utils";
+import { useToast } from "../ui/Toast";
 
 interface McpLibraryDeployDialogProps {
   preset: McpTargetPreset;
@@ -53,6 +54,7 @@ export function McpLibraryDeployDialog({
   onClose,
 }: McpLibraryDeployDialogProps) {
   const { t } = useTranslation();
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedServerIds, setSelectedServerIds] = useState<Set<string>>(
     new Set(),
@@ -129,6 +131,11 @@ export function McpLibraryDeployDialog({
     try {
       await onApply(selectedServers.map((server) => server.id));
       onClose();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : String(error),
+        "error",
+      );
     } finally {
       setIsApplying(false);
     }

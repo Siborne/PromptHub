@@ -7,6 +7,8 @@ import path from "node:path";
 export interface NativeCommandRunOptions {
   timeout: number;
   maxBuffer: number;
+  env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
 }
 
 export interface NativeCommandRunner {
@@ -37,9 +39,10 @@ function execFileAsync(
       command,
       args,
       {
-        env: process.env,
+        env: options.env ?? process.env,
         timeout: options.timeout,
         maxBuffer: options.maxBuffer,
+        signal: options.signal,
         windowsHide: true,
       },
       (error, stdout, stderr) => {

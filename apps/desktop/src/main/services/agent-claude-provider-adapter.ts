@@ -55,6 +55,7 @@ import type {
 type JsonRecord = Record<string, unknown>;
 type CredentialEnvKey = "ANTHROPIC_API_KEY" | "ANTHROPIC_AUTH_TOKEN";
 type CredentialKind = "api-key" | "auth-token" | "none";
+type ClaudeModelRoute = "primary" | "sonnet" | "opus" | "haiku" | "subagent";
 
 interface ClaudeProviderAdapterOptions {
   backupRoot: string;
@@ -86,13 +87,17 @@ interface DesiredClaudeProvider {
   endpoint: string | null;
   protocol: "anthropic-messages" | "platform-native";
   model: string;
+  sonnetModel: string | null;
+  opusModel: string | null;
+  haikuModel: string | null;
+  subagentModel: string | null;
   credentialEnvKey: CredentialEnvKey | null;
   credentialKind: CredentialKind;
   secret: string | null;
   credentialStatus: "configured" | "platform-managed";
 }
 
-const ADAPTER_VERSION = "claude-provider-profile-v1";
+const ADAPTER_VERSION = "claude-provider-profile-v2";
 const CONFIG_FILE_NAME = "settings.json";
 const DEFAULT_ENDPOINT = "https://api.anthropic.com";
 const MAX_NAME_LENGTH = 80;
@@ -109,6 +114,19 @@ const DIRECT_PROVIDER_ENV_KEYS = [
   "CLAUDE_CODE_USE_VERTEX",
   "CLAUDE_CODE_USE_FOUNDRY",
 ] as const;
+const MODEL_ROUTE_ENV_KEYS = {
+  sonnet: "ANTHROPIC_DEFAULT_SONNET_MODEL",
+  opus: "ANTHROPIC_DEFAULT_OPUS_MODEL",
+  haiku: "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  subagent: "CLAUDE_CODE_SUBAGENT_MODEL",
+} as const;
+const MODEL_ROUTE_KEYS = new Set<ClaudeModelRoute>([
+  "primary",
+  "sonnet",
+  "opus",
+  "haiku",
+  "subagent",
+]);
 const formatting = { insertSpaces: true, tabSize: 2, eol: "\n" };
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -209,6 +227,10 @@ function comparableState(
           ? "platform-native"
           : "anthropic-messages",
       model: getString(data, "model"),
+      sonnetModel: getString(env, MODEL_ROUTE_ENV_KEYS.sonnet),
+      opusModel: getString(env, MODEL_ROUTE_ENV_KEYS.opus),
+      haikuModel: getString(env, MODEL_ROUTE_ENV_KEYS.haiku),
+      subagentModel: getString(env, MODEL_ROUTE_ENV_KEYS.subagent),
       credentialKind: credential.kind,
       credentialStatus: credential.status,
       sourceRelativePath: CONFIG_FILE_NAME,
@@ -262,21 +284,44 @@ function normalizeEndpoint(value: string | null): string | null {
   }
 }
 
+function validModelId(value: string): boolean {
+  return (
+    Boolean(value) &&
+    value.length <= MAX_MODEL_LENGTH &&
+    !/[\u0000-\u001f\u007f]/.test(value)
+  );
+}
+
+function parseModelMappings(
+  mappings: AgentProviderModelMapping[],
+): Record<ClaudeModelRoute, AgentProviderModelMapping | null> | null {
+  if (mappings.length > MODEL_ROUTE_KEYS.size) return null;
+  const parsed: Record<ClaudeModelRoute, AgentProviderModelMapping | null> = {
+    primary: null,
+    sonnet: null,
+    opus: null,
+    haiku: null,
+    subagent: null,
+  };
+  for (const mapping of mappings) {
+    if (
+      !MODEL_ROUTE_KEYS.has(mapping.routeKey as ClaudeModelRoute) ||
+      Object.keys(mapping.parameters).length > 0
+    ) {
+      return null;
+    }
+    const route = mapping.routeKey as ClaudeModelRoute;
+    const modelId = mapping.modelId.trim();
+    if (parsed[route] || !validModelId(modelId)) return null;
+    parsed[route] = { ...mapping, modelId };
+  }
+  return parsed.primary ? parsed : null;
+}
+
 function primaryMapping(
   mappings: AgentProviderModelMapping[],
 ): AgentProviderModelMapping | null {
-  const primary = mappings.filter((mapping) => mapping.routeKey === "primary");
-  if (
-    primary.length !== 1 ||
-    mappings.some(
-      (mapping) =>
-        mapping.routeKey !== "primary" ||
-        Object.keys(mapping.parameters).length > 0,
-    )
-  ) {
-    return null;
-  }
-  return primary[0];
+  return parseModelMappings(mappings)?.primary ?? null;
 }
 
 function credentialEnvKey(
@@ -297,6 +342,10 @@ function publicDesiredValues(
     endpoint: desired.endpoint,
     protocol: desired.protocol,
     model: desired.model,
+    sonnetModel: desired.sonnetModel,
+    opusModel: desired.opusModel,
+    haikuModel: desired.haikuModel,
+    subagentModel: desired.subagentModel,
     credentialKind: desired.credentialKind,
     credentialStatus: desired.credentialStatus,
   };
@@ -311,8 +360,8 @@ async function resolveDesired(
 }> {
   const blockedReasons: string[] = [];
   const profile = input.profile;
-  const mapping = primaryMapping(input.modelMappings);
-  const model = mapping?.modelId.trim() ?? "";
+  const models = parseModelMappings(input.modelMappings);
+  const model = models?.primary?.modelId ?? "";
   const endpoint = normalizeEndpoint(profile.endpoint);
   const native =
     profile.providerKind === "anthropic" &&
@@ -328,12 +377,7 @@ async function resolveDesired(
   if (!profile.name.trim() || profile.name.length > MAX_NAME_LENGTH) {
     blockedReasons.push("provider-name-invalid");
   }
-  if (
-    !mapping ||
-    !model ||
-    model.length > MAX_MODEL_LENGTH ||
-    /[\u0000-\u001f\u007f]/.test(model)
-  ) {
+  if (!models || !validModelId(model)) {
     blockedReasons.push("primary-model-required");
   }
   if (!native && !messages) {
@@ -368,7 +412,7 @@ async function resolveDesired(
     blockedReasons.push("provider-credential-required");
   }
 
-  if (blockedReasons.length > 0 || !mapping || (!native && !messages)) {
+  if (blockedReasons.length > 0 || !models || (!native && !messages)) {
     return {
       blockedReasons: [...new Set(blockedReasons)],
       desired: null,
@@ -386,6 +430,10 @@ async function resolveDesired(
       endpoint,
       protocol: native ? "platform-native" : "anthropic-messages",
       model,
+      sonnetModel: models.sonnet?.modelId ?? null,
+      opusModel: models.opus?.modelId ?? null,
+      haikuModel: models.haiku?.modelId ?? null,
+      subagentModel: models.subagent?.modelId ?? null,
       credentialEnvKey: native ? null : envKey,
       credentialKind,
       secret,
@@ -437,6 +485,17 @@ function renderConfig(
   for (const key of DIRECT_PROVIDER_ENV_KEYS) {
     if (hasEnvKey(next, key)) {
       next = edit(next, ["env", key], undefined);
+    }
+  }
+  for (const key of Object.values(MODEL_ROUTE_ENV_KEYS)) {
+    if (hasEnvKey(next, key)) {
+      next = edit(next, ["env", key], undefined);
+    }
+  }
+  for (const [route, envKey] of Object.entries(MODEL_ROUTE_ENV_KEYS)) {
+    const model = desired[`${route}Model` as keyof DesiredClaudeProvider];
+    if (typeof model === "string") {
+      next = edit(next, ["env", envKey], model);
     }
   }
   if (desired.protocol === "anthropic-messages") {
@@ -611,6 +670,14 @@ export function createAgentClaudeProviderAdapter(
       const provider = native.state.values.provider as string;
       const credential = nativeCredential(env);
       const model = getString(native.data, "model");
+      const routeMappings = (
+        Object.entries(MODEL_ROUTE_ENV_KEYS) as Array<
+          [Exclude<ClaudeModelRoute, "primary">, string]
+        >
+      ).flatMap(([routeKey, envKey]) => {
+        const modelId = getString(env, envKey);
+        return modelId ? [{ routeKey, modelId, parameters: {} }] : [];
+      });
       return {
         state: native.state,
         profile: {
@@ -630,9 +697,12 @@ export function createAgentClaudeProviderAdapter(
           secretRef: null,
           source: "native-import",
         },
-        modelMappings: model
-          ? [{ routeKey: "primary", modelId: model, parameters: {} }]
-          : [],
+        modelMappings: [
+          ...(model
+            ? [{ routeKey: "primary", modelId: model, parameters: {} }]
+            : []),
+          ...routeMappings,
+        ],
         warnings: [
           ...(credential.envKey ? ["native-credential-not-imported"] : []),
           ...(!["anthropic", "custom-gateway"].includes(provider)
@@ -671,6 +741,10 @@ export function createAgentClaudeProviderAdapter(
           "endpoint",
           "protocol",
           "model",
+          "sonnetModel",
+          "opusModel",
+          "haikuModel",
+          "subagentModel",
           "credentialKind",
           "credentialStatus",
         ],

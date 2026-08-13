@@ -18,6 +18,7 @@ import { AgentConversationService } from "../services/agent-conversation-service
 import { createAgentTerminalLauncher } from "../services/agent-terminal-launcher";
 import { createNativeCommandRunner } from "../services/native-command";
 import { registerAgentProviderProfileIPC } from "./agent-provider-profile.ipc";
+import { registerAgentCodexAccountIPC } from "./agent-codex-account.ipc";
 import { registerAgentProviderSourceIPC } from "./agent-provider-source.ipc";
 import { registerAgentManagementBackupIPC } from "./agent-management-backup.ipc";
 import { registerAgentProviderActivationIPC } from "./agent-provider-activation.ipc";
@@ -197,12 +198,19 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.AGENT_PROVIDER_MIGRATION_PREVIEW,
   IPC_CHANNELS.AGENT_PROVIDER_MIGRATION_APPLY,
   IPC_CHANNELS.AGENT_PROVIDER_IMPORT_CURRENT,
+  IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_CONNECTION,
+  IPC_CHANNELS.AGENT_PROVIDER_TEST_CURRENT_MODEL,
   IPC_CHANNELS.AGENT_PROVIDER_TEST_CONNECTION,
   IPC_CHANNELS.AGENT_PROVIDER_TEST_MODEL,
   IPC_CHANNELS.AGENT_PROVIDER_CANCEL_MODEL_TEST,
   IPC_CHANNELS.AGENT_PROVIDER_PREVIEW,
   IPC_CHANNELS.AGENT_PROVIDER_ACTIVATE,
   IPC_CHANNELS.AGENT_PROVIDER_CURRENT_STATE,
+  IPC_CHANNELS.AGENT_CODEX_ACCOUNTS_LIST,
+  IPC_CHANNELS.AGENT_CODEX_ACCOUNT_SAVE_CURRENT,
+  IPC_CHANNELS.AGENT_CODEX_ACCOUNT_IMPORT,
+  IPC_CHANNELS.AGENT_CODEX_ACCOUNT_ACTIVATE,
+  IPC_CHANNELS.AGENT_CODEX_ACCOUNT_DELETE,
   IPC_CHANNELS.AGENT_APPEARANCE_GET,
   IPC_CHANNELS.AGENT_APPEARANCE_IMPORT_THEME,
   IPC_CHANNELS.AGENT_APPEARANCE_APPLY_THEME,
@@ -452,6 +460,7 @@ export function registerAllIPC(
       },
     });
     registerAgentProviderProfileIPC(runtime.profileService);
+    registerAgentCodexAccountIPC(runtime.codexAccountService);
     const providerSourceService = createAgentProviderSourceService({
       readConfig: () => {
         const state = rendererPersistence.readHydratedStateSync();

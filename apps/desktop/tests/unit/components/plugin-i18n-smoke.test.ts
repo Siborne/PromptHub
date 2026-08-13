@@ -31,17 +31,32 @@ function getPathValue(source: TranslationTree, path: string): unknown {
 describe("plugin i18n smoke", () => {
   it("defines the Agent add action in every supported locale", () => {
     const locales = { en, ...NON_ENGLISH_LOCALES };
+    const keys = [
+      "plugin.addPluginToAgent",
+      "plugin.installMyPluginToAgentHint",
+      "plugin.selectPluginsToAgentHint",
+      "plugin.alreadyOnAgent",
+      "plugin.installSelectedToAgent",
+      "plugin.noPluginsForAgent",
+      "plugin.noPluginsAvailable",
+      "plugin.agentPluginInstallUnsupported",
+      "plugin.installNetworkError",
+      "plugin.installSourceError",
+      "plugin.installPackageError",
+      "plugin.installDuplicateError",
+      "plugin.installStorageError",
+      "plugin.installGitError",
+      "plugin.installUnexpectedError",
+      "plugin.installRefreshError",
+      "plugin.batchInstallFirstFailure",
+    ];
 
     for (const [locale, messages] of Object.entries(locales)) {
-      const value = getPathValue(
-        messages as TranslationTree,
-        "plugin.addPluginToAgent",
-      );
-
-      expect(typeof value, `${locale} is missing plugin.addPluginToAgent`).toBe(
-        "string",
-      );
-      expect(String(value).trim().length).toBeGreaterThan(0);
+      for (const key of keys) {
+        const value = getPathValue(messages as TranslationTree, key);
+        expect(typeof value, `${locale} is missing ${key}`).toBe("string");
+        expect(String(value).trim().length).toBeGreaterThan(0);
+      }
     }
   });
 

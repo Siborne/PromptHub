@@ -64,10 +64,8 @@ describe("AgentSessionsPanel", () => {
     useSettingsStore.getState().setLocalSessionIndexEnabled(true);
   });
 
-  it("pages metadata and provides fast transcript pagination", async () => {
-    const allSessions = Array.from({ length: 120 }, (_, index) =>
-      metadata(index),
-    );
+  it("provides fast transcript pagination", async () => {
+    const allSessions = [metadata(0)];
     const listSessions = vi.fn(
       async (_agentId: string, limit: number, offset = 0) => ({
         agentId: "codex",
@@ -112,7 +110,7 @@ describe("AgentSessionsPanel", () => {
       await screen.findByRole("button", { name: /Session 0/ }),
     ).toBeVisible();
     expect(listSessions).toHaveBeenNthCalledWith(1, "codex", 50, 0);
-    expect(screen.getByText("50 / 120")).toBeVisible();
+    expect(screen.getByText("1 / 1")).toBeVisible();
     expect(await screen.findByText("Message 19")).toBeVisible();
     expect(screen.queryByText("Message 20")).not.toBeInTheDocument();
     expect(
@@ -158,6 +156,48 @@ describe("AgentSessionsPanel", () => {
     expect(
       screen.getByRole("button", { name: "First message page" }),
     ).toBeDisabled();
+
+    expect(listSessions).toHaveBeenCalledTimes(1);
+  });
+
+  it("pages session metadata", async () => {
+    const allSessions = Array.from({ length: 120 }, (_, index) => metadata(index));
+    const listSessions = vi.fn(
+      async (_agentId: string, limit: number, offset = 0) => ({
+        agentId: "codex",
+        adapter: "codex-rollout-jsonl-v1",
+        sessions: allSessions.slice(offset, offset + limit),
+        total: allSessions.length,
+        hasMore: offset + limit < allSessions.length,
+      }),
+    );
+    installWindowMocks({
+      api: {
+        agent: {
+          listSessions,
+          readSession: vi.fn().mockResolvedValue({
+            agentId: "codex",
+            adapter: "codex-rollout-jsonl-v1",
+            sessionId: "session-0",
+            entries: [],
+            parseErrors: 0,
+            truncated: false,
+            nextCursor: null,
+          }),
+        },
+      },
+    });
+
+    await renderWithI18n(<AgentSessionsPanel agent={agent} />, {
+      language: "en",
+      settleAsyncEffects: true,
+    });
+
+    expect(
+      await screen.findByRole("button", { name: /Session 0/ }),
+    ).toBeVisible();
+    expect(listSessions).toHaveBeenNthCalledWith(1, "codex", 50, 0);
+    expect(screen.getByText("50 / 120")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Load more sessions" }));
     await waitFor(() =>

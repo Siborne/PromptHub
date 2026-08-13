@@ -22,6 +22,7 @@ import type {
 import type { ManagedAgentSummary } from "@prompthub/shared/types";
 import { AgentPluginDetailPage } from "../plugin/AgentPluginDetailPage";
 import { PluginAgentTargetPicker } from "../plugin/PluginAgentTargetPicker";
+import { PluginLibraryDeployDialog } from "../plugin/PluginLibraryDeployDialog";
 import { PluginFullDetailPage } from "../plugin/PluginFullDetailPage";
 import {
   type AgentPluginFilter,
@@ -31,7 +32,6 @@ import {
   InventoryChips,
   PluginAvatar,
 } from "../plugin/plugin-manager-utils";
-import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { usePluginStore } from "../../stores/plugin.store";
 import { useUIStore } from "../../stores/ui.store";
@@ -44,6 +44,11 @@ import {
   AgentAssetPrimaryAction,
 } from "./AgentAssetManagementSurface";
 import { useBoundedPage } from "./BoundedListPager";
+import {
+  AgentPluginDeleteDialog,
+  AgentPluginRemoveDistributionDialog,
+  type PendingPluginDistributionRemoval,
+} from "./AgentPluginConfirmDialogs";
 
 function isAgentPluginTarget(
   target: PluginTargetCompatibility,
@@ -486,10 +491,8 @@ export function AgentPluginAssetPanel({
   const [pendingDelete, setPendingDelete] = useState<PluginLibraryEntry | null>(
     null,
   );
-  const [pendingRemoveDistribution, setPendingRemoveDistribution] = useState<{
-    plugin: PluginLibraryEntry;
-    target: PluginTargetCompatibility;
-  } | null>(null);
+  const [pendingRemoveDistribution, setPendingRemoveDistribution] =
+    useState<PendingPluginDistributionRemoval | null>(null);
   const [importingTargetPluginId, setImportingTargetPluginId] = useState<
     string | null
   >(null);
@@ -499,6 +502,7 @@ export function AgentPluginAssetPanel({
   const [isDeleting, setIsDeleting] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AgentPluginFilter>("all");
+  const [isLibraryDeployOpen, setIsLibraryDeployOpen] = useState(false);
 
   const scopedTargets = useMemo(
     () => targetMatrix.filter((target) => isAgentPluginTarget(target, agent)),
@@ -753,8 +757,8 @@ export function AgentPluginAssetPanel({
   };
 
   const deleteDialog = (
-    <ConfirmDialog
-      isOpen={Boolean(pendingDelete)}
+    <AgentPluginDeleteDialog
+      plugin={pendingDelete}
       onClose={() => setPendingDelete(null)}
       onConfirm={() => {
         if (!pendingDelete) return;
@@ -770,21 +774,13 @@ export function AgentPluginAssetPanel({
           .catch(reportError)
           .finally(() => setIsDeleting(false));
       }}
-      title={t("plugin.deletePlugin", "Delete Plugin")}
-      message={t("plugin.deleteConfirmMessage", {
-        name: pendingDelete?.displayName ?? "",
-        defaultValue: "Delete {{name}} from My Plugins?",
-      })}
-      confirmText={t("common.delete", "Delete")}
-      cancelText={t("common.cancel", "Cancel")}
-      variant="destructive"
       isLoading={isDeleting}
     />
   );
 
   const removeDistributionDialog = (
-    <ConfirmDialog
-      isOpen={Boolean(pendingRemoveDistribution)}
+    <AgentPluginRemoveDistributionDialog
+      pending={pendingRemoveDistribution}
       onClose={() => {
         if (!removingLibraryPluginId) {
           setPendingRemoveDistribution(null);
@@ -799,19 +795,6 @@ export function AgentPluginAssetPanel({
           .then(() => setPendingRemoveDistribution(null))
           .catch(reportError);
       }}
-      title={t(
-        "plugin.removePluginFromAgentConfirmTitle",
-        "Remove Plugin from Agent",
-      )}
-      message={t("plugin.removePluginFromAgentConfirmDescription", {
-        agent: pendingRemoveDistribution?.target.displayName ?? "",
-        defaultValue:
-          "Remove {{name}} from {{agent}}? This only removes the distributed Plugin package and keeps My Plugins unchanged.",
-        name: pendingRemoveDistribution?.plugin.displayName ?? "",
-      })}
-      confirmText={t("plugin.removeFromAgent", "Remove from Agent")}
-      cancelText={t("common.cancel", "Cancel")}
-      variant="destructive"
       isLoading={
         pendingRemoveDistribution
           ? removingLibraryPluginId === pendingRemoveDistribution.plugin.id
@@ -908,7 +891,7 @@ export function AgentPluginAssetPanel({
         }
         primaryAction={
           <AgentAssetPrimaryAction
-            onClick={openStore}
+            onClick={() => setIsLibraryDeployOpen(true)}
             label={t("plugin.addPluginToAgent", "Add Plugin")}
           />
         }
@@ -921,19 +904,16 @@ export function AgentPluginAssetPanel({
             <p className="max-w-md text-sm leading-6 text-muted-foreground">
               {query.trim()
                 ? t("plugin.noFilteredAgentPlugins", "No matching Plugins")
-                : t("plugin.noMyPluginsForAgent", "No Plugins for this Agent")}
+                : t("plugin.noPluginsForAgent", "No Plugins")}
             </p>
-            <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
-              {query.trim()
-                ? t(
-                    "plugin.noFilteredAgentPluginsDesc",
-                    "Change the search or filter to see other packages.",
-                  )
-                : t(
-                    "plugin.noMyPluginsForAgentDesc",
-                    "Install Plugin bundles from the store or refresh this Agent.",
-                  )}
-            </p>
+            {query.trim() ? (
+              <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
+                {t(
+                  "plugin.noFilteredAgentPluginsDesc",
+                  "Change the search or filter to see other packages.",
+                )}
+              </p>
+            ) : null}
           </div>
         }
         page={pluginPage}
@@ -1011,6 +991,17 @@ export function AgentPluginAssetPanel({
         plugin={pickerPlugin}
         plugins={pickerPlugin ? [pickerPlugin] : []}
         targetMatrix={scopedTargets}
+      />
+      <PluginLibraryDeployDialog
+        agentName={agent.name}
+        isOpen={isLibraryDeployOpen}
+        onClose={() => setIsLibraryDeployOpen(false)}
+        onDistribute={(plugin, targetIds, mode) =>
+          distributePlugin(plugin.id, targetIds, mode).then(() => undefined)
+        }
+        onRefresh={() => load({ force: true })}
+        plugins={installedPlugins}
+        targets={scopedTargets}
       />
       {deleteDialog}
       {removeDistributionDialog}
