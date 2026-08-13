@@ -3,7 +3,7 @@
 ## Status
 
 - Phase: converge
-- Status: local-gates-passed
+- Status: published
 
 ## Baseline Audit
 
@@ -24,8 +24,8 @@
 - Focused verification also passed the canonical Rule reconciliation test,
   58 Desktop Rule/settings regressions, the self-hosted startup E2E scenario,
   the full 123-test CLI suite, source-size governance, and Desktop build.
-- Signed/notarized artifact verification remains pending because no candidate
-  artifacts have been built.
+- Signed/notarized artifact verification was completed by the tag-triggered
+  release workflow before publication.
 
 ## First CI Attempt
 
@@ -47,8 +47,8 @@
   inventory timing assertion under concurrent gate load; the assertion now
   measures cold inventory construction and cached lookup separately, and its
   focused four-test suite passes.
-- Hosted Linux Electron launch and the complete release profile remain for the
-  replacement tag-triggered workflow to prove.
+- Hosted Linux Electron launch and the complete release profile were then
+  exercised by the replacement tag-triggered workflows.
 - Replacement run `31708660993` passed 41 of 42 full release checks. Its Linux
   Electron smoke launched and passed four scenarios; three settings scenarios
   then failed because the headless runner had no desktop keyring for Electron
@@ -57,10 +57,23 @@
   readiness, while production launch and production secret-vault behavior
   remain unchanged.
 
-## Remaining Publication Boundary
+## Publication Evidence
 
-- `T-BETA1-006` remains open: the current worktree must be reviewed and turned
-  into an intentional candidate commit before tagging.
-- Tag-triggered CI must produce the macOS, Windows, and Linux artifacts and
-  verify signing, notarization, stapling, Gatekeeper, update manifests, and
-  draft-prerelease assets before public promotion.
+- Candidate commit: `2ed96c7f23da512bb41a3081ca4c198df483b2ba`.
+- Final tag-triggered run `31712011544` completed successfully:
+  https://github.com/legeling/PromptHub/actions/runs/31712011544
+- The verify job and Linux, Windows x64, Windows arm64, macOS arm64, macOS x64,
+  and release jobs all passed.
+- Both macOS matrix jobs passed architecture, Developer ID signing,
+  notarization, stapling, and Gatekeeper verification.
+- The draft prerelease contained 20 required installers, archives, blockmaps,
+  update manifests, and CLI assets before promotion.
+- The public prerelease was published on 2026-08-13 and was not promoted to
+  Latest: https://github.com/legeling/PromptHub/releases/tag/v0.6.0-beta.1
+
+## Convergence
+
+- `CHANGELOG.md` and the structured release record now identify the beta as
+  published rather than an unreleased candidate.
+- Stable-facing `0.5.9` downloads and update behavior remain unchanged.
+- The completed change is ready for the dated archive.

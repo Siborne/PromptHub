@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [0.6.0-beta.1] - Unreleased
+## [0.6.0-beta.1] - 2026-08-13
 
 ### 新功能 / Features
 

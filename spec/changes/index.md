@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 56 |
-| Archived | 188 |
+| Active | 55 |
+| Archived | 189 |
 | Legacy | 1 |
 
 ## Active
@@ -56,7 +56,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `prompt-workspace-completion` | active | `spec/changes/active/prompt-workspace-completion/` |
 | `r2-direct-downloads` | active | `spec/changes/active/r2-direct-downloads/` |
 | `readme-screenshots-v0-5-6` | active | `spec/changes/active/readme-screenshots-v0-5-6/` |
-| `release-0-6-0-beta-1-readiness` | active | `spec/changes/active/release-0-6-0-beta-1-readiness/` |
 | `release-0-6-0-version-alignment` | active | `spec/changes/active/release-0-6-0-version-alignment/` |
 | `republish-0-5-9-20260714` | active | `spec/changes/active/republish-0-5-9-20260714/` |
 | `risk-aware-verification-harness` | active | `spec/changes/active/risk-aware-verification-harness/` |
@@ -264,6 +263,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-08-10-desktop-language-startup-persistence` | archived | `spec/changes/archive/2026/08/2026-08-10-desktop-language-startup-persistence/` |
 | `2026-08-12-database-migration-safety` | archived | `spec/changes/archive/2026/08/2026-08-12-database-migration-safety/` |
 | `2026-08-12-storage-recovery-review-fixes` | archived | `spec/changes/archive/2026/08/2026-08-12-storage-recovery-review-fixes/` |
+| `2026-08-13-release-0-6-0-beta-1-readiness` | archived | `spec/changes/archive/2026/08/2026-08-13-release-0-6-0-beta-1-readiness/` |
 
 ## Legacy
 

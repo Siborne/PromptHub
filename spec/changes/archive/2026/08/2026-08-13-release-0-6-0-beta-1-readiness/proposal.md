@@ -2,8 +2,8 @@
 
 ## Phase And Status
 
-- Phase: implement
-- Status: ci-repair
+- Phase: converge
+- Status: completed
 - Primary requirement: `FR-BETA1-001`
 
 ## Why
@@ -38,5 +38,6 @@ build version and fails the repository release gate.
   weakening budgets.
 - Before publication, rollback is limited to restoring version-bearing files
   and prerelease documentation. No user-data migration is introduced here.
-- The first tag-triggered run failed before packaging. The beta tag may be
-  moved to the CI-repair commit only while no public release exists.
+- The first tag-triggered run failed before packaging. The beta tag was moved
+  only while no public release existed; the published tag now remains fixed at
+  the verified candidate commit.

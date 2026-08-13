@@ -15,8 +15,8 @@ The full release profile must pass before tagging or publication.
 
 ### `FR-BETA1-003`: Preview record
 
-The changelog and release index must identify `0.6.0-beta.1` as an unreleased
-preview candidate and must not describe it as the latest stable release.
+The changelog and release index must identify `0.6.0-beta.1` as a published
+preview release and must not describe it as the latest stable release.
 
 ### `NFR-BETA1-001`: Reproducibility
 
