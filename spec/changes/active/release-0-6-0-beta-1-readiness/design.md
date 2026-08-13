@@ -36,6 +36,13 @@ lowest effective layer:
 - split Desktop integration tests into four serialized single-worker shards
   and disable Wrangler telemetry during the Worker dry-run so both gates have
   bounded memory and process lifetimes.
+- inject a test-only JWT secret into the isolated Web verification process;
+- make platform-specific Desktop assertions explicitly select their target
+  platform instead of inheriting the runner operating system;
+- launch Electron with `--no-sandbox` only in Linux CI, where the hosted runner
+  cannot start Chromium's sandbox, while retaining the sandbox elsewhere;
+- scope the root `release/` build-output ignore so release-domain change specs
+  remain eligible for source control and traceability validation.
 
 The inventory and test runners remain bounded. No retry loop or raised budget
 may mask deterministic regressions.
@@ -66,3 +73,4 @@ publication.
 | `FR-BETA1-002`  | `DES-BETA1-002` | `TEST-BETA1-002`, `-003`         | `T-BETA1-002`, `-003`, `-003A`, `-005` |
 | `FR-BETA1-003`  | `DES-BETA1-001` | `TEST-BETA1-004`                 | `T-BETA1-004`                          |
 | `NFR-BETA1-001` | `DES-BETA1-003` | `TEST-BETA1-002`, `-003`, `-005` | `T-BETA1-005`, `-006`                  |
+| `FR-BETA1-004`  | `DES-BETA1-002` | `TEST-BETA1-002`, `-003`, `-005` | `T-BETA1-007`, `-006`                  |

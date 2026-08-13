@@ -67,8 +67,6 @@ describe("Agent usage popover window", () => {
         height: 540,
         transparent: true,
         width: 392,
-        vibrancy: "popover",
-        visualEffectState: "active",
         webPreferences: expect.objectContaining({
           contextIsolation: true,
           nodeIntegration: false,

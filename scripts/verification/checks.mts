@@ -302,7 +302,13 @@ export const VERIFICATION_CHECKS: VerificationCheck[] = [
     ["web-self-hosted", "database"],
     ["unit", "contract", "security"],
     ["--filter", "@prompthub/web", "test"],
-    { timeoutMs: 360_000, resourceGroup: "test-heavy" },
+    {
+      timeoutMs: 360_000,
+      resourceGroup: "test-heavy",
+      environment: {
+        JWT_SECRET: "test-secret-for-web-release-verification-1234567890",
+      },
+    },
   ),
   pnpmCheck(
     "web-build",

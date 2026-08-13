@@ -132,6 +132,14 @@ test("Cloudflare dry-run disables nonessential Wrangler telemetry", () => {
   });
 });
 
+test("self-hosted Web tests receive a deterministic release-only JWT secret", () => {
+  const webTest = VERIFICATION_CHECKS.find((item) => item.id === "web-test");
+
+  assert.deepEqual(webTest?.command.environment, {
+    JWT_SECRET: "test-secret-for-web-release-verification-1234567890",
+  });
+});
+
 test("complete registry validation rejects a missing required risk layer", () => {
   assert.throws(
     () =>

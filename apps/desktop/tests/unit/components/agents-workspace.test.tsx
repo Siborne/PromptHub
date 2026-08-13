@@ -656,6 +656,11 @@ describe("Agent workspace shell", () => {
   });
 
   it("edits the selected Agent in a modal without leaving the workspace", async () => {
+    const userAgent = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      );
     const updateBuiltinAgentOverride = vi.fn();
     useSettingsStore.setState({
       builtinAgentOverrides: {},
@@ -685,6 +690,7 @@ describe("Agent workspace shell", () => {
     fireEvent.change(rootInput, { target: { value: "~/temporary" } });
     fireEvent.click(within(dialog).getByRole("button", { name: /^reset$/i }));
     expect(rootInput).toHaveValue("%USERPROFILE%\\.claude");
+    userAgent.mockRestore();
     fireEvent.change(rootInput, { target: { value: "~/Agents/claude" } });
     fireEvent.click(within(dialog).getByRole("button", { name: /^save$/i }));
 

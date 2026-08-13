@@ -3,7 +3,7 @@
 ## Phase And Status
 
 - Phase: implement
-- Status: release-blocked
+- Status: ci-repair
 - Primary requirement: `FR-BETA1-001`
 
 ## Why
@@ -25,8 +25,8 @@ build version and fails the repository release gate.
 
 ## Out Of Scope
 
-- Creating or pushing `v0.6.0-beta.1`.
-- Publishing a GitHub Release, package, container, mirror, or app-store build.
+- Publishing a package, container, mirror, or app-store build outside the
+  tag-triggered GitHub Release workflow.
 - Promoting `0.6.0` to the stable channel.
 - Completing unrelated designed-but-unimplemented active changes.
 
@@ -38,3 +38,5 @@ build version and fails the repository release gate.
   weakening budgets.
 - Before publication, rollback is limited to restoring version-bearing files
   and prerelease documentation. No user-data migration is introduced here.
+- The first tag-triggered run failed before packaging. The beta tag may be
+  moved to the CI-repair commit only while no public release exists.

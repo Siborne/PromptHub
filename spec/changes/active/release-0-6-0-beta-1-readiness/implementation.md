@@ -27,6 +27,29 @@
 - Signed/notarized artifact verification remains pending because no candidate
   artifacts have been built.
 
+## First CI Attempt
+
+- Release run `31704219084` failed in the verify job before packaging.
+- Specification governance could not see the ignored release-domain delta
+  spec; Web tests had no collection-time `JWT_SECRET`; three Desktop tests
+  inherited the Linux runner platform; and Electron E2E could not launch the
+  Chromium sandbox on the hosted Linux runner.
+- The failed run produced no release artifacts and no public GitHub Release.
+
+## CI Repair Verification
+
+- `pnpm spec:test` passed traceability validation for 24 active changes.
+- Focused Desktop verification passed 56 tests covering Linux CI Electron
+  launch arguments and the three platform-specific assertion repairs.
+- Self-hosted Web verification passed 69 files and 413 tests with the
+  release-only JWT secret; the verification harness passed 22 tests.
+- The quick profile passed 28 of 29 checks. Its only failure was the Web
+  inventory timing assertion under concurrent gate load; the assertion now
+  measures cold inventory construction and cached lookup separately, and its
+  focused four-test suite passes.
+- Hosted Linux Electron launch and the complete release profile remain for the
+  replacement tag-triggered workflow to prove.
+
 ## Remaining Publication Boundary
 
 - `T-BETA1-006` remains open: the current worktree must be reviewed and turned

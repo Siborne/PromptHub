@@ -13,6 +13,7 @@ import type {
   Settings,
   SyncProviderKind,
 } from "@prompthub/shared/types";
+import { getElectronLaunchArgs } from "./electron-launch-options";
 
 export interface LaunchedElectronApp {
   app: ElectronApplication;
@@ -88,7 +89,7 @@ export async function launchPromptHub(
   const seedPath = seedFileName ? getSeedPath(seedFileName) : undefined;
 
   const app = await electron.launch({
-    args: [mainEntry],
+    args: getElectronLaunchArgs(mainEntry),
     env: {
       ...process.env,
       NODE_ENV: "test",

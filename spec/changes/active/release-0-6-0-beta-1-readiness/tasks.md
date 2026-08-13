@@ -15,5 +15,10 @@
       database connection from deleting in-flight atomic writes. Bound CLI
       workers and split the uneven Desktop unit tail into eight release shards.
 - [x] `T-BETA1-005` Pass quick and full release verification.
+- [ ] `T-BETA1-007` Repair the first tag-triggered Linux CI verification
+      failures in traceability, Web test configuration, platform-specific
+      Desktop assertions, and Electron sandbox launch; rerun the full workflow.
+      Covers `FR-BETA1-004`, `DES-BETA1-002`, `TEST-BETA1-002`,
+      `TEST-BETA1-003`, and `TEST-BETA1-005`.
 - [ ] `T-BETA1-006` Confirm a clean, intentional candidate commit and record
       CI artifact/signing/notarization verification before publication.

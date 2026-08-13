@@ -276,6 +276,7 @@ describe("Updater Service (Main Process)", () => {
   });
 
   it("registers installSource handler and replaces old updater handlers on re-register", async () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
     const electron = await import("electron");
     const removeHandlerMock = vi.fn();
     vi.mocked(electron.ipcMain).removeHandler = removeHandlerMock;
