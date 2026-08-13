@@ -279,4 +279,42 @@ describe("canonical storage production projector", () => {
       maintenance.release();
     }
   });
+
+  it("does not publish target-missing Rule placeholders with missing or empty files", async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-canonical-empty-rule-"),
+    );
+    roots.push(root);
+    configureRuntimePaths({ userDataPath: root });
+    const database = initDatabase(path.join(root, "prompthub.db"));
+    const targetPath = path.join(root, "home", ".config", "amp", "AGENTS.md");
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, "");
+    new RuleDB(database).upsert({
+      id: "amp-global",
+      scope: "global",
+      platformId: "amp",
+      platformName: "Amp",
+      platformIcon: "Zap",
+      platformDescription: "Amp rules",
+      canonicalFileName: "AGENTS.md",
+      description: "Global Amp rule",
+      managedPath: path.join(root, "rules", "global", "amp", "AGENTS.md"),
+      targetPath,
+      projectRootPath: null,
+      syncStatus: "target-missing",
+      currentVersion: 0,
+      contentHash: "",
+      createdAt: "2026-08-12T00:00:00.000Z",
+      updatedAt: "2026-08-12T00:00:00.000Z",
+    });
+
+    const result = await projectCanonicalStorageShadow({
+      database,
+      targetPath: path.join(root, "canonical-shadow"),
+    });
+
+    expect(readCanonicalStorageShadow(result.targetPath).rules).toEqual([]);
+    expect(result.stagedDatabase.domainCounts.rules).toBe(0);
+  });
 });

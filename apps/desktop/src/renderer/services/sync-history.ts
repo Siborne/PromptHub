@@ -5,6 +5,7 @@ import type {
   AutoSyncStatus,
   Settings,
 } from "@prompthub/shared/types";
+import { useSettingsStore } from "../stores/settings.store";
 
 export type {
   AutoSyncHistoryEntry,
@@ -139,7 +140,7 @@ export async function recordAutoSyncHistory(
     const entry = createEntry(input);
     const current = await readAutoSyncHistory();
     const next = [entry, ...current].slice(0, AUTO_SYNC_HISTORY_LIMIT);
-
+    useSettingsStore.setState({ autoSyncHistory: next });
     await window.api?.settings?.set?.({ autoSyncHistory: next });
     await appendAutoSyncLogFile(entry);
     window.dispatchEvent(new CustomEvent(AUTO_SYNC_HISTORY_UPDATED_EVENT));

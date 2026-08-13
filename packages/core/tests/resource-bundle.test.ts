@@ -716,6 +716,28 @@ describe("resource bundle", () => {
     expect(readResourceBundle(input.bundlePath).manifest).toEqual(manifest);
   });
 
+  it("defers fsync when an outer publication journal owns crash recovery", () => {
+    const root = createRoot();
+    const sourcePath = writeSource(root, "prompt.json", "{}\n");
+    const fsync = vi.spyOn(fs, "fsyncSync");
+
+    const bundlePath = path.join(root, "bundle");
+    const manifest = materializeResourceBundle({
+      bundlePath,
+      resourceType: "prompt",
+      resourceId: "prompt-1",
+      schemaVersion: 1,
+      revision: 1,
+      createdAt: "2026-08-11T00:00:00.000Z",
+      updatedAt: "2026-08-11T00:00:00.000Z",
+      payloads: [{ path: "prompt.json", sourcePath }],
+      durability: "publication-journal",
+    });
+
+    expect(fsync).not.toHaveBeenCalled();
+    expect(readResourceBundle(bundlePath).manifest).toEqual(manifest);
+  });
+
   it("fails closed for special entries and post-inventory payload races", () => {
     const root = createRoot();
     const sourcePath = writeSource(root, "prompt.json", "abc");

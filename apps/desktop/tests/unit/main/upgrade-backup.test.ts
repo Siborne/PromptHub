@@ -693,7 +693,7 @@ describe("upgrade-backup", () => {
         fs.existsSync(path.join(getUpgradeBackupRoot(userDataPath), ".legacy-migrated")),
       ).toBe(false);
 
-      fs.rmSync(path.join(legacyBackup, "workspace", "linked"));
+      fs.unlinkSync(path.join(legacyBackup, "workspace", "linked"));
       const retried = await migrateLegacyUpgradeBackups(userDataPath);
       expect(retried.migrated).toBe(1);
       expect(

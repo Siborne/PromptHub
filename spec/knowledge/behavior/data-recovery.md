@@ -26,7 +26,19 @@
   完整 canonical checkpoint。
 - 恢复候选、安全点、被覆盖根和 pre-restore 状态统一进入有界 recovery registry，
   按数量、年龄和总字节限制清理。正在使用的 operation ID 必须受保护；损坏、未完成
-  或越界 artifact 不得被当作可恢复快照。
+  或越界 artifact 不得被当作可恢复快照，并应在确认其为 registry 直接管理的普通
+  目录后由 retention 清理；不得跟随符号链接或清理受保护 operation ID。
+- recovery artifact 发布必须先持久化 operation-owned `preparing` manifest，再移动
+  prior tree，最后原子发布 `complete` manifest。移动 prior tree 后中断时，启动恢复
+  必须按 manifest 身份继续发布，不能把已提交的新数据回滚掉，也不能遗失唯一 prior
+  set；未知或冲突身份必须 fail closed。journal 与 artifact registry 的既有祖先路径
+  必须逐级拒绝符号链接，不能仅检查最终文件或目录。
+- 全量恢复 journal 的 stage/prior 路径必须与 `activeRoot + operationId` 派生路径精确
+  一致，仅位于 active root 内不足以证明 ownership。operation/artifact ID 必须是安全的
+  单一路径段并拒绝 `.`、`..`。根目录迁移 journal 必须持久化 inventory 是否包含
+  secrets，并在 prepared rename 恢复时使用同一策略比较 digest。
+- storage inventory 与 recovery artifact 扫描的 entry 上限同时计算目录和文件，避免
+  大量空目录绕过遍历容量限制。
 - 当前目录残留恢复重试时，旧根目录中的空 `prompthub.db` 占位文件不得阻断
   Skill/workspace 残留迁移。若旧根 `prompthub.db` 与统一目录
   `data/prompthub.db` 同时存在且内容冲突，必须先把旧根数据库保留为
@@ -82,6 +94,18 @@
   `sqlite_master` 中确认，所有 `REINDEX` 必须位于单事务内，并在提交前及新连接
   上重新通过 `PRAGMA quick_check`。其它损坏必须停止初始化，不得用空库、默认值
   或猜测性表级恢复掩盖。
+- 历史 Prompt 若完全缺少 `prompt_versions` 行，数据库迁移必须在规范资源图校验前
+  从当前 Prompt 行合成版本 1，并把 `current_version` 对齐到最高正版本。该修复必须
+  幂等且不得改写已有有效版本；迁移完成后，规范资源 schema 仍必须拒绝非正版本。
+- 桌面端首次发布 canonical authority 前必须先完成源数据库迁移；迁移失败必须停止
+  发布。内置 Rule 平台在尚未发现目标文件时可以保留纯占位记录，但仅当记录同时为
+  `target-missing`、版本 0、无托管内容、无目标内容且无历史版本时，projector 才能
+  将其排除。任何已有内容或历史的 Rule 都必须继续通过严格的正版本校验。
+- canonical 数据根允许与独立所有者的运行时文件共存，但只能按精确名称和类型放行：
+  Prompt 图读取可忽略由旧工作区管理的根 `.versions` 普通目录，以及由 Agent 外观
+  功能管理的根 `agent-appearance` 普通目录；MCP bundle 枚举可忽略市场源注册表
+  `market-sources.json` 普通文件。类型替换、符号链接和其它未声明路径仍必须 fail
+  closed。
 - WebDAV、S3、自部署快照恢复和手动整包导入在改变本地数据前必须创建安全快照。
   任一数据库、文件、媒体、Rule、Skill、MCP 或 Plugin 恢复步骤失败时，必须尝试
   恢复安全快照；空数据目录必须创建仅含清单的空基线，不能因本地无数据而跳过

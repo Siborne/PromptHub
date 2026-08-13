@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
 
+import { assertStoragePathComponentsSafe } from "./runtime-storage-context";
+
 const DEFAULT_MAX_COUNT = 10;
 const DEFAULT_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024 * 1024;
@@ -143,10 +145,15 @@ function parseArtifact(
   }
 }
 
-export function listRecoveryArtifacts(
+interface RecoveryArtifactRegistryScan {
+  artifacts: RecoveryArtifactRecord[];
+  invalid: Array<{ id: string; directoryPath: string }>;
+}
+
+function scanRecoveryArtifactRegistry(
   activeRoot: string,
   limits: RecoveryArtifactScanLimits = {},
-): RecoveryArtifactRecord[] {
+): RecoveryArtifactRegistryScan {
   const resolvedLimits = {
     maxEntries: assertPositiveInteger(
       limits.maxEntries ?? MAX_SCAN_ENTRIES,
@@ -159,30 +166,44 @@ export function listRecoveryArtifacts(
   };
   const registryRoot = getRecoveryArtifactRoot(activeRoot);
   try {
+    assertStoragePathComponentsSafe(activeRoot, registryRoot);
     const registryStats = fs.lstatSync(registryRoot);
-    if (registryStats.isSymbolicLink() || !registryStats.isDirectory())
-      return [];
-    return fs
-      .readdirSync(registryRoot, { withFileTypes: true })
-      .filter(
-        (entry) =>
-          entry.isDirectory() &&
-          !entry.isSymbolicLink() &&
-          entry.name !== "journals" &&
-          !entry.name.startsWith("."),
-      )
-      .flatMap((entry) => {
-        const artifact = parseArtifact(
-          path.join(registryRoot, entry.name),
-          resolvedLimits,
-        );
-        return artifact ? [artifact] : [];
-      })
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    if (registryStats.isSymbolicLink() || !registryStats.isDirectory()) {
+      return { artifacts: [], invalid: [] };
+    }
+    const artifacts: RecoveryArtifactRecord[] = [];
+    const invalid: Array<{ id: string; directoryPath: string }> = [];
+    for (const entry of fs.readdirSync(registryRoot, { withFileTypes: true })) {
+      if (
+        !entry.isDirectory() ||
+        entry.isSymbolicLink() ||
+        entry.name === "journals" ||
+        entry.name.startsWith(".")
+      ) {
+        continue;
+      }
+      const directoryPath = path.join(registryRoot, entry.name);
+      const artifact = parseArtifact(directoryPath, resolvedLimits);
+      if (artifact) artifacts.push(artifact);
+      else invalid.push({ id: entry.name, directoryPath });
+    }
+    artifacts.sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
+    );
+    return { artifacts, invalid };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    return [];
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { artifacts: [], invalid: [] };
+    }
+    return { artifacts: [], invalid: [] };
   }
+}
+
+export function listRecoveryArtifacts(
+  activeRoot: string,
+  limits: RecoveryArtifactScanLimits = {},
+): RecoveryArtifactRecord[] {
+  return scanRecoveryArtifactRegistry(activeRoot, limits).artifacts;
 }
 
 export function pruneRecoveryArtifacts(
@@ -203,7 +224,8 @@ export function pruneRecoveryArtifacts(
     retention.maxBytes ?? DEFAULT_MAX_BYTES,
     "maxBytes",
   );
-  const artifacts = listRecoveryArtifacts(activeRoot);
+  const scan = scanRecoveryArtifactRegistry(activeRoot);
+  const artifacts = scan.artifacts;
   const protectedArtifacts = artifacts.filter(
     (artifact) =>
       protectedIds.has(artifact.id) || Boolean(artifact.pinnedReason),
@@ -215,6 +237,14 @@ export function pruneRecoveryArtifacts(
     0,
   );
   const removed: string[] = [];
+
+  for (const invalid of scan.invalid) {
+    if (protectedIds.has(invalid.id)) continue;
+    const stats = fs.lstatSync(invalid.directoryPath);
+    if (stats.isSymbolicLink() || !stats.isDirectory()) continue;
+    fs.rmSync(invalid.directoryPath, { recursive: true, force: true });
+    removed.push(invalid.id);
+  }
 
   for (const artifact of artifacts) {
     if (kept.has(artifact.id)) continue;

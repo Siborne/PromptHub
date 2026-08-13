@@ -1,7 +1,32 @@
 import "@testing-library/jest-dom";
 import { cleanup } from "@testing-library/react";
-import { afterEach, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+import { configureRuntimePaths } from "@prompthub/core/runtime-paths";
 import { installWindowMocks } from "./helpers/window";
+
+const workerRuntimeRoot = path.join(
+  os.tmpdir(),
+  `prompthub-desktop-vitest-${process.pid}`,
+);
+
+function installIsolatedRuntimeRoot(): void {
+  const dataPath = path.join(workerRuntimeRoot, "data");
+  fs.mkdirSync(dataPath, { recursive: true });
+  const databasePath = path.join(dataPath, "prompthub.db");
+  if (!fs.existsSync(databasePath)) fs.closeSync(fs.openSync(databasePath, "w"));
+  configureRuntimePaths({ userDataPath: workerRuntimeRoot });
+}
+
+beforeAll(() => {
+  installIsolatedRuntimeRoot();
+});
+
+beforeEach(() => {
+  installIsolatedRuntimeRoot();
+});
 
 // 扩展 Window 类型
 // Extend Window type
@@ -61,6 +86,11 @@ installLocalStorageMock();
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  installIsolatedRuntimeRoot();
+});
+
+afterAll(() => {
+  fs.rmSync(workerRuntimeRoot, { recursive: true, force: true });
 });
 
 // jsdom does not perform real layout, so @tanstack/react-virtual measures the

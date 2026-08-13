@@ -229,6 +229,33 @@ function inventoryRoot(
         continue;
       }
       if (
+        relativePath === "prompthub.db.clients" ||
+        relativePath === "prompthub.db.lock"
+      ) {
+        if (!stat.isDirectory()) {
+          throw new Error(
+            "canonical graph database coordination path is invalid",
+          );
+        }
+        continue;
+      }
+      if (relativePath === ".versions") {
+        if (!stat.isDirectory()) {
+          throw new Error(
+            "canonical graph Prompt version workspace path is invalid",
+          );
+        }
+        continue;
+      }
+      if (relativePath === "agent-appearance") {
+        if (!stat.isDirectory()) {
+          throw new Error(
+            "canonical graph Agent appearance workspace path is invalid",
+          );
+        }
+        continue;
+      }
+      if (
         relativePath === ".layout-state.json" ||
         relativePath === ".authority-state.json" ||
         relativePath === "prompthub.db" ||

@@ -26,6 +26,7 @@ export interface EnsureCanonicalStorageAuthorityOnStartupOptions extends Omit<
   sourceDatabasePath: string;
   checkpointPath?: string;
   publish?: AuthorityPublisher;
+  prepareSourceDatabase?: () => void | Promise<void>;
   refreshRuntimeContext?: () => void;
 }
 
@@ -65,6 +66,7 @@ export async function ensureCanonicalStorageAuthorityOnStartup(
   if (!assertRegularDatabaseOrMissing(sourceDatabasePath)) {
     return { status: "source-database-missing" };
   }
+  await options.prepareSourceDatabase?.();
   const checkpointPath = path.resolve(
     options.checkpointPath ??
       path.join(
@@ -75,6 +77,7 @@ export async function ensureCanonicalStorageAuthorityOnStartup(
   );
   const {
     publish = publishCanonicalStorageAuthority,
+    prepareSourceDatabase: _prepareSourceDatabase,
     refreshRuntimeContext = refreshRuntimeStorageContext,
     ...publicationOptions
   } = options;

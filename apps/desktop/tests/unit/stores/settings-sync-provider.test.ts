@@ -222,4 +222,72 @@ describe("settings sync provider guards", () => {
       autoSync: false,
     });
   });
+
+  it("restores the canonical flat WebDAV provider after renderer reload", async () => {
+    const { useSettingsStore, loadSettingsFromMainProcess } =
+      await importStoreWithSettingsSpies({
+        githubToken: "",
+        sync: { provider: "manual" },
+        syncProvider: "webdav",
+        webdavEnabled: true,
+        webdavUrl: "https://dav.example.com",
+        webdavUsername: "dav-user",
+        webdavPassword: "dav-secret",
+        webdavSyncOnStartup: true,
+      });
+
+    await loadSettingsFromMainProcess();
+
+    expect(useSettingsStore.getState()).toMatchObject({
+      syncProvider: "webdav",
+      webdavEnabled: true,
+      webdavSyncOnStartup: true,
+    });
+  });
+
+  it("hydrates canonical backup credentials and timing settings from the main process", async () => {
+    const { useSettingsStore, loadSettingsFromMainProcess } =
+      await importStoreWithSettingsSpies({
+        githubToken: "",
+        sync: { provider: "self-hosted" },
+        webdavEnabled: true,
+        webdavUrl: "https://dav.example.com",
+        webdavUsername: "dav-user",
+        webdavPassword: "dav-secret",
+        webdavSyncOnStartup: true,
+        webdavSyncOnStartupDelay: 3,
+        selfHostedSyncEnabled: true,
+        selfHostedSyncUrl: "https://hub.example.com",
+        selfHostedSyncUsername: "hub-user",
+        selfHostedSyncPassword: "hub-secret",
+        selfHostedSyncOnStartup: true,
+        selfHostedSyncOnStartupDelay: 4,
+        s3StorageEnabled: true,
+        s3Endpoint: "https://s3.example.com",
+        s3AccessKeyId: "access-key",
+        s3SecretAccessKey: "secret-key",
+      });
+
+    await loadSettingsFromMainProcess();
+
+    expect(useSettingsStore.getState()).toMatchObject({
+      syncProvider: "manual",
+      webdavEnabled: true,
+      webdavUrl: "https://dav.example.com",
+      webdavUsername: "dav-user",
+      webdavPassword: "dav-secret",
+      webdavSyncOnStartup: true,
+      webdavSyncOnStartupDelay: 3,
+      selfHostedSyncEnabled: true,
+      selfHostedSyncUrl: "https://hub.example.com",
+      selfHostedSyncUsername: "hub-user",
+      selfHostedSyncPassword: "hub-secret",
+      selfHostedSyncOnStartup: true,
+      selfHostedSyncOnStartupDelay: 4,
+      s3StorageEnabled: true,
+      s3Endpoint: "https://s3.example.com",
+      s3AccessKeyId: "access-key",
+      s3SecretAccessKey: "secret-key",
+    });
+  });
 });

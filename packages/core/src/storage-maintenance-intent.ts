@@ -2,6 +2,8 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
+import { assertStoragePathComponentsSafe } from "./runtime-storage-context";
+
 interface StorageMaintenanceRecord {
   kind: "prompthub-storage-maintenance";
   version: 1;
@@ -47,7 +49,11 @@ export function getStorageMaintenanceIntentPath(activeRoot: string): string {
   );
 }
 
-function readRecord(intentPath: string): StorageMaintenanceRecord | null {
+function readRecord(
+  activeRoot: string,
+  intentPath: string,
+): StorageMaintenanceRecord | null {
+  assertStoragePathComponentsSafe(activeRoot, path.dirname(intentPath));
   try {
     const stats = fs.lstatSync(intentPath);
     if (!stats.isFile() || stats.isSymbolicLink()) return null;
@@ -75,8 +81,12 @@ function readRecord(intentPath: string): StorageMaintenanceRecord | null {
   }
 }
 
-function removeIfOwned(intentPath: string, token: string): void {
-  if (readRecord(intentPath)?.token === token) {
+function removeIfOwned(
+  activeRoot: string,
+  intentPath: string,
+  token: string,
+): void {
+  if (readRecord(activeRoot, intentPath)?.token === token) {
     fs.rmSync(intentPath, { force: true });
   }
 }
@@ -86,8 +96,9 @@ export function assertStorageMaintenanceAvailable(
   options: { isProcessAlive?: (pid: number) => boolean } = {},
 ): void {
   const intentPath = getStorageMaintenanceIntentPath(activeRoot);
+  assertStoragePathComponentsSafe(activeRoot, path.dirname(intentPath));
   if (!fs.existsSync(intentPath)) return;
-  const record = readRecord(intentPath);
+  const record = readRecord(activeRoot, intentPath);
   if (!record) {
     throw new StorageMaintenanceBusyError(
       "PromptHub storage maintenance intent is malformed or unsafe",
@@ -103,7 +114,8 @@ export function assertStorageMaintenanceIntentHeld(
   activeRoot: string,
   operationId: string,
 ): void {
-  const record = readRecord(getStorageMaintenanceIntentPath(activeRoot));
+  const intentPath = getStorageMaintenanceIntentPath(activeRoot);
+  const record = readRecord(activeRoot, intentPath);
   if (
     !record ||
     record.pid !== process.pid ||
@@ -137,7 +149,9 @@ export function acquireStorageMaintenanceIntent(
     token,
     createdAt: new Date().toISOString(),
   };
+  assertStoragePathComponentsSafe(activeRoot, path.dirname(intentPath));
   fs.mkdirSync(path.dirname(intentPath), { recursive: true, mode: 0o700 });
+  assertStoragePathComponentsSafe(activeRoot, path.dirname(intentPath));
   try {
     fs.writeFileSync(intentPath, `${JSON.stringify(record, null, 2)}\n`, {
       encoding: "utf8",
@@ -152,6 +166,6 @@ export function acquireStorageMaintenanceIntent(
   }
   return {
     intentPath,
-    release: () => removeIfOwned(intentPath, token),
+    release: () => removeIfOwned(activeRoot, intentPath, token),
   };
 }

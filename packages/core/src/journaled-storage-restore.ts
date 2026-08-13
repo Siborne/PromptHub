@@ -3,6 +3,8 @@ import fs from "fs";
 import path from "path";
 
 import { pruneRecoveryArtifacts } from "./recovery-artifact-registry";
+import { publishRecoveryArtifact } from "./recovery-artifact-publication";
+import { assertStoragePathComponentsSafe } from "./runtime-storage-context";
 import {
   acquireStorageMaintenanceIntent,
   assertStorageMaintenanceIntentHeld,
@@ -96,6 +98,15 @@ function positiveInteger(value: number, name: string): number {
   return value;
 }
 
+function isOperationId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[a-zA-Z0-9._-]{1,128}$/.test(value) &&
+    value !== "." &&
+    value !== ".."
+  );
+}
+
 function flushDirectory(directoryPath: string): void {
   let descriptor: number | null = null;
   try {
@@ -108,9 +119,15 @@ function flushDirectory(directoryPath: string): void {
   }
 }
 
-function atomicWriteJson(filePath: string, value: unknown): void {
+function atomicWriteJson(
+  activeRoot: string,
+  filePath: string,
+  value: unknown,
+): void {
   const directory = path.dirname(filePath);
+  assertStoragePathComponentsSafe(activeRoot, directory);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  assertStoragePathComponentsSafe(activeRoot, directory);
   const temporaryPath = `${filePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
   const descriptor = fs.openSync(temporaryPath, "wx", 0o600);
   try {
@@ -146,8 +163,7 @@ function parseJournal(
     !isRecord(value) ||
     value.formatVersion !== RESTORE_FORMAT_VERSION ||
     value.kind !== "prompthub-journaled-storage-restore" ||
-    typeof value.operationId !== "string" ||
-    !/^[a-zA-Z0-9._-]{1,128}$/.test(value.operationId) ||
+    !isOperationId(value.operationId) ||
     !["prepared", "swapping", "committed"].includes(String(value.state)) ||
     typeof value.activeRoot !== "string" ||
     path.resolve(value.activeRoot) !== path.resolve(activeRoot) ||
@@ -179,12 +195,20 @@ function parseJournal(
   }
   assertOwnedOperationPath(activeRoot, value.stageRoot);
   assertOwnedOperationPath(activeRoot, value.priorRoot);
+  const expectedPaths = operationPaths(activeRoot, value.operationId);
+  if (
+    value.stageRoot !== expectedPaths.stageRoot ||
+    value.priorRoot !== expectedPaths.priorRoot
+  ) {
+    return null;
+  }
   return value as unknown as StorageRestoreJournal;
 }
 
 function readJournal(activeRoot: string): StorageRestoreJournal | null {
   const journalPath = getStorageRestoreJournalPath(activeRoot);
   try {
+    assertStoragePathComponentsSafe(activeRoot, path.dirname(journalPath));
     const stats = fs.lstatSync(journalPath);
     if (stats.isSymbolicLink() || !stats.isFile()) {
       throw new Error(`Invalid storage restore journal: ${journalPath}`);
@@ -221,12 +245,18 @@ export function readStorageRestoreJournalState(activeRoot: string): {
 
 function writeJournal(journal: StorageRestoreJournal): StorageRestoreJournal {
   const next = { ...journal, updatedAt: new Date().toISOString() };
-  atomicWriteJson(getStorageRestoreJournalPath(journal.activeRoot), next);
+  atomicWriteJson(
+    journal.activeRoot,
+    getStorageRestoreJournalPath(journal.activeRoot),
+    next,
+  );
   return next;
 }
 
 function removeJournal(activeRoot: string): void {
-  fs.rmSync(getStorageRestoreJournalPath(activeRoot), { force: true });
+  const journalPath = getStorageRestoreJournalPath(activeRoot);
+  assertStoragePathComponentsSafe(activeRoot, journalPath);
+  fs.rmSync(journalPath, { force: true });
 }
 
 function assertEntryNames(entryNames: string[]): string[] {
@@ -242,7 +272,7 @@ function assertEntryNames(entryNames: string[]): string[] {
 }
 
 function assertOperationId(operationId: string): void {
-  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(operationId)) {
+  if (!isOperationId(operationId)) {
     throw new Error(`Invalid storage restore operation id: ${operationId}`);
   }
 }
@@ -353,35 +383,19 @@ function rollbackRestore(journal: StorageRestoreJournal): void {
 }
 
 function preservePrior(journal: StorageRestoreJournal): string {
-  const artifactPath = path.join(
-    journal.activeRoot,
-    "backups",
-    "recovery",
-    journal.operationId,
-  );
-  const artifactRoot = path.join(artifactPath, "root");
-  if (fs.existsSync(artifactPath)) {
-    throw new Error(
-      `Storage restore recovery artifact already exists: ${artifactPath}`,
-    );
-  }
-  fs.mkdirSync(artifactPath, { recursive: true, mode: 0o700 });
-  if (fs.existsSync(journal.priorRoot)) {
-    fs.renameSync(journal.priorRoot, artifactRoot);
-  } else {
-    fs.mkdirSync(artifactRoot, { recursive: true, mode: 0o700 });
-  }
-  atomicWriteJson(path.join(artifactPath, "manifest.json"), {
-    formatVersion: 1,
-    kind: "storage-restore-recovery-artifact",
-    state: "complete",
-    id: journal.operationId,
-    operationId: journal.operationId,
-    artifactType: "pre-restore-state",
-    sourceRoot: journal.activeRoot,
-    entries: journal.entryNames,
-    createdAt: journal.createdAt,
-    validatedAt: new Date().toISOString(),
+  const artifactPath = publishRecoveryArtifact({
+    ownerRoot: journal.activeRoot,
+    registryRoot: path.join(journal.activeRoot, "backups", "recovery"),
+    priorRoot: journal.priorRoot,
+    manifest: {
+      kind: "storage-restore-recovery-artifact",
+      id: journal.operationId,
+      operationId: journal.operationId,
+      artifactType: "pre-restore-state",
+      sourceRoot: journal.activeRoot,
+      entries: journal.entryNames,
+      createdAt: journal.createdAt,
+    },
   });
   removePath(journal.stageRoot);
   removeJournal(journal.activeRoot);

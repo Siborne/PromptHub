@@ -38,7 +38,11 @@ describe("canonical storage startup", () => {
     const sourceDatabasePath = path.join(activeRoot, "data", "prompthub.db");
     fs.mkdirSync(path.dirname(sourceDatabasePath), { recursive: true });
     fs.writeFileSync(sourceDatabasePath, "database");
-    return { activeRoot, sourceDatabasePath };
+    return {
+      activeRoot,
+      sourceDatabasePath,
+      prepareSourceDatabase: vi.fn(),
+    };
   }
 
   function completeRendererMigration(activeRoot: string): void {
@@ -64,6 +68,7 @@ describe("canonical storage startup", () => {
       ensureCanonicalStorageAuthorityOnStartup({ ...input, publish }),
     ).resolves.toEqual({ status: "waiting-renderer-migration" });
     expect(publish).not.toHaveBeenCalled();
+    expect(input.prepareSourceDatabase).not.toHaveBeenCalled();
   });
 
   it("does not republish an existing canonical authority", async () => {
@@ -78,6 +83,7 @@ describe("canonical storage startup", () => {
       ensureCanonicalStorageAuthorityOnStartup({ ...input, publish }),
     ).resolves.toEqual({ status: "already-canonical" });
     expect(publish).not.toHaveBeenCalled();
+    expect(input.prepareSourceDatabase).not.toHaveBeenCalled();
   });
 
   it("publishes once and refreshes runtime paths only after commit", async () => {
@@ -104,6 +110,10 @@ describe("canonical storage startup", () => {
       consistencyId: "b".repeat(64),
     });
     expect(publish).toHaveBeenCalledOnce();
+    expect(input.prepareSourceDatabase).toHaveBeenCalledOnce();
+    expect(
+      input.prepareSourceDatabase.mock.invocationCallOrder[0],
+    ).toBeLessThan(publish.mock.invocationCallOrder[0] ?? 0);
     expect(publish.mock.calls[0]?.[0]).toMatchObject({
       activeRoot: input.activeRoot,
       sourceDatabasePath: input.sourceDatabasePath,
@@ -130,6 +140,20 @@ describe("canonical storage startup", () => {
     expect(refreshRuntimeContext).not.toHaveBeenCalled();
   });
 
+  it("does not publish when source database preparation fails", async () => {
+    const input = fixture();
+    completeRendererMigration(input.activeRoot);
+    input.prepareSourceDatabase.mockImplementation(() => {
+      throw new Error("migration failed");
+    });
+    const publish = vi.fn();
+
+    await expect(
+      ensureCanonicalStorageAuthorityOnStartup({ ...input, publish }),
+    ).rejects.toThrow("migration failed");
+    expect(publish).not.toHaveBeenCalled();
+  });
+
   it("defers a missing source database instead of creating a partial root", async () => {
     const input = fixture();
     completeRendererMigration(input.activeRoot);
@@ -140,6 +164,7 @@ describe("canonical storage startup", () => {
       ensureCanonicalStorageAuthorityOnStartup({ ...input, publish }),
     ).resolves.toEqual({ status: "source-database-missing" });
     expect(publish).not.toHaveBeenCalled();
+    expect(input.prepareSourceDatabase).not.toHaveBeenCalled();
   });
 
   it("switches the live runtime context to canonical file authority", async () => {

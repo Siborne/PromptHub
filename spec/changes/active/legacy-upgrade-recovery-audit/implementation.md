@@ -48,6 +48,69 @@ safety-point remediations remain owned by `database-migration-safety`.
   traceability checks for 22 enforced changes.
 - `git diff --check`: passed.
 
+## 2026-08-12 Empty Prompt Version-Chain Repair
+
+- Reproduced desktop startup rejection when historical Prompt rows had no
+  `prompt_versions` records after `fix_prompt_current_version_v1` had already
+  been marked complete.
+- Added the idempotent `repair_empty_prompt_version_chain_v1` database migration.
+  It synthesizes version 1 from current Prompt content and aligns
+  `current_version` to the highest positive stored version without weakening the
+  canonical resource schema.
+- Added a tagged historical-database regression covering both a version-0 Prompt
+  and a version-1 Prompt with empty version chains, canonical graph validation,
+  content preservation, and reopen idempotency.
+- Focused historical fixture verification passed: 5 tests.
+- Related canonical rebuild and startup verification passed: 10 tests.
+- A copied production database with 127 Prompts passed the migration and full
+  canonical graph validation. Seven missing initial versions were recovered;
+  no Prompt remained at a non-positive counter or referenced a missing current
+  version.
+- The repository package-manager wrapper could not start because its remote
+  package-manager signature check was unavailable. Verification used the
+  repository-installed Vitest binary; no package-manager metadata was changed.
+
+### Startup publication follow-up
+
+- Moved source-database preparation ahead of canonical projection while keeping
+  the renderer migration, existing-authority, and source-file safety gates in
+  front of it. A migration failure now blocks publication.
+- Reproduced the next strict-validation failure against the live data: nine
+  built-in Rule platform discovery rows were `target-missing` placeholders with
+  version zero and no content or history.
+- Kept the Rule resource schema strict and changed only projector eligibility:
+  pure empty placeholders are not canonical resources, while target-missing
+  Rules with durable content or history remain validated and publishable.
+- Focused canonical projector, startup, historical fixture, and canonical
+  rebuild verification passed: 4 files, 21 tests.
+
+### Shared-root coexistence follow-up
+
+- Reproduced a second-cold-start Prompt graph rejection caused by the legacy
+  `.versions/<prompt-id>/<version>.md` workspace living beside canonical
+  resources. The graph reader now excludes only an exact, real `.versions`
+  directory and still rejects a file or symlink at that path.
+- Reproduced MCP library startup errors caused by the independently managed
+  `data/mcp/market-sources.json` registry. Canonical MCP enumeration now
+  excludes only that exact regular file and still rejects a directory or
+  symlink substitution.
+- Added focused positive and fail-closed regressions for both coexistence
+  boundaries.
+- Reproduced a later second-cold-start inventory mismatch after Agent appearance
+  seeded its bundled Codex theme. Prompt inventory now excludes only the exact,
+  real `agent-appearance` directory and rejects a file or symlink substitution.
+- Concurrent Agent appearance requests now coalesce bundled-theme seeding by
+  resolved theme directory across service instances. A failed seed is removed
+  from the in-flight map so a later request can retry.
+- Final focused Desktop and Core regression suites pass 58 tests. Desktop and
+  Core TypeScript checks pass, and the Desktop production Vite build completes.
+- Two consecutive real cold starts against the current user database completed
+  without a canonical startup error. The exact development sessions were then
+  stopped and port 5173 was released.
+- Remaining non-blocking diagnostics are broken external Skill symlink warnings
+  under the local Codex Skill directory and the existing Vite `fflate`
+  static/dynamic import chunk warning; neither prevents startup.
+
 ## Remaining Risk
 
 Current recovery code and tests now prove the shared SQLite migration slice for

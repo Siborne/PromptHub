@@ -15,6 +15,7 @@ import {
   writeRuntimeLayoutState,
 } from "./runtime-storage-context";
 import { pruneRecoveryArtifacts } from "./recovery-artifact-registry";
+import { publishRecoveryArtifact } from "./recovery-artifact-publication";
 import { acquireStorageMaintenanceIntent } from "./storage-maintenance-intent";
 
 export { classifyStorageRoot } from "./storage-inventory";
@@ -44,6 +45,7 @@ interface StorageRootOperationJournal {
   stagePath: string | null;
   priorPath: string | null;
   sourceDigest: string | null;
+  includeSecrets: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,6 +96,15 @@ export interface StorageRootRecoveryResult {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isOperationId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[a-zA-Z0-9._-]{1,128}$/.test(value) &&
+    value !== "." &&
+    value !== ".."
+  );
 }
 
 function flushDirectory(directoryPath: string): void {
@@ -153,8 +164,7 @@ function parseJournal(value: unknown): StorageRootOperationJournal | null {
     !isRecord(value) ||
     value.formatVersion !== JOURNAL_FORMAT_VERSION ||
     value.kind !== "prompthub-storage-root-operation" ||
-    typeof value.operationId !== "string" ||
-    !/^[a-zA-Z0-9._-]{1,128}$/.test(value.operationId) ||
+    !isOperationId(value.operationId) ||
     !["switch", "migrate", "overwrite"].includes(String(value.action)) ||
     !["prepared", "swapping", "pointer-published", "committed"].includes(
       String(value.state),
@@ -164,12 +174,17 @@ function parseJournal(value: unknown): StorageRootOperationJournal | null {
     (value.stagePath !== null && typeof value.stagePath !== "string") ||
     (value.priorPath !== null && typeof value.priorPath !== "string") ||
     (value.sourceDigest !== null && typeof value.sourceDigest !== "string") ||
+    (value.includeSecrets !== undefined &&
+      typeof value.includeSecrets !== "boolean") ||
     typeof value.createdAt !== "string" ||
     typeof value.updatedAt !== "string"
   ) {
     return null;
   }
-  const journal = value as unknown as StorageRootOperationJournal;
+  const journal = {
+    ...value,
+    includeSecrets: value.includeSecrets ?? true,
+  } as unknown as StorageRootOperationJournal;
   if (
     path.resolve(journal.sourceRoot) !== journal.sourceRoot ||
     path.resolve(journal.targetRoot) !== journal.targetRoot
@@ -223,7 +238,7 @@ function removeJournal(controlDirectory: string): void {
 }
 
 function assertOperationId(operationId: string): void {
-  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(operationId)) {
+  if (!isOperationId(operationId)) {
     throw new Error(`Invalid storage root operation id: ${operationId}`);
   }
 }
@@ -311,7 +326,9 @@ function targetMatchesSourceDigest(
   if (!journal.sourceDigest) return false;
   try {
     return (
-      createStorageInventory(journal.targetRoot).digest === journal.sourceDigest
+      createStorageInventory(journal.targetRoot, {
+        includeSecrets: journal.includeSecrets,
+      }).digest === journal.sourceDigest
     );
   } catch {
     return false;
@@ -341,7 +358,7 @@ function rollbackTargetPublication(journal: StorageRootOperationJournal): void {
 function preservePriorAsRecoveryArtifact(
   journal: StorageRootOperationJournal,
 ): string | undefined {
-  if (!journal.priorPath || !fs.existsSync(journal.priorPath)) return undefined;
+  if (!journal.priorPath) return undefined;
   if (journal.action !== "overwrite") {
     removeOwnedPath(journal.priorPath);
     return undefined;
@@ -352,25 +369,23 @@ function preservePriorAsRecoveryArtifact(
     "recovery",
     journal.operationId,
   );
-  const rootPath = path.join(artifactPath, "root");
-  if (fs.existsSync(artifactPath)) {
-    throw new Error(`Recovery artifact already exists: ${artifactPath}`);
+  if (!fs.existsSync(journal.priorPath) && !fs.existsSync(artifactPath)) {
+    return undefined;
   }
-  fs.mkdirSync(artifactPath, { recursive: true, mode: 0o700 });
-  fs.renameSync(journal.priorPath, rootPath);
-  atomicWriteJson(path.join(artifactPath, "manifest.json"), {
-    formatVersion: 1,
-    kind: "storage-root-recovery-artifact",
-    state: "complete",
-    id: journal.operationId,
-    operationId: journal.operationId,
-    artifactType: "overwritten-root",
-    sourceRoot: journal.sourceRoot,
-    targetRoot: journal.targetRoot,
-    createdAt: journal.createdAt,
-    validatedAt: new Date().toISOString(),
+  return publishRecoveryArtifact({
+    ownerRoot: journal.targetRoot,
+    registryRoot: path.dirname(artifactPath),
+    priorRoot: journal.priorPath,
+    manifest: {
+      kind: "storage-root-recovery-artifact",
+      id: journal.operationId,
+      operationId: journal.operationId,
+      artifactType: "overwritten-root",
+      sourceRoot: journal.sourceRoot,
+      targetRoot: journal.targetRoot,
+      createdAt: journal.createdAt,
+    },
   });
-  return artifactPath;
 }
 
 function pruneCommittedRecoveryArtifacts(
@@ -443,6 +458,7 @@ async function applyStorageRootChangeWithIntent(
     stagePath,
     priorPath,
     sourceDigest: null,
+    includeSecrets: options.includeSecrets ?? true,
     createdAt,
     updatedAt: createdAt,
   };

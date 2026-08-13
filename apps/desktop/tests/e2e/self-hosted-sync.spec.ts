@@ -11,32 +11,43 @@ import {
   startSelfHostedTestServer,
 } from "./helpers/self-hosted-web";
 
-interface SyncManifestResponse {
-  data: {
-    counts: {
+interface DesktopBackupListResponse {
+  data: Array<{
+    id: string;
+    summary: {
       prompts: number;
       folders: number;
+      rules: number;
       skills: number;
       mcpServers: number;
       plugins: number;
     };
-  };
+  }>;
 }
 
-interface SyncDataResponse {
-  data: {
-    rules?: unknown[];
-    mcpLibrary?: { servers: unknown[] };
-    pluginLibrary?: { plugins: unknown[] };
-  };
+interface AutoSyncHistoryEntry {
+  provider: string;
+  reason: string;
+  status: string;
+  message: string;
+}
+
+async function readLatestSelfHostedHistory(
+  page: Parameters<typeof setAppSettings>[0],
+): Promise<AutoSyncHistoryEntry | null> {
+  return page.evaluate(async () => {
+    const settings = await window.api.settings.get();
+    const history = Array.isArray(settings.autoSyncHistory)
+      ? settings.autoSyncHistory
+      : [];
+    return history.find((entry) => entry.provider === "self-hosted") ?? null;
+  });
 }
 
 test.describe("E2E: desktop self-hosted sync", () => {
-  test("automatically pulls the remote workspace on startup when self-hosted startup sync is enabled", async () => {
+  test("creates an immutable remote backup on startup without replacing the local workspace", async () => {
     const server = await startSelfHostedTestServer();
-    const firstLaunch = await launchPromptHub(
-      "prompt-workspace.seed.json",
-    );
+    const firstLaunch = await launchPromptHub("prompt-workspace.seed.json");
     let app = firstLaunch.app;
     let page = firstLaunch.page;
     const { userDataDir } = firstLaunch;
@@ -50,80 +61,83 @@ test.describe("E2E: desktop self-hosted sync", () => {
         server.password,
       );
 
-      const syncUpdateResponse = await fetch(`${server.baseUrl}/api/sync/data`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          payload: {
-            version: "web-backup-v2",
-            exportedAt: "2026-04-16T08:00:00.000Z",
-            prompts: [
-              {
-                id: "remote_auto_prompt",
-                title: "Auto Pull Prompt",
-                description: "Synced during desktop startup",
-                promptType: "text",
-                systemPrompt: "You are the startup sync payload",
-                userPrompt: "Confirm automatic startup sync works.",
-                variables: [],
-                tags: ["startup", "sync"],
-                folderId: "remote_auto_folder",
-                images: [],
-                videos: [],
-                isFavorite: false,
-                isPinned: false,
-                version: 1,
-                currentVersion: 1,
-                usageCount: 0,
-                source: null,
-                notes: "Pulled automatically from self-hosted PromptHub Web",
-                lastAiResponse: null,
-                createdAt: "2026-04-16T08:00:00.000Z",
-                updatedAt: "2026-04-16T08:00:00.000Z",
-              },
-            ],
-            promptVersions: [
-              {
-                id: "remote_auto_version",
-                promptId: "remote_auto_prompt",
-                version: 1,
-                systemPrompt: "You are the startup sync payload",
-                userPrompt: "Confirm automatic startup sync works.",
-                variables: [],
-                note: "Initial startup sync version",
-                aiResponse: null,
-                createdAt: "2026-04-16T08:00:00.000Z",
-              },
-            ],
-            folders: [
-              {
-                id: "remote_auto_folder",
-                name: "Startup Folder",
-                order: 0,
-                createdAt: "2026-04-16T08:00:00.000Z",
-                updatedAt: "2026-04-16T08:00:00.000Z",
-              },
-            ],
-            skills: [],
-            skillVersions: [],
-            settings: {
-              theme: "dark",
-              language: "en",
-              autoSave: true,
-              customPlatformRootPaths: {},
-              customSkillPlatformPaths: {},
-              sync: {
-                enabled: false,
-                provider: "manual",
-                autoSync: false,
+      const syncUpdateResponse = await fetch(
+        `${server.baseUrl}/api/sync/data`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            payload: {
+              version: "web-backup-v2",
+              exportedAt: "2026-04-16T08:00:00.000Z",
+              prompts: [
+                {
+                  id: "remote_auto_prompt",
+                  title: "Auto Pull Prompt",
+                  description: "Synced during desktop startup",
+                  promptType: "text",
+                  systemPrompt: "You are the startup sync payload",
+                  userPrompt: "Confirm automatic startup sync works.",
+                  variables: [],
+                  tags: ["startup", "sync"],
+                  folderId: "remote_auto_folder",
+                  images: [],
+                  videos: [],
+                  isFavorite: false,
+                  isPinned: false,
+                  version: 1,
+                  currentVersion: 1,
+                  usageCount: 0,
+                  source: null,
+                  notes: "Pulled automatically from self-hosted PromptHub Web",
+                  lastAiResponse: null,
+                  createdAt: "2026-04-16T08:00:00.000Z",
+                  updatedAt: "2026-04-16T08:00:00.000Z",
+                },
+              ],
+              promptVersions: [
+                {
+                  id: "remote_auto_version",
+                  promptId: "remote_auto_prompt",
+                  version: 1,
+                  systemPrompt: "You are the startup sync payload",
+                  userPrompt: "Confirm automatic startup sync works.",
+                  variables: [],
+                  note: "Initial startup sync version",
+                  aiResponse: null,
+                  createdAt: "2026-04-16T08:00:00.000Z",
+                },
+              ],
+              folders: [
+                {
+                  id: "remote_auto_folder",
+                  name: "Startup Folder",
+                  order: 0,
+                  createdAt: "2026-04-16T08:00:00.000Z",
+                  updatedAt: "2026-04-16T08:00:00.000Z",
+                },
+              ],
+              skills: [],
+              skillVersions: [],
+              settings: {
+                theme: "dark",
+                language: "en",
+                autoSave: true,
+                customPlatformRootPaths: {},
+                customSkillPlatformPaths: {},
+                sync: {
+                  enabled: false,
+                  provider: "manual",
+                  autoSync: false,
+                },
               },
             },
-          },
-        }),
-      });
+          }),
+        },
+      );
       expect(syncUpdateResponse.ok).toBe(true);
 
       await setAppSettings(page, {
@@ -146,15 +160,22 @@ test.describe("E2E: desktop self-hosted sync", () => {
       app = secondLaunch.app;
       page = secondLaunch.page;
 
-      const startupSettings = await page.evaluate(() => {
-        const raw = localStorage.getItem("prompthub-settings");
-        const parsed = raw ? JSON.parse(raw) : {};
+      const startupSettings = await page.evaluate(async () => {
+        const settings = await window.api.settings.get();
         return {
           onLine: navigator.onLine,
-          selfHostedSyncEnabled: parsed.state?.selfHostedSyncEnabled ?? false,
-          selfHostedSyncOnStartup: parsed.state?.selfHostedSyncOnStartup ?? false,
-          selfHostedSyncUrl: parsed.state?.selfHostedSyncUrl ?? "",
-          selfHostedSyncUsername: parsed.state?.selfHostedSyncUsername ?? "",
+          selfHostedSyncEnabled:
+            (settings as unknown as Record<string, unknown>)
+              .selfHostedSyncEnabled ?? false,
+          selfHostedSyncOnStartup:
+            (settings as unknown as Record<string, unknown>)
+              .selfHostedSyncOnStartup ?? false,
+          selfHostedSyncUrl:
+            (settings as unknown as Record<string, unknown>)
+              .selfHostedSyncUrl ?? "",
+          selfHostedSyncUsername:
+            (settings as unknown as Record<string, unknown>)
+              .selfHostedSyncUsername ?? "",
         };
       });
 
@@ -164,18 +185,39 @@ test.describe("E2E: desktop self-hosted sync", () => {
       expect(startupSettings.selfHostedSyncUsername).toBe(server.username);
 
       await expect
+        .poll(() => readLatestSelfHostedHistory(page), {
+          timeout: 20000,
+          message: "self-hosted startup backup should reach a terminal state",
+        })
+        .toEqual(
+          expect.objectContaining({
+            provider: "self-hosted",
+            reason: "startup",
+            status: "success",
+          }),
+        );
+
+      await expect
         .poll(
-          async () =>
-            page.evaluate(async () => {
-              const prompts = await window.api.prompt.getAll();
-              return prompts.map((prompt) => prompt.title);
-            }),
+          async () => {
+            const response = await fetch(
+              `${server.baseUrl}/api/backups/desktop`,
+              {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                cache: "no-store",
+              },
+            );
+            if (!response.ok) return [];
+            const payload =
+              (await response.json()) as DesktopBackupListResponse;
+            return payload.data.map((backup) => backup.summary);
+          },
           {
-            timeout: 8000,
-            message: "desktop should pull remote prompt content on startup",
+            timeout: 20000,
+            message: "desktop should upload an immutable backup on startup",
           },
         )
-        .toEqual(["Auto Pull Prompt"]);
+        .toContainEqual(expect.objectContaining({ prompts: 1, folders: 1 }));
 
       const restoredState = await page.evaluate(async () => {
         const prompts = await window.api.prompt.getAll();
@@ -193,19 +235,34 @@ test.describe("E2E: desktop self-hosted sync", () => {
       });
 
       expect(restoredState.prompts).toEqual([
-        expect.objectContaining({ title: "Auto Pull Prompt" }),
+        expect.objectContaining({ title: "Deploy Checklist" }),
       ]);
       expect(restoredState.folders).toEqual([
-        expect.objectContaining({ name: "Startup Folder" }),
+        expect.objectContaining({ name: "Ops" }),
       ]);
 
       const startupPrompt = restoredState.prompts.find(
-        (prompt) => prompt.title === "Auto Pull Prompt",
+        (prompt) => prompt.title === "Deploy Checklist",
       );
       const startupFolder = restoredState.folders.find(
-        (folder) => folder.name === "Startup Folder",
+        (folder) => folder.name === "Ops",
       );
       expect(startupPrompt?.folderId).toBe(startupFolder?.id);
+
+      const liveWorkspaceResponse = await fetch(
+        `${server.baseUrl}/api/sync/data`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
+        },
+      );
+      expect(liveWorkspaceResponse.ok).toBe(true);
+      const liveWorkspace = (await liveWorkspaceResponse.json()) as {
+        data: { prompts: Array<{ title: string }> };
+      };
+      expect(liveWorkspace.data.prompts.map((prompt) => prompt.title)).toEqual([
+        "Auto Pull Prompt",
+      ]);
     } finally {
       await closePromptHub(app, userDataDir);
       await server.stop();
@@ -214,9 +271,10 @@ test.describe("E2E: desktop self-hosted sync", () => {
 
   test("connects, uploads to, and downloads from a live self-hosted PromptHub Web", async () => {
     const server = await startSelfHostedTestServer();
-    const { app, page, userDataDir } = await launchPromptHub(
-      "prompt-workspace.seed.json",
-    );
+    const firstLaunch = await launchPromptHub("prompt-workspace.seed.json");
+    let app = firstLaunch.app;
+    let page = firstLaunch.page;
+    const { userDataDir } = firstLaunch;
 
     try {
       await setAppLanguage(page, "en");
@@ -230,13 +288,13 @@ test.describe("E2E: desktop self-hosted sync", () => {
       });
 
       await page.getByRole("button", { name: "Settings", exact: true }).click();
-      await page.getByRole("button", { name: "Data & Sync", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Data & Sync", exact: true })
+        .click();
       await page.getByRole("button", { name: /Self-Hosted PromptHub/ }).click();
 
       await page.getByRole("button", { name: "Test Connection" }).click();
-      await expect(
-        page.getByText(/Connection successful/i),
-      ).toBeVisible();
+      await expect(page.getByText(/Backup endpoint ready/i)).toBeVisible();
 
       const expectedRuntimeAssetCounts = await page.evaluate(async () => {
         const [rules, mcpLibrary, pluginSnapshot] = await Promise.all([
@@ -253,7 +311,7 @@ test.describe("E2E: desktop self-hosted sync", () => {
       });
 
       const backupToRemote = page.getByRole("button", {
-        name: "Back up to remote",
+        name: "Create remote backup",
         exact: true,
       });
       await expect(backupToRemote).toBeEnabled();
@@ -261,7 +319,7 @@ test.describe("E2E: desktop self-hosted sync", () => {
       await expect(
         page.getByText(
           new RegExp(
-            `Uploaded 1 prompts, 1 folders, ${expectedRuntimeAssetCounts.rules} rules, and 0 skills`,
+            `Created a remote backup with 1 prompts, 1 folders, ${expectedRuntimeAssetCounts.rules} rules, and 0 skills`,
             "i",
           ),
         ),
@@ -273,137 +331,138 @@ test.describe("E2E: desktop self-hosted sync", () => {
         server.password,
       );
 
-      const manifestResponse = await fetch(`${server.baseUrl}/api/sync/manifest`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
+      const backupListResponse = await fetch(
+        `${server.baseUrl}/api/backups/desktop`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: "no-store",
         },
-        cache: "no-store",
-      });
-      expect(manifestResponse.ok).toBe(true);
-
-      const manifestPayload =
-        (await manifestResponse.json()) as SyncManifestResponse;
-      expect(manifestPayload.data.counts).toEqual({
+      );
+      expect(backupListResponse.ok).toBe(true);
+      const backupList =
+        (await backupListResponse.json()) as DesktopBackupListResponse;
+      expect(backupList.data[0]?.summary).toEqual({
         prompts: 1,
         folders: 1,
+        rules: expectedRuntimeAssetCounts.rules,
         skills: 0,
+        promptRelations: 0,
+        outputFormatItems: 0,
         mcpServers: expectedRuntimeAssetCounts.mcpServers,
         plugins: expectedRuntimeAssetCounts.plugins,
       });
 
-      const uploadedDataResponse = await fetch(`${server.baseUrl}/api/sync/data`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        cache: "no-store",
-      });
-      expect(uploadedDataResponse.ok).toBe(true);
-      const uploadedData =
-        (await uploadedDataResponse.json()) as SyncDataResponse;
-      expect(uploadedData.data.rules ?? []).toHaveLength(
-        expectedRuntimeAssetCounts.rules,
-      );
-      expect(uploadedData.data.mcpLibrary?.servers ?? []).toHaveLength(
-        expectedRuntimeAssetCounts.mcpServers,
-      );
-      expect(uploadedData.data.pluginLibrary?.plugins ?? []).toHaveLength(
-        expectedRuntimeAssetCounts.plugins,
-      );
-
-      const syncUpdateResponse = await fetch(`${server.baseUrl}/api/sync/data`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          payload: {
-            version: "web-backup-v2",
-            exportedAt: "2026-04-16T00:00:00.000Z",
-            prompts: [
-              {
-                id: "remote_prompt_1",
-                title: "Remote Prompt",
-                description: "Pulled from web",
-                promptType: "text",
-                systemPrompt: "You are the remote backup",
-                userPrompt: "Validate {{target}} from remote.",
-                variables: [
-                  {
-                    name: "target",
-                    type: "text",
-                    required: true,
-                  },
-                ],
-                tags: ["remote", "backup"],
-                folderId: "remote_folder_1",
-                images: [],
-                videos: [],
-                isFavorite: false,
-                isPinned: false,
-                version: 1,
-                currentVersion: 1,
-                usageCount: 0,
-                source: null,
-                notes: "Round-tripped from self-hosted web",
-                lastAiResponse: null,
-                createdAt: "2026-04-16T00:00:00.000Z",
-                updatedAt: "2026-04-16T00:00:00.000Z",
-              },
-            ],
-            promptVersions: [
-              {
-                id: "remote_version_1",
-                promptId: "remote_prompt_1",
-                version: 1,
-                systemPrompt: "You are the remote backup",
-                userPrompt: "Validate {{target}} from remote.",
-                variables: [
-                  {
-                    name: "target",
-                    type: "text",
-                    required: true,
-                  },
-                ],
-                note: "Initial remote version",
-                aiResponse: null,
-                createdAt: "2026-04-16T00:00:00.000Z",
-              },
-            ],
-            folders: [
-              {
-                id: "remote_folder_1",
-                name: "Remote Folder",
-                order: 0,
-                createdAt: "2026-04-16T00:00:00.000Z",
-                updatedAt: "2026-04-16T00:00:00.000Z",
-              },
-            ],
-            skills: [],
-            skillVersions: [],
-            settings: {
-              theme: "dark",
-              language: "en",
-              autoSave: true,
-              customPlatformRootPaths: {},
-              customSkillPlatformPaths: {},
-              sync: {
-                enabled: false,
-                provider: "manual",
-                autoSync: false,
+      const syncUpdateResponse = await fetch(
+        `${server.baseUrl}/api/backups/desktop`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            clientVersion: "0.6.0-beta.1",
+            payload: {
+              version: "desktop-backup-v1",
+              exportedAt: "2026-04-16T00:00:00.000Z",
+              prompts: [
+                {
+                  id: "remote_prompt_1",
+                  title: "Remote Prompt",
+                  description: "Pulled from web",
+                  promptType: "text",
+                  systemPrompt: "You are the remote backup",
+                  userPrompt: "Validate {{target}} from remote.",
+                  variables: [
+                    {
+                      name: "target",
+                      type: "text",
+                      required: true,
+                    },
+                  ],
+                  tags: ["remote", "backup"],
+                  folderId: "remote_folder_1",
+                  images: [],
+                  videos: [],
+                  isFavorite: false,
+                  isPinned: false,
+                  version: 1,
+                  currentVersion: 1,
+                  usageCount: 0,
+                  source: null,
+                  notes: "Round-tripped from self-hosted web",
+                  lastAiResponse: null,
+                  createdAt: "2026-04-16T00:00:00.000Z",
+                  updatedAt: "2026-04-16T00:00:00.000Z",
+                },
+              ],
+              promptVersions: [
+                {
+                  id: "remote_version_1",
+                  promptId: "remote_prompt_1",
+                  version: 1,
+                  systemPrompt: "You are the remote backup",
+                  userPrompt: "Validate {{target}} from remote.",
+                  variables: [
+                    {
+                      name: "target",
+                      type: "text",
+                      required: true,
+                    },
+                  ],
+                  note: "Initial remote version",
+                  aiResponse: null,
+                  createdAt: "2026-04-16T00:00:00.000Z",
+                },
+              ],
+              folders: [
+                {
+                  id: "remote_folder_1",
+                  name: "Remote Folder",
+                  order: 0,
+                  createdAt: "2026-04-16T00:00:00.000Z",
+                  updatedAt: "2026-04-16T00:00:00.000Z",
+                },
+              ],
+              skills: [],
+              skillVersions: [],
+              settings: {
+                theme: "dark",
+                language: "en",
+                autoSave: true,
+                customPlatformRootPaths: {},
+                customSkillPlatformPaths: {},
+                sync: {
+                  enabled: false,
+                  provider: "manual",
+                  autoSync: false,
+                },
               },
             },
-          },
-        }),
-      });
+          }),
+        },
+      );
       expect(syncUpdateResponse.ok).toBe(true);
 
       const updateFromRemote = page.getByRole("button", {
-        name: "Update from remote",
+        name: "Restore latest backup",
         exact: true,
       });
       await expect(updateFromRemote).toBeEnabled();
       await updateFromRemote.click();
+      await expect(
+        page.getByText(/Restored 1 prompts, 1 folders/i),
+      ).toBeVisible();
+
+      await closePromptHub(app, userDataDir, {
+        preserveUserDataDir: true,
+      });
+      const secondLaunch = await launchPromptHub(null, { userDataDir });
+      app = secondLaunch.app;
+      page = secondLaunch.page;
+
       await expect
         .poll(
           async () =>
@@ -424,21 +483,14 @@ test.describe("E2E: desktop self-hosted sync", () => {
             }),
           {
             timeout: 10000,
-            message: "desktop should restore remote self-hosted data after download",
+            message:
+              "desktop should restore remote self-hosted data after download",
           },
         )
-        .toEqual(
-          expect.objectContaining({
-            prompts: expect.arrayContaining([
-              expect.objectContaining({ title: "Deploy Checklist" }),
-              expect.objectContaining({ title: "Remote Prompt" }),
-            ]),
-            folders: expect.arrayContaining([
-              expect.objectContaining({ name: "Ops" }),
-              expect.objectContaining({ name: "Remote Folder" }),
-            ]),
-          }),
-        );
+        .toEqual({
+          prompts: [expect.objectContaining({ title: "Remote Prompt" })],
+          folders: [expect.objectContaining({ name: "Remote Folder" })],
+        });
 
       const restoredState = await page.evaluate(async () => {
         const prompts = await window.api.prompt.getAll();
@@ -456,20 +508,12 @@ test.describe("E2E: desktop self-hosted sync", () => {
         };
       });
 
-      expect(restoredState.prompts).toHaveLength(2);
-      expect(restoredState.folders).toHaveLength(2);
-      expect(restoredState.prompts).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ title: "Deploy Checklist" }),
-          expect.objectContaining({ title: "Remote Prompt" }),
-        ]),
-      );
-      expect(restoredState.folders).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: "Ops" }),
-          expect.objectContaining({ name: "Remote Folder" }),
-        ]),
-      );
+      expect(restoredState.prompts).toEqual([
+        expect.objectContaining({ title: "Remote Prompt" }),
+      ]);
+      expect(restoredState.folders).toEqual([
+        expect.objectContaining({ name: "Remote Folder" }),
+      ]);
 
       const remotePrompt = restoredState.prompts.find(
         (prompt) => prompt.title === "Remote Prompt",

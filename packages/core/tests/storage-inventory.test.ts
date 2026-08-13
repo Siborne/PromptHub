@@ -250,6 +250,16 @@ describe("storage inventory", () => {
     );
   });
 
+  it("counts empty directories against the inventory entry limit", () => {
+    const canonical = canonicalFixture();
+    for (let index = 0; index < 25; index += 1) {
+      fs.mkdirSync(path.join(canonical, "data", "prompts", `empty-${index}`));
+    }
+    expect(() => createStorageInventory(canonical, { maxEntries: 20 })).toThrow(
+      /maxEntries/,
+    );
+  });
+
   it.skipIf(process.platform === "win32")(
     "rejects symbolic links in inventory trees",
     () => {

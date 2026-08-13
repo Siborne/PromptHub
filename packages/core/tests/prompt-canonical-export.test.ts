@@ -178,6 +178,60 @@ describe("prompt canonical export", () => {
     }
   });
 
+  it("rebuilds folders and prompts parent-first when canonical ids sort children first", () => {
+    const root = createRoot();
+    const target = path.join(root, "canonical-data");
+    const parentFolder: Folder = {
+      ...folder(),
+      id: "z-parent-folder",
+      name: "Parent",
+    };
+    const childFolder: Folder = {
+      ...folder(),
+      id: "a-child-folder",
+      name: "Child",
+      parentId: parentFolder.id,
+    };
+    const parentPrompt = prompt("z-parent-prompt", parentFolder.id);
+    const childPrompt = {
+      ...prompt("a-child-prompt", childFolder.id),
+      parentId: parentPrompt.id,
+    };
+
+    materializePromptCanonicalGraph(target, {
+      prompts: [parentPrompt, childPrompt],
+      promptVersions: [
+        version(parentPrompt.id),
+        version(childPrompt.id),
+      ],
+      folders: [parentFolder, childFolder],
+      promptRelations: [],
+      outputFormatItems: [],
+    });
+
+    const rebuiltPath = path.join(root, "parent-first.db");
+    expect(() =>
+      stagePromptCanonicalDatabase(target, rebuiltPath),
+    ).not.toThrow();
+
+    const rebuiltDb = new DatabaseAdapter(rebuiltPath, { readOnly: true });
+    try {
+      const rebuilt = collectPromptCanonicalGraph(
+        new PromptDB(rebuiltDb),
+        new FolderDB(rebuiltDb),
+        rebuiltDb,
+      );
+      expect(
+        rebuilt.folders.find((item) => item.id === childFolder.id)?.parentId,
+      ).toBe(parentFolder.id);
+      expect(
+        rebuilt.prompts.find((item) => item.id === childPrompt.id)?.parentId,
+      ).toBe(parentPrompt.id);
+    } finally {
+      rebuiltDb.close();
+    }
+  });
+
   it("rejects broken graph references before writing and cleans failed stages", () => {
     const root = createRoot();
     const snapshot: PromptCanonicalGraphSnapshot = {
@@ -309,6 +363,90 @@ describe("prompt canonical export", () => {
     );
 
     expect(() => readPromptCanonicalGraph(target)).toThrow(/size mismatch/u);
+  });
+
+  it("ignores validated runtime database coordination directories", () => {
+    const root = createRoot();
+    const target = path.join(root, "canonical-data");
+    materializePromptCanonicalGraph(target, {
+      prompts: [prompt("prompt-1")],
+      promptVersions: [version("prompt-1")],
+      folders: [],
+      promptRelations: [],
+      outputFormatItems: [],
+    });
+    const clientsPath = path.join(target, "prompthub.db.clients");
+    fs.mkdirSync(clientsPath);
+    fs.writeFileSync(
+      path.join(clientsPath, "4242.json"),
+      `${JSON.stringify({ pid: 4242, registeredAt: "2026-08-12T00:00:00.000Z" })}\n`,
+      "utf8",
+    );
+    fs.mkdirSync(path.join(target, "prompthub.db.lock"));
+
+    expect(readPromptCanonicalGraph(target).snapshot.prompts).toHaveLength(1);
+
+    fs.rmSync(clientsPath, { recursive: true });
+    fs.writeFileSync(clientsPath, "not a directory", "utf8");
+    expect(() => readPromptCanonicalGraph(target)).toThrow(
+      /database coordination path is invalid/u,
+    );
+  });
+
+  it("ignores the validated legacy Prompt version workspace", () => {
+    const root = createRoot();
+    const target = path.join(root, "canonical-data");
+    materializePromptCanonicalGraph(target, {
+      prompts: [prompt("prompt-1")],
+      promptVersions: [version("prompt-1")],
+      folders: [],
+      promptRelations: [],
+      outputFormatItems: [],
+    });
+    const versionRoot = path.join(target, ".versions");
+    fs.mkdirSync(path.join(versionRoot, "prompt-1"), { recursive: true });
+    fs.writeFileSync(
+      path.join(versionRoot, "prompt-1", "0001.md"),
+      "# Legacy Prompt snapshot\n",
+      "utf8",
+    );
+
+    expect(readPromptCanonicalGraph(target).snapshot.prompts).toHaveLength(1);
+
+    fs.rmSync(versionRoot, { recursive: true });
+    fs.writeFileSync(versionRoot, "not a directory", "utf8");
+    expect(() => readPromptCanonicalGraph(target)).toThrow(
+      /canonical graph Prompt version workspace path is invalid/u,
+    );
+  });
+
+  it("ignores the validated Agent appearance workspace", () => {
+    const root = createRoot();
+    const target = path.join(root, "canonical-data");
+    materializePromptCanonicalGraph(target, {
+      prompts: [prompt("prompt-1")],
+      promptVersions: [version("prompt-1")],
+      folders: [],
+      promptRelations: [],
+      outputFormatItems: [],
+    });
+    const appearanceRoot = path.join(target, "agent-appearance");
+    fs.mkdirSync(path.join(appearanceRoot, "themes", "codex"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(appearanceRoot, "themes", "codex", ".dream-skin-bundled-v1"),
+      "seeded\n",
+      "utf8",
+    );
+
+    expect(readPromptCanonicalGraph(target).snapshot.prompts).toHaveLength(1);
+
+    fs.rmSync(appearanceRoot, { recursive: true });
+    fs.writeFileSync(appearanceRoot, "not a directory", "utf8");
+    expect(() => readPromptCanonicalGraph(target)).toThrow(
+      /canonical graph Agent appearance workspace path is invalid/u,
+    );
   });
 
   it("fails closed on undeclared files, catalog count tampering, and unsafe roots", () => {

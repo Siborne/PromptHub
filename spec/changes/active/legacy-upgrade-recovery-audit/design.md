@@ -108,6 +108,60 @@ If remediation touches recursive candidate inspection, that path must gain and
 test explicit traversal limits rather than inheriting an unbounded filesystem
 walk.
 
+## `DES-LEGACYREC-008`: Empty Prompt Version-Chain Repair
+
+Keep the positive-version canonical resource contract strict. Repair the legacy
+SQLite invariant in `packages/db` before the canonical graph is materialized:
+
+1. insert one version-1 snapshot from each Prompt row that has no version rows;
+2. align each Prompt counter to its highest positive stored version;
+3. record the named migration in the existing migration transaction.
+
+The repair uses two set-based SQL statements and is idempotent. For `P` Prompts
+and `V` version rows, the indexed existence and maximum-version work is bounded
+by the database query plan rather than per-Prompt application queries; no Prompt
+payloads are loaded into application memory. Existing valid version rows are
+not rewritten or deleted.
+
+Canonical publication invokes source-database preparation only after the
+renderer migration gate, authority check, and source-file safety check pass.
+Preparation opens the source through `initDatabase()`, applies the normal
+migration transaction, and closes it before the projector reads the source.
+Preparation failure stops publication, so an invalid pre-migration graph cannot
+become the canonical authority.
+
+## `DES-LEGACYREC-009`: Empty Rule Placeholder Boundary
+
+Keep Rule resource validation strict and narrow the projector input instead.
+The projector omits a Rule only when all placeholder signals agree:
+
+- `sync_status` is `target-missing`;
+- `current_version` is zero;
+- neither managed nor target content exists; and
+- no version history exists.
+
+This is a constant-time decision per already-enumerated Rule and does not add
+filesystem scans or database queries. Records with any durable content or
+history continue through the canonical schema and therefore cannot bypass the
+positive-version invariant.
+
+## `DES-LEGACYREC-010`: Explicit Coexistence Artifacts
+
+The canonical readers use exact-name, exact-type exclusions for artifacts that
+are independently owned in the shared data root:
+
+- Prompt graph inventory skips root `.versions` only when it is a non-symlink
+  directory owned by the legacy Prompt workspace;
+- Prompt graph inventory skips root `agent-appearance` only when it is a
+  non-symlink directory owned by Agent appearance themes and pets;
+- MCP bundle enumeration skips `market-sources.json` only when it is a
+  non-symlink regular file owned by the MCP market source registry.
+
+No prefix or extension-wide exclusion is allowed. Prompt graph verification
+continues to hash every declared file and reject other undeclared files. MCP
+enumeration counts only server bundle directories against its resource limit.
+Both scans remain linear in the number of root entries plus owned files.
+
 ## Analyze Result
 
 - #89 has a credible tag-backed path-transition explanation and a matching
@@ -128,4 +182,7 @@ walk.
 | `FR-LEGACYREC-003`  | `DES-LEGACYREC-004`, `DES-LEGACYREC-006` | `TEST-LEGACYREC-097`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-004` |
 | `FR-LEGACYREC-004`  | `DES-LEGACYREC-005`, `DES-LEGACYREC-006` | `TEST-LEGACYREC-098`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-005` |
 | `FR-LEGACYREC-005`  | `DES-LEGACYREC-001`, `DES-LEGACYREC-006` | `TEST-LEGACYREC-089`, `TEST-LEGACYREC-097`, `TEST-LEGACYREC-098` | `T-LEGACYREC-006` |
+| `FR-LEGACYREC-006`  | `DES-LEGACYREC-008`                      | `TEST-LEGACYREC-006`                                             | `T-LEGACYREC-009` |
+| `FR-LEGACYREC-007`  | `DES-LEGACYREC-008`, `DES-LEGACYREC-009` | `TEST-LEGACYREC-007`                                             | `T-LEGACYREC-010` |
+| `FR-LEGACYREC-008`  | `DES-LEGACYREC-010`                      | `TEST-LEGACYREC-008`                                             | `T-LEGACYREC-011` |
 | `NFR-LEGACYREC-001` | `DES-LEGACYREC-007`                      | `TEST-LEGACYREC-005`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-007` |

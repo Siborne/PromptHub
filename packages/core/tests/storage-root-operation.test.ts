@@ -111,18 +111,46 @@ describe("storage root operation", () => {
     );
   });
 
-  it("validates operation identity and source ownership before acquiring maintenance", async () => {
-    const { base, source, target, control } = createFixture();
+  it("commits an overwrite journal when both prior and artifact are already absent", async () => {
+    const { source, target, control } = createFixture();
+    fs.cpSync(source, target, { recursive: true });
+    writeRuntimeLayoutState(target);
+    writeJournal(control, {
+      operationId: "committed-without-prior",
+      action: "overwrite",
+      state: "committed",
+      sourceRoot: source,
+      targetRoot: target,
+    });
+
     await expect(
-      applyStorageRootChange({
-        action: "migrate",
-        sourceRoot: source,
-        targetRoot: target,
+      recoverPendingStorageRootChange({
         controlDirectory: control,
         publishBootPointer: () => undefined,
-        operationId: "../unsafe",
       }),
-    ).rejects.toThrow(/Invalid storage root operation id/);
+    ).resolves.toEqual({
+      status: "committed",
+      operationId: "committed-without-prior",
+    });
+    expect(fs.existsSync(getStorageRootOperationJournalPath(control))).toBe(
+      false,
+    );
+  });
+
+  it("validates operation identity and source ownership before acquiring maintenance", async () => {
+    const { base, source, target, control } = createFixture();
+    for (const operationId of ["../unsafe", ".", ".."]) {
+      await expect(
+        applyStorageRootChange({
+          action: "migrate",
+          sourceRoot: source,
+          targetRoot: target,
+          controlDirectory: control,
+          publishBootPointer: () => undefined,
+          operationId,
+        }),
+      ).rejects.toThrow(/Invalid storage root operation id/);
+    }
     expect(fs.existsSync(getStorageMaintenanceIntentPath(source))).toBe(false);
 
     const unknown = path.join(base, "unknown");
@@ -1023,6 +1051,43 @@ describe("storage root operation", () => {
     expect(classifyStorageRoot(missingDigest.target).kind).toBe("canonical");
   });
 
+  it("uses the journaled secret policy when recognizing a prepared rename window", async () => {
+    const fixture = createFixture();
+    fs.mkdirSync(path.join(fixture.source, "secrets"));
+    fs.writeFileSync(
+      path.join(fixture.source, "secrets", "vault.enc"),
+      "secret",
+    );
+    await expect(
+      applyStorageRootChange({
+        action: "migrate",
+        sourceRoot: fixture.source,
+        targetRoot: fixture.target,
+        controlDirectory: fixture.control,
+        publishBootPointer: () => undefined,
+        getAvailableBytes: () => Number.MAX_SAFE_INTEGER,
+        operationId: "secret-rename-window",
+        injectFailure: (stage) => {
+          if (stage === "prepared") {
+            throw Object.assign(new Error("stop"), {
+              leaveOperationForRecovery: true,
+            });
+          }
+        },
+      }),
+    ).rejects.toThrow("stop");
+    const journal = readStorageRootOperationJournal(fixture.control)!;
+    fs.renameSync(journal.stagePath!, fixture.target);
+
+    await expect(
+      recoverPendingStorageRootChange({
+        controlDirectory: fixture.control,
+        publishBootPointer: () => undefined,
+      }),
+    ).resolves.toMatchObject({ status: "rolled-back" });
+    expect(fs.existsSync(fixture.target)).toBe(false);
+  });
+
   it("restores an overwritten target when publication fails", async () => {
     const fixture = createFixture();
     fs.mkdirSync(path.join(fixture.target, "data"), { recursive: true });
@@ -1159,6 +1224,68 @@ describe("storage root operation", () => {
         operationId: "artifact-collision",
       }),
     ).rejects.toThrow(/Recovery artifact already exists/);
+  });
+
+  it("finishes overwrite recovery when artifact manifest publication fails after moving prior data", async () => {
+    const fixture = createFixture();
+    fs.mkdirSync(path.join(fixture.target, "data"), { recursive: true });
+    fs.writeFileSync(
+      path.join(fixture.target, "data", "prompthub.db"),
+      "old-target",
+    );
+    writeRuntimeLayoutState(fixture.target);
+    const operationId = "root-artifact-manifest-crash";
+    const artifactPath = path.join(
+      fixture.target,
+      "backups",
+      "recovery",
+      operationId,
+    );
+    const artifactManifestPath = path.join(artifactPath, "manifest.json");
+    const originalRename = fs.renameSync.bind(fs);
+    let failedCompleteManifest = false;
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (
+        !failedCompleteManifest &&
+        path.resolve(String(to)) === artifactManifestPath &&
+        fs.readFileSync(String(from), "utf8").includes('"state": "complete"')
+      ) {
+        failedCompleteManifest = true;
+        throw new Error("root artifact manifest interrupted");
+      }
+      return originalRename(from, to);
+    });
+
+    await expect(
+      applyStorageRootChange({
+        action: "overwrite",
+        sourceRoot: fixture.source,
+        targetRoot: fixture.target,
+        controlDirectory: fixture.control,
+        publishBootPointer: () => undefined,
+        getAvailableBytes: () => Number.MAX_SAFE_INTEGER,
+        operationId,
+      }),
+    ).rejects.toThrow("root artifact manifest interrupted");
+
+    await expect(
+      recoverPendingStorageRootChange({
+        controlDirectory: fixture.control,
+        publishBootPointer: () => undefined,
+      }),
+    ).resolves.toMatchObject({ status: "committed", operationId });
+    expect(classifyStorageRoot(fixture.target).kind).toBe("canonical");
+    expect(
+      fs.readFileSync(
+        path.join(artifactPath, "root", "data", "prompthub.db"),
+        "utf8",
+      ),
+    ).toBe("old-target");
+    expect(
+      JSON.parse(
+        fs.readFileSync(path.join(artifactPath, "manifest.json"), "utf8"),
+      ),
+    ).toMatchObject({ state: "complete", operationId });
   });
 
   it("falls back synchronously when target completion fails or is missing", async () => {

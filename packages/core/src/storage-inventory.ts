@@ -259,10 +259,14 @@ export function createStorageInventory(
     ),
   );
   let totalBytes = 0;
+  let visitedEntries = 0;
 
   const visit = (targetPath: string, depth: number): void => {
     if (depth > maxDepth)
       throw new Error(`Storage inventory exceeds maxDepth at ${targetPath}`);
+    visitedEntries += 1;
+    if (visitedEntries > maxEntries)
+      throw new Error("Storage inventory exceeds maxEntries");
     const stats = fs.lstatSync(targetPath);
     if (stats.isSymbolicLink()) {
       throw new Error(
@@ -295,8 +299,6 @@ export function createStorageInventory(
     totalBytes += stats.size;
     if (totalBytes > maxTotalBytes)
       throw new Error("Storage inventory exceeds maxTotalBytes");
-    if (files.length >= maxEntries)
-      throw new Error("Storage inventory exceeds maxEntries");
     files.push({
       relativePath,
       sizeBytes: stats.size,

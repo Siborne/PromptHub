@@ -175,6 +175,10 @@ function readRequiredRuleFile(filePath: string): string {
   return content;
 }
 
+function hasRuleContent(content: string | undefined): boolean {
+  return content !== undefined && content.trim().length > 0;
+}
+
 function collectRules(database: DatabaseAdapter.Database): RuleFileContent[] {
   const ruleDb = new RuleDB(database);
   const records = ruleDb.getAll();
@@ -189,6 +193,13 @@ function collectRules(database: DatabaseAdapter.Database): RuleFileContent[] {
     const versions = ruleDb
       .getVersions(record.id)
       .sort((left, right) => left.version - right.version);
+    const isUnmaterializedPlaceholder =
+      record.syncStatus === "target-missing" &&
+      record.currentVersion === 0 &&
+      !hasRuleContent(managedContent) &&
+      !hasRuleContent(targetContent) &&
+      versions.length === 0;
+    if (isUnmaterializedPlaceholder) continue;
     versionCount += versions.length;
     if (versionCount > MAX_DOMAIN_RESOURCES) {
       throw new Error(

@@ -1,6 +1,7 @@
 import type {
   AgentIdentityPreference,
   AgentIdentityPreferences,
+  AutoSyncHistoryEntry,
   BuiltinAgentOverrideConfig,
   CustomAgentConfig,
   NetworkProxySettings,
@@ -171,6 +172,7 @@ export interface SettingsState {
   selfHostedSyncOnStartup: boolean;
   selfHostedSyncOnStartupDelay: number;
   selfHostedAutoSyncInterval: number;
+  autoSyncHistory: AutoSyncHistoryEntry[];
   s3StorageEnabled: boolean;
   s3Endpoint: string;
   s3Region: string;

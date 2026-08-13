@@ -195,6 +195,20 @@ const CURRENT_DATABASE_SCHEMA_INVARIANTS: DatabaseSchemaInvariants =
             "119941083a063625f69633c3202eda8b7b8056177ba6889143fbb309cc5bea66",
           destructive: true,
         },
+        {
+          migrationId: "legacy-011",
+          name: "repair_empty_prompt_version_chain_v1",
+          checksum:
+            "4e8ccdd5f8bf1ea7de8b7ad6c48707253be30d4c16c91f4cd6875fc013bfdd97",
+          destructive: false,
+        },
+        {
+          migrationId: "legacy-012",
+          name: "drop_agent_conversation_metadata_deleted_at_v1",
+          checksum:
+            "90009359c490a98ccaeac0058caac2727263dfbdbfbbae4766e61a0c79eb0ae8",
+          destructive: true,
+        },
       ].map((entry) => Object.freeze(entry)),
     ),
   });

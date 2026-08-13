@@ -190,6 +190,12 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
     modelRouteDefaults?: ModelRouteDefaults;
   };
   const state = useSettingsStore.getState();
+  const hydratedSettings = mergeSettingsState(settings, state);
+  const hydratedValues = Object.fromEntries(
+    Object.entries(hydratedSettings).filter(
+      ([key, value]) => key !== "language" && typeof value !== "function",
+    ),
+  ) as Partial<SettingsState>;
   const mainProcessLanguage =
     typeof settings.language === "string" &&
     SUPPORTED_LANGUAGES.includes(settings.language as SupportedLanguage)
@@ -204,9 +210,12 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
       ? settings.minimizeOnLaunch
       : state.minimizeOnLaunch;
   const githubToken = sanitizeGithubToken(settings.githubToken ?? "");
+  const canonicalSyncProvider = (
+    settings as Settings & { syncProvider?: unknown }
+  ).syncProvider;
   const syncProvider = clampSyncProvider(
-    normalizeSyncProvider(settings.sync?.provider),
-    state,
+    normalizeSyncProvider(canonicalSyncProvider ?? settings.sync?.provider),
+    hydratedSettings,
   );
   const customAgents = normalizeCustomAgents(
     settings.customAgents ?? state.customAgents,
@@ -259,6 +268,7 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
   );
 
   useSettingsStore.setState({
+    ...hydratedValues,
     customAgents,
     builtinAgentOverrides,
     agentIdentityPreferences,

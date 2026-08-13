@@ -6,11 +6,13 @@ import {
   normalizeAutoSyncHistory,
   recordAutoSyncHistory,
 } from "../../../src/renderer/services/sync-history";
+import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
 
 describe("sync-history", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    useSettingsStore.setState({ autoSyncHistory: [] });
   });
 
   it("normalizes only valid automatic sync history entries", () => {
@@ -101,5 +103,45 @@ describe("sync-history", () => {
         message: "Failed to reach [url] for [email]",
       }),
     );
+  });
+
+  it("updates the durable and live automatic sync history", async () => {
+    const setSettings = vi.fn().mockResolvedValue(undefined);
+    installWindowMocks({
+      api: {
+        settings: {
+          get: vi.fn().mockResolvedValue({ autoSyncHistory: [] }),
+          set: setSettings,
+        },
+      },
+      electron: {
+        appendAutoSyncLog: vi.fn().mockResolvedValue({ success: true }),
+      },
+    });
+
+    await recordAutoSyncHistory({
+      provider: "webdav",
+      reason: "startup-resume",
+      status: "success",
+      message: "uploaded",
+    });
+
+    expect(setSettings).toHaveBeenCalledWith({
+      autoSyncHistory: [
+        expect.objectContaining({
+          provider: "webdav",
+          reason: "startup-resume",
+          status: "success",
+          message: "uploaded",
+        }),
+      ],
+    });
+    expect(useSettingsStore.getState().autoSyncHistory).toEqual([
+      expect.objectContaining({
+        provider: "webdav",
+        reason: "startup-resume",
+        status: "success",
+      }),
+    ]);
   });
 });

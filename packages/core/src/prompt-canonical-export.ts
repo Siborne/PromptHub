@@ -369,7 +369,11 @@ export function collectPromptCanonicalGraph(
   };
 }
 
-function writeJsonFile(filePath: string, value: unknown): void {
+function writeJsonFile(
+  filePath: string,
+  value: unknown,
+  options: { durable?: boolean } = {},
+): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const descriptor = fs.openSync(
     filePath,
@@ -378,7 +382,7 @@ function writeJsonFile(filePath: string, value: unknown): void {
   );
   try {
     fs.writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-    fs.fsyncSync(descriptor);
+    if (options.durable !== false) fs.fsyncSync(descriptor);
   } finally {
     fs.closeSync(descriptor);
   }
@@ -403,7 +407,7 @@ function writePromptSources(
     })),
   ];
   for (const source of sources)
-    writeJsonFile(source.sourcePath, source.document);
+    writeJsonFile(source.sourcePath, source.document, { durable: false });
   return sources.map(({ path: payloadPath, sourcePath, role }) => ({
     path: payloadPath,
     sourcePath,
@@ -514,6 +518,7 @@ function materializePrompt(
       ...new Set(mediaObjects.map((object) => object.sha256)),
     ].sort(compareText),
     payloads: writePromptSources(sourceRoot, documents),
+    durability: "publication-journal",
   });
 }
 

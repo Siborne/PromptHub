@@ -118,6 +118,13 @@ function getSafePathStats(
   return result;
 }
 
+export function assertStoragePathComponentsSafe(
+  activeRoot: string,
+  targetPath: string,
+): void {
+  getSafePathStats(activeRoot, targetPath);
+}
+
 function regularFileExists(activeRoot: string, filePath: string): boolean {
   const stats = getSafePathStats(activeRoot, filePath);
   if (!stats) return false;

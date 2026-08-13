@@ -109,6 +109,23 @@ describe("storage maintenance intent", () => {
     );
   });
 
+  it.skipIf(process.platform === "win32")(
+    "rejects a symlinked intent ancestor without writing outside the root",
+    () => {
+      const root = createRoot();
+      const outside = createRoot();
+      fs.symlinkSync(outside, path.join(root, "backups"));
+
+      expect(() =>
+        acquireStorageMaintenanceIntent(root, {
+          operationId: "unsafe-parent",
+          operationKind: "restore",
+        }),
+      ).toThrow(/Refusing symbolic link/);
+      expect(fs.readdirSync(outside)).toEqual([]);
+    },
+  );
+
   it("treats permission-denied owners as alive and removes missing owners", () => {
     const root = createRoot();
     const intent = acquireStorageMaintenanceIntent(

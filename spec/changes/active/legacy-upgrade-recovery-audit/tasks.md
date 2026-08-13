@@ -32,3 +32,18 @@
 - [ ] `T-LEGACYREC-008` Run focused tests and the changed/release harness,
       update `implementation.md`, stable recovery knowledge, and local issue
       evidence, then complete analyze/converge checks.
+- [x] `T-LEGACYREC-009` Reproduce and repair the startup failure caused by
+      legacy Prompts with an empty version chain. Preserve strict canonical
+      validation, synthesize version 1 transactionally, align counters, and
+      prove reopen idempotency (`FR-LEGACYREC-006`, `DES-LEGACYREC-008`,
+      `TEST-LEGACYREC-006`).
+- [x] `T-LEGACYREC-010` Run source-database migrations before canonical
+      publication and exclude only empty target-missing Rule discovery
+      placeholders from projection. Prove preparation ordering, fail-closed
+      behavior, and placeholder filtering (`FR-LEGACYREC-007`,
+      `DES-LEGACYREC-008`, `DES-LEGACYREC-009`, `TEST-LEGACYREC-007`).
+- [x] `T-LEGACYREC-011` Allow canonical Prompt and MCP readers to coexist with
+      their exact legacy version workspace, Agent appearance workspace, and
+      market-source registry artifacts without weakening symlink, type, or
+      undeclared-path validation
+      (`FR-LEGACYREC-008`, `DES-LEGACYREC-010`, `TEST-LEGACYREC-008`).

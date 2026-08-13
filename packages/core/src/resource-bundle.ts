@@ -66,6 +66,7 @@ export interface MaterializeResourceBundleInput {
   payloads: readonly ResourceBundlePayloadSource[];
   extraFields?: Record<string, unknown>;
   limits?: Partial<ResourceBundleLimits>;
+  durability?: "standalone" | "publication-journal";
 }
 
 export interface ReadResourceBundleOptions {
@@ -447,6 +448,7 @@ function copyPayloadFile(
   sourcePath: string,
   targetPath: string,
   maxBytes: number,
+  durable: boolean,
 ) {
   const source = fs.openSync(
     sourcePath,
@@ -478,7 +480,7 @@ function copyPayloadFile(
         hash.update(buffer.subarray(0, bytesRead));
       }
     } while (bytesRead > 0);
-    fs.fsyncSync(target);
+    if (durable) fs.fsyncSync(target);
   } finally {
     if (target !== undefined) fs.closeSync(target);
     fs.closeSync(source);
@@ -598,6 +600,7 @@ function writeManifest(
   stagePath: string,
   manifest: ResourceBundleManifest,
   limits: ResourceBundleLimits,
+  durable: boolean,
 ): void {
   const content = `${JSON.stringify(manifest, null, 2)}\n`;
   if (Buffer.byteLength(content, "utf8") > limits.maxManifestBytes) {
@@ -611,7 +614,7 @@ function writeManifest(
   );
   try {
     fs.writeFileSync(descriptor, content, "utf8");
-    fs.fsyncSync(descriptor);
+    if (durable) fs.fsyncSync(descriptor);
   } finally {
     fs.closeSync(descriptor);
   }
@@ -623,6 +626,7 @@ function materializePayloadFiles(
     expectedSize: number;
   })[],
   limits: ResourceBundleLimits,
+  durable: boolean,
 ): ResourceBundlePayloadFile[] {
   return payloads.map((payload) => {
     const targetPath = path.join(stagePath, ...payload.path.split("/"));
@@ -631,6 +635,7 @@ function materializePayloadFiles(
       payload.sourcePath,
       targetPath,
       limits.maxPayloadFileBytes,
+      durable,
     );
     if (copied.size !== payload.expectedSize) {
       throw new Error(
@@ -650,6 +655,7 @@ export function materializeResourceBundle(
   input: MaterializeResourceBundleInput,
 ): ResourceBundleManifest {
   const limits = resolveLimits(input.limits);
+  const durable = input.durability !== "publication-journal";
   if (fs.existsSync(input.bundlePath))
     throw new Error(
       `resource bundle destination already exists: ${input.bundlePath}`,
@@ -663,17 +669,22 @@ export function materializeResourceBundle(
   );
   try {
     fs.mkdirSync(stagePath, { mode: 0o700 });
-    const payloadFiles = materializePayloadFiles(stagePath, payloads, limits);
+    const payloadFiles = materializePayloadFiles(
+      stagePath,
+      payloads,
+      limits,
+      durable,
+    );
     validatePayloadFileSet(payloadFiles, limits);
     const manifest = createManifest(input, payloadFiles);
-    writeManifest(stagePath, manifest, limits);
-    fsyncDirectory(stagePath);
+    writeManifest(stagePath, manifest, limits, durable);
+    if (durable) fsyncDirectory(stagePath);
     if (fs.existsSync(input.bundlePath))
       throw new Error(
         `resource bundle destination already exists: ${input.bundlePath}`,
       );
     fs.renameSync(stagePath, input.bundlePath);
-    fsyncDirectory(parentPath);
+    if (durable) fsyncDirectory(parentPath);
     return manifest;
   } catch (error) {
     fs.rmSync(stagePath, { recursive: true, force: true });

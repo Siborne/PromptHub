@@ -77,6 +77,60 @@ describe("recovery artifact registry", () => {
     ]);
   });
 
+  it("removes invalid owned artifact directories during retention", () => {
+    const root = fixture();
+    const invalidPath = path.join(root, "backups", "recovery", "broken");
+    fs.mkdirSync(invalidPath, { recursive: true });
+    fs.writeFileSync(path.join(invalidPath, "manifest.json"), "{}");
+
+    expect(pruneRecoveryArtifacts(root)).toEqual(["broken"]);
+    expect(fs.existsSync(invalidPath)).toBe(false);
+  });
+
+  it("preserves an invalid artifact while its operation id is protected", () => {
+    const root = fixture();
+    const invalidPath = path.join(
+      root,
+      "backups",
+      "recovery",
+      "active-operation",
+    );
+    fs.mkdirSync(invalidPath, { recursive: true });
+    fs.writeFileSync(path.join(invalidPath, "manifest.json"), "{}");
+
+    expect(
+      pruneRecoveryArtifacts(root, {}, new Set(["active-operation"])),
+    ).toEqual([]);
+    expect(fs.existsSync(invalidPath)).toBe(true);
+  });
+
+  it("does not remove an invalid entry if its type changes during pruning", () => {
+    for (const unsafeKind of ["symlink", "file"] as const) {
+      const root = fixture();
+      const invalidPath = path.join(
+        root,
+        "backups",
+        "recovery",
+        `changed-to-${unsafeKind}`,
+      );
+      fs.mkdirSync(invalidPath, { recursive: true });
+      fs.writeFileSync(path.join(invalidPath, "manifest.json"), "{}");
+      const originalLstat = fs.lstatSync.bind(fs);
+      vi.spyOn(fs, "lstatSync").mockImplementation((target, options) => {
+        const stats = originalLstat(target, options as never);
+        if (path.resolve(String(target)) !== invalidPath) return stats;
+        return Object.assign(Object.create(stats), {
+          isDirectory: () => unsafeKind !== "file",
+          isSymbolicLink: () => unsafeKind === "symlink",
+        });
+      });
+
+      expect(pruneRecoveryArtifacts(root)).toEqual([]);
+      expect(fs.existsSync(invalidPath)).toBe(true);
+      vi.restoreAllMocks();
+    }
+  });
+
   it("uses default retention for an empty registry", () => {
     const root = fixture();
     expect(listRecoveryArtifacts(root)).toEqual([]);
@@ -117,6 +171,24 @@ describe("recovery artifact registry", () => {
       expect(fs.readFileSync(path.join(outside, "secret"), "utf8")).toBe(
         "secret",
       );
+      expect(pruneRecoveryArtifacts(root)).toEqual([]);
+      expect(fs.readFileSync(path.join(outside, "secret"), "utf8")).toBe(
+        "secret",
+      );
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "ignores a registry beneath a symlinked ancestor",
+    () => {
+      const root = fixture();
+      const outside = fixture();
+      fs.mkdirSync(path.join(outside, "recovery"));
+      fs.symlinkSync(outside, path.join(root, "backups"));
+
+      expect(listRecoveryArtifacts(root)).toEqual([]);
+      expect(pruneRecoveryArtifacts(root)).toEqual([]);
+      expect(fs.existsSync(path.join(outside, "recovery"))).toBe(true);
     },
   );
 
@@ -136,6 +208,8 @@ describe("recovery artifact registry", () => {
       fs.symlinkSync(outside, path.join(directory, "manifest.json"));
 
       expect(listRecoveryArtifacts(root)).toEqual([]);
+      expect(pruneRecoveryArtifacts(root)).toEqual(["linked-manifest"]);
+      expect(fs.readFileSync(outside, "utf8")).toBe("{}\n");
     },
   );
 

@@ -11,11 +11,17 @@ const useFolderStoreMock = vi.fn();
 const useSettingsStoreMock = vi.fn();
 const useUIStoreMock = vi.fn();
 const useToastMock = vi.fn();
+const getPromptDetailMock = vi.fn();
 
 vi.mock("../../../src/renderer/stores/prompt.store", () => ({
   usePromptStore: (selector: (state: Record<string, unknown>) => unknown) =>
     usePromptStoreMock(selector),
-  ViewMode: { card: "card", list: "list", gallery: "gallery", kanban: "kanban" },
+  ViewMode: {
+    card: "card",
+    list: "list",
+    gallery: "gallery",
+    kanban: "kanban",
+  },
 }));
 
 vi.mock("../../../src/renderer/stores/folder.store", async () => {
@@ -102,6 +108,7 @@ describe("MainContent context move integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     installWindowMocks();
+    getPromptDetailMock.mockResolvedValue(null);
 
     useToastMock.mockReturnValue({ showToast: vi.fn() });
     useSettingsStoreMock.mockImplementation((selector) =>
@@ -128,9 +135,7 @@ describe("MainContent context move integration", () => {
     );
   });
 
-  it(
-    "moves a prompt from the context menu into a selected folder",
-    async () => {
+  it("moves a prompt from the context menu into a selected folder", async () => {
     const updatePrompt = vi.fn().mockResolvedValue(undefined);
     const showToast = vi.fn();
     const prompt = createPrompt();
@@ -140,7 +145,7 @@ describe("MainContent context move integration", () => {
       selector({
         prompts: [prompt],
         promptDetailCache: {},
-        getPromptDetail: vi.fn().mockResolvedValue(null),
+        getPromptDetail: getPromptDetailMock,
         selectedId: prompt.id,
         selectedIds: [prompt.id],
         selectPrompt: vi.fn(),
@@ -166,8 +171,22 @@ describe("MainContent context move integration", () => {
         selectedFolderId: null,
         unlockedFolderIds: new Set<string>(),
         folders: [
-          { id: "folder-1", name: "Folder A", order: 0, icon: "", createdAt: "", updatedAt: "" },
-          { id: "folder-2", name: "Folder B", order: 1, icon: "", createdAt: "", updatedAt: "" },
+          {
+            id: "folder-1",
+            name: "Folder A",
+            order: 0,
+            icon: "",
+            createdAt: "",
+            updatedAt: "",
+          },
+          {
+            id: "folder-2",
+            name: "Folder B",
+            order: 1,
+            icon: "",
+            createdAt: "",
+            updatedAt: "",
+          },
         ],
       }),
     );
@@ -178,7 +197,9 @@ describe("MainContent context move integration", () => {
 
     fireEvent.contextMenu(screen.getAllByText("Move me")[0]);
 
-    const moveButton = await screen.findByRole("button", { name: /Move to\.\.\./i });
+    const moveButton = await screen.findByRole("button", {
+      name: /Move to\.\.\./i,
+    });
     fireEvent.mouseEnter(moveButton.parentElement as HTMLElement);
 
     const submenu = (await screen.findAllByText("Folder B")).find(
@@ -190,90 +211,88 @@ describe("MainContent context move integration", () => {
     fireEvent.click(submenu);
 
     await waitFor(() => {
-      expect(updatePrompt).toHaveBeenCalledWith("prompt-1", { folderId: "folder-2" });
+      expect(updatePrompt).toHaveBeenCalledWith("prompt-1", {
+        folderId: "folder-2",
+      });
     });
-    expect(showToast).toHaveBeenCalledWith("Moved to folder「Folder B」", "success");
-    },
-    30000,
-  );
+    expect(showToast).toHaveBeenCalledWith(
+      "Moved to folder「Folder B」",
+      "success",
+    );
+  }, 30000);
 
-  it(
-    "opens the quick rewrite dialog from the context menu",
-    async () => {
-      const prompt = createPrompt({ title: "Rewrite me" });
+  it("opens the quick rewrite dialog from the context menu", async () => {
+    const prompt = createPrompt({ title: "Rewrite me" });
+    getPromptDetailMock.mockResolvedValue(prompt);
 
-      usePromptStoreMock.mockImplementation((selector) =>
-        selector({
-          prompts: [prompt],
-          promptDetailCache: {},
-          getPromptDetail: vi.fn().mockResolvedValue(null),
-          selectedId: prompt.id,
-          selectedIds: [prompt.id],
-          selectPrompt: vi.fn(),
-          setSelectedIds: vi.fn(),
-          createPrompt: vi.fn().mockResolvedValue(prompt),
-          toggleFavorite: vi.fn().mockResolvedValue(undefined),
-          togglePinned: vi.fn().mockResolvedValue(undefined),
-          deletePrompt: vi.fn().mockResolvedValue(undefined),
-          updatePrompt: vi.fn().mockResolvedValue(undefined),
-          searchQuery: "",
-          filterTags: [],
-          sortBy: "updatedAt",
-          sortOrder: "desc",
-          viewMode: "card",
-          incrementUsageCount: vi.fn().mockResolvedValue(undefined),
-          promptTypeFilter: "all",
-          setPromptTypeFilter: vi.fn(),
-          setViewMode: vi.fn(),
-        }),
-      );
-      useFolderStoreMock.mockImplementation((selector) =>
-        selector({
-          selectedFolderId: null,
-          unlockedFolderIds: new Set<string>(),
-          folders: [],
-        }),
-      );
+    usePromptStoreMock.mockImplementation((selector) =>
+      selector({
+        prompts: [prompt],
+        promptDetailCache: {},
+        getPromptDetail: getPromptDetailMock,
+        selectedId: prompt.id,
+        selectedIds: [prompt.id],
+        selectPrompt: vi.fn(),
+        setSelectedIds: vi.fn(),
+        createPrompt: vi.fn().mockResolvedValue(prompt),
+        toggleFavorite: vi.fn().mockResolvedValue(undefined),
+        togglePinned: vi.fn().mockResolvedValue(undefined),
+        deletePrompt: vi.fn().mockResolvedValue(undefined),
+        updatePrompt: vi.fn().mockResolvedValue(undefined),
+        searchQuery: "",
+        filterTags: [],
+        sortBy: "updatedAt",
+        sortOrder: "desc",
+        viewMode: "card",
+        incrementUsageCount: vi.fn().mockResolvedValue(undefined),
+        promptTypeFilter: "all",
+        setPromptTypeFilter: vi.fn(),
+        setViewMode: vi.fn(),
+      }),
+    );
+    useFolderStoreMock.mockImplementation((selector) =>
+      selector({
+        selectedFolderId: null,
+        unlockedFolderIds: new Set<string>(),
+        folders: [],
+      }),
+    );
 
-      await act(async () => {
-        await renderWithI18n(<MainContent />, { language: "en" });
-      });
+    await act(async () => {
+      await renderWithI18n(<MainContent />, { language: "en" });
+    });
 
-      fireEvent.contextMenu(screen.getAllByText("Rewrite me")[0]);
+    fireEvent.contextMenu(screen.getAllByText("Rewrite me")[0]);
 
-      const quickRewriteLabel = await screen.findByText("AI Quick Edit");
-      const quickRewriteButton = quickRewriteLabel.closest("button");
+    const quickRewriteLabel = await screen.findByText("AI Quick Edit");
+    const quickRewriteButton = quickRewriteLabel.closest("button");
 
-      if (!quickRewriteButton) {
-        throw new Error("Quick rewrite context menu action not found");
-      }
+    if (!quickRewriteButton) {
+      throw new Error("Quick rewrite context menu action not found");
+    }
 
-      await act(async () => {
-        fireEvent.click(quickRewriteButton);
-      });
+    await act(async () => {
+      fireEvent.click(quickRewriteButton);
+    });
 
-      await waitFor(
-        () => {
-          expect(screen.getByTestId("quick-rewrite-dialog")).toHaveTextContent(
-            "Quick rewrite open: Rewrite me",
-          );
-        },
-        { timeout: 60_000 },
-      );
-    },
-    60000,
-  );
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("quick-rewrite-dialog")).toHaveTextContent(
+          "Quick rewrite open: Rewrite me",
+        );
+      },
+      { timeout: 60_000 },
+    );
+  }, 60000);
 
-  it(
-    "shows folder icons and nested submenu items in move menu",
-    async () => {
+  it("shows folder icons and nested submenu items in move menu", async () => {
     const prompt = createPrompt();
 
     usePromptStoreMock.mockImplementation((selector) =>
       selector({
         prompts: [prompt],
         promptDetailCache: {},
-        getPromptDetail: vi.fn().mockResolvedValue(null),
+        getPromptDetail: getPromptDetailMock,
         selectedId: prompt.id,
         selectedIds: [prompt.id],
         selectPrompt: vi.fn(),
@@ -299,8 +318,23 @@ describe("MainContent context move integration", () => {
         selectedFolderId: null,
         unlockedFolderIds: new Set<string>(),
         folders: [
-          { id: "folder-1", name: "Folder A", order: 0, icon: "icon:folder-open", createdAt: "", updatedAt: "" },
-          { id: "folder-2", name: "Child Folder", parentId: "folder-1", order: 1, icon: "📚", createdAt: "", updatedAt: "" },
+          {
+            id: "folder-1",
+            name: "Folder A",
+            order: 0,
+            icon: "icon:folder-open",
+            createdAt: "",
+            updatedAt: "",
+          },
+          {
+            id: "folder-2",
+            name: "Child Folder",
+            parentId: "folder-1",
+            order: 1,
+            icon: "📚",
+            createdAt: "",
+            updatedAt: "",
+          },
         ],
       }),
     );
@@ -310,7 +344,9 @@ describe("MainContent context move integration", () => {
     });
 
     fireEvent.contextMenu(screen.getAllByText("Move me")[0]);
-    const moveButton = await screen.findByRole("button", { name: /Move to\.\.\./i });
+    const moveButton = await screen.findByRole("button", {
+      name: /Move to\.\.\./i,
+    });
     fireEvent.mouseEnter(moveButton.parentElement as HTMLElement);
 
     const folderA = await screen.findByRole("button", { name: /^Folder A$/i });
@@ -325,13 +361,9 @@ describe("MainContent context move integration", () => {
     expect(childFolder?.textContent).toContain("📚");
     expect(childFolder?.getAttribute("style")).toContain("padding-left");
     expect(childFolder?.querySelector("svg")).not.toBeNull();
-    },
-    60_000,
-  );
+  }, 60_000);
 
-  it(
-    "duplicates a prompt from the context menu",
-    async () => {
+  it("duplicates a prompt from the context menu", async () => {
     const showToast = vi.fn();
     const selectPrompt = vi.fn();
     const prompt = createPrompt({
@@ -353,7 +385,7 @@ describe("MainContent context move integration", () => {
       selector({
         prompts: [prompt],
         promptDetailCache: {},
-        getPromptDetail: vi.fn().mockResolvedValue(null),
+        getPromptDetail: getPromptDetailMock,
         selectedId: prompt.id,
         selectedIds: [prompt.id],
         selectPrompt,
@@ -379,7 +411,14 @@ describe("MainContent context move integration", () => {
         selectedFolderId: null,
         unlockedFolderIds: new Set<string>(),
         folders: [
-          { id: "folder-1", name: "Folder A", order: 0, icon: "", createdAt: "", updatedAt: "" },
+          {
+            id: "folder-1",
+            name: "Folder A",
+            order: 0,
+            icon: "",
+            createdAt: "",
+            updatedAt: "",
+          },
         ],
       }),
     );
@@ -389,7 +428,9 @@ describe("MainContent context move integration", () => {
     });
 
     fireEvent.contextMenu(screen.getAllByText("Original Prompt")[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Create Duplicate" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create Duplicate" }),
+    );
 
     await waitFor(() => {
       expect(createPromptMock).toHaveBeenCalledWith({
@@ -411,134 +452,148 @@ describe("MainContent context move integration", () => {
     });
 
     expect(selectPrompt).toHaveBeenCalledWith("prompt-copy-1");
-    expect(showToast).toHaveBeenCalledWith("Prompt duplicate created", "success");
-    },
-    30000,
-  );
+    expect(showToast).toHaveBeenCalledWith(
+      "Prompt duplicate created",
+      "success",
+    );
+  }, 30000);
 
-  it(
-    "moves a prompt to another prompt node from the context menu",
-    async () => {
-      const movePrompt = vi.fn().mockResolvedValue(undefined);
-      const sourcePrompt = createPrompt({ id: "prompt-source", title: "Source Prompt" });
-      const targetPrompt = createPrompt({ id: "prompt-target", title: "Target Node" });
+  it("moves a prompt to another prompt node from the context menu", async () => {
+    const movePrompt = vi.fn().mockResolvedValue(undefined);
+    const sourcePrompt = createPrompt({
+      id: "prompt-source",
+      title: "Source Prompt",
+    });
+    const targetPrompt = createPrompt({
+      id: "prompt-target",
+      title: "Target Node",
+    });
 
-      usePromptStoreMock.mockImplementation((selector) =>
-        selector({
-          prompts: [sourcePrompt, targetPrompt],
-          promptDetailCache: {},
-          getPromptDetail: vi.fn().mockResolvedValue(null),
-          selectedId: sourcePrompt.id,
-          selectedIds: [sourcePrompt.id],
-          selectPrompt: vi.fn(),
-          setSelectedIds: vi.fn(),
-          createPrompt: vi.fn().mockResolvedValue(sourcePrompt),
-          toggleFavorite: vi.fn().mockResolvedValue(undefined),
-          togglePinned: vi.fn().mockResolvedValue(undefined),
-          deletePrompt: vi.fn().mockResolvedValue(undefined),
-          updatePrompt: vi.fn().mockResolvedValue(undefined),
-          movePrompt,
-          searchQuery: "",
-          filterTags: [],
-          sortBy: "updatedAt",
-          sortOrder: "desc",
-          viewMode: "card",
-          incrementUsageCount: vi.fn().mockResolvedValue(undefined),
-          promptTypeFilter: "all",
-          setPromptTypeFilter: vi.fn(),
-          setViewMode: vi.fn(),
-        }),
+    usePromptStoreMock.mockImplementation((selector) =>
+      selector({
+        prompts: [sourcePrompt, targetPrompt],
+        promptDetailCache: {},
+        getPromptDetail: getPromptDetailMock,
+        selectedId: sourcePrompt.id,
+        selectedIds: [sourcePrompt.id],
+        selectPrompt: vi.fn(),
+        setSelectedIds: vi.fn(),
+        createPrompt: vi.fn().mockResolvedValue(sourcePrompt),
+        toggleFavorite: vi.fn().mockResolvedValue(undefined),
+        togglePinned: vi.fn().mockResolvedValue(undefined),
+        deletePrompt: vi.fn().mockResolvedValue(undefined),
+        updatePrompt: vi.fn().mockResolvedValue(undefined),
+        movePrompt,
+        searchQuery: "",
+        filterTags: [],
+        sortBy: "updatedAt",
+        sortOrder: "desc",
+        viewMode: "card",
+        incrementUsageCount: vi.fn().mockResolvedValue(undefined),
+        promptTypeFilter: "all",
+        setPromptTypeFilter: vi.fn(),
+        setViewMode: vi.fn(),
+      }),
+    );
+    useFolderStoreMock.mockImplementation((selector) =>
+      selector({
+        selectedFolderId: null,
+        unlockedFolderIds: new Set<string>(),
+        folders: [],
+      }),
+    );
+
+    await act(async () => {
+      await renderWithI18n(<MainContent />, { language: "en" });
+    });
+
+    fireEvent.contextMenu(screen.getAllByText("Source Prompt")[0]);
+    const moveToNodeButton = await screen.findByRole("button", {
+      name: "Move to node",
+    });
+    fireEvent.mouseEnter(moveToNodeButton.parentElement as HTMLElement);
+
+    const targetButtons = await screen.findAllByRole("button", {
+      name: /Target Node/,
+    });
+    fireEvent.click(targetButtons[targetButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(movePrompt).toHaveBeenCalledWith(
+        "prompt-source",
+        "prompt-target",
+        0,
       );
-      useFolderStoreMock.mockImplementation((selector) =>
-        selector({
-          selectedFolderId: null,
-          unlockedFolderIds: new Set<string>(),
-          folders: [],
-        }),
-      );
+    });
+  }, 30000);
 
-      await act(async () => {
-        await renderWithI18n(<MainContent />, { language: "en" });
-      });
+  it("collapses all visible prompt tree nodes from the context menu", async () => {
+    const parentPrompt = createPrompt({
+      id: "prompt-parent",
+      title: "Parent Prompt",
+    });
+    const childPrompt = createPrompt({
+      id: "prompt-child",
+      title: "Child Prompt",
+      parentId: "prompt-parent",
+      order: 0,
+    });
 
-      fireEvent.contextMenu(screen.getAllByText("Source Prompt")[0]);
-      const moveToNodeButton = await screen.findByRole("button", { name: "Move to node" });
-      fireEvent.mouseEnter(moveToNodeButton.parentElement as HTMLElement);
+    usePromptStoreMock.mockImplementation((selector) =>
+      selector({
+        prompts: [parentPrompt, childPrompt],
+        promptDetailCache: {},
+        getPromptDetail: getPromptDetailMock,
+        selectedId: parentPrompt.id,
+        selectedIds: [parentPrompt.id],
+        selectPrompt: vi.fn(),
+        setSelectedIds: vi.fn(),
+        createPrompt: vi.fn().mockResolvedValue(parentPrompt),
+        toggleFavorite: vi.fn().mockResolvedValue(undefined),
+        togglePinned: vi.fn().mockResolvedValue(undefined),
+        deletePrompt: vi.fn().mockResolvedValue(undefined),
+        updatePrompt: vi.fn().mockResolvedValue(undefined),
+        movePrompt: vi.fn().mockResolvedValue(undefined),
+        searchQuery: "",
+        filterTags: [],
+        sortBy: "updatedAt",
+        sortOrder: "desc",
+        viewMode: "card",
+        incrementUsageCount: vi.fn().mockResolvedValue(undefined),
+        promptTypeFilter: "all",
+        setPromptTypeFilter: vi.fn(),
+        setViewMode: vi.fn(),
+      }),
+    );
+    useFolderStoreMock.mockImplementation((selector) =>
+      selector({
+        selectedFolderId: null,
+        unlockedFolderIds: new Set<string>(),
+        folders: [],
+      }),
+    );
 
-      const targetButtons = await screen.findAllByRole("button", { name: /Target Node/ });
-      fireEvent.click(targetButtons[targetButtons.length - 1]);
+    await act(async () => {
+      await renderWithI18n(<MainContent />, { language: "en" });
+    });
 
-      await waitFor(() => {
-        expect(movePrompt).toHaveBeenCalledWith("prompt-source", "prompt-target", 0);
-      });
-    },
-    30000,
-  );
+    expect(
+      screen
+        .getAllByTestId("prompt-card-title")
+        .some((title) => title.textContent === "Child Prompt"),
+    ).toBe(true);
 
-  it(
-    "collapses all visible prompt tree nodes from the context menu",
-    async () => {
-      const parentPrompt = createPrompt({ id: "prompt-parent", title: "Parent Prompt" });
-      const childPrompt = createPrompt({
-        id: "prompt-child",
-        title: "Child Prompt",
-        parentId: "prompt-parent",
-        order: 0,
-      });
+    fireEvent.contextMenu(screen.getAllByText("Parent Prompt")[0]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Collapse all prompts" }),
+    );
 
-      usePromptStoreMock.mockImplementation((selector) =>
-        selector({
-          prompts: [parentPrompt, childPrompt],
-          promptDetailCache: {},
-          getPromptDetail: vi.fn().mockResolvedValue(null),
-          selectedId: parentPrompt.id,
-          selectedIds: [parentPrompt.id],
-          selectPrompt: vi.fn(),
-          setSelectedIds: vi.fn(),
-          createPrompt: vi.fn().mockResolvedValue(parentPrompt),
-          toggleFavorite: vi.fn().mockResolvedValue(undefined),
-          togglePinned: vi.fn().mockResolvedValue(undefined),
-          deletePrompt: vi.fn().mockResolvedValue(undefined),
-          updatePrompt: vi.fn().mockResolvedValue(undefined),
-          movePrompt: vi.fn().mockResolvedValue(undefined),
-          searchQuery: "",
-          filterTags: [],
-          sortBy: "updatedAt",
-          sortOrder: "desc",
-          viewMode: "card",
-          incrementUsageCount: vi.fn().mockResolvedValue(undefined),
-          promptTypeFilter: "all",
-          setPromptTypeFilter: vi.fn(),
-          setViewMode: vi.fn(),
-        }),
-      );
-      useFolderStoreMock.mockImplementation((selector) =>
-        selector({
-          selectedFolderId: null,
-          unlockedFolderIds: new Set<string>(),
-          folders: [],
-        }),
-      );
-
-      await act(async () => {
-        await renderWithI18n(<MainContent />, { language: "en" });
-      });
-
+    await waitFor(() => {
       expect(
-        screen.getAllByTestId("prompt-card-title").some((title) => title.textContent === "Child Prompt"),
-      ).toBe(true);
-
-      fireEvent.contextMenu(screen.getAllByText("Parent Prompt")[0]);
-      fireEvent.click(await screen.findByRole("button", { name: "Collapse all prompts" }));
-
-      await waitFor(() => {
-        expect(
-          screen
-            .queryAllByTestId("prompt-card-title")
-            .some((title) => title.textContent === "Child Prompt"),
-        ).toBe(false);
-      });
-    },
-    30000,
-  );
+        screen
+          .queryAllByTestId("prompt-card-title")
+          .some((title) => title.textContent === "Child Prompt"),
+      ).toBe(false);
+    });
+  }, 30000);
 });

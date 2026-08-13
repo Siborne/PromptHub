@@ -137,6 +137,64 @@ describe("journaled storage restore", () => {
     expect(fs.existsSync(getStorageRestoreJournalPath(root))).toBe(false);
   });
 
+  it("rejects restore journals whose operation paths name active data", async () => {
+    const root = fixture();
+    const operationId = "unsafe-owned-path";
+    const journalPath = getStorageRestoreJournalPath(root);
+    fs.mkdirSync(path.dirname(journalPath), { recursive: true });
+    fs.writeFileSync(
+      journalPath,
+      `${JSON.stringify({
+        formatVersion: 1,
+        kind: "prompthub-journaled-storage-restore",
+        operationId,
+        state: "prepared",
+        activeRoot: root,
+        stageRoot: path.join(root, "data"),
+        priorRoot: path.join(root, `.prompthub-restore-prior-${operationId}`),
+        entryNames: ["data"],
+        swappedEntries: [],
+        currentEntry: null,
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:00.000Z",
+      })}\n`,
+    );
+
+    await expect(
+      recoverJournaledStorageRestore({
+        activeRoot: root,
+        verifyActive: () => undefined,
+      }),
+    ).rejects.toThrow(/Invalid storage restore journal/);
+    expect(
+      fs.readFileSync(path.join(root, "data", "library.txt"), "utf8"),
+    ).toBe("before");
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "rejects a symlinked recovery ancestor before publishing a journal",
+    async () => {
+      const root = fixture();
+      const outside = fs.mkdtempSync(
+        path.join(os.tmpdir(), "prompthub-restore-outside-"),
+      );
+      roots.push(outside);
+      fs.symlinkSync(outside, path.join(root, "backups"));
+
+      await expect(
+        runJournaledStorageRestore({
+          activeRoot: root,
+          operationId: "unsafe-recovery-parent",
+          entryNames: ["data"],
+          prepareCandidate: () => undefined,
+          verifyCandidate: () => undefined,
+          verifyActive: () => undefined,
+        }),
+      ).rejects.toThrow(/Refusing symbolic link/);
+      expect(fs.readdirSync(outside)).toEqual([]);
+    },
+  );
+
   it("resolves an interrupted swap before startup services open", async () => {
     const root = fixture();
     await expect(
@@ -254,16 +312,18 @@ describe("journaled storage restore", () => {
         verifyActive: () => undefined,
       }),
     ).rejects.toThrow(/active root is unsafe/);
-    await expect(
-      runJournaledStorageRestore({
-        activeRoot: root,
-        operationId: "invalid/id",
-        entryNames: ["data"],
-        prepareCandidate: () => undefined,
-        verifyCandidate: () => undefined,
-        verifyActive: () => undefined,
-      }),
-    ).rejects.toThrow(/Invalid storage restore operation id/);
+    for (const operationId of ["invalid/id", ".", ".."]) {
+      await expect(
+        runJournaledStorageRestore({
+          activeRoot: root,
+          operationId,
+          entryNames: ["data"],
+          prepareCandidate: () => undefined,
+          verifyCandidate: () => undefined,
+          verifyActive: () => undefined,
+        }),
+      ).rejects.toThrow(/Invalid storage restore operation id/);
+    }
     for (const entryNames of [[], ["data", "data"]]) {
       await expect(
         runJournaledStorageRestore({
@@ -797,6 +857,62 @@ describe("journaled storage restore", () => {
         .statSync(path.join(recovered.recoveryArtifactPath!, "root"))
         .isDirectory(),
     ).toBe(true);
+  });
+
+  it("finishes recovery when artifact manifest publication fails after moving prior data", async () => {
+    const root = fixture();
+    const operationId = "artifact-manifest-crash";
+    const artifactPath = path.join(root, "backups", "recovery", operationId);
+    const artifactManifestPath = path.join(artifactPath, "manifest.json");
+    const originalRename = fs.renameSync.bind(fs);
+    let failedCompleteManifest = false;
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (
+        !failedCompleteManifest &&
+        path.resolve(String(to)) === artifactManifestPath &&
+        fs.readFileSync(String(from), "utf8").includes('"state": "complete"')
+      ) {
+        failedCompleteManifest = true;
+        throw new Error("manifest publication interrupted");
+      }
+      return originalRename(from, to);
+    });
+
+    await expect(
+      runJournaledStorageRestore({
+        activeRoot: root,
+        operationId,
+        entryNames: ["data"],
+        prepareCandidate: (stageRoot) => {
+          fs.mkdirSync(path.join(stageRoot, "data"));
+          fs.writeFileSync(
+            path.join(stageRoot, "data", "library.txt"),
+            "after",
+          );
+        },
+        verifyCandidate: () => undefined,
+        verifyActive: () => undefined,
+      }),
+    ).rejects.toThrow("manifest publication interrupted");
+    expect(
+      fs.readFileSync(path.join(root, "data", "library.txt"), "utf8"),
+    ).toBe("after");
+
+    await expect(
+      recoverJournaledStorageRestore({
+        activeRoot: root,
+        verifyActive: () => undefined,
+      }),
+    ).resolves.toMatchObject({ status: "committed", operationId });
+    expect(
+      fs.readFileSync(path.join(root, "data", "library.txt"), "utf8"),
+    ).toBe("after");
+    expect(
+      fs.readFileSync(
+        path.join(artifactPath, "root", "data", "library.txt"),
+        "utf8",
+      ),
+    ).toBe("before");
   });
 
   it("rolls back when the recovery artifact identity already exists", async () => {

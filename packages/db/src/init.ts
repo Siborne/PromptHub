@@ -544,6 +544,48 @@ export function initDatabase(
       markMigration("agent_conversation_handoff_launch_v2");
     }
 
+    if (
+      !hasMigration("drop_agent_conversation_metadata_deleted_at_v1")
+    ) {
+      const metadataColumns = columnNames(
+        db!,
+        "agent_conversation_metadata",
+      );
+      if (metadataColumns?.has("deleted_at")) {
+        db!.exec(`
+          ALTER TABLE agent_conversation_metadata
+            RENAME TO agent_conversation_metadata_legacy;
+          CREATE TABLE agent_conversation_metadata (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            title TEXT,
+            project_id TEXT,
+            project_path TEXT,
+            tags_json TEXT NOT NULL DEFAULT '[]',
+            note TEXT,
+            is_favorite INTEGER NOT NULL DEFAULT 0
+              CHECK(is_favorite IN (0, 1)),
+            archived_at INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(agent_id, session_id)
+          );
+          INSERT INTO agent_conversation_metadata (
+            id, agent_id, session_id, title, project_id, project_path,
+            tags_json, note, is_favorite, archived_at, created_at, updated_at
+          )
+          SELECT
+            id, agent_id, session_id, title, project_id, project_path,
+            tags_json, note, is_favorite, archived_at, created_at, updated_at
+          FROM agent_conversation_metadata_legacy
+          WHERE deleted_at IS NULL;
+          DROP TABLE agent_conversation_metadata_legacy;
+        `);
+      }
+      markMigration("drop_agent_conversation_metadata_deleted_at_v1");
+    }
+
     // Migrations: prompts table (query column list once)
     const promptCols = (
       db!.pragma("table_info(prompts)") as PragmaColumnInfo[]
@@ -944,6 +986,61 @@ export function initDatabase(
          )`,
       );
       markMigration("fix_prompt_current_version_v1");
+    }
+
+    if (!hasMigration("repair_empty_prompt_version_chain_v1")) {
+      console.log(
+        "Migrating: Repairing prompts without a stored version chain",
+      );
+      db!.run(
+        `INSERT INTO prompt_versions (
+           id, prompt_id, version, system_prompt, system_prompt_en,
+           user_prompt, user_prompt_en, variables, note, ai_response, created_at
+         )
+         SELECT
+           'recovered-' || lower(hex(randomblob(16))),
+           prompts.id,
+           1,
+           prompts.system_prompt,
+           prompts.system_prompt_en,
+           prompts.user_prompt,
+           prompts.user_prompt_en,
+           COALESCE(prompts.variables, '[]'),
+           NULL,
+           prompts.last_ai_response,
+           prompts.created_at
+         FROM prompts
+         WHERE NOT EXISTS (
+           SELECT 1
+           FROM prompt_versions
+           WHERE prompt_versions.prompt_id = prompts.id
+         )`,
+      );
+      db!.run(
+        `UPDATE prompts
+         SET current_version = (
+           SELECT MAX(version)
+           FROM prompt_versions
+           WHERE prompt_versions.prompt_id = prompts.id
+             AND prompt_versions.version > 0
+         )
+         WHERE EXISTS (
+           SELECT 1
+           FROM prompt_versions
+           WHERE prompt_versions.prompt_id = prompts.id
+             AND prompt_versions.version > 0
+         )
+           AND (
+             current_version IS NULL
+             OR current_version != (
+               SELECT MAX(version)
+               FROM prompt_versions
+               WHERE prompt_versions.prompt_id = prompts.id
+                 AND prompt_versions.version > 0
+             )
+           )`,
+      );
+      markMigration("repair_empty_prompt_version_chain_v1");
     }
   };
 

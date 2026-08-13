@@ -133,6 +133,39 @@ function assertLocalOwnership(snapshot: PromptCanonicalGraphSnapshot): void {
   }
 }
 
+function orderParentsFirst<
+  T extends { id: string; parentId?: string | null },
+>(values: readonly T[], label: string): T[] {
+  const byId = new Map(values.map((value) => [value.id, value]));
+  const children = new Map<string, T[]>();
+  const roots: T[] = [];
+
+  for (const value of values) {
+    if (!value.parentId) {
+      roots.push(value);
+      continue;
+    }
+    if (!byId.has(value.parentId)) {
+      throw new Error(`${label} ${value.id} references missing parent`);
+    }
+    const siblings = children.get(value.parentId) ?? [];
+    siblings.push(value);
+    children.set(value.parentId, siblings);
+  }
+
+  const ordered: T[] = [];
+  const queue = [...roots];
+  for (let index = 0; index < queue.length; index += 1) {
+    const value = queue[index];
+    ordered.push(value);
+    queue.push(...(children.get(value.id) ?? []));
+  }
+  if (ordered.length !== values.length) {
+    throw new Error(`${label} graph contains a cycle`);
+  }
+  return ordered;
+}
+
 function populatePromptCatalog(
   database: Database.Database,
   snapshot: PromptCanonicalGraphSnapshot,
@@ -141,8 +174,12 @@ function populatePromptCatalog(
   const promptDb = new PromptDB(database);
   const relationDb = new PromptRelationDB(database);
   const outputFormatDb = new PromptOutputFormatDB(database);
-  for (const folder of snapshot.folders) folderDb.insertFolderDirect(folder);
-  for (const prompt of snapshot.prompts) promptDb.insertPromptDirect(prompt);
+  for (const folder of orderParentsFirst(snapshot.folders, "folder")) {
+    folderDb.insertFolderDirect(folder);
+  }
+  for (const prompt of orderParentsFirst(snapshot.prompts, "prompt")) {
+    promptDb.insertPromptDirect(prompt);
+  }
   for (const version of snapshot.promptVersions) {
     promptDb.insertVersionDirect(version);
   }
