@@ -54,6 +54,7 @@ import {
   registerE2EIPC,
   shouldUseDevServer,
 } from "./testing/e2e";
+import { configureE2ESecretStorage } from "./testing/e2e-secret-storage";
 import {
   getHistoricalDefaultUserDataPath,
   getStorageOperationControlDirectory,
@@ -1576,6 +1577,8 @@ app.whenReady().then(async () => {
       app.quit();
       return;
     }
+
+    configureE2ESecretStorage(safeStorage);
 
     // Register updater IPC as early as possible so renderer calls do not depend on
     // later startup work (DB bootstrap, workspace sync, window creation) completing.

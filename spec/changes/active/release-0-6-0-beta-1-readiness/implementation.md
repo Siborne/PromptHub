@@ -53,8 +53,9 @@
   Electron smoke launched and passed four scenarios; three settings scenarios
   then failed because the headless runner had no desktop keyring for Electron
   `safeStorage`. Linux CI E2E now opts into Chromium's basic test password
-  store while production launch and production secret-vault behavior remain
-  unchanged.
+  store and Electron's documented in-memory encryption fallback after app
+  readiness, while production launch and production secret-vault behavior
+  remain unchanged.
 
 ## Remaining Publication Boundary
 
