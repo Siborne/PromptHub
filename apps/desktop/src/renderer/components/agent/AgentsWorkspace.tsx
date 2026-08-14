@@ -41,6 +41,11 @@ const AgentAssetsWorkspace = lazy(() =>
     default: module.AgentAssetsWorkspace,
   })),
 );
+const AgentDeepSeekHarnessPanel = lazy(() =>
+  import("./AgentDeepSeekHarnessPanel").then((module) => ({
+    default: module.AgentDeepSeekHarnessPanel,
+  })),
+);
 const AgentConfigFilesPanel = lazy(() =>
   import("./AgentConfigFilesPanel").then((module) => ({
     default: module.AgentConfigFilesPanel,
@@ -385,7 +390,12 @@ function AgentWorkspacePanel({
               {target.tab === "overview" ? (
                 <AgentOverviewPanel agent={agent} onNavigate={onNavigate} />
               ) : null}
-              {isAgentAssetDomain(target.tab) ? (
+              {target.tab === "plugins" &&
+              agent.workspaceKind === "plugin-harness" ? (
+                <AgentDeepSeekHarnessPanel key={agent.id} />
+              ) : null}
+              {isAgentAssetDomain(target.tab) &&
+              agent.workspaceKind !== "plugin-harness" ? (
                 <AgentAssetsWorkspace
                   agent={agent}
                   domain={target.tab}

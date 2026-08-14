@@ -27,16 +27,17 @@
 
 当前内置 Agent 列表使用独立、可追溯的品牌图标：
 
-| Platform  | Asset                                                     | Source                                                                                                           |
-| --------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Kimi Code | `apps/desktop/src/renderer/assets/platforms/kimi.png`     | Official Kimi site favicon: `https://www.kimi.com/favicon.ico`                                                   |
-| Augment   | `apps/desktop/src/renderer/assets/platforms/augment.svg`  | Official Augment favicon: `https://www.augmentcode.com/favicon.svg`                                              |
-| Reasonix  | `apps/desktop/src/renderer/assets/platforms/reasonix.svg` | Official Reasonix repository mark                                                                                |
-| Pi        | `apps/desktop/src/renderer/assets/platforms/pi.svg`       | Official Pi badge: `https://pi.dev/press-kit` (`https://pi.dev/favicon.svg`)                                     |
-| Oh My Pi  | `apps/desktop/src/renderer/assets/platforms/oh-my-pi.svg` | Official upstream mark: `https://github.com/can1357/oh-my-pi/blob/main/assets/icon.svg`                          |
-| CoPaw     | `apps/desktop/src/renderer/assets/platforms/copaw.png`    | AgentScope/QwenPaw public mark: `https://github.com/agentscope-ai/QwenPaw/blob/main/website/public/paw.png`      |
-| AutoClaw  | `apps/desktop/src/renderer/assets/platforms/autoclaw.png` | Official AutoClaw mark: `https://autoclaw.zhipuai.cn/` (`https://resource.zhipuai.cn/landing-page/og-image.png`) |
-| NanoClaw  | `apps/desktop/src/renderer/assets/platforms/nanoclaw.png` | Official NanoClaw repository asset: `https://github.com/nanocoai/nanoclaw/blob/main/assets/nanoclaw-icon.png`    |
+| Platform         | Asset                                                                          | Source                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Kimi Code        | `apps/desktop/src/renderer/assets/platforms/kimi.png`                          | Official Kimi site favicon: `https://www.kimi.com/favicon.ico`                                                    |
+| Augment          | `apps/desktop/src/renderer/assets/platforms/augment.svg`                       | Official Augment favicon: `https://www.augmentcode.com/favicon.svg`                                               |
+| Reasonix         | `apps/desktop/src/renderer/assets/platforms/reasonix.svg`                      | Official Reasonix repository mark                                                                                 |
+| Pi               | `apps/desktop/src/renderer/assets/platforms/pi.svg`                            | Official Pi badge: `https://pi.dev/press-kit` (`https://pi.dev/favicon.svg`)                                      |
+| Oh My Pi         | `apps/desktop/src/renderer/assets/platforms/oh-my-pi.svg`                      | Official upstream mark: `https://github.com/can1357/oh-my-pi/blob/main/assets/icon.svg`                           |
+| CoPaw            | `apps/desktop/src/renderer/assets/platforms/copaw.png`                         | AgentScope/QwenPaw public mark: `https://github.com/agentscope-ai/QwenPaw/blob/main/website/public/paw.png`       |
+| AutoClaw         | `apps/desktop/src/renderer/assets/platforms/autoclaw.png`                      | Official AutoClaw mark: `https://autoclaw.zhipuai.cn/` (`https://resource.zhipuai.cn/landing-page/og-image.png`)  |
+| NanoClaw         | `apps/desktop/src/renderer/assets/platforms/nanoclaw.png`                      | Official NanoClaw repository asset: `https://github.com/nanocoai/nanoclaw/blob/main/assets/nanoclaw-icon.png`     |
+| DeepSeek Harness | `apps/desktop/src/renderer/assets/platforms/deepseek-harness-{light,dark}.svg` | Official Harness favicon: `https://github.com/deepseek-ai/deepseek-harness/blob/main/apps/web/public/favicon.svg` |
 
 Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加载失败，二者也使用不同的命名 fallback。内置平台注册表对 id 做唯一性回归校验，避免把已有平台再次注册。
 
@@ -47,6 +48,7 @@ Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加�
 - 因此设置页和后续 Agent 管理页应优先暴露根目录管理与派生资产预览；仅保留零散扫描路径会把产品错误收窄成 Skill 导入工具。
 - 对 PromptHub 而言，Plugin 是比 Skill 更高一级的分发包；它可以包含 Skill、MCP server、App/connector、commands、hooks、assets 等子资产。稳定概念映射见 `spec/knowledge/reference/codex-extension-surfaces.md`。
 - Agent 工作台的 family 分组是 PromptHub 的展示分类，不是上游兼容性声明；`openclaw`、`copaw`、`autoclaw`、`nanoclaw`、`qclaw` 和 `hermes` 明确归入 Claw（龙虾）组，但各自仍保留独立的平台 id、根目录、能力适配器和原生文件合同。
+- DeepSeek Harness 使用独立的 `plugin-harness` 资产模型。它的能力载体是 `$DSH_HOME/profiles/<name>/package.json` 中的依赖和有序 `dsh.profile.bundles`，不得伪装成独立的 Skill、MCP 或 Rules 目录。PromptHub 只读取有界、脱敏的包元数据；安装、更新和移除必须通过官方 `dsh plugin --profile <name> ...` 命令完成。
 
 ## User Config Files Boundary
 
@@ -63,15 +65,16 @@ Kimi 与 Auggie 不共享 Sparkles/Sparkle 通用图标；即使品牌资源加�
 source of truth. PromptHub retains an internal read-only version probe
 for the following evidence-backed built-ins:
 
-| Platform    | Executable | Version arguments | Capability |
-| ----------- | ---------- | ----------------- | ---------- |
-| Claude Code | `claude`   | `--version`       | `partial`  |
-| Codex       | `codex`    | `--version`       | `partial`  |
-| Kimi Code   | `kimi`     | `--version`       | `partial`  |
-| Qwen Code   | `qwen`     | `--version`       | `partial`  |
-| OpenCode    | `opencode` | `--version`       | `partial`  |
-| Oh My Pi    | `omp`      | `--version`       | `partial`  |
-| OpenClaw    | `openclaw` | `--version`       | `partial`  |
+| Platform         | Executable | Version arguments | Capability |
+| ---------------- | ---------- | ----------------- | ---------- |
+| Claude Code      | `claude`   | `--version`       | `partial`  |
+| Codex            | `codex`    | `--version`       | `partial`  |
+| Kimi Code        | `kimi`     | `--version`       | `partial`  |
+| Qwen Code        | `qwen`     | `--version`       | `partial`  |
+| OpenCode         | `opencode` | `--version`       | `partial`  |
+| Oh My Pi         | `omp`      | `--version`       | `partial`  |
+| OpenClaw         | `openclaw` | `--version`       | `partial`  |
+| DeepSeek Harness | `dsh`      | `--version`       | `partial`  |
 
 The Electron main process resolves only those registry-owned executable names
 through a bounded PATH search and executes fixed argument arrays without a

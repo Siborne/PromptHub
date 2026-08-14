@@ -40,6 +40,13 @@ export function createWindowApiMock(overrides?: DeepPartial<MockRecord>) {
       close: vi.fn(),
       prompt: {},
       agent: {
+        listHarnessProfiles: vi.fn().mockResolvedValue({
+          agentId: "deepseek-harness",
+          cliAvailable: false,
+          profiles: [],
+        }),
+        readHarnessProfile: vi.fn(),
+        mutateHarnessPlugin: vi.fn(),
         listConfigFiles: vi.fn().mockResolvedValue([]),
         readConfigFile: vi.fn().mockResolvedValue(null),
         writeConfigFile: vi.fn().mockResolvedValue(undefined),

@@ -11,6 +11,7 @@ import { registerSkillIPC } from "./skill.ipc";
 import { registerAIIPC } from "./ai.ipc";
 import { registerAgentIPC } from "./agent.ipc";
 import { registerAgentQwenDefinitionIPC } from "./agent-qwen-definition.ipc";
+import { registerAgentDeepSeekHarnessIPC } from "./agent-deepseek-harness.ipc";
 import { registerAgentSessionIndexIPC } from "./agent-session-index.ipc";
 import { registerAgentConversationIPC } from "./agent-conversation.ipc";
 import { createAgentSessionIndexOperations } from "../services/agent-session-index-operations";
@@ -173,6 +174,9 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.AGENT_CONFIG_FILE_WRITE,
   IPC_CHANNELS.AGENT_DEFINITIONS_LIST,
   IPC_CHANNELS.AGENT_DEFINITION_OPEN,
+  IPC_CHANNELS.AGENT_HARNESS_PROFILES_LIST,
+  IPC_CHANNELS.AGENT_HARNESS_PROFILE_READ,
+  IPC_CHANNELS.AGENT_HARNESS_PLUGIN_MUTATE,
   IPC_CHANNELS.AGENT_SESSIONS_LIST,
   IPC_CHANNELS.AGENT_SESSION_READ,
   IPC_CHANNELS.AGENT_SESSION_INDEX_GET_STATE,
@@ -373,6 +377,7 @@ export function registerAllIPC(
     });
     onAgentProviderRuntime(runtime);
     registerAgentIPC();
+    registerAgentDeepSeekHarnessIPC();
     registerAgentQwenDefinitionIPC(db);
     registerAgentSessionIndexIPC({
       createService: (agentId) =>

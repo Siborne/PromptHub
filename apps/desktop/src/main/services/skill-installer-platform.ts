@@ -38,10 +38,12 @@ import {
 } from "./cherry-studio-skill-platform";
 import {
   getPlatformSkillsDir,
+  getPlatformRootDir,
   getConfiguredBuiltinAgentPlatformIds,
   getCustomAgentPlatforms,
   validateMCPConfig,
 } from "./skill-installer-utils";
+import { createNativeCommandRunner } from "./native-command";
 
 interface SkillMdInstallOptions {
   legacySkillNames?: string[];
@@ -473,15 +475,37 @@ export function getSupportedPlatforms(): SkillPlatform[] {
 /**
  * Detect which AI tools are installed on the system.
  */
-export async function detectInstalledPlatforms(): Promise<string[]> {
+export interface DetectInstalledPlatformsOptions {
+  pathExists?: (candidate: string) => Promise<boolean>;
+  resolveExecutable?: (candidate: string) => Promise<string | null>;
+}
+
+export async function detectInstalledPlatforms(
+  options: DetectInstalledPlatformsOptions = {},
+): Promise<string[]> {
   const installed: string[] = [];
+  const pathExists = options.pathExists ?? fileExists;
+  const resolveExecutable =
+    options.resolveExecutable ?? createNativeCommandRunner().resolve;
 
   for (const platform of getSupportedPlatforms()) {
+    if (platform.assetModel === "plugin-harness") {
+      const rootExists = await pathExists(getPlatformRootDir(platform));
+      let cliExists = false;
+      for (const candidate of platform.cli?.executableCandidates || []) {
+        if (await resolveExecutable(candidate)) {
+          cliExists = true;
+          break;
+        }
+      }
+      if (rootExists || cliExists) installed.push(platform.id);
+      continue;
+    }
     const skillsDir = getPlatformSkillsDir(platform);
     // Check if the parent directory exists (e.g., ~/.claude means Claude Code is installed)
     const parentDir = path.dirname(skillsDir);
 
-    if (await fileExists(parentDir)) {
+    if (await pathExists(parentDir)) {
       installed.push(platform.id);
     }
   }

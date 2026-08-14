@@ -583,3 +583,8 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 
 - [x] `TEST-AGENT-205` 先复现官方 Codex 供应商被错误隐藏检测入口并返回 unsupported；覆盖 `codex login status` 零模型请求、隔离 `codex exec` 参数、选中模型、临时文件清理、取消、超时、缺少 CLI、未登录、认证/网络/额度/模型错误分类、结果脱敏和零 `config.toml`/Profile 写入。
 - [x] `T-AGENT-214` 按 `FR-AGENT-123` / `DES-AGENT-141` 为官方 Codex 恢复连接和模型检测，通过共享无 shell native runner 执行有界官方 CLI 探针；不得读取或返回 token、伪造成功、持久化会话、绕过模型测试确认或改变其他 platform-native 供应商语义。
+
+## DeepSeek Harness Profile Plugin Follow-up
+
+- [x] `TEST-AGENT-206` 先复现 DeepSeek Harness 不在 Agent 清单、复用通用 DeepSeek Provider 图标、通用 Skills/MCP/Rules/Plugin 路径模型无法表达 Profile bundle、且没有安装/更新/卸载/详情入口的问题；覆盖正式标题、明暗主题官方图标、`DSH_HOME`、仅 CLI 检测、Profile/manifest 上限、软链接逃逸、畸形/超限 JSON、bundle 与 direct dependency 区分、脚本正文隔离、命令参数、风险确认、超时/输出限制/失败脱敏、per-profile 串行和专属两栏 UI。
+- [x] `T-AGENT-215` 按 `FR-AGENT-126` / `DES-AGENT-144` 注册 DeepSeek Harness 的 plugin-harness 平台模型，增加 main-only Profile/Plugin adapter、类型化 IPC/preload 和专属 Plugins 工作区；安装、更新、移除只调用官方 `dsh plugin`，不得伪造独立 Skill/MCP/Rules 能力、执行 shell、静默接受安装脚本、引入 marketplace、schema、sync 或后台 watcher。

@@ -84,6 +84,7 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
     sessions: VERIFIED_SESSION,
     usage: VERIFIED_USAGE,
   }),
+  "deepseek-harness": depthCapabilities(),
   copilot: depthCapabilities({
     providerModel: MODEL_CONFIG_ONLY,
     sessions: VERIFIED_READONLY_DATABASE_SESSION,
@@ -213,6 +214,31 @@ export function getAgentPlatformCapabilityInventory(
     AGENT_PLATFORM_DEPTH_CAPABILITIES[
       platform.id as keyof typeof AGENT_PLATFORM_DEPTH_CAPABILITIES
     ] || FALLBACK_DEPTH_CAPABILITIES;
+
+  if (platform.assetModel === "plugin-harness") {
+    return {
+      installationPath: declaration("partial", "platform-root-declaration"),
+      providerModel: declaration("planned", "harness-plugin-owned-capability"),
+      skills: declaration("unsupported", "harness-plugin-owned-capability"),
+      mcp: declaration("unsupported", "harness-plugin-owned-capability"),
+      rules: declaration("unsupported", "harness-plugin-owned-capability"),
+      plugins: declaration("partial", "dsh-profile-bundle-adapter"),
+      configFiles: declaration("planned", "harness-profile-editor-pending"),
+      sessions: declaration("planned", "harness-session-adapter-pending"),
+      usage: declaration("planned", "harness-usage-adapter-pending"),
+      launch: declaration("planned", "harness-launch-adapter-pending"),
+      maintenanceCli: declaration("partial", platform.cli!.evidence),
+      backupExportImport: declaration(
+        "partial",
+        "non-secret-agent-settings-backup",
+      ),
+      secretRuntimeExclusion: declaration(
+        "partial",
+        "runtime-and-secret-exclusion-policy",
+      ),
+      appearance: declaration("unsupported", "harness-plugin-owned-capability"),
+    };
+  }
 
   return {
     installationPath: declaration("partial", "platform-root-declaration"),

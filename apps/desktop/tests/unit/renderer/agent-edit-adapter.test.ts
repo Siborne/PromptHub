@@ -11,7 +11,7 @@ describe("Agent edit adapter", () => {
   it("maps every built-in Agent to exactly its canonical path declarations", () => {
     for (const platform of SKILL_PLATFORMS) {
       const expected = [
-        "skillsPath",
+        ...(platform.skillsRelativePath ? ["skillsPath"] : []),
         ...(platform.globalRuleFile ? ["rulesPath"] : []),
         ...(platform.mcpRelativePath ? ["mcpPath"] : []),
         ...(platform.pluginsRelativePath ? ["pluginsPath"] : []),
@@ -24,6 +24,14 @@ describe("Agent edit adapter", () => {
         expected,
       );
     }
+  });
+
+  it("does not invent a Skills path for the DeepSeek Harness profile model", () => {
+    const platform = SKILL_PLATFORMS.find(
+      ({ id }) => id === "deepseek-harness",
+    )!;
+
+    expect(getAgentEditPathFields({ platform })).toEqual([]);
   });
 
   it("keeps an explicit legacy override visible until the user clears it", () => {

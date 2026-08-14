@@ -55,6 +55,9 @@ describe("Agent workspace tab availability", () => {
       "configFiles",
       "sessions",
     ]);
+    expect(
+      getAgentWorkspaceTabs(agent("deepseek-harness")).map((tab) => tab.key),
+    ).toEqual(["overview", "plugins"]);
   });
 
   it("shows Definitions only for Qwen without creating a global capability", () => {
@@ -96,6 +99,12 @@ describe("Agent workspace tab availability", () => {
     const rules = AGENT_WORKSPACE_TABS.find((tab) => tab.key === "rules")!;
     expect(getAgentTabStatus(cursor, rules)).toBe("partial");
     expect(isAgentTabEnabled(cursor, rules)).toBe(true);
+
+    const harness = agent("deepseek-harness");
+    harness.paths.profiles = "/home/test/.dsh/profiles";
+    const plugins = AGENT_WORKSPACE_TABS.find((tab) => tab.key === "plugins")!;
+    expect(getAgentTabStatus(harness, plugins)).toBe("partial");
+    expect(isAgentTabEnabled(harness, plugins)).toBe(true);
   });
 
   it("identifies asset tabs and returns explicit capability guidance", () => {

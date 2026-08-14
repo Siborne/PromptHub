@@ -16,6 +16,7 @@ import type {
 const COMMON_AGENT_ORDER = [
   "claude",
   "codex",
+  "deepseek-harness",
   "antigravity",
   "gemini",
   "kimi",
@@ -246,6 +247,10 @@ export function buildManagedAgents({
           launchable: Boolean(platform.launchPaths?.[osKey]?.length),
           lifecycle: platform.lifecycle,
           replacementPlatformId: platform.replacementPlatformId,
+          workspaceKind:
+            platform.assetModel === "plugin-harness"
+              ? "plugin-harness"
+              : "standard",
           status: isDetected
             ? "installed"
             : isConfigured
@@ -253,7 +258,11 @@ export function buildManagedAgents({
               : "not-detected",
           paths: {
             root,
-            skills: joinPath(root, skillsRelativePath) || root,
+            skills:
+              platform.assetModel === "plugin-harness"
+                ? ""
+                : joinPath(root, skillsRelativePath) || root,
+            profiles: joinPath(root, platform.harnessProfilesRelativePath),
             mcp: joinPath(
               root,
               override.mcpRelativePath || platform.mcpRelativePath,

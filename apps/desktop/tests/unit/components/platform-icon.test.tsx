@@ -113,7 +113,9 @@ describe("PlatformIcon", () => {
       const icon = screen.getByRole("img", { name: `${platformId} icon` });
 
       expect(icon).toHaveAttribute("src", expect.stringContaining(fileName));
-      expect(readFileSync(join(platformAssetsDir, fileName)).length).toBeGreaterThan(0);
+      expect(
+        readFileSync(join(platformAssetsDir, fileName)).length,
+      ).toBeGreaterThan(0);
       unmount();
     }
   });
@@ -207,6 +209,42 @@ describe("PlatformIcon", () => {
     expect(asset.subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
     expect(asset.readUInt32BE(16)).toBe(512);
     expect(asset.readUInt32BE(20)).toBe(512);
+  });
+
+  it("renders the official DeepSeek Harness fish mark for both app themes", () => {
+    render(<PlatformIcon platformId="deepseek-harness" size={20} />);
+
+    const icons = screen.getAllByRole("img", {
+      name: "deepseek-harness icon",
+    });
+    expect(icons).toHaveLength(2);
+    expect(icons[0]).toHaveAttribute(
+      "src",
+      expect.stringContaining("deepseek-harness-light.svg"),
+    );
+    expect(icons[0]).toHaveClass("dark:hidden");
+    expect(icons[1]).toHaveAttribute(
+      "src",
+      expect.stringContaining("deepseek-harness-dark.svg"),
+    );
+    expect(icons[1]).toHaveClass("hidden", "dark:block");
+
+    const lightAsset = readFileSync(
+      join(platformAssetsDir, "deepseek-harness-light.svg"),
+      "utf8",
+    );
+    const darkAsset = readFileSync(
+      join(platformAssetsDir, "deepseek-harness-dark.svg"),
+      "utf8",
+    );
+
+    for (const asset of [lightAsset, darkAsset]) {
+      expect(asset).toContain('viewBox="0 0 50 50"');
+      expect(asset).toContain('id="path"');
+      expect(asset).not.toContain("prefers-color-scheme");
+    }
+    expect(lightAsset).toContain('fill="#000"');
+    expect(darkAsset).toContain('fill="#fff"');
   });
 
   it("renders the official Pi badge instead of a generic fallback", () => {

@@ -2,6 +2,10 @@ import { ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import type {
   AgentAppearanceActionResult,
+  AgentHarnessOverview,
+  AgentHarnessPluginMutationRequest,
+  AgentHarnessPluginMutationResult,
+  AgentHarnessProfileDetail,
   AgentLaunchResult,
   AgentManagementBackup,
   AgentManagementBackupRestoreResult,
@@ -74,6 +78,16 @@ import type {
 } from "@prompthub/shared/types";
 
 export const agentApi = {
+  listHarnessProfiles: (): Promise<AgentHarnessOverview> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_HARNESS_PROFILES_LIST),
+  readHarnessProfile: (
+    profileName: string,
+  ): Promise<AgentHarnessProfileDetail> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_HARNESS_PROFILE_READ, profileName),
+  mutateHarnessPlugin: (
+    request: AgentHarnessPluginMutationRequest,
+  ): Promise<AgentHarnessPluginMutationResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENT_HARNESS_PLUGIN_MUTATE, request),
   launch: (agentId: string): Promise<AgentLaunchResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.AGENT_LAUNCH, agentId),
   listConfigFiles: (agentId: string): Promise<SkillLocalFileTreeEntry[]> =>

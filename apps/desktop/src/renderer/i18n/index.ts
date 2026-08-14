@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import { withAgentDefinitionMessages } from "./locales/agent-definitions";
+import { withAgentDeepSeekHarnessMessages } from "./locales/agent-deepseek-harness";
 
 const localeLoaders = {
   en: () => import("./locales/en.json").then((module) => module.default),
@@ -67,9 +68,9 @@ async function loadLocale(lang: string): Promise<LocaleMessages> {
     return cached;
   }
 
-  const messages = withAgentDefinitionMessages(
+  const messages = withAgentDeepSeekHarnessMessages(
     normalized,
-    await localeLoaders[normalized](),
+    withAgentDefinitionMessages(normalized, await localeLoaders[normalized]()),
   );
   loadedLocales.add(normalized);
   localeCache.set(normalized, messages);

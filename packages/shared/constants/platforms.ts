@@ -45,6 +45,8 @@ export interface SkillPlatform {
   launchPaths?: Partial<Record<SkillPlatformOsKey, string[]>>;
   resolvedRootPath?: string;
   skillsRelativePath: string;
+  assetModel?: "directory" | "plugin-harness";
+  harnessProfilesRelativePath?: string;
   mcpRelativePath?: string;
   pluginsRelativePath?: string;
   agentsRelativePath?: string;
@@ -163,6 +165,7 @@ export function getPlatformPluginsRelativePath(
 export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "claude",
   "codex",
+  "deepseek-harness",
   "kimi",
   "reasonix",
   "augment",
@@ -258,6 +261,25 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       executableCandidates: ["claude"],
       versionArgs: ["--version"],
       evidence: "official-claude-cli",
+    },
+  },
+  {
+    id: "deepseek-harness",
+    name: "DeepSeek Harness",
+    icon: "Plug",
+    rootEnvironmentVariable: "DSH_HOME",
+    rootDir: {
+      darwin: "~/.dsh",
+      win32: "%USERPROFILE%\\.dsh",
+      linux: "~/.dsh",
+    },
+    skillsRelativePath: "",
+    assetModel: "plugin-harness",
+    harnessProfilesRelativePath: "profiles",
+    cli: {
+      executableCandidates: ["dsh"],
+      versionArgs: ["--version"],
+      evidence: "official-deepseek-harness-cli",
     },
   },
   {

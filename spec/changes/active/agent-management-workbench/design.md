@@ -3328,3 +3328,51 @@ provider detail and does not expose a general-purpose secret JSON editor.
 | Requirement    | Design          | Verification     | Task          |
 | -------------- | --------------- | ---------------- | ------------- |
 | `FR-AGENT-125` | `DES-AGENT-143` | `TEST-AGENT-204` | `T-AGENT-213` |
+
+## `DES-AGENT-144`: DeepSeek Harness Profile Adapter
+
+DeepSeek Harness is registered with a `plugin-harness` asset model, a
+`DSH_HOME` root override, the `dsh` executable, and no generic Skills, MCP,
+Rules, Appearance, Provider, Config Files, or Session path claim. The shared
+Agent shell uses that declaration to show only Overview and Plugins. The
+Plugins destination renders `AgentDeepSeekHarnessPanel` instead of the generic
+PromptHub Plugin target view; this is a platform adapter, not a second canonical
+PromptHub Plugin library.
+
+Desktop main owns `AgentDeepSeekHarnessService`. Profile enumeration reads at
+most 64 direct, non-symlink profile directories and only their bounded
+`package.json` manifests. Opening one profile reads at most 128 unique bundle
+or dependency manifests. Installed package resolution follows pnpm links from
+the selected profile's `node_modules` only when their real target remains
+inside the Harness root, and returns sanitized identity,
+version, description, license, repository, bundle/client declarations,
+dependency source, enabled/direct status, and lifecycle-script names. Script
+bodies and arbitrary package content never cross IPC. Profile listing is
+`O(P)` and selected detail is `O(D)` for the declared hard limits; it uses no
+watcher, timer, database row, sync payload, or unbounded cache.
+
+Three typed IPC operations list profiles, read one selected profile, and mutate
+one plugin. Both IPC and service layers validate the fixed Agent id, strict
+profile/package grammar, allowed keys, operation, and risk acknowledgement.
+Mutations resolve only the allowlisted `dsh` executable and invoke one of:
+`plugin --profile <name> add <source>`, `update <package>`, or
+`remove <package>`. They run without a shell, cap execution at two minutes and
+128 KiB output, serialize per profile, discard stdout/stderr, and return only
+allowlisted error codes. Update/removal first re-read the profile and reject
+shipped bundles that are not direct dependencies. A successful mutation then
+re-reads only the selected profile.
+
+The renderer uses the shared portal-backed Select, standard buttons, Lucide
+command icons, and theme-aware copies of the official DeepSeek Harness favicon
+from the upstream repository. The platform icon resolver shares that identity
+between the Agent list and workspace header instead of reusing the generic
+DeepSeek provider logo. The panel also uses an explicit install confirmation
+checkbox and a destructive removal confirmation. It keeps one
+profile detail request in flight per selection and refreshes after mutations;
+there is no background polling or remote marketplace discovery. Community
+discovery remains separately gated because the upstream project exposes a
+package contract, not an authoritative marketplace.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-126` | `DES-AGENT-144` | `TEST-AGENT-206` | `T-AGENT-215` |

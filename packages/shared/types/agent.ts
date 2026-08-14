@@ -54,6 +54,7 @@ export interface ManagedAgentCapability {
 export interface ManagedAgentPaths {
   root: string;
   skills: string;
+  profiles?: string;
   mcp?: string;
   plugins?: string;
   rules?: string;
@@ -76,6 +77,7 @@ export interface ManagedAgentSummary {
   status: "installed" | "configured" | "not-detected";
   lifecycle?: AgentProductLifecycle;
   replacementPlatformId?: string;
+  workspaceKind?: "standard" | "plugin-harness";
   paths: ManagedAgentPaths;
   capabilities: Record<AgentCapabilityKey, ManagedAgentCapability>;
 }

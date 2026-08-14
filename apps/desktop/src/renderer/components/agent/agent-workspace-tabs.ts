@@ -122,6 +122,12 @@ export function getAgentTabStatus(
   }
   if (
     tab.assetDomain &&
+    !(
+      tab.assetDomain === "plugins" &&
+      (agent.workspaceKind === "plugin-harness" ||
+        agent.id === "deepseek-harness") &&
+      agent.paths.profiles
+    ) &&
     !agent.paths[tab.assetDomain] &&
     !(tab.assetDomain === "rules" && agent.paths.projectRules)
   ) {
@@ -133,6 +139,14 @@ export function getAgentTabStatus(
 export function getAgentWorkspaceTabs(
   agent: ManagedAgentSummary,
 ): AgentWorkspaceTab[] {
+  if (
+    agent.workspaceKind === "plugin-harness" ||
+    agent.id === "deepseek-harness"
+  ) {
+    return AGENT_WORKSPACE_TABS.filter(
+      (tab) => tab.key === "overview" || tab.key === "plugins",
+    );
+  }
   return AGENT_WORKSPACE_TABS.filter(
     (tab) => !tab.platformIds || tab.platformIds.includes(agent.id),
   );

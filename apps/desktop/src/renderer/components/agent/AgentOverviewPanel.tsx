@@ -404,6 +404,24 @@ function OverviewNavGrid({
 }) {
   const { t } = useTranslation();
   const inventories = useAgentAssetInventoryMap(agent);
+  if (agent.workspaceKind === "plugin-harness") {
+    return (
+      <section
+        aria-label={t("agents.overview", "Overview")}
+        className="rounded-md border border-border/80 bg-card p-4 shadow-sm"
+      >
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <NavCellShell
+            icon={PlugIcon}
+            label={t("agents.plugins")}
+            primary={t("agents.deepseekHarness.pluginList")}
+            secondary={t("agents.deepseekHarness.selectPlugin")}
+            onSelect={() => onNavigate("plugins")}
+          />
+        </div>
+      </section>
+    );
+  }
   const assetMeta: Array<{
     domain: AgentAssetDomain;
     icon: LucideIcon;
@@ -568,22 +586,31 @@ function PathsPanel({ agent }: { agent: ManagedAgentSummary }) {
               label={t("agents.rootPath", "Root")}
               value={agent.paths.root}
             />
-            <PathRow
-              label={t("agents.skillsPath", "Skills")}
-              value={agent.paths.skills}
-            />
-            <PathRow
-              label={t("agents.mcpPath", "MCP")}
-              value={agent.paths.mcp}
-            />
-            <PathRow
-              label={t("agents.rulesPath", "Rules")}
-              value={agent.paths.rules}
-            />
-            <PathRow
-              label={t("agents.pluginsPath", "Plugins")}
-              value={agent.paths.plugins}
-            />
+            {agent.workspaceKind === "plugin-harness" ? (
+              <PathRow
+                label={t("agents.deepseekHarness.profilesPath", "Profiles")}
+                value={agent.paths.profiles}
+              />
+            ) : (
+              <>
+                <PathRow
+                  label={t("agents.skillsPath", "Skills")}
+                  value={agent.paths.skills}
+                />
+                <PathRow
+                  label={t("agents.mcpPath", "MCP")}
+                  value={agent.paths.mcp}
+                />
+                <PathRow
+                  label={t("agents.rulesPath", "Rules")}
+                  value={agent.paths.rules}
+                />
+                <PathRow
+                  label={t("agents.pluginsPath", "Plugins")}
+                  value={agent.paths.plugins}
+                />
+              </>
+            )}
           </dl>
         </details>
       </div>

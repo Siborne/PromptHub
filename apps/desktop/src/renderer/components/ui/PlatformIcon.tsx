@@ -54,6 +54,8 @@ import piIcon from "../../assets/platforms/pi.svg";
 import ohMyPiIcon from "../../assets/platforms/oh-my-pi.svg";
 import chatgptLightIcon from "../../assets/platforms/chatgpt-light.png";
 import chatgptDarkIcon from "../../assets/platforms/chatgpt-dark.png";
+import deepseekHarnessLightIcon from "../../assets/platforms/deepseek-harness-light.svg";
+import deepseekHarnessDarkIcon from "../../assets/platforms/deepseek-harness-dark.svg";
 
 type PlatformIconSource = string | { light: string; dark: string };
 
@@ -61,6 +63,10 @@ type PlatformIconSource = string | { light: string; dark: string };
 // 平台图标映射
 const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   claude: claudeIcon,
+  "deepseek-harness": {
+    light: deepseekHarnessLightIcon,
+    dark: deepseekHarnessDarkIcon,
+  },
   cursor: cursorIcon,
   copilot: copilotIcon,
   windsurf: windsurfIcon,
@@ -116,6 +122,7 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
 // 没有内置品牌资源时的 Lucide 图标 fallback
 const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   claude: <SparklesIcon />,
+  "deepseek-harness": <BotIcon />,
   cursor: <TerminalIcon />,
   copilot: <GithubIcon />,
   windsurf: <WindIcon />,

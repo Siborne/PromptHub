@@ -4120,3 +4120,57 @@ state. An active snapshot MUST NOT be deletable.
 - When the user tries to add an account
 - Then no account metadata, ciphertext or Codex file is changed
 - And no token or raw authentication JSON appears in the returned error
+
+### `FR-AGENT-126`: DeepSeek Harness Profile Plugin Management
+
+PromptHub MUST register DeepSeek Harness as a distinct managed Agent rooted at
+`$DSH_HOME` or the platform default `~/.dsh`. Its Agent workspace MUST follow
+the product's profile-and-bundle model instead of projecting separate Skills,
+MCP, Rules, or generic directory-plugin tabs. The visible management surface
+MUST be Plugins, with a custom profile selector and a two-pane installed-plugin
+inventory/detail view. The shared Agent list and header MUST use the upstream
+product title `DeepSeek Harness` and its official fish mark in both light and
+dark themes rather than reusing the generic DeepSeek provider logo.
+
+PromptHub MUST read each bounded `<dsh-root>/profiles/<name>/package.json` as
+the profile source of truth. Ordered `dsh.profile.bundles`, direct dependencies,
+installed package metadata, `dsh.bundle.patch`, client declarations, and the
+presence of lifecycle scripts MAY be projected as sanitized metadata. Package
+script bodies, credentials, arbitrary package files, generated runtime state,
+and composed conversation content MUST NOT enter renderer state, backup, or
+sync.
+
+Install, update, and uninstall MUST execute only through the installed official
+`dsh plugin --profile <name> ...` command without a shell. Package/profile names,
+GitHub HTTPS sources, operation, timeout, output size, and concurrency MUST be
+bounded in the main process. Installation MUST require an explicit risk
+acknowledgement because pnpm packages can execute lifecycle or prepare scripts.
+Built-in profile bundles that are not direct profile dependencies MUST remain
+read-only. A failed command MUST return a typed, redacted result and MUST NOT be
+reported as a successful inventory mutation.
+
+#### Scenario: Inspect a DeepSeek Harness profile
+
+- Given DeepSeek Harness has one or more profiles
+- When the user opens its Plugins tab and selects a profile
+- Then the Agent list and header identify it as DeepSeek Harness with the official theme-aware fish mark
+- Then PromptHub shows the ordered bundle/dependency inventory and selected plugin details
+- And enabled means the package appears in `dsh.profile.bundles`
+- And install-script risk is shown without returning script bodies
+- And Skills, MCP, Rules, Appearance, Provider, Config Files, and Sessions are not presented as independently supported Harness domains
+
+#### Scenario: Install a profile plugin safely
+
+- Given the official `dsh` CLI is installed
+- When the user enters a valid registry or GitHub HTTPS package source, selects or names a profile, acknowledges lifecycle-script risk, and confirms
+- Then PromptHub runs `dsh plugin --profile <profile> add <source>` without a shell
+- And the profile is initialized by the official CLI when it does not yet exist
+- And the selected profile is re-read only after the command succeeds
+- And malformed sources, missing acknowledgement, output overflow, timeout, or command failure return a redacted failure without a false success state
+
+#### Scenario: Update or remove a direct plugin dependency
+
+- Given a selected package is a direct dependency of the profile
+- When the user confirms update or permanent removal
+- Then PromptHub delegates to the matching official `dsh plugin` operation and refreshes the profile
+- And a shipped bundle that is not a direct dependency cannot be updated or removed from PromptHub

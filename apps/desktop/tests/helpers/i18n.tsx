@@ -11,17 +11,29 @@ import ja from "../../src/renderer/i18n/locales/ja.json";
 import zhTW from "../../src/renderer/i18n/locales/zh-TW.json";
 import zh from "../../src/renderer/i18n/locales/zh.json";
 import { withAgentDefinitionMessages } from "../../src/renderer/i18n/locales/agent-definitions";
+import { withAgentDeepSeekHarnessMessages } from "../../src/renderer/i18n/locales/agent-deepseek-harness";
+
+function withAgentMessages<
+  T extends { agents: object },
+  L extends
+    keyof typeof import("../../src/renderer/i18n/locales/agent-definitions").agentDefinitionMessages,
+>(locale: L, messages: T) {
+  return withAgentDeepSeekHarnessMessages(
+    locale,
+    withAgentDefinitionMessages(locale, messages),
+  );
+}
 
 const resources = {
-  en: { translation: withAgentDefinitionMessages("en", en) },
-  zh: { translation: withAgentDefinitionMessages("zh", zh) },
+  en: { translation: withAgentMessages("en", en) },
+  zh: { translation: withAgentMessages("zh", zh) },
   "zh-TW": {
-    translation: withAgentDefinitionMessages("zh-TW", zhTW),
+    translation: withAgentMessages("zh-TW", zhTW),
   },
-  ja: { translation: withAgentDefinitionMessages("ja", ja) },
-  es: { translation: withAgentDefinitionMessages("es", es) },
-  de: { translation: withAgentDefinitionMessages("de", de) },
-  fr: { translation: withAgentDefinitionMessages("fr", fr) },
+  ja: { translation: withAgentMessages("ja", ja) },
+  es: { translation: withAgentMessages("es", es) },
+  de: { translation: withAgentMessages("de", de) },
+  fr: { translation: withAgentMessages("fr", fr) },
 };
 
 export async function createTestI18n(language = "en") {

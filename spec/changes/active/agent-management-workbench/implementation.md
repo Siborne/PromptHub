@@ -3642,3 +3642,32 @@ clientWidth`, the table wrapper owned horizontal overflow, and the inspected
   connection check succeeds. One explicitly confirmed live model probe reached
   the official CLI and ended at the bounded 60-second timeout without exposing
   command output or leaving temporary state.
+
+### DeepSeek Harness Profile Plugins
+
+- `FR-AGENT-126` / `DES-AGENT-144` register DeepSeek Harness as a
+  `plugin-harness` Agent rooted at `DSH_HOME` or `~/.dsh`. Its desktop workspace
+  exposes only Overview and Plugins; Skills, MCP and Rules are not presented as
+  independent native domains.
+- The platform registry keeps the upstream title `DeepSeek Harness`, while the
+  shared Agent list/header icon resolver uses fixed light/dark variants of the
+  official upstream Harness favicon instead of the generic DeepSeek provider
+  logo.
+- The main-only adapter reads bounded profile manifests from
+  `profiles/<name>/package.json`, distinguishes ordered bundles from direct
+  package dependencies, resolves package metadata under the Harness root and
+  returns only sanitized metadata. Profile directories cannot be symlinks;
+  manifests and inventories have explicit size and count limits.
+- Install, update and removal use the official shell-free `dsh plugin --profile`
+  command path with per-profile serialization, a two-minute timeout, bounded
+  output and typed redacted errors. Installation requires an explicit package
+  lifecycle-script acknowledgement. No marketplace, database schema, sync
+  payload or background watcher is introduced.
+- Focused platform, capability, icon, tab, service, IPC, renderer and i18n suites
+  passed 53 tests. The canonical Agent edit-path regression passed 7 tests.
+  Desktop, core and shared TypeScript checks, desktop ESLint and spec
+  traceability passed. `pnpm verify:release:quick` passed all 29 checks across
+  desktop, CLI, core, database, shared, self-hosted Web, Cloudflare Worker and
+  mobile surfaces in 685.2 seconds. The current machine has no installed `dsh`
+  executable or Harness profile, so fixture-backed tests prove the adapter
+  contract but a live package installation remains unverified.

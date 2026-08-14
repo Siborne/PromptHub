@@ -65,6 +65,7 @@ const expectedPlannedSessionAdapters = [
   "amp",
   "autoclaw",
   "codebuddy",
+  "deepseek-harness",
   "qclaw",
   "qoderwork",
   "trae",
@@ -102,7 +103,7 @@ describe("Agent platform capability inventory", () => {
     const registryIds = SKILL_PLATFORMS.map((platform) => platform.id).sort();
     const inventoryIds = Object.keys(AGENT_PLATFORM_DEPTH_CAPABILITIES).sort();
 
-    expect(new Set(registryIds).size).toBe(35);
+    expect(new Set(registryIds).size).toBe(36);
     expect(inventoryIds).toEqual(registryIds);
   });
 
@@ -223,6 +224,30 @@ describe("Agent platform capability inventory", () => {
       rootEnvironmentVariable: "GROK_HOME",
       mcpRelativePath: "config.toml",
       configFiles: expect.arrayContaining(["config.toml"]),
+    });
+  });
+
+  it("models DeepSeek Harness as profile plugins instead of generic asset paths", () => {
+    const harness = SKILL_PLATFORMS.find(
+      (platform) => platform.id === "deepseek-harness",
+    );
+
+    expect(harness).toMatchObject({
+      name: "DeepSeek Harness",
+      icon: "Plug",
+      rootEnvironmentVariable: "DSH_HOME",
+      assetModel: "plugin-harness",
+      harnessProfilesRelativePath: "profiles",
+      cli: { executableCandidates: ["dsh"] },
+    });
+    expect(getAgentPlatformCapabilityInventory(harness!)).toMatchObject({
+      skills: { status: "unsupported" },
+      mcp: { status: "unsupported" },
+      rules: { status: "unsupported" },
+      plugins: {
+        status: "partial",
+        evidence: "dsh-profile-bundle-adapter",
+      },
     });
   });
 
@@ -348,6 +373,7 @@ describe("Agent platform capability inventory", () => {
     expect(diagnosticIds).toEqual([
       "claude",
       "codex",
+      "deepseek-harness",
       "kimi",
       "oh-my-pi",
       "openclaw",
