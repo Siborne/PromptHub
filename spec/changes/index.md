@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 57 |
+| Active | 58 |
 | Archived | 189 |
 | Legacy | 1 |
 
@@ -56,6 +56,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `prompt-output-format-contribution` | active | `spec/changes/active/prompt-output-format-contribution/` |
 | `prompt-workspace-completion` | active | `spec/changes/active/prompt-workspace-completion/` |
 | `r2-direct-downloads` | active | `spec/changes/active/r2-direct-downloads/` |
+| `react-type-workspace-boundary` | active | `spec/changes/active/react-type-workspace-boundary/` |
 | `readme-screenshots-v0-5-6` | active | `spec/changes/active/readme-screenshots-v0-5-6/` |
 | `release-0-6-0-version-alignment` | active | `spec/changes/active/release-0-6-0-version-alignment/` |
 | `republish-0-5-9-20260714` | active | `spec/changes/active/republish-0-5-9-20260714/` |
