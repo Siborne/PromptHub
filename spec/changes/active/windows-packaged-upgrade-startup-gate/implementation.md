@@ -2,8 +2,9 @@
 
 ## Status
 
-In progress. `v0.6.0-beta.1` was withdrawn to a draft on 2026-08-14 after a
-Windows startup failure was confirmed.
+Implemented and fully verified. `v0.6.0-beta.1` remains withdrawn as a draft;
+the successful replacement-candidate verification does not republish or retag
+the release.
 
 ## Implemented
 
@@ -66,6 +67,13 @@ Windows startup failure was confirmed.
   was specification index freshness caused by a separate uncommitted active
   change already present in the shared worktree; every code, type, lint, and
   test check completed successfully.
+- Manual GitHub Actions run `31798130196` passed the full release verification
+  and every build matrix job at commit `e1c0f5bc`. Windows x64 passed the real
+  packaged `0.5.9` upgrade cold start, both Windows architectures uploaded
+  artifacts, and both macOS architectures passed signing and notarization.
+- The workflow was dispatched without a release tag, so its release job was
+  intentionally skipped. The withdrawn GitHub release remains a draft pending
+  a separate explicit publication decision.
 - The AppData profile policy and release workflow wiring regressions passed 13
   focused tests; the wider data-path set passed 38 tests total, and desktop
   typecheck passed.
@@ -83,8 +91,9 @@ Windows startup failure was confirmed.
 - The real Windows GitHub Actions runner remains required before release
   approval.
 
-## Remaining Release Blockers
+## Publication State
 
-- Windows packaged `0.5.9` upgrade cold start must pass in GitHub Actions.
-- The complete release workflow must pass before a replacement prerelease is
-  published.
+- No code or build-matrix blocker remains for this startup fix.
+- The existing `v0.6.0-beta.1` GitHub release still points at the withdrawn
+  candidate and remains a draft. Retagging or publishing is outside this change
+  and requires an explicit release action.
