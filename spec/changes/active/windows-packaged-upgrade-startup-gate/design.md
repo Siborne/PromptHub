@@ -63,6 +63,8 @@ proxy, runner-global PromptHub data, or existing processes.
 - `TEST-WINSTART-004`: Unit tests prove the AppData override is unavailable to
   normal/dev launches and rejects paths outside the runner-owned temporary
   root.
+- `TEST-WINSTART-005`: Desktop skill reconciliation proves a committed marker
+  remains valid when Windows rejects best-effort directory fsync after rename.
 - `TEST-WINSTART-003`: GitHub Actions manual release workflow passes the Windows
   x64 packaged upgrade smoke and the full platform matrix before tagging or
   publication.

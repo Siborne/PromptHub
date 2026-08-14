@@ -21,6 +21,14 @@ file passed to `fsync` must have been opened with write permission.
 - Then the copied evidence is durably flushed and hashed
 - And the operation does not use a read-only flush handle
 
+#### Scenario: Windows rejects directory fsync after marker commit
+
+- Given a desktop skill reconciliation marker whose temporary file was flushed
+  and atomically renamed
+- When Windows returns `EPERM` for the best-effort parent-directory `fsync`
+- Then startup keeps the committed marker and continues
+- And file-level durability failures remain fatal
+
 ### FR-WINSTART-002 Release Blocking Gate
 
 The release workflow must execute the unpacked packaged Windows x64 application
@@ -65,8 +73,8 @@ must terminate and clean up its own process and files.
 
 ## Traceability
 
-| Requirement        | Design             | Verification                             | Task             |
-| ------------------ | ------------------ | ---------------------------------------- | ---------------- |
-| `FR-WINSTART-001`  | `DES-WINSTART-001` | `TEST-WINSTART-001`                      | `T-WINSTART-001` |
-| `FR-WINSTART-002`  | `DES-WINSTART-002` | `TEST-WINSTART-002`                      | `T-WINSTART-002` |
-| `NFR-WINSTART-001` | `DES-WINSTART-003` | `TEST-WINSTART-003`, `TEST-WINSTART-004` | `T-WINSTART-003` |
+| Requirement        | Design             | Verification                             | Task                                   |
+| ------------------ | ------------------ | ---------------------------------------- | -------------------------------------- |
+| `FR-WINSTART-001`  | `DES-WINSTART-001` | `TEST-WINSTART-001`, `TEST-WINSTART-005` | `T-WINSTART-001`, `T-WINSTART-005`     |
+| `FR-WINSTART-002`  | `DES-WINSTART-002` | `TEST-WINSTART-002`                      | `T-WINSTART-002`                       |
+| `NFR-WINSTART-001` | `DES-WINSTART-003` | `TEST-WINSTART-003`, `TEST-WINSTART-004` | `T-WINSTART-003`                       |

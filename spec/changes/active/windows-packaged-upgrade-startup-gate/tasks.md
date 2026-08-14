@@ -12,3 +12,6 @@
 - [ ] `T-WINSTART-004` (`FR-WINSTART-002`, `DES-WINSTART-002`,
       `TEST-WINSTART-003`): update release records and keep publication blocked
       until all checks pass.
+- [x] `T-WINSTART-005` (`FR-WINSTART-001`, `DES-WINSTART-001`,
+      `TEST-WINSTART-005`): tolerate unsupported directory fsync after the
+      desktop skill reconciliation marker has been atomically committed.

@@ -13,6 +13,7 @@ describe("desktop skill repository reconciliation", () => {
   const roots: string[] = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const root of roots.splice(0)) {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -75,6 +76,25 @@ describe("desktop skill repository reconciliation", () => {
       reconcileDesktopSkillRepoPaths(database, markerPath, resolver),
     ).toEqual({ status: "already-complete", reconciled: 1, unresolved: 0 });
     expect(resolver).toHaveBeenCalledTimes(1);
+    database.close();
+  });
+
+  it("keeps the committed marker when Windows rejects directory fsync", () => {
+    const { database, markerPath } = fixture();
+    const fsyncSync = fs.fsyncSync.bind(fs);
+    vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      if (fs.fstatSync(descriptor).isDirectory()) {
+        throw Object.assign(new Error("operation not permitted, fsync"), {
+          code: "EPERM",
+        });
+      }
+      fsyncSync(descriptor);
+    });
+
+    expect(
+      reconcileDesktopSkillRepoPaths(database, markerPath, () => null),
+    ).toEqual({ status: "completed", reconciled: 0, unresolved: 1 });
+    expect(fs.existsSync(markerPath)).toBe(true);
     database.close();
   });
 

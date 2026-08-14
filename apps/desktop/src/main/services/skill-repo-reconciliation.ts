@@ -67,6 +67,18 @@ function assertSafeRepoPath(repoPath: string): string {
   return resolved;
 }
 
+function flushDirectory(directoryPath: string): void {
+  let descriptor: number | null = null;
+  try {
+    descriptor = fs.openSync(directoryPath, "r");
+    fs.fsyncSync(descriptor);
+  } catch {
+    // Windows and some filesystems do not permit directory fsync.
+  } finally {
+    if (descriptor !== null) fs.closeSync(descriptor);
+  }
+}
+
 function publishMarker(markerPath: string, marker: ReconciliationMarker): void {
   const markerDirectory = path.dirname(markerPath);
   fs.mkdirSync(markerDirectory, { recursive: true, mode: 0o700 });
@@ -83,16 +95,11 @@ function publishMarker(markerPath: string, marker: ReconciliationMarker): void {
   }
   try {
     fs.renameSync(temporaryPath, markerPath);
-    const directoryDescriptor = fs.openSync(markerDirectory, "r");
-    try {
-      fs.fsyncSync(directoryDescriptor);
-    } finally {
-      fs.closeSync(directoryDescriptor);
-    }
   } catch (error) {
     fs.rmSync(temporaryPath, { force: true });
     throw error;
   }
+  flushDirectory(markerDirectory);
 }
 
 export function reconcileDesktopSkillRepoPaths(

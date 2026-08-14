@@ -171,7 +171,30 @@ jobs:
             if [ "${{ matrix.platform }}" = "win" ]; then
               pnpm vite build && pnpm electron-builder --config electron-builder.config.cjs --win --${{ matrix.arch }} --publish never
             elif [ "${{ matrix.platform }}" = "mac" ]; then
-              pnpm vite build && PROMPTHUB_MAC_RELEASE_SIGN=true pnpm electron-builder --config electron-builder.config.cjs --mac --${{ matrix.arch }} --publish never
+              pnpm vite build
+
+              MAC_TIMESTAMP_RETRY_LIMIT=2
+              MAC_TIMESTAMP_RETRY_DELAY_SECONDS=60
+              package_attempt=1
+              while [ "$package_attempt" -le "$MAC_TIMESTAMP_RETRY_LIMIT" ]; do
+                package_log="${RUNNER_TEMP}/prompthub-mac-package-${{ matrix.arch }}-${package_attempt}.log"
+                set +e
+                PROMPTHUB_MAC_RELEASE_SIGN=true pnpm electron-builder --config electron-builder.config.cjs --mac --${{ matrix.arch }} --publish never 2>&1 | tee "$package_log"
+                package_status=${PIPESTATUS[0]}
+                set -e
+
+                if [ "$package_status" -eq 0 ]; then
+                  break
+                fi
+                if [ "$package_attempt" -ge "$MAC_TIMESTAMP_RETRY_LIMIT" ] || ! grep -Fq "The timestamp service is not available" "$package_log"; then
+                  exit "$package_status"
+                fi
+
+                echo "::warning::Apple timestamp service unavailable; retrying macOS packaging in ${MAC_TIMESTAMP_RETRY_DELAY_SECONDS}s."
+                sleep "$MAC_TIMESTAMP_RETRY_DELAY_SECONDS"
+                find dist -maxdepth 1 -type d -name 'mac*' -exec rm -rf {} +
+                package_attempt=$((package_attempt + 1))
+              done
             fi
           else
             pnpm electron:build:${{ matrix.platform }}

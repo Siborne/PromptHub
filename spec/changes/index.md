@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 56 |
+| Active | 57 |
 | Archived | 189 |
 | Legacy | 1 |
 
@@ -41,6 +41,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `homepage-changelog-route-retirement` | active | `spec/changes/active/homepage-changelog-route-retirement/` |
 | `legacy-upgrade-recovery-audit` | active | `spec/changes/active/legacy-upgrade-recovery-audit/` |
 | `macos-developer-id-signing` | active | `spec/changes/active/macos-developer-id-signing/` |
+| `macos-timestamp-retry` | in progress | `spec/changes/active/macos-timestamp-retry/` |
 | `marketplace-expansion` | active | `spec/changes/active/marketplace-expansion/` |
 | `mcp-version-history-and-projection-safety` | active | `spec/changes/active/mcp-version-history-and-projection-safety/` |
 | `mobile-app-shell` | active | `spec/changes/active/mobile-app-shell/` |

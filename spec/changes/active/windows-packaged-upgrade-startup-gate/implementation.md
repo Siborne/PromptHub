@@ -58,6 +58,14 @@ Windows startup failure was confirmed.
 - The production desktop build, specification traceability validation, and the
   29-check quick release verification profile passed on the converged local
   code state.
+- Manual GitHub Actions run `31778706137` reached the isolated Windows profile,
+  completed the upgrade snapshot and layout migration, then exposed a second
+  Windows-only startup failure: the desktop skill reconciliation marker was
+  committed successfully, but an uncaught directory `fsync` returned `EPERM`.
+- The marker publisher now keeps file durability mandatory while treating
+  unsupported directory `fsync` as best effort, matching the repository's other
+  atomic marker publishers. A regression reproduces the Windows error after
+  rename and requires the committed marker to remain usable.
 - The real Windows GitHub Actions runner remains required before release
   approval.
 

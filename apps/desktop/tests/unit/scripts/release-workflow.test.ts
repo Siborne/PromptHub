@@ -84,6 +84,13 @@ describe("release workflow secret guards", () => {
     expect(desktopMainSource).toContain('app.setPath("appData"');
   });
 
+  it("retries macOS packaging only when Apple's timestamp service is unavailable", () => {
+    expect(workflowSource).toContain("MAC_TIMESTAMP_RETRY_LIMIT=2");
+    expect(workflowSource).toContain("The timestamp service is not available");
+    expect(workflowSource).toContain("MAC_TIMESTAMP_RETRY_DELAY_SECONDS=60");
+    expect(workflowSource).toContain("exit \"$package_status\"");
+  });
+
   it("gates optional publishers through non-secret readiness outputs", () => {
     expect(workflowSource).toContain("id: publish_secrets");
     expect(workflowSource).toContain(
