@@ -62,6 +62,14 @@ must terminate and clean up its own process and files.
 - When the release-smoke AppData override is present
 - Then startup rejects the override instead of using that path
 
+#### Scenario: Windows releases packaged-process handles asynchronously
+
+- Given the packaged startup assertions have passed
+- When terminating the task-owned process tree leaves a temporary handle busy
+- Then the smoke waits for process close and retries only transient Windows
+  cleanup errors within a bounded budget
+- And persistent or non-transient cleanup failures still fail the build
+
 ## Acceptance Criteria
 
 - `AC-WINSTART-001`: Unit regressions simulate the Windows requirement that a
@@ -70,11 +78,13 @@ must terminate and clean up its own process and files.
   and a renderer-loaded startup event.
 - `AC-WINSTART-003`: The release record remains blocked until the complete
   workflow, including Windows packaged startup, passes.
+- `AC-WINSTART-004`: A successful packaged launch is not turned into a false
+  failure by the bounded Windows process-handle release race.
 
 ## Traceability
 
-| Requirement        | Design             | Verification                             | Task                                   |
-| ------------------ | ------------------ | ---------------------------------------- | -------------------------------------- |
-| `FR-WINSTART-001`  | `DES-WINSTART-001` | `TEST-WINSTART-001`, `TEST-WINSTART-005` | `T-WINSTART-001`, `T-WINSTART-005`     |
-| `FR-WINSTART-002`  | `DES-WINSTART-002` | `TEST-WINSTART-002`                      | `T-WINSTART-002`                       |
-| `NFR-WINSTART-001` | `DES-WINSTART-003` | `TEST-WINSTART-003`, `TEST-WINSTART-004` | `T-WINSTART-003`                       |
+| Requirement        | Design             | Verification                                                  | Task                               |
+| ------------------ | ------------------ | ------------------------------------------------------------- | ---------------------------------- |
+| `FR-WINSTART-001`  | `DES-WINSTART-001` | `TEST-WINSTART-001`, `TEST-WINSTART-005`                      | `T-WINSTART-001`, `T-WINSTART-005` |
+| `FR-WINSTART-002`  | `DES-WINSTART-002` | `TEST-WINSTART-002`                                           | `T-WINSTART-002`                   |
+| `NFR-WINSTART-001` | `DES-WINSTART-003` | `TEST-WINSTART-003`, `TEST-WINSTART-004`, `TEST-WINSTART-006` | `T-WINSTART-003`, `T-WINSTART-006` |

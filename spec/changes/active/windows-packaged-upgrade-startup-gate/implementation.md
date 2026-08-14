@@ -52,6 +52,20 @@ Windows startup failure was confirmed.
   out-of-root paths fail closed.
 - Failure output now includes a bounded isolated-profile inventory, any startup
   logs found there, and bounded child output before cleanup.
+- Manual GitHub Actions run `31795386867` proved that Windows x64 completed the
+  upgrade snapshot and loaded its renderer. The job then failed while removing
+  its isolated root because Windows had not yet released a packaged-process
+  handle.
+- Cleanup now waits for the launched child close event and retries only the
+  documented transient recursive-removal errors with a fixed budget. Persistent
+  cleanup failures still fail the release job.
+- The focused packaged-cleanup and workflow tests passed 20 tests. The cleanup
+  helper reached 100% statement, branch, function, and line coverage; affected
+  ESLint and change traceability also passed.
+- The local quick release profile passed 28 of 29 checks. Its only failed check
+  was specification index freshness caused by a separate uncommitted active
+  change already present in the shared worktree; every code, type, lint, and
+  test check completed successfully.
 - The AppData profile policy and release workflow wiring regressions passed 13
   focused tests; the wider data-path set passed 38 tests total, and desktop
   typecheck passed.

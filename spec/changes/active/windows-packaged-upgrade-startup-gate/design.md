@@ -50,7 +50,11 @@ cannot provide native arm64 execution evidence.
 ## DES-WINSTART-003 Bounded Resource Ownership
 
 The smoke uses one child process, a fixed 60-second timeout, 250 ms polling,
-bounded captured output, and a `finally` cleanup path. It never changes system
+bounded captured output, and a `finally` cleanup path. Cleanup terminates only
+the launched process tree, waits up to five seconds for the child close event,
+then retries the same task-owned directory only for Node's transient Windows
+recursive-removal errors. The retry budget is 20 attempts at 250 ms intervals;
+non-transient and exhausted failures remain fatal. It never changes system
 proxy, runner-global PromptHub data, or existing processes.
 
 ## Verification
@@ -65,6 +69,9 @@ proxy, runner-global PromptHub data, or existing processes.
   root.
 - `TEST-WINSTART-005`: Desktop skill reconciliation proves a committed marker
   remains valid when Windows rejects best-effort directory fsync after rename.
+- `TEST-WINSTART-006`: Focused cleanup regressions cover successful real
+  removal, every retryable Windows error, non-transient failure, and exhausted
+  retry budget.
 - `TEST-WINSTART-003`: GitHub Actions manual release workflow passes the Windows
   x64 packaged upgrade smoke and the full platform matrix before tagging or
   publication.
@@ -73,4 +80,6 @@ proxy, runner-global PromptHub data, or existing processes.
 
 The unit checks add constant work around existing file operations. The release
 smoke creates one small database and scans a bounded startup log; time and
-memory are `O(n)` in the bounded log size, with no network requests required.
+memory are `O(n)` in the bounded log size. Cleanup adds at most ten seconds of
+bounded waiting in the exceptional locked-handle path and makes no network
+requests.

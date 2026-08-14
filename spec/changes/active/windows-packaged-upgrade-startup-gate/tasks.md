@@ -15,3 +15,6 @@
 - [x] `T-WINSTART-005` (`FR-WINSTART-001`, `DES-WINSTART-001`,
       `TEST-WINSTART-005`): tolerate unsupported directory fsync after the
       desktop skill reconciliation marker has been atomically committed.
+- [x] `T-WINSTART-006` (`NFR-WINSTART-001`, `DES-WINSTART-003`,
+      `TEST-WINSTART-006`): wait for packaged-process close and retry bounded
+      transient Windows cleanup failures without hiding persistent errors.

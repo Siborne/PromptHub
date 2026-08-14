@@ -8,6 +8,11 @@ import os from "node:os";
 import path from "node:path";
 import sqlite3Wasm from "node-sqlite3-wasm";
 
+import {
+  removePackagedStartupRoot,
+  waitForPackagedProcessExit,
+} from "./packaged-startup-cleanup.mts";
+
 type SeedDatabase = {
   exec: (sql: string) => void;
   close: () => void;
@@ -17,6 +22,7 @@ const SeedDatabase = sqlite3Wasm.Database as new (path: string) => SeedDatabase;
 
 const STARTUP_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 250;
+const PROCESS_EXIT_GRACE_MS = 5_000;
 const MAX_CAPTURED_OUTPUT_CHARS = 64 * 1024;
 const MAX_DIAGNOSTIC_FILES = 200;
 const MAX_DIAGNOSTIC_LOG_CHARS = 64 * 1024;
@@ -243,7 +249,8 @@ async function main(): Promise<void> {
     console.log(fs.readFileSync(logPath, "utf8"));
   } finally {
     stopProcessTree(child);
-    fs.rmSync(root, { recursive: true, force: true });
+    await waitForPackagedProcessExit(child, PROCESS_EXIT_GRACE_MS);
+    await removePackagedStartupRoot(root);
   }
 }
 
