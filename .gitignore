@@ -112,6 +112,7 @@ apps/desktop/dist-stats/
 *.sqlite3
 apps/web/data/
 apps/web/data-first-run-*/
+apps/web/backups/
 packages/db/src/index.js
 packages/db/src/index.js.map
 packages/shared/types/index.js
