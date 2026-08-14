@@ -451,10 +451,14 @@ test.describe("E2E: desktop self-hosted sync", () => {
         exact: true,
       });
       await expect(updateFromRemote).toBeEnabled();
+      const restoreSucceeded = page
+        .getByText(/Restored 1 prompts, 1 folders/i)
+        .waitFor({
+          state: "visible",
+          timeout: 20000,
+        });
       await updateFromRemote.click();
-      await expect(
-        page.getByText(/Restored 1 prompts, 1 folders/i),
-      ).toBeVisible();
+      await restoreSucceeded;
 
       await closePromptHub(app, userDataDir, {
         preserveUserDataDir: true,
