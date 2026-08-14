@@ -35,6 +35,33 @@ function persisted(state: Record<string, unknown>): string {
   return JSON.stringify({ state, version: 19 });
 }
 
+function enforceWindowsFsyncWriteAccess(): void {
+  const descriptorFlags = new Map<number, string | number>();
+  const openSync = fs.openSync.bind(fs);
+  const closeSync = fs.closeSync.bind(fs);
+  const fsyncSync = fs.fsyncSync.bind(fs);
+
+  vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+    const descriptor = openSync(filePath, flags, mode);
+    descriptorFlags.set(descriptor, flags);
+    return descriptor;
+  });
+  vi.spyOn(fs, "closeSync").mockImplementation((descriptor) => {
+    descriptorFlags.delete(descriptor);
+    closeSync(descriptor);
+  });
+  vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+    if (descriptorFlags.get(descriptor) === "r") {
+      const error = new Error(
+        "EPERM: operation not permitted, fsync",
+      ) as NodeJS.ErrnoException;
+      error.code = "EPERM";
+      throw error;
+    }
+    fsyncSync(descriptor);
+  });
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) {
@@ -43,6 +70,18 @@ afterEach(() => {
 });
 
 describe("renderer persistence migration", () => {
+  it("flushes staged canonical files through Windows write-capable handles", async () => {
+    enforceWindowsFsyncWriteAccess();
+    const store = createRendererPersistenceStore({
+      rootPath: createRoot(),
+      encryption,
+    });
+
+    await expect(store.migrate({})).resolves.toMatchObject({
+      status: "migrated",
+    });
+  });
+
   it("moves durable settings, sources, device identity, recovery paths, and secrets to canonical owners", async () => {
     const root = createRoot();
     const store = createRendererPersistenceStore({

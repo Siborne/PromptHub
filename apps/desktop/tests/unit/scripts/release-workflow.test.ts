@@ -35,6 +35,18 @@ describe("release workflow secret guards", () => {
     expect(unsafeIfLines).toEqual([]);
   });
 
+  it("blocks Windows release artifacts on a packaged x64 upgrade cold start", () => {
+    expect(workflowSource).toContain(
+      "Run packaged Windows x64 upgrade startup smoke",
+    );
+    expect(workflowSource).toContain(
+      "node --experimental-strip-types scripts/smoke-windows-packaged-startup.mts",
+    );
+    expect(workflowSource).toContain(
+      "matrix.platform == 'win' && matrix.arch == 'x64'",
+    );
+  });
+
   it("gates optional publishers through non-secret readiness outputs", () => {
     expect(workflowSource).toContain("id: publish_secrets");
     expect(workflowSource).toContain(

@@ -1889,6 +1889,7 @@ app.whenReady().then(async () => {
     registerShortcutsIPC();
 
     await createWindow();
+    logStartupEvent({ event: "startup:window_ready" });
     agentDeepLinkRouter.connect(dispatchFromTray);
     agentDeepLinkRouter.acceptArgv(process.argv);
 

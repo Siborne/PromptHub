@@ -928,12 +928,9 @@ function writeStagedJson(
 ): void {
   const filePath = resolveOwnedPath(stagePath, relativePath);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  const descriptor = fs.openSync(filePath, "r");
+  const descriptor = fs.openSync(filePath, "wx", 0o600);
   try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, "utf8");
     fs.fsyncSync(descriptor);
   } finally {
     fs.closeSync(descriptor);

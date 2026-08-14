@@ -14,13 +14,13 @@
 
 ## Release Index
 
-| Version        | Status         | Path                            | Updated    |
-| -------------- | -------------- | ------------------------------- | ---------- |
-| `0.6.0-beta.1` | published beta | `spec/releases/0.6.0-beta.1.md` | 2026-08-13 |
-| `0.6.0`        | preparation    | `spec/releases/0.6.0.md`        | 2026-07-30 |
-| `0.5.9`        | stable record  | `spec/releases/0.5.9.md`        | 2026-07-14 |
-| `0.5.9-beta.2` | published beta | `spec/releases/0.5.9-beta.2.md` | 2026-07-10 |
-| `0.5.9-beta.1` | published beta | `spec/releases/0.5.9-beta.1.md` | 2026-07-10 |
+| Version        | Status          | Path                            | Updated    |
+| -------------- | --------------- | ------------------------------- | ---------- |
+| `0.6.0-beta.1` | withdrawn draft | `spec/releases/0.6.0-beta.1.md` | 2026-08-14 |
+| `0.6.0`        | preparation     | `spec/releases/0.6.0.md`        | 2026-07-30 |
+| `0.5.9`        | stable record   | `spec/releases/0.5.9.md`        | 2026-07-14 |
+| `0.5.9-beta.2` | published beta  | `spec/releases/0.5.9-beta.2.md` | 2026-07-10 |
+| `0.5.9-beta.1` | published beta  | `spec/releases/0.5.9-beta.1.md` | 2026-07-10 |
 
 ## Routing Rule
 

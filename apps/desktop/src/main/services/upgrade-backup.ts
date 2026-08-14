@@ -255,7 +255,7 @@ function copyRawDatabaseEvidence(
   fs.mkdirSync(path.dirname(targetPath), { recursive: true, mode: 0o700 });
   fs.copyFileSync(sourcePath, targetPath, fs.constants.COPYFILE_EXCL);
   fs.chmodSync(targetPath, 0o600);
-  const descriptor = fs.openSync(targetPath, "r");
+  const descriptor = fs.openSync(targetPath, "r+");
   const digest = crypto.createHash("sha256");
   const buffer = Buffer.allocUnsafe(1024 * 1024);
   let sizeBytes = 0;

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -52,6 +52,33 @@ function seedUserData(userDataPath: string): void {
   );
 }
 
+function enforceWindowsFsyncWriteAccess(): void {
+  const descriptorFlags = new Map<number, string | number>();
+  const openSync = fs.openSync.bind(fs);
+  const closeSync = fs.closeSync.bind(fs);
+  const fsyncSync = fs.fsyncSync.bind(fs);
+
+  vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+    const descriptor = openSync(filePath, flags, mode);
+    descriptorFlags.set(descriptor, flags);
+    return descriptor;
+  });
+  vi.spyOn(fs, "closeSync").mockImplementation((descriptor) => {
+    descriptorFlags.delete(descriptor);
+    closeSync(descriptor);
+  });
+  vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+    if (descriptorFlags.get(descriptor) === "r") {
+      const error = new Error(
+        "EPERM: operation not permitted, fsync",
+      ) as NodeJS.ErrnoException;
+      error.code = "EPERM";
+      throw error;
+    }
+    fsyncSync(descriptor);
+  });
+}
+
 describe("upgrade-backup", () => {
   let tmpBase: string;
 
@@ -60,6 +87,7 @@ describe("upgrade-backup", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(tmpBase, { recursive: true, force: true });
   });
 
@@ -287,6 +315,21 @@ describe("upgrade-backup", () => {
       expect(listed?.manifest.databaseCaptureMode).toBe(
         "raw-recovery-evidence",
       );
+    });
+
+    it("flushes raw recovery evidence through a Windows write-capable handle", async () => {
+      const userDataPath = path.join(tmpBase, "PromptHub-invalid-legacy-db");
+      fs.mkdirSync(userDataPath, { recursive: true });
+      fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "legacy-bytes");
+      enforceWindowsFsyncWriteAccess();
+
+      await expect(
+        createUpgradeDataSnapshot(userDataPath, {
+          fromVersion: "0.4.7-pre-layout-migration",
+        }),
+      ).resolves.toMatchObject({
+        manifest: { databaseCaptureMode: "raw-recovery-evidence" },
+      });
     });
 
     it("keeps only the latest five upgrade snapshots", async () => {

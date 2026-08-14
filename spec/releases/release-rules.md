@@ -63,6 +63,19 @@
 - Release-impacting local changes use `pnpm verify:release:quick`; tagging or
   publishing a release candidate requires the full `pnpm verify:release` gate.
 
+### 10. Packaged Desktop Startup
+
+- A desktop release cannot be approved from source tests and packaging success
+  alone. The release workflow must launch the packaged application on each
+  natively executable release platform required by the current gate.
+- Windows x64 candidates must pass an isolated packaged cold start that follows
+  a supported stable-to-candidate upgrade path and creates the pre-upgrade
+  safety snapshot before the window finishes loading.
+- A build job that cannot execute its target architecture must be reported as
+  packaging-only evidence and must not be described as startup validation.
+- A startup failure blocks release publication even when all installers and
+  update manifests were generated successfully.
+
 ## Stable Scenarios
 
 ### Scenario: Contributor prepares a release-impacting change
@@ -123,3 +136,15 @@ When a tag release builds macOS DMG and ZIP artifacts:
 - the packaged app passes signature, stapling, and Gatekeeper assessment checks
 - the release includes matching ZIP metadata for direct-install in-app updates
 - public install notes present the notarized artifact as the normal install path
+
+### Scenario: Maintainer builds Windows desktop artifacts
+
+When the workflow packages the Windows x64 desktop candidate:
+
+- it seeds an isolated profile representing an upgrade from the supported
+  stable release
+- it launches the unpacked packaged executable rather than the source Electron
+  entry
+- it requires both the upgrade safety snapshot and loaded renderer window
+- it fails the build before artifact upload when startup exits, errors, or
+  times out

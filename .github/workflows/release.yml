@@ -187,6 +187,12 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
 
+      - name: Run packaged Windows x64 upgrade startup smoke
+        if: matrix.platform == 'win' && matrix.arch == 'x64'
+        shell: pwsh
+        working-directory: apps/desktop
+        run: node --experimental-strip-types scripts/smoke-windows-packaged-startup.mts dist/win-unpacked/PromptHub.exe
+
       - name: Verify macOS app architecture
         if: matrix.platform == 'mac' && matrix.arch != ''
         shell: bash

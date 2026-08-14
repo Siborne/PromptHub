@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 55 |
+| Active | 56 |
 | Archived | 189 |
 | Legacy | 1 |
 
@@ -70,6 +70,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `web-agent-service-parity` | active | `spec/changes/active/web-agent-service-parity/` |
 | `web-sync-contract-completion` | active | `spec/changes/active/web-sync-contract-completion/` |
 | `windows-code-signing-and-reputation` | active | `spec/changes/active/windows-code-signing-and-reputation/` |
+| `windows-packaged-upgrade-startup-gate` | in progress | `spec/changes/active/windows-packaged-upgrade-startup-gate/` |
 
 ## Archived
 

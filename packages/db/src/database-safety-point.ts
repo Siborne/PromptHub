@@ -204,7 +204,7 @@ function verifyDatabaseImage(
 }
 
 function flushFile(filePath: string): void {
-  const descriptor = fs.openSync(filePath, "r");
+  const descriptor = fs.openSync(filePath, "r+");
   try {
     fs.fsyncSync(descriptor);
   } finally {

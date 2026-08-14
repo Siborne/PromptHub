@@ -4,7 +4,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createDatabaseSafetyPoint,
@@ -17,10 +17,38 @@ describe("database safety points", () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const directory of tempDirs.splice(0)) {
       fs.rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  function enforceWindowsFsyncWriteAccess(): void {
+    const descriptorFlags = new Map<number, string | number>();
+    const openSync = fs.openSync.bind(fs);
+    const closeSync = fs.closeSync.bind(fs);
+    const fsyncSync = fs.fsyncSync.bind(fs);
+
+    vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      const descriptor = openSync(filePath, flags, mode);
+      descriptorFlags.set(descriptor, flags);
+      return descriptor;
+    });
+    vi.spyOn(fs, "closeSync").mockImplementation((descriptor) => {
+      descriptorFlags.delete(descriptor);
+      closeSync(descriptor);
+    });
+    vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      if (descriptorFlags.get(descriptor) === "r") {
+        const error = new Error(
+          "EPERM: operation not permitted, fsync",
+        ) as NodeJS.ErrnoException;
+        error.code = "EPERM";
+        throw error;
+      }
+      fsyncSync(descriptor);
+    });
+  }
 
   function createTempDatabase(): {
     dbPath: string;
@@ -61,6 +89,16 @@ describe("database safety points", () => {
       { value: "before" },
     ]);
     snapshot.close();
+  });
+
+  it("flushes the SQLite image through a Windows write-capable handle", () => {
+    const { dbPath, db } = createTempDatabase();
+    db.close();
+    enforceWindowsFsyncWriteAccess();
+
+    expect(() =>
+      createDatabaseSafetyPoint(dbPath, "pre-upgrade"),
+    ).not.toThrow();
   });
 
   it("does not list a safety point after its verified image is changed", () => {
