@@ -6,8 +6,14 @@ import {
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import sqlite3Wasm from "node-sqlite3-wasm";
 
-import Database from "../../../packages/db/src/adapter.ts";
+type SeedDatabase = {
+  exec: (sql: string) => void;
+  close: () => void;
+};
+
+const SeedDatabase = sqlite3Wasm.Database as new (path: string) => SeedDatabase;
 
 const STARTUP_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 250;
@@ -22,7 +28,7 @@ interface StartupEvent {
 function seedUpgradeProfile(appDataPath: string): string {
   const userDataPath = path.join(appDataPath, "PromptHub");
   fs.mkdirSync(userDataPath, { recursive: true });
-  const database = new Database(path.join(userDataPath, "prompthub.db"));
+  const database = new SeedDatabase(path.join(userDataPath, "prompthub.db"));
   try {
     database.exec("CREATE TABLE startup_smoke (value TEXT NOT NULL)");
     database.exec("INSERT INTO startup_smoke (value) VALUES ('0.5.9')");

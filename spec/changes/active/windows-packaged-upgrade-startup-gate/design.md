@@ -16,6 +16,10 @@ passed to `fsync`.
 Add a bounded Node script invoked only by the Windows x64 release matrix after
 electron-builder produces `dist/win-unpacked/PromptHub.exe`.
 
+The script must itself load under Node's `--experimental-strip-types` runner.
+It may import runtime JavaScript dependencies, but it must not import package
+TypeScript source that requires transformation beyond type stripping.
+
 The script will:
 
 1. Create a temporary `%APPDATA%/PromptHub` profile.
@@ -39,8 +43,9 @@ proxy, runner-global PromptHub data, or existing processes.
 
 - `TEST-WINSTART-001`: Focused Vitest regressions reject read-only fsync handles
   across canonical staging, SQLite images, and raw evidence.
-- `TEST-WINSTART-002`: Release workflow test requires the packaged Windows x64
-  smoke step and script invocation.
+- `TEST-WINSTART-002`: Release workflow tests require the packaged Windows x64
+  smoke step and prove the script reaches its platform guard under Node
+  strip-types without unsupported TypeScript syntax.
 - `TEST-WINSTART-003`: GitHub Actions manual release workflow passes the Windows
   x64 packaged upgrade smoke and the full platform matrix before tagging or
   publication.

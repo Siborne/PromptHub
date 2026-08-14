@@ -31,6 +31,14 @@ Windows startup failure was confirmed.
 - The restore E2E now arms its success-state listener before clicking restore;
   the focused flow passed three consecutive runs and the complete built-artifact
   smoke passed all seven tests.
+- Manual GitHub Actions run `31774646606` passed the full Linux verification job
+  and reached the Windows x64 packaged smoke. The smoke failed before launching
+  PromptHub because Node strip-types could not transform a parameter property in
+  an imported package TypeScript source file.
+- The smoke now seeds SQLite through the installed `node-sqlite3-wasm` runtime
+  dependency instead of importing `packages/db/src/adapter.ts`. A regression
+  test executes the script with Node strip-types and requires it to reach the
+  non-Windows platform guard without syntax errors.
 - The real Windows GitHub Actions runner remains required before release
   approval.
 

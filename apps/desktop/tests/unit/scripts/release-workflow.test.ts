@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,6 +10,10 @@ const workflowPath = path.resolve(
 );
 
 const workflowSource = readFileSync(workflowPath, "utf8");
+const packagedStartupSmokePath = path.resolve(
+  process.cwd(),
+  "scripts/smoke-windows-packaged-startup.mts",
+);
 
 function getIfLines(source: string): string[] {
   return source
@@ -45,6 +50,20 @@ describe("release workflow secret guards", () => {
     expect(workflowSource).toContain(
       "matrix.platform == 'win' && matrix.arch == 'x64'",
     );
+  });
+
+  it("loads the packaged startup smoke with Node strip-types", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--experimental-strip-types", packagedStartupSmokePath],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "The packaged Windows startup smoke must run on Windows",
+    );
+    expect(result.stderr).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
   });
 
   it("gates optional publishers through non-secret readiness outputs", () => {
