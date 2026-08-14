@@ -4174,3 +4174,21 @@ reported as a successful inventory mutation.
 - When the user confirms update or permanent removal
 - Then PromptHub delegates to the matching official `dsh plugin` operation and refreshes the profile
 - And a shipped bundle that is not a direct dependency cannot be updated or removed from PromptHub
+
+### `FR-AGENT-127`: Registry-Aware Agent Order Upgrades
+
+PromptHub MUST treat a saved Agent display order as a preference over the
+current platform registry rather than as a frozen registry snapshot. When a
+new built-in Agent is registered after a user has saved an order, Agent
+Management MUST merge the new entry beside its product-default neighbors while
+preserving the user's existing relative order. The new Agent MUST use the same
+shared title, icon, root, enablement, and ordering metadata as the Agent
+workspace.
+
+#### Scenario: DeepSeek Harness is added after the Agent order was saved
+
+- Given a saved Agent order contains Codex and later built-in platforms but not DeepSeek Harness
+- When Agent Management loads the current platform registry
+- Then DeepSeek Harness appears immediately after Codex
+- And its row uses the official DeepSeek Harness title and theme-aware fish mark
+- And the relative order of the user's previously saved Agent entries is unchanged

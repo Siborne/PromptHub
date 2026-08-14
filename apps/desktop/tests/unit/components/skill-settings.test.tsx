@@ -144,6 +144,33 @@ describe("SkillSettings", () => {
     );
   });
 
+  it("places DeepSeek Harness into an older saved Agent order", async () => {
+    const settingsState = createSettingsState();
+    const legacyOrder = SKILL_PLATFORMS.map((platform) => platform.id).filter(
+      (platformId) => platformId !== "deepseek-harness",
+    );
+    useSettingsStoreMock.mockReturnValue({
+      ...settingsState,
+      skillPlatformOrder: legacyOrder,
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const list = screen.getByRole("list", { name: "Platform Display Order" });
+    const platformIds = within(list)
+      .getAllByRole("listitem")
+      .map((item) => item.getAttribute("data-platform-id"));
+    const harnessIndex = platformIds.indexOf("deepseek-harness");
+
+    expect(harnessIndex).toBeGreaterThan(-1);
+    expect(platformIds[harnessIndex - 1]).toBe("codex");
+    expect(
+      within(list).getAllByRole("img", { name: "deepseek-harness icon" }),
+    ).toHaveLength(2);
+  });
+
   it("places the local Claw platforms in the Claw family group", async () => {
     await act(async () => {
       await renderWithI18n(<SkillSettings />, { language: "en" });

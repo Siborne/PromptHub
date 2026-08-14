@@ -41,7 +41,10 @@ import {
 import { BuiltinAgentDetails } from "./BuiltinAgentDetails";
 import { SettingSection, ToggleSwitch } from "./shared";
 import { useToast } from "../ui/Toast";
-import { sortSkillPlatformsByPreference } from "../skill/use-skill-platform";
+import {
+  resolveSkillPlatformOrder,
+  sortSkillPlatformsByPreference,
+} from "../skill/use-skill-platform";
 import { getRendererPlatform } from "../../services/runtime-platform";
 import {
   DEFAULT_CODEX_IDENTITY,
@@ -128,17 +131,14 @@ function useManagedAgentEntries() {
 
     const preferredOrder = settings.skillPlatformOrder ?? [];
     const allEntries = [...builtinEntries, ...customEntries];
-    const orderIndex = new Map(preferredOrder.map((id, index) => [id, index]));
+    const entryById = new Map(allEntries.map((entry) => [entry.id, entry]));
 
-    return [...allEntries].sort((left, right) => {
-      const leftIndex = orderIndex.get(left.id);
-      const rightIndex = orderIndex.get(right.id);
-      if (leftIndex != null && rightIndex != null)
-        return leftIndex - rightIndex;
-      if (leftIndex != null) return -1;
-      if (rightIndex != null) return 1;
-      if (left.kind !== right.kind) return left.kind === "builtin" ? -1 : 1;
-      return left.name.localeCompare(right.name);
+    return resolveSkillPlatformOrder(
+      allEntries.map((entry) => entry.id),
+      preferredOrder,
+    ).flatMap((entryId) => {
+      const entry = entryById.get(entryId);
+      return entry ? [entry] : [];
     });
   }, [
     currentPlatformKey,

@@ -588,3 +588,8 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 
 - [x] `TEST-AGENT-206` 先复现 DeepSeek Harness 不在 Agent 清单、复用通用 DeepSeek Provider 图标、通用 Skills/MCP/Rules/Plugin 路径模型无法表达 Profile bundle、且没有安装/更新/卸载/详情入口的问题；覆盖正式标题、明暗主题官方图标、`DSH_HOME`、仅 CLI 检测、Profile/manifest 上限、软链接逃逸、畸形/超限 JSON、bundle 与 direct dependency 区分、脚本正文隔离、命令参数、风险确认、超时/输出限制/失败脱敏、per-profile 串行和专属两栏 UI。
 - [x] `T-AGENT-215` 按 `FR-AGENT-126` / `DES-AGENT-144` 注册 DeepSeek Harness 的 plugin-harness 平台模型，增加 main-only Profile/Plugin adapter、类型化 IPC/preload 和专属 Plugins 工作区；安装、更新、移除只调用官方 `dsh plugin`，不得伪造独立 Skill/MCP/Rules 能力、执行 shell、静默接受安装脚本、引入 marketplace、schema、sync 或后台 watcher。
+
+## Registry-Aware Agent Order Upgrade Follow-up
+
+- [x] `TEST-AGENT-207` 先复现旧版已保存完整 Agent 顺序时，新注册的 DeepSeek Harness 被排到清单末尾、首屏看起来像未接入的问题；覆盖纯顺序合并、Agent 管理行位置以及共享官方标题/图标投影。
+- [x] `T-AGENT-216` 按 `FR-AGENT-127` / `DES-AGENT-145` 让 Skill 与 Agent 管理共用当前注册表感知的偏好顺序合并；保留用户已有相对顺序，不重置设置、不新增持久化字段、不复制 DeepSeek 身份或图标映射。

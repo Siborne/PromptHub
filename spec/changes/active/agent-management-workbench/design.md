@@ -3376,3 +3376,24 @@ package contract, not an authoritative marketplace.
 | Requirement    | Design          | Verification     | Task          |
 | -------------- | --------------- | ---------------- | ------------- |
 | `FR-AGENT-126` | `DES-AGENT-144` | `TEST-AGENT-206` | `T-AGENT-215` |
+
+## `DES-AGENT-145`: Registry-Aware Preference Merge
+
+One pure ordering helper owns the merge used by both the Skill platform view
+and Settings Agent Management. It first keeps the unique, currently available
+ids from the saved preference. Each missing built-in id is then inserted after
+the nearest predecessor that was present in the saved order. If the user had
+not saved a preceding default entry, the explicit preference remains ahead and
+the missing default is appended in product-default order. Remaining custom ids
+are appended in their incoming order.
+
+This keeps existing user-relative order while making new built-in Agents
+visible without resetting or eagerly rewriting settings. Both management rows
+and workspace cards continue to resolve identity through `SKILL_PLATFORMS` and
+`PlatformIcon`, so DeepSeek Harness cannot drift to a generic provider title or
+logo. The operation is bounded by the small platform registry, performs no I/O,
+network access, persistence migration, process launch, or background work.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-127` | `DES-AGENT-145` | `TEST-AGENT-207` | `T-AGENT-216` |

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { sortSkillPlatformsByPreference } from "../../../src/renderer/components/skill/use-skill-platform";
+import {
+  resolveSkillPlatformOrder,
+  sortSkillPlatformsByPreference,
+} from "../../../src/renderer/components/skill/use-skill-platform";
 
 describe("use-skill-platform helpers", () => {
   it("sorts detected platforms by the saved user preference", () => {
@@ -113,6 +116,42 @@ describe("use-skill-platform helpers", () => {
       "workbuddy",
       "codebuddy",
       "hermes",
+    ]);
+  });
+
+  it("inserts a newly registered platform beside its default predecessor", () => {
+    const legacyOrder = [
+      "amp",
+      "antigravity",
+      "cherry-studio",
+      "claude",
+      "cline",
+      "codebuddy",
+      "codex",
+      "cursor",
+      "gemini",
+      "copilot",
+      "kimi",
+    ];
+
+    expect(
+      resolveSkillPlatformOrder(
+        [...legacyOrder, "deepseek-harness"],
+        legacyOrder,
+      ),
+    ).toEqual([
+      "amp",
+      "antigravity",
+      "cherry-studio",
+      "claude",
+      "cline",
+      "codebuddy",
+      "codex",
+      "deepseek-harness",
+      "cursor",
+      "gemini",
+      "copilot",
+      "kimi",
     ]);
   });
 });

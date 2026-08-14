@@ -6,6 +6,23 @@
 - Status: in-progress
 - Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
 
+## DeepSeek Harness Agent management order upgrade (2026-08-14)
+
+- Reproduced the missing-looking Agent row with an older persisted order that
+  predates `deepseek-harness`: the new registry item was appended after every
+  saved entry instead of being merged near Codex.
+- Added one registry-aware preference merge shared by Skill ordering and Agent
+  Management. DeepSeek Harness now enters older orders immediately after Codex
+  while all previously saved relative ordering remains intact.
+- Kept title and icon ownership in the shared platform registry and
+  `PlatformIcon`; the management row therefore uses `DeepSeek Harness` and the
+  official theme-aware fish mark rather than a renderer-local fallback.
+- Focused Agent ordering and Settings component tests passed 25/25; the official
+  PlatformIcon suite passed 18/18. Desktop typecheck, affected ESLint,
+  repository spec governance, `git diff --check`, and all 29 checks in
+  `pnpm verify:release:quick` passed. Full CI remains pending until the commits
+  are pushed.
+
 ## Shared polymorphic Provider & Model workbench (2026-08-01)
 
 - Replaced the `AgentsWorkspace` Pi-only branch with one `AgentProviderModelWorkbench` entry for every Agent. The entry selects the native catalog or unified Provider Profile adapter without creating separate product navigation or page ownership.

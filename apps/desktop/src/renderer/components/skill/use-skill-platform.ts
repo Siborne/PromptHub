@@ -44,6 +44,62 @@ export interface BatchInstallResult {
   fallbacks: BatchInstallFallback[];
 }
 
+export function resolveSkillPlatformOrder(
+  availablePlatformIds: string[],
+  preferredOrder: string[],
+): string[] {
+  const defaultOrder: readonly string[] = DEFAULT_SKILL_PLATFORM_ORDER;
+  const availableIds = new Set(availablePlatformIds);
+  const orderedIds = Array.from(new Set(preferredOrder)).filter((platformId) =>
+    availableIds.has(platformId),
+  );
+  const preferredIdSet = new Set(orderedIds);
+  const orderedIdSet = new Set(orderedIds);
+
+  for (const platformId of defaultOrder) {
+    if (!availableIds.has(platformId) || orderedIdSet.has(platformId)) continue;
+
+    const defaultIndex = defaultOrder.indexOf(platformId);
+    const predecessor = defaultOrder
+      .slice(0, defaultIndex)
+      .reverse()
+      .find((candidate) => preferredIdSet.has(candidate));
+    const predecessorIndex = predecessor
+      ? orderedIds.indexOf(predecessor)
+      : -1;
+    const successor = orderedIds
+      .slice(predecessorIndex + 1)
+      .find((candidate) => preferredIdSet.has(candidate));
+    const successorDefaultIndex = successor
+      ? defaultOrder.indexOf(successor)
+      : -1;
+    let insertionIndex =
+      predecessorIndex >= 0 &&
+      (successorDefaultIndex < 0 || successorDefaultIndex > defaultIndex)
+        ? predecessorIndex + 1
+        : orderedIds.length;
+
+    while (
+      insertionIndex < orderedIds.length &&
+      !preferredIdSet.has(orderedIds[insertionIndex]) &&
+      defaultOrder.indexOf(orderedIds[insertionIndex]) < defaultIndex
+    ) {
+      insertionIndex += 1;
+    }
+
+    orderedIds.splice(insertionIndex, 0, platformId);
+    orderedIdSet.add(platformId);
+  }
+
+  for (const platformId of availablePlatformIds) {
+    if (orderedIdSet.has(platformId)) continue;
+    orderedIds.push(platformId);
+    orderedIdSet.add(platformId);
+  }
+
+  return orderedIds;
+}
+
 function isCopyFallback(
   result: SkillPlatformInstallResult | void,
 ): result is SkillPlatformInstallResult & {
@@ -65,8 +121,9 @@ export function sortSkillPlatformsByPreference(
   platforms: SkillPlatform[],
   preferredOrder: string[],
 ): SkillPlatform[] {
-  const effectiveOrder = Array.from(
-    new Set([...preferredOrder, ...DEFAULT_SKILL_PLATFORM_ORDER]),
+  const effectiveOrder = resolveSkillPlatformOrder(
+    platforms.map((platform) => platform.id),
+    preferredOrder,
   );
 
   if (effectiveOrder.length === 0) {
