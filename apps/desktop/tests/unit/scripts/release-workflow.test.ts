@@ -14,6 +14,14 @@ const packagedStartupSmokePath = path.resolve(
   process.cwd(),
   "scripts/smoke-windows-packaged-startup.mts",
 );
+const packagedStartupSmokeSource = readFileSync(
+  packagedStartupSmokePath,
+  "utf8",
+);
+const desktopMainSource = readFileSync(
+  path.resolve(process.cwd(), "src/main/index.ts"),
+  "utf8",
+);
 
 function getIfLines(source: string): string[] {
   return source
@@ -64,6 +72,16 @@ describe("release workflow secret guards", () => {
       "The packaged Windows startup smoke must run on Windows",
     );
     expect(result.stderr).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+  });
+
+  it("routes the packaged smoke through an isolated Electron AppData root", () => {
+    const environmentKey = "PROMPTHUB_PACKAGED_STARTUP_SMOKE_APP_DATA";
+
+    expect(packagedStartupSmokeSource).toContain(environmentKey);
+    expect(desktopMainSource).toContain(
+      "resolvePackagedStartupSmokeAppDataPath",
+    );
+    expect(desktopMainSource).toContain('app.setPath("appData"');
   });
 
   it("gates optional publishers through non-secret readiness outputs", () => {

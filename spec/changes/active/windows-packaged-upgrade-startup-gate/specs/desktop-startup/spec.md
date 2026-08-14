@@ -39,6 +39,21 @@ The packaged startup smoke must not read or write the runner's normal PromptHub
 profile. It must use a task-owned temporary AppData tree, bounded polling, and
 must terminate and clean up its own process and files.
 
+#### Scenario: CI requests an isolated packaged profile
+
+- Given a packaged Windows process running in CI
+- And the requested AppData root is below `RUNNER_TEMP`
+- When PromptHub starts
+- Then Electron uses that AppData root before normal data-path resolution
+- And the normal runner profile is not selected
+
+#### Scenario: An untrusted override is supplied
+
+- Given a development process, a non-Windows process, a non-CI process, or a
+  path outside `RUNNER_TEMP`
+- When the release-smoke AppData override is present
+- Then startup rejects the override instead of using that path
+
 ## Acceptance Criteria
 
 - `AC-WINSTART-001`: Unit regressions simulate the Windows requirement that a
@@ -50,8 +65,8 @@ must terminate and clean up its own process and files.
 
 ## Traceability
 
-| Requirement        | Design             | Verification        | Task             |
-| ------------------ | ------------------ | ------------------- | ---------------- |
-| `FR-WINSTART-001`  | `DES-WINSTART-001` | `TEST-WINSTART-001` | `T-WINSTART-001` |
-| `FR-WINSTART-002`  | `DES-WINSTART-002` | `TEST-WINSTART-002` | `T-WINSTART-002` |
-| `NFR-WINSTART-001` | `DES-WINSTART-003` | `TEST-WINSTART-003` | `T-WINSTART-003` |
+| Requirement        | Design             | Verification                             | Task             |
+| ------------------ | ------------------ | ---------------------------------------- | ---------------- |
+| `FR-WINSTART-001`  | `DES-WINSTART-001` | `TEST-WINSTART-001`                      | `T-WINSTART-001` |
+| `FR-WINSTART-002`  | `DES-WINSTART-002` | `TEST-WINSTART-002`                      | `T-WINSTART-002` |
+| `NFR-WINSTART-001` | `DES-WINSTART-003` | `TEST-WINSTART-003`, `TEST-WINSTART-004` | `T-WINSTART-003` |

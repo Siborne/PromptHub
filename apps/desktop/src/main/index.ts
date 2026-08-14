@@ -91,6 +91,7 @@ import {
 } from "./services/data-layout-migration";
 import { listUpgradeBackups } from "./services/upgrade-backup";
 import { runUpgradeBackupStartupTasks } from "./services/upgrade-backup-startup";
+import { resolvePackagedStartupSmokeAppDataPath } from "./testing/release-smoke-profile";
 import { performJournaledDatabaseRecovery } from "./services/journaled-database-recovery";
 import { registerPortableSnapshotIPC } from "./services/portable-snapshot-ipc";
 import {
@@ -230,6 +231,21 @@ protocol.registerSchemesAsPrivileged([
 
 const isE2E = isE2EEnabled();
 const isLegacyCliInvocation = process.argv.includes("--cli");
+const packagedStartupSmokeAppDataPath = resolvePackagedStartupSmokeAppDataPath({
+  env: process.env,
+  isPackaged: app.isPackaged,
+  platform: process.platform,
+});
+if (packagedStartupSmokeAppDataPath) {
+  fs.mkdirSync(packagedStartupSmokeAppDataPath, { recursive: true });
+  const stats = fs.lstatSync(packagedStartupSmokeAppDataPath);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error(
+      "Packaged startup smoke AppData must be a regular directory",
+    );
+  }
+  app.setPath("appData", packagedStartupSmokeAppDataPath);
+}
 configureE2ETestProfile();
 if (!isE2E) {
   const appDataPath = app.getPath("appData");

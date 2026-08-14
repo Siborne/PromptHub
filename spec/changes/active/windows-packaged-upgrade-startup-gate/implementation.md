@@ -39,6 +39,25 @@ Windows startup failure was confirmed.
   dependency instead of importing `packages/db/src/adapter.ts`. A regression
   test executes the script with Node strip-types and requires it to reach the
   non-Windows platform guard without syntax errors.
+- Manual GitHub Actions run `31775706140` again passed the full Linux
+  verification job and completed Windows x64 packaging. Its packaged process
+  stayed alive, but the smoke timed out because changing the child `APPDATA`
+  environment variable did not reliably change Electron's Windows Known Folder
+  `appData` path; the script therefore seeded and watched a profile the app did
+  not select.
+- The packaged main process now accepts a release-smoke-only AppData override
+  when, and only when, it is a packaged Windows CI process and the requested
+  directory is strictly below `RUNNER_TEMP`. Electron receives that path before
+  the unchanged normal data-path resolver runs. Invalid contexts and
+  out-of-root paths fail closed.
+- Failure output now includes a bounded isolated-profile inventory, any startup
+  logs found there, and bounded child output before cleanup.
+- The AppData profile policy and release workflow wiring regressions passed 13
+  focused tests; the wider data-path set passed 38 tests total, and desktop
+  typecheck passed.
+- The production desktop build, specification traceability validation, and the
+  29-check quick release verification profile passed on the converged local
+  code state.
 - The real Windows GitHub Actions runner remains required before release
   approval.
 

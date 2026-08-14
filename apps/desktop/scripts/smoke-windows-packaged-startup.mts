@@ -18,6 +18,10 @@ const SeedDatabase = sqlite3Wasm.Database as new (path: string) => SeedDatabase;
 const STARTUP_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 250;
 const MAX_CAPTURED_OUTPUT_CHARS = 64 * 1024;
+const MAX_DIAGNOSTIC_FILES = 200;
+const MAX_DIAGNOSTIC_LOG_CHARS = 64 * 1024;
+const PACKAGED_STARTUP_SMOKE_APP_DATA_ENV =
+  "PROMPTHUB_PACKAGED_STARTUP_SMOKE_APP_DATA";
 
 interface StartupEvent {
   event?: unknown;
@@ -69,6 +73,63 @@ function appendBounded(current: string, chunk: Buffer): string {
   return `${current}${chunk.toString("utf8")}`.slice(
     -MAX_CAPTURED_OUTPUT_CHARS,
   );
+}
+
+function collectDiagnosticFiles(rootPath: string): string[] {
+  const files: string[] = [];
+  const pending = [rootPath];
+  while (pending.length > 0 && files.length < MAX_DIAGNOSTIC_FILES) {
+    const directoryPath = pending.shift();
+    if (!directoryPath) break;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs
+        .readdirSync(directoryPath, { withFileTypes: true })
+        .sort((left, right) => left.name.localeCompare(right.name));
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (files.length >= MAX_DIAGNOSTIC_FILES) break;
+      const entryPath = path.join(directoryPath, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) {
+        pending.push(entryPath);
+      } else if (entry.isFile()) {
+        files.push(entryPath);
+      }
+    }
+  }
+  return files;
+}
+
+function formatFailureDiagnostics(rootPath: string, output: string): string {
+  const files = collectDiagnosticFiles(rootPath);
+  const relativeFiles = files.map((filePath) =>
+    path.relative(rootPath, filePath),
+  );
+  const startupLogs = files
+    .filter((filePath) => path.basename(filePath) === "startup.log")
+    .map((filePath) => {
+      let content: string;
+      try {
+        content = fs
+          .readFileSync(filePath, "utf8")
+          .slice(-MAX_DIAGNOSTIC_LOG_CHARS);
+      } catch (error) {
+        content = `<unreadable: ${error instanceof Error ? error.message : String(error)}>`;
+      }
+      return `--- ${path.relative(rootPath, filePath)} ---\n${content}`;
+    });
+  return [
+    `Isolated root: ${rootPath}`,
+    `Files (${relativeFiles.length}${files.length === MAX_DIAGNOSTIC_FILES ? "+" : ""}):`,
+    relativeFiles.join("\n") || "<none>",
+    "Startup logs:",
+    startupLogs.join("\n") || "<none>",
+    "Child output:",
+    output || "<none>",
+  ].join("\n");
 }
 
 function delay(milliseconds: number): Promise<void> {
@@ -156,6 +217,8 @@ async function main(): Promise<void> {
       USERPROFILE: userProfilePath,
       HOME: userProfilePath,
       CI: "true",
+      [PACKAGED_STARTUP_SMOKE_APP_DATA_ENV]: appDataPath,
+      ELECTRON_ENABLE_LOGGING: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -168,7 +231,12 @@ async function main(): Promise<void> {
   });
 
   try {
-    await waitForUpgradeWindow(child, logPath, () => output);
+    try {
+      await waitForUpgradeWindow(child, logPath, () => output);
+    } catch (error) {
+      console.error(formatFailureDiagnostics(root, output));
+      throw error;
+    }
     console.log(
       "Packaged Windows 0.5.9 upgrade startup reached a loaded window.",
     );
