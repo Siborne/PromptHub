@@ -7,6 +7,7 @@ import type {
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
 import { AgentOverviewPanel } from "../../../src/renderer/components/agent/AgentOverviewPanel";
+import { agentAssetAggregationService } from "../../../src/renderer/services/agent-asset-domain-adapters";
 import { useMcpStore } from "../../../src/renderer/stores/mcp.store";
 import { usePluginStore } from "../../../src/renderer/stores/plugin.store";
 import { useRulesStore } from "../../../src/renderer/stores/rules.store";
@@ -292,35 +293,42 @@ describe("AgentOverviewPanel", () => {
     seedStores();
   });
 
-  it("loads My Skills before rendering cold-start Agent overview counts", async () => {
-    const managedSkill = createSkillFixture({
-      local_repo_path: "/Users/demo/skills/write",
+  it("keeps overview asset summaries passive on a cold cache", async () => {
+    const loadSkills = vi.fn();
+    const scanSkills = vi.fn();
+    const loadMcp = vi.fn();
+    const loadRules = vi.fn();
+    const loadPlugins = vi.fn();
+    const listForTarget = vi.spyOn(
+      agentAssetAggregationService,
+      "listForTarget",
+    );
+    useSkillStore.setState({
+      skills: [],
+      isLoading: false,
+      agentScanState: {},
+      loadSkills,
+      scanAgentPlatformSkills: scanSkills,
     });
-    const getAll = vi.fn().mockResolvedValue([managedSkill]);
-    installWindowMocks({ api: { skill: { getAll } } });
-    useSkillStore.setState({ skills: [] });
+    useMcpStore.setState({ library: null, load: loadMcp });
+    useRulesStore.setState({
+      files: [],
+      hasLoadedFiles: false,
+      loadFiles: loadRules,
+    });
+    usePluginStore.setState({ library: null, load: loadPlugins });
 
     await renderWithI18n(
       <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
     );
 
-    await waitFor(() => expect(getAll).toHaveBeenCalledTimes(1));
-    const skillsCell = screen.getByRole("button", { name: /^skills/i });
-    expect(
-      await within(skillsCell).findByText("1 managed · 2 external"),
-    ).toBeVisible();
-  });
-
-  it("does not duplicate a My Skills load already in progress", async () => {
-    const getAll = vi.fn().mockResolvedValue([]);
-    installWindowMocks({ api: { skill: { getAll } } });
-    useSkillStore.setState({ isLoading: true, skills: [] });
-
-    await renderWithI18n(
-      <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
-    );
-
-    expect(getAll).not.toHaveBeenCalled();
+    expect(loadSkills).not.toHaveBeenCalled();
+    expect(scanSkills).not.toHaveBeenCalled();
+    expect(loadMcp).not.toHaveBeenCalled();
+    expect(loadRules).not.toHaveBeenCalled();
+    expect(loadPlugins).not.toHaveBeenCalled();
+    expect(listForTarget).not.toHaveBeenCalled();
+    listForTarget.mockRestore();
   });
 
   it("renders real domain counts from the owning stores and IPC summaries", async () => {

@@ -31,6 +31,11 @@ import {
   type AgentAssetInventory,
 } from "./use-agent-asset-domain";
 
+const PASSIVE_ASSET_INVENTORY_OPTIONS = {
+  eagerDomains: [],
+  validate: false,
+} as const;
+
 function isEnabled(status: AgentCapabilityStatus): boolean {
   return status === "supported" || status === "partial";
 }
@@ -403,7 +408,10 @@ function OverviewNavGrid({
   onNavigate: AgentWorkspaceNavigate;
 }) {
   const { t } = useTranslation();
-  const inventories = useAgentAssetInventoryMap(agent);
+  const inventories = useAgentAssetInventoryMap(
+    agent,
+    PASSIVE_ASSET_INVENTORY_OPTIONS,
+  );
   if (agent.workspaceKind === "plugin-harness") {
     return (
       <section

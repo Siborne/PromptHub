@@ -25,6 +25,7 @@
   - 复核 `vite.config.ts` 的 `manualChunks` 策略，让 `markdown-vendor` 不在首屏关键路径中。
   - 审计 `lucide-react` 命名导入与 Tailwind `content` 配置，确保 tree-shaking / purge 没有遗漏。
   - Prompt 工作区只挂载当前激活的重量级视图，并为关系图模拟设置有界、较短的收敛预算。
+  - Agent 概览只读取 renderer 已有资源快照，不在模块切换时隐式扫描 Skills 或加载 MCP、Rules、Plugins；深度读取由对应标签页或显式刷新触发。
 - Out of scope:
   - 不替换 Zustand / 不更换 React 主版本 / 不接入 RSC 或 server components。
   - 不改 IPC 契约、不改主进程业务逻辑、不改数据库 schema。

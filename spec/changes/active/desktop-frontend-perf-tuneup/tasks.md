@@ -151,6 +151,14 @@
 - [x] `TEST-PERF-14` 运行定向组件测试、相关集成测试、受影响文件 lint、Desktop typecheck 与生产构建
 - [x] 同步稳定前端性能边界与 implementation 记录
 
+## P15 — Agent 概览被动资源快照（2026-08-15 follow-up）
+
+- [x] `T-PERF-15` 以冷缓存回归测试锁定 Agent 概览不得触发 Skills、MCP、Rules、Plugins 或全域聚合加载
+- [x] `T-PERF-15` 为资源 inventory hook 增加 eager domain / validation 策略，并将概览切换为被动快照
+- [x] `T-PERF-15` 保持具体资源领域的按需加载与刷新入口不变
+- [x] `TEST-PERF-15` 运行 Agent 概览定向测试、受影响文件 lint、Desktop typecheck 与生产构建
+- [x] 同步稳定前端性能边界与 implementation 记录
+
 - [x] 每完成一个阶段，更新 `implementation.md` 中对应小节，记录实际数据与偏差
 - [x] 把"桌面端长列表虚拟化"、"bundle 预算"作为稳定行为同步到 `spec/knowledge/behavior/desktop.md`
 - [x] 在 `spec/knowledge/structure/` 下新增 `desktop-frontend-performance.md` 描述桌面端 renderer 性能策略

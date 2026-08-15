@@ -34,6 +34,18 @@ export interface AgentAssetInventory {
   refresh: () => void;
 }
 
+interface AgentAssetInventoryOptions {
+  eagerDomains?: readonly AgentAssetDomain[];
+  validate?: boolean;
+}
+
+const ALL_ASSET_DOMAINS: readonly AgentAssetDomain[] = [
+  "skills",
+  "mcp",
+  "rules",
+  "plugins",
+];
+
 const DOMAIN_KIND = {
   skills: "skill",
   mcp: "mcp",
@@ -100,8 +112,15 @@ function mapItems(
 
 export function useAgentAssetInventoryMap(
   agent: ManagedAgentSummary,
+  options: AgentAssetInventoryOptions = {},
 ): Record<AgentAssetDomain, AgentAssetInventory> {
   const { t } = useTranslation();
+  const eagerDomains = options.eagerDomains ?? ALL_ASSET_DOMAINS;
+  const validate = options.validate ?? true;
+  const eagerSkills = eagerDomains.includes("skills");
+  const eagerMcp = eagerDomains.includes("mcp");
+  const eagerRules = eagerDomains.includes("rules");
+  const eagerPlugins = eagerDomains.includes("plugins");
   const assetsEnabled =
     agent.capabilities.assets.status === "supported" ||
     agent.capabilities.assets.status === "partial";
@@ -121,10 +140,13 @@ export function useAgentAssetInventoryMap(
   const [validation, setValidation] = useState<AgentAssetAggregate | null>(
     null,
   );
-  useEnsureSkillLibraryLoaded(assetsEnabled && Boolean(agent.paths.skills));
+  useEnsureSkillLibraryLoaded(
+    eagerSkills && assetsEnabled && Boolean(agent.paths.skills),
+  );
 
   useEffect(() => {
     if (
+      eagerSkills &&
       assetsEnabled &&
       agent.paths.skills &&
       agent.isDetected &&
@@ -138,20 +160,34 @@ export function useAgentAssetInventoryMap(
     agent.isDetected,
     agent.paths.skills,
     assetsEnabled,
+    eagerSkills,
     scanSkills,
     skillScan?.isScanning,
     skillScan?.result,
   ]);
   useEffect(() => {
-    if (assetsEnabled && agent.paths.mcp && !mcpLibrary) void loadMcp();
-  }, [agent.paths.mcp, assetsEnabled, loadMcp, mcpLibrary]);
+    if (eagerMcp && assetsEnabled && agent.paths.mcp && !mcpLibrary)
+      void loadMcp();
+  }, [agent.paths.mcp, assetsEnabled, eagerMcp, loadMcp, mcpLibrary]);
   useEffect(() => {
-    if (assetsEnabled && agent.paths.rules && !rulesLoaded) void loadRules();
-  }, [agent.paths.rules, assetsEnabled, loadRules, rulesLoaded]);
+    if (eagerRules && assetsEnabled && agent.paths.rules && !rulesLoaded)
+      void loadRules();
+  }, [agent.paths.rules, assetsEnabled, eagerRules, loadRules, rulesLoaded]);
   useEffect(() => {
-    if (assetsEnabled && agent.paths.plugins && !pluginLibrary)
+    if (
+      eagerPlugins &&
+      assetsEnabled &&
+      agent.paths.plugins &&
+      !pluginLibrary
+    )
       void loadPlugins();
-  }, [agent.paths.plugins, assetsEnabled, loadPlugins, pluginLibrary]);
+  }, [
+    agent.paths.plugins,
+    assetsEnabled,
+    eagerPlugins,
+    loadPlugins,
+    pluginLibrary,
+  ]);
 
   const aggregate = useMemo(
     () => readAgentAssetAggregate(agent.id),
@@ -167,7 +203,7 @@ export function useAgentAssetInventoryMap(
   );
 
   useEffect(() => {
-    if (!assetsEnabled) {
+    if (!assetsEnabled || !validate) {
       setValidation(null);
       return;
     }
@@ -192,6 +228,7 @@ export function useAgentAssetInventoryMap(
   }, [
     agent.id,
     assetsEnabled,
+    validate,
     mcpPresets,
     mcpStatus,
     pluginTargets,
@@ -274,5 +311,5 @@ export function useAgentAssetDomain(
   agent: ManagedAgentSummary,
   domain: AgentAssetDomain,
 ): AgentAssetInventory {
-  return useAgentAssetInventoryMap(agent)[domain];
+  return useAgentAssetInventoryMap(agent, { eagerDomains: [domain] })[domain];
 }

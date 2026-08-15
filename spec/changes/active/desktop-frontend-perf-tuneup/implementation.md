@@ -449,6 +449,22 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - Desktop TypeScript `tsc --noEmit` 通过。
   - Desktop 生产构建通过；既有 main 构建 `fflate` static/dynamic import 提示仍存在，与本次 renderer 视图生命周期无关。
 
+### P15 — Agent 概览被动资源快照（2026-08-15 follow-up）
+
+- 状态：已完成（2026-08-15）。
+- 根因：Agent 概览复用了资源管理页的 eager inventory hook。每次从其他模块切回 Agent 都会重新请求 My Skills、扫描 Agent Skills 目录、加载 MCP/Rules/Plugins，并在各 store 依次更新时重复执行全域聚合校验。诊断日志对应出现 8 次无效 MCP 配置错误和 28 次坏 Skill 软链接解析错误。
+- 实现：
+  - `useAgentAssetInventoryMap` 增加 eager domain 与 validation 选项，默认行为保持兼容。
+  - `AgentOverviewPanel` 使用空 eager domain 和关闭 validation 的被动模式，只显示 renderer 已有快照；冷缓存显示未知占位。
+  - `useAgentAssetDomain` 只声明当前领域为 eager，避免未来单领域调用方重新拉起所有资源域。
+  - 具体 Skills/MCP/Rules/Plugins 页面及显式刷新动作保持真实读取，不改变持久化、IPC 或数据来源。
+- Traceability：`FR-PERF-15 -> DES-PERF-15 -> TEST-PERF-15 -> T-PERF-15`。
+- 验证：
+  - Agent overview、Web capability、Agent assets 与 Agent workspace：4 files / 75 tests passed。
+  - 受影响的 2 个 renderer 源文件和 1 个测试文件 ESLint 通过。
+  - Desktop TypeScript `tsc --noEmit` 通过。
+  - Desktop 生产构建通过；Agent overview 保持独立 lazy chunk（24.98 KB raw / 7.47 KB gzip）。
+
 ## Verification
 
 - 每阶段完成时记录：lint / typecheck / unit / integration / e2e:smoke / perf 的实际结果。

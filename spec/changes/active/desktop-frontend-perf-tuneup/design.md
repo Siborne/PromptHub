@@ -133,9 +133,17 @@
 
 复杂度由“激活视图成本 + 隐藏表格成本 + 隐藏卡片详情成本”收敛为 `O(active view)`；初始坐标生成是 `O(n)` 时间和 `O(n)` 节点存储，force 模拟受 750 ms 与 tick 双重上限约束；非激活视图的 DOM、内存与动画成本为 `O(0)`。不变更 SQLite、IPC、持久化视图偏好或 Prompt 数据契约。
 
+### P15 — Agent 概览被动资源快照（2026-08-15 follow-up）
+
+`DES-PERF-15`：`useAgentAssetInventoryMap` 接受明确的 eager domain 与 validation 策略。资源管理页保持默认按需加载能力；`AgentOverviewPanel` 传入空 eager domain 且关闭全域 validation，只投影 Zustand 中已经存在的 Skills、MCP、Rules 和 Plugins 快照。
+
+概览不再拥有资源发现生命周期。冷缓存时数量使用现有未知占位；用户进入具体资源页或点击该页刷新后，由该领域自己的 store / panel 执行真实读取。这样不会复制数据源，也不新增持久缓存或 IPC 契约。
+
+优化前每次概览挂载会触发最多一次 My Skills 读取、一次 Agent Skills 目录扫描、三套领域库加载以及一次随 store 更新反复执行的全域聚合校验，文件 I/O 为 `O(skill files + MCP config + rule files + plugin inventory)`。优化后概览资源投影只遍历 renderer 已缓存条目，为 `O(cached inventory)` 内存读取；冷缓存 I/O 为 `O(0)`。资源页的真实扫描复杂度不变，但只在用户明确进入相应领域时发生。
+
 ## Implementation Order
 
-P1 → P2 → P3 → (P4 与 P5 可并行) → P6；P7-P14 为后续独立补强。
+P1 → P2 → P3 → (P4 与 P5 可并行) → P6；P7-P15 为后续独立补强。
 
 P1 是基础观测，必须最先；P6 必须最后，因为它会"封盘"前面所有阶段拿到的收益作为新基线。
 
