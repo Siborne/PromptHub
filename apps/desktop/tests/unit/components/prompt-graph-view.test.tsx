@@ -28,6 +28,7 @@ vi.mock("react-force-graph-2d", () => ({
         data-testid="force-graph-mock"
         data-node-count={props.graphData.nodes.length}
         data-link-count={props.graphData.links.length}
+        data-pointer-interaction={String(props.enablePointerInteraction)}
       >
         {props.graphData.nodes.map((node: PromptGraphNode) => (
           <button
@@ -68,7 +69,11 @@ function createPrompt(id: string, title: string, parentId?: string): Prompt {
 }
 
 const parentPrompt = basePrompt;
-const childPrompt = createPrompt("prompt-child", "Child prompt", parentPrompt.id);
+const childPrompt = createPrompt(
+  "prompt-child",
+  "Child prompt",
+  parentPrompt.id,
+);
 const relatedPrompt = createPrompt("prompt-related", "Related prompt");
 
 const relation: PromptRelation = {
@@ -99,9 +104,35 @@ describe("PromptGraphView", () => {
     expect(mock.getAttribute("data-node-count")).toBe("3");
     // 1 hierarchy link (parent → child) + 1 semantic link (child → related).
     expect(mock.getAttribute("data-link-count")).toBe("2");
+    expect(graphProps.current.warmupTicks).toBe(0);
+    expect(graphProps.current.cooldownTicks).toBe(30);
+    expect(graphProps.current.cooldownTime).toBe(750);
+    expect(graphProps.current.d3AlphaDecay).toBe(0.1);
+    expect(graphProps.current.d3AlphaMin).toBe(0.08);
 
     fireEvent.click(screen.getByTestId("graph-node-prompt-child"));
     expect(onSelectPrompt).toHaveBeenCalledWith(childPrompt.id);
+  });
+
+  it("only enables canvas hit testing while the pointer is inside the graph", async () => {
+    await renderWithI18n(
+      <PromptGraphView
+        prompts={[parentPrompt, childPrompt, relatedPrompt]}
+        relations={[relation]}
+        selectedPromptId={null}
+        onSelectPrompt={vi.fn()}
+      />,
+      { language: "en" },
+    );
+
+    const content = screen.getByTestId("prompt-graph-content");
+    expect(graphProps.current.enablePointerInteraction).toBe(false);
+
+    fireEvent.pointerEnter(content);
+    expect(graphProps.current.enablePointerInteraction).toBe(true);
+
+    fireEvent.pointerLeave(content);
+    expect(graphProps.current.enablePointerInteraction).toBe(false);
   });
 
   it("exposes zoom and view controls in the graph workspace", async () => {
@@ -181,6 +212,19 @@ describe("prompt graph data model", () => {
     expect(getNodeVal(child!)).toBeGreaterThan(getNodeVal(related!));
   });
 
+  it("seeds finite distinct node positions before the force engine starts", () => {
+    const { nodes } = buildPromptGraphData(
+      [parentPrompt, childPrompt, relatedPrompt],
+      [relation],
+    );
+
+    expect(nodes.every((node) => Number.isFinite(node.x))).toBe(true);
+    expect(nodes.every((node) => Number.isFinite(node.y))).toBe(true);
+    expect(new Set(nodes.map((node) => `${node.x}:${node.y}`)).size).toBe(
+      nodes.length,
+    );
+  });
+
   it("hides isolated labels until zoomed in on dense graphs", () => {
     const isolated: PromptGraphNode = {
       id: "isolated",
@@ -213,13 +257,7 @@ describe("prompt graph data model", () => {
       shouldShowNodeLabel(connected, 200, "connected", new Set(), 0.4),
     ).toBe(true);
     expect(
-      shouldShowNodeLabel(
-        connected,
-        200,
-        "other",
-        new Set(["connected"]),
-        0.4,
-      ),
+      shouldShowNodeLabel(connected, 200, "other", new Set(["connected"]), 0.4),
     ).toBe(true);
   });
 });

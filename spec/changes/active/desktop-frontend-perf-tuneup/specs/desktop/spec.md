@@ -12,6 +12,9 @@
   - Prompt 看板视图（`PromptKanbanView`）。
   - 侧边栏文件夹树（`Sidebar` 中渲染 prompts 文件夹与子文件夹的部分）。
 - 桌面端"设置 → 数据与同步"和"设置 → AI 模型"两个面板应支持二级懒加载：用户切换到具体子面板（如 WebDAV、S3、Self-Hosted、Backup；或单个 AI provider）时再加载对应代码。
+- `FR-PERF-14`：Prompt 工作区任一时刻只应挂载当前激活的重量级视图。切换到关系图时不得同时挂载隐藏的表格或卡片详情，切换离开关系图时必须释放其 canvas 与模拟循环；视图切换不得影响独立的对话框层。
+- `FR-PERF-14`：Prompt 关系图的自动布局必须使用有限计算预算，默认动画偏好下不得恢复为 200 tick 的长时间模拟；无论 tick 执行速度如何，单次自动模拟还必须有亚秒级时间上限。
+- `FR-PERF-14`：Prompt 关系图在指针位于画布外时不得持续执行逐帧命中检测，初始节点布局应使用确定性分布，避免每次进入 Prompt 都从随机重叠位置重新解算。
 
 ## Modified
 
@@ -30,5 +33,7 @@
 - 用户在生产构建产物中打开桌面端首屏，主入口 chunk（gzip 压缩后）应显著小于当前基线 368 KB；目标基线由 `bundle-budget.json` 给出可执行阈值。
 - 用户拥有 5000 条 prompts、滚动 Prompt 画廊视图，应在帧时间 16 ms 以内保持稳定滚动（虚拟化覆盖）；具体由 `pnpm test:perf` 与现有 `apps/desktop/scripts/profile-large-datasets.mts` 报告承担可量化判定。
 - 用户在 AI 测试 modal 上反复打开 / 关闭，prompt 列表项应不发生不必要的 rerender（通过 React Profiler 或 RTL re-render 计数验证）。
+- 用户在 Prompt 的 card/list/gallery/kanban/graph/generation 之间切换时，DOM 中只能存在当前视图 renderer；再次切换到其他模块时不应继续执行关系图模拟。
+- 用户上次停留在关系图后从任意模块切回 Prompt，关系图应在 750 ms 自动布局预算内停止；指针未进入画布时不得启用 canvas 命中检测。
 - 用户进入"设置 → 数据与同步"，再进入子面板（例如 WebDAV）时，对应代码应通过二级 chunk 异步加载，而不是设置页首次打开时一次性载入全部子面板。
 - 开发者执行 `pnpm --filter @prompthub/desktop build`，并执行 bundle 预算脚本时，应得到明确通过 / 失败信号；预算变更必须随对应 PR 一并提交。

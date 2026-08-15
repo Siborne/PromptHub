@@ -6,32 +6,32 @@
 
 `pnpm --filter @prompthub/desktop build` 在 main `01f6874` (toolchain Node 24 升级后) 实测：
 
-| chunk | size | gzip |
-| --- | --- | --- |
-| `index-*.js`（主入口） | 1.20 MB | 368 KB |
-| `markdown-vendor` | 322 KB | 100 KB |
-| `SettingsPage` | 194 KB | 50 KB |
-| `ui-vendor`（framer-motion + dnd-kit） | 165 KB | 55 KB |
-| `react-vendor` | 138 KB | 45 KB |
-| `icons`（lucide-react） | 70 KB | 14 KB |
-| `i18n-vendor` | 49 KB | 15 KB |
-| 其它（按需） | n/a | n/a |
-| `out/renderer/assets/*.css` | 99 KB | n/a |
+| chunk                                  | size    | gzip   |
+| -------------------------------------- | ------- | ------ |
+| `index-*.js`（主入口）                 | 1.20 MB | 368 KB |
+| `markdown-vendor`                      | 322 KB  | 100 KB |
+| `SettingsPage`                         | 194 KB  | 50 KB  |
+| `ui-vendor`（framer-motion + dnd-kit） | 165 KB  | 55 KB  |
+| `react-vendor`                         | 138 KB  | 45 KB  |
+| `icons`（lucide-react）                | 70 KB   | 14 KB  |
+| `i18n-vendor`                          | 49 KB   | 15 KB  |
+| 其它（按需）                           | n/a     | n/a    |
+| `out/renderer/assets/*.css`            | 99 KB   | n/a    |
 
 vite 构建告警：`Some chunks are larger than 500 kB after minification`。
 
 源码侧巨型文件（行数）：
 
-| 文件 | 行数 |
-| --- | --- |
-| `apps/desktop/src/renderer/components/settings/DataSettings.tsx` | 2774 |
-| `apps/desktop/src/renderer/components/settings/AISettings.tsx` | 2717 |
-| `apps/desktop/src/renderer/components/layout/MainContent.tsx` | 2490 |
-| `apps/desktop/src/renderer/services/ai.ts` | 2458 |
+| 文件                                                              | 行数 |
+| ----------------------------------------------------------------- | ---- |
+| `apps/desktop/src/renderer/components/settings/DataSettings.tsx`  | 2774 |
+| `apps/desktop/src/renderer/components/settings/AISettings.tsx`    | 2717 |
+| `apps/desktop/src/renderer/components/layout/MainContent.tsx`     | 2490 |
+| `apps/desktop/src/renderer/services/ai.ts`                        | 2458 |
 | `apps/desktop/src/renderer/components/skill/CreateSkillModal.tsx` | 2144 |
-| `apps/desktop/src/renderer/stores/settings.store.ts` | 1776 |
-| `apps/desktop/src/renderer/stores/skill.store.ts` | 1695 |
-| `apps/desktop/src/renderer/components/layout/Sidebar.tsx` | 1603 |
+| `apps/desktop/src/renderer/stores/settings.store.ts`              | 1776 |
+| `apps/desktop/src/renderer/stores/skill.store.ts`                 | 1695 |
+| `apps/desktop/src/renderer/components/layout/Sidebar.tsx`         | 1603 |
 
 虚拟化情况：`@tanstack/react-virtual` 与 `react-window` 均未引入；`MainContent.tsx` 内已存在手写分批渲染补丁（`INITIAL_PROMPT_RENDER_COUNT = 160`、`PROMPT_RENDER_CHUNK_SIZE = 160`、`PROMPT_RENDER_CHUNK_DELAY_MS = 24`）。
 
@@ -54,16 +54,16 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - `bundle-budget.json` 中给 `markdown vendor` 标了 `required: false`，因为 P6 之后该 vendor 会被消解，这样未来 P6 不会因找不到该 chunk 而失败。
 - 实测数字（baseline + budget）：
 
-| chunk | actual gzip | budget |
-| --- | --- | --- |
-| `index-*.js` | 359.31 KB | 384 KB |
-| `markdown-vendor` | 98.21 KB | 120 KB |
-| `SettingsPage` | 49.07 KB | 60 KB |
-| `ui-vendor` | 54.04 KB | 70 KB |
-| `react-vendor` | 44.38 KB | 50 KB |
-| `icons` | 13.51 KB | 18 KB |
-| `i18n-vendor` | 14.96 KB | 20 KB |
-| renderer css total | 19.48 KB | 30 KB |
+| chunk              | actual gzip | budget |
+| ------------------ | ----------- | ------ |
+| `index-*.js`       | 359.31 KB   | 384 KB |
+| `markdown-vendor`  | 98.21 KB    | 120 KB |
+| `SettingsPage`     | 49.07 KB    | 60 KB  |
+| `ui-vendor`        | 54.04 KB    | 70 KB  |
+| `react-vendor`     | 44.38 KB    | 50 KB  |
+| `icons`            | 13.51 KB    | 18 KB  |
+| `i18n-vendor`      | 14.96 KB    | 20 KB  |
+| renderer css total | 19.48 KB    | 30 KB  |
 
 - 验证：
   - `pnpm --filter @prompthub/desktop build` ✅
@@ -103,12 +103,12 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - **未新增 `prompt-large-list.spec.ts` e2e**：现有 `tests/integration/components/main-content-large-dataset.integration.test.tsx` 覆盖了 1000 条数据集场景；继续追加 e2e 是 marginal value。也归入 follow-up。
 - 实测数字（`pnpm build` + `pnpm bundle:budget`，相对 P1 baseline）：
 
-| chunk | P1 baseline gzip | P3 实测 gzip | Δ |
-| --- | --- | --- | --- |
-| `index-*.js`（主入口） | 359.31 KB | 364.30 KB | +4.99 KB（virtualizer 入口） |
-| `SkillListView-*.js` | 7.7 KB（raw） | 7.9 KB（raw） | 基本持平 |
-| `PromptGalleryView-*.js` | 6.0 KB（raw） | 6.0 KB（raw） | 持平 |
-| `PromptKanbanView-*.js` | 10.5 KB（raw） | 11 KB（raw） | +0.5 KB |
+| chunk                    | P1 baseline gzip | P3 实测 gzip  | Δ                            |
+| ------------------------ | ---------------- | ------------- | ---------------------------- |
+| `index-*.js`（主入口）   | 359.31 KB        | 364.30 KB     | +4.99 KB（virtualizer 入口） |
+| `SkillListView-*.js`     | 7.7 KB（raw）    | 7.9 KB（raw） | 基本持平                     |
+| `PromptGalleryView-*.js` | 6.0 KB（raw）    | 6.0 KB（raw） | 持平                         |
+| `PromptKanbanView-*.js`  | 10.5 KB（raw）   | 11 KB（raw）  | +0.5 KB                      |
 
 主入口体积小幅上涨是 `@tanstack/react-virtual` 进入首屏关键路径的代价；整体预算仍在 384 KB 阈值内。运行时收益：
 
@@ -184,16 +184,16 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - **未把"markdown 渲染统一到 `<MarkdownViewer>` + lazy 化"作为本次范围**：那需要重写 6+ 个组件的 markdown 用法，是独立 change。
 - 实测数字（最终 baseline，附在 `apps/desktop/out/renderer/`）：
 
-| chunk | 终态 gzip | 预算 | 备注 |
-| --- | --- | --- | --- |
+| chunk                  | 终态 gzip | 预算   | 备注                                                 |
+| ---------------------- | --------- | ------ | ---------------------------------------------------- |
 | `index-*.js`（主入口） | 364.29 KB | 384 KB | +5 KB vs P1 baseline，来自 `@tanstack/react-virtual` |
-| `markdown-vendor` | 98.21 KB | 120 KB | 持平 |
-| `SettingsPage` | 49.07 KB | 60 KB | 持平 |
-| `ui-vendor` | 54.04 KB | 70 KB | 持平 |
-| `react-vendor` | 44.38 KB | 50 KB | 持平 |
-| `icons` | 13.51 KB | 18 KB | 持平 |
-| `i18n-vendor` | 14.96 KB | 20 KB | 持平 |
-| renderer css total | 19.45 KB | 30 KB | 持平 |
+| `markdown-vendor`      | 98.21 KB  | 120 KB | 持平                                                 |
+| `SettingsPage`         | 49.07 KB  | 60 KB  | 持平                                                 |
+| `ui-vendor`            | 54.04 KB  | 70 KB  | 持平                                                 |
+| `react-vendor`         | 44.38 KB  | 50 KB  | 持平                                                 |
+| `icons`                | 13.51 KB  | 18 KB  | 持平                                                 |
+| `i18n-vendor`          | 14.96 KB  | 20 KB  | 持平                                                 |
+| renderer css total     | 19.45 KB  | 30 KB  | 持平                                                 |
 
 - 验证：
   - `pnpm --filter @prompthub/desktop typecheck` ✅
@@ -222,14 +222,14 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - Rules shell 拆分保留现有 `rules.store.ts` 作为单一 source of truth，只改变加载边界，不改变 Rules 数据模型或 IPC contract。
 - 实测数字：
 
-| chunk | P7 前 gzip | P7 后 gzip | 预算 | 备注 |
-| --- | --- | --- | --- | --- |
-| `index-*.js`（主入口） | 436.03 KB | 147.05 KB | 384 KB | locale JSON、prompt markdown、Rules store 从启动入口移出 |
-| `markdown-vendor` | n/a | 99.04 KB | 120 KB | 保持独立 vendor chunk |
-| `SettingsPage` | n/a | 57.84 KB | 60 KB | 接近预算，后续设置页增长需警惕 |
-| `i18n-vendor` | n/a | 14.99 KB | 20 KB | 仅 i18n runtime，不含 locale JSON |
-| locale JSON chunks | 打进主入口 | 37.11-42.97 KB each | n/a | `en`、`zh`、`zh-TW`、`ja`、`es`、`de`、`fr` 均为动态 chunk |
-| `rules.store` | 打进主入口 | 2.81 KB | n/a | 仅 Rules UI / settings refresh 动态加载 |
+| chunk                  | P7 前 gzip | P7 后 gzip          | 预算   | 备注                                                       |
+| ---------------------- | ---------- | ------------------- | ------ | ---------------------------------------------------------- |
+| `index-*.js`（主入口） | 436.03 KB  | 147.05 KB           | 384 KB | locale JSON、prompt markdown、Rules store 从启动入口移出   |
+| `markdown-vendor`      | n/a        | 99.04 KB            | 120 KB | 保持独立 vendor chunk                                      |
+| `SettingsPage`         | n/a        | 57.84 KB            | 60 KB  | 接近预算，后续设置页增长需警惕                             |
+| `i18n-vendor`          | n/a        | 14.99 KB            | 20 KB  | 仅 i18n runtime，不含 locale JSON                          |
+| locale JSON chunks     | 打进主入口 | 37.11-42.97 KB each | n/a    | `en`、`zh`、`zh-TW`、`ja`、`es`、`de`、`fr` 均为动态 chunk |
+| `rules.store`          | 打进主入口 | 2.81 KB             | n/a    | 仅 Rules UI / settings refresh 动态加载                    |
 
 - 验证：
   - `pnpm --filter @prompthub/desktop test -- tests/unit/services/i18n-init.test.ts tests/unit/stores/settings-language.test.ts tests/unit/components/language-settings.test.tsx --run` ✅（10 tests，覆盖初始语言、非初始 locale lazy load、初始 locale 失败 fallback、settings store 失败路径）
@@ -254,14 +254,14 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - `tests/integration/components/skill-ui.integration.test.tsx`：增加回归测试，断言默认技能详情页只渲染 preview，不加载 `EditSkillModal` / `SkillFileEditor` mock module；点击 Files tab 后才加载并渲染 file editor。同时修正一个已有 async update 测试的 race，等待 `Update` 按钮出现后再点击。
 - 实测数字（`pnpm --filter @prompthub/desktop build:analyze`）：
 
-| chunk | P8 前 gzip | P8 后 gzip | 备注 |
-| --- | --- | --- | --- |
-| `SkillFullDetailPage-*.js` | 264.93 KB | 23.06 KB | 默认技能详情 / Preview tab 不再携带 CodeMirror |
-| `SkillFileEditor-*.js` | 打进 `SkillFullDetailPage` | 239.96 KB | 仅 Files tab / edit modal 文件编辑器路径加载 |
-| `EditSkillModal-*.js` | 打进 `SkillFullDetailPage` | 3.50 KB | 仅点击编辑技能元数据时加载 |
-| `SkillFullDetailPage-*.css` | 合并文件编辑器样式 | 1.37 KB | 文件编辑器样式拆入 `SkillFileEditor-*.css` |
-| `SkillFileEditor-*.css` | n/a | 2.22 KB | 仅文件编辑器路径加载 |
-| `index-*.js`（主入口） | 147.05 KB | 147.05 KB | 本阶段优化冷路径，不改变启动入口 |
+| chunk                       | P8 前 gzip                 | P8 后 gzip | 备注                                           |
+| --------------------------- | -------------------------- | ---------- | ---------------------------------------------- |
+| `SkillFullDetailPage-*.js`  | 264.93 KB                  | 23.06 KB   | 默认技能详情 / Preview tab 不再携带 CodeMirror |
+| `SkillFileEditor-*.js`      | 打进 `SkillFullDetailPage` | 239.96 KB  | 仅 Files tab / edit modal 文件编辑器路径加载   |
+| `EditSkillModal-*.js`       | 打进 `SkillFullDetailPage` | 3.50 KB    | 仅点击编辑技能元数据时加载                     |
+| `SkillFullDetailPage-*.css` | 合并文件编辑器样式         | 1.37 KB    | 文件编辑器样式拆入 `SkillFileEditor-*.css`     |
+| `SkillFileEditor-*.css`     | n/a                        | 2.22 KB    | 仅文件编辑器路径加载                           |
+| `index-*.js`（主入口）      | 147.05 KB                  | 147.05 KB  | 本阶段优化冷路径，不改变启动入口               |
 
 - 验证：
   - `pnpm --filter @prompthub/desktop test -- tests/integration/components/skill-ui.integration.test.tsx --run` ✅（11 tests，覆盖 skill detail lazy loading、snapshot、local store import/update、project SKILL.md source_url）
@@ -282,14 +282,14 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - `apps/desktop/bundle-budget.json`：将 `SettingsPage-*.js` 预算从 60 KB 收紧到 6 KB，并新增 `DataSettings`、`AISettingsPrototype`、`SkillSettings` section chunk 预算，避免拆分后大面板失去预算守护。
 - 实测数字（`pnpm --filter @prompthub/desktop build:analyze` + `bundle:budget`）：
 
-| chunk | P9 前 gzip | P9 后 gzip | 预算 | 备注 |
-| --- | --- | --- | --- | --- |
-| `SettingsPage-*.js` | 59.23 KB | 2.59 KB | 6 KB | 仅保留设置 shell、导航、lazy 边界 |
-| `DataSettings-*.js` | 打进 `SettingsPage` | 11.57 KB | 15 KB | 仅 Data & Sync section 加载 |
-| `AISettingsPrototype-*.js` | 打进 `SettingsPage` | 26.44 KB | 32 KB | 仅 Model Services section 加载 |
-| `SkillSettings-*.js` | 打进 `SettingsPage` | 6.73 KB | 10 KB | 仅 Agent Management section 加载 |
-| `GeneralSettings-*.js` | 打进 `SettingsPage` | 1.16 KB | n/a | 默认 General section 单独加载 |
-| `index-*.js`（主入口） | 147.05 KB | 147.03 KB | 384 KB | 本阶段优化设置冷路径，不改变启动入口 |
+| chunk                      | P9 前 gzip          | P9 后 gzip | 预算   | 备注                                 |
+| -------------------------- | ------------------- | ---------- | ------ | ------------------------------------ |
+| `SettingsPage-*.js`        | 59.23 KB            | 2.59 KB    | 6 KB   | 仅保留设置 shell、导航、lazy 边界    |
+| `DataSettings-*.js`        | 打进 `SettingsPage` | 11.57 KB   | 15 KB  | 仅 Data & Sync section 加载          |
+| `AISettingsPrototype-*.js` | 打进 `SettingsPage` | 26.44 KB   | 32 KB  | 仅 Model Services section 加载       |
+| `SkillSettings-*.js`       | 打进 `SettingsPage` | 6.73 KB    | 10 KB  | 仅 Agent Management section 加载     |
+| `GeneralSettings-*.js`     | 打进 `SettingsPage` | 1.16 KB    | n/a    | 默认 General section 单独加载        |
+| `index-*.js`（主入口）     | 147.05 KB           | 147.03 KB  | 384 KB | 本阶段优化设置冷路径，不改变启动入口 |
 
 - 验证：
   - `pnpm --filter @prompthub/desktop test -- tests/unit/components/settings-page.test.tsx --run` ✅（8 tests，覆盖默认 section lazy loading、Data 子菜单、pending section navigation、AI shell layout）
@@ -340,12 +340,12 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - `bundle-budget.json` 将主入口预算从 384 KB gzip 收紧到 150 KB gzip，锁住本次收益。
 - 实测数字：
 
-| chunk | P11 前 | P11 后 | 备注 |
-| --- | --- | --- | --- |
-| `index-*.js`（主入口） | 549.06 KB raw / 154.55 KB gzip | 459.04 KB raw / 125.91 KB gzip | 低于 Vite 500 KB raw warning limit |
-| `skill-registry-*.js` | 打进主入口 | 47.21 KB raw / 11.70 KB gzip | 仅 `loadRegistry()` 路径加载 |
-| `skill-icons-*.js` | 打进主入口 | 43.03 KB raw / 15.62 KB gzip | 仅注册表路径加载 |
-| `skill-categories-*.js` | n/a | 0.68 KB raw / 0.38 KB gzip | 轻量分类常量 |
+| chunk                   | P11 前                         | P11 后                         | 备注                               |
+| ----------------------- | ------------------------------ | ------------------------------ | ---------------------------------- |
+| `index-*.js`（主入口）  | 549.06 KB raw / 154.55 KB gzip | 459.04 KB raw / 125.91 KB gzip | 低于 Vite 500 KB raw warning limit |
+| `skill-registry-*.js`   | 打进主入口                     | 47.21 KB raw / 11.70 KB gzip   | 仅 `loadRegistry()` 路径加载       |
+| `skill-icons-*.js`      | 打进主入口                     | 43.03 KB raw / 15.62 KB gzip   | 仅注册表路径加载                   |
+| `skill-categories-*.js` | n/a                            | 0.68 KB raw / 0.38 KB gzip     | 轻量分类常量                       |
 
 - 验证：
   - `pnpm --filter @prompthub/desktop test -- --run tests/unit/stores/skill.store.test.ts -t "loadRegistry loads"` ✅（先红后绿，验证注册表异步加载契约）
@@ -376,11 +376,11 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
     150 KB gzip 预算。
 - 实测数字：
 
-| chunk | P12 前 | P12 后 | 备注 |
-| --- | --- | --- | --- |
-| `SkillFileEditor-*.js` | 688.52 KB raw / 240.02 KB gzip | 408.87 KB raw / 130.37 KB gzip | 低于 Vite 500 KB raw warning limit |
-| `index-*.js`（主入口） | 459.04 KB raw / 125.91 KB gzip | 459.04 KB raw / 125.92 KB gzip | 不回流到启动路径 |
-| CodeMirror language chunks | 打进 `SkillFileEditor` | 2.26-84.88 KB raw each | 只按文件类型加载 |
+| chunk                      | P12 前                         | P12 后                         | 备注                               |
+| -------------------------- | ------------------------------ | ------------------------------ | ---------------------------------- |
+| `SkillFileEditor-*.js`     | 688.52 KB raw / 240.02 KB gzip | 408.87 KB raw / 130.37 KB gzip | 低于 Vite 500 KB raw warning limit |
+| `index-*.js`（主入口）     | 459.04 KB raw / 125.91 KB gzip | 459.04 KB raw / 125.92 KB gzip | 不回流到启动路径                   |
+| CodeMirror language chunks | 打进 `SkillFileEditor`         | 2.26-84.88 KB raw each         | 只按文件类型加载                   |
 
 - 验证：
   - `pnpm --filter @prompthub/desktop test -- --run tests/unit/components/skill-code-editor.test.tsx` ✅（先红后绿）
@@ -408,14 +408,14 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
     budget。
 - 实测数字：
 
-| chunk | P13 前 | P13 后 | 预算 |
-| --- | --- | --- | --- |
-| `App-*.js` | 555.88 KB raw / 153.48 KB gzip | 238.29 KB raw / 72.78 KB gzip | 80 KB gzip |
-| `AppWorkspaceShell-*.js` | 打进 `App` | 300.92 KB raw / 76.63 KB gzip | 84 KB gzip |
-| `AgentsWorkspace-*.js` | 266.56 KB raw / 62.76 KB gzip | 13.47 KB raw / 4.75 KB gzip | 6 KB gzip |
-| `AgentProviderModelWorkbench-*.js` | 打进 `AgentsWorkspace` | 83.42 KB raw / 18.15 KB gzip | 22 KB gzip |
-| `AgentAssetsWorkspace-*.js` | 打进 `AgentsWorkspace` | 54.79 KB raw / 14.79 KB gzip | 18 KB gzip |
-| `AgentSessionsPanel-*.js` | 打进 `AgentsWorkspace` | 42.43 KB raw / 11.46 KB gzip | 14 KB gzip |
+| chunk                              | P13 前                         | P13 后                        | 预算       |
+| ---------------------------------- | ------------------------------ | ----------------------------- | ---------- |
+| `App-*.js`                         | 555.88 KB raw / 153.48 KB gzip | 238.29 KB raw / 72.78 KB gzip | 80 KB gzip |
+| `AppWorkspaceShell-*.js`           | 打进 `App`                     | 300.92 KB raw / 76.63 KB gzip | 84 KB gzip |
+| `AgentsWorkspace-*.js`             | 266.56 KB raw / 62.76 KB gzip  | 13.47 KB raw / 4.75 KB gzip   | 6 KB gzip  |
+| `AgentProviderModelWorkbench-*.js` | 打进 `AgentsWorkspace`         | 83.42 KB raw / 18.15 KB gzip  | 22 KB gzip |
+| `AgentAssetsWorkspace-*.js`        | 打进 `AgentsWorkspace`         | 54.79 KB raw / 14.79 KB gzip  | 18 KB gzip |
+| `AgentSessionsPanel-*.js`          | 打进 `AgentsWorkspace`         | 42.43 KB raw / 11.46 KB gzip  | 14 KB gzip |
 
 - 验证：
   - lazy 边界、Agent workspace、Plugin inventory 和 target matrix 定向回归：
@@ -428,6 +428,26 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
     renderer lazy 边界。
   - bundle budget 通过：App 71.07 KB、App shell 74.84 KB、AgentsWorkspace
     4.64 KB、Provider 17.72 KB、Assets 14.44 KB、Sessions 11.19 KB gzip。
+
+### P14 — Prompt 激活视图隔离（2026-08-15 follow-up）
+
+- 状态：已完成（2026-08-15）。
+- 根因：Prompt 非 card route 使用透明度隐藏所有视图，其中表格始终挂载；card route 也在其他 view mode 下保持隐藏挂载。用户持久化为 graph view 时，进入 Prompt 会同时承担关系图、表格和卡片详情的挂载/卸载成本，标准关系图还会执行 200 个 cooldown ticks。
+- 实现：
+  - `PromptWorkspaceContent` 按 `viewMode` 互斥挂载 card route 或其他 view route，Dialog layer 保持独立。
+  - `PromptViewContainers` 只返回当前 list/gallery/kanban/graph/generation renderer，不再创建透明的非激活容器。
+  - 关系图标准模拟预算降为 30 ticks，减少模式为 12 ticks，关闭动画模式的同步 warmup 降为 24 ticks；增加 750 ms 硬时间上限与 alpha 提前停止阈值。
+  - 节点按确定性 sunflower 分布获得初始坐标，密集图 collision force 降为单次迭代，避免进入 graph 时从随机重叠位置执行高成本解算。
+  - Canvas 指针命中检测仅在指针进入图区域后启用；移出后清空 hover 并关闭逐帧 shadow-canvas hit test。
+  - `ResizeObserver` 忽略未改变的宽高，减少布局通知带来的无效 React 更新。
+- Traceability：`FR-PERF-14 -> DES-PERF-14 -> TEST-PERF-14 -> T-PERF-14`。
+- 诊断样本：本机 Prompt 数据为 127 条、1 条关系，持久化视图为 graph。优化前一次进入会挂载 graph + 隐藏 table + 隐藏 card route，graph 标准模式最多运行 200 ticks；优化后只挂载 graph，标准模式最多运行 30 ticks 且不超过 750 ms，tick 预算下降 85%。
+- 验证结果：
+  - `prompt-active-view-isolation.test.tsx` + `prompt-graph-view.test.tsx`：2 files / 16 tests passed，覆盖激活视图互斥、模拟硬上限、确定性初始坐标与画布指针检测开关。
+  - `main-content-large-dataset.integration.test.tsx` + `main-content-selection-restore.integration.test.tsx`：2 files / 5 tests passed；大数据测试同步锁定只存在 1 个激活列表头。
+  - 受影响源码与测试 ESLint 通过。
+  - Desktop TypeScript `tsc --noEmit` 通过。
+  - Desktop 生产构建通过；既有 main 构建 `fflate` static/dynamic import 提示仍存在，与本次 renderer 视图生命周期无关。
 
 ## Verification
 

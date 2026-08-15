@@ -142,6 +142,15 @@
 - [x] 用 `build:analyze` 对比 App、AgentsWorkspace 和新拆分 chunks，补充可执行 bundle budget
 - [x] 复跑边界测试、Agent workspace 组件测试、typecheck、构建与 bundle budget
 
+## P14 — Prompt 激活视图隔离（2026-08-15 follow-up）
+
+- [x] `T-PERF-14` 补充激活视图挂载回归测试，覆盖全部 Prompt view mode 与 card/view route 互斥
+- [x] `T-PERF-14` 移除隐藏表格、隐藏卡片详情及其他非激活视图的常驻挂载
+- [x] `T-PERF-14` 缩短关系图模拟预算并去重相同尺寸的 `ResizeObserver` state 更新
+- [x] `T-PERF-14` 为关系图增加确定性初始布局、750 ms 模拟硬上限和画布外指针检测停用
+- [x] `TEST-PERF-14` 运行定向组件测试、相关集成测试、受影响文件 lint、Desktop typecheck 与生产构建
+- [x] 同步稳定前端性能边界与 implementation 记录
+
 - [x] 每完成一个阶段，更新 `implementation.md` 中对应小节，记录实际数据与偏差
 - [x] 把"桌面端长列表虚拟化"、"bundle 预算"作为稳定行为同步到 `spec/knowledge/behavior/desktop.md`
 - [x] 在 `spec/knowledge/structure/` 下新增 `desktop-frontend-performance.md` 描述桌面端 renderer 性能策略

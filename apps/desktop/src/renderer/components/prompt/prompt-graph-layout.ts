@@ -49,6 +49,24 @@ const DENSE_GRAPH_THRESHOLD = 32;
 // clean dots. Connected nodes reveal their label earlier than isolated ones.
 const CONNECTED_LABEL_ZOOM = 2;
 const ISOLATED_LABEL_ZOOM = 2.8;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
+function getInitialNodePosition(index: number, count: number) {
+  if (count <= 1) {
+    return { x: 0, y: 0 };
+  }
+
+  // A deterministic sunflower layout gives the force engine an even starting
+  // point. Starting every node at an implicit random position makes dense
+  // graphs spend their first frames resolving a collision-heavy cluster.
+  const radius =
+    Math.max(72, Math.sqrt(count) * 22) * Math.sqrt((index + 1) / count);
+  const angle = index * GOLDEN_ANGLE;
+  return {
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius,
+  };
+}
 
 function linkEndpointId(endpoint: string | PromptGraphNode): string {
   return typeof endpoint === "string" ? endpoint : endpoint.id;
@@ -149,12 +167,13 @@ export function buildPromptGraphData(
   }
 
   const metrics = createNodeMetrics(prompts, relations);
-  const nodes: PromptGraphNode[] = prompts.map((prompt) => {
+  const nodes: PromptGraphNode[] = prompts.map((prompt, index) => {
     const metric = metrics.get(prompt.id) ?? {
       degree: 0,
       hasHierarchy: false,
       hasSemanticRelation: false,
     };
+    const position = getInitialNodePosition(index, prompts.length);
 
     return {
       id: prompt.id,
@@ -163,6 +182,9 @@ export function buildPromptGraphData(
       degree: metric.degree,
       hasHierarchy: metric.hasHierarchy,
       hasSemanticRelation: metric.hasSemanticRelation,
+      ...position,
+      vx: 0,
+      vy: 0,
     };
   });
 
@@ -178,7 +200,9 @@ export function getNodeVal(node: PromptGraphNode): number {
   );
 }
 
-export function buildNeighborIndex(links: PromptGraphLink[]): Map<string, Set<string>> {
+export function buildNeighborIndex(
+  links: PromptGraphLink[],
+): Map<string, Set<string>> {
   const index = new Map<string, Set<string>>();
 
   const connect = (a: string, b: string) => {

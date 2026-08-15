@@ -20,10 +20,14 @@ function PromptWorkspaceLoading() {
 }
 
 function PromptWorkspaceRoutes() {
+  const { stores } = usePromptWorkspaceContext();
   return (
     <>
-      <PromptWorkspaceViewRoutes />
-      <PromptWorkspaceCardRoute />
+      {stores.promptData.viewMode === "card" ? (
+        <PromptWorkspaceCardRoute />
+      ) : (
+        <PromptWorkspaceViewRoutes />
+      )}
       <PromptWorkspaceDialogLayer />
     </>
   );

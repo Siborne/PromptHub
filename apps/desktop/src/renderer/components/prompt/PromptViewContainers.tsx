@@ -66,7 +66,6 @@ export interface PromptTableActions {
 
 interface PromptViewContainersProps {
   viewMode: ViewMode;
-  getViewClass: (mode: ViewMode, layout?: "col" | "row") => string;
   /** Prompt list projection (graph view). */
   prompts: PromptSummary[];
   relations: PromptRelation[];
@@ -82,7 +81,6 @@ interface PromptViewContainersProps {
 
 export function PromptViewContainers({
   viewMode,
-  getViewClass,
   prompts,
   relations,
   selectedId,
@@ -93,32 +91,36 @@ export function PromptViewContainers({
   cardActions,
   tableActions,
 }: PromptViewContainersProps) {
-  return (
-    <>
-      <div className={getViewClass("generation")}>
-        {viewMode === "generation" && (
-          <Suspense fallback={loadingFallback}>
-            <ImageGenerationWorkbench />
-          </Suspense>
-        )}
-      </div>
+  if (viewMode === "card") return null;
 
-      {/* Relationship graph view */}
-      <div className={getViewClass("graph")}>
-        {viewMode === "graph" && (
-          <Suspense fallback={loadingFallback}>
-            <PromptGraphView
-              prompts={prompts}
-              relations={relations}
-              selectedPromptId={selectedId}
-              onSelectPrompt={onGraphSelectPrompt}
-            />
-          </Suspense>
-        )}
+  if (viewMode === "generation") {
+    return (
+      <div className="absolute inset-0 flex flex-col">
+        <Suspense fallback={loadingFallback}>
+          <ImageGenerationWorkbench />
+        </Suspense>
       </div>
+    );
+  }
 
-      {/* List view mode / 列表视图模式 */}
-      <div className={getViewClass("list")}>
+  if (viewMode === "graph") {
+    return (
+      <div className="absolute inset-0 flex flex-col">
+        <Suspense fallback={loadingFallback}>
+          <PromptGraphView
+            prompts={prompts}
+            relations={relations}
+            selectedPromptId={selectedId}
+            onSelectPrompt={onGraphSelectPrompt}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (viewMode === "list") {
+    return (
+      <div className="absolute inset-0 flex flex-col">
         <PromptListHeader count={sortedPrompts.length} />
         <div className="flex-1 overflow-hidden">
           <Suspense fallback={loadingFallback}>
@@ -147,50 +149,50 @@ export function PromptViewContainers({
           </Suspense>
         </div>
       </div>
+    );
+  }
 
-      {/* Gallery view / Gallery 视图 */}
-      <div className={getViewClass("gallery")}>
+  if (viewMode === "gallery") {
+    return (
+      <div className="absolute inset-0 flex flex-col">
         <PromptListHeader count={sortedPrompts.length} />
-        {viewMode === "gallery" && (
-          <Suspense fallback={loadingFallback}>
-            <PromptGalleryView
-              prompts={visiblePrompts}
-              highlightTerms={highlightTerms}
-              onSelect={cardActions.onSelect}
-              onToggleFavorite={cardActions.onToggleFavorite}
-              onCopy={cardActions.onCopy}
-              onEdit={cardActions.onEdit}
-              onDelete={cardActions.onDelete}
-              onAiTest={cardActions.onAiTest}
-              onVersionHistory={cardActions.onVersionHistory}
-              onViewDetail={cardActions.onViewDetail}
-              onContextMenu={cardActions.onContextMenu}
-            />
-          </Suspense>
-        )}
+        <Suspense fallback={loadingFallback}>
+          <PromptGalleryView
+            prompts={visiblePrompts}
+            highlightTerms={highlightTerms}
+            onSelect={cardActions.onSelect}
+            onToggleFavorite={cardActions.onToggleFavorite}
+            onCopy={cardActions.onCopy}
+            onEdit={cardActions.onEdit}
+            onDelete={cardActions.onDelete}
+            onAiTest={cardActions.onAiTest}
+            onVersionHistory={cardActions.onVersionHistory}
+            onViewDetail={cardActions.onViewDetail}
+            onContextMenu={cardActions.onContextMenu}
+          />
+        </Suspense>
       </div>
+    );
+  }
 
-      {/* Kanban view / 看板视图 */}
-      <div className={getViewClass("kanban")}>
-        <PromptListHeader count={sortedPrompts.length} />
-        {viewMode === "kanban" && (
-          <Suspense fallback={loadingFallback}>
-            <PromptKanbanView
-              prompts={visiblePrompts}
-              highlightTerms={highlightTerms}
-              onSelect={cardActions.onSelect}
-              onToggleFavorite={cardActions.onToggleFavorite}
-              onCopy={cardActions.onCopy}
-              onEdit={cardActions.onEdit}
-              onDelete={cardActions.onDelete}
-              onAiTest={cardActions.onAiTest}
-              onVersionHistory={cardActions.onVersionHistory}
-              onViewDetail={cardActions.onViewDetail}
-              onContextMenu={cardActions.onContextMenu}
-            />
-          </Suspense>
-        )}
-      </div>
-    </>
+  return (
+    <div className="absolute inset-0 flex flex-col">
+      <PromptListHeader count={sortedPrompts.length} />
+      <Suspense fallback={loadingFallback}>
+        <PromptKanbanView
+          prompts={visiblePrompts}
+          highlightTerms={highlightTerms}
+          onSelect={cardActions.onSelect}
+          onToggleFavorite={cardActions.onToggleFavorite}
+          onCopy={cardActions.onCopy}
+          onEdit={cardActions.onEdit}
+          onDelete={cardActions.onDelete}
+          onAiTest={cardActions.onAiTest}
+          onVersionHistory={cardActions.onVersionHistory}
+          onViewDetail={cardActions.onViewDetail}
+          onContextMenu={cardActions.onContextMenu}
+        />
+      </Suspense>
+    </div>
   );
 }

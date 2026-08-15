@@ -97,10 +97,13 @@ function useContainerSize(): [
     }
 
     const update = () => {
-      setSize({
-        width: element.clientWidth,
-        height: element.clientHeight,
-      });
+      const width = element.clientWidth;
+      const height = element.clientHeight;
+      setSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height },
+      );
     };
 
     update();
@@ -130,6 +133,7 @@ export function PromptGraphView({
   const [containerRef, size] = useContainerSize();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [isPointerInside, setIsPointerInside] = useState(false);
 
   const graphData = useMemo(
     () => buildPromptGraphData(prompts, relations),
@@ -177,7 +181,7 @@ export function PromptGraphView({
       forceCollide<PromptGraphNode>()
         .radius((node) => Math.sqrt(getNodeVal(node)) * 3.2 + 14)
         .strength(0.85)
-        .iterations(2),
+        .iterations(graphData.nodes.length > 64 ? 1 : 2),
     );
 
     const link = graph.d3Force("link");
@@ -207,12 +211,12 @@ export function PromptGraphView({
   // sim keeps drifting and balloons on every interaction.
   const motionConfig = useMemo(() => {
     if (motionPreference === "off") {
-      return { warmupTicks: 200, cooldownTicks: 0, alphaDecay: 0.1 };
+      return { warmupTicks: 24, cooldownTicks: 0, alphaDecay: 0.18 };
     }
     if (motionPreference === "reduced") {
-      return { warmupTicks: 40, cooldownTicks: 60, alphaDecay: 0.06 };
+      return { warmupTicks: 8, cooldownTicks: 12, alphaDecay: 0.12 };
     }
-    return { warmupTicks: 0, cooldownTicks: 200, alphaDecay: 0.0228 };
+    return { warmupTicks: 0, cooldownTicks: 30, alphaDecay: 0.1 };
   }, [motionPreference]);
 
   const handleZoom = useCallback((transform: { k: number }) => {
@@ -399,6 +403,11 @@ export function PromptGraphView({
         ref={containerRef}
         className="relative min-h-[420px] flex-1 overflow-hidden"
         data-testid="prompt-graph-content"
+        onPointerEnter={() => setIsPointerInside(true)}
+        onPointerLeave={() => {
+          setIsPointerInside(false);
+          setHoveredId(null);
+        }}
       >
         <GraphControls
           zoomPercent={zoomPercent}
@@ -414,23 +423,26 @@ export function PromptGraphView({
           width={size.width || 800}
           height={size.height || 600}
           graphData={graphData}
-            backgroundColor={theme.background}
-            nodeId="id"
-            nodeVal={getNodeVal}
-            nodeColor={nodeColor}
-            nodeCanvasObject={paintNode}
-            nodeCanvasObjectMode={() => "replace"}
-            nodeLabel={() => ""}
-            linkColor={linkColor}
-            linkWidth={linkWidth}
-            linkLineDash={(link: PromptGraphLink) =>
-              link.isHierarchy ? null : [4, 4]
-            }
-            warmupTicks={motionConfig.warmupTicks}
-            cooldownTicks={motionConfig.cooldownTicks}
-            d3AlphaDecay={motionConfig.alphaDecay}
-            d3VelocityDecay={0.32}
-            enableNodeDrag
+          backgroundColor={theme.background}
+          nodeId="id"
+          nodeVal={getNodeVal}
+          nodeColor={nodeColor}
+          nodeCanvasObject={paintNode}
+          nodeCanvasObjectMode={() => "replace"}
+          nodeLabel={() => ""}
+          linkColor={linkColor}
+          linkWidth={linkWidth}
+          linkLineDash={(link: PromptGraphLink) =>
+            link.isHierarchy ? null : [4, 4]
+          }
+          warmupTicks={motionConfig.warmupTicks}
+          cooldownTicks={motionConfig.cooldownTicks}
+          cooldownTime={750}
+          d3AlphaMin={0.08}
+          d3AlphaDecay={motionConfig.alphaDecay}
+          d3VelocityDecay={0.32}
+          enableNodeDrag={isPointerInside}
+          enablePointerInteraction={isPointerInside}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}
           onZoom={handleZoom}

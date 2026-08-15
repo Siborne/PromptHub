@@ -80,6 +80,17 @@ Renderer startup entry (`index-*.js`) 不应静态 import 与当前首屏无关�
 - 组件拆分应为 1,500 行门禁留出余量；不能以移动空行或压缩格式作为通过手段。新文件继续以 1,000 行以内为默认目标。
 - 每个新增渲染隔离边界至少有一个可失败的测试，证明稳定输入不会重复执行昂贵子树。
 
+### 8. 重量级工作区只挂载当前视图
+
+同一工作区存在 card、table、gallery、kanban、graph、generation 等互斥视图时，`viewMode` 必须同时控制可见性与挂载生命周期。禁止用 `opacity: 0` 或 `pointer-events: none` 长期隐藏非激活的 virtualizer、Markdown renderer、canvas、WebGL 或持续计算组件。
+
+- 非激活视图的 DOM、订阅、observer 与动画循环必须被卸载；独立的 dialog/overlay host 可以保留。
+- 图谱和其他模拟型组件必须设置有限的 warmup/cooldown 预算，不能以无限动画或长时间默认模拟换取布局效果。
+- 图谱的 tick 上限必须同时配合绝对时间上限，避免单帧成本升高时 tick 数看似有限但页面仍长时间不可交互；初始节点位置应可重复且避免大规模重叠。
+- Canvas/WebGL 的逐帧 pointer hit test 只能在指针位于交互区域时启用；用户操作侧栏、顶部栏或其他面板时，不得持续读取隐藏命中画布。
+- `ResizeObserver`、scroll 和 pointer 等高频回调在写入 React state 前必须去重没有变化的值。
+- 如果产品确实要求保留非激活视图状态，应把轻量状态提升到 store 或缓存，而不是保留整个隐藏渲染树。
+
 ## Stable Scenarios
 
 ### Scenario: Adding a new long list

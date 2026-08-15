@@ -11,15 +11,6 @@ import { VirtualizedPromptList } from "./PromptVirtualizedList";
 import { PromptWorkspaceDetailRoute } from "./PromptWorkspaceDetailRoute";
 import { usePromptWorkspaceContext } from "./PromptWorkspaceContext";
 
-function getCardRouteClass(
-  viewMode: ReturnType<
-    typeof usePromptWorkspaceContext
-  >["stores"]["promptData"]["viewMode"],
-) {
-  const active = viewMode === "card";
-  return `absolute inset-0 flex overflow-hidden transition-opacity ease-out ${active ? "opacity-100 z-10 pointer-events-auto duration-base" : "opacity-0 z-0 pointer-events-none duration-0"}`;
-}
-
 function PromptWorkspaceEmptyList() {
   const { t } = usePromptWorkspaceContext();
   return (
@@ -87,9 +78,8 @@ function PromptWorkspaceListPane() {
 }
 
 export function PromptWorkspaceCardRoute() {
-  const { stores } = usePromptWorkspaceContext();
   return (
-    <div className={getCardRouteClass(stores.promptData.viewMode)}>
+    <div className="absolute inset-0 flex overflow-hidden">
       <PromptWorkspaceListPane />
       <PromptWorkspaceDetailRoute />
     </div>

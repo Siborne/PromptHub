@@ -29,7 +29,6 @@ export function PromptWorkspaceViewRoutes() {
   return (
     <PromptViewContainers
       viewMode={stores.promptData.viewMode}
-      getViewClass={getPromptViewClass(stores.promptData.viewMode)}
       prompts={stores.promptData.prompts}
       relations={stores.promptData.relations}
       selectedId={stores.promptData.selectedId}
@@ -41,22 +40,6 @@ export function PromptWorkspaceViewRoutes() {
       tableActions={getPromptTableActions(actions, state)}
     />
   );
-}
-
-function getPromptViewClass(
-  viewMode: ReturnType<
-    typeof usePromptWorkspaceContext
-  >["stores"]["promptData"]["viewMode"],
-) {
-  return (mode: typeof viewMode, layout: "col" | "row" = "col") => {
-    const layoutClass =
-      layout === "col" ? "flex flex-col" : "flex overflow-hidden";
-    const visibility =
-      viewMode === mode
-        ? "opacity-100 z-10 pointer-events-auto duration-base"
-        : "opacity-0 z-0 pointer-events-none duration-0";
-    return `absolute inset-0 ${layoutClass} transition-opacity ease-out ${visibility}`;
-  };
 }
 
 function getPromptCardActions(

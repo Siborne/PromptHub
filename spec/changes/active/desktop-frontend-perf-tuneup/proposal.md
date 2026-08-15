@@ -9,6 +9,7 @@
 - 单文件臃肿：`DataSettings.tsx` 2774 行、`AISettings.tsx` 2717 行、`MainContent.tsx` 2490 行、`Sidebar.tsx` 1603 行、`skill.store.ts` 1695 行、`settings.store.ts` 1776 行。这些文件既拖累构建拆分，也让任何小改动的 review / typecheck / HMR 全量受牵连。
 - `manualChunks` 已经把 `markdown-vendor` (322 KB) 当作一个 vendor chunk 显式聚合，导致只要任意首屏代码碰到 markdown，就会强制把整个 vendor 拉进首屏。
 - 没有 bundle 可视化或体积预算，每次性能回归只能靠人眼盯 vite 输出。
+- Prompt 工作区会同时挂载当前视图、隐藏的表格视图和隐藏的卡片详情；当持久化视图为关系图时，每次进入 Prompt 还会重新启动 200 tick 的力导向计算，造成进入页面和切换模块时的明显卡顿。
 
 收益对象是桌面端日常用户（首屏冷启动、几百条 prompts/skills 的列表滚动）以及未来的贡献者（更小的单文件、更可预测的分包）。这次变更是一次**有边界的性能调优**，不引入新功能。
 
@@ -23,6 +24,7 @@
   - 把 `skill.store.ts` 中冷路径（platform 同步、scan、export）拆出独立 module 并按需 import。
   - 复核 `vite.config.ts` 的 `manualChunks` 策略，让 `markdown-vendor` 不在首屏关键路径中。
   - 审计 `lucide-react` 命名导入与 Tailwind `content` 配置，确保 tree-shaking / purge 没有遗漏。
+  - Prompt 工作区只挂载当前激活的重量级视图，并为关系图模拟设置有界、较短的收敛预算。
 - Out of scope:
   - 不替换 Zustand / 不更换 React 主版本 / 不接入 RSC 或 server components。
   - 不改 IPC 契约、不改主进程业务逻辑、不改数据库 schema。

@@ -125,9 +125,17 @@
 
 退出条件：`pnpm build` 不再打印 "chunks larger than 500 kB" 警告；CI 中 budget 检查通过。
 
+### P14 — Prompt 激活视图隔离（2026-08-15 follow-up）
+
+`DES-PERF-14`：Prompt 工作区的 `viewMode` 是视图挂载的唯一来源。Card route 与 list/gallery/kanban/graph/generation route 互斥挂载；非激活视图不保留 DOM、Markdown renderer、virtualizer 或 canvas simulation。Dialog layer 独立于视图 route，切换视图时继续保留。
+
+关系图保持现有数据与交互契约，但缩短三种 motion preference 的模拟预算。标准模式最多 30 个 cooldown ticks，减少模式最多 12 个，关闭动画模式只执行 24 个同步 warmup ticks；所有模式共享 750 ms 硬时间上限和较高的 alpha 停止阈值。节点在进入 force engine 前按确定性 sunflower 分布写入初始坐标，避免随机重叠导致首帧碰撞解算。Canvas 指针命中检测只在指针位于图区域内时启用，避免 graph 可见但用户操作侧栏时仍逐帧读取 shadow canvas。`ResizeObserver` 只有在宽高真实变化时才更新 React state。
+
+复杂度由“激活视图成本 + 隐藏表格成本 + 隐藏卡片详情成本”收敛为 `O(active view)`；初始坐标生成是 `O(n)` 时间和 `O(n)` 节点存储，force 模拟受 750 ms 与 tick 双重上限约束；非激活视图的 DOM、内存与动画成本为 `O(0)`。不变更 SQLite、IPC、持久化视图偏好或 Prompt 数据契约。
+
 ## Implementation Order
 
-P1 → P2 → P3 → (P4 与 P5 可并行) → P6。
+P1 → P2 → P3 → (P4 与 P5 可并行) → P6；P7-P14 为后续独立补强。
 
 P1 是基础观测，必须最先；P6 必须最后，因为它会"封盘"前面所有阶段拿到的收益作为新基线。
 

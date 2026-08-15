@@ -239,7 +239,9 @@ describe("MainContent large dataset integration", () => {
       // 成"全量渲染"，所以这里能看到全部 1000 条。
       expect(screen.getByText("Prompt 0000")).toBeInTheDocument();
       expect(screen.getByText("Prompt 0999")).toBeInTheDocument();
-      expect(screen.getAllByText("count:1000")).toHaveLength(4);
+      // Only the active card route owns a list header. Hidden table/gallery/
+      // kanban routes must not stay mounted just to preserve their count.
+      expect(screen.getAllByText("count:1000")).toHaveLength(1);
       expect(container.querySelectorAll('h3[title^="Prompt "]')).toHaveLength(
         prompts.length,
       );
