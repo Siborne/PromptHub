@@ -3,7 +3,6 @@ import path from "path";
 import { dialog, ipcMain, safeStorage } from "electron";
 
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
-import { createRendererPersistenceStore } from "@prompthub/core";
 
 import { closeDatabase } from "../database";
 import {
@@ -92,10 +91,6 @@ function registerExportHandler(): void {
               destinationPath: selected.filePath,
               sourcePaths: portableSourcePaths(),
               scope: normalizedScope,
-              deviceId: await createRendererPersistenceStore({
-                rootPath: getUserDataPath(),
-                encryption: safeStorage,
-              }).getOrCreateSelfHostedDeviceId(),
               persistExtractedMcpSecrets: (secrets) =>
                 createMcpResourceSecretStore({
                   filePath: path.join(

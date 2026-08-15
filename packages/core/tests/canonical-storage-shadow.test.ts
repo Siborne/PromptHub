@@ -517,6 +517,13 @@ describe("complete canonical storage shadow", () => {
     const empty = materializeCanonicalStorageShadow({
       targetPath: emptyTarget,
       prompts: emptyPrompts(),
+      mcpLibrary: {
+        kind: "prompthub-mcp-library",
+        version: 1,
+        updatedAt: "2026-08-15T00:00:00.000Z",
+        servers: [],
+        bindings: [],
+      },
     });
     expect(empty.domainCounts).toEqual({
       skills: 0,
@@ -573,6 +580,36 @@ describe("complete canonical storage shadow", () => {
         } as never),
       ).toThrow(/duplicate canonical/);
     }
+  });
+
+  it("rejects MCP bindings without a local resource identity", () => {
+    const targetPath = path.join(root(), "missing-mcp-device-identity");
+
+    expect(() =>
+      materializeCanonicalStorageShadow({
+        targetPath,
+        prompts: emptyPrompts(),
+        mcpLibrary: {
+          kind: "prompthub-mcp-library",
+          version: 1,
+          updatedAt: "2026-08-15T00:00:00.000Z",
+          servers: [],
+          bindings: [
+            {
+              id: "binding-1",
+              serverIds: [],
+              target: "codex",
+              scope: "global",
+              path: "/Users/example/.codex/config.toml",
+              enabled: true,
+              createdAt: Date.parse("2026-08-15T00:00:00.000Z"),
+              updatedAt: Date.parse("2026-08-15T00:00:00.000Z"),
+            },
+          ],
+        },
+      }),
+    ).toThrow("Canonical MCP bindings require a local device identity");
+    expect(fs.existsSync(targetPath)).toBe(false);
   });
 
   it("rejects invalid canonical domain roots and entries", () => {

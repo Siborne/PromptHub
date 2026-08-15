@@ -47,3 +47,18 @@
       market-source registry artifacts without weakening symlink, type, or
       undeclared-path validation
       (`FR-LEGACYREC-008`, `DES-LEGACYREC-010`, `TEST-LEGACYREC-008`).
+- [x] `T-LEGACYREC-012` Extend exact-name shared-root coexistence to superseded
+      MCP and Plugin metadata files, migrate populated superseded libraries
+      exactly once without allowing stale resurrection, reproduce the live
+      second-start failure, and retain fail-closed handling for symlinks, type
+      substitutions, and unknown entries
+      (`FR-LEGACYREC-008`, `DES-LEGACYREC-010`, `TEST-LEGACYREC-008`).
+  - MCP and Plugin migration also accepts the pre-sync null renderer device ID
+    and uses a stable root-scoped local identity for device-local metadata.
+- [ ] `T-LEGACYREC-013` Add an explicit older-client startup refusal and a
+      recovery-required state for an authority marker whose declared canonical
+      graph is invalid. Preserve both SQLite and legacy-workspace candidates and
+      require explicit source selection before publication
+      (`FR-LEGACYREC-009`, `DES-LEGACYREC-011`, `TEST-LEGACYREC-009`).
+  - Implemented the invalid-graph validation and Prompt workspace write gate.
+    Pending: older-client refusal and explicit candidate selection/publication.

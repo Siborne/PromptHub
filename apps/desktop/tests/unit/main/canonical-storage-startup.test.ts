@@ -8,7 +8,9 @@ import path from "node:path";
 import {
   RENDERER_PERSISTENCE_MARKER,
   configureRuntimePaths,
+  deriveLocalResourceDeviceId,
   getRuntimeStorageContext,
+  materializePromptCanonicalGraph,
   resetRuntimePaths,
   writeCanonicalStorageAuthority,
   writeRuntimeLayoutState,
@@ -60,6 +62,22 @@ describe("canonical storage startup", () => {
     );
   }
 
+  function materializeEmptyPromptGraph(activeRoot: string): void {
+    const stagePath = path.join(activeRoot, "prompt-graph-fixture");
+    materializePromptCanonicalGraph(stagePath, {
+      prompts: [],
+      promptVersions: [],
+      folders: [],
+      promptRelations: [],
+      outputFormatItems: [],
+    });
+    const dataPath = path.join(activeRoot, "data");
+    for (const entry of fs.readdirSync(stagePath)) {
+      fs.renameSync(path.join(stagePath, entry), path.join(dataPath, entry));
+    }
+    fs.rmdirSync(stagePath);
+  }
+
   it("waits until renderer persistence has been durably migrated", async () => {
     const input = fixture();
     const publish = vi.fn();
@@ -77,11 +95,40 @@ describe("canonical storage startup", () => {
       consistencyId: "a".repeat(64),
       operationId: "existing-authority",
     });
+    materializeEmptyPromptGraph(input.activeRoot);
     const publish = vi.fn();
 
     await expect(
       ensureCanonicalStorageAuthorityOnStartup({ ...input, publish }),
     ).resolves.toEqual({ status: "already-canonical" });
+    expect(publish).not.toHaveBeenCalled();
+    expect(input.prepareSourceDatabase).not.toHaveBeenCalled();
+  });
+
+  it("requires recovery when the authority Prompt graph is incomplete", async () => {
+    const input = fixture();
+    writeCanonicalStorageAuthority(input.activeRoot, {
+      consistencyId: "a".repeat(64),
+      operationId: "invalid-authority",
+    });
+    materializeEmptyPromptGraph(input.activeRoot);
+    const catalogPath = path.join(input.activeRoot, "data", "catalog.json");
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+    catalog.files.push({
+      path: "prompts/missing/manifest.json",
+      size: 1,
+      sha256: "f".repeat(64),
+    });
+    fs.writeFileSync(catalogPath, JSON.stringify(catalog));
+    const publish = vi.fn();
+
+    await expect(
+      ensureCanonicalStorageAuthorityOnStartup({ ...input, publish }),
+    ).resolves.toMatchObject({
+      status: "recovery-required",
+      reason: "invalid-canonical-prompt-graph",
+      error: expect.stringContaining("canonical graph file is missing"),
+    });
     expect(publish).not.toHaveBeenCalled();
     expect(input.prepareSourceDatabase).not.toHaveBeenCalled();
   });
@@ -117,6 +164,7 @@ describe("canonical storage startup", () => {
     expect(publish.mock.calls[0]?.[0]).toMatchObject({
       activeRoot: input.activeRoot,
       sourceDatabasePath: input.sourceDatabasePath,
+      deviceId: deriveLocalResourceDeviceId(input.activeRoot),
       now: new Date("2026-08-12T01:00:00.000Z"),
     });
     expect(publish.mock.calls[0]?.[0].checkpointPath).toMatch(
@@ -183,8 +231,32 @@ describe("canonical storage startup", () => {
         kind: "prompthub-mcp-library",
         version: 1,
         updatedAt: "2026-08-12T00:00:00.000Z",
-        servers: [],
-        bindings: [],
+        servers: [
+          {
+            id: "mcp-1",
+            name: "filesystem",
+            displayName: "Filesystem",
+            transport: "stdio",
+            command: "npx",
+            args: ["server-filesystem"],
+            enabled: true,
+            source: { type: "manual" },
+            createdAt: Date.parse("2026-08-12T00:00:00.000Z"),
+            updatedAt: Date.parse("2026-08-12T00:00:00.000Z"),
+          },
+        ],
+        bindings: [
+          {
+            id: "binding-1",
+            serverIds: ["mcp-1"],
+            target: "codex",
+            scope: "global",
+            path: "/Users/example/.codex/config.toml",
+            enabled: true,
+            createdAt: Date.parse("2026-08-12T00:00:00.000Z"),
+            updatedAt: Date.parse("2026-08-12T00:00:00.000Z"),
+          },
+        ],
       },
       plugins: [],
       pluginVersions: new Map(),
@@ -194,6 +266,22 @@ describe("canonical storage startup", () => {
 
     expect(result.status).toBe("published");
     expect(getRuntimeStorageContext().localAuthority).toBe("canonical-files");
+    expect(
+      JSON.parse(
+        fs.readFileSync(
+          path.join(input.activeRoot, "config", "devices", "mcp-bindings.json"),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({
+      deviceId: deriveLocalResourceDeviceId(input.activeRoot),
+      bindings: [{ id: "binding-1" }],
+    });
+    expect(
+      fs.existsSync(
+        path.join(input.activeRoot, "config", "devices", "renderer.json"),
+      ),
+    ).toBe(false);
     expect(
       await ensureCanonicalStorageAuthorityOnStartup({ ...input }),
     ).toEqual({ status: "already-canonical" });

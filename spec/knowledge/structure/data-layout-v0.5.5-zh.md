@@ -142,6 +142,10 @@ authority。
 `selfHostedDeviceId` 只属于可选的 self-hosted 同步流程，未启用同步时保持 `null`；
 配置或更换同步身份不能改变本地资源身份。旧 UUID/desktop 身份文档先按文档内身份完成
 有界校验，再通过 canonical publication 无损重挂到存储根身份。
+首次 canonical authority 发布和完整便携导出同样直接使用存储根身份；即使从未配置
+PromptHub 账号或 self-hosted 同步，MCP bindings 也必须完整进入 checkpoint，且这些
+本地操作不得创建或改写 `selfHostedDeviceId`。存在 bindings 但调用方未提供本地资源
+身份时，shadow 构建必须在落盘前失败，不能静默省略绑定。
 
 ## 6. 根目录迁移
 

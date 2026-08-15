@@ -14,7 +14,7 @@ import {
   parseAgentDeviceConfigDocument,
   type AgentDeviceConfigDocument,
 } from "./agent-resource-schema";
-import { deriveStorageRootIdentity } from "./storage-root-identity";
+import { deriveLocalResourceDeviceId } from "./storage-root-identity";
 
 export const RENDERER_PERSISTENCE_VERSION = 1;
 export const RENDERER_PERSISTENCE_MARKER =
@@ -131,7 +131,7 @@ export function createRendererPersistenceStore(options: {
   failPublicationAt?: string;
 }): RendererPersistenceStore {
   const rootPath = path.resolve(options.rootPath);
-  const localResourceDeviceId = `device-${deriveStorageRootIdentity(rootPath).slice(0, 32)}`;
+  const localResourceDeviceId = deriveLocalResourceDeviceId(rootPath);
   const markerPath = resolveOwnedPath(rootPath, RENDERER_PERSISTENCE_MARKER);
   const now = () => (options.now ?? (() => new Date()))().toISOString();
 

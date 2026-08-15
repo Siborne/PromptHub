@@ -3,7 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
+  deriveLocalResourceDeviceId,
   readCanonicalStorageAuthority,
+  readPromptCanonicalGraph,
   readRendererPersistenceMigrationMarker,
   refreshRuntimeStorageContext,
 } from "@prompthub/core";
@@ -20,7 +22,7 @@ type AuthorityPublisher = (
 
 export interface EnsureCanonicalStorageAuthorityOnStartupOptions extends Omit<
   PublishCanonicalStorageAuthorityOptions,
-  "activeRoot" | "sourceDatabasePath" | "checkpointPath"
+  "activeRoot" | "sourceDatabasePath" | "checkpointPath" | "deviceId"
 > {
   activeRoot: string;
   sourceDatabasePath: string;
@@ -32,6 +34,11 @@ export interface EnsureCanonicalStorageAuthorityOnStartupOptions extends Omit<
 
 export type CanonicalStorageAuthorityStartupResult =
   | { status: "already-canonical" }
+  | {
+      status: "recovery-required";
+      reason: "invalid-canonical-prompt-graph";
+      error: string;
+    }
   | { status: "waiting-renderer-migration" }
   | { status: "source-database-missing" }
   | ({ status: "published" } & Omit<
@@ -57,7 +64,19 @@ export async function ensureCanonicalStorageAuthorityOnStartup(
 ): Promise<CanonicalStorageAuthorityStartupResult> {
   const activeRoot = path.resolve(options.activeRoot);
   if (readCanonicalStorageAuthority(activeRoot)) {
-    return { status: "already-canonical" };
+    try {
+      readPromptCanonicalGraph(path.join(activeRoot, "data"));
+      return { status: "already-canonical" };
+    } catch (error) {
+      return {
+        status: "recovery-required",
+        reason: "invalid-canonical-prompt-graph",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Canonical Prompt graph is invalid",
+      };
+    }
   }
   if (!readRendererPersistenceMigrationMarker(activeRoot)) {
     return { status: "waiting-renderer-migration" };
@@ -86,6 +105,7 @@ export async function ensureCanonicalStorageAuthorityOnStartup(
     activeRoot,
     sourceDatabasePath,
     checkpointPath,
+    deviceId: deriveLocalResourceDeviceId(activeRoot),
   });
   refreshRuntimeContext();
   return {

@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import { zipSync } from "fflate";
 import { IPC_CHANNELS } from "@prompthub/shared/constants";
 import { SkillInstaller } from "../../services/skill-installer";
 import { isInternalSkillRepoEntry } from "../../services/skill-installer-repo";
@@ -313,7 +314,6 @@ export function registerSkillCrudHandlers({ db }: SkillIPCContext): void {
       throw new Error(`Skill repo is empty: ${skill.name}`);
     }
 
-    const { zipSync } = await import("fflate");
     const zipFiles: Record<string, Uint8Array> = {};
 
     for (const file of fileEntries) {

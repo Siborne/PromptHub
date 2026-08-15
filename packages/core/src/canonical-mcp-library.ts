@@ -28,6 +28,7 @@ import {
   getRuntimeStorageContext,
   getUserDataPath,
 } from "./runtime-paths";
+import { localResourceDeviceIdFromRootIdentity } from "./storage-root-identity";
 
 const OPERATION_KEY = "mcp-library";
 const BINDING_FILE_NAME = "mcp-bindings.json";
@@ -105,7 +106,9 @@ function isCoexistingMcpRootFile(entry: fs.Dirent): boolean {
 }
 
 function localDeviceId(): string {
-  return `device-${getRuntimeStorageContext().rootIdentity.slice(0, 32)}`;
+  return localResourceDeviceIdFromRootIdentity(
+    getRuntimeStorageContext().rootIdentity,
+  );
 }
 
 function readEmbeddedBindingDeviceId(content: string): string {

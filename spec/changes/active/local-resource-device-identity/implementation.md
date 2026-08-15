@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented.
+Implemented and verified.
 
 ## Delivered
 
@@ -12,10 +12,22 @@ Implemented.
 - Valid legacy MCP binding documents remain readable through their embedded identity; the next canonical write republishes the same bindings under the local storage-root identity.
 - Malformed, oversized, symlinked, and identity-mismatched documents continue to fail closed through existing schema and publication validation.
 
+## Account Boundary Audit
+
+- PromptHub Desktop local libraries, settings, Agent management, Plugin Store, MCP management, and portable snapshots do not require a PromptHub account.
+- `selfHostedDeviceId` is optional self-hosted synchronization state only. Local publication and export must not read, create, or mutate it.
+- PromptHub Cloud account and Cloud Store code is capability-gated and disabled by default; disabled builds do not expose its settings/store entries or schedule Cloud refreshes.
+- Codex, Claude, Kimi, Grok, and other Agent credentials are external provider-owned authentication, not a PromptHub account dependency.
+- Self-hosted Web authentication remains isolated to Web access and explicitly configured synchronization.
+
 ## Verification
 
-- Focused Core tests passed: 4 files, 46 tests.
+- Focused Core tests passed: 6 files, 81 tests.
+- Full Desktop Vitest suite passed: 604 files, 5,350 tests.
 - `pnpm --filter @prompthub/core typecheck`: passed.
 - `pnpm --filter @prompthub/desktop typecheck`: passed.
-- Focused ESLint for changed Core source and tests: passed with zero warnings.
+- Focused ESLint for changed Core and Desktop source and tests: passed with zero warnings.
+- `pnpm --filter @prompthub/desktop build`: passed.
+- `pnpm spec:test`: passed for 24 active changes.
+- `pnpm lint:file-size`: passed.
 - `git diff --check`: passed.

@@ -4,6 +4,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { deriveLocalResourceDeviceId } from "@prompthub/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createCheckpointedPortableSnapshotZip } from "../../../src/main/services/canonical-portable-export";
@@ -77,6 +78,7 @@ describe("canonical portable export coordinator", () => {
         createCheckpoint: async (options) => {
           events.push("checkpoint");
           expect(databaseOpen).toBe(false);
+          expect(options.deviceId).toBe(deriveLocalResourceDeviceId(root));
           checkpointPath = options.targetPath;
           fs.mkdirSync(path.join(checkpointPath, "canonical"), {
             recursive: true,

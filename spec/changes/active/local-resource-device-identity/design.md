@@ -6,6 +6,8 @@ Canonical local projections derive `device-<32 hex>` from `RuntimeStorageContext
 
 `selfHostedDeviceId` remains renderer persistence owned by self-hosted synchronization. Renderer migration stores it as null until a synchronization workflow explicitly requests one.
 
+Canonical authority startup and complete portable export derive the local resource identity directly from their explicit active root. The canonical shadow builder rejects non-empty MCP bindings when its owner omits that identity, preventing a successful-looking checkpoint from silently dropping device bindings.
+
 ## `DES-LOCALID-002`: Compatibility readers
 
 - Plugin projections already migrate through the journaled canonical Plugin writer.
@@ -26,3 +28,4 @@ Unsafe paths, symlinks, malformed JSON, invalid IDs, missing secret adapters, an
 | `FR-LOCALID-001`  | `DES-LOCALID-001`, `DES-LOCALID-002` | `TEST-LOCALID-001` | `T-LOCALID-001` |
 | `FR-LOCALID-002`  | `DES-LOCALID-002`                    | `TEST-LOCALID-002` | `T-LOCALID-002` |
 | `NFR-LOCALID-001` | `DES-LOCALID-003`                    | `TEST-LOCALID-003` | `T-LOCALID-003` |
+| `FR-LOCALID-001`  | `DES-LOCALID-001`, `DES-LOCALID-003` | `TEST-LOCALID-004` | `T-LOCALID-004` |

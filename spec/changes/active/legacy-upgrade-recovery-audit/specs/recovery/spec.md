@@ -64,13 +64,36 @@ validation even when its target file is missing.
 
 ### `FR-LEGACYREC-008`: Canonical root coexistence
 
-Canonical Prompt and MCP readers MUST coexist with runtime artifacts that have
+Canonical Prompt, MCP, and Plugin readers MUST coexist with runtime artifacts that have
 separate owners in the same data root. Prompt graph verification MUST ignore
 the legacy `.versions` workspace only when it is a real directory. Canonical
 Prompt graph verification MUST also ignore the Agent appearance workspace
 `agent-appearance` only when it is a real directory. Canonical MCP discovery
-MUST ignore `market-sources.json` only when it is a real file. Symlinks, type
-mismatches, and other undeclared paths MUST remain rejected.
+MUST ignore `market-sources.json` and the superseded `library.json` only when
+they are real files. Canonical Plugin discovery MUST ignore the superseded
+`library.json`, `market-cache.json`, and `versions.json` only when they are real
+files. Symlinks, type mismatches, and other undeclared paths MUST remain
+rejected. When canonical authority has no MCP or Plugin bundles but an exact
+superseded library still contains records, the owning service MUST migrate
+those records into canonical bundles before removing the superseded metadata.
+When canonical bundles already exist, they MUST remain authoritative and the
+superseded metadata MUST NOT overwrite or resurrect older records. Failed
+migration MUST leave the superseded library available for retry.
+Before self-hosted sync has assigned an identity, a null renderer device ID
+MUST NOT block local MCP or Plugin compatibility migration. Device-local
+binding or projection state MUST use a stable storage-root identity in that
+case.
+
+### `FR-LEGACYREC-009`: Downgrade refusal and invalid-authority recovery
+
+An application version older than the last version that wrote the active data
+root MUST fail before database, canonical resource, or legacy workspace writes.
+When a canonical authority marker exists but its declared graph is missing,
+unsafe, or inconsistent, startup MUST enter an explicit recovery-required state
+instead of trusting the marker or rebuilding from SQLite or legacy Markdown.
+PromptHub MUST preserve and identify each validated recovery candidate and MUST
+require an explicit source selection before replacing the active canonical
+graph.
 
 ### `NFR-LEGACYREC-001`: Bounded audit resources
 
@@ -107,7 +130,15 @@ directory or load a complete database or media archive into memory.
   omitted, while the existing strict Rule resource tests continue to reject
   malformed materialized records.
 - `TEST-LEGACYREC-008`: materialize a canonical Prompt graph beside a legacy
-  `.versions` tree and an Agent appearance workspace, then read an empty
-  canonical MCP library beside `market-sources.json`. Assert all valid
-  coexistence paths load, while file or directory type substitution still
-  fails closed.
+  `.versions` tree and an Agent appearance workspace, then read empty canonical
+  MCP and Plugin libraries beside their exact superseded metadata and runtime
+  registry files. Assert all valid coexistence paths load, while symlink, file,
+  or directory type substitution still fails closed. Assert a populated
+  superseded library migrates once, secrets remain outside MCP bundles, an
+  empty superseded library is removed, and existing canonical bundles win over
+  stale metadata.
+- `TEST-LEGACYREC-009`: launch an older version against a newer-version marker
+  and assert no database, canonical resource, legacy workspace, or version
+  marker write occurs. Corrupt a catalog-declared Prompt bundle while retaining
+  divergent SQLite and legacy workspace candidates; assert startup reports
+  recovery-required and leaves every source unchanged until explicit selection.

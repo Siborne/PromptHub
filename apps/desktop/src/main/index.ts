@@ -1730,12 +1730,9 @@ app.whenReady().then(async () => {
       throw error;
     }
 
+    let canonicalPromptRecoveryRequired = false;
     try {
       const activeRoot = getUserDataPath();
-      const rendererPersistence = createRendererPersistenceStore({
-        rootPath: activeRoot,
-        encryption: safeStorage,
-      }).readHydratedStateSync();
       const authorityStartup = await ensureCanonicalStorageAuthorityOnStartup({
         activeRoot,
         sourceDatabasePath: getDatabasePath(),
@@ -1747,7 +1744,6 @@ app.whenReady().then(async () => {
             closeDatabase();
           }
         },
-        deviceId: rendererPersistence.selfHostedDeviceId ?? undefined,
         persistExtractedMcpSecrets: (secrets) =>
           createMcpResourceSecretStore({
             filePath: path.join(
@@ -1758,6 +1754,8 @@ app.whenReady().then(async () => {
             encryption: safeStorage,
           }).writeMany(secrets),
       });
+      canonicalPromptRecoveryRequired =
+        authorityStartup.status === "recovery-required";
       logStartupEvent({
         event: "startup:canonical_storage_authority",
         ...authorityStartup,
@@ -1831,38 +1829,48 @@ app.whenReady().then(async () => {
     }
 
     try {
-      const bootstrapResult = bootstrapPromptWorkspace(
-        new PromptDB(db),
-        new FolderDB(db),
-      );
-      // v0.5.3: Always log bootstrap outcome so users who see an empty UI
-      // after upgrade can share a diagnosable log. "empty" quadrant in
-      // particular indicates both DB and workspace were empty — the user
-      // likely needs to use DataRecoveryDialog manually.
-      // v0.5.3: 总是记录引导结果，以便升级后看到空界面的用户能提供可分析日志。
-      // 特别是 "empty" 象限意味着 DB 和工作区都空，用户可能需要手动使用
-      // DataRecoveryDialog 恢复数据。
-      logStartupEvent({
-        event:
-          bootstrapResult.quadrant === "empty"
-            ? "startup:bootstrap_workspace_empty"
-            : "startup:bootstrap_workspace_ok",
-        quadrant: bootstrapResult.quadrant,
-        imported: bootstrapResult.imported,
-        exported: bootstrapResult.exported,
-        promptCount: bootstrapResult.promptCount,
-        folderCount: bootstrapResult.folderCount,
-        versionCount: bootstrapResult.versionCount,
-        ...(bootstrapResult.restoreMarkerUsed
-          ? { restoreMarkerUsed: true }
-          : {}),
-      });
-      if (bootstrapResult.quadrant === "empty") {
+      if (canonicalPromptRecoveryRequired) {
         console.warn(
-          "[startup] Both database and workspace are empty. " +
-            "If this is an upgrade, the user should use DataRecoveryDialog " +
-            "to restore data from a previous install location.",
+          "[startup] Canonical Prompt graph requires recovery; workspace synchronization was skipped.",
         );
+        logStartupEvent({
+          event: "startup:bootstrap_workspace_recovery_required",
+          reason: "invalid-canonical-prompt-graph",
+        });
+      } else {
+        const bootstrapResult = bootstrapPromptWorkspace(
+          new PromptDB(db),
+          new FolderDB(db),
+        );
+        // v0.5.3: Always log bootstrap outcome so users who see an empty UI
+        // after upgrade can share a diagnosable log. "empty" quadrant in
+        // particular indicates both DB and workspace were empty — the user
+        // likely needs to use DataRecoveryDialog manually.
+        // v0.5.3: 总是记录引导结果，以便升级后看到空界面的用户能提供可分析日志。
+        // 特别是 "empty" 象限意味着 DB 和工作区都空，用户可能需要手动使用
+        // DataRecoveryDialog 恢复数据。
+        logStartupEvent({
+          event:
+            bootstrapResult.quadrant === "empty"
+              ? "startup:bootstrap_workspace_empty"
+              : "startup:bootstrap_workspace_ok",
+          quadrant: bootstrapResult.quadrant,
+          imported: bootstrapResult.imported,
+          exported: bootstrapResult.exported,
+          promptCount: bootstrapResult.promptCount,
+          folderCount: bootstrapResult.folderCount,
+          versionCount: bootstrapResult.versionCount,
+          ...(bootstrapResult.restoreMarkerUsed
+            ? { restoreMarkerUsed: true }
+            : {}),
+        });
+        if (bootstrapResult.quadrant === "empty") {
+          console.warn(
+            "[startup] Both database and workspace are empty. " +
+              "If this is an upgrade, the user should use DataRecoveryDialog " +
+              "to restore data from a previous install location.",
+          );
+        }
       }
     } catch (error) {
       console.error(

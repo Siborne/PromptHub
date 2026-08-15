@@ -108,8 +108,92 @@ safety-point remediations remain owned by `database-migration-safety`.
   without a canonical startup error. The exact development sessions were then
   stopped and port 5173 was released.
 - Remaining non-blocking diagnostics are broken external Skill symlink warnings
-  under the local Codex Skill directory and the existing Vite `fflate`
-  static/dynamic import chunk warning; neither prevents startup.
+  under the local Codex Skill directory. The Vite `fflate` static/dynamic import
+  warning was removed by using the already-bundled static import for Skill ZIP
+  export.
+
+### Superseded MCP and Plugin metadata coexistence follow-up
+
+- Reproduced the live failure after canonical authority publication with
+  `data/mcp/library.json` and `data/plugins/library.json` plus
+  `market-cache.json` remaining as regular compatibility files. MCP and Plugin
+  bundle enumeration treated those files as resource directories and rejected
+  both libraries before the store UI could load.
+- MCP enumeration now excludes only exact regular `library.json` and
+  `market-sources.json` entries. Plugin enumeration now excludes only exact
+  regular `library.json`, `market-cache.json`, and `versions.json` entries.
+  Same-name symlinks or directories and all other undeclared root files still
+  fail closed.
+- Production service reads do not merely hide populated compatibility files.
+  When no canonical records exist, MCP and Plugin libraries are normalized and
+  published through their existing journaled bundle writers, then the old
+  library/version metadata is removed after verification. Existing canonical
+  records win over stale files. MCP secrets continue through the device-bound
+  secret store and are absent from bundle JSON.
+- Focused regressions cover the observed multi-file layouts, each exact type
+  substitution, symlink substitution, unknown root files, one-time populated
+  migration, empty cleanup, canonical precedence, Plugin history presence and
+  absence, and MCP secret extraction.
+- Canonical MCP, Plugin, and complete storage-shadow verification passed: 3
+  files, 30 tests. `@prompthub/core` TypeScript checking and the Desktop
+  production Vite build passed. The build retained only the existing non-blocking
+  `fflate` static/dynamic import chunk warning.
+- The compatibility migration orchestration now lives in a small shared module
+  instead of expanding the legacy 1,900-line MCP service. Superseded files are
+  all type-checked before any cleanup begins, so an unsafe companion file cannot
+  leave a partially removed compatibility set.
+
+### Downgrade and canonical Prompt graph diagnostic
+
+- Startup logs show a successful canonical authority publication on 2026-08-12,
+  followed by a 0.5.9 process on 2026-08-14 writing the legacy 127-Prompt
+  Markdown workspace into the canonical `data/prompts` location. Four later
+  0.6.0-beta.1 starts failed Prompt bootstrap because the catalog-declared
+  `manifest.json` no longer exists.
+- The authority marker is currently trusted without validating its declared
+  Prompt graph, and the upgrade marker treats an older application version as a
+  normal non-upgrade while rewriting the recorded version downward. These two
+  behaviors permit an older writer to damage a newer canonical layout.
+- E2E launch helpers correctly force a temporary user-data directory. The live
+  layout was not caused by the current E2E launcher.
+- No inspected upgrade safety point contains the missing canonical Prompt
+  bundle. The current catalog declares one Prompt with 46 versions, while the
+  SQLite catalog contains 127 different Prompts and does not contain that ID.
+  Automatically rebuilding either side would therefore choose a source of truth
+  and may discard user data; no live files were modified during this audit.
+- A follow-up must block older writers before initialization and present explicit
+  recovery candidates when an authority marker exists but the canonical graph
+  is invalid. Recovery must not silently rebuild from SQLite or legacy Markdown.
+
+### Invalid authority and null device identity follow-up
+
+- Existing canonical authority is now validated against the complete Prompt
+  catalog before startup reports `already-canonical`. A missing declared file
+  produces `recovery-required`, and desktop startup skips Prompt workspace
+  synchronization instead of repeatedly attempting DB-to-graph publication.
+- The gate does not rebuild or modify the divergent canonical, SQLite, or legacy
+  workspace candidates. Explicit candidate selection remains pending.
+- Canonical MCP compatibility migration now mirrors Plugin migration when the
+  renderer device document contains a null pre-sync identity: it derives a
+  deterministic storage-root identity and still rejects malformed non-null
+  identities.
+- Added regressions for the observed missing Prompt manifest and null renderer
+  device identity paths. The focused canonical MCP suite passed 13 tests, the
+  combined local Agent/MCP/renderer identity suites passed 33 tests, and the
+  canonical startup suite passed 8 tests. Core and Desktop TypeScript checks,
+  targeted Desktop ESLint, Prettier, and file-size checks passed. The Desktop
+  production build passed without the earlier `fflate` chunk warning.
+
+### 2026-08-15 verification
+
+- `pnpm verify:release:quick` passed 27 of 29 checks. All package typechecks,
+  lints, Core/CLI/Desktop/Web/Mobile tests, and eight Desktop unit shards passed.
+  The only failures were an MCP legacy-file growth guard and a stale generated
+  change index.
+- After extracting migration orchestration and regenerating the index,
+  `pnpm lint:file-size`, `pnpm spec:test`, `@prompthub/core` typecheck, and the
+  30 focused canonical MCP/Plugin/storage-shadow tests passed. Unaffected release
+  checks were not repeated.
 
 ## Remaining Risk
 
@@ -118,3 +202,5 @@ all four tagged schemas, including a four-version Prompt. They do not yet prove
 the v0.4.7/v0.4.8 Windows path transition, a v0.5.1 portable backup, or a v0.5.2
 upgrade-snapshot restore through the complete application path. Issues #89,
 #97, and #98 remain open and must not be marked locally done from this evidence.
+The live downgrade corruption also remains unresolved until PromptHub can block
+an older writer and ask the user to select a validated recovery source.

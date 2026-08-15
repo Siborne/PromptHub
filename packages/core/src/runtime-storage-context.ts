@@ -66,7 +66,11 @@ interface LegacyLayoutMarker {
   dbLayoutVersion?: unknown;
 }
 
-export { deriveStorageRootIdentity } from "./storage-root-identity";
+export {
+  deriveLocalResourceDeviceId,
+  deriveStorageRootIdentity,
+  localResourceDeviceIdFromRootIdentity,
+} from "./storage-root-identity";
 
 function getSafePathStats(
   activeRoot: string,

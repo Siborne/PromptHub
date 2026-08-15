@@ -104,8 +104,17 @@
 - canonical 数据根允许与独立所有者的运行时文件共存，但只能按精确名称和类型放行：
   Prompt 图读取可忽略由旧工作区管理的根 `.versions` 普通目录，以及由 Agent 外观
   功能管理的根 `agent-appearance` 普通目录；MCP bundle 枚举可忽略市场源注册表
-  `market-sources.json` 普通文件。类型替换、符号链接和其它未声明路径仍必须 fail
-  closed。
+  `market-sources.json` 和已被 canonical bundle 取代的 `library.json` 普通文件；Plugin
+  bundle 枚举可忽略已被取代的 `library.json`、`market-cache.json` 与 `versions.json`
+  普通文件。若 canonical bundle 为空但旧 library 仍有记录，所属服务必须先通过现有
+  journaled writer 完整迁移并验证，成功后才删除旧元数据；已有 canonical bundle 时
+  不得由旧文件覆盖或复活记录。MCP 凭据必须进入设备绑定的加密存储，不能写入 bundle
+  JSON。尚未配置自托管同步、renderer device ID 为 null 时，本地 MCP binding 与
+  Plugin projection 使用稳定的存储根身份，不得因此阻断兼容迁移。类型替换、符号
+  链接和其它未声明路径仍必须 fail closed。
+- 已存在 canonical authority marker 时，启动必须验证 Prompt catalog 及其声明文件。
+  验证失败进入 recovery-required 并跳过 Prompt workspace 同步；在用户明确选择并
+  验证恢复源之前，不得从 SQLite 或旧 Markdown workspace 自动重建 canonical graph。
 - WebDAV、S3、自部署快照恢复和手动整包导入在改变本地数据前必须创建安全快照。
   任一数据库、文件、媒体、Rule、Skill、MCP 或 Plugin 恢复步骤失败时，必须尝试
   恢复安全快照；空数据目录必须创建仅含清单的空基线，不能因本地无数据而跳过

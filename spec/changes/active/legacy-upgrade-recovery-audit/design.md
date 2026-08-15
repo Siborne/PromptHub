@@ -155,12 +155,57 @@ are independently owned in the shared data root:
 - Prompt graph inventory skips root `agent-appearance` only when it is a
   non-symlink directory owned by Agent appearance themes and pets;
 - MCP bundle enumeration skips `market-sources.json` only when it is a
-  non-symlink regular file owned by the MCP market source registry.
+  non-symlink regular file owned by the MCP market source registry, and skips
+  the superseded `library.json` only when it is a non-symlink regular file;
+- Plugin bundle enumeration skips superseded `library.json`,
+  `market-cache.json`, and `versions.json` only when each entry is a
+  non-symlink regular file.
 
 No prefix or extension-wide exclusion is allowed. Prompt graph verification
 continues to hash every declared file and reject other undeclared files. MCP
-enumeration counts only server bundle directories against its resource limit.
-Both scans remain linear in the number of root entries plus owned files.
+and Plugin enumeration count only bundle directories against their resource
+limits. All scans remain linear in the number of root entries plus owned files.
+
+The production MCP and Plugin service readers add a one-time compatibility
+step above raw bundle enumeration. They first validate and read canonical
+state. If canonical resources exist, they delete only the exact superseded
+metadata files and keep canonical state authoritative. If canonical state is
+empty, they parse the superseded library through the existing normalization,
+publish all records through the existing journaled bundle writer, verify the
+published state, and only then remove the old metadata. MCP credentials pass
+through the existing device-bound secret store and are never copied into bundle
+JSON. A parse, validation, secret-store, package, or publication failure occurs
+before cleanup, so the old library remains available for retry. The migration
+is `O(R + P)` for `R` records and bounded Plugin package files `P`, with one
+journaled publication and no network work.
+
+Renderer persistence permits a null `selfHostedDeviceId` before self-hosted
+sync is configured. Canonical MCP bindings and Plugin projections therefore use
+the persisted device ID when available and otherwise derive a deterministic,
+root-scoped local identity. Malformed non-null IDs, symlinks, and identity
+mismatches remain fail-closed.
+
+## `DES-LEGACYREC-011`: Older Writer And Invalid Authority Gate
+
+Compare the current application version with the durable last-writer version
+before opening SQLite or initializing any workspace writer. A strictly older
+application fails closed and must not rewrite the marker downward. Version
+comparison must use the repository's prerelease-aware version utility rather
+than numeric splitting.
+
+An existing canonical authority marker is necessary but not sufficient. Startup
+must validate the canonical catalog and every declared resource before returning
+`already-canonical`. Invalid authority produces a recovery-required result with
+read-only candidate metadata. SQLite, legacy Markdown, and safety points remain
+separate candidates; modification time or record count cannot select a winner.
+Only an explicit user choice may stage, validate, and atomically publish one
+candidate through the existing recovery boundary. Candidate inspection is
+linear in declared files and bounded by the existing catalog and recovery limits.
+
+Until candidate selection is complete, desktop startup skips Prompt workspace
+synchronization for an invalid authority. This prevents the normal DB-to-graph
+publisher from repeatedly reading or replacing the damaged graph while keeping
+the application available for recovery operations.
 
 ## Analyze Result
 
@@ -185,4 +230,5 @@ Both scans remain linear in the number of root entries plus owned files.
 | `FR-LEGACYREC-006`  | `DES-LEGACYREC-008`                      | `TEST-LEGACYREC-006`                                             | `T-LEGACYREC-009` |
 | `FR-LEGACYREC-007`  | `DES-LEGACYREC-008`, `DES-LEGACYREC-009` | `TEST-LEGACYREC-007`                                             | `T-LEGACYREC-010` |
 | `FR-LEGACYREC-008`  | `DES-LEGACYREC-010`                      | `TEST-LEGACYREC-008`                                             | `T-LEGACYREC-011` |
+| `FR-LEGACYREC-009`  | `DES-LEGACYREC-011`                      | `TEST-LEGACYREC-009`                                             | `T-LEGACYREC-013` |
 | `NFR-LEGACYREC-001` | `DES-LEGACYREC-007`                      | `TEST-LEGACYREC-005`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-007` |

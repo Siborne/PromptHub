@@ -276,6 +276,13 @@ function materializeAdditionalDomains(
 export function materializeCanonicalStorageShadow(
   input: MaterializeCanonicalStorageShadowInput,
 ): MaterializeCanonicalStorageShadowResult {
+  if (
+    input.mcpLibrary &&
+    input.mcpLibrary.bindings.length > 0 &&
+    !input.deviceId
+  ) {
+    throw new Error("Canonical MCP bindings require a local device identity");
+  }
   const extractedMcpSecrets: ExtractedMcpSecret[] = [];
   let domainCounts: Record<string, number> = {};
   const manifest = materializePromptCanonicalGraph(

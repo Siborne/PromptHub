@@ -10,6 +10,8 @@ import {
   LAYOUT_STATE_FILE_NAME,
   LEGACY_LAYOUT_EPOCH,
   deriveStorageRootIdentity,
+  deriveLocalResourceDeviceId,
+  localResourceDeviceIdFromRootIdentity,
   readRuntimeLayoutState,
   resolveRuntimeStorageContext,
   writeRuntimeLayoutState,
@@ -420,5 +422,17 @@ describe("runtime storage context", () => {
     });
 
     expect(writeRuntimeLayoutState(activeRoot).state).toBe("complete");
+  });
+
+  it("derives a bounded local resource identity from the storage root", () => {
+    const activeRoot = root();
+    const rootIdentity = deriveStorageRootIdentity(activeRoot);
+    const expected = `device-${rootIdentity.slice(0, 32)}`;
+
+    expect(deriveLocalResourceDeviceId(activeRoot)).toBe(expected);
+    expect(localResourceDeviceIdFromRootIdentity(rootIdentity)).toBe(expected);
+    expect(() => localResourceDeviceIdFromRootIdentity("invalid")).toThrow(
+      "Storage root identity is invalid",
+    );
   });
 });

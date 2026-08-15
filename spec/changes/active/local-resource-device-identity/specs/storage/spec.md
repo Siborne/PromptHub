@@ -11,6 +11,21 @@ PromptHub MUST read and write local Plugin, MCP, and Agent resources when `selfH
 - **Then** every local library loads normally
 - **And** new local projection documents use the deterministic storage-root identity
 
+#### Scenario: First canonical publication
+
+- **Given** the local MCP library contains Agent bindings
+- **And** no PromptHub account or self-hosted synchronization identity exists
+- **When** Desktop publishes canonical file authority for the first time
+- **Then** the checkpoint includes every MCP binding under the deterministic storage-root identity
+- **And** publication fails before writing files if no local resource identity is available
+
+#### Scenario: Complete local export
+
+- **Given** the user has never configured self-hosted synchronization
+- **When** the user exports a complete portable snapshot
+- **Then** MCP binding metadata uses the deterministic storage-root identity
+- **And** the export does not create or mutate `selfHostedDeviceId`
+
 ### `FR-LOCALID-002`: Legacy identities preserve user data
 
 PromptHub MUST accept structurally valid legacy local documents whose embedded device ID differs from the storage-root identity and migrate them without dropping payload data.

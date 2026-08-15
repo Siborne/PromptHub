@@ -21,6 +21,7 @@ import {
   getRuntimeStorageContext,
   getUserDataPath,
 } from "./runtime-paths";
+import { localResourceDeviceIdFromRootIdentity } from "./storage-root-identity";
 
 const OPERATION_KEY = "agent-device-config";
 const MAX_AGENT_DEVICE_BYTES = 8 * 1024 * 1024;
@@ -37,7 +38,9 @@ function configPath(): string {
 }
 
 export function resolveCanonicalAgentDeviceId(): string {
-  return `device-${getRuntimeStorageContext().rootIdentity.slice(0, 32)}`;
+  return localResourceDeviceIdFromRootIdentity(
+    getRuntimeStorageContext().rootIdentity,
+  );
 }
 
 function readStoredDocument(filePath: string): AgentDeviceConfigDocument {

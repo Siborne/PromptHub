@@ -149,6 +149,7 @@ describe("canonical storage checkpoint", () => {
         plugins: [],
         pluginVersions: new Map(),
         generations: [],
+        deviceId: "device-1",
       }),
     ).rejects.toThrow("secure MCP secret migration sink");
     expect(fs.existsSync(targetPath)).toBe(false);
@@ -162,6 +163,7 @@ describe("canonical storage checkpoint", () => {
         plugins: [],
         pluginVersions: new Map(),
         generations: [],
+        deviceId: "device-1",
       }),
     ).rejects.toThrow("target already exists");
   });

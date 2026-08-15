@@ -5,6 +5,7 @@ import path from "path";
 import {
   acquireStorageMaintenanceIntent,
   assertPortableLogicalMatchesCanonicalStorage,
+  deriveLocalResourceDeviceId,
   type ExtractedMcpSecret,
 } from "@prompthub/core";
 
@@ -27,7 +28,6 @@ export interface CanonicalPortableExportOptions {
   destinationPath: string;
   sourcePaths: PortableZipSourcePaths;
   scope: PortableZipScope;
-  deviceId?: string;
   persistExtractedMcpSecrets?: (
     secrets: readonly ExtractedMcpSecret[],
   ) => void | Promise<void>;
@@ -97,7 +97,7 @@ export async function createCheckpointedPortableSnapshotZip(
         activeRoot: options.activeRoot,
         sourceDatabasePath: options.databasePath,
         targetPath: checkpointPath,
-        deviceId: options.deviceId,
+        deviceId: deriveLocalResourceDeviceId(options.activeRoot),
         persistExtractedMcpSecrets: options.persistExtractedMcpSecrets,
         maintenanceOperationId,
       };

@@ -33,6 +33,7 @@ import {
   getRuntimeStorageContext,
   getUserDataPath,
 } from "./runtime-paths";
+import { localResourceDeviceIdFromRootIdentity } from "./storage-root-identity";
 
 const OPERATION_KEY = "plugin-library";
 const MAX_RESOURCES = 10_000;
@@ -105,7 +106,9 @@ function isSupersededPluginMetadataFile(entry: fs.Dirent): boolean {
 }
 
 function localProjectionDeviceId(): string {
-  return `device-${getRuntimeStorageContext().rootIdentity.slice(0, 32)}`;
+  return localResourceDeviceIdFromRootIdentity(
+    getRuntimeStorageContext().rootIdentity,
+  );
 }
 
 function listBundles(): LoadedPlugin[] {
