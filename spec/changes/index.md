@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 58 |
+| Active | 60 |
 | Archived | 189 |
 | Legacy | 1 |
 
@@ -35,11 +35,13 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-renderer-ui-test-coverage` | active | `spec/changes/active/desktop-renderer-ui-test-coverage/` |
 | `desktop-skill-ui-size-performance` | active | `spec/changes/active/desktop-skill-ui-size-performance/` |
 | `desktop-update-dialog-polish` | active | `spec/changes/active/desktop-update-dialog-polish/` |
+| `desktop-upgrade-snapshot-lock-recovery` | active | `spec/changes/active/desktop-upgrade-snapshot-lock-recovery/` |
 | `desktop-workspace-live-refresh` | active | `spec/changes/active/desktop-workspace-live-refresh/` |
 | `git-backup-transports` | active | `spec/changes/active/git-backup-transports/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
 | `homepage-changelog-route-retirement` | active | `spec/changes/active/homepage-changelog-route-retirement/` |
 | `legacy-upgrade-recovery-audit` | active | `spec/changes/active/legacy-upgrade-recovery-audit/` |
+| `local-resource-device-identity` | implemented | `spec/changes/active/local-resource-device-identity/` |
 | `macos-developer-id-signing` | active | `spec/changes/active/macos-developer-id-signing/` |
 | `macos-timestamp-retry` | in progress | `spec/changes/active/macos-timestamp-retry/` |
 | `marketplace-expansion` | active | `spec/changes/active/marketplace-expansion/` |
@@ -72,7 +74,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `web-agent-service-parity` | active | `spec/changes/active/web-agent-service-parity/` |
 | `web-sync-contract-completion` | active | `spec/changes/active/web-sync-contract-completion/` |
 | `windows-code-signing-and-reputation` | active | `spec/changes/active/windows-code-signing-and-reputation/` |
-| `windows-packaged-upgrade-startup-gate` | in progress | `spec/changes/active/windows-packaged-upgrade-startup-gate/` |
+| `windows-packaged-upgrade-startup-gate` | implemented | `spec/changes/active/windows-packaged-upgrade-startup-gate/` |
 
 ## Archived
 
