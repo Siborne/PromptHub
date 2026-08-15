@@ -14,6 +14,7 @@ import {
   parseAgentDeviceConfigDocument,
   type AgentDeviceConfigDocument,
 } from "./agent-resource-schema";
+import { deriveStorageRootIdentity } from "./storage-root-identity";
 
 export const RENDERER_PERSISTENCE_VERSION = 1;
 export const RENDERER_PERSISTENCE_MARKER =
@@ -130,6 +131,7 @@ export function createRendererPersistenceStore(options: {
   failPublicationAt?: string;
 }): RendererPersistenceStore {
   const rootPath = path.resolve(options.rootPath);
+  const localResourceDeviceId = `device-${deriveStorageRootIdentity(rootPath).slice(0, 32)}`;
   const markerPath = resolveOwnedPath(rootPath, RENDERER_PERSISTENCE_MARKER);
   const now = () => (options.now ?? (() => new Date()))().toISOString();
 
@@ -145,13 +147,11 @@ export function createRendererPersistenceStore(options: {
       rootPath,
       "config/devices/renderer.json",
     );
-    const agentDeviceId =
+    const selfHostedDeviceId =
       typeof devices?.selfHostedDeviceId === "string"
         ? devices.selfHostedDeviceId
         : null;
-    const agents = agentDeviceId
-      ? readOptionalAgentDeviceDocument(rootPath, agentDeviceId)
-      : null;
+    const agents = readOptionalAgentDeviceDocument(rootPath);
     const recovery = readOptionalDocument(
       rootPath,
       "config/recovery-paths.json",
@@ -184,7 +184,7 @@ export function createRendererPersistenceStore(options: {
         plugin: readSourceDomain(marketplace, "plugin"),
       },
       recoveryPaths: readStringArray(recovery?.paths),
-      selfHostedDeviceId: agentDeviceId,
+      selfHostedDeviceId,
       indexedDbMigrationDone: marker?.indexedDbMigrationDone === true,
     };
   }
@@ -204,6 +204,7 @@ export function createRendererPersistenceStore(options: {
         input,
         completedAt,
         options.encryption,
+        localResourceDeviceId,
       );
       publishCanonicalState(rootPath, canonical, options.failPublicationAt);
       readHydratedStateSync();
@@ -224,6 +225,7 @@ export function createRendererPersistenceStore(options: {
         createMigrationInput({ ...hydrated, settings }),
         now(),
         options.encryption,
+        localResourceDeviceId,
       );
       publishCanonicalEntries(
         rootPath,
@@ -252,6 +254,7 @@ export function createRendererPersistenceStore(options: {
         }),
         now(),
         options.encryption,
+        localResourceDeviceId,
       );
       publishCanonicalEntries(
         rootPath,
@@ -267,6 +270,7 @@ export function createRendererPersistenceStore(options: {
         createMigrationInput({ ...hydrated, recoveryPaths: paths }),
         now(),
         options.encryption,
+        localResourceDeviceId,
       );
       publishCanonicalEntries(
         rootPath,
@@ -284,6 +288,7 @@ export function createRendererPersistenceStore(options: {
         createMigrationInput({ ...hydrated, selfHostedDeviceId: deviceId }),
         now(),
         options.encryption,
+        localResourceDeviceId,
       );
       publishCanonicalEntries(
         rootPath,
@@ -318,11 +323,10 @@ function buildCanonicalState(
   input: RendererPersistenceMigrationInput,
   updatedAt: string,
   encryption: RendererPersistenceEncryption,
+  localResourceDeviceId: string,
 ): CanonicalRendererState {
   const settings = parsePersistedState(input.settings);
-  const deviceId =
-    normalizeDeviceId(input.selfHostedDeviceId) ??
-    `desktop-${crypto.randomUUID()}`;
+  const selfHostedDeviceId = normalizeDeviceId(input.selfHostedDeviceId);
   const legacyAIConfig = asRecord(input.legacyAIConfig);
   if (
     settings.aiProviders === undefined &&
@@ -414,10 +418,10 @@ function buildCanonicalState(
       kind: "prompthub-renderer-devices",
       version: 1,
       updatedAt,
-      selfHostedDeviceId: deviceId,
+      selfHostedDeviceId,
     },
     agents: createAgentDeviceConfigDocument({
-      deviceId,
+      deviceId: localResourceDeviceId,
       updatedAt,
       builtinAgentOverrides: asRecord(
         settings.builtinAgentOverrides,
@@ -880,7 +884,6 @@ function readOptionalDocument(
 
 function readOptionalAgentDeviceDocument(
   rootPath: string,
-  expectedDeviceId: string,
 ): AgentDeviceConfigDocument | null {
   const relativePath = "config/devices/agents.json";
   const filePath = resolveOwnedPath(rootPath, relativePath);
@@ -889,8 +892,13 @@ function readOptionalAgentDeviceDocument(
   if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new Error(`Invalid renderer persistence file: ${relativePath}`);
   }
-  return parseAgentDeviceConfigDocument(fs.readFileSync(filePath, "utf8"), {
-    expectedDeviceId,
+  const content = fs.readFileSync(filePath, "utf8");
+  const parsed = asRecord(parseJson(content, relativePath));
+  if (typeof parsed.deviceId !== "string") {
+    throw new Error(`Invalid renderer persistence file: ${relativePath}`);
+  }
+  return parseAgentDeviceConfigDocument(content, {
+    expectedDeviceId: parsed.deviceId,
   });
 }
 

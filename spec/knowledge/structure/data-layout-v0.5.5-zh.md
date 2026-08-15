@@ -126,7 +126,8 @@ authority。
 | ---------------------------------------- | ---------------------------------- |
 | 非敏感设置、marketplace sources          | `config/`                          |
 | provider、sync、proxy 等凭据             | OS 安全设施或加密 secret store     |
-| device ID、recovery path                 | 主进程配置与恢复 registry          |
+| 本地资源 device ID、recovery path        | 主进程配置与恢复 registry          |
+| 可选 self-hosted sync device ID          | `config/devices/renderer.json`     |
 | 明确定义为持久的 Prompt variable history | 有界 canonical 配置                |
 | UI 选择、筛选、列宽                      | 有版本和容量上限的 LocalStorage    |
 | quota、remote catalog                    | 带 TTL 的 cache                    |
@@ -135,6 +136,12 @@ authority。
 
 浏览器数据清空后，用户资源、配置、凭据引用、device identity、marketplace sources、
 版本历史和恢复候选仍必须存在；只允许 UI/cache 状态重建。
+
+本地 Plugin projection、MCP binding 和 Agent device configuration 使用由活动存储根
+确定性派生的 `device-<32 hex>` 身份。这个身份不依赖账号、登录或同步配置。
+`selfHostedDeviceId` 只属于可选的 self-hosted 同步流程，未启用同步时保持 `null`；
+配置或更换同步身份不能改变本地资源身份。旧 UUID/desktop 身份文档先按文档内身份完成
+有界校验，再通过 canonical publication 无损重挂到存储根身份。
 
 ## 6. 根目录迁移
 

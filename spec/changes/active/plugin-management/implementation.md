@@ -428,6 +428,7 @@
 
 - Canonical Plugin target projections now use the deterministic local storage-root identity instead of requiring `selfHostedDeviceId` from renderer persistence.
 - Plugin library migration and store loading therefore remain available when self-hosted sync has not been configured and the renderer device document contains a null sync identity.
+- PromptHub Desktop does not require account login for this flow; `selfHostedDeviceId` is optional synchronization metadata rather than an authentication prerequisite.
 - Existing Plugin metadata still migrates through the journaled canonical writer; no user Plugin entry or distributed target is discarded.
 - The active development data migrated one installed Gmail Plugin and its `codex` distribution target into a canonical bundle and local projection after the Electron main process reloaded.
 

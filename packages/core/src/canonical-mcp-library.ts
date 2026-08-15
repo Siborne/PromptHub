@@ -22,11 +22,21 @@ import {
   type McpServerResourceVersionInput,
   type ReadMcpServerResourceResult,
 } from "./mcp-resource-schema";
-import { getConfigDir, getDataDir, getUserDataPath } from "./runtime-paths";
+import {
+  getConfigDir,
+  getDataDir,
+  getRuntimeStorageContext,
+  getUserDataPath,
+} from "./runtime-paths";
 
 const OPERATION_KEY = "mcp-library";
 const BINDING_FILE_NAME = "mcp-bindings.json";
 const MAX_RESOURCES = 10_000;
+const MAX_BINDING_BYTES = 1024 * 1024;
+const COEXISTING_ROOT_FILE_LABELS = new Map([
+  ["library.json", "legacy library"],
+  ["market-sources.json", "market source registry"],
+]);
 
 export interface CanonicalMcpSecretStore {
   filePath: string;
@@ -85,42 +95,43 @@ function assertId(value: string, label: string): void {
   }
 }
 
-function readDeviceId(
-  explicit: string | undefined,
-  required: boolean,
-): string | null {
-  const filePath = path.join(getConfigDir(), "devices", "renderer.json");
-  let persisted: string | null = null;
+function isCoexistingMcpRootFile(entry: fs.Dirent): boolean {
+  const label = COEXISTING_ROOT_FILE_LABELS.get(entry.name);
+  if (!label) return false;
+  if (entry.isSymbolicLink() || !entry.isFile()) {
+    throw new Error(`Canonical MCP ${label} path is unsafe`);
+  }
+  return true;
+}
+
+function localDeviceId(): string {
+  return `device-${getRuntimeStorageContext().rootIdentity.slice(0, 32)}`;
+}
+
+function readEmbeddedBindingDeviceId(content: string): string {
+  let value: unknown;
   try {
-    const stats = fs.lstatSync(filePath);
-    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > 1024 * 1024) {
-      throw new Error("Canonical MCP device configuration is unsafe");
-    }
-    const value: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    if (
-      !value ||
-      typeof value !== "object" ||
-      Array.isArray(value) ||
-      typeof (value as Record<string, unknown>).selfHostedDeviceId !== "string"
-    ) {
-      throw new Error("Canonical MCP device configuration is invalid");
-    }
-    persisted = (value as Record<string, string>).selfHostedDeviceId;
-    assertId(persisted, "device id");
+    value = JSON.parse(content);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    throw new Error("Canonical MCP binding configuration is invalid", {
+      cause: error,
+    });
   }
-  if (explicit) {
-    assertId(explicit, "device id");
-    if (persisted && persisted !== explicit) {
-      throw new Error("Canonical MCP device identity mismatch");
-    }
-    return explicit;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Canonical MCP binding configuration is invalid");
   }
-  if (!persisted && required) {
-    throw new Error("Canonical MCP device identity is unavailable");
+  const deviceId = (value as Record<string, unknown>).deviceId;
+  if (typeof deviceId !== "string") {
+    throw new Error("Canonical MCP binding device identity is invalid");
   }
-  return persisted;
+  assertId(deviceId, "device id");
+  return deviceId;
+}
+
+function resolveWriteDeviceId(explicit: string | undefined): string {
+  const deviceId = explicit ?? localDeviceId();
+  assertId(deviceId, "device id");
+  return deviceId;
 }
 
 function listBundlePaths(): string[] {
@@ -133,12 +144,7 @@ function listBundlePaths(): string[] {
   const entries = fs.readdirSync(root, { withFileTypes: true });
   const bundlePaths = entries.flatMap((entry) => {
     if (entry.name.startsWith(".")) return [];
-    if (entry.name === "market-sources.json") {
-      if (!entry.isFile() || entry.isSymbolicLink()) {
-        throw new Error("Canonical MCP market source registry path is unsafe");
-      }
-      return [];
-    }
+    if (isCoexistingMcpRootFile(entry)) return [];
     assertId(entry.name, "resource path");
     if (!entry.isDirectory() || entry.isSymbolicLink()) {
       throw new Error("Canonical MCP resource path is unsafe");
@@ -198,11 +204,17 @@ function readBindings(
   const filePath = bindingPath();
   if (!fs.existsSync(filePath)) return [];
   const stats = fs.lstatSync(filePath);
-  if (!stats.isFile() || stats.isSymbolicLink()) {
+  if (
+    !stats.isFile() ||
+    stats.isSymbolicLink() ||
+    stats.size > MAX_BINDING_BYTES
+  ) {
     throw new Error("Canonical MCP binding path is unsafe");
   }
-  const deviceId = readDeviceId(options.deviceId, true)!;
-  return parseMcpBindingConfigDocument(fs.readFileSync(filePath, "utf8"), {
+  const content = fs.readFileSync(filePath, "utf8");
+  const deviceId = options.deviceId ?? readEmbeddedBindingDeviceId(content);
+  assertId(deviceId, "device id");
+  return parseMcpBindingConfigDocument(content, {
     expectedDeviceId: deviceId,
     knownServerIds,
   }).bindings;
@@ -278,7 +290,7 @@ export function writeCanonicalMcpLibrary(
       throw new Error("Canonical MCP server id is duplicate");
     next.set(server.id, server);
   }
-  const deviceId = readDeviceId(options.deviceId, true)!;
+  const deviceId = resolveWriteDeviceId(options.deviceId);
   const mutations: CanonicalEntryMutation[] = [];
   const extractedSecrets: ExtractedMcpSecret[] = [];
   const retainedRefs = new Set<string>();

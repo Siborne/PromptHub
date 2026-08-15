@@ -192,26 +192,166 @@ describe("canonical MCP library", () => {
     );
   });
 
-  it("coexists with the independently managed MCP market source registry", () => {
-    const registryPath = path.join(
-      root,
-      "data",
-      "mcp",
-      "market-sources.json",
-    );
-    fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+  it("coexists with exact legacy and independently managed MCP metadata files", () => {
+    const mcpRoot = path.join(root, "data", "mcp");
+    fs.mkdirSync(mcpRoot, { recursive: true });
+    fs.writeFileSync(path.join(mcpRoot, "library.json"), "{}\n", "utf8");
     fs.writeFileSync(
-      registryPath,
+      path.join(mcpRoot, "market-sources.json"),
       `${JSON.stringify({ kind: "prompthub-mcp-market-sources", version: 1 })}\n`,
       "utf8",
     );
 
     expect(readCanonicalMcpLibrary({ secretStore }).servers).toEqual([]);
+  });
 
-    fs.rmSync(registryPath);
-    fs.mkdirSync(registryPath);
+  it("migrates a superseded MCP library into canonical bundles without losing secrets", () => {
+    const legacyPath = path.join(root, "data", "mcp", "library.json");
+    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+    fs.writeFileSync(legacyPath, JSON.stringify(library([server()])), "utf8");
+
+    const migrated = new CoreMcpLibraryService({ secretStore }).read();
+
+    expect(migrated.servers).toHaveLength(1);
+    expect(migrated.servers[0]).toMatchObject(server());
+    expect(fs.existsSync(legacyPath)).toBe(false);
+    expect(
+      fs.existsSync(
+        path.join(root, "data", "mcp", "server-1", "manifest.json"),
+      ),
+    ).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(root, "data", "mcp", "server-1", "server.json"),
+        "utf8",
+      ),
+    ).not.toContain("secret-value");
+    expect(
+      Object.values(JSON.parse(fs.readFileSync(secretStore.filePath, "utf8"))),
+    ).toContain("secret-value");
+  });
+
+  it("uses a stable local identity when renderer device identity is null", () => {
+    const rendererPath = path.join(root, "config", "devices", "renderer.json");
+    fs.writeFileSync(
+      rendererPath,
+      JSON.stringify({
+        kind: "prompthub-renderer-devices",
+        version: 1,
+        selfHostedDeviceId: null,
+      }),
+    );
+    const legacyPath = path.join(root, "data", "mcp", "library.json");
+    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+    fs.writeFileSync(legacyPath, JSON.stringify(library([server()])), "utf8");
+
+    expect(
+      new CoreMcpLibraryService({ secretStore }).read().servers,
+    ).toHaveLength(1);
+    const bindingDocument = JSON.parse(
+      fs.readFileSync(
+        path.join(root, "config", "devices", "mcp-bindings.json"),
+        "utf8",
+      ),
+    );
+    expect(bindingDocument.deviceId).toMatch(/^device-[a-f0-9]{32}$/u);
+  });
+
+  it("preserves legacy MCP bindings and re-keys them on the next write", () => {
+    const configured = library([server()]);
+    configured.bindings = [
+      {
+        id: "binding-1",
+        serverIds: ["server-1"],
+        target: "codex",
+        scope: "global",
+        path: path.join(root, ".codex", "config.toml"),
+        enabled: true,
+        createdAt: Date.parse("2026-08-12T00:00:00.000Z"),
+        updatedAt: Date.parse("2026-08-12T00:00:00.000Z"),
+      },
+    ];
+    writeCanonicalMcpLibrary(configured, { secretStore });
+    const bindingPath = path.join(
+      root,
+      "config",
+      "devices",
+      "mcp-bindings.json",
+    );
+    const legacy = JSON.parse(fs.readFileSync(bindingPath, "utf8"));
+    legacy.deviceId = "desktop-legacy-mcp";
+    fs.writeFileSync(bindingPath, JSON.stringify(legacy), "utf8");
+
+    const restored = readCanonicalMcpLibrary({ secretStore });
+    expect(restored.bindings).toEqual(configured.bindings);
+
+    writeCanonicalMcpLibrary(restored, { secretStore });
+    const rekeyed = JSON.parse(fs.readFileSync(bindingPath, "utf8"));
+    expect(rekeyed.deviceId).toMatch(/^device-[a-f0-9]{32}$/u);
+    expect(rekeyed.deviceId).not.toBe("desktop-legacy-mcp");
+    expect(rekeyed.bindings).toEqual(configured.bindings);
+  });
+
+  it("keeps canonical MCP bundles authoritative over a stale legacy library", () => {
+    const service = new CoreMcpLibraryService({ secretStore });
+    service.write(library([server()]));
+    const legacyPath = path.join(root, "data", "mcp", "library.json");
+    fs.writeFileSync(
+      legacyPath,
+      JSON.stringify(
+        library([
+          server({ id: "stale-server", name: "stale", displayName: "Stale" }),
+        ]),
+      ),
+      "utf8",
+    );
+
+    const current = service.read();
+    expect(current.servers).toHaveLength(1);
+    expect(current.servers[0]).toMatchObject(server());
+    expect(fs.existsSync(legacyPath)).toBe(false);
+    expect(fs.existsSync(path.join(root, "data", "mcp", "stale-server"))).toBe(
+      false,
+    );
+  });
+
+  it("removes an empty superseded MCP library without creating bundles", () => {
+    const legacyPath = path.join(root, "data", "mcp", "library.json");
+    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+    fs.writeFileSync(legacyPath, JSON.stringify(library([])), "utf8");
+
+    expect(new CoreMcpLibraryService({ secretStore }).read().servers).toEqual(
+      [],
+    );
+    expect(fs.existsSync(legacyPath)).toBe(false);
+  });
+
+  it.each([
+    ["library.json", "legacy library"],
+    ["market-sources.json", "market source registry"],
+  ])("rejects an unsafe MCP coexistence artifact at %s", (fileName, label) => {
+    const artifactPath = path.join(root, "data", "mcp", fileName);
+    fs.mkdirSync(artifactPath, { recursive: true });
     expect(() => readCanonicalMcpLibrary({ secretStore })).toThrow(
-      /Canonical MCP market source registry path is unsafe/u,
+      new RegExp(`Canonical MCP ${label} path is unsafe`, "u"),
+    );
+  });
+
+  it("rejects symlinked and undeclared MCP root artifacts", () => {
+    const mcpRoot = path.join(root, "data", "mcp");
+    const targetPath = path.join(root, "legacy-mcp-library.json");
+    fs.mkdirSync(mcpRoot, { recursive: true });
+    fs.writeFileSync(targetPath, "{}\n", "utf8");
+    fs.symlinkSync(targetPath, path.join(mcpRoot, "library.json"));
+
+    expect(() => readCanonicalMcpLibrary({ secretStore })).toThrow(
+      /Canonical MCP legacy library path is unsafe/u,
+    );
+
+    fs.rmSync(path.join(mcpRoot, "library.json"));
+    fs.writeFileSync(path.join(mcpRoot, "unexpected.json"), "{}\n", "utf8");
+    expect(() => readCanonicalMcpLibrary({ secretStore })).toThrow(
+      /Canonical MCP resource path is unsafe/u,
     );
   });
 });

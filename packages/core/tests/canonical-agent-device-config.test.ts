@@ -37,7 +37,7 @@ describe("canonical Agent device configuration", () => {
         kind: "prompthub-renderer-devices",
         version: 1,
         updatedAt: "2026-08-12T00:00:00.000Z",
-        selfHostedDeviceId: "device-test",
+        selfHostedDeviceId: null,
       }),
     );
     database = new DatabaseAdapter(":memory:");
@@ -71,7 +71,7 @@ describe("canonical Agent device configuration", () => {
     repository.setCodexIdentity({ name: "chatgpt", icon: "codex" });
 
     const stored = readCanonicalAgentDeviceConfig()!;
-    expect(stored.deviceId).toBe("device-test");
+    expect(stored.deviceId).toMatch(/^device-[a-f0-9]{32}$/u);
     expect(stored.builtinAgentOverrides.codex.rootPath).toBe(
       path.join(root, ".codex-alt"),
     );
@@ -109,5 +109,49 @@ describe("canonical Agent device configuration", () => {
       ),
     ).toThrow("database write failed");
     expect(readCanonicalAgentDeviceConfig()?.disabledPlatformIds).toEqual([]);
+  });
+
+  it("preserves legacy Agent settings while re-keying the local document", () => {
+    const filePath = path.join(root, "config", "devices", "agents.json");
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({
+        kind: "prompthub-agent-device-config",
+        version: 1,
+        deviceId: "desktop-legacy-device",
+        updatedAt: "2026-08-12T00:00:00.000Z",
+        builtinAgentOverrides: { codex: { rootPath: "/legacy/codex" } },
+        customAgents: [],
+        disabledPlatformIds: ["claude"],
+        agentIdentityPreferences: {
+          codex: { name: "chatgpt", icon: "codex" },
+        },
+      }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(root, "config", "devices", "renderer.json"),
+      JSON.stringify({
+        kind: "prompthub-renderer-devices",
+        version: 1,
+        selfHostedDeviceId: null,
+      }),
+      "utf8",
+    );
+
+    const stored = readCanonicalAgentDeviceConfig()!;
+
+    expect(stored.deviceId).toMatch(/^device-[a-f0-9]{32}$/u);
+    expect(stored.deviceId).not.toBe("desktop-legacy-device");
+    expect(stored.builtinAgentOverrides.codex.rootPath).toBe("/legacy/codex");
+    expect(stored.disabledPlatformIds).toEqual(["claude"]);
+    expect(stored.agentIdentityPreferences.codex).toEqual({
+      name: "chatgpt",
+      icon: "codex",
+    });
+    expect(JSON.parse(fs.readFileSync(filePath, "utf8")).deviceId).toBe(
+      stored.deviceId,
+    );
   });
 });

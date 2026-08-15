@@ -66,7 +66,7 @@ Decision for the first implementation: use option A, `<userData>/data/plugins/li
 
 Canonical migration treats superseded Plugin JSON metadata as a compatibility input, not as an invalid resource bundle. Exact regular `library.json`, `versions.json`, and `market-cache.json` files can coexist during migration; undeclared files, directories, and symlinks remain rejected. Publication uses the canonical journaled writer, verifies the resulting bundles and projection, and only then removes superseded library/version files.
 
-Canonical Plugin target projections are local to one PromptHub storage root, so their device identity is derived from the stable storage-root identity rather than the optional self-hosted sync identity. This keeps Plugin library reads and first-read migration available before cloud/self-hosted sync is configured, and prevents login state from changing the projection identity.
+Canonical Plugin target projections are local to one PromptHub storage root, so their device identity is derived from the stable storage-root identity rather than the optional self-hosted sync identity. This keeps Plugin library reads and first-read migration available before cloud/self-hosted sync is configured, and prevents synchronization configuration changes from changing the projection identity.
 
 No durable business rule should live only in React state. The renderer only chooses filters, selected rows, and confirmation state.
 

@@ -23,7 +23,7 @@ import {
 } from "./runtime-paths";
 
 const OPERATION_KEY = "agent-device-config";
-const MAX_RENDERER_DEVICE_BYTES = 1024 * 1024;
+const MAX_AGENT_DEVICE_BYTES = 8 * 1024 * 1024;
 
 export interface CanonicalAgentDeviceSettings {
   builtinAgentOverrides: Record<string, BuiltinAgentOverrideConfig>;
@@ -36,48 +36,53 @@ function configPath(): string {
   return path.join(getConfigDir(), "devices", "agents.json");
 }
 
-function rendererDevicePath(): string {
-  return path.join(getConfigDir(), "devices", "renderer.json");
+export function resolveCanonicalAgentDeviceId(): string {
+  return `device-${getRuntimeStorageContext().rootIdentity.slice(0, 32)}`;
 }
 
-function readRendererDeviceId(): string | null {
-  const filePath = rendererDevicePath();
-  if (!fs.existsSync(filePath)) return null;
+function readStoredDocument(filePath: string): AgentDeviceConfigDocument {
   const stats = fs.lstatSync(filePath);
   if (
     !stats.isFile() ||
     stats.isSymbolicLink() ||
-    stats.size > MAX_RENDERER_DEVICE_BYTES
+    stats.size > MAX_AGENT_DEVICE_BYTES
   ) {
-    throw new Error("Renderer device configuration is invalid");
+    throw new Error("Canonical Agent device configuration is invalid");
   }
-  const value: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  const content = fs.readFileSync(filePath, "utf8");
+  let value: unknown;
+  try {
+    value = JSON.parse(content);
+  } catch (error) {
+    throw new Error("Canonical Agent device configuration is invalid", {
+      cause: error,
+    });
+  }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Renderer device configuration is invalid");
+    throw new Error("Canonical Agent device configuration is invalid");
   }
-  const deviceId = Reflect.get(value, "selfHostedDeviceId");
-  return typeof deviceId === "string" && deviceId.trim()
-    ? deviceId.trim()
-    : null;
-}
-
-export function resolveCanonicalAgentDeviceId(): string {
-  return (
-    readRendererDeviceId() ??
-    `device-${getRuntimeStorageContext().rootIdentity.slice(0, 32)}`
-  );
+  const deviceId = (value as Record<string, unknown>).deviceId;
+  if (typeof deviceId !== "string") {
+    throw new Error("Canonical Agent device configuration is invalid");
+  }
+  return parseAgentDeviceConfigDocument(content, {
+    expectedDeviceId: deviceId,
+  });
 }
 
 export function readCanonicalAgentDeviceConfig(): AgentDeviceConfigDocument | null {
   recoverCanonicalEntryPublication(getUserDataPath(), OPERATION_KEY);
   const filePath = configPath();
   if (!fs.existsSync(filePath)) return null;
-  const stats = fs.lstatSync(filePath);
-  if (!stats.isFile() || stats.isSymbolicLink()) {
-    throw new Error("Canonical Agent device configuration is invalid");
+  const document = readStoredDocument(filePath);
+  if (document.deviceId === resolveCanonicalAgentDeviceId()) {
+    return document;
   }
-  return parseAgentDeviceConfigDocument(fs.readFileSync(filePath, "utf8"), {
-    expectedDeviceId: resolveCanonicalAgentDeviceId(),
+  return publishCanonicalAgentDeviceConfig({
+    builtinAgentOverrides: document.builtinAgentOverrides,
+    customAgents: document.customAgents,
+    disabledPlatformIds: document.disabledPlatformIds,
+    agentIdentityPreferences: document.agentIdentityPreferences,
   });
 }
 

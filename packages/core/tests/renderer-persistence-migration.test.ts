@@ -482,7 +482,7 @@ describe("renderer persistence migration", () => {
         createdAt: 0,
       }),
     ]);
-    expect(state.selfHostedDeviceId).toMatch(/^desktop-/u);
+    expect(state.selfHostedDeviceId).toBeNull();
     expect(readRendererPersistenceMigrationMarker(root)?.completedAt).toBe(
       "2026-08-12T00:00:00.000Z",
     );
@@ -969,5 +969,55 @@ describe("renderer persistence migration", () => {
     expect(() => resolveOwnedPath(root, "../escape")).toThrow(
       /path escapes root/,
     );
+  });
+
+  it("keeps local Agent identity stable without provisioning sync identity", async () => {
+    const root = createRoot();
+    const store = createRendererPersistenceStore({
+      rootPath: root,
+      encryption,
+    });
+    await store.migrate({
+      settings: persisted({
+        agentIdentityPreferences: {
+          codex: { name: "codex", icon: "codex" },
+        },
+      }),
+      selfHostedDeviceId: null,
+    });
+    const agentPath = path.join(root, "config", "devices", "agents.json");
+    const rendererPath = path.join(root, "config", "devices", "renderer.json");
+    const initialAgentId = JSON.parse(
+      fs.readFileSync(agentPath, "utf8"),
+    ).deviceId;
+
+    expect(initialAgentId).toMatch(/^device-[a-f0-9]{32}$/u);
+    expect(
+      JSON.parse(fs.readFileSync(rendererPath, "utf8")).selfHostedDeviceId,
+    ).toBeNull();
+
+    const legacyAgentDocument = JSON.parse(fs.readFileSync(agentPath, "utf8"));
+    legacyAgentDocument.deviceId = "desktop-legacy-agent";
+    fs.writeFileSync(agentPath, JSON.stringify(legacyAgentDocument), "utf8");
+    expect(
+      store.readHydratedStateSync().settings.agentIdentityPreferences,
+    ).toEqual({ codex: { name: "codex", icon: "codex" } });
+
+    await store.replaceSettings({
+      ...store.readHydratedStateSync().settings,
+      language: "zh",
+    });
+    expect(JSON.parse(fs.readFileSync(agentPath, "utf8")).deviceId).toBe(
+      initialAgentId,
+    );
+
+    const syncDeviceId = await store.getOrCreateSelfHostedDeviceId();
+    expect(syncDeviceId).toMatch(/^desktop-/u);
+    expect(JSON.parse(fs.readFileSync(agentPath, "utf8")).deviceId).toBe(
+      initialAgentId,
+    );
+    expect(
+      store.readHydratedStateSync().settings.agentIdentityPreferences,
+    ).toEqual({ codex: { name: "codex", icon: "codex" } });
   });
 });

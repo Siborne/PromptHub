@@ -67,7 +67,6 @@ import {
   getUserDataPath,
 } from "./runtime-paths";
 import {
-  readCanonicalMcpLibrary,
   writeCanonicalMcpLibrary,
   type CanonicalMcpLibraryOptions,
 } from "./canonical-mcp-library";
@@ -89,6 +88,7 @@ import {
   shouldSkipDisabledMcpPlatform,
 } from "./mcp-target-sync-policy";
 import { commitMcpTargetProjection } from "./mcp-target-projection";
+import { readCanonicalMcpLibraryWithMigration } from "./mcp-library-canonical-migration";
 
 export { getMcpTargetPresets } from "./mcp-target-presets";
 export type { McpTargetPreset } from "./mcp-target-presets";
@@ -1058,7 +1058,11 @@ export class CoreMcpLibraryService {
   read(): McpLibraryFile {
     if (getRuntimeStorageContext().localAuthority === "canonical-files") {
       try {
-        return normalizeLibrary(readCanonicalMcpLibrary(this.canonicalOptions));
+        return readCanonicalMcpLibraryWithMigration({
+          canonicalOptions: this.canonicalOptions,
+          legacyPath: getMcpLibraryFilePath(),
+          normalize: normalizeLibrary,
+        });
       } catch (error) {
         throw new CoreMcpError(
           "INVALID_LIBRARY",
