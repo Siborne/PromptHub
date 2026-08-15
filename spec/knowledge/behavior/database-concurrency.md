@@ -41,6 +41,9 @@
 - Desktop 在通过 Electron 单实例 gate 后，可恢复升级前版本遗留的未登记普通
   lock；self-hosted Web 在每个 `DATA_ROOT` 只有一个服务进程的部署边界内也可
   显式启用该能力；CLI 与其它共享调用方不得默认启用该能力。
+- Desktop 版本升级的安全快照早于常规数据库初始化；它在打开 SQLite 生成一致性
+  镜像前必须复用同一 guarded recovery。可证明无主的普通 lock 可以恢复，live、
+  unknown 或 unsafe owner 必须保留现场并阻止版本标记前移。
 - 初始化中途失败必须清理本进程刚创建的租约，避免制造新的假所有者。
 - CLI 必须通过不打开 SQLite 的显式 `doctor database-lock` 命令报告 lock、live
   lease、stale lease 与未知项；普通业务命令不得因发现 ownerless lock 自动删除它。

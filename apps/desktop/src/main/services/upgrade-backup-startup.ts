@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { recoverDatabaseClientLock } from "@prompthub/db";
 
 import {
   createUpgradeDataSnapshot,
@@ -61,7 +62,10 @@ async function readLastRunVersion(
     const parsed = JSON.parse(
       await fs.promises.readFile(markerPath, "utf8"),
     ) as Partial<LastRunVersionRecord>;
-    if (typeof parsed.version !== "string" || parsed.version.trim().length === 0) {
+    if (
+      typeof parsed.version !== "string" ||
+      parsed.version.trim().length === 0
+    ) {
       return null;
     }
 
@@ -82,7 +86,29 @@ async function writeLastRunVersion(
   };
 
   await fs.promises.mkdir(path.dirname(markerPath), { recursive: true });
-  await fs.promises.writeFile(markerPath, JSON.stringify(payload, null, 2), "utf8");
+  await fs.promises.writeFile(
+    markerPath,
+    JSON.stringify(payload, null, 2),
+    "utf8",
+  );
+}
+
+function recoverUpgradeSnapshotDatabaseLock(userDataPath: string): void {
+  const canonicalDatabase = path.join(userDataPath, "data", "prompthub.db");
+  const legacyDatabase = path.join(userDataPath, "prompthub.db");
+  const databasePath = fs.existsSync(canonicalDatabase)
+    ? canonicalDatabase
+    : fs.existsSync(legacyDatabase)
+      ? legacyDatabase
+      : null;
+  if (!databasePath) return;
+
+  const recovery = recoverDatabaseClientLock(databasePath);
+  if (recovery.status === "blocked") {
+    throw new Error(
+      `Database lock cannot be recovered before upgrade snapshot: ${recovery.reason ?? "unknown-client"}`,
+    );
+  }
 }
 
 export async function runUpgradeBackupStartupTasks(
@@ -117,6 +143,7 @@ export async function runUpgradeBackupStartupTasks(
   }
 
   try {
+    recoverUpgradeSnapshotDatabaseLock(userDataPath);
     const snapshot = await createUpgradeDataSnapshot(userDataPath, {
       fromVersion: previousVersion,
       toVersion: currentVersion,
