@@ -22,12 +22,27 @@ import {
   type PluginPackagePayloadSource,
   type ReadPluginResourceResult,
 } from "./plugin-resource-schema";
-import { getConfigDir, getDataDir, getUserDataPath } from "./runtime-paths";
+import {
+  PLUGIN_LIBRARY_FILE_NAME,
+  PLUGIN_MARKET_CACHE_FILE_NAME,
+  PLUGIN_VERSION_FILE_NAME,
+} from "./plugin-library/shared";
+import {
+  getConfigDir,
+  getDataDir,
+  getRuntimeStorageContext,
+  getUserDataPath,
+} from "./runtime-paths";
 
 const OPERATION_KEY = "plugin-library";
 const MAX_RESOURCES = 10_000;
 const MAX_PACKAGE_FILES = 2_000;
 const MAX_PACKAGE_FILE_BYTES = 5 * 1024 * 1024;
+const SUPERSEDED_METADATA_FILE_NAMES = new Set([
+  PLUGIN_LIBRARY_FILE_NAME,
+  PLUGIN_MARKET_CACHE_FILE_NAME,
+  PLUGIN_VERSION_FILE_NAME,
+]);
 const IGNORED_ROOTS = new Set([
   ".git",
   "node_modules",
@@ -81,29 +96,16 @@ function assertId(value: string, label: string): void {
   }
 }
 
-function readDeviceId(required: boolean): string | null {
-  const filePath = path.join(getConfigDir(), "devices", "renderer.json");
-  try {
-    const stats = fs.lstatSync(filePath);
-    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > 1024 * 1024)
-      throw new Error("Canonical Plugin device configuration is unsafe");
-    const value: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    if (
-      !value ||
-      typeof value !== "object" ||
-      Array.isArray(value) ||
-      typeof (value as Record<string, unknown>).selfHostedDeviceId !== "string"
-    )
-      throw new Error("Canonical Plugin device configuration is invalid");
-    const deviceId = (value as Record<string, string>).selfHostedDeviceId;
-    assertId(deviceId, "device id");
-    return deviceId;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    if (required)
-      throw new Error("Canonical Plugin device identity is unavailable");
-    return null;
+function isSupersededPluginMetadataFile(entry: fs.Dirent): boolean {
+  if (!SUPERSEDED_METADATA_FILE_NAMES.has(entry.name)) return false;
+  if (entry.isSymbolicLink() || !entry.isFile()) {
+    throw new Error("Canonical Plugin legacy metadata path is unsafe");
   }
+  return true;
+}
+
+function localProjectionDeviceId(): string {
+  return `device-${getRuntimeStorageContext().rootIdentity.slice(0, 32)}`;
 }
 
 function listBundles(): LoadedPlugin[] {
@@ -113,10 +115,9 @@ function listBundles(): LoadedPlugin[] {
   if (!stats.isDirectory() || stats.isSymbolicLink())
     throw new Error("Canonical Plugin library path is unsafe");
   const entries = fs.readdirSync(root, { withFileTypes: true });
-  if (entries.length > MAX_RESOURCES)
-    throw new Error("Canonical Plugin resource limit exceeded");
-  return entries.flatMap((entry) => {
+  const bundles = entries.flatMap((entry) => {
     if (entry.name.startsWith(".")) return [];
+    if (isSupersededPluginMetadataFile(entry)) return [];
     assertId(entry.name, "resource path");
     if (!entry.isDirectory() || entry.isSymbolicLink())
       throw new Error("Canonical Plugin resource path is unsafe");
@@ -126,6 +127,9 @@ function listBundles(): LoadedPlugin[] {
       throw new Error("Canonical Plugin bundle path does not match its id");
     return [{ bundlePath, resource }];
   });
+  if (bundles.length > MAX_RESOURCES)
+    throw new Error("Canonical Plugin resource limit exceeded");
+  return bundles;
 }
 
 function readProjection(
@@ -139,7 +143,7 @@ function readProjection(
   const document = parsePluginDeviceProjectionDocument(
     fs.readFileSync(filePath, "utf8"),
     {
-      expectedDeviceId: readDeviceId(true)!,
+      expectedDeviceId: localProjectionDeviceId(),
       knownPluginIds: new Set(
         plugins.map(({ resource }) => resource.plugin.id),
       ),
@@ -307,7 +311,7 @@ export function writeCanonicalPluginState(input: {
       mutations.push({ targetPath: current.bundlePath, delete: true });
   }
   const projection = createPluginDeviceProjectionDocument({
-    deviceId: readDeviceId(true)!,
+    deviceId: localProjectionDeviceId(),
     plugins: [...plugins.values()],
   });
   mutations.push({

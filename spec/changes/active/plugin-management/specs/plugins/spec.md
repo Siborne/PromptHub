@@ -436,6 +436,25 @@ PromptHub MUST model Plugin support as an adapter matrix across agent-native bun
 - **AND** requesting symlink mode for adapter targets still materializes a generated copy package and reports the actual copy result
 - **AND** Codex targets can still preserve Codex native package copy or symlink behavior when the source package already contains `.codex-plugin/plugin.json`
 
+### Requirement: FR-PLUGIN-010 Canonical Library Recovery Without Sync Identity
+
+PromptHub MUST read and migrate the local Plugin library independently of whether self-hosted sync has been configured.
+
+#### Scenario: Migrating superseded metadata before sync setup
+
+- **GIVEN** canonical file authority is active, `data/plugins/library.json` contains installed Plugins, and the renderer device document has a null `selfHostedDeviceId`
+- **WHEN** the Plugin library is read
+- **THEN** PromptHub migrates every valid Plugin into canonical resource bundles
+- **AND** preserves distributed Agent target mappings in a projection keyed by the deterministic local storage-root identity
+- **AND** removes superseded library/version metadata only after canonical publication verifies successfully
+
+#### Scenario: Canonical bundles coexist with stale metadata
+
+- **GIVEN** valid canonical Plugin bundles already exist beside exact superseded Plugin metadata files
+- **WHEN** the Plugin library is read
+- **THEN** canonical bundles remain authoritative and stale regular metadata files are removed
+- **AND** same-name directories, symlinks, and undeclared root files remain rejected as unsafe
+
 ## Open Decisions
 
 - First implementation source of truth is decided: filesystem-backed `data/plugins/library.json`, with first-read migration from legacy `config/plugin-library.json`. `[待确认]` remains only for a later migration to SQLite or hybrid metadata if child bindings, sync, and update history require it.

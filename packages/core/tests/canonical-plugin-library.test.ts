@@ -170,4 +170,162 @@ describe("canonical Plugin library", () => {
     expect(restored.userNotes).toBeUndefined();
     expect(fs.readFileSync(projectionPath, "utf8")).toBe(beforeProjection);
   });
+
+  it("coexists with exact superseded Plugin metadata files", () => {
+    const pluginRoot = path.join(root, "data", "plugins");
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    for (const fileName of [
+      "library.json",
+      "market-cache.json",
+      "versions.json",
+    ]) {
+      fs.writeFileSync(path.join(pluginRoot, fileName), "{}\n", "utf8");
+    }
+
+    expect(readCanonicalPluginLibrary().plugins).toEqual([]);
+    expect(readCanonicalPluginVersions().versions).toEqual([]);
+  });
+
+  it("migrates a superseded Plugin library into canonical bundles", () => {
+    const pluginRoot = path.join(root, "data", "plugins");
+    const libraryPath = path.join(pluginRoot, "library.json");
+    const versionsPath = path.join(pluginRoot, "versions.json");
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.writeFileSync(
+      libraryPath,
+      JSON.stringify(library([plugin(packagePath)])),
+    );
+    fs.writeFileSync(
+      versionsPath,
+      JSON.stringify({
+        kind: "prompthub-plugin-versions",
+        version: 1,
+        updatedAt: "2026-08-12T00:00:00.000Z",
+        versions: [],
+      }),
+    );
+
+    const migrated = new CorePluginLibraryService().read();
+
+    expect(migrated.plugins).toHaveLength(1);
+    expect(migrated.plugins[0]).toMatchObject({
+      id: "plugin-1",
+      displayName: "Writing Tools",
+    });
+    expect(fs.existsSync(libraryPath)).toBe(false);
+    expect(fs.existsSync(versionsPath)).toBe(false);
+    expect(
+      fs.existsSync(path.join(pluginRoot, "plugin-1", "manifest.json")),
+    ).toBe(true);
+  });
+
+  it("keeps canonical Plugin bundles authoritative over stale metadata", () => {
+    const service = new CorePluginLibraryService();
+    service.write(library([plugin(packagePath)]));
+    const pluginRoot = path.join(root, "data", "plugins");
+    const libraryPath = path.join(pluginRoot, "library.json");
+    const versionsPath = path.join(pluginRoot, "versions.json");
+    fs.writeFileSync(libraryPath, JSON.stringify(library([])));
+    fs.writeFileSync(
+      versionsPath,
+      JSON.stringify({
+        kind: "prompthub-plugin-versions",
+        version: 1,
+        updatedAt: "2026-08-12T00:00:00.000Z",
+        versions: [],
+      }),
+    );
+
+    expect(service.read().plugins).toHaveLength(1);
+    expect(fs.existsSync(libraryPath)).toBe(false);
+    expect(fs.existsSync(versionsPath)).toBe(false);
+  });
+
+  it("migrates superseded Plugin metadata when no version file exists", () => {
+    const pluginRoot = path.join(root, "data", "plugins");
+    const libraryPath = path.join(pluginRoot, "library.json");
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.writeFileSync(
+      libraryPath,
+      JSON.stringify(library([plugin(packagePath)])),
+    );
+
+    expect(new CorePluginLibraryService().read().plugins).toHaveLength(1);
+    expect(fs.existsSync(libraryPath)).toBe(false);
+  });
+
+  it("migrates with a stable local identity before self-hosted sync is configured", () => {
+    const rendererPath = path.join(root, "config", "devices", "renderer.json");
+    fs.writeFileSync(
+      rendererPath,
+      JSON.stringify({
+        kind: "prompthub-renderer-devices",
+        version: 1,
+        updatedAt: "2026-08-12T00:00:00.000Z",
+        selfHostedDeviceId: null,
+      }),
+    );
+    const pluginRoot = path.join(root, "data", "plugins");
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginRoot, "library.json"),
+      JSON.stringify(library([plugin(packagePath)])),
+    );
+
+    const migrated = new CorePluginLibraryService().read();
+    const projection = JSON.parse(
+      fs.readFileSync(
+        path.join(root, "config", "devices", "plugin-projections.json"),
+        "utf8",
+      ),
+    ) as { deviceId: string; targets: Record<string, string[]> };
+
+    expect(migrated.plugins).toHaveLength(1);
+    expect(projection.deviceId).toMatch(/^device-[a-f0-9]{32}$/u);
+    expect(projection.targets).toEqual({ "plugin-1": ["codex"] });
+  });
+
+  it("removes empty superseded Plugin metadata without creating bundles", () => {
+    const pluginRoot = path.join(root, "data", "plugins");
+    const libraryPath = path.join(pluginRoot, "library.json");
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.writeFileSync(libraryPath, JSON.stringify(library([])));
+
+    expect(new CorePluginLibraryService().read().plugins).toEqual([]);
+    expect(fs.existsSync(libraryPath)).toBe(false);
+  });
+
+  it.each(["library.json", "market-cache.json", "versions.json"])(
+    "rejects an unsafe Plugin coexistence artifact at %s",
+    (fileName) => {
+      const artifactPath = path.join(root, "data", "plugins", fileName);
+      fs.mkdirSync(artifactPath, { recursive: true });
+
+      expect(() => readCanonicalPluginLibrary()).toThrow(
+        /Canonical Plugin legacy metadata path is unsafe/u,
+      );
+    },
+  );
+
+  it("rejects a symlinked Plugin coexistence artifact", () => {
+    const pluginRoot = path.join(root, "data", "plugins");
+    const targetPath = path.join(root, "legacy-plugin-library.json");
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.writeFileSync(targetPath, "{}\n", "utf8");
+    fs.symlinkSync(targetPath, path.join(pluginRoot, "library.json"));
+
+    expect(() => readCanonicalPluginLibrary()).toThrow(
+      /Canonical Plugin legacy metadata path is unsafe/u,
+    );
+  });
+
+  it("continues to reject undeclared Plugin root files", () => {
+    const pluginRoot = path.join(root, "data", "plugins");
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.writeFileSync(path.join(pluginRoot, "unexpected.json"), "{}\n", "utf8");
+
+    expect(() => readCanonicalPluginLibrary()).toThrow(
+      /Canonical Plugin resource path is unsafe/u,
+    );
+  });
 });

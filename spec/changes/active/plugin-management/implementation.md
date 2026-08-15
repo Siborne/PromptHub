@@ -424,6 +424,21 @@
 - Git package materialization is bounded by a 30-second timeout, terminates stalled processes, and removes temporary package directories after validation or failure.
 - MCP parity review confirmed that installed MCP entries use normalized configuration records rather than package-directory sources. The equivalent MCP risk is target configuration reconciliation, which remains digest-based and is covered by the MCP library persistence, target, Codex sync, remote-store, renderer-store, and component suites.
 
+## Canonical Plugin Device Identity Recovery
+
+- Canonical Plugin target projections now use the deterministic local storage-root identity instead of requiring `selfHostedDeviceId` from renderer persistence.
+- Plugin library migration and store loading therefore remain available when self-hosted sync has not been configured and the renderer device document contains a null sync identity.
+- Existing Plugin metadata still migrates through the journaled canonical writer; no user Plugin entry or distributed target is discarded.
+- The active development data migrated one installed Gmail Plugin and its `codex` distribution target into a canonical bundle and local projection after the Electron main process reloaded.
+
+Verification:
+
+- `pnpm --filter @prompthub/core test -- canonical-plugin-library.test.ts --run`: passed (1 file, 13 tests).
+- `pnpm --filter @prompthub/core typecheck`: passed.
+- `pnpm --filter @prompthub/desktop typecheck`: passed.
+- `pnpm exec eslint --config ../../apps/desktop/eslint.config.mjs src/canonical-plugin-library.ts tests/canonical-plugin-library.test.ts --max-warnings 0` from `packages/core`: passed.
+- `git diff --check`: passed.
+
 Verification:
 
 - Red-first Plugin regressions failed on content-only changes, credential-sensitive identity, credential leakage, and unbounded Git processes before the implementation.

@@ -118,6 +118,7 @@
 - [x] Core Plugin library tests cover importing a target-native Agent Plugin package into My Plugins by copying the package into PromptHub-managed storage.
 - [x] Core Plugin library tests cover HTTPS and SSH Plugin source imports, duplicate handling across branches, branch metadata retention after library readback, and single-skill source rejection.
 - [x] Core Plugin library tests cover package copy distribution to resolved Agent Plugin paths, unsupported target rejection, and `distributedTargetIds` persistence.
+- [x] Canonical Plugin projection tests cover first-read migration while self-hosted sync identity is null, using the stable local storage-root identity instead.
 - [x] Core Plugin library tests cover adapter-native Agent Plugin marker generation for Claude Code, Cursor, Gemini CLI, Kiro, and GitHub Copilot / VS Code, including the rule that adapter targets materialize generated copies even when symlink mode was requested.
 - [x] Core Plugin library tests cover unsafe Agent target path rejection so existing config files are not overwritten or removed during distribution cleanup.
 - [x] Core Plugin library and PluginManager component tests cover default preservation of distributed Agent package copies and explicit cleanup during Plugin deletion.
@@ -138,6 +139,7 @@
 - `T-PLUGIN-005`: Expose Assistant-callable scan/install/distribute actions behind the same confirmations as UI. Covers `FR-PLUGIN-008`, `DES-PLUGIN-001`, `TEST-PLUGIN-005`.
 - `T-PLUGIN-006`: Implement Plugin Targets compatibility UI with `Native`, `Adapter`, `RuntimeOnly`, and `Composite` target statuses. Covers `FR-PLUGIN-009`, `DES-PLUGIN-006`, `TEST-PLUGIN-006`.
 - `T-PLUGIN-007`: Harden Plugin source reconciliation and Git transport diagnostics. Covers `FR-PLUGIN-003`, `FR-PLUGIN-006`, `DES-PLUGIN-010`, `TEST-PLUGIN-008`, `TEST-PLUGIN-009`.
+- `T-PLUGIN-008`: Migrate superseded Plugin metadata under canonical authority and decouple local target projections from optional sync identity. Covers `FR-PLUGIN-010`, `DES-PLUGIN-011`, `TEST-PLUGIN-010`.
 
 ## Verification Plan
 
@@ -151,3 +153,4 @@
 - `TEST-PLUGIN-007`: Semantic gate tests prove single `SKILL.md` sources and single JS/TS hook modules are not rendered as full Plugin bundles.
 - `TEST-PLUGIN-008`: Local and Git-backed fixtures prove content-only child-file changes are detected while unchanged packages remain up to date.
 - `TEST-PLUGIN-009`: Credentialed self-hosted Git fixtures prove stable credential-free identity, sanitized failures, bounded clone timeout, and temporary package cleanup.
+- `TEST-PLUGIN-010`: Canonical Plugin fixtures prove populated metadata migrates with a null self-hosted sync identity, canonical bundles win over stale metadata, unsafe coexistence artifacts remain rejected, and target mappings survive publication.

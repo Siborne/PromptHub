@@ -51,11 +51,42 @@ import {
   writeCanonicalPluginState,
 } from "../canonical-plugin-library";
 import { getRuntimeStorageContext } from "../runtime-paths";
+import { readCanonicalWithMetadataMigration } from "../canonical-metadata-migration";
+
+function readCanonicalPluginLibraryWithMigration(): PluginLibraryFile {
+  const canonical = normalizeLibrary(readCanonicalPluginLibrary());
+  const legacyPath = getPluginLibraryFilePath();
+  const versionPath = getPluginVersionFilePath();
+  return readCanonicalWithMetadataMigration({
+    canonical,
+    supersededPath: legacyPath,
+    cleanupPaths: [versionPath],
+    isPopulated: (library) => library.plugins.length > 0,
+    readSuperseded: () =>
+      normalizeLibrary(
+        parseJsonObject(fs.readFileSync(legacyPath, "utf8"), "Plugin library"),
+      ),
+    publish: (legacy) =>
+      writeCanonicalPluginState({
+        library: legacy,
+        versions: fs.existsSync(versionPath)
+          ? normalizePluginVersionsFile(
+              parseJsonObject(
+                fs.readFileSync(versionPath, "utf8"),
+                "Plugin versions",
+              ),
+            )
+          : defaultPluginVersions(),
+      }),
+    rereadCanonical: () => normalizeLibrary(readCanonicalPluginLibrary()),
+    unsafePathMessage: "Superseded Plugin metadata path is unsafe",
+  });
+}
 
 export class PluginLibraryStorage {
   read(): PluginLibraryFile {
     if (getRuntimeStorageContext().localAuthority === "canonical-files") {
-      return normalizeLibrary(readCanonicalPluginLibrary());
+      return readCanonicalPluginLibraryWithMigration();
     }
     const primaryPath = getPluginLibraryFilePath();
     if (fs.existsSync(primaryPath)) {

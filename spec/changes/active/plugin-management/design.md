@@ -62,6 +62,12 @@ Recommended first implementation:
 
 Decision for the first implementation: use option A, `<userData>/data/plugins/library.json`, because installed Plugin metadata is user data and should live beside the managed plugin package workspace. Older builds wrote `<userData>/config/plugin-library.json`; when the data file is missing, the core service reads the legacy file, normalizes it into the data path immediately, and keeps the legacy file as a compatibility backup. If child asset bindings, update history, or sync ownership require relational metadata later, migrate to option C with the same compatibility reader.
 
+`DES-PLUGIN-011`
+
+Canonical migration treats superseded Plugin JSON metadata as a compatibility input, not as an invalid resource bundle. Exact regular `library.json`, `versions.json`, and `market-cache.json` files can coexist during migration; undeclared files, directories, and symlinks remain rejected. Publication uses the canonical journaled writer, verifies the resulting bundles and projection, and only then removes superseded library/version files.
+
+Canonical Plugin target projections are local to one PromptHub storage root, so their device identity is derived from the stable storage-root identity rather than the optional self-hosted sync identity. This keeps Plugin library reads and first-read migration available before cloud/self-hosted sync is configured, and prevents login state from changing the projection identity.
+
 No durable business rule should live only in React state. The renderer only chooses filters, selected rows, and confirmation state.
 
 ## Store and Source Model
@@ -307,3 +313,4 @@ inventory extraction, and package fingerprinting complete, then cleaned.
 - `FR-PLUGIN-008` -> `DES-PLUGIN-001` -> `TEST-PLUGIN-005` -> `T-PLUGIN-005`
 - `FR-PLUGIN-009` -> `DES-PLUGIN-006` -> `TEST-PLUGIN-006` -> `T-PLUGIN-006`
 - `FR-PLUGIN-003` / `FR-PLUGIN-006` -> `DES-PLUGIN-010` -> `TEST-PLUGIN-008` / `TEST-PLUGIN-009` -> `T-PLUGIN-007`
+- `FR-PLUGIN-010` -> `DES-PLUGIN-011` -> `TEST-PLUGIN-010` -> `T-PLUGIN-008`
