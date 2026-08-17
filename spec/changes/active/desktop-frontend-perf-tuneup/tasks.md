@@ -159,6 +159,22 @@
 - [x] `TEST-PERF-15` 运行 Agent 概览定向测试、受影响文件 lint、Desktop typecheck 与生产构建
 - [x] 同步稳定前端性能边界与 implementation 记录
 
+## P16 — Skill 远程目录按需加载（2026-08-17 follow-up）
+
+- [x] `T-PERF-16` 以自动同步开启的回归测试锁定 My Skills 不得请求远程目录
+- [x] `T-PERF-16` 将 My Skills 改为本地注册表与已持久化远程缓存的被动消费者
+- [x] `T-PERF-16` 保留 Skill 商店当前来源加载、明确刷新和定时同步 owner
+- [x] `TEST-PERF-16` 运行 SkillManager 定向测试、受影响文件 lint、Desktop typecheck 与开发启动复测
+- [x] 同步稳定前端性能边界与 implementation 记录
+
+## P17 — 主进程数据库初始化边界（2026-08-17 follow-up）
+
+- [x] `T-PERF-17` 用 CPU profile 确认平台设置读取重复进入 `initDatabase -> reconcileCanonicalWorkspaces -> hydrateCanonicalSkillWorkspace`
+- [x] `T-PERF-17` 增加回归测试，锁定设置读取只调用 `getDatabase`，不得调用 `initDatabase`
+- [x] `T-PERF-17` 将 Agent/Skill 平台设置读取改为复用已初始化连接，并保留数据库不可用时的降级行为
+- [x] `TEST-PERF-17` 运行定向测试、受影响文件 lint、Desktop typecheck 与 fresh-start CPU 验证
+- [x] 同步稳定前端性能边界与 implementation 记录
+
 - [x] 每完成一个阶段，更新 `implementation.md` 中对应小节，记录实际数据与偏差
 - [x] 把"桌面端长列表虚拟化"、"bundle 预算"作为稳定行为同步到 `spec/knowledge/behavior/desktop.md`
 - [x] 在 `spec/knowledge/structure/` 下新增 `desktop-frontend-performance.md` 描述桌面端 renderer 性能策略

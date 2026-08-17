@@ -141,9 +141,21 @@
 
 优化前每次概览挂载会触发最多一次 My Skills 读取、一次 Agent Skills 目录扫描、三套领域库加载以及一次随 store 更新反复执行的全域聚合校验，文件 I/O 为 `O(skill files + MCP config + rule files + plugin inventory)`。优化后概览资源投影只遍历 renderer 已缓存条目，为 `O(cached inventory)` 内存读取；冷缓存 I/O 为 `O(0)`。资源页的真实扫描复杂度不变，但只在用户明确进入相应领域时发生。
 
+### P16 — Skill 远程目录按需加载（2026-08-17 follow-up）
+
+`DES-PERF-16`：`SkillManager` 的 My Skills 页面是本地库 surface，只负责加载本地 Skill 数据与动态导入的内置注册表。商店更新提示可以投影 Zustand 已持久化的 `remoteStoreEntries`，但不得在挂载时复用远程同步 hook，也不得读取自动同步设置或预取全部远程源。
+
+`SkillStore` 继续拥有远程目录生命周期：用户进入商店后只加载当前选择的来源，明确刷新时强制更新；设置中的自动同步 cadence 只在商店同步 owner 存活时生效。这样启动和模块切换的网络成本从 `O(remote sources * page entries)` 收敛为 `O(0)`，本地缓存投影保持 `O(cached store entries)`，不会新增数据库、IPC 或持久化契约。
+
+### P17 — 主进程数据库初始化边界（2026-08-17 follow-up）
+
+`DES-PERF-17`：数据库初始化与普通设置读取必须分离。Electron 启动入口继续唯一负责 `initDatabase()`、schema/migration 检查以及 canonical workspace reconciliation；Agent/Skill 平台路径读取只通过 `getDatabase()` 复用当前连接。数据库尚未初始化时维持现有容错返回，不允许为一个 selector 隐式初始化数据库。
+
+Canonical Skill reconciliation 仍在真实启动和恢复重开时执行，持久化、migration 与恢复契约不变。热路径从每次平台枚举触发 `O(skills * package files)` 的删除、复制与校验，收敛为一次 SQLite settings 查询 `O(1)`；启动期 reconciliation 保持一次有界 `O(skills * package files)`。
+
 ## Implementation Order
 
-P1 → P2 → P3 → (P4 与 P5 可并行) → P6；P7-P15 为后续独立补强。
+P1 → P2 → P3 → (P4 与 P5 可并行) → P6；P7-P17 为后续独立补强。
 
 P1 是基础观测，必须最先；P6 必须最后，因为它会"封盘"前面所有阶段拿到的收益作为新基线。
 

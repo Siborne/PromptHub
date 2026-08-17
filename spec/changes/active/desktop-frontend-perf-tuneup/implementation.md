@@ -465,6 +465,27 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
   - Desktop TypeScript `tsc --noEmit` 通过。
   - Desktop 生产构建通过；Agent overview 保持独立 lazy chunk（24.98 KB raw / 7.47 KB gzip）。
 
+### P16 — Skill 远程目录按需加载（2026-08-17 follow-up）
+
+- 状态：已完成（2026-08-17）。
+- 根因：`SkillManager` 为了计算 My Skills 的商店更新提示，挂载了 `useSkillStoreRemoteSync({ eagerRemoteSources: "all" })`。当设备设置默认开启商店自动同步时，每次应用恢复到 Skills 模块都会同时加载 Claude、Codex、skills.sh、ClawHub 等远程源；分页详情请求和失败堆栈通过 `skill:fetchRemoteContent` 扇出到 Electron 主进程，网络异常时形成大量超时、`ECONNRESET` 与 HTTP 409 日志并阻塞交互。
+- 实现：
+  - `SkillManager` 不再拥有远程同步 hook，只订阅已持久化的 `remoteStoreEntries` 以计算更新提示。
+  - My Skills 挂载时继续加载本地 Skill 数据和动态内置注册表，不读取商店自动同步设置，不触发远程请求。
+  - `SkillStore` 仍按当前选择来源加载，并保留明确刷新及商店 owner 生命周期内的 cadence，同步能力未删除。
+- Traceability：`FR-PERF-16 -> DES-PERF-16 -> TEST-PERF-16 -> T-PERF-16`。
+- 诊断证据：开发启动复现中 Electron 主进程一度持续接近 100% CPU；随后日志持续出现 `skill:fetchRemoteContent` 的 `ECONNRESET`、超时与 HTTP 409，而不是最初可见的两次失败。移除 My Skills 全源预取后应只保留用户实际进入远程商店时的按需请求。
+- 验证：SkillManager 与 Skill installer utils 定向测试共 2 files / 93 tests passed；相关源码与测试 ESLint、Desktop typecheck、`git diff --check` 通过。Fresh dev restart 后观察 5 分钟未再出现 `skill:fetchRemoteContent`、`ECONNRESET`、超时或 HTTP 409 日志。
+
+### P17 — 主进程数据库初始化边界（2026-08-17 follow-up）
+
+- 状态：已完成（2026-08-17）。
+- 根因：`skill-installer-utils` 的平台设置读取调用了 Desktop `initDatabase()`。该 wrapper 在 canonical-files authority 下每次都会运行 Skill/Rule workspace reconciliation，因此 Skills 安装状态枚举会反复进入 `hydrateCanonicalSkillWorkspace`，同步删除、复制并校验全部 Skill package 文件。CPU profile 直接显示热栈为 `getSkillMdInstallStatusForSkill -> getSupportedPlatforms -> readCustomAgentsFromSettings -> initDatabase -> reconcileCanonicalWorkspaces -> hydrateCanonicalSkillWorkspace`。
+- 实现：平台内置覆盖与自定义 Agent 设置读取改为 `getDatabase()`，只复用 Electron 启动时已初始化的连接；数据库不可用、JSON 异常与查询异常继续走既有降级返回。
+- Traceability：`FR-PERF-17 -> DES-PERF-17 -> TEST-PERF-17 -> T-PERF-17`。
+- 复杂度：平台枚举的数据库部分由隐式 `O(skills * package files)` workspace 重建收敛为单次 settings key 查询 `O(1)`；不新增缓存、IPC、schema 或持久化状态。
+- 验证：修复前 fresh dev run 的 Electron main process 持续约 96.2% CPU，3 秒 CPU profile 中主要时间消耗在 canonical Skill 文件复制、目录删除、bundle 读取与哈希；修复后同一开发数据库 fresh restart 并稳定运行超过 5 分钟，连续 5 次采样均为 0.0% CPU。定向测试、相关文件 ESLint、Desktop typecheck 与 `git diff --check` 均通过。
+
 ## Verification
 
 - 每阶段完成时记录：lint / typecheck / unit / integration / e2e:smoke / perf 的实际结果。

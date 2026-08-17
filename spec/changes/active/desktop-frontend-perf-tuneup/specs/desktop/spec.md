@@ -17,6 +17,8 @@
 - `FR-PERF-14`：Prompt 关系图在指针位于画布外时不得持续执行逐帧命中检测，初始节点布局应使用确定性分布，避免每次进入 Prompt 都从随机重叠位置重新解算。
 - `FR-PERF-15`：Agent 概览的资源数量卡片必须是被动快照。进入或重新进入 Agent 模块时，不得隐式触发 Skills 扫描、My Skills 加载、MCP 健康检查、Rules 文件加载、Plugin 库加载或全域资源校验。
 - `FR-PERF-15`：Agent 的具体资源标签页仍必须按所选领域加载真实数据，并保留显式刷新能力；概览冷缓存可以显示未知占位，不得为了立即补齐计数阻塞模块切换。
+- `FR-PERF-16`：打开应用或进入 My Skills 时不得自动请求全部远程 Skill 商店。该页面必须使用本地技能、内置注册表和持久化的远程缓存生成列表与更新提示；只有进入 Skill 商店或执行明确刷新后才能加载远程目录。
+- `FR-PERF-17`：应用启动后枚举 Agent/Skill 平台、检查安装状态或切换模块时，只能读取当前数据库连接；不得再次执行 schema 初始化或 canonical Skill 工作区重建。
 
 ## Modified
 
@@ -38,5 +40,7 @@
 - 用户在 Prompt 的 card/list/gallery/kanban/graph/generation 之间切换时，DOM 中只能存在当前视图 renderer；再次切换到其他模块时不应继续执行关系图模拟。
 - 用户上次停留在关系图后从任意模块切回 Prompt，关系图应在 750 ms 自动布局预算内停止；指针未进入画布时不得启用 canvas 命中检测。
 - 用户从任意模块切换到 Agent 概览，即使 Agent 存在大量 Skills、坏软链接或无效 MCP 配置，概览挂载也不得启动对应文件扫描或健康检查；进入 Skills/MCP 等具体标签页后才加载该领域。
+- 用户上次停留在 My Skills 或从 Prompt 切换到 Skills 时，即使自动同步已开启且远程源不可达，也不得产生 `skill:fetchRemoteContent` 请求风暴；已有远程缓存仍可用于显示更新提示。
+- 用户切换到 Skills、Agents 或其他会读取平台路径的模块时，主进程不得重复删除、复制和校验全部 canonical Skill 工作区。
 - 用户进入"设置 → 数据与同步"，再进入子面板（例如 WebDAV）时，对应代码应通过二级 chunk 异步加载，而不是设置页首次打开时一次性载入全部子面板。
 - 开发者执行 `pnpm --filter @prompthub/desktop build`，并执行 bundle 预算脚本时，应得到明确通过 / 失败信号；预算变更必须随对应 PR 一并提交。

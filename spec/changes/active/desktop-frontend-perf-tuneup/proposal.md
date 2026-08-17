@@ -26,9 +26,11 @@
   - 审计 `lucide-react` 命名导入与 Tailwind `content` 配置，确保 tree-shaking / purge 没有遗漏。
   - Prompt 工作区只挂载当前激活的重量级视图，并为关系图模拟设置有界、较短的收敛预算。
   - Agent 概览只读取 renderer 已有资源快照，不在模块切换时隐式扫描 Skills 或加载 MCP、Rules、Plugins；深度读取由对应标签页或显式刷新触发。
+  - My Skills 只读取本地技能、内置注册表和已持久化的远程商店缓存；不得因为自动同步设置在挂载时预取所有远程 Skill 源。
+  - Agent/Skill 平台设置读取只复用已经初始化的 SQLite 连接；普通查询不得重新进入数据库启动流程或触发 canonical Skill 工作区全量重建。
 - Out of scope:
   - 不替换 Zustand / 不更换 React 主版本 / 不接入 RSC 或 server components。
-  - 不改 IPC 契约、不改主进程业务逻辑、不改数据库 schema。
+  - 不改 IPC 契约、不改数据库 schema 或持久化语义；主进程只收紧已经初始化后的只读查询边界。
   - 不改样式视觉、不调整色板、不改动暗黑模式 token。
   - Web 端（`apps/web`）和 CLI 不在本变更内。
   - 不引入 framer-motion 替代或动画重构（保留为后续 follow-up）。

@@ -100,6 +100,24 @@ Renderer startup entry (`index-*.js`) 不应静态 import 与当前首屏无关�
 - 单领域页面只能启动本领域读取，不得因为共享 hook 顺带加载其他领域。
 - 已缓存条目可以线性投影，但不得在每个 store 依次更新时重复启动相同的跨域校验。
 
+### 10. 本地库不得拥有远程目录预取生命周期
+
+My Skills、已安装插件等本地资产页面可以读取持久化的远程目录缓存来显示更新提示，但挂载本地页面不得自动抓取所有远程商店。
+
+- 本地资产 owner 只加载本地数据库、文件快照和随应用打包的内置注册表。
+- 远程目录 owner 是对应商店页面；进入商店后只加载当前选择的来源，切换来源或明确刷新时再发起请求。
+- 自动同步 cadence 不得把普通模块切换变成远程全量刷新；远程源不可达时，启动与本地资产浏览仍必须可交互。
+- 远程更新提示优先使用持久化缓存；缓存为空时允许暂时没有更新提示，不能用高扇出网络请求补齐首屏状态。
+
+### 11. 普通查询不得重入数据库初始化
+
+Electron 主进程中的 `initDatabase()` 只属于启动、恢复重开和显式存储生命周期。已经启动后的设置、平台枚举和安装状态查询必须通过 `getDatabase()` 复用当前连接。
+
+- 普通读取不得隐式执行 schema/migration、canonical publication recovery 或 workspace reconciliation。
+- 数据库尚未初始化时，非关键 selector 保持既有容错降级；不得为了显示路径或平台列表自行初始化数据库。
+- Canonical Skill workspace reconciliation 只在真实初始化后执行一次，不能随着组件挂载、列表枚举或 IPC 查询重复执行。
+- 性能诊断需区分 renderer 卡顿与 Electron main-process 同步文件 I/O；主进程持续高 CPU 时应使用 CPU profile 确认真实调用链。
+
 ## Stable Scenarios
 
 ### Scenario: Adding a new long list
