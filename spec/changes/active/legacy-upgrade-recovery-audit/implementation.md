@@ -195,6 +195,36 @@ safety-point remediations remain owned by `database-migration-safety`.
   30 focused canonical MCP/Plugin/storage-shadow tests passed. Unaffected release
   checks were not repeated.
 
+### 2026-08-17 explicit SQLite canonical recovery
+
+- Read-only inspection confirmed that the current SQLite catalog remained
+  intact with 127 Prompts, 137 Prompt versions, 12 Folders, 97 Skills, 10 Rules,
+  and 18 Settings rows. No live user file was changed during diagnosis or
+  verification.
+- Invalid canonical Prompt authority now ignores an old recovery-dismiss marker
+  and surfaces the current SQLite catalog only after link-safe regular-file,
+  size, `quick_check`, table, and durable-content validation. The candidate
+  preview includes Prompt, Folder, Skill, and Rule counts.
+- The startup recovery dialog disables the destructive start-fresh path while
+  the validated current catalog is available. Recovery still requires an
+  explicit user selection and is never triggered by startup or record counts.
+- Selecting the catalog closes SQLite, creates a unique closed-database
+  checkpoint, projects and validates the complete canonical shadow, preserves
+  the damaged root as a journaled recovery artifact, atomically publishes the
+  replacement, and schedules a restart. A failed publication restores the
+  pre-recovery root and reopens SQLite for another attempt.
+- Recovery replaces an existing regular device MCP binding inside the isolated
+  stage, while a directory, symlink, or unsafe device-config target remains
+  fail-closed. The ordinary first-publication API still refuses to replace an
+  existing authority marker.
+- Focused verification passed: canonical authority publication/recovery and
+  rollback, 8 tests; recovery orchestration, 3 tests; recovery candidate scan
+  and preview, 11 tests; recovery dialog behavior, 7 tests. Desktop TypeScript,
+  targeted ESLint, file-size, and spec traceability checks passed.
+- Recovery was not executed against the live user root. The current divergent
+  files remain preserved until the user explicitly selects the SQLite candidate
+  in the updated application.
+
 ## Remaining Risk
 
 Current recovery code and tests now prove the shared SQLite migration slice for
@@ -202,5 +232,6 @@ all four tagged schemas, including a four-version Prompt. They do not yet prove
 the v0.4.7/v0.4.8 Windows path transition, a v0.5.1 portable backup, or a v0.5.2
 upgrade-snapshot restore through the complete application path. Issues #89,
 #97, and #98 remain open and must not be marked locally done from this evidence.
-The live downgrade corruption also remains unresolved until PromptHub can block
-an older writer and ask the user to select a validated recovery source.
+The current SQLite source can now repair the live downgrade corruption after an
+explicit user selection. Older-writer refusal and a separately validated legacy
+Markdown candidate remain pending under `T-LEGACYREC-013`.

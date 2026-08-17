@@ -61,4 +61,8 @@
       require explicit source selection before publication
       (`FR-LEGACYREC-009`, `DES-LEGACYREC-011`, `TEST-LEGACYREC-009`).
   - Implemented the invalid-graph validation and Prompt workspace write gate.
-    Pending: older-client refusal and explicit candidate selection/publication.
+  - Completed the current SQLite slice: integrity-check and preview the catalog,
+    require explicit selection, and publish through staged, journaled canonical
+    recovery with rollback coverage.
+  - Pending: older-client refusal and a separately validated legacy-workspace
+    candidate.

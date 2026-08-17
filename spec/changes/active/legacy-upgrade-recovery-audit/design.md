@@ -207,6 +207,14 @@ synchronization for an invalid authority. This prevents the normal DB-to-graph
 publisher from repeatedly reading or replacing the damaged graph while keeping
 the application available for recovery operations.
 
+The current SQLite catalog is surfaced as an explicit recovery candidate when
+it passes read-only integrity and content inspection. Selecting that candidate
+creates a closed-database checkpoint, projects and validates the complete
+canonical shadow in staging, preserves the damaged active root as a journaled
+recovery artifact, and atomically publishes the selected catalog. Startup never
+selects this candidate automatically, and the ordinary first-publication API
+continues to reject an existing authority marker.
+
 ## Analyze Result
 
 - #89 has a credible tag-backed path-transition explanation and a matching
