@@ -336,6 +336,33 @@ describe("skill i18n smoke", () => {
       .__PROMPTHUB_WEB__;
   });
 
+  it("loads local Skill metadata without preloading remote stores", async () => {
+    const loadRegistry = vi.fn().mockResolvedValue(undefined);
+    const fetchRemoteContent = vi.fn().mockResolvedValue("{}");
+    const getSettings = vi.fn().mockResolvedValue({
+      device: { storeAutoSync: true, storeSyncCadence: "1d" },
+    });
+    const skillStoreState = createSkillStoreState({ loadRegistry });
+
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(
+      bindStoreSelector(createSettingsState()),
+    );
+    window.api.skill.fetchRemoteContent = fetchRemoteContent;
+    window.api.settings.get = getSettings;
+
+    render(<SkillManager />);
+
+    await waitFor(() => expect(loadRegistry).toHaveBeenCalledOnce());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
+    expect(getSettings).not.toHaveBeenCalled();
+  });
+
   it("renders skill manager actions in english and updates selection summary", async () => {
     const skillStoreState = createSkillStoreState({
       deployedSkillNames: new Set([baseSkill.id]),

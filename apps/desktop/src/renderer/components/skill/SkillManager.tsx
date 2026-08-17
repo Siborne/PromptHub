@@ -38,7 +38,6 @@ import { buildMySkillSourceBadges } from "../../services/skill-source-badges";
 import { getRemoteStoreSkills } from "../../services/remote-store-entry";
 import { getSkillsWithStoreUpdates } from "../../services/skill-library-update-status";
 import { getRuntimeCapabilities } from "../../runtime";
-import { useSkillStoreRemoteSync } from "./store-remote-sync";
 import { filterDeployablePlatforms } from "../../services/platform-visibility";
 import { SkillManagerLibraryHeader } from "./SkillManagerLibraryHeader";
 import { SkillManagerLibraryContent } from "./SkillManagerLibraryContent";
@@ -391,10 +390,11 @@ export function SkillManager() {
     y: number;
     skill: Skill;
   } | null>(null);
-  const { remoteStoreEntries } = useSkillStoreRemoteSync({
-    eagerRemoteSources: "all",
-  });
+  const remoteStoreEntries = useSkillStore(
+    (state) => state.remoteStoreEntries,
+  );
   const registrySkills = useSkillStore((state) => state.registrySkills);
+  const loadRegistry = useSkillStore((state) => state.loadRegistry);
 
   const scanLocalPreview = useSkillStore((state) => state.scanLocalPreview);
   const importScannedSkills = useSkillStore(
@@ -608,6 +608,7 @@ export function SkillManager() {
       cancelIdleCallback?: (handle: number) => void;
     };
 
+    void loadRegistry().catch(() => undefined);
     void loadSkills({ preferCache: true }).then(() => {
       if (disposed) return;
 
@@ -640,7 +641,12 @@ export function SkillManager() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [loadSkills, loadDeployedStatus, runtimeCapabilities.skillDistribution]);
+  }, [
+    loadRegistry,
+    loadSkills,
+    loadDeployedStatus,
+    runtimeCapabilities.skillDistribution,
+  ]);
 
   useEffect(() => {
     if (!runtimeCapabilities.skillPlatformIntegration) {
