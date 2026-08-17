@@ -225,6 +225,22 @@ safety-point remediations remain owned by `database-migration-safety`.
   files remain preserved until the user explicitly selects the SQLite candidate
   in the updated application.
 
+### Recovery retry follow-up
+
+- Canonical MCP projection now accepts persisted binding ids such as
+  `codex:global:/Users/.../.codex/config.toml`. These are opaque keys derived
+  from an absolute target path, not filesystem resource names.
+- Failed recovery now awaits database reopening and re-registers all
+  database-bound IPC handlers against the replacement connection before the
+  renderer receives the failure result.
+- Regressions cover path-bearing binding ids, control-character rejection,
+  awaited IPC rebinding, and combined recovery/reopen failure reporting.
+- Verification passed: 18 focused Core canonical schema/shadow tests, 27
+  focused Desktop checkpoint/recovery tests, the 8-test end-to-end authority
+  suite with a path-derived binding id, Core and Desktop typechecks, targeted
+  Desktop ESLint, Prettier, file-size checks, spec traceability, and the Desktop
+  production build.
+
 ## Remaining Risk
 
 Current recovery code and tests now prove the shared SQLite migration slice for

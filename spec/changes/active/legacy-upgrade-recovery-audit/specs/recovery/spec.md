@@ -95,6 +95,11 @@ PromptHub MUST preserve and identify each validated recovery candidate and MUST
 require an explicit source selection before replacing the active canonical
 graph.
 
+Canonical recovery MUST accept existing MCP target-binding identities derived
+from an absolute target path. If recovery fails after SQLite is closed, the
+application MUST reopen the original database and rebind database-backed IPC
+handlers before reporting the retryable failure to the renderer.
+
 ### `NFR-LEGACYREC-001`: Bounded audit resources
 
 Candidate roots MUST come from a fixed allowlist. Inspection MUST apply explicit
@@ -142,3 +147,6 @@ directory or load a complete database or media archive into memory.
   marker write occurs. Corrupt a catalog-declared Prompt bundle while retaining
   divergent SQLite and legacy workspace candidates; assert startup reports
   recovery-required and leaves every source unchanged until explicit selection.
+  Exercise a path-derived MCP binding id and a failed recovery; assert the id
+  survives canonical projection and subsequent IPC reads use the reopened
+  database rather than the closed connection.

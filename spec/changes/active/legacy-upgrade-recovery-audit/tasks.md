@@ -64,5 +64,8 @@
   - Completed the current SQLite slice: integrity-check and preview the catalog,
     require explicit selection, and publish through staged, journaled canonical
     recovery with rollback coverage.
+  - Recovery now accepts path-derived MCP binding ids and, after a failed
+    publication, reopens SQLite and rebinds every database IPC handler before
+    returning control to the renderer.
   - Pending: older-client refusal and a separately validated legacy-workspace
     candidate.

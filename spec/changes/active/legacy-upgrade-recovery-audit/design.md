@@ -215,6 +215,14 @@ recovery artifact, and atomically publishes the selected catalog. Startup never
 selects this candidate automatically, and the ordinary first-publication API
 continues to reject an existing authority marker.
 
+MCP target-binding ids are opaque synchronization keys derived from target,
+scope, and an absolute path. Canonical projection therefore validates their
+length and control characters but does not apply resource-path separator rules.
+If any recovery path closes SQLite and then fails, it reopens the original
+catalog and re-registers all database-bound IPC handlers before returning the
+error. This prevents renderer stores from retaining services backed by the
+closed connection.
+
 ## Analyze Result
 
 - #89 has a credible tag-backed path-transition explanation and a matching
