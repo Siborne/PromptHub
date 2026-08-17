@@ -6,7 +6,7 @@ import {
   sanitizeSkillPackageDiagnostic,
   sanitizeSkillPackageSourceUrl,
 } from "@prompthub/core/skills/package-operation";
-import { initDatabase } from "../database";
+import { getDatabase } from "../database";
 import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import {
   isPrivateAddress,
@@ -521,7 +521,7 @@ function readBuiltinAgentOverridesFromSettings(): Record<
   }
 
   try {
-    const db = initDatabase();
+    const db = getDatabase();
     if (!db || typeof db.prepare !== "function") {
       _builtinAgentOverridesCache = {};
       _builtinAgentOverridesCacheTs = now;
@@ -613,7 +613,7 @@ function readPlatformRootPathsFromSettings(): Record<string, string> {
 
 export function readCustomAgentsFromSettings(): CustomAgentConfig[] {
   try {
-    const db = initDatabase();
+    const db = getDatabase();
     if (!db || typeof db.prepare !== "function") {
       return [];
     }

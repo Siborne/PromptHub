@@ -13,10 +13,11 @@ vi.mock("child_process", async () => {
 });
 
 vi.mock("../../../src/main/database", () => ({
+  getDatabase: vi.fn(),
   initDatabase: vi.fn(),
 }));
 
-import { initDatabase } from "../../../src/main/database";
+import { getDatabase, initDatabase } from "../../../src/main/database";
 import { getPlatformById } from "@prompthub/shared/constants/platforms";
 import {
   getCustomAgentPlatforms,
@@ -40,6 +41,18 @@ describe("skill-installer-utils", () => {
   });
 
   describe("getCustomAgentPlatforms", () => {
+    it("reads the already initialized database without restarting canonical reconciliation", () => {
+      vi.mocked(getDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({
+          get: vi.fn().mockReturnValue(undefined),
+        }),
+      } as unknown as ReturnType<typeof getDatabase>);
+
+      expect(getCustomAgentPlatforms()).toEqual([]);
+      expect(getDatabase).toHaveBeenCalledTimes(1);
+      expect(initDatabase).not.toHaveBeenCalled();
+    });
+
     it("projects every enabled custom Agent asset path into the shared platform registry", () => {
       const getMock = vi.fn().mockImplementation((key: string) => {
         if (key !== "customAgents") return undefined;
@@ -64,9 +77,9 @@ describe("skill-installer-utils", () => {
           ]),
         };
       });
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       expect(getCustomAgentPlatforms()).toEqual([
         expect.objectContaining({
@@ -97,9 +110,9 @@ describe("skill-installer-utils", () => {
         }
         return undefined;
       });
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       expect(getConfiguredBuiltinAgentPlatformIds().sort()).toEqual([
         "claude",
@@ -116,9 +129,9 @@ describe("skill-installer-utils", () => {
         }
         return undefined;
       });
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       expect(getConfiguredBuiltinAgentPlatformIds()).toEqual(["claude"]);
     });
@@ -132,9 +145,9 @@ describe("skill-installer-utils", () => {
         }
         return undefined;
       });
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       expect(getConfiguredBuiltinAgentPlatformIds()).toEqual(["claude"]);
     });
@@ -150,9 +163,9 @@ describe("skill-installer-utils", () => {
         }
         return undefined;
       });
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("trae");
       expect(platform).toBeDefined();
@@ -173,9 +186,9 @@ describe("skill-installer-utils", () => {
         }
         return undefined;
       });
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("trae");
       expect(platform).toBeDefined();
@@ -192,9 +205,9 @@ describe("skill-installer-utils", () => {
 
     it("falls back to the built-in platform path when no override exists", () => {
       const getMock = vi.fn().mockReturnValue(undefined);
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("trae");
       expect(platform).toBeDefined();
@@ -206,9 +219,9 @@ describe("skill-installer-utils", () => {
 
     it("resolves the built-in Trae CN path without overrides", () => {
       const getMock = vi.fn().mockReturnValue(undefined);
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("trae-cn");
       expect(platform).toBeDefined();
@@ -222,9 +235,9 @@ describe("skill-installer-utils", () => {
 
     it("resolves the built-in TRAE Work path without overrides", () => {
       const getMock = vi.fn().mockReturnValue(undefined);
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("trae-work");
       expect(platform).toBeDefined();
@@ -238,9 +251,9 @@ describe("skill-installer-utils", () => {
 
     it("resolves the built-in TRAE Work CN path without overrides", () => {
       const getMock = vi.fn().mockReturnValue(undefined);
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("trae-work-cn");
       expect(platform).toBeDefined();
@@ -254,9 +267,9 @@ describe("skill-installer-utils", () => {
 
     it("resolves the built-in Cline path without overrides", () => {
       const getMock = vi.fn().mockReturnValue(undefined);
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("cline");
       expect(platform).toBeDefined();
@@ -269,11 +282,11 @@ describe("skill-installer-utils", () => {
     });
 
     it("prefers current Kimi Code roots and falls back to legacy roots only when needed", () => {
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi
           .fn()
           .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
       const platform = getPlatformById("kimi");
       expect(platform).toBeDefined();
 
@@ -306,11 +319,11 @@ describe("skill-installer-utils", () => {
     });
 
     it("resolves Qwen Code from QWEN_HOME without treating QWEN_RUNTIME_DIR as its config root", () => {
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi
           .fn()
           .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
       const platform = getPlatformById("qwen");
       expect(platform).toBeDefined();
 
@@ -347,11 +360,11 @@ describe("skill-installer-utils", () => {
         configurable: true,
       });
       process.env.HOME = "/Users/TestUser";
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi
           .fn()
           .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
       invalidateCustomPathsCache();
 
       const platform = getPlatformById("cherry-studio");
@@ -384,11 +397,11 @@ describe("skill-installer-utils", () => {
       process.env.HOME = "C:\\Users\\TestUser";
       process.env.USERPROFILE = "C:\\Users\\TestUser";
       process.env.APPDATA = "C:\\Users\\TestUser\\AppData\\Roaming";
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi
           .fn()
           .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
       invalidateCustomPathsCache();
 
       const platform = getPlatformById("cherry-studio");
@@ -420,9 +433,9 @@ describe("skill-installer-utils", () => {
 
     it("resolves the Antigravity global skills path", () => {
       const getMock = vi.fn().mockReturnValue(undefined);
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("antigravity");
       expect(platform).toBeDefined();
@@ -448,9 +461,9 @@ describe("skill-installer-utils", () => {
 
     it("ignores empty string override and falls back to built-in", () => {
       const getMock = vi.fn().mockReturnValue(undefined);
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("cursor");
       expect(platform).toBeDefined();
@@ -461,7 +474,7 @@ describe("skill-installer-utils", () => {
     });
 
     it("handles DB read failure gracefully (returns built-in path)", () => {
-      vi.mocked(initDatabase).mockImplementation(() => {
+      vi.mocked(getDatabase).mockImplementation(() => {
         throw new Error("DB not available");
       });
 
@@ -477,9 +490,9 @@ describe("skill-installer-utils", () => {
       const getMock = vi.fn().mockReturnValue({
         value: "not valid json!",
       });
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("claude");
       expect(platform).toBeDefined();
@@ -492,11 +505,11 @@ describe("skill-installer-utils", () => {
 
   describe("getPlatformGlobalRulePath", () => {
     it("resolves Antigravity's shared global rule outside the config asset root", () => {
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi
           .fn()
           .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
       const platform = getPlatformById("antigravity");
       expect(platform).toBeDefined();
 
@@ -546,9 +559,9 @@ describe("skill-installer-utils", () => {
         }
         return undefined;
       });
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi.fn().mockReturnValue({ get: getMock }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
 
       const platform = getPlatformById("opencode");
       expect(platform).toBeDefined();
@@ -573,11 +586,11 @@ describe("skill-installer-utils", () => {
       });
       process.env.HOME = "C:\\Users\\TestUser";
       process.env.USERPROFILE = "C:\\Users\\TestUser";
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi
           .fn()
           .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
       invalidateCustomPathsCache();
 
       const platform = getPlatformById("opencode");
@@ -611,11 +624,11 @@ describe("skill-installer-utils", () => {
       });
       process.env.HOME = "C:\\Users\\TestUser";
       process.env.USERPROFILE = "C:\\Users\\TestUser";
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi
           .fn()
           .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
       invalidateCustomPathsCache();
 
       const platform = getPlatformById("kilo");
@@ -650,11 +663,11 @@ describe("skill-installer-utils", () => {
       process.env.HOME = "C:\\Users\\TestUser";
       process.env.USERPROFILE = "C:\\Users\\TestUser";
       process.env.LOCALAPPDATA = "C:\\Users\\TestUser\\AppData\\Local";
-      vi.mocked(initDatabase).mockReturnValue({
+      vi.mocked(getDatabase).mockReturnValue({
         prepare: vi
           .fn()
           .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
-      } as unknown as ReturnType<typeof initDatabase>);
+      } as unknown as ReturnType<typeof getDatabase>);
       invalidateCustomPathsCache();
 
       const platform = getPlatformById("hermes");
