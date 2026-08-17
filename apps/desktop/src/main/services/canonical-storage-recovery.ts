@@ -27,7 +27,24 @@ interface CanonicalDatabaseRecoveryOptions {
   encryption: McpResourceSecretEncryption;
   scheduleRelaunch: (delayMs: number) => void;
   onSuccess: () => void;
-  onFailure: () => void;
+  onFailure: () => void | Promise<void>;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function reopenDatabaseAfterFailure(
+  options: CanonicalDatabaseRecoveryOptions,
+  recoveryError: unknown,
+): Promise<string> {
+  const recoveryMessage = errorMessage(recoveryError);
+  try {
+    await options.onFailure();
+    return recoveryMessage;
+  } catch (reopenError) {
+    return `${recoveryMessage}; failed to reopen database: ${errorMessage(reopenError)}`;
+  }
 }
 
 function recoverSelectedDatabase(
@@ -62,16 +79,16 @@ export async function performCanonicalDatabaseRecovery(
   try {
     result = await recoverSelectedDatabase(options);
   } catch (error) {
+    const message = await reopenDatabaseAfterFailure(options, error);
     const failure = {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
     } as const;
     logStartupEvent({
       event: "recovery:canonical_authority_rebuild_failed",
       sourcePath: scrubPath(options.sourcePath),
       error: failure.error,
     });
-    options.onFailure();
     return failure;
   }
   logStartupEvent({

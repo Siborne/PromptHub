@@ -164,4 +164,60 @@ describe("canonical storage recovery orchestration", () => {
       });
     },
   );
+
+  it("waits for database reopen and IPC rebinding before returning a failure", async () => {
+    let finishRebind: (() => void) | undefined;
+    const onFailure = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishRebind = resolve;
+        }),
+    );
+    mocks.recoverCanonicalStorageAuthorityFromDatabase.mockRejectedValue(
+      new Error("recovery failed"),
+    );
+
+    let settled = false;
+    const recovery = performCanonicalDatabaseRecovery({
+      activeRoot: "/root",
+      sourceDatabasePath: "/root/data/prompthub.db",
+      sourcePath: "/root/data/prompthub.db",
+      encryption,
+      scheduleRelaunch: vi.fn(),
+      onSuccess: vi.fn(),
+      onFailure,
+    }).then((result) => {
+      settled = true;
+      return result;
+    });
+
+    await vi.waitFor(() => expect(onFailure).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    finishRebind?.();
+    await expect(recovery).resolves.toEqual({
+      success: false,
+      error: "recovery failed",
+    });
+  });
+
+  it("reports both recovery and database reopen failures", async () => {
+    mocks.recoverCanonicalStorageAuthorityFromDatabase.mockRejectedValue(
+      new Error("recovery failed"),
+    );
+
+    await expect(
+      performCanonicalDatabaseRecovery({
+        activeRoot: "/root",
+        sourceDatabasePath: "/root/data/prompthub.db",
+        sourcePath: "/root/data/prompthub.db",
+        encryption,
+        scheduleRelaunch: vi.fn(),
+        onSuccess: vi.fn(),
+        onFailure: vi.fn().mockRejectedValue(new Error("rebind failed")),
+      }),
+    ).resolves.toEqual({
+      success: false,
+      error: "recovery failed; failed to reopen database: rebind failed",
+    });
+  });
 });

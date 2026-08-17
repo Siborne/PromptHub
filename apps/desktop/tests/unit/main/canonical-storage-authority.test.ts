@@ -99,7 +99,7 @@ describe("canonical storage authority publication", () => {
         ],
         bindings: [
           {
-            id: "binding-1",
+            id: "codex:global:/Users/example/.codex/config.toml",
             serverIds: ["mcp-1"],
             target: "codex" as const,
             scope: "global" as const,
@@ -172,7 +172,10 @@ describe("canonical storage authority publication", () => {
           "utf8",
         ),
       ),
-    ).toMatchObject({ deviceId: "device-1", bindings: [{ id: "binding-1" }] });
+    ).toMatchObject({
+      deviceId: "device-1",
+      bindings: [{ id: "codex:global:/Users/example/.codex/config.toml" }],
+    });
   });
 
   it("rolls back the whole data tree when post-publication verification fails", async () => {

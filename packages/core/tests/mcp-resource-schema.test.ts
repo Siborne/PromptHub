@@ -169,6 +169,32 @@ describe("MCP canonical resource schema", () => {
     ).toThrow(/unknown MCP server/u);
   });
 
+  it("accepts persisted target binding ids that contain absolute paths", () => {
+    const persisted = {
+      ...binding(),
+      id: "codex:global:/Users/example/.codex/config.toml",
+    };
+    const document = createMcpBindingConfigDocument({
+      deviceId: "device-1",
+      bindings: [persisted],
+      knownServerIds: new Set(["mcp-server-1"]),
+    });
+
+    expect(
+      parseMcpBindingConfigDocument(JSON.stringify(document), {
+        expectedDeviceId: "device-1",
+        knownServerIds: new Set(["mcp-server-1"]),
+      }).bindings,
+    ).toEqual([persisted]);
+    expect(() =>
+      createMcpBindingConfigDocument({
+        deviceId: "device-1",
+        bindings: [{ ...persisted, id: "codex:global:/tmp/config.toml\n" }],
+        knownServerIds: new Set(["mcp-server-1"]),
+      }),
+    ).toThrow(/binding id/u);
+  });
+
   it("fails closed on missing secrets, hostile paths, and tampered payloads", async () => {
     const base = root();
     const serverBundle = path.join(base, "server");

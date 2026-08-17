@@ -123,6 +123,17 @@ function assertId(value: unknown, label: string): asserts value is string {
   }
 }
 
+function assertBindingId(value: unknown): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    Buffer.byteLength(value, "utf8") > 4096 ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    throw new Error("MCP resource binding id is invalid");
+  }
+}
+
 function assertString(value: unknown, label: string): asserts value is string {
   if (typeof value !== "string")
     throw new Error(`MCP resource ${label} must be a string`);
@@ -747,7 +758,9 @@ function validateBinding(
   knownServerIds: ReadonlySet<string>,
 ): McpTargetBinding {
   if (!isRecord(value)) throw new Error("MCP binding is invalid");
-  assertId(value.id, "binding id");
+  // Binding ids are opaque keys derived from target + scope + absolute path.
+  // Unlike resource ids, valid persisted values therefore contain separators.
+  assertBindingId(value.id);
   if (!Array.isArray(value.serverIds) || value.serverIds.length === 0)
     throw new Error("MCP binding serverIds are invalid");
   const serverIds = value.serverIds.map((serverId) => {

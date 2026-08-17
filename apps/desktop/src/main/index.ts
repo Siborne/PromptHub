@@ -343,6 +343,20 @@ const trayController = createTrayController({
   platform: process.platform,
 });
 
+function registerDatabaseBoundIpc(database: Database.Database): void {
+  appDb = database;
+  registerAllIPC(
+    database,
+    (nextDb) => {
+      appDb = nextDb;
+    },
+    (runtime) => {
+      agentProviderRuntime = runtime;
+      void trayController.reloadAgentProviders();
+    },
+  );
+}
+
 const gotTheLock =
   isE2E || isLegacyCliInvocation ? true : app.requestSingleInstanceLock();
 const agentDeepLinkRouter = startAgentDeepLinkRouting(
@@ -1058,7 +1072,7 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
       },
       onFailure: () => {
         recoveryAttemptedThisSession = false;
-        appDb = initDatabase();
+        registerDatabaseBoundIpc(initDatabase());
       },
     });
   }
@@ -1085,6 +1099,7 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
       ) {
         recoveryAttemptedThisSession = false;
         cachedRecoveryResult = null;
+        registerDatabaseBoundIpc(initDatabase());
         return {
           success: false,
           error:
@@ -1114,6 +1129,8 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
       }, 500);
       return { success: true };
     } catch (retryErr) {
+      recoveryAttemptedThisSession = false;
+      registerDatabaseBoundIpc(initDatabase());
       const msg =
         retryErr instanceof Error ? retryErr.message : String(retryErr);
       logStartupEvent({
@@ -1177,16 +1194,13 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
     };
   }
 
-  // If recovery failed, re-open the original database and allow another
-  // attempt (the user might select a different candidate).
   recoveryAttemptedThisSession = false;
   logStartupEvent({
     event: "recovery:failed",
     sourcePath: scrubPath(sourcePath),
     error: result.error,
   });
-  const db = initDatabase();
-  appDb = db;
+  registerDatabaseBoundIpc(initDatabase());
 
   return result;
 });
@@ -1891,17 +1905,7 @@ app.whenReady().then(async () => {
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    appDb = db; // Save to module-level variable for createWindow access
-    registerAllIPC(
-      db,
-      (nextDb) => {
-        appDb = nextDb;
-      },
-      (runtime) => {
-        agentProviderRuntime = runtime;
-        void trayController.reloadAgentProviders();
-      },
-    );
+    registerDatabaseBoundIpc(db);
 
     // Create application menu
     // 创建菜单
