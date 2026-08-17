@@ -100,10 +100,12 @@ import {
   verifyRestoredStorageRoot,
 } from "./services/storage-database-inspection";
 import {
+  buildCanonicalDatabaseRecoveryCandidate,
   buildDirectoryRecoveryCandidate,
   buildResidualLegacyRecoveryCandidate,
   buildStandaloneDbBackupCandidate,
   buildUpgradeBackupRecoveryCandidate,
+  findRecoveryCandidateByPath,
   listStandaloneDatabaseBackupFiles,
   previewRecoveryCandidate,
 } from "./services/recovery-candidates";
@@ -124,6 +126,7 @@ import { createDefaultAgentUsagePopoverWindowController } from "./agent-usage-po
 import { startAgentDeepLinkRouting } from "./agent-deep-link-router";
 import { ensureCanonicalStorageAuthorityOnStartup } from "./services/canonical-storage-startup";
 import { createMcpResourceSecretStore } from "./services/mcp-resource-secret-store";
+import { performCanonicalDatabaseRecovery } from "./services/canonical-storage-recovery";
 
 let mainWindow: BrowserWindow | null = null;
 let minimizeToTray = false;
@@ -814,19 +817,10 @@ ipcMain.handle("data:getStatus", () => {
   };
 });
 
-// Data recovery: check for recoverable databases at known locations
-// 数据恢复：在已知位置检查可恢复的数据库
 let cachedRecoveryResult: RecoveryCandidate[] | null = null;
 let transientRecoveryResult: RecoveryCandidate[] | null = null;
+let canonicalRecoveryRequired = false;
 const RECOVERY_DISMISS_MARKER = ".recovery-dismissed";
-// Process-lifetime guard: we only allow performRecovery to trigger a relaunch
-// ONCE per app session. Historically a combination of auto-recovery in the
-// renderer + `app.relaunch() + app.quit()` here produced an instant restart
-// loop when the recovered data was still interpreted as empty on the next
-// boot (e.g. after an NSIS upgrade overwrote userData, or the copy silently
-// targeted a path that was cleared by bootstrapPromptWorkspace). Limiting to
-// one attempt per process ensures the worst case is a single pointless
-// restart, not an infinite loop.
 let recoveryAttemptedThisSession = false;
 
 ipcMain.handle(
@@ -852,13 +846,22 @@ ipcMain.handle(
 
     const currentPath = app.getPath("userData");
     const dismissMarkerPath = path.join(currentPath, RECOVERY_DISMISS_MARKER);
-    if (!ignoreDismissMarker && fs.existsSync(dismissMarkerPath)) {
+    if (
+      !canonicalRecoveryRequired &&
+      !ignoreDismissMarker &&
+      fs.existsSync(dismissMarkerPath)
+    ) {
       cachedRecoveryResult = [];
       transientRecoveryResult = null;
       return [];
     }
 
     const results: RecoveryCandidate[] = [];
+    if (canonicalRecoveryRequired) {
+      const currentCatalog =
+        buildCanonicalDatabaseRecoveryCandidate(getDatabasePath());
+      if (currentCatalog) results.push(currentCatalog);
+    }
     const residualCandidate = buildResidualLegacyRecoveryCandidate(currentPath);
     if (residualCandidate) {
       results.push(residualCandidate);
@@ -868,7 +871,8 @@ ipcMain.handle(
     // When the user explicitly requests a scan (ignoreDismissMarker: true) from
     // the Settings page, always scan all candidate paths regardless of DB state.
     // Without this, users whose DB has any data can never surface recovery candidates.
-    const shouldScanCandidates = isDbEmpty || ignoreDismissMarker;
+    const shouldScanCandidates =
+      canonicalRecoveryRequired || isDbEmpty || ignoreDismissMarker;
     const candidatePaths = getRecoveryCandidatePaths({
       currentPath,
       appDataPath: app.getPath("appData"),
@@ -1013,10 +1017,6 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
     return { success: false, error: "sourcePath is required" };
   }
 
-  // Session-level guard: refuse a second attempt in the same process. If the
-  // first attempt "succeeded" but the DB is still empty on next boot, the
-  // renderer would normally call us again; we must break the loop here rather
-  // than relaunch infinitely.
   if (recoveryAttemptedThisSession) {
     console.warn(
       "[Recovery] performRecovery called more than once in this session; refusing to relaunch again.",
@@ -1039,13 +1039,30 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
   });
 
   const currentPath = app.getPath("userData");
+  const selectedCandidate = findRecoveryCandidateByPath(
+    transientRecoveryResult ?? cachedRecoveryResult ?? [],
+    sourcePath,
+  );
 
-  // Special case: sourcePath === currentPath means a partial data-layout
-  // migration left residual legacy entries in the current userData root.
-  // Re-run the migration in place rather than trying to copy the DB over itself.
-  //
-  // 特殊情况：sourcePath === currentPath 表示当前目录本身有迁移残留。
-  // 直接原地重跑迁移，而不是把 DB 复制到自身。
+  if (selectedCandidate?.sourceType === "current-canonical-db") {
+    return performCanonicalDatabaseRecovery({
+      activeRoot: currentPath,
+      sourceDatabasePath: getDatabasePath(),
+      sourcePath,
+      encryption: safeStorage,
+      scheduleRelaunch: scheduleAppRelaunch,
+      onSuccess: () => {
+        canonicalRecoveryRequired = false;
+        cachedRecoveryResult = null;
+        transientRecoveryResult = null;
+      },
+      onFailure: () => {
+        recoveryAttemptedThisSession = false;
+        appDb = initDatabase();
+      },
+    });
+  }
+
   if (path.resolve(sourcePath) === path.resolve(currentPath)) {
     try {
       closeDatabase();
@@ -1107,7 +1124,6 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
     }
   }
 
-  // Close current database before overwriting
   closeDatabase();
 
   const result = await performJournaledDatabaseRecovery(
@@ -1116,15 +1132,8 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
   );
 
   if (result.success) {
-    // Clear cache so next check sees the recovered data
     cachedRecoveryResult = null;
     transientRecoveryResult = null;
-    // Write (not delete) the dismiss marker so the auto-recovery dialog does
-    // NOT reappear on the next boot after a successful recovery. The user
-    // already chose to restore; showing the dialog again would be confusing.
-    // They can still manually trigger a scan from Settings → Data if needed.
-    // 写入（而非删除）dismiss 标记，防止恢复成功重启后对话框再次弹出。
-    // 用户可以在「设置 → 数据」中手动触发扫描。
     try {
       fs.writeFileSync(
         path.join(currentPath, RECOVERY_DISMISS_MARKER),
@@ -1730,7 +1739,7 @@ app.whenReady().then(async () => {
       throw error;
     }
 
-    let canonicalPromptRecoveryRequired = false;
+    canonicalRecoveryRequired = false;
     try {
       const activeRoot = getUserDataPath();
       const authorityStartup = await ensureCanonicalStorageAuthorityOnStartup({
@@ -1754,7 +1763,7 @@ app.whenReady().then(async () => {
             encryption: safeStorage,
           }).writeMany(secrets),
       });
-      canonicalPromptRecoveryRequired =
+      canonicalRecoveryRequired =
         authorityStartup.status === "recovery-required";
       logStartupEvent({
         event: "startup:canonical_storage_authority",
@@ -1829,7 +1838,7 @@ app.whenReady().then(async () => {
     }
 
     try {
-      if (canonicalPromptRecoveryRequired) {
+      if (canonicalRecoveryRequired) {
         console.warn(
           "[startup] Canonical Prompt graph requires recovery; workspace synchronization was skipped.",
         );

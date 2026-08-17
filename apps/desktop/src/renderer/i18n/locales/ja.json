@@ -3593,6 +3593,7 @@
     "previewTruncated": "プレビューは一部のみ表示しています。完全な内容は復元後に確認できます。",
     "sourceType": {
       "current-residual": "現在のディレクトリの残留データ",
+      "current-canonical-db": "現在の SQLite データベース",
       "external-user-data": "以前のデータディレクトリ",
       "upgrade-backup": "自動アップグレードバックアップ",
       "standalone-db-backup": "単独データベースバックアップ"

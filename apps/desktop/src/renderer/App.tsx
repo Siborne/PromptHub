@@ -1263,6 +1263,11 @@ function App() {
             isOpen={showRecoveryDialog}
             onClose={() => setShowRecoveryDialog(false)}
             databases={recoverableDatabases}
+            allowStartFresh={
+              !recoverableDatabases.some(
+                (candidate) => candidate.sourceType === "current-canonical-db",
+              )
+            }
           />
         </Suspense>
       ) : null}

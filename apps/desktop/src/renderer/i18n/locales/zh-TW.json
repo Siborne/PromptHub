@@ -3593,6 +3593,7 @@
     "previewTruncated": "預覽只顯示部分項目，復原後可查看完整資料。",
     "sourceType": {
       "current-residual": "目前目錄殘留資料",
+      "current-canonical-db": "目前 SQLite 資料庫",
       "external-user-data": "舊資料目錄",
       "upgrade-backup": "自動升級備份",
       "standalone-db-backup": "獨立資料庫備份"

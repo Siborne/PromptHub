@@ -3631,6 +3631,7 @@
     "previewTruncated": "预览只展示部分条目，恢复后可查看完整数据。",
     "sourceType": {
       "current-residual": "当前目录残留数据",
+      "current-canonical-db": "当前 SQLite 数据库",
       "external-user-data": "旧数据目录",
       "upgrade-backup": "自动升级备份",
       "standalone-db-backup": "独立数据库备份"

@@ -3594,6 +3594,7 @@
     "previewTruncated": "L’aperçu est tronqué. Restaurez la source pour voir l’ensemble des éléments.",
     "sourceType": {
       "current-residual": "Résidus du répertoire actuel",
+      "current-canonical-db": "Base SQLite actuelle",
       "external-user-data": "Ancien répertoire de données",
       "upgrade-backup": "Sauvegarde automatique de mise à niveau",
       "standalone-db-backup": "Sauvegarde de base de données autonome"

@@ -3593,6 +3593,7 @@
     "previewTruncated": "La vista previa está truncada. Restaure la fuente para ver todos los elementos.",
     "sourceType": {
       "current-residual": "Residuos del directorio actual",
+      "current-canonical-db": "Base de datos SQLite actual",
       "external-user-data": "Directorio de datos anterior",
       "upgrade-backup": "Copia automática de actualización",
       "standalone-db-backup": "Copia independiente de base de datos"

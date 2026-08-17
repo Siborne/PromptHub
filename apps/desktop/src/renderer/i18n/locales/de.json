@@ -3593,6 +3593,7 @@
     "previewTruncated": "Die Vorschau ist gekürzt. Stellen Sie die Quelle wieder her, um alle Einträge zu sehen.",
     "sourceType": {
       "current-residual": "Reste im aktuellen Verzeichnis",
+      "current-canonical-db": "Aktuelle SQLite-Datenbank",
       "external-user-data": "Früheres Datenverzeichnis",
       "upgrade-backup": "Automatisches Upgrade-Backup",
       "standalone-db-backup": "Eigenständiges Datenbank-Backup"

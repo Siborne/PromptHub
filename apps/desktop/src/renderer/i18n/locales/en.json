@@ -3633,6 +3633,7 @@
     "previewTruncated": "Preview is truncated. Restore the source to inspect all items.",
     "sourceType": {
       "current-residual": "Current directory residuals",
+      "current-canonical-db": "Current SQLite catalog",
       "external-user-data": "Previous data directory",
       "upgrade-backup": "Automatic upgrade backup",
       "standalone-db-backup": "Standalone database backup"
