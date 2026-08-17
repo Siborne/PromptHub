@@ -19,7 +19,10 @@ import {
 } from "@prompthub/db";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { publishCanonicalStorageAuthority } from "../../../src/main/services/canonical-storage-authority";
+import {
+  publishCanonicalStorageAuthority,
+  recoverCanonicalStorageAuthorityFromDatabase,
+} from "../../../src/main/services/canonical-storage-authority";
 
 describe("canonical storage authority publication", () => {
   const roots: string[] = [];
@@ -203,5 +206,123 @@ describe("canonical storage authority publication", () => {
       fs.readFileSync(path.join(input.checkpointPath, "owned.txt"), "utf8"),
     ).toBe("keep");
     expect(readCanonicalStorageAuthority(input.activeRoot)).toBeNull();
+  });
+
+  it("atomically recovers an invalid authority from an explicitly selected SQLite catalog", async () => {
+    const input = fixture();
+    await publishCanonicalStorageAuthority(options(input));
+    const originalPromptManifest = path.join(
+      input.activeRoot,
+      "data",
+      "prompts",
+      input.prompt.id,
+      "manifest.json",
+    );
+    fs.rmSync(originalPromptManifest);
+
+    const database = new DatabaseAdapter(input.sourceDatabasePath);
+    const recoveredPrompt = new PromptDB(database).create({
+      title: "Recovered from SQLite",
+      userPrompt: "Selected explicitly",
+    });
+    database.close();
+
+    const result = await recoverCanonicalStorageAuthorityFromDatabase({
+      ...options(input),
+      operationId: "canonical-authority-recovery-test",
+    });
+
+    expect(result.status).toBe("committed");
+    expect(
+      readCanonicalStorageShadow(path.join(input.activeRoot, "data"))
+        .promptGraph.snapshot.prompts,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: input.prompt.id }),
+        expect.objectContaining({ id: recoveredPrompt.id }),
+      ]),
+    );
+    expect(
+      fs.existsSync(
+        path.join(result.recoveryArtifactPath, "root", "data", "catalog.json"),
+      ),
+    ).toBe(true);
+  });
+
+  it("refuses recovery while the existing canonical authority is valid", async () => {
+    const input = fixture();
+    await publishCanonicalStorageAuthority(options(input));
+
+    await expect(
+      recoverCanonicalStorageAuthorityFromDatabase(options(input)),
+    ).rejects.toThrow("does not require recovery");
+  });
+
+  it("refuses recovery without a published authority marker", async () => {
+    const input = fixture();
+
+    await expect(
+      recoverCanonicalStorageAuthorityFromDatabase(options(input)),
+    ).rejects.toThrow("requires an authority marker");
+  });
+
+  it("rolls back to the invalid pre-recovery graph when recovery verification fails", async () => {
+    const input = fixture();
+    await publishCanonicalStorageAuthority(options(input));
+    const promptManifestPath = path.join(
+      input.activeRoot,
+      "data",
+      "prompts",
+      input.prompt.id,
+      "manifest.json",
+    );
+    fs.rmSync(promptManifestPath);
+    const databaseBeforeRecovery = fs.readFileSync(input.sourceDatabasePath);
+
+    await expect(
+      recoverCanonicalStorageAuthorityFromDatabase({
+        ...options(input),
+        operationId: "canonical-authority-recovery-rollback-test",
+        injectFailure: (stage) => {
+          if (stage === "verified") throw new Error("recovery interrupted");
+        },
+      }),
+    ).rejects.toThrow("recovery interrupted");
+
+    expect(fs.existsSync(promptManifestPath)).toBe(false);
+    expect(fs.readFileSync(input.sourceDatabasePath)).toEqual(
+      databaseBeforeRecovery,
+    );
+  });
+
+  it("rejects an unsafe existing device binding target during recovery", async () => {
+    const input = fixture();
+    await publishCanonicalStorageAuthority(options(input));
+    fs.rmSync(
+      path.join(
+        input.activeRoot,
+        "data",
+        "prompts",
+        input.prompt.id,
+        "manifest.json",
+      ),
+    );
+    const bindingPath = path.join(
+      input.activeRoot,
+      "config",
+      "devices",
+      "mcp-bindings.json",
+    );
+    fs.rmSync(bindingPath);
+    fs.mkdirSync(bindingPath);
+
+    await expect(
+      recoverCanonicalStorageAuthorityFromDatabase({
+        ...options(input),
+        operationId: "canonical-authority-recovery-unsafe-binding-test",
+      }),
+    ).rejects.toThrow("MCP binding target is unsafe");
+
+    expect(fs.statSync(bindingPath).isDirectory()).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 export type RecoveryCandidateType =
   | "current-residual"
+  | "current-canonical-db"
   | "external-user-data"
   | "upgrade-backup"
   | "standalone-db-backup";

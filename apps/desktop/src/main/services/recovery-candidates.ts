@@ -322,6 +322,93 @@ export function buildStandaloneDbBackupCandidate(
   };
 }
 
+function readCandidateTableCount(
+  database: DatabaseAdapter.Database,
+  tableName: string,
+  optional = false,
+): number {
+  try {
+    const row = database
+      .prepare(`SELECT COUNT(*) as count FROM ${tableName}`)
+      .get() as { count?: number } | undefined;
+    return row?.count ?? 0;
+  } catch (error) {
+    if (optional) return 0;
+    throw error;
+  }
+}
+
+function hasAdditionalDurableRows(database: DatabaseAdapter.Database): boolean {
+  return ["prompt_versions", "rule_versions", "settings"].some(
+    (tableName) => readCandidateTableCount(database, tableName, true) > 0,
+  );
+}
+
+export function buildCanonicalDatabaseRecoveryCandidate(
+  databasePath: string,
+): RecoveryCandidate | null {
+  let database: DatabaseAdapter.Database | null = null;
+  try {
+    const stats = fs.lstatSync(databasePath);
+    if (!stats.isFile() || stats.isSymbolicLink() || stats.size < 4096) {
+      return null;
+    }
+    database = new DatabaseAdapter(databasePath, { readOnly: true });
+    const quickCheck = database.pragma("quick_check") as Array<{
+      quick_check?: unknown;
+    }>;
+    if (quickCheck.length !== 1 || quickCheck[0]?.quick_check !== "ok") {
+      return null;
+    }
+    const promptCount = readCandidateTableCount(database, "prompts");
+    const folderCount = readCandidateTableCount(database, "folders");
+    const skillCount = readCandidateTableCount(database, "skills", true);
+    const ruleCount = readCandidateTableCount(database, "rules", true);
+    const hasDurableRows =
+      promptCount + folderCount + skillCount + ruleCount > 0 ||
+      hasAdditionalDurableRows(database);
+    if (!hasDurableRows) return null;
+    return {
+      sourcePath: databasePath,
+      sourceType: "current-canonical-db",
+      displayName: "Current SQLite catalog",
+      displayPath: databasePath,
+      promptCount,
+      folderCount,
+      skillCount,
+      dbSizeBytes: stats.size,
+      lastModified: stats.mtime.toISOString(),
+      previewAvailable: true,
+      dataSources: ruleCount > 0 ? ["sqlite", "rules"] : ["sqlite"],
+      contentCounts: ruleCount > 0 ? { rules: ruleCount } : undefined,
+      description:
+        "The current SQLite catalog is intact and can rebuild the damaged canonical file graph.",
+      backupId: null,
+      fromVersion: null,
+      toVersion: null,
+    };
+  } catch {
+    return null;
+  } finally {
+    try {
+      database?.close();
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
+export function findRecoveryCandidateByPath(
+  candidates: readonly RecoveryCandidate[],
+  sourcePath: string,
+): RecoveryCandidate | undefined {
+  const normalizedSourcePath = path.resolve(sourcePath).toLowerCase();
+  return candidates.find(
+    (candidate) =>
+      path.resolve(candidate.sourcePath).toLowerCase() === normalizedSourcePath,
+  );
+}
+
 function toIsoTimestamp(value: unknown): string | null {
   if (typeof value === "string" && value.trim().length > 0) {
     const parsed = new Date(value);

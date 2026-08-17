@@ -6,6 +6,7 @@ import {
   acquireStorageMaintenanceIntent,
   deriveStorageRootIdentity,
   readCanonicalStorageAuthority,
+  readPromptCanonicalGraph,
   readRendererPersistenceMigrationMarker,
   readRuntimeLayoutState,
   runJournaledStorageRestore,
@@ -79,6 +80,32 @@ function copyExistingRootEntry(
     errorOnExist: true,
     force: false,
   });
+}
+
+function copyProjectedDeviceBindings(
+  checkpointPath: string,
+  stageRoot: string,
+): void {
+  const source = path.join(checkpointPath, "device", "mcp-bindings.json");
+  if (!fs.existsSync(source)) return;
+  const targetDirectory = path.join(stageRoot, "config", "devices");
+  if (fs.existsSync(targetDirectory)) {
+    const directoryStats = fs.lstatSync(targetDirectory);
+    if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink()) {
+      throw new Error("Canonical authority device config path is unsafe");
+    }
+  } else {
+    fs.mkdirSync(targetDirectory, { recursive: true, mode: 0o700 });
+  }
+  const target = path.join(targetDirectory, "mcp-bindings.json");
+  if (fs.existsSync(target)) {
+    const targetStats = fs.lstatSync(target);
+    if (!targetStats.isFile() || targetStats.isSymbolicLink()) {
+      throw new Error("Canonical authority MCP binding target is unsafe");
+    }
+    fs.rmSync(target);
+  }
+  fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL);
 }
 
 function hashFile(filePath: string): string {
@@ -183,21 +210,7 @@ function prepareAuthorityCandidate(
     fs.constants.COPYFILE_EXCL,
   );
   copyCompletedMigrationState(options.activeRoot, candidateData);
-  const bindingSource = path.join(
-    options.checkpointPath,
-    "device",
-    "mcp-bindings.json",
-  );
-  if (fs.existsSync(bindingSource)) {
-    const bindingTarget = path.join(
-      stageRoot,
-      "config",
-      "devices",
-      "mcp-bindings.json",
-    );
-    fs.mkdirSync(path.dirname(bindingTarget), { recursive: true, mode: 0o700 });
-    fs.copyFileSync(bindingSource, bindingTarget, fs.constants.COPYFILE_EXCL);
-  }
+  copyProjectedDeviceBindings(options.checkpointPath, stageRoot);
   writeRuntimeLayoutState(stageRoot, {
     identityRoot: options.activeRoot,
     lastVerifiedOperation: operationId,
@@ -214,9 +227,22 @@ function prepareAuthorityCandidate(
 export async function publishCanonicalStorageAuthority(
   options: PublishCanonicalStorageAuthorityOptions,
 ): Promise<PublishCanonicalStorageAuthorityResult> {
+  return publishCanonicalStorageAuthorityInternal(options, false);
+}
+
+async function publishCanonicalStorageAuthorityInternal(
+  options: PublishCanonicalStorageAuthorityOptions,
+  replaceInvalidAuthority: boolean,
+): Promise<PublishCanonicalStorageAuthorityResult> {
   const activeRoot = path.resolve(options.activeRoot);
-  if (readCanonicalStorageAuthority(activeRoot)) {
+  const existingAuthority = readCanonicalStorageAuthority(activeRoot);
+  if (existingAuthority && !replaceInvalidAuthority) {
     throw new Error("Canonical file authority is already published");
+  }
+  if (!existingAuthority && replaceInvalidAuthority) {
+    throw new Error(
+      "Canonical file authority recovery requires an authority marker",
+    );
   }
   if (!readRendererPersistenceMigrationMarker(activeRoot)) {
     throw new Error(
@@ -226,7 +252,9 @@ export async function publishCanonicalStorageAuthority(
   const operationId = options.operationId ?? `authority-${crypto.randomUUID()}`;
   const maintenance = acquireStorageMaintenanceIntent(activeRoot, {
     operationId,
-    operationKind: "canonical-authority",
+    operationKind: replaceInvalidAuthority
+      ? "canonical-authority-recovery"
+      : "canonical-authority",
   });
   let ownsCheckpoint = false;
   try {
@@ -268,4 +296,25 @@ export async function publishCanonicalStorageAuthority(
     }
     maintenance.release();
   }
+}
+
+export async function recoverCanonicalStorageAuthorityFromDatabase(
+  options: PublishCanonicalStorageAuthorityOptions,
+): Promise<PublishCanonicalStorageAuthorityResult> {
+  const activeRoot = path.resolve(options.activeRoot);
+  if (!readCanonicalStorageAuthority(activeRoot)) {
+    throw new Error(
+      "Canonical file authority recovery requires an authority marker",
+    );
+  }
+  let graphIsInvalid = false;
+  try {
+    readPromptCanonicalGraph(path.join(activeRoot, "data"));
+  } catch {
+    graphIsInvalid = true;
+  }
+  if (!graphIsInvalid) {
+    throw new Error("Canonical file authority does not require recovery");
+  }
+  return publishCanonicalStorageAuthorityInternal(options, true);
 }

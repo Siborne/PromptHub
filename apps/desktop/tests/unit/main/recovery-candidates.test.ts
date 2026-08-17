@@ -9,8 +9,10 @@ import {
 } from "../../../src/main/database/schema";
 
 import {
+  buildCanonicalDatabaseRecoveryCandidate,
   buildResidualLegacyRecoveryCandidate,
   buildStandaloneDbBackupCandidate,
+  findRecoveryCandidateByPath,
   listStandaloneDatabaseBackupFiles,
   previewRecoveryCandidate,
 } from "../../../src/main/services/recovery-candidates";
@@ -247,6 +249,90 @@ describe("recovery-candidates", () => {
     expect(preview.previewAvailable).toBe(true);
     expect(preview.items.some((item) => item.kind === "prompt")).toBe(true);
     expect(preview.items[0]?.title).toContain("Prompt");
+  });
+
+  it("surfaces the current SQLite catalog only as an explicit canonical recovery candidate", async () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-recovery-candidate-"),
+    );
+    tempDirs.push(userDataPath);
+    const databasePath = path.join(userDataPath, "prompthub.db");
+    createTestDatabase(databasePath, { prompts: 2, folders: 1, skills: 1 });
+    const database = new DatabaseAdapter(databasePath);
+    const now = Date.now();
+    database
+      .prepare(
+        `INSERT INTO rules (
+        id, scope, platform_id, platform_name, platform_icon,
+        platform_description, canonical_file_name, description,
+        managed_path, target_path, project_root_path, sync_status,
+        current_version, content_hash, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "rule-1",
+        "global",
+        "codex",
+        "Codex",
+        "bot",
+        "",
+        "AGENTS.md",
+        "Rule 1",
+        "/tmp/rules/rule-1.md",
+        "/tmp/AGENTS.md",
+        null,
+        "synced",
+        0,
+        "hash",
+        now,
+        now,
+      );
+    database.close();
+
+    const candidate = buildCanonicalDatabaseRecoveryCandidate(databasePath);
+
+    expect(candidate).toMatchObject({
+      sourcePath: databasePath,
+      sourceType: "current-canonical-db",
+      promptCount: 2,
+      folderCount: 1,
+      skillCount: 1,
+      dataSources: ["sqlite", "rules"],
+      contentCounts: { rules: 1 },
+      previewAvailable: true,
+    });
+    expect(findRecoveryCandidateByPath([candidate!], databasePath)).toBe(
+      candidate,
+    );
+    expect(
+      findRecoveryCandidateByPath([candidate!], `${databasePath}.missing`),
+    ).toBeUndefined();
+    await expect(previewRecoveryCandidate(candidate!)).resolves.toMatchObject({
+      previewAvailable: true,
+      truncated: false,
+    });
+  });
+
+  it("rejects an invalid current SQLite catalog as a canonical recovery candidate", () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-recovery-candidate-"),
+    );
+    tempDirs.push(userDataPath);
+    const databasePath = path.join(userDataPath, "prompthub.db");
+    fs.writeFileSync(databasePath, Buffer.alloc(4096, 1));
+
+    expect(buildCanonicalDatabaseRecoveryCandidate(databasePath)).toBeNull();
+  });
+
+  it("does not offer an empty SQLite catalog for canonical recovery", () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-recovery-candidate-"),
+    );
+    tempDirs.push(userDataPath);
+    const databasePath = path.join(userDataPath, "prompthub.db");
+    createTestDatabase(databasePath);
+
+    expect(buildCanonicalDatabaseRecoveryCandidate(databasePath)).toBeNull();
   });
 
   it("previews prompt data from a unified data directory candidate", async () => {
