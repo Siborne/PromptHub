@@ -580,10 +580,10 @@ Thanks to everyone who has contributed to PromptHub.
 
 ## Star history
 
-<a href="https://star-history.com/#legeling/PromptHub&Date">
+<a href="https://star-history.dera.page/#legeling/PromptHub&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=legeling/PromptHub&type=Date&theme=dark" />
-    <img alt="Star history" src="https://api.star-history.com/svg?repos=legeling/PromptHub&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=legeling/PromptHub&type=Date&theme=dark" />
+    <img alt="Star history" src="https://star-history.dera.page/svg?repos=legeling/PromptHub&type=Date" />
   </picture>
 </a>
 
