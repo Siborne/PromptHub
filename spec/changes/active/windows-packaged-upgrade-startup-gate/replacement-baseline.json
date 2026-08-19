@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-19T11:22:05Z",
+  "repository": "legeling/PromptHub",
+  "tag": {
+    "name": "v0.6.0-beta.1",
+    "objectSha": "8990383992d0ad1fd778f37656284feb9d559d04",
+    "peeledCommitSha": "2ed96c7f23da512bb41a3081ca4c198df483b2ba"
+  },
+  "release": {
+    "databaseId": 370007019,
+    "nodeId": "RE_kwDOQfJatM4WDdvr",
+    "isDraft": true,
+    "isPrerelease": true,
+    "createdAt": "2026-08-13T14:48:44Z",
+    "publishedAt": "2026-08-13T15:13:35Z"
+  },
+  "assets": [
+    {
+      "name": "latest-arm64.yml",
+      "size": 158741,
+      "digest": "sha256:67c278ef74f9eb05bf343cd34a0f169b2ac7f60e2728cac18a66ec3b644de0cc"
+    },
+    {
+      "name": "latest-linux.yml",
+      "size": 156435,
+      "digest": "sha256:52a405ee66596e479bb25bc8db97579dd36f2e7034d0d66f6bbcce35736110ec"
+    },
+    {
+      "name": "latest-mac-arm64.yml",
+      "size": 156727,
+      "digest": "sha256:aaf80f2e0f0e086fc28cfe5d0d26a70e74b69df5534086fe0359760539fc021b"
+    },
+    {
+      "name": "latest-mac-x64.yml",
+      "size": 156725,
+      "digest": "sha256:e923def7ec7cd8ff714974a2660090c045b53e10761184f87c7f408e5f89a0c5"
+    },
+    {
+      "name": "latest-mac.yml",
+      "size": 156725,
+      "digest": "sha256:e923def7ec7cd8ff714974a2660090c045b53e10761184f87c7f408e5f89a0c5"
+    },
+    {
+      "name": "latest-x64.yml",
+      "size": 158737,
+      "digest": "sha256:1ee7dc48649fb1400e1a1d7f650c54ff3ed7d72c353c7db494f065227838800b"
+    },
+    {
+      "name": "latest.yml",
+      "size": 158737,
+      "digest": "sha256:1ee7dc48649fb1400e1a1d7f650c54ff3ed7d72c353c7db494f065227838800b"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-amd64.deb",
+      "size": 87968980,
+      "digest": "sha256:926e3864601f45559dd5337aa5ade304c237fb6c3bd0efd49a4966d21642f4c1"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-arm64.dmg",
+      "size": 119156498,
+      "digest": "sha256:c20210ef083da67285af07e8c2986ae42b77ff64875cd13f0168205bdc707096"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-arm64.dmg.blockmap",
+      "size": 125754,
+      "digest": "sha256:80ba9cf55af559caff1f4569ea3a78e63c1f6051d4a974fa6cab2e594fe6feb6"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-arm64.zip",
+      "size": 114047030,
+      "digest": "sha256:c960e905688605ff564d0c30f0906412b461004912120ba316d3aadae9bd533a"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-arm64.zip.blockmap",
+      "size": 117485,
+      "digest": "sha256:2c500f471f11e17dced92bde89f7eabacc1292b36d4496a2052c0e56d326eb0e"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-x64.AppImage",
+      "size": 125867882,
+      "digest": "sha256:35af1406bc9f70d24c1ce1e698a4803f510dfcdf9388874d0678b2383834f737"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-x64.dmg",
+      "size": 125237335,
+      "digest": "sha256:fc3ebdc83b2ac8a44e411b5a35d6e99f574a4f4288c338effebe6754affcddf8"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-x64.dmg.blockmap",
+      "size": 132165,
+      "digest": "sha256:63336d61dd0b362aa275f5d8f888a82e73d85b47711cb9c12ca04f725c54a766"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-x64.zip",
+      "size": 120160669,
+      "digest": "sha256:9087144b712934ef2c949afc5d61ed9f1044d2beb7cbffa8edfae6cedac3bea2"
+    },
+    {
+      "name": "PromptHub-0.6.0-beta.1-x64.zip.blockmap",
+      "size": 123403,
+      "digest": "sha256:f6751c373cf983fb04afeec7f314b026c1aa1108fd94b6783767e011a7a3915d"
+    },
+    {
+      "name": "prompthub-cli-0.6.0-beta.1.tgz",
+      "size": 289282,
+      "digest": "sha256:e6d0a236b7ffbf19ae116ed868c06059aa905e75482b26e697f891f3d2a3716e"
+    },
+    {
+      "name": "PromptHub-Setup-0.6.0-beta.1-arm64.exe",
+      "size": 93251544,
+      "digest": "sha256:03222c8b0273fac4dbc8568daeebbee9c8c606614d2170945d0ee1124ec53357"
+    },
+    {
+      "name": "PromptHub-Setup-0.6.0-beta.1-x64.exe",
+      "size": 86964443,
+      "digest": "sha256:429d041f3c2345ef45c65d14e4c62791c58678a33e8a5d93f8509d81468da180"
+    }
+  ]
+}

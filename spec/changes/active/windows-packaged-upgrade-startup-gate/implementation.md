@@ -2,9 +2,9 @@
 
 ## Status
 
-Implemented and fully verified. `v0.6.0-beta.1` remains withdrawn as a draft;
-the successful replacement-candidate verification does not republish or retag
-the release.
+Status: release-pending. Implementation is fully verified.
+`v0.6.0-beta.1` remains withdrawn as a draft; the successful
+replacement-candidate verification does not republish or retag the release.
 
 ## Implemented
 
@@ -94,6 +94,48 @@ the release.
 ## Publication State
 
 - No code or build-matrix blocker remains for this startup fix.
-- The existing `v0.6.0-beta.1` GitHub release still points at the withdrawn
-  candidate and remains a draft. Retagging or publishing is outside this change
-  and requires an explicit release action.
+- On 2026-08-19 the maintainer explicitly authorized reusing and overwriting
+  `v0.6.0-beta.1` instead of creating `beta.2`.
+- The existing tag still points at the withdrawn candidate and the release
+  remains a draft. They are intentionally preserved until the current dirty
+  worktree is reduced to a clean, pushed candidate and the current quick/full
+  plus platform gates pass.
+- The pre-replacement remote baseline is recorded in
+  `replacement-baseline.json`: annotated tag object, peeled commit, draft
+  identity, and all 20 asset names, sizes, and GitHub SHA-256 digests.
+- Candidate preflight repaired the only known Desktop-suite red state without
+  weakening production code: `skill-ui.integration.test.tsx` now supplies the
+  complete current Skill store contract (`registrySkills`, remote stores,
+  registry loading, gallery columns, and pending child deployment state). Its
+  focused integration suite passes 1 file / 11 tests; the prior seven failures
+  all stopped at the stale mock before rendering.
+- The complete Desktop Vitest suite now passes 610 files / 5,434 tests in
+  664.42 seconds. Its stderr contains existing deprecation, React `act`, mock,
+  jsdom navigation, and expected failure-path logs but no test failure. The
+  delegated test process exited without leaving a Vitest worker.
+- On the frozen replacement candidate, `pnpm verify:release:quick` passed all
+  29 checks in 1,230.1 seconds and `pnpm verify:release` passed all 42 checks in
+  796.3 seconds with zero failed or blocked checks. The full profile includes
+  Core/Desktop performance budgets, four Desktop integration shards, Desktop
+  build and bundle budget, built-artifact Electron smoke, CLI/Web builds,
+  self-hosted Web smoke, Cloudflare dry-run build and Mobile checks.
+- Release documentation is synchronized across the root and six translated
+  user READMEs plus the website changelog. `docs/README.md` remains unchanged
+  because it is only a documentation router. Website generated stable metadata
+  and default downloads remain `0.5.9` as required for a beta.
+- Isolated Agent config-files E2E passed and its screenshot confirms the gray
+  file tree / white primary editor hierarchy. The broader Agent workspace E2E
+  passed after its stale activation-button calls and non-waiting plan lookup
+  were updated to the existing per-provider switch contract; production
+  activation behavior was not relaxed. No matching public Agent screenshot
+  exists, so unrelated stable screenshots were intentionally retained.
+- `candidate-scope.md` freezes included replacement deltas, non-claims,
+  worktree/sensitive-file audit results, verification state, and the remaining
+  external mutation boundary.
+- The repository workflow already refreshes an existing release in place,
+  preserves its draft state, and uploads deterministic assets with `--clobber`.
+  `TEST-WINSTART-007` locks this replacement path and passed with the complete
+  release-workflow suite: 1 file / 8 tests. File-size governance, spec
+  traceability, generated index and diff hygiene also passed. The leased tag
+  update, replacement workflow run, asset verification and explicit promotion
+  remain pending under `T-WINSTART-008`.
