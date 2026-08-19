@@ -15,12 +15,15 @@ const webPackage = JSON.parse(
 ) as { version: string };
 
 describe("self-hosted Web release workflow", () => {
-  it("publishes Web images from the standard Desktop release tag", () => {
+  it("publishes versioned Web images from release tags without moving stable latest for prereleases", () => {
     expect(workflowSource).toContain('- "packages/core/**"');
     expect(workflowSource).toContain('- "v*"');
     expect(workflowSource).toContain("type=semver,pattern={{version}}");
     expect(workflowSource).toContain("type=semver,pattern=v{{version}}");
     expect(workflowSource).toContain(
+      "type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}",
+    );
+    expect(workflowSource).not.toContain(
       "type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}",
     );
   });

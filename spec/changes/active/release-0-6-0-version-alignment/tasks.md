@@ -15,3 +15,8 @@
       actual results and residual release risks.
 - [x] `T-REL-005` Complete converge records; keep the change active until
       `0.6.0` publication is complete.
+- [x] `T-REL-006` Add the failing GHCR prerelease-isolation regression, then
+      restrict the mutable `latest` alias to stable tag refs (`FR-REL-003`,
+      `DES-REL-004`, `TEST-REL-006`).
+- [ ] `T-REL-007` Verify the corrected tag workflow publishes beta-versioned
+      images without changing stable `latest`, then record remote evidence.

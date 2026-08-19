@@ -16,6 +16,13 @@
 - The `0.6.0` preparation record and unreleased changelog note are synchronized.
 - Public website badges, introduction copy, and download URLs remain on the
   published `0.5.9` stable release.
+- During the `v0.6.0-beta.1` replacement, the first Self-Hosted Web run was
+  cancelled before its Docker job because the existing any-`v*` metadata rule
+  would also publish the mutable GHCR `latest` alias. No beta image was pushed
+  by that cancelled run.
+- The GHCR metadata rule now emits `latest` only for a tag ref whose ref name
+  has no prerelease suffix. Beta images retain explicit semver, source-tag and
+  commit-SHA tags.
 
 ## Verification
 
@@ -51,6 +58,21 @@
     lines each, above the preferred 1500-line limit. All shared, database, core,
     CLI, Desktop, Web, Worker, and Mobile typecheck/test/lint checks in the
     profile passed.
+- `TEST-REL-006` first failed against the any-`v*` raw `latest` rule, then
+  passed after the stable-ref guard was added. The cancelled Web run completed
+  Web verification and Docker Compose validation; its Docker metadata and
+  build-push steps never started.
+- The corrected candidate passed `pnpm verify:release` with 42/42 checks, zero
+  failed or blocked checks, and a maximum concurrency of two. Performance,
+  Desktop unit/integration/build/bundle/E2E, CLI/Web builds, Web smoke,
+  Cloudflare dry-run and Mobile gates all passed.
+- Read-only GHCR inspection confirmed the pre-existing `latest` alias still
+  points at withdrawn beta revision `2ed96c7f` with manifest digest
+  `sha256:c9b4c4f3b7a463146685144a4f4f4b8ef23e2b07c5d16c9d51a9c1e2fcd33664`.
+  The explicit stable `0.5.9` image remains available at digest
+  `sha256:e8d6214030a27090a443ca38d4b5f07d4331af09d9a20b71e5138090bd8a2e40`;
+  `T-REL-007` must restore `latest` to that stable image before beta
+  publication completes.
 
 ## Analyze
 
@@ -81,5 +103,8 @@ this change has no visible product UI delta.
 
 ## Follow-ups
 
-- Tagging, signing, artifact publication, and remote verification are separate
-  publication tasks and are not performed by this version-alignment change.
+- Complete `T-REL-006` and retag the replacement candidate, then verify the
+  versioned beta image is present while stable `latest` keeps the `0.5.9`
+  manifest digest.
+- Desktop signing, artifact publication, and promotion remain governed by the
+  `v0.6.0-beta.1` replacement release change.

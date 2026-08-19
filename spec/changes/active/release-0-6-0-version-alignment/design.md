@@ -28,6 +28,15 @@ Add a `0.6.0` release record with `Preparation` status and an `Unreleased`
 changelog summary. Do not change localized README stable badges or fixed
 download links until publication.
 
+## `DES-REL-004`: Stable GHCR Alias Isolation
+
+The Self-Hosted Web tag workflow always publishes immutable prerelease tags
+such as `0.6.0-beta.1`, `v0.6.0-beta.1`, the source tag, and commit SHA. It
+publishes the mutable `latest` alias only when `github.ref_name` has no semver
+prerelease suffix. The decision is constant-time string classification and does
+not change image contents, build inputs, registry authentication, or the
+stable-versioned tags already present in GHCR.
+
 ## Affected Areas
 
 - Data model: none
@@ -68,3 +77,4 @@ download links until publication.
 | `FR-REL-001`  | `DES-REL-001`                | `TEST-REL-001`                                 | `T-REL-001`              |
 | `FR-REL-002`  | `DES-REL-002`, `DES-REL-003` | `TEST-REL-002`, `TEST-REL-003`, `TEST-REL-005` | `T-REL-002`, `T-REL-003` |
 | `NFR-REL-001` | `DES-REL-002`                | `TEST-REL-003`, `TEST-REL-004`                 | `T-REL-002`              |
+| `FR-REL-003`  | `DES-REL-004`                | `TEST-REL-006`                                 | `T-REL-006`, `T-REL-007` |

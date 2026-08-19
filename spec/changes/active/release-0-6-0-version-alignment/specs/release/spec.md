@@ -34,6 +34,17 @@ Release metadata selection must scan the release index and changelog linearly,
 use bounded working memory, and fail explicitly when the published stable
 record or its dated changelog entry is missing.
 
+### `FR-REL-003`: Prerelease GHCR Isolation
+
+Self-Hosted Web prerelease tags MUST publish versioned GHCR images without
+moving the mutable stable `latest` alias.
+
+#### `AC-REL-004`
+
+Given a tag such as `v0.6.0-beta.1`, the workflow emits prerelease-version and
+commit-specific image tags but does not emit `latest`. Given a stable tag such
+as `v0.6.0`, the same workflow emits `latest` in addition to versioned tags.
+
 ## Verification
 
 - `TEST-REL-001`: assert all authoritative product manifests equal `0.6.0`.
@@ -45,3 +56,5 @@ record or its dated changelog entry is missing.
   entries fail explicitly.
 - `TEST-REL-005`: run website synchronization and verify generated public
   metadata remains on the latest published stable version.
+- `TEST-REL-006`: assert the Self-Hosted Web workflow gates the raw `latest`
+  image tag on a stable ref name and rejects the previous any-`v*` condition.

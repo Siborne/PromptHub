@@ -167,12 +167,17 @@ Useful root-level commands:
 
 `apps/web` already includes a production `Dockerfile` and ready-to-use compose files.
 
-When a standard `v<version>` release tag is built in CI, PromptHub also
-publishes a container image to GHCR:
+When a `v<version>` release tag is built in CI, PromptHub also publishes a
+container image to GHCR:
 
 - `ghcr.io/legeling/prompthub-web:<version>`
 - `ghcr.io/legeling/prompthub-web:v<version>`
-- `ghcr.io/legeling/prompthub-web:latest`
+- `ghcr.io/legeling/prompthub-web:latest` for stable tags only
+
+Prerelease tags such as `v0.6.0-beta.1` publish their explicit versioned image
+without moving `latest`. Use the explicit prerelease tag for manual beta
+testing; production deployments that track `latest` remain on the latest
+stable image.
 
 ### Quick Start with Docker Compose
 
@@ -209,6 +214,8 @@ pre-release process, but this is not multi-replica SQLite support; do not scale
 multiple containers against the same data volume.
 
 ### Deploy from the Published GHCR Image
+
+The `latest` alias below tracks stable releases only.
 
 ```bash
 docker pull ghcr.io/legeling/prompthub-web:latest

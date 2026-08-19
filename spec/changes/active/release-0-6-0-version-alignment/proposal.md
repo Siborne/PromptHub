@@ -27,6 +27,8 @@ advertising nonexistent `0.6.0` downloads.
   - record `0.6.0` as a release preparation
   - keep public stable downloads and badges on the latest explicit stable
     release record
+  - publish prerelease Web images under versioned GHCR tags without moving the
+    stable `latest` image
   - verify the explicit public stable release boundary
 - Out of scope:
   - creating or pushing a `v0.6.0` tag
@@ -38,6 +40,8 @@ advertising nonexistent `0.6.0` downloads.
 
 - A missed product manifest could produce artifacts with inconsistent versions.
 - Premature website synchronization could create broken `0.6.0` download links.
+- A prerelease tag could overwrite GHCR `latest` and silently move stable
+  self-hosted deployments onto a beta image.
 - The dirty worktree contains unrelated feature work; release edits must remain
   isolated and must not rewrite those files.
 
