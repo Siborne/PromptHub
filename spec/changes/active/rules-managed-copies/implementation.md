@@ -2,9 +2,35 @@
 
 ## Status
 
-In progress.
+Needs convergence. Core implementation is present, but the remaining Rules
+sync-status and deployment-action copy/test follow-up is now tracked explicitly
+as `T-RULES-COPY-019`; this change is not archive-eligible.
 
 ## Shipped
+
+- Canonical project Rule metadata now retains `targetPath` and
+  `projectRootPath`; global targets remain device-derived. Catalog rebuild no
+  longer points external targets back at `data/rules/<id>/rule.md`.
+- The legacy cached-list API now delegates to the bounded authoritative file
+  scan, which reconciles current device paths and rebuilds the SQLite
+  projection before returning the first list.
+- File-owned Rules remain visible when their external deployment target is
+  missing, so the managed content can be read, edited, and redeployed.
+- Older project bundles without placement recover the binding from the bounded,
+  link-safe cache `_rule.json` compatibility source when it is still present.
+- Unchanged Rule scans are idempotent and no longer advance bundle revisions or
+  invalidate the canonical catalog hash.
+- Agent Rules cold loading now creates one RuleDB adapter for the authoritative
+  inventory scan, performs canonical Skill hydration once per open database
+  connection, and reads only the selected Agent's Rule after inventory load.
+- Inventory failures leave the loading state and preserve the existing explicit
+  retry path instead of leaving the Agent panel on an indefinite spinner.
+- Legacy and canonical-hydrated Rule version indexes are normalized newest
+  first before materialization. SQLite version numbers are derived oldest
+  first, so canonical publication remains chronological without changing Rule
+  bodies or durable version files.
+- Canonical Rule hydration now emits compatibility indexes newest first, which
+  prevents a rebuilt cache from recreating the invalid order on the next scan.
 
 - 新建 `rules-managed-copies` active change，并将方案收敛为 `data/rules` 真相源 + DB 索引 + target-file sync。
 - 将“规则市场要求保留副本文本、方便备份和快速替换”的产品约束正式落盘。
@@ -50,6 +76,47 @@ In progress.
 - Electron E2E verifies the source key stays below 70% of the dialog width and leaves at least 8 pixels before the comparison region.
 
 ## Verification
+
+- `TEST-RULES-COPY-022`: 71 focused Core/Desktop tests passed, including the
+  real three-version oldest-first compatibility index that previously made
+  `rules:list` throw. The regression verifies no Rule is hidden, the index is
+  repaired newest first, and SQLite chronology remains valid for canonical
+  publication.
+- The live Codex Rule was audited read-only after repair: `rule.md` remains
+  9,763 bytes, all three durable version bodies remain present, the canonical
+  bundle remains version 1 through 3, and the compatibility index is now
+  version 3 through 1.
+- Core and Desktop typechecks, affected-file Prettier, targeted Desktop ESLint,
+  line limits, change traceability, and whitespace checks passed for
+  `TEST-RULES-COPY-022`.
+- The fresh post-fix `pnpm verify:release:quick` run passed all 29 gates in
+  718.6 seconds, including Core Rule tests and every Desktop unit shard.
+- `TEST-RULES-COPY-021`: 64 focused Core/Desktop tests passed, covering one
+  RuleDB adapter per authoritative scan, one canonical Skill hydration per
+  database connection, no unrelated Rule read when opening an Agent Rules tab,
+  and loading-state release on inventory failure.
+- Core and Desktop typechecks, affected-file Prettier, Desktop targeted ESLint,
+  line limits, and change traceability passed. The Core package has no local
+  ESLint configuration, so its direct ESLint invocation was not an available
+  gate; Core typecheck and focused tests passed.
+- `pnpm verify:release:quick` passed all 29 gates in 470.3 seconds, including
+  Core, DB, Shared, Desktop unit shards, Web, Cloudflare, Mobile, build, and
+  governance checks.
+
+- `TEST-RULES-COPY-020`: Rule resource schema, canonical catalog rebuild,
+  legacy project-placement hydration, stale cached-path reconciliation,
+  managed target-missing visibility, portable placement consistency, and
+  renderer selection regressions pass in 78 focused tests.
+- `pnpm --filter @prompthub/core typecheck` passed.
+- `pnpm --filter @prompthub/desktop typecheck` passed.
+- `pnpm lint:file-size` passed; `packages/core/src/rules-workspace.ts` is below
+  the 1,500-line new-file limit after removing the duplicate DB-first list
+  policy.
+- Targeted Desktop ESLint and affected-file Prettier checks passed.
+- `pnpm verify:release:quick` passed 28 of 29 gates, including Core tests,
+  Desktop lint/typechecks/unit shards, and governance checks. The only failure
+  was the CLI wall-clock budget: all 16 files and 123 tests passed, but the
+  86.237-second run exceeded the 75-second budget. No Rules assertion failed.
 
 - 方案已对齐现有 PromptHub 数据布局：内部持久化资源集中在 `userData/data/`，例如 `data/skills`、`data/assets/images`、`data/assets/videos`。
 - 当前实现已新增 `data/rules/` 真相源目录，并将 Rules 纳入 ZIP 导出和 JSON backup 载荷。

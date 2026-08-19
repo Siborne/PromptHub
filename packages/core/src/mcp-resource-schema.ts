@@ -280,7 +280,10 @@ function validateServer(
   const headers = validateStringMap(value.headers, "headers");
   const envRefs = validateStringMap(value.envRefs, "envRefs");
   const headerRefs = validateStringMap(value.headerRefs, "headerRefs");
-  if (!allowSecrets && (env !== undefined || headers !== undefined))
+  const containsLiteralCredential = [env, headers].some((entries) =>
+    Object.values(entries ?? {}).some((item) => item.length > 0),
+  );
+  if (!allowSecrets && containsLiteralCredential)
     throw new Error("MCP resource cannot contain literal credentials");
   if (value.transport === "stdio" && !String(value.command ?? "").trim())
     throw new Error("MCP resource stdio server requires command");
@@ -331,12 +334,21 @@ function extractSecrets(
   const references: McpResourceSecretReferences = { env: {}, headers: {} };
   const secrets: ExtractedMcpSecret[] = [];
   for (const field of ["env", "headers"] as const) {
+    const placeholders: Record<string, string> = {};
     for (const [key, value] of Object.entries(server[field] ?? {})) {
+      if (value.length === 0) {
+        placeholders[key] = value;
+        continue;
+      }
       const ref = secretRef(server.id, version, field, key);
       references[field][key] = ref;
       secrets.push({ ref, field, key, value, version });
     }
-    delete portable[field];
+    if (Object.keys(placeholders).length > 0) {
+      portable[field] = placeholders;
+    } else {
+      delete portable[field];
+    }
   }
   return { server: portable, references, secrets };
 }
@@ -680,7 +692,7 @@ export async function hydrateMcpServerResourceSecrets(
 ): Promise<McpServerConfig> {
   const hydrated = structuredClone(resource.server);
   for (const field of ["env", "headers"] as const) {
-    const values: Record<string, string> = {};
+    const values: Record<string, string> = { ...hydrated[field] };
     for (const [key, ref] of Object.entries(resource.secretReferences[field])) {
       const value = await readSecret(ref);
       if (value === null) throw new Error(`missing MCP secret: ${ref}`);
@@ -697,7 +709,7 @@ export function hydrateMcpServerResourceSecretsSync(
 ): McpServerConfig {
   const hydrated = structuredClone(resource.server);
   for (const field of ["env", "headers"] as const) {
-    const values: Record<string, string> = {};
+    const values: Record<string, string> = { ...hydrated[field] };
     for (const [key, ref] of Object.entries(resource.secretReferences[field])) {
       const value = readSecret(ref);
       if (value === null) throw new Error(`missing MCP secret: ${ref}`);
@@ -714,7 +726,7 @@ export function hydrateMcpServerVersionSecretsSync(
 ): McpServerConfig {
   const hydrated = structuredClone(version.server);
   for (const field of ["env", "headers"] as const) {
-    const values: Record<string, string> = {};
+    const values: Record<string, string> = { ...hydrated[field] };
     for (const [key, ref] of Object.entries(version.secretReferences[field])) {
       const value = readSecret(ref);
       if (value === null) throw new Error(`missing MCP secret: ${ref}`);

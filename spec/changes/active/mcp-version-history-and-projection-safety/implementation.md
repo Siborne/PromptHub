@@ -23,6 +23,14 @@
   centralized copy of an external Agent/project config is created.
 - Kept the optional `backupPath` fields readable for compatibility, marked them
   deprecated, and omitted them from new projection results.
+- Classified empty MCP `env` and header values as file-owned unconfigured
+  placeholders. Canonical publication now extracts only non-empty literal
+  credentials into the device vault and merges both classes on hydration.
+- Added a renderer inventory read path that degrades only unavailable device
+  secrets to the existing redaction sentinel. Strict execution and mutation
+  reads still reject missing or invalid secrets.
+- Routed Desktop `mcp-library:get` through the redacted file inventory path so
+  one unavailable vault cannot erase every file-owned MCP entry from the UI.
 
 ## Remaining Delivery
 
@@ -45,6 +53,20 @@ tests/mcp-target-projection.test.ts --coverage
 - Focused Desktop MCP suite: 3 files and 52 tests passed.
 - `pnpm --filter @prompthub/core typecheck`: passed.
 - `pnpm --filter @prompthub/shared typecheck`: passed.
+- Empty-placeholder and vault-degradation regression suite: 2 Core files and
+  23 tests passed; 3 Desktop files and 25 tests passed.
+- Changed Core MCP coverage run: 23 tests passed; canonical migration reached
+  100% statements/branches/functions/lines, while the larger existing canonical
+  library and resource-schema modules reached 91.61%/88.18% and
+  94.97%/68.62% statement/branch coverage respectively. Every new
+  placeholder, strict-read, missing-vault, unreadable-vault, and redacted-read
+  decision is exercised.
+- Core and Desktop typechecks passed. Scoped Desktop ESLint, Prettier, file-size
+  enforcement, and repository spec governance/traceability passed.
+- Development-root migration produced six validated per-server MCP bundles,
+  four device bindings, no superseded `library.json`, and explicit empty Slack
+  credential placeholders without literal secret output. A direct canonical
+  reload returned all six server names.
 - UI verification, legacy-sidecar cleanup tests, and performance measurements
   remain pending with the unfinished tasks.
 

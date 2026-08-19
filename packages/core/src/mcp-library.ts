@@ -5,18 +5,13 @@ import {
   BUILTIN_MCP_MARKET_SOURCES,
   BUILTIN_MCP_MARKET_TEMPLATES,
 } from "@prompthub/shared/constants/mcp-market";
-import {
-  isMcpTargetKind,
-  type McpServerConfig,
-} from "@prompthub/shared/types/mcp";
+import { type McpServerConfig } from "@prompthub/shared/types/mcp";
 import { MCP_REDACTED_VALUE } from "@prompthub/shared/utils/mcp-config";
 import {
   type McpEnvImportResult,
   type McpCreateFromSourceRequest,
   type McpCreateFromSourceResult,
   type McpHealthCheckResult,
-  type McpHealthIssue,
-  type McpHealthStatus,
   type McpApplyResult,
   type McpApplyTarget,
   type McpImportResult,
@@ -42,10 +37,6 @@ import {
   computeMcpTargetEntryDigest,
   getMcpTargetEntryObject,
   getMcpJsonServerEntries,
-  getMcpEnvReferences,
-  inferMcpEnvRequirements,
-  inferMcpPlaceholderRequirements,
-  inferMcpRuntimeDetails,
   installMcpTemplate,
   listMcpServerNamesInJson,
   listMcpServerNamesInToml,
@@ -57,7 +48,6 @@ import {
   redactMcpServerConfig,
   removeCodexMcpTomlServers,
   removeMcpServersFromJson,
-  sanitizeMcpServerName,
 } from "@prompthub/shared/utils/mcp-config";
 
 import {
@@ -70,6 +60,10 @@ import {
   writeCanonicalMcpLibrary,
   type CanonicalMcpLibraryOptions,
 } from "./canonical-mcp-library";
+import {
+  normalizeMcpLibrary,
+  readMcpLibraryFile,
+} from "./mcp-library-persistence";
 import { assertStorageMaintenanceAvailable } from "./storage-maintenance-intent";
 import { inferMcpSource } from "./mcp-source";
 import { buildMcpEnvImportResult } from "./mcp-env-import";
@@ -89,9 +83,20 @@ import {
 } from "./mcp-target-sync-policy";
 import { commitMcpTargetProjection } from "./mcp-target-projection";
 import { readCanonicalMcpLibraryWithMigration } from "./mcp-library-canonical-migration";
+import { createMcpHealthResult } from "./mcp-health";
+import {
+  mergeMcpImportedServers,
+  parseTomlInlineTable,
+  parseTomlString,
+  parseTomlStringArray,
+  readImportServersFromContent,
+  readMcpImportServers,
+  readMcpTargetServers,
+} from "./mcp-import";
 
 export { getMcpTargetPresets } from "./mcp-target-presets";
 export type { McpTargetPreset } from "./mcp-target-presets";
+export { readMcpLibraryRecoverySource } from "./mcp-library-persistence";
 
 const MCP_LIBRARY_DIR_NAME = "mcp";
 const MCP_LIBRARY_FILE_NAME = "library.json";
@@ -113,10 +118,6 @@ export function getMcpLibraryFilePath(): string {
 
 export function getLegacyMcpLibraryFilePath(): string {
   return path.join(getConfigDir(), LEGACY_MCP_LIBRARY_FILE_NAME);
-}
-
-function readMcpLibraryFile(filePath: string): McpLibraryFile {
-  return normalizeLibrary(JSON.parse(fs.readFileSync(filePath, "utf8")));
 }
 
 function nowIso(): string {
@@ -143,82 +144,6 @@ function writeJsonFileAtomic(filePath: string, data: unknown): void {
   const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
   fs.writeFileSync(tempPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   fs.renameSync(tempPath, filePath);
-}
-
-function normalizeLibrary(raw: Partial<McpLibraryFile>): McpLibraryFile {
-  const now = nowMs();
-  return {
-    kind: "prompthub-mcp-library",
-    version: 1,
-    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : nowIso(),
-    servers: Array.isArray(raw.servers)
-      ? raw.servers.map((server) =>
-          normalizeMcpServerDraft(server as McpServerDraft, now),
-        )
-      : [],
-    bindings: Array.isArray(raw.bindings)
-      ? raw.bindings
-          .filter((binding): binding is McpTargetBinding =>
-            Boolean(
-              binding &&
-              typeof binding === "object" &&
-              typeof binding.id === "string" &&
-              isMcpTargetKind(binding.target) &&
-              typeof binding.path === "string" &&
-              Array.isArray(binding.serverIds),
-            ),
-          )
-          .map((binding) => ({
-            ...binding,
-            enabled: binding.enabled !== false,
-            entryDigests: normalizeEntryDigests(binding.entryDigests),
-            createdAt: binding.createdAt || now,
-            updatedAt: binding.updatedAt || now,
-          }))
-      : [],
-  };
-}
-
-function normalizeEntryDigests(
-  value: unknown,
-): Record<string, McpTargetEntryDigest> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-  const entries = Object.entries(value as Record<string, unknown>).flatMap(
-    ([serverId, rawDigest]) => {
-      if (
-        !rawDigest ||
-        typeof rawDigest !== "object" ||
-        Array.isArray(rawDigest)
-      ) {
-        return [];
-      }
-      const record = rawDigest as Record<string, unknown>;
-      if (
-        record.algorithm !== "mcp-target-entry-sha256-v1" ||
-        typeof record.digest !== "string" ||
-        typeof record.serverName !== "string"
-      ) {
-        return [];
-      }
-      return [
-        [
-          serverId,
-          {
-            algorithm: "mcp-target-entry-sha256-v1" as const,
-            digest: record.digest,
-            serverName: record.serverName,
-            recordedAt:
-              typeof record.recordedAt === "number"
-                ? record.recordedAt
-                : Date.now(),
-          },
-        ] as const,
-      ];
-    },
-  );
-  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function assertUniqueName(
@@ -514,220 +439,6 @@ function resolveServer(
   return server;
 }
 
-function commandExists(
-  command: string,
-  envPath = process.env.PATH ?? "",
-): boolean {
-  if (path.isAbsolute(command) || command.includes(path.sep)) {
-    return fs.existsSync(command);
-  }
-  const extensions =
-    process.platform === "win32" ? ["", ".exe", ".cmd", ".bat", ".ps1"] : [""];
-  return envPath
-    .split(path.delimiter)
-    .some((dir) =>
-      extensions.some((extension) =>
-        fs.existsSync(path.join(dir, command + extension)),
-      ),
-    );
-}
-
-function getHealthStatus(issues: McpHealthIssue[]): McpHealthStatus {
-  if (issues.some((issue) => issue.severity === "error")) {
-    return "error";
-  }
-  if (issues.length > 0) {
-    return "warning";
-  }
-  return "ok";
-}
-
-function validateKnownEnvValue(name: string, value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const validators: Record<string, { pattern: RegExp; example: string }> = {
-    AMAP_MAPS_API_KEY: {
-      pattern: /^[A-Za-z0-9]{16,64}$/,
-      example: "a 16-64 character AMap key",
-    },
-    BRAVE_API_KEY: {
-      pattern: /^BSA[0-9A-Za-z_-]{20,}$/,
-      example: "a Brave key starting with BSA",
-    },
-    FIRECRAWL_API_KEY: {
-      pattern: /^fc-[0-9A-Za-z_-]{20,}$/,
-      example: "a Firecrawl key starting with fc-",
-    },
-    GITHUB_PERSONAL_ACCESS_TOKEN: {
-      pattern: /^(ghp|github_pat|gho|ghu|ghs|ghr)_[0-9A-Za-z_]{20,}$/,
-      example: "a GitHub token such as ghp_... or github_pat_...",
-    },
-    GOOGLE_MAPS_API_KEY: {
-      pattern: /^AIza[0-9A-Za-z_-]{20,}$/,
-      example: "a Google Maps key starting with AIza",
-    },
-    SLACK_BOT_TOKEN: {
-      pattern: /^xoxb-[0-9A-Za-z-]{20,}$/,
-      example: "a Slack bot token starting with xoxb-",
-    },
-    SLACK_TEAM_ID: {
-      pattern: /^T[A-Z0-9]{8,}$/,
-      example: "a Slack workspace/team id such as T01234567",
-    },
-  };
-  const validator = validators[name];
-  if (!validator || validator.pattern.test(trimmed)) {
-    return null;
-  }
-  return `${name} 格式看起来不正确，应填写 ${validator.example}`;
-}
-
-function createHealthResult(server: McpServerConfig): McpHealthCheckResult {
-  const issues: McpHealthIssue[] = [];
-  if (server.transport === "stdio") {
-    if (!server.command) {
-      issues.push({
-        code: "MISSING_COMMAND",
-        severity: "error",
-        field: "command",
-        message: "stdio MCP 服务缺少 command",
-      });
-    } else if (!commandExists(server.command)) {
-      issues.push({
-        code: "COMMAND_NOT_FOUND",
-        severity: "error",
-        field: "command",
-        message: `找不到命令: ${server.command}`,
-      });
-    }
-    if (server.cwd && !fs.existsSync(server.cwd)) {
-      issues.push({
-        code: "MISSING_CWD",
-        severity: "warning",
-        field: "cwd",
-        message: `工作目录不存在: ${server.cwd}`,
-      });
-    }
-  } else {
-    try {
-      if (!server.url) {
-        throw new Error("missing url");
-      }
-      new URL(server.url);
-    } catch {
-      issues.push({
-        code: "INVALID_URL",
-        severity: "error",
-        field: "url",
-        message: "远程 MCP 服务 URL 无效",
-      });
-    }
-  }
-
-  const referenceDetails = new Map<string, { hasDefault: boolean }>();
-  const referenceValues = [
-    ...Object.values(server.env ?? {}),
-    ...Object.values(server.envRefs ?? {}),
-    ...(server.args ?? []),
-    ...(server.url ? [server.url] : []),
-    ...Object.values(server.headers ?? {}),
-    ...Object.values(server.headerRefs ?? {}),
-  ];
-  for (const value of referenceValues) {
-    for (const reference of getMcpEnvReferences(value)) {
-      const current = referenceDetails.get(reference.name);
-      referenceDetails.set(reference.name, {
-        hasDefault: (current?.hasDefault ?? false) || reference.hasDefault,
-      });
-    }
-  }
-
-  for (const requirement of inferMcpEnvRequirements(server)) {
-    const reference = referenceDetails.get(requirement.name);
-    const directValue = server.env?.[requirement.name];
-    const hasMissingDirectValue =
-      Object.prototype.hasOwnProperty.call(
-        server.env ?? {},
-        requirement.name,
-      ) &&
-      (!directValue || /^<[^>]+>$/.test(directValue.trim()));
-    if (reference) {
-      if (hasMissingDirectValue) {
-        issues.push({
-          code: "MISSING_ENV",
-          severity: "error",
-          field: requirement.name,
-          message: `缺少环境变量: ${requirement.name}`,
-        });
-        continue;
-      }
-      const resolvedInCurrentProcess = Boolean(
-        process.env[requirement.name]?.trim(),
-      );
-      if (!reference.hasDefault && !resolvedInCurrentProcess) {
-        issues.push({
-          code: "UNRESOLVED_ENV_REFERENCE",
-          severity: "warning",
-          field: requirement.name,
-          message: `当前进程未设置环境变量引用: ${requirement.name}`,
-        });
-      }
-      continue;
-    }
-    const value = directValue;
-    if (requirement.required && (!value || /^<[^>]+>$/.test(value.trim()))) {
-      issues.push({
-        code: "MISSING_ENV",
-        severity: "error",
-        field: requirement.name,
-        message: `缺少环境变量: ${requirement.name}`,
-      });
-      continue;
-    }
-    if (value) {
-      if (/\$\{[A-Za-z_][A-Za-z0-9_]*\}/.test(value.trim())) {
-        issues.push({
-          code: "UNRESOLVED_ENV_REFERENCE",
-          severity: "warning",
-          field: requirement.name,
-          message: `Environment references may not expand in all MCP targets: ${requirement.name}`,
-        });
-        continue;
-      }
-      const invalidMessage = validateKnownEnvValue(requirement.name, value);
-      if (invalidMessage) {
-        issues.push({
-          code: "INVALID_ENV_VALUE",
-          severity: "warning",
-          field: requirement.name,
-          message: invalidMessage,
-        });
-      }
-    }
-  }
-
-  for (const placeholder of inferMcpPlaceholderRequirements(server)) {
-    issues.push({
-      code: "PLACEHOLDER_VALUE",
-      severity: "error",
-      field: placeholder.source,
-      message: `仍有占位值需要替换: ${placeholder.value}`,
-    });
-  }
-
-  return {
-    serverId: server.id,
-    serverName: server.name,
-    status: getHealthStatus(issues),
-    checkedAt: nowIso(),
-    runtime: inferMcpRuntimeDetails(server),
-    issues,
-  };
-}
-
 function toSyncCheck(
   binding: McpTargetBinding,
   server: McpServerConfig,
@@ -774,282 +485,6 @@ function classifySyncStatus(
   return "conflict";
 }
 
-function importServerEntry(
-  name: string,
-  entry: unknown,
-  now: number,
-  target?: McpTargetKind,
-): McpServerConfig | null {
-  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-    return null;
-  }
-  const record = entry as Record<string, unknown>;
-  const commandParts = Array.isArray(record.command)
-    ? record.command.filter((item): item is string => typeof item === "string")
-    : [];
-  const command =
-    typeof record.command === "string" ? record.command : commandParts[0];
-  const url =
-    target === "antigravity" && typeof record.serverUrl === "string"
-      ? record.serverUrl
-      : typeof record.url === "string"
-        ? record.url
-        : undefined;
-  if (!command && !url) {
-    return null;
-  }
-  const args =
-    commandParts.length > 0
-      ? commandParts.slice(1)
-      : Array.isArray(record.args)
-        ? record.args.filter((item): item is string => typeof item === "string")
-        : undefined;
-  const envRecord = record.env ?? record.environment;
-  const headersRecord = record.headers ?? record.http_headers;
-
-  return normalizeMcpServerDraft(
-    {
-      name: sanitizeMcpServerName(name),
-      displayName: name,
-      description:
-        typeof record.description === "string" ? record.description : undefined,
-      transport: command
-        ? "stdio"
-        : target === "openclaw"
-          ? record.transport === "streamable-http"
-            ? "streamable-http"
-            : "sse"
-          : record.type === "sse"
-            ? "sse"
-            : "streamable-http",
-      command,
-      args,
-      cwd: typeof record.cwd === "string" ? record.cwd : undefined,
-      env:
-        envRecord && typeof envRecord === "object" && !Array.isArray(envRecord)
-          ? (envRecord as Record<string, string>)
-          : undefined,
-      url,
-      headers:
-        headersRecord &&
-        typeof headersRecord === "object" &&
-        !Array.isArray(headersRecord)
-          ? (headersRecord as Record<string, string>)
-          : undefined,
-      enabled:
-        record.enable !== false &&
-        record.enabled !== false &&
-        record.disabled !== true,
-      source: { type: "import" },
-    },
-    now,
-  );
-}
-
-function parseTomlString(value: string): string | undefined {
-  try {
-    const parsed = JSON.parse(value.trim()) as unknown;
-    return typeof parsed === "string" ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function parseTomlStringArray(value: string): string[] | undefined {
-  try {
-    const parsed = JSON.parse(value.trim()) as unknown;
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function parseTomlInlineTable(
-  value: string,
-): Record<string, string> | undefined {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
-    return undefined;
-  }
-  const entries = trimmed
-    .slice(1, -1)
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => {
-      const separatorIndex = entry.indexOf("=");
-      if (separatorIndex === -1) {
-        return null;
-      }
-      const key = entry.slice(0, separatorIndex).trim().replace(/^"|"$/g, "");
-      const parsedValue = parseTomlString(entry.slice(separatorIndex + 1));
-      return key && parsedValue !== undefined ? [key, parsedValue] : null;
-    })
-    .filter((entry): entry is [string, string] => Boolean(entry));
-
-  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
-}
-
-function parseCodexTomlServers(
-  content: string,
-  now: number,
-): McpServerConfig[] {
-  const servers: McpServerConfig[] = [];
-  let currentName: string | null = null;
-  let current: Record<string, unknown> = {};
-
-  const flush = () => {
-    if (!currentName) {
-      return;
-    }
-    const server = importServerEntry(currentName, current, now);
-    if (server) {
-      servers.push(server);
-    }
-    currentName = null;
-    current = {};
-  };
-
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-    const sectionMatch = line.match(/^\[mcp_servers\.("?)([^"\]]+)\1\]$/);
-    if (sectionMatch) {
-      flush();
-      currentName = sectionMatch[2];
-      continue;
-    }
-    if (!currentName) {
-      continue;
-    }
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex === -1) {
-      continue;
-    }
-    const key = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
-    if (key === "args") {
-      current.args = parseTomlStringArray(value);
-    } else if (key === "env" || key === "http_headers" || key === "headers") {
-      current[key === "env" ? "env" : "headers"] = parseTomlInlineTable(value);
-    } else if (key === "command" || key === "cwd" || key === "url") {
-      current[key] = parseTomlString(value);
-    }
-  }
-  flush();
-  return servers;
-}
-
-function parseJsonImportServers(
-  content: string,
-  now: number,
-): McpServerConfig[] {
-  const raw = parseMcpJsonConfigContent(content) as Record<string, unknown>;
-  const asObjectRecord = (
-    value: unknown,
-  ): Record<string, unknown> | undefined =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : undefined;
-  const mcp = asObjectRecord(raw.mcp);
-  const source =
-    asObjectRecord(raw.mcpServers) ??
-    asObjectRecord(raw.servers) ??
-    asObjectRecord(mcp?.servers) ??
-    mcp ??
-    {};
-  return Object.entries(source)
-    .map(([name, entry]) => importServerEntry(name, entry, now))
-    .filter((server): server is McpServerConfig => Boolean(server));
-}
-
-function readImportServersFromContent(
-  content: string,
-  now: number,
-  format?: "json" | "toml",
-): McpServerConfig[] {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    return [];
-  }
-  if (format === "toml") {
-    return parseCodexTomlServers(trimmed, now);
-  }
-  if (format === "json") {
-    return parseJsonImportServers(trimmed, now);
-  }
-  try {
-    return parseJsonImportServers(trimmed, now);
-  } catch {
-    const servers = parseCodexTomlServers(trimmed, now);
-    if (servers.length > 0) {
-      return servers;
-    }
-    throw new Error("Invalid MCP config content");
-  }
-}
-
-function readImportServers(filePath: string, now: number): McpServerConfig[] {
-  const content = fs.readFileSync(filePath, "utf8");
-  const format =
-    path.extname(filePath).toLowerCase() === ".toml" ? "toml" : "json";
-  return readImportServersFromContent(content, now, format);
-}
-
-function mergeImportedServers(
-  library: McpLibraryFile,
-  sourceServers: McpServerConfig[],
-): McpImportResult & { library: McpLibraryFile } {
-  const imported: McpServerConfig[] = [];
-  const skipped: string[] = [];
-  const existingNames = new Set(library.servers.map((server) => server.name));
-
-  for (const server of sourceServers) {
-    if (existingNames.has(server.name)) {
-      skipped.push(server.name);
-      continue;
-    }
-    imported.push(server);
-    existingNames.add(server.name);
-  }
-
-  return {
-    imported,
-    skipped,
-    library:
-      imported.length > 0
-        ? { ...library, servers: [...imported, ...library.servers] }
-        : library,
-  };
-}
-
-function readTargetServers(
-  filePath: string,
-  target: McpTargetKind,
-  now: number,
-): McpServerConfig[] {
-  const content = fs.readFileSync(filePath, "utf8");
-  if (isTomlTarget(target)) {
-    return parseCodexTomlServers(content, now);
-  }
-  const raw = parseMcpJsonConfigContent(content);
-  const source = getMcpJsonServerEntries(raw, target);
-  if (!source) {
-    return [];
-  }
-  return Object.entries(source)
-    .map(([name, entry]) => importServerEntry(name, entry, now, target))
-    .filter((server): server is McpServerConfig => Boolean(server))
-    .map((server) => ({
-      ...server,
-      source: { type: "import", id: target, label: filePath },
-    }));
-}
-
 export class CoreMcpLibraryService {
   constructor(
     private readonly canonicalOptions: CanonicalMcpLibraryOptions = {},
@@ -1061,7 +496,7 @@ export class CoreMcpLibraryService {
         return readCanonicalMcpLibraryWithMigration({
           canonicalOptions: this.canonicalOptions,
           legacyPath: getMcpLibraryFilePath(),
-          normalize: normalizeLibrary,
+          normalize: normalizeMcpLibrary,
         });
       } catch (error) {
         throw new CoreMcpError(
@@ -1092,8 +527,30 @@ export class CoreMcpLibraryService {
     }
   }
 
+  readForTransport(): McpLibraryFile {
+    if (getRuntimeStorageContext().localAuthority !== "canonical-files") {
+      return this.read();
+    }
+    try {
+      return readCanonicalMcpLibraryWithMigration({
+        canonicalOptions: {
+          ...this.canonicalOptions,
+          secretReadMode: "redacted",
+        },
+        legacyPath: getMcpLibraryFilePath(),
+        normalize: normalizeMcpLibrary,
+        normalizeCanonical: (library) => library,
+      });
+    } catch (error) {
+      throw new CoreMcpError(
+        "INVALID_LIBRARY",
+        error instanceof Error ? error.message : "MCP 配置库无法解析",
+      );
+    }
+  }
+
   write(library: McpLibraryFile): McpLibraryFile {
-    const next = normalizeLibrary({
+    const next = normalizeMcpLibrary({
       ...library,
       updatedAt: nowIso(),
     });
@@ -1114,11 +571,11 @@ export class CoreMcpLibraryService {
   }
 
   checkServer(identifier: string): McpHealthCheckResult {
-    return createHealthResult(resolveServer(this.read(), identifier));
+    return createMcpHealthResult(resolveServer(this.read(), identifier));
   }
 
   checkAllServers(): McpHealthCheckResult[] {
-    return this.read().servers.map((server) => createHealthResult(server));
+    return this.read().servers.map((server) => createMcpHealthResult(server));
   }
 
   createServer(draft: McpServerDraft): McpServerConfig {
@@ -1783,7 +1240,11 @@ export class CoreMcpLibraryService {
         };
       }
       try {
-        const servers = readTargetServers(preset.path, preset.target, nowMs());
+        const servers = readMcpTargetServers(
+          preset.path,
+          preset.target,
+          nowMs(),
+        );
         const serverNames = servers.map((server) => server.name);
         return {
           presetId: preset.id,
@@ -1812,8 +1273,8 @@ export class CoreMcpLibraryService {
   importFromFile(filePath: string): McpImportResult {
     const library = this.read();
     const now = nowMs();
-    const sourceServers = readImportServers(filePath, now);
-    const result = mergeImportedServers(library, sourceServers);
+    const sourceServers = readMcpImportServers(filePath, now);
+    const result = mergeMcpImportedServers(library, sourceServers);
     if (result.imported.length > 0) {
       this.write(result.library);
     }
@@ -1828,7 +1289,7 @@ export class CoreMcpLibraryService {
       const library = this.read();
       const now = nowMs();
       const sourceServers = readImportServersFromContent(request.input, now);
-      const result = mergeImportedServers(library, sourceServers);
+      const result = mergeMcpImportedServers(library, sourceServers);
       if (result.imported.length > 0) {
         this.write(result.library);
       }

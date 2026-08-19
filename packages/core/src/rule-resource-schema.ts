@@ -49,6 +49,8 @@ export interface RuleResourceDocument {
     name: string;
     description: string;
     group: RuleFileGroup;
+    targetPath?: string;
+    projectRootPath?: string | null;
     currentVersion: number;
     versions: CanonicalRuleVersionMetadata[];
   };
@@ -64,6 +66,8 @@ export interface CanonicalRuleResource {
   name: string;
   description: string;
   group: RuleFileGroup;
+  targetPath?: string;
+  projectRootPath?: string | null;
   content: string;
   versions: RuleVersionSnapshot[];
 }
@@ -128,6 +132,22 @@ function validateContent(value: unknown, label: string): string {
   return value;
 }
 
+function validateOptionalPath(
+  value: unknown,
+  label: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    Buffer.byteLength(value, "utf8") > 16_384 ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    throw new Error(`Rule resource ${label} is invalid`);
+  }
+  return value;
+}
+
 function validateVersion(value: unknown, version: number): RuleVersionSnapshot {
   if (!isRecord(value)) throw new Error("Rule resource version is invalid");
   assertId(value.id, "version id");
@@ -184,12 +204,23 @@ function validateRule(value: unknown): CanonicalRuleResource {
     name: value.name as string,
     description: value.description as string,
     group: value.group as RuleFileGroup,
+    targetPath: validateOptionalPath(value.targetPath, "targetPath"),
+    projectRootPath:
+      value.projectRootPath === null
+        ? null
+        : validateOptionalPath(value.projectRootPath, "projectRootPath"),
     content,
     versions,
   };
 }
 
 function portableRule(input: RuleFileContent): CanonicalRuleResource {
+  const projectPlacement = input.id.startsWith("project:")
+    ? {
+        targetPath: input.targetPath ?? input.path,
+        projectRootPath: input.projectRootPath ?? null,
+      }
+    : {};
   return {
     id: input.id,
     platformId: input.platformId,
@@ -199,6 +230,7 @@ function portableRule(input: RuleFileContent): CanonicalRuleResource {
     name: input.name,
     description: input.description,
     group: input.group,
+    ...projectPlacement,
     content: input.content,
     versions: structuredClone(input.versions),
   };
@@ -244,6 +276,12 @@ export function materializeRuleResourceBundle(input: {
       name: rule.name,
       description: rule.description,
       group: rule.group,
+      ...(rule.targetPath
+        ? {
+            targetPath: rule.targetPath,
+            projectRootPath: rule.projectRootPath ?? null,
+          }
+        : {}),
       currentVersion: rule.versions.length,
       versions: versionMetadata,
     },
@@ -348,6 +386,11 @@ function parseDocument(bundlePath: string): RuleResourceDocument {
   if (typeof metadata.group !== "string" || !GROUPS.has(metadata.group))
     throw new Error("Rule resource group is invalid");
   const currentVersion = positiveVersion(metadata.currentVersion);
+  const targetPath = validateOptionalPath(metadata.targetPath, "targetPath");
+  const projectRootPath =
+    metadata.projectRootPath === null
+      ? null
+      : validateOptionalPath(metadata.projectRootPath, "projectRootPath");
   if (
     !Array.isArray(metadata.versions) ||
     metadata.versions.length !== currentVersion
@@ -388,6 +431,8 @@ function parseDocument(bundlePath: string): RuleResourceDocument {
       name: metadata.name as string,
       description: metadata.description as string,
       group: metadata.group as RuleFileGroup,
+      targetPath,
+      projectRootPath,
       currentVersion,
       versions,
     },
@@ -447,6 +492,8 @@ export function readRuleResourceBundle(
       name: document.rule.name,
       description: document.rule.description,
       group: document.rule.group,
+      targetPath: document.rule.targetPath,
+      projectRootPath: document.rule.projectRootPath,
       content,
       versions,
     },

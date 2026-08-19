@@ -147,6 +147,57 @@ describe("MCP canonical resource schema", () => {
     ).toMatchObject({ env: server().env, headers: server().headers });
   });
 
+  it("keeps empty credential placeholders in the canonical file while vaulting non-empty values", async () => {
+    const base = root();
+    const bundlePath = path.join(base, "server");
+    const configured = server();
+    configured.env = {
+      GITHUB_TOKEN: "",
+      OPTIONAL: "plain-value",
+    };
+    configured.headers = {
+      Authorization: "",
+      "X-Secret": "secret-header",
+    };
+
+    const result = materializeMcpServerResourceBundle({
+      bundlePath,
+      server: configured,
+    });
+
+    expect(
+      result.extractedSecrets.map(({ key, value }) => [key, value]),
+    ).toEqual([
+      ["OPTIONAL", "plain-value"],
+      ["X-Secret", "secret-header"],
+    ]);
+    const storedText = fs.readFileSync(
+      path.join(bundlePath, "server.json"),
+      "utf8",
+    );
+    expect(storedText).toContain('"GITHUB_TOKEN": ""');
+    expect(storedText).toContain('"Authorization": ""');
+    expect(storedText).not.toContain("plain-value");
+    expect(storedText).not.toContain("secret-header");
+
+    const restored = readMcpServerResourceBundle(bundlePath);
+    const values = new Map(
+      result.extractedSecrets.map(({ ref, value }) => [ref, value]),
+    );
+    expect(
+      await hydrateMcpServerResourceSecrets(
+        restored,
+        async (ref) => values.get(ref) ?? null,
+      ),
+    ).toMatchObject({ env: configured.env, headers: configured.headers });
+    expect(
+      hydrateMcpServerResourceSecretsSync(
+        restored,
+        (ref) => values.get(ref) ?? null,
+      ),
+    ).toMatchObject({ env: configured.env, headers: configured.headers });
+  });
+
   it("keeps device target bindings outside server bundles", () => {
     const document = createMcpBindingConfigDocument({
       deviceId: "device-1",

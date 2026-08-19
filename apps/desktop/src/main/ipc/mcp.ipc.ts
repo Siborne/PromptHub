@@ -211,7 +211,7 @@ export function registerMcpIPC(
   service = createDesktopMcpLibraryService(),
 ): void {
   ipcMain.handle(IPC_CHANNELS.MCP_LIBRARY_GET, async () =>
-    redactMcpLibraryForTransport(service.read()),
+    redactMcpLibraryForTransport(service.readForTransport()),
   );
   ipcMain.handle(
     IPC_CHANNELS.MCP_LIBRARY_REPLACE,

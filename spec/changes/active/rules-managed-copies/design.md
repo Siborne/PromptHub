@@ -17,9 +17,9 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
 ## Affected Areas
 
 - Data model:
-- `data/rules/` 作为业务真相源，按全局规则、项目规则和版本目录组织文本数据
+- `data/rules/` 作为业务真相源，按稳定 Rule id 组织 canonical bundle
 - 数据库中的 `rules` / `rule_versions`（后续实现）只承担索引和状态缓存，不应成为正文唯一来源
-- `ruleProjects` 不再作为项目规则的长期真相源；项目规则记录应沉淀进 `data/rules/projects/`
+- `ruleProjects` 不再作为项目规则的长期真相源；项目绑定进入对应 canonical bundle
 - 现有 `KNOWN_RULE_FILE_TEMPLATES` 继续作为全局规则白名单模板，但只负责“可建档规则目标”，不再直接代表正文存储位置
 
 - IPC / API:
@@ -30,8 +30,8 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
 
 - Filesystem / sync:
 - 新增 managed copy 根目录：`<userData>/data/rules/`
-- 目录建议按语义分层：`global/<platform>/`、`projects/<slug>__<id>/`、`.versions/<rule-id>/`
-- 每条规则保留一个正文文件和一个 `_rule.json` 元数据文件；版本正文放在 `.versions/<rule-id>/NNNN.md`
+- 每条 Rule 使用 `data/rules/<rule-id>/` bundle：`rule.md`、`rule.json`、
+  `versions/` 和 bundle manifest；`cache/rules-workspace/` 仅为可重建兼容工作区
 - 外部目标文件继续放在平台原生位置，但角色降级为 mirror target
 - 升级备份、手动 ZIP 导出、WebDAV 同步应覆盖 `data/rules/`；数据库只作为加速层附带备份
 
@@ -46,19 +46,19 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
 
 ### `data/rules/`
 
-建议目录：
+当前目录：
 
-- `data/rules/global/<platform>/<canonical-file>`
-- `data/rules/global/<platform>/_rule.json`
-- `data/rules/projects/<slug>__<id>/AGENTS.md`
-- `data/rules/projects/<slug>__<id>/_rule.json`
-- `data/rules/.versions/<rule-id>/0001.md`
-- `data/rules/.versions/<rule-id>/index.json`
+- `data/rules/<rule-id>/rule.md`
+- `data/rules/<rule-id>/rule.json`
+- `data/rules/<rule-id>/versions/000001.md`
+- `data/rules/<rule-id>/manifest.json`
 
 说明：
 
 - 规则正文和版本正文以纯文本形式存盘，符合规则市场、diff、手工恢复和 Finder 直查需求。
-- `_rule.json` 保存规则 id、目标路径、同步状态、最近更新时间等轻量元数据。
+- `rule.json` 保存 Rule 逻辑元数据；项目 Rule 额外保存目标路径和项目根路径。
+  内置/custom 全局目标始终由当前设备 agent 配置派生。同步状态由当前 canonical
+  正文与外部目标重新计算，不作为业务真相源。
 
 ### 数据库索引层
 
@@ -70,16 +70,17 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
 
 ## Managed Copy Layout
 
-建议遵循现有 `userData/data/` 结构，把 Rules 副本放在：
+遵循现有 `userData/data/` 结构，把 Rules 副本放在：
 
-- `userData/data/rules/<rule-id>/RULE.md`
-- `userData/data/rules/<rule-id>/meta.json`（可选）
+- `userData/data/rules/<rule-id>/rule.md`
+- `userData/data/rules/<rule-id>/rule.json`
+- `userData/data/rules/<rule-id>/versions/*.md`
 
 原因：
 
 - 当前数据布局迁移已把内部持久化资源集中到 `userData/data/`，例如 `data/skills`、`data/assets/images`、`data/assets/videos`
 - 规则副本放在 `data/rules/` 能自然进入升级快照、目录迁移、未来 ZIP 导出与人工排查
-- 使用纯文本 `RULE.md`，最适合规则市场分发、手工恢复与 diff
+- 使用纯文本 `rule.md`，最适合规则市场分发、手工恢复与 diff
 
 ## Source of Truth Contract
 
@@ -91,9 +92,9 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
 
 保存流程：
 
-1. 写 `data/rules/...` 当前正文文件
-2. 追加 `.versions/<rule-id>/NNNN.md`
-3. 更新 `_rule.json`
+1. 通过 canonical publication journal 写 `data/rules/<rule-id>/rule.md`
+2. 追加 bundle `versions/NNNNNN.md`
+3. 更新 `rule.json` 与 `manifest.json`
 4. 尝试同步外部目标文件
 5. 更新数据库索引和 `sync_status`
 
@@ -111,7 +112,8 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
 3. UI 展示两边内容，由用户选择要保留哪个版本作为事实来源，并在执行覆盖前二次确认：
    - `use-managed`: 将 PromptHub 托管正文写回外部目标文件。
    - `use-target`: 将外部目标文件导入 PromptHub 托管正文，并追加一条版本快照。
-4. 解决完成后重新计算 `sync_status`，更新 `_rule.json` 与数据库索引。
+4. 解决完成后重新计算 `sync_status`，更新 cache metadata 与数据库索引；
+   canonical 正文或 placement 改变时发布新的 bundle revision。
 
 ## `DES-RULESCROLL-001` Single Scroll Owner
 
@@ -139,8 +141,8 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
 
 <!-- traceability: enforced -->
 
-| Requirement | Design | Verification | Task |
-| --- | --- | --- | --- |
+| Requirement         | Design               | Verification          | Task               |
+| ------------------- | -------------------- | --------------------- | ------------------ |
 | `FR-RULESCROLL-001` | `DES-RULESCROLL-001` | `TEST-RULESCROLL-001` | `T-RULESCROLL-001` |
 | `FR-RULESCROLL-002` | `DES-RULESCROLL-002` | `TEST-RULESCROLL-002` | `T-RULESCROLL-002` |
 | `FR-RULESCROLL-003` | `DES-RULESCROLL-003` | `TEST-RULESCROLL-003` | `T-RULESCROLL-003` |
@@ -204,3 +206,57 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
 - 选择“data/rules 真相源 + DB 索引 + target file 部署”三层结构，比现在纯文件直写复杂，但这是规则市场、可恢复、跨设备迁移三者同时成立的最低成本方案。
 - 文本正文与版本正文落在 `data/rules/` 会增加磁盘文件数量，但这与当前 Prompt/Skill 方向一致，也最符合用户可见、可备份、可手改的产品原则。
 - 初期不做实时文件监听，而是用显式加载/保存/部署/冲突检测，能避免复杂度失控，也更符合当前桌面产品的工程节奏。
+
+## `DES-RULES-COPY-020` Rebuildable Rule Placement
+
+- Project canonical `data/rules/<rule-id>/rule.json` 保存外部 `targetPath` 与
+  `projectRootPath`；内置/custom 全局路径继续由设备配置派生。`managedPath`、
+  同步状态和外部正文不进入 canonical metadata。
+- SQLite 重建以 bundle placement 恢复项目绑定；内置全局规则在工作区读取时继续以当前设备平台注册表/override 重新派生目标路径，避免旧设备路径覆盖当前配置。
+- 旧 bundle 没有 placement 时保持可读；全局规则会自动重新派生，项目规则优先保留旧 cache `_rule.json` 兼容信息。新写入和后续版本更新会补齐 placement。
+- legacy cached-list contract 直接委托给文件权威的有界扫描并回写 SQLite
+  投影，不再维护第二套 DB 优先的可见性与路径判定。扫描复杂度为
+  `O(R + B)`，`R` 为已声明 Rule 数，`B` 为读取的正文/版本字节数；无网络
+  I/O、无无界并发。
+- Rule publication 在正文、逻辑 metadata、版本和项目 placement 均未变化时
+  必须幂等 no-op，不能仅因扫描提升 bundle revision 并使 catalog hash 失效。
+- renderer 将 `exists` 解释为外部部署目标是否存在，而不是 PromptHub 托管 Rule 是否存在；main 已过滤无托管数据且平台目录不存在的空占位项。
+
+## Rules Rebuild Traceability
+
+| Requirement         | Design               | Verification          | Task               |
+| ------------------- | -------------------- | --------------------- | ------------------ |
+| `FR-RULES-COPY-020` | `DES-RULES-COPY-020` | `TEST-RULES-COPY-020` | `T-RULES-COPY-020` |
+
+## `DES-RULES-COPY-021` Bounded Cold Load
+
+- `scanRuleDescriptors` 在单次调用开始时创建一个 RuleDB adapter，并将它传给
+  global materialization 和 project reconciliation；adapter 创建次数从 `O(R)`
+  降为 `O(1)`，文件扫描仍为 `O(R + B)`。
+- `CanonicalSkillDB.reconcileCanonicalWorkspaces` 按数据库连接去重，连接首次打开
+  时执行 `O(S)` hydration，后续 Rule 索引写入不再重复扫描全部 `S` 个 Skill。
+  新连接仍会重新执行，兼容数据库关闭、数据目录切换和 catalog 重建。
+- Agent Rules inventory 使用不自动选择首项的 store 模式；descriptor 返回后由
+  Agent path/platform 唯一选择目标，只产生一次相关 `rules:read`。
+- 不新增常驻缓存、网络调用或无界并发；SQLite 仍可由 canonical 文件重建。
+
+## Agent Rule Loading Traceability
+
+| Requirement         | Design               | Verification          | Task               |
+| ------------------- | -------------------- | --------------------- | ------------------ |
+| `FR-RULES-COPY-021` | `DES-RULES-COPY-021` | `TEST-RULES-COPY-021` | `T-RULES-COPY-021` |
+
+## `DES-RULES-COPY-022` Version Order Normalization
+
+- compatibility `index.json` 读取后按 `savedAt` 从新到旧稳定排序；检测到旧顺序时
+  原子回写索引，不修改任何版本正文。
+- SQLite `rule_versions.version` 不依赖输入数组位置，按 `savedAt` 从旧到新分配
+  `1..N`；CanonicalRuleDB 仍按 version 升序发布，因此 bundle 永远是旧到新。
+- canonical bundle hydration 写 compatibility index 时直接生成新到旧顺序，避免
+  下次扫描再次修复。处理量为 `O(V log V)`，`V` 受现有 20 版本上限约束。
+
+## Rule Version Repair Traceability
+
+| Requirement         | Design               | Verification          | Task               |
+| ------------------- | -------------------- | --------------------- | ------------------ |
+| `FR-RULES-COPY-022` | `DES-RULES-COPY-022` | `TEST-RULES-COPY-022` | `T-RULES-COPY-022` |

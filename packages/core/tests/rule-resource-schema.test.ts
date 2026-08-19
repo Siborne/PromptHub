@@ -97,12 +97,40 @@ describe("Rule canonical resource schema", () => {
     });
     expect(restored.rule).not.toHaveProperty("path");
     expect(restored.rule).not.toHaveProperty("managedPath");
-    expect(restored.rule).not.toHaveProperty("targetPath");
+    expect(restored.rule.targetPath).toBeUndefined();
+    expect(restored.rule.projectRootPath).toBeUndefined();
     expect(restored.rule).not.toHaveProperty("targetContent");
     expect(restored.rule).not.toHaveProperty("syncStatus");
     expect(fs.readFileSync(path.join(bundlePath, "rule.md"), "utf8")).toBe(
       "# Current\n",
     );
+  });
+
+  it("keeps project placement in canonical files so SQLite can be rebuilt", () => {
+    const base = root();
+    const projectRule = {
+      ...rule(),
+      id: "project:docs",
+      platformId: "workspace",
+      platformName: "Docs",
+      path: "/Users/example/docs/AGENTS.md",
+      targetPath: "/Users/example/docs/AGENTS.md",
+      projectRootPath: "/Users/example/docs",
+      group: "workspace",
+    } satisfies RuleFileContent;
+
+    materializeRuleResourceBundle({
+      bundlePath: path.join(base, "project-rule"),
+      rule: projectRule,
+    });
+
+    expect(
+      readRuleResourceBundle(path.join(base, "project-rule")).rule,
+    ).toMatchObject({
+      id: "project:docs",
+      targetPath: "/Users/example/docs/AGENTS.md",
+      projectRootPath: "/Users/example/docs",
+    });
   });
 
   it("rejects duplicate versions and current content that disagrees with history", () => {
@@ -134,6 +162,16 @@ describe("Rule canonical resource schema", () => {
         rule: { ...rule(), id: "custom:../escape" },
       }),
     ).toThrow(/id is invalid/u);
+    expect(() =>
+      materializeRuleResourceBundle({
+        bundlePath: path.join(base, "unsafe-placement"),
+        rule: {
+          ...rule(),
+          id: "project:unsafe",
+          targetPath: "/tmp/rule\0escape",
+        },
+      }),
+    ).toThrow(/targetPath is invalid/u);
 
     const bundlePath = path.join(base, "tampered");
     materializeRuleResourceBundle({ bundlePath, rule: rule() });

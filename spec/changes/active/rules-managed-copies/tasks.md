@@ -18,3 +18,17 @@
 - [x] `T-RULESCROLL-003` 先补来源区域宽度与工具栏间距回归测试，再将来源状态块改为有界宽度和自然换行
 - [x] 更新 implementation.md
 - [x] 同步稳定 specs / logic / assets / docs
+- [ ] `T-RULES-COPY-019` Resolve the remaining Rules sync-status and deployment
+      action copy/test follow-up recorded in `implementation.md`, then complete
+      convergence and archive the change.
+- [x] `T-RULES-COPY-020` Persist Rule placement in canonical files, rebuild the
+      SQLite projection without path inversion, auto-rebind stale cached global
+      paths, keep file-owned target-missing Rules visible, and verify restart /
+      rebuild regressions.
+- [x] `T-RULES-COPY-021` Bound the Agent Rules cold-load path to one RuleDB
+      adapter, one canonical Skill hydration per database connection, and one
+      target Rule read; verify focused behavior, types, lint, formatting, and
+      the release gate.
+- [x] `T-RULES-COPY-022` Normalize legacy/hydrated Rule version indexes, assign
+      chronological SQLite version numbers, emit newest-first compatibility
+      indexes, and verify the real three-version failure shape.

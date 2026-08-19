@@ -2,6 +2,7 @@ import {
   type AgentManagementBackupProfile,
   type McpServerConfig,
   type PluginLibraryEntry,
+  type RuleBackupRecord,
   type Skill,
 } from "@prompthub/shared";
 
@@ -11,6 +12,7 @@ import {
   type PortableLogicalScope,
 } from "./portable-logical-snapshot";
 import { calculatePromptCanonicalGraphHash } from "./prompt-canonical-catalog";
+import type { CanonicalRuleResource } from "./rule-resource-schema";
 import { ruleGroupForKnownId } from "./rules-workspace-support";
 
 function compareText(left: string, right: string): number {
@@ -108,6 +110,30 @@ function normalizeAgentProfile(value: AgentManagementBackupProfile) {
   };
 }
 
+function normalizeRule(value: RuleBackupRecord | CanonicalRuleResource) {
+  const projectPlacement = value.id.startsWith("project:")
+    ? {
+        targetPath: value.targetPath ?? ("path" in value ? value.path : ""),
+        projectRootPath: value.projectRootPath ?? null,
+      }
+    : {};
+  return {
+    id: value.id,
+    platformId: value.platformId,
+    platformName: value.platformName,
+    platformIcon: value.platformIcon,
+    platformDescription: value.platformDescription,
+    name: value.name,
+    description: value.description,
+    group: "group" in value ? value.group : ruleGroupForKnownId(value.id),
+    ...projectPlacement,
+    content: value.content,
+    versions: [...value.versions].sort(
+      (left, right) => Date.parse(left.savedAt) - Date.parse(right.savedAt),
+    ),
+  };
+}
+
 function sortedById<T extends { id: string }>(values: readonly T[]): T[] {
   return [...values].sort((left, right) => compareText(left.id, right.id));
 }
@@ -164,23 +190,8 @@ export function assertPortableLogicalMatchesCanonicalStorage(
   );
   assertEquivalent(
     "Rules",
-    sortedById(canonical.rules.map((entry) => entry.rule)),
-    sortedById(
-      (payload.rules ?? []).map((rule) => ({
-        id: rule.id,
-        platformId: rule.platformId,
-        platformName: rule.platformName,
-        platformIcon: rule.platformIcon,
-        platformDescription: rule.platformDescription,
-        name: rule.name,
-        description: rule.description,
-        group: ruleGroupForKnownId(rule.id),
-        content: rule.content,
-        versions: [...rule.versions].sort(
-          (left, right) => Date.parse(left.savedAt) - Date.parse(right.savedAt),
-        ),
-      })),
-    ),
+    sortedById(canonical.rules.map((entry) => normalizeRule(entry.rule))),
+    sortedById((payload.rules ?? []).map(normalizeRule)),
   );
   assertEquivalent(
     "MCP servers",

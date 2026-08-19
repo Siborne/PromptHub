@@ -13,7 +13,10 @@ import {
   type CanonicalMcpSecretStore,
   writeCanonicalMcpLibrary,
 } from "../src/canonical-mcp-library";
-import { CoreMcpLibraryService } from "../src/mcp-library";
+import {
+  CoreMcpLibraryService,
+  readMcpLibraryRecoverySource,
+} from "../src/mcp-library";
 import { readMcpServerResourceBundle } from "../src/mcp-resource-schema";
 import { configureRuntimePaths, resetRuntimePaths } from "../src/runtime-paths";
 import {
@@ -168,6 +171,50 @@ describe("canonical MCP library", () => {
     );
   });
 
+  it("keeps canonical file metadata readable for transport when the device vault is unavailable", () => {
+    writeCanonicalMcpLibrary(library([server()]), { secretStore });
+    expect(
+      new CoreMcpLibraryService({ secretStore }).readForTransport().servers[0]
+        .env,
+    ).toEqual({ TOKEN: "secret-value" });
+    expect(
+      new CoreMcpLibraryService().readForTransport().servers[0].env,
+    ).toEqual({ TOKEN: "[REDACTED]" });
+    const missingStore: CanonicalMcpSecretStore = {
+      ...secretStore,
+      read: () => null,
+    };
+    expect(
+      new CoreMcpLibraryService({
+        secretStore: missingStore,
+      }).readForTransport().servers[0].env,
+    ).toEqual({ TOKEN: "[REDACTED]" });
+    const unavailableStore: CanonicalMcpSecretStore = {
+      ...secretStore,
+      read() {
+        throw new Error("MCP_RESOURCE_SECRET_STORE_INVALID");
+      },
+    };
+    const service = new CoreMcpLibraryService({
+      secretStore: unavailableStore,
+    });
+
+    expect(() => service.read()).toThrow("MCP_RESOURCE_SECRET_STORE_INVALID");
+    expect(service.readForTransport().servers).toEqual([
+      expect.objectContaining({
+        id: "server-1",
+        name: "github",
+        env: { TOKEN: "[REDACTED]" },
+      }),
+    ]);
+
+    fs.appendFileSync(
+      path.join(root, "data", "mcp", "server-1", "server.json"),
+      " ",
+    );
+    expect(() => service.readForTransport()).toThrow(/size mismatch/u);
+  });
+
   it("routes the production MCP service through canonical authority", () => {
     const service = new CoreMcpLibraryService({ secretStore });
     const created = service.createServer({
@@ -229,6 +276,90 @@ describe("canonical MCP library", () => {
     expect(
       Object.values(JSON.parse(fs.readFileSync(secretStore.filePath, "utf8"))),
     ).toContain("secret-value");
+  });
+
+  it("migrates empty credential placeholders into canonical files without writing empty vault entries", () => {
+    const legacyPath = path.join(root, "data", "mcp", "library.json");
+    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+    const legacyServer = server({
+      env: { TOKEN: "", OPTIONAL: "secret-value" },
+      headers: { Authorization: "" },
+    });
+    fs.writeFileSync(
+      legacyPath,
+      JSON.stringify(library([legacyServer])),
+      "utf8",
+    );
+    const rejectingEmptyStore: CanonicalMcpSecretStore = {
+      ...secretStore,
+      prepareUpdate(stagePath, input) {
+        expect(input.secrets.every(({ value }) => value.length > 0)).toBe(true);
+        secretStore.prepareUpdate(stagePath, input);
+      },
+    };
+
+    const service = new CoreMcpLibraryService({
+      secretStore: rejectingEmptyStore,
+    });
+    const migrated = service.read();
+
+    expect(migrated.servers).toEqual([expect.objectContaining(legacyServer)]);
+    expect(fs.existsSync(legacyPath)).toBe(false);
+    const bundlePath = path.join(root, "data", "mcp", "server-1");
+    const storedText = fs.readFileSync(
+      path.join(bundlePath, "server.json"),
+      "utf8",
+    );
+    expect(storedText).toContain('"TOKEN": ""');
+    expect(storedText).toContain('"Authorization": ""');
+    expect(storedText).not.toContain("secret-value");
+    expect(
+      Object.values(JSON.parse(fs.readFileSync(secretStore.filePath, "utf8"))),
+    ).toEqual(["secret-value"]);
+
+    const updated = {
+      ...legacyServer,
+      displayName: "GitHub Updated",
+      updatedAt: Date.parse("2026-08-12T03:00:00.000Z"),
+    };
+    service.write(library([updated]));
+    expect(service.read().servers).toEqual([expect.objectContaining(updated)]);
+    const resource = readMcpServerResourceBundle(bundlePath);
+    expect(resource.versions).toHaveLength(2);
+    expect(resource.versions[0].server.env).toEqual({ TOKEN: "" });
+    expect(resource.versions[0].server.headers).toEqual({ Authorization: "" });
+  });
+
+  it("reads a credential-bearing superseded library for recovery without publishing it", () => {
+    const legacyPath = path.join(root, "data", "mcp", "library.json");
+    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+    fs.writeFileSync(legacyPath, JSON.stringify(library([server()])), "utf8");
+
+    const recoverySource = readMcpLibraryRecoverySource({
+      canonicalOptions: { secretStore },
+      supersededPath: legacyPath,
+    });
+
+    expect(recoverySource.servers).toEqual([expect.objectContaining(server())]);
+    expect(fs.existsSync(legacyPath)).toBe(true);
+    expect(fs.existsSync(path.join(root, "data", "mcp", "server-1"))).toBe(
+      false,
+    );
+    expect(fs.existsSync(secretStore.filePath)).toBe(false);
+  });
+
+  it("rejects an oversized superseded MCP recovery source", () => {
+    const legacyPath = path.join(root, "data", "mcp", "library.json");
+    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+    fs.writeFileSync(legacyPath, "{}");
+    fs.truncateSync(legacyPath, 16 * 1024 * 1024 + 1);
+
+    expect(() =>
+      readMcpLibraryRecoverySource({
+        canonicalOptions: { secretStore },
+        supersededPath: legacyPath,
+      }),
+    ).toThrow("Superseded MCP library path is unsafe");
   });
 
   it("uses a stable local identity when renderer device identity is null", () => {

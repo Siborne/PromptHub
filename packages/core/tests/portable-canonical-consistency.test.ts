@@ -266,6 +266,28 @@ describe("portable canonical consistency", () => {
         },
       ],
     };
+    const projectRule: RuleFileContent = {
+      id: "project:prompthub",
+      platformId: "workspace",
+      platformName: "Project",
+      platformIcon: "folder",
+      platformDescription: "Project rules",
+      name: "AGENTS.md",
+      description: "PromptHub project rules",
+      path: "/projects/prompthub/AGENTS.md",
+      projectRootPath: "/projects/prompthub",
+      exists: true,
+      group: "workspace",
+      content: "Project rules\n",
+      versions: [
+        {
+          id: "project-rule-v1",
+          savedAt: "2026-08-11T00:00:00.000Z",
+          content: "Project rules\n",
+          source: "create",
+        },
+      ],
+    };
     const mcpServer: McpServerConfig = {
       id: "mcp-1",
       name: "local-mcp",
@@ -334,7 +356,7 @@ describe("portable canonical consistency", () => {
         outputFormatItems: [],
       },
       skills: [{ skill, versions: [skillVersion], packageFiles: [] }],
-      rules: [rule],
+      rules: [rule, projectRule],
       mcpLibrary: {
         kind: "prompthub-mcp-library",
         version: 1,
@@ -367,68 +389,84 @@ describe("portable canonical consistency", () => {
       ],
     });
 
+    const matchingLogical = logicalEnvelope({
+      skills: [{ ...skill, local_repo_path: "/device-b/skills/writer" }],
+      skillVersions: [skillVersion],
+      rules: [
+        {
+          ...rule,
+          path: "/device-b/.codex/AGENTS.md",
+          versions: [...rule.versions].reverse(),
+        },
+        projectRule,
+      ],
+      mcpServers: [
+        {
+          ...mcpServer,
+          env: { TOKEN: "[REDACTED]" },
+          headers: { Authorization: "[REDACTED]" },
+        },
+      ],
+      plugins: [
+        {
+          ...plugin,
+          localPackagePath: "/device-b/plugins/plugin",
+          source: {
+            ...plugin.source,
+            localPackagePath: "/device-b/plugins/plugin",
+          },
+        },
+      ],
+      providerProfiles: [
+        {
+          id: "profile-1",
+          profile: {
+            platformId: "codex",
+            name: "OpenAI",
+            providerKind: "openai",
+            protocol: "openai-responses",
+            endpoint: null,
+            config: { reasoning: "high" },
+            source: "manual",
+          },
+          modelMappings: [
+            {
+              routeKey: "secondary",
+              modelId: "gpt-4.1",
+              parameters: { reasoning: "high" },
+            },
+            {
+              routeKey: "primary",
+              modelId: "gpt-5",
+              parameters: { reasoning: "high" },
+            },
+          ],
+          requiresSecret: true,
+          archived: false,
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    });
+
     expect(() =>
       assertPortableLogicalMatchesCanonicalStorage(
-        logicalEnvelope({
-          skills: [{ ...skill, local_repo_path: "/device-b/skills/writer" }],
-          skillVersions: [skillVersion],
-          rules: [
-            {
-              ...rule,
-              path: "/device-b/.codex/AGENTS.md",
-              versions: [...rule.versions].reverse(),
-            },
-          ],
-          mcpServers: [
-            {
-              ...mcpServer,
-              env: { TOKEN: "[REDACTED]" },
-              headers: { Authorization: "[REDACTED]" },
-            },
-          ],
-          plugins: [
-            {
-              ...plugin,
-              localPackagePath: "/device-b/plugins/plugin",
-              source: {
-                ...plugin.source,
-                localPackagePath: "/device-b/plugins/plugin",
-              },
-            },
-          ],
-          providerProfiles: [
-            {
-              id: "profile-1",
-              profile: {
-                platformId: "codex",
-                name: "OpenAI",
-                providerKind: "openai",
-                protocol: "openai-responses",
-                endpoint: null,
-                config: { reasoning: "high" },
-                source: "manual",
-              },
-              modelMappings: [
-                {
-                  routeKey: "secondary",
-                  modelId: "gpt-4.1",
-                  parameters: { reasoning: "high" },
-                },
-                {
-                  routeKey: "primary",
-                  modelId: "gpt-5",
-                  parameters: { reasoning: "high" },
-                },
-              ],
-              requiresSecret: true,
-              archived: false,
-              createdAt: 1,
-              updatedAt: 2,
-            },
-          ],
-        }),
+        matchingLogical,
         canonicalPath,
       ),
     ).not.toThrow();
+
+    const mismatchedProjectPlacement = JSON.parse(matchingLogical) as Record<
+      string,
+      any
+    >;
+    mismatchedProjectPlacement.payload.rules[1].path =
+      "/projects/other/AGENTS.md";
+    expect(() =>
+      assertPortableLogicalMatchesCanonicalStorage(
+        JSON.stringify(mismatchedProjectPlacement),
+        canonicalPath,
+      ),
+    ).toThrow("does not match canonical Rules");
   });
 });

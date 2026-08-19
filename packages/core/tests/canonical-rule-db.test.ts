@@ -97,7 +97,17 @@ describe("canonical Rule database adapter", () => {
     ruleDb.replaceVersions("codex-global", versions());
     const bundlePath = path.join(root, "data", "rules", "codex-global");
 
-    expect(readRuleResourceBundle(bundlePath).rule.content).toBe("# Rules\n");
+    expect(readRuleResourceBundle(bundlePath).rule).toMatchObject({
+      content: "# Rules\n",
+    });
+    expect(readRuleResourceBundle(bundlePath).rule.targetPath).toBeUndefined();
+    const initialRevision =
+      readRuleResourceBundle(bundlePath).bundleManifest.revision;
+    ruleDb.upsert(record());
+    ruleDb.replaceVersions("codex-global", versions());
+    expect(readRuleResourceBundle(bundlePath).bundleManifest.revision).toBe(
+      initialRevision,
+    );
     fs.rmSync(getRulesDir(), { recursive: true, force: true });
     ruleDb.reconcileCanonicalWorkspaces();
     const restored = ruleDb.getById("codex-global")!;
@@ -116,5 +126,101 @@ describe("canonical Rule database adapter", () => {
 
     ruleDb.delete("codex-global");
     expect(fs.existsSync(bundlePath)).toBe(false);
+  });
+
+  it("recovers an older project placement from the file workspace during catalog rebuild", () => {
+    const projectRootPath = path.join(root, "project");
+    const targetPath = path.join(projectRootPath, "AGENTS.md");
+    const legacyContainer = path.join(getRulesDir(), "projects", "docs__docs");
+    const projectManagedPath = path.join(legacyContainer, "AGENTS.md");
+    const projectVersionPath = path.join(
+      getRulesDir(),
+      ".versions",
+      "project%3Adocs",
+      "0001.md",
+    );
+    fs.mkdirSync(path.dirname(projectVersionPath), { recursive: true });
+    fs.mkdirSync(legacyContainer, { recursive: true });
+    fs.writeFileSync(projectManagedPath, "# Project\n");
+    fs.writeFileSync(projectVersionPath, "# Project\n");
+    const projectRecord: RuleRecord = {
+      ...record(),
+      id: "project:docs",
+      scope: "project",
+      platformId: "workspace",
+      platformName: "Docs",
+      canonicalFileName: "AGENTS.md",
+      managedPath: projectManagedPath,
+      targetPath,
+      projectRootPath,
+    };
+    const projectVersions: RuleVersionRecord[] = [
+      {
+        ...versions()[0],
+        id: "project-version-1",
+        ruleId: "project:docs",
+        filePath: projectVersionPath,
+      },
+    ];
+    ruleDb.upsert(projectRecord);
+    ruleDb.replaceVersions(projectRecord.id, projectVersions);
+    fs.writeFileSync(
+      path.join(legacyContainer, "_rule.json"),
+      `${JSON.stringify({ ...projectRecord, managedPath: projectManagedPath })}\n`,
+    );
+    database
+      .prepare(
+        "UPDATE rules SET target_path = '', project_root_path = NULL WHERE id = ?",
+      )
+      .run(projectRecord.id);
+
+    ruleDb.reconcileCanonicalWorkspaces();
+
+    expect(ruleDb.getById(projectRecord.id)).toMatchObject({
+      targetPath,
+      projectRootPath,
+    });
+  });
+
+  it("hydrates the compatibility version index newest first", () => {
+    const versionDir = path.dirname(versionPath);
+    const history = [
+      ["version-1", "2026-08-10T00:00:00.000Z", "# Version 1\n"],
+      ["version-2", "2026-08-11T00:00:00.000Z", "# Version 2\n"],
+      ["version-3", "2026-08-12T00:00:00.000Z", "# Version 3\n"],
+    ] as const;
+    const records = history.map(([id, createdAt, content], index) => {
+      const filePath = path.join(
+        versionDir,
+        `${String(index + 1).padStart(4, "0")}.md`,
+      );
+      fs.writeFileSync(filePath, content);
+      return {
+        id,
+        ruleId: "codex-global" as const,
+        version: index + 1,
+        filePath,
+        source: index === 0 ? ("create" as const) : ("manual-save" as const),
+        createdAt,
+      };
+    });
+    fs.writeFileSync(managedPath, "# Version 3\n");
+    ruleDb.upsert({ ...record(), currentVersion: 3 });
+    ruleDb.replaceVersions("codex-global", records);
+    fs.rmSync(getRulesDir(), { recursive: true, force: true });
+
+    ruleDb.reconcileCanonicalWorkspaces();
+
+    const index = JSON.parse(
+      fs.readFileSync(
+        path.join(getRulesDir(), ".versions", "codex-global", "index.json"),
+        "utf8",
+      ),
+    ) as Array<{ id: string }>;
+    expect(index.map((entry) => entry.id)).toEqual([
+      "version-3",
+      "version-2",
+      "version-1",
+    ]);
   });
 });

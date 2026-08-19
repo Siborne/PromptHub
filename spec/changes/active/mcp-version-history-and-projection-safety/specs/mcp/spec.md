@@ -169,6 +169,30 @@ without treating them as valid MCP version records.
 - **And** skips files whose identity or metadata changed after preview
 - **And** leaves unselected and unknown files untouched
 
+### `FR-MCPVER-007`: File-authoritative MCP configuration migration
+
+PromptHub MUST keep My MCP definitions and history in canonical files. SQLite
+and renderer state MUST NOT be the only copy of an MCP definition. Device-bound
+secret storage owns only non-empty literal credential values.
+
+#### Scenario: Existing library contains unconfigured credential placeholders
+
+- **Given** a version-1 MCP library contains empty `env` or header values
+- **When** PromptHub migrates it to canonical MCP bundles
+- **Then** the empty placeholders remain in the canonical server and version files
+- **And** only non-empty literal credentials are extracted into the encrypted vault
+- **And** reopening My MCP returns every server instead of failing the whole list
+- **And** Agent/project MCP files remain derived projections
+
+#### Scenario: Device secret storage is unavailable
+
+- **Given** canonical MCP bundles are valid but a referenced device secret is
+  missing, unreadable, or bound to another unavailable device vault
+- **When** the renderer requests the My MCP inventory
+- **Then** PromptHub returns the file-owned definitions with credential values redacted
+- **And** does not discard the server list or fall back to SQLite
+- **And** execution and mutation paths that require the real credential still fail closed
+
 ## Non-Functional Requirements
 
 ### `NFR-MCPVER-001`: Bounded work
@@ -189,6 +213,11 @@ without treating them as valid MCP version records.
   during export, backup, sync, logging, IPC, and UI preview.
 - Transaction metadata MUST NOT duplicate literal MCP credentials or whole
   external target files.
+- Empty credential placeholders are configuration state rather than secrets;
+  canonical files may contain the key with an empty value, but never a non-empty
+  literal credential.
+- Renderer inventory fallback MUST expose only the existing redaction sentinel;
+  it MUST NOT convert an unavailable secret into a usable empty credential.
 
 ## Compatibility Requirements
 

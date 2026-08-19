@@ -99,27 +99,28 @@ describe("MCP market IPC", () => {
   });
 
   it("redacts MCP library values at the IPC transport boundary", async () => {
+    const privateLibrary = {
+      kind: "prompthub-mcp-library",
+      version: 1,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      servers: [
+        {
+          id: "mcp-private",
+          name: "private",
+          displayName: "Private",
+          transport: "stdio",
+          command: "node",
+          env: { API_TOKEN: "ipc-secret" },
+          enabled: true,
+          source: { type: "manual" },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      bindings: [],
+    };
     const service = {
-      read: vi.fn(() => ({
-        kind: "prompthub-mcp-library",
-        version: 1,
-        updatedAt: "2026-01-01T00:00:00.000Z",
-        servers: [
-          {
-            id: "mcp-private",
-            name: "private",
-            displayName: "Private",
-            transport: "stdio",
-            command: "node",
-            env: { API_TOKEN: "ipc-secret" },
-            enabled: true,
-            source: { type: "manual" },
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ],
-        bindings: [],
-      })),
+      readForTransport: vi.fn(() => privateLibrary),
     };
     const handlers = await setupHandlers(service);
     const { IPC_CHANNELS } =
@@ -131,5 +132,6 @@ describe("MCP market IPC", () => {
     expect((library as any).servers[0].env).toEqual({
       API_TOKEN: "[REDACTED]",
     });
+    expect(service.readForTransport).toHaveBeenCalledOnce();
   });
 });

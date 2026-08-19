@@ -112,4 +112,21 @@ describe("canonical Skill database adapter", () => {
       before.bundleManifest.revision,
     );
   });
+
+  it("hydrates canonical Skill workspaces only once per database connection", () => {
+    const created = skillDb.create({
+      name: "one-shot-hydration",
+      protocol_type: "skill",
+      content: "Initial",
+      is_favorite: false,
+      local_repo_path: sourcePath,
+    });
+    const workspacePath = getCanonicalSkillWorkspacePath(created.id);
+
+    skillDb.reconcileCanonicalWorkspaces();
+    fs.rmSync(workspacePath, { recursive: true, force: true });
+    new CanonicalSkillDB(database).reconcileCanonicalWorkspaces();
+
+    expect(fs.existsSync(workspacePath)).toBe(false);
+  });
 });

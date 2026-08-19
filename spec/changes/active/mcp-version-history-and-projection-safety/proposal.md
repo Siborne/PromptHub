@@ -29,6 +29,10 @@ error instead of fixing it.
 ## Product Decision
 
 - My MCP is the source of truth and owns formal MCP version history.
+- My MCP definitions and versions are canonical files below `data/mcp`; SQLite
+  and renderer state are derived only. Empty credential fields are file-owned
+  unconfigured state, while non-empty literal credentials remain device-vault
+  owned.
 - Agent and project MCP files are derived projections, not history stores.
 - Projection safety uses validation, same-filesystem atomic replacement,
   in-operation rollback, and post-write verification. It does not create a
@@ -73,6 +77,8 @@ error instead of fixing it.
 - Existing `data/mcp/library.json` version 1 remains readable.
 - Migration creates an initial `v1` snapshot for each existing My MCP server,
   then advances the library schema only after all version records verify.
+- Empty legacy `env` and header values migrate as explicit file placeholders
+  and do not create invalid empty entries in the encrypted secret store.
 - Existing Agent/project target files are not rewritten during migration.
 - Existing adjacent backup sidecars remain untouched until the user confirms a
   cleanup action.

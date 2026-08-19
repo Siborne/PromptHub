@@ -14,6 +14,8 @@ import {
 } from "./canonical-skill-library";
 import { getRuntimeStorageContext } from "./runtime-paths";
 
+const reconciledSkillDatabases = new WeakSet<DatabaseAdapter.Database>();
+
 interface SkillSnapshot {
   skill: Skill | null;
   versions: SkillVersion[];
@@ -202,14 +204,20 @@ export class CanonicalSkillDB extends BaseSkillDB {
   }
 
   reconcileCanonicalWorkspaces(): void {
-    if (!this.canonical()) return;
-    for (const skill of super.getAll()) {
-      const workspacePath = hydrateCanonicalSkillWorkspace(skill.id);
-      if (workspacePath && skill.local_repo_path !== workspacePath) {
-        this.db
-          .prepare("UPDATE skills SET local_repo_path = ? WHERE id = ?")
-          .run(workspacePath, skill.id);
+    if (!this.canonical() || reconciledSkillDatabases.has(this.db)) return;
+    try {
+      for (const skill of super.getAll()) {
+        const workspacePath = hydrateCanonicalSkillWorkspace(skill.id);
+        if (workspacePath && skill.local_repo_path !== workspacePath) {
+          this.db
+            .prepare("UPDATE skills SET local_repo_path = ? WHERE id = ?")
+            .run(workspacePath, skill.id);
+        }
       }
+      reconciledSkillDatabases.add(this.db);
+    } catch (error) {
+      reconciledSkillDatabases.delete(this.db);
+      throw error;
     }
   }
 }

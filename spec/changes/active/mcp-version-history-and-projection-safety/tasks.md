@@ -40,3 +40,6 @@
       `pnpm verify:changed`, and UI interaction verification.
 - [ ] `T-MCPVER-012` Converge stable MCP knowledge, issue #203 local status,
       sync/backup docs, release notes when applicable, and archive the change.
+- [x] `T-MCPVER-013` Reproduce empty legacy credential migration failure, keep
+      empty placeholders in canonical MCP files, vault only non-empty values,
+      and verify reload without weakening invalid-secret handling.

@@ -834,6 +834,184 @@ describe("rules workspace storage", () => {
     expect(opencodeRule?.path).toContain("AGENTS.md");
   });
 
+  it("rebinds a rebuilt catalog to device paths before serving the cached list", async () => {
+    const service = createGlobalRulesTestService();
+    const targetPath = path.join(tempDir, "home", ".claude", "CLAUDE.md");
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, "# Device rule", "utf8");
+    const staleCanonicalPath = path.join(
+      tempDir,
+      "data",
+      "rules",
+      "claude-global",
+      "rule.md",
+    );
+    const db = new RuleDB(initDatabase());
+    db.upsert({
+      id: "claude-global",
+      scope: "global",
+      platformId: "claude",
+      platformName: "Claude Code",
+      platformIcon: "Bot",
+      platformDescription: "Claude rules",
+      canonicalFileName: "CLAUDE.md",
+      description: "Global Claude rules",
+      managedPath: path.join(getRulesDir(), "global", "claude", "CLAUDE.md"),
+      targetPath: staleCanonicalPath,
+      projectRootPath: null,
+      syncStatus: "target-missing",
+      currentVersion: 1,
+      contentHash: "stale",
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    });
+
+    const descriptors = await service.listCachedRuleDescriptors();
+
+    expect(descriptors).toContainEqual(
+      expect.objectContaining({
+        id: "claude-global",
+        path: targetPath,
+        exists: true,
+        syncStatus: "synced",
+      }),
+    );
+    expect(db.getById("claude-global")).toMatchObject({
+      targetPath,
+      syncStatus: "synced",
+    });
+  });
+
+  it("keeps managed Rules in the cached list when only the deployment target is missing", async () => {
+    const service = createGlobalRulesTestService();
+    const managedPath = path.join(getRulesDir(), "global", "pi", "AGENTS.md");
+    fs.mkdirSync(path.dirname(managedPath), { recursive: true });
+    fs.writeFileSync(managedPath, "# Managed Pi rule", "utf8");
+    new RuleDB(initDatabase()).upsert({
+      id: "pi-global",
+      scope: "global",
+      platformId: "pi",
+      platformName: "Pi",
+      platformIcon: "Bot",
+      platformDescription: "Pi rules",
+      canonicalFileName: "AGENTS.md",
+      description: "Global Pi rules",
+      managedPath,
+      targetPath: path.join(tempDir, "home", "pi", "AGENTS.md"),
+      projectRootPath: null,
+      syncStatus: "target-missing",
+      currentVersion: 1,
+      contentHash: "managed",
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    });
+
+    expect(await service.listCachedRuleDescriptors()).toContainEqual(
+      expect.objectContaining({
+        id: "pi-global",
+        exists: false,
+        syncStatus: "target-missing",
+      }),
+    );
+  });
+
+  it("reuses one SQLite adapter while rebuilding the Rule projection", async () => {
+    const database = initDatabase();
+    const createRuleDb = vi.fn(() => new RuleDB(database));
+    const homeDir = path.join(tempDir, "bounded-scan-home");
+    fs.mkdirSync(path.join(homeDir, "claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(homeDir, "claude", "CLAUDE.md"),
+      "# Claude rules",
+      "utf8",
+    );
+    const service = createRulesWorkspaceService({
+      getRulesDir,
+      createRuleDb,
+      getPlatformGlobalRulePath: (platform) =>
+        path.join(
+          homeDir,
+          platform.id,
+          platform.id === "claude" ? "CLAUDE.md" : "AGENTS.md",
+        ),
+      getPlatformRootDir: (platform) => path.join(homeDir, platform.id),
+    });
+
+    const descriptors = await service.scanRuleDescriptors();
+
+    expect(descriptors).toContainEqual(
+      expect.objectContaining({ id: "claude-global", exists: true }),
+    );
+    expect(createRuleDb).toHaveBeenCalledTimes(1);
+  });
+
+  it("repairs chronological compatibility indexes before canonical publication", async () => {
+    const service = createGlobalRulesTestService();
+    const targetPath = path.join(tempDir, "home", "codex", "AGENTS.md");
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, "# Version 3", "utf8");
+    await service.scanRuleDescriptors();
+
+    const versionDir = path.join(getRulesDir(), ".versions", "codex-global");
+    const entries = [
+      {
+        id: "codex-version-1",
+        savedAt: "2026-07-14T07:52:55.760Z",
+        source: "create",
+        fileName: "0001.md",
+        content: "# Version 1",
+      },
+      {
+        id: "codex-version-2",
+        savedAt: "2026-07-30T02:56:33.746Z",
+        source: "manual-save",
+        fileName: "0002.md",
+        content: "# Version 2",
+      },
+      {
+        id: "codex-version-3",
+        savedAt: "2026-08-03T04:45:21.203Z",
+        source: "manual-save",
+        fileName: "0003.md",
+        content: "# Version 3",
+      },
+    ] as const;
+    fs.mkdirSync(versionDir, { recursive: true });
+    for (const entry of entries) {
+      fs.writeFileSync(path.join(versionDir, entry.fileName), entry.content);
+    }
+    fs.writeFileSync(
+      path.join(versionDir, "index.json"),
+      `${JSON.stringify(
+        entries.map(({ content: _content, ...entry }) => entry),
+        null,
+        2,
+      )}\n`,
+    );
+
+    await expect(service.scanRuleDescriptors()).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "codex-global" })]),
+    );
+
+    const repairedIndex = JSON.parse(
+      fs.readFileSync(path.join(versionDir, "index.json"), "utf8"),
+    ) as Array<{ id: string }>;
+    expect(repairedIndex.map((entry) => entry.id)).toEqual([
+      "codex-version-3",
+      "codex-version-2",
+      "codex-version-1",
+    ]);
+    expect(
+      new RuleDB(initDatabase())
+        .getVersions("codex-global")
+        .map((version) => version.createdAt),
+    ).toEqual([
+      "2026-08-03T04:45:21.203Z",
+      "2026-07-30T02:56:33.746Z",
+      "2026-07-14T07:52:55.760Z",
+    ]);
+  });
+
   it("deduplicates concurrent initial snapshots for global rules on first read", async () => {
     const service = createGlobalRulesTestService();
     const platform = getPlatformById("claude");

@@ -163,6 +163,25 @@ Complexity is `O(F + B)` for `F` known target locations and `B` selected bytes
 hashed during preview/revalidation. Candidate listing and cleanup are paginated
 and batch-limited.
 
+## `DES-MCPVER-007`: Empty Credential Placeholder Boundary
+
+Canonical MCP bundles keep normalized definitions and immutable versions below
+`data/mcp/<server-id>/`. A literal `env` or header value is classified as:
+
+- non-empty: extract it into the device-bound encrypted secret store and retain
+  only its deterministic reference in the bundle;
+- empty: keep the key and empty value in the bundle as explicit unconfigured
+  state and do not create a vault entry.
+
+Hydration merges referenced secret values into the file-owned empty maps rather
+than replacing them. Missing or unreadable non-empty secret references continue
+to fail closed for execution and mutation. The renderer inventory uses a
+separate redacted read mode: only secret-read failures become the established
+`[REDACTED]` sentinel, while bundle/schema/path failures still fail closed. The
+migration does not weaken secret-store validation or store plaintext
+credentials. Classification and hydration are linear in the number of `env`
+and header entries and add no extra file scan.
+
 ## Contracts And Ownership
 
 - `packages/shared/types/mcp.ts`: version, mutation, diff, cleanup, and
@@ -196,17 +215,18 @@ Migration time and I/O are `O(N * S)` for `N` servers and average snapshot size
 
 ## Verification Plan
 
-| Test ID           | Method                     | Required proof                                                                                                             |
-| ----------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `TEST-MCPVER-001` | Integration + black box    | v1 migration, create/import v1, reload, and exact current-version agreement                                                |
-| `TEST-MCPVER-002` | White box + property cases | Every versioned field changes digest; metadata/no-op paths do not create versions                                          |
-| `TEST-MCPVER-003` | Failure/rollback           | Failure at snapshot, index, library, verify, binding, and restore boundaries leaves one valid state                        |
-| `TEST-MCPVER-004` | Filesystem integration     | Apply/remove/sync create no sidecar or central snapshot; unchanged target keeps inode/mtime where supported                |
-| `TEST-MCPVER-005` | Conflict integration       | Import creates one new entry-level version; overwrite creates none and preserves unrelated target keys                     |
-| `TEST-MCPVER-006` | Security/fuzz              | traversal, null byte, symlink, malformed JSON/TOML, hostile ids, and changed-after-preview cleanup candidates are rejected |
-| `TEST-MCPVER-007` | Sync/export contract       | MCP versions round-trip; secret-bearing fields obey the current encrypted/redacted channel policy                          |
-| `TEST-MCPVER-008` | Performance/stress         | Large server/history inventory is paginated, details load on demand, mutation remains per-server bounded                   |
-| `TEST-MCPVER-009` | UI/CLI behavior            | history, diff, restore, delete, cleanup preview, confirmation, loading, empty, and error states are usable                 |
+| Test ID           | Method                     | Required proof                                                                                                                          |
+| ----------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `TEST-MCPVER-001` | Integration + black box    | v1 migration, create/import v1, reload, and exact current-version agreement                                                             |
+| `TEST-MCPVER-002` | White box + property cases | Every versioned field changes digest; metadata/no-op paths do not create versions                                                       |
+| `TEST-MCPVER-003` | Failure/rollback           | Failure at snapshot, index, library, verify, binding, and restore boundaries leaves one valid state                                     |
+| `TEST-MCPVER-004` | Filesystem integration     | Apply/remove/sync create no sidecar or central snapshot; unchanged target keeps inode/mtime where supported                             |
+| `TEST-MCPVER-005` | Conflict integration       | Import creates one new entry-level version; overwrite creates none and preserves unrelated target keys                                  |
+| `TEST-MCPVER-006` | Security/fuzz              | traversal, null byte, symlink, malformed JSON/TOML, hostile ids, and changed-after-preview cleanup candidates are rejected              |
+| `TEST-MCPVER-007` | Sync/export contract       | MCP versions round-trip; secret-bearing fields obey the current encrypted/redacted channel policy                                       |
+| `TEST-MCPVER-008` | Performance/stress         | Large server/history inventory is paginated, details load on demand, mutation remains per-server bounded                                |
+| `TEST-MCPVER-009` | UI/CLI behavior            | history, diff, restore, delete, cleanup preview, confirmation, loading, empty, and error states are usable                              |
+| `TEST-MCPVER-010` | Migration + schema         | empty placeholders migrate into files, non-empty values remain vault-only, and unavailable vaults still permit redacted inventory reads |
 
 Changed critical filesystem modules require 100% branch and condition coverage
 for new behavior plus adversarial rollback tests. UI acceptance requires actual
@@ -237,3 +257,4 @@ desktop interaction or Playwright evidence, not only component callbacks.
 | `FR-MCPVER-006`  | `DES-MCPVER-006`                                     | `TEST-MCPVER-006`, `TEST-MCPVER-009`                    | `T-MCPVER-007`                                 |
 | `NFR-MCPVER-001` | `DES-MCPVER-001`, `DES-MCPVER-006`                   | `TEST-MCPVER-008`                                       | `T-MCPVER-008`                                 |
 | `NFR-MCPVER-002` | `DES-MCPVER-001`, `DES-MCPVER-003`                   | `TEST-MCPVER-006`, `TEST-MCPVER-007`                    | `T-MCPVER-002`, `T-MCPVER-009`                 |
+| `FR-MCPVER-007`  | `DES-MCPVER-007`                                     | `TEST-MCPVER-010`                                       | `T-MCPVER-013`                                 |

@@ -101,10 +101,15 @@
 
 - 全局规则平台注册表来自 `packages/shared/constants/rules.ts`
 - Rules 的业务真相源位于 `userData/data/rules/`
-- 全局规则保存在 `data/rules/global/<platform>/`
-- 项目规则保存在 `data/rules/projects/<slug>__<id>/`
-- 版本快照保存在 `data/rules/.versions/<rule-id>/`
+- 每条规则保存在 `data/rules/<rule-id>/` canonical bundle 中：`rule.md`
+  是当前正文，`rule.json` 是逻辑元数据与外部 placement，`versions/` 保存版本正文。
+- `cache/rules-workspace/` 只用于运行期兼容工作区和索引 hydration，可以删除并从 canonical bundle 重建。
 - `prompthub.db` 仅承担 Rules 的索引/状态缓存角色，业务正文不应只存在于数据库中
+- 项目规则的 `targetPath` 与 `projectRootPath` 必须随 canonical Rule 文件保存，
+  使删除或迁移 SQLite 后仍能恢复项目绑定；全局规则路径由当前设备 agent
+  配置派生，`managedPath` 和 `syncStatus` 是可重建状态。
+- 内置全局规则在读取时以当前设备平台注册表和 agent override 重新派生外部目标，
+  不得把 canonical `rule.md` 或旧设备路径当作部署目标。
 - 旧版 settings 里的 `ruleProjects` 只作为迁移来源，不再是长期真相源
 - 旧版 user data 同级 `rule-history/*.json` 只作为首次 materialize 时的迁移来源：
   - 目标文件存在时，目标内容成为当前托管正文，legacy history 合并为更早版本快照。
@@ -114,10 +119,16 @@
   single path segments before they are used in managed project directories.
   Valid ids start with an alphanumeric character and may contain only letters,
   numbers, dots, underscores, and hyphens.
-- Shared Rules workspace files under `data/rules/`, including managed rule
-  content, `_rule.json`, version snapshots, and version indexes, must use
+- Canonical Rule bundles under `data/rules/` use the shared journaled bundle
+  publication boundary. Hydrated compatibility files under
+  `cache/rules-workspace/`, including `_rule.json` and version indexes, use
   same-directory temporary writes followed by rename so interrupted writes do
   not replace the previous readable file with partial content.
+- Canonical `rule.json` history is chronological from oldest to newest, while
+  the compatibility `index.json` is newest first for the runtime workspace.
+  Hydration and reads must normalize that boundary before rebuilding SQLite;
+  an older reversed compatibility index is repaired atomically without
+  changing any Rule body or durable version file.
 - Backup import version restoration must stage the replacement version
   directory before publishing it; failed version writes must preserve the
   previous readable version history.
@@ -133,6 +144,14 @@
   `project:` IDs whose targets are still absent. It deletes PromptHub-managed
   rule/version data and the matching RuleDB row, never the external project
   root or target path, and reports removed, skipped, and failed IDs.
+- legacy cached-list API 必须直接委托给一次有界文件扫描并重建 SQLite 投影，
+  不得从 DB 复制另一套可见性或路径判定；用户不需要先点击 Rescan 才能看到
+  文件持有的规则。
+- 单次文件权威扫描只创建一个 SQLite Rule 投影适配器；同一个已打开的数据库
+  连接只执行一次 canonical Skill workspace hydration，避免 Rule 枚举把 Skill
+  全量 hydration 放大为 `Rules x Skills`。
+- Agent Rules 冷启动只加载 descriptor inventory，再按 Agent 声明路径/平台读取
+  对应 Rule；不得先读取列表首项或其他 Agent 的 Rule。
 
 ### 10. Path Derivation Constraints
 
@@ -172,7 +191,8 @@
 ### 15. Agent-Scoped Missing File Creation
 
 - Agent `Rules` 页必须从完整 descriptor inventory 解析目标；standalone
-  Rules 侧栏仍只使用可见且已存在的文件投影。
+  Rules 侧栏展示 main 返回的已启用文件持有规则。`exists: false` 只表示外部
+  部署目标缺失，不得因此隐藏 PromptHub canonical 正文。
 - descriptor 已知但 `exists: false` 时，页面必须居中显示创建确认、声明的
   canonical 文件名和精确目标路径；用户确认前不得读取、创建或打开空编辑器。
 - descriptor 的 `name`、`path`、`id` 和 `platformId` 是创建操作的唯一来源。

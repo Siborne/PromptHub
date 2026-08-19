@@ -5,6 +5,7 @@ import type {
   McpLibraryFile,
   McpServerConfig,
 } from "@prompthub/shared/types/mcp";
+import { MCP_REDACTED_VALUE } from "@prompthub/shared/utils/mcp-config";
 
 import {
   publishCanonicalEntries,
@@ -55,6 +56,10 @@ export interface CanonicalMcpLibraryOptions {
   deviceId?: string;
   secretStore?: CanonicalMcpSecretStore;
   injectPublicationFailure?: (targetPath: string) => void;
+}
+
+export interface CanonicalMcpLibraryReadOptions extends CanonicalMcpLibraryOptions {
+  secretReadMode?: "strict" | "redacted";
 }
 
 interface LoadedServer {
@@ -170,18 +175,30 @@ function hasSecretReferences(resource: ReadMcpServerResourceResult): boolean {
 
 function requireSecretReader(
   resource: ReadMcpServerResourceResult,
-  options: CanonicalMcpLibraryOptions,
+  options: CanonicalMcpLibraryReadOptions,
 ): (ref: string) => string | null {
   if (!hasSecretReferences(resource)) return () => null;
   if (!options.secretStore) {
+    if (options.secretReadMode === "redacted") {
+      return () => MCP_REDACTED_VALUE;
+    }
     throw new Error(
       "Canonical MCP credentials require the device-bound secret store",
     );
   }
+  if (options.secretReadMode === "redacted") {
+    return (ref) => {
+      try {
+        return options.secretStore!.read(ref) ?? MCP_REDACTED_VALUE;
+      } catch {
+        return MCP_REDACTED_VALUE;
+      }
+    };
+  }
   return (ref) => options.secretStore!.read(ref);
 }
 
-function loadServers(options: CanonicalMcpLibraryOptions): LoadedServer[] {
+function loadServers(options: CanonicalMcpLibraryReadOptions): LoadedServer[] {
   return listBundlePaths()
     .map((bundlePath): LoadedServer => {
       const resource = readMcpServerResourceBundle(bundlePath);
@@ -224,7 +241,7 @@ function readBindings(
 }
 
 export function readCanonicalMcpLibrary(
-  options: CanonicalMcpLibraryOptions = {},
+  options: CanonicalMcpLibraryReadOptions = {},
 ): McpLibraryFile {
   recoverCanonicalEntryPublication(getUserDataPath(), OPERATION_KEY);
   const loaded = loadServers(options);
@@ -284,7 +301,12 @@ export function writeCanonicalMcpLibrary(
   options: CanonicalMcpLibraryOptions = {},
 ): void {
   recoverCanonicalEntryPublication(getUserDataPath(), OPERATION_KEY);
-  const loaded = loadServers(options);
+  const strictOptions: CanonicalMcpLibraryOptions = {
+    deviceId: options.deviceId,
+    secretStore: options.secretStore,
+    injectPublicationFailure: options.injectPublicationFailure,
+  };
+  const loaded = loadServers(strictOptions);
   const previous = new Map(loaded.map((entry) => [entry.hydrated.id, entry]));
   const next = new Map<string, McpServerConfig>();
   for (const server of library.servers) {
@@ -306,7 +328,7 @@ export function writeCanonicalMcpLibrary(
     }
     const currentVersion = (current?.resource.currentVersion ?? 0) + 1;
     const versions = [
-      ...(current ? hydrateVersions(current, options) : []),
+      ...(current ? hydrateVersions(current, strictOptions) : []),
       {
         version: currentVersion,
         server,
@@ -348,10 +370,10 @@ export function writeCanonicalMcpLibrary(
   });
   const requiresSecretStore =
     loaded.some(({ resource }) => hasSecretReferences(resource)) ||
-    [...next.values()].some(
-      (server) =>
-        Object.keys(server.env ?? {}).length > 0 ||
-        Object.keys(server.headers ?? {}).length > 0,
+    [...next.values()].some((server) =>
+      [server.env, server.headers].some((entries) =>
+        Object.values(entries ?? {}).some((value) => value.length > 0),
+      ),
     );
   if (options.secretStore) {
     const secretStore = options.secretStore;
@@ -375,7 +397,7 @@ export function writeCanonicalMcpLibrary(
     entries: mutations,
     injectFailure: options.injectPublicationFailure,
     verify() {
-      const restored = readCanonicalMcpLibrary(options);
+      const restored = readCanonicalMcpLibrary(strictOptions);
       if (
         stableJson(restored.servers) !==
           stableJson(

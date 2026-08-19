@@ -94,7 +94,8 @@ export function createRulesWorkspaceService(
     Promise<AppendRuleVersionResult>
   >();
   const pendingGlobalRuleMaterializations = new Map<
-    KnownRuleFileId | CustomRuleFileId, Promise<StoredRuleMeta>
+    KnownRuleFileId | CustomRuleFileId,
+    Promise<StoredRuleMeta>
   >();
 
   function assertStorageAvailable(): void {
@@ -109,14 +110,6 @@ export function createRulesWorkspaceService(
       ...Object.values(KNOWN_RULE_FILE_TEMPLATES),
       ...(deps.getExtraGlobalRuleTemplates?.() ?? []),
     ];
-  }
-
-  function getActiveCustomRuleIds(): Set<CustomRuleFileId> {
-    return new Set(
-      (deps.getExtraGlobalRuleTemplates?.() ?? []).map(
-        (template) => template.id,
-      ),
-    );
   }
 
   function getRuleDb(): RuleDB {
@@ -277,16 +270,33 @@ export function createRulesWorkspaceService(
     return highestExistingSequence + 1;
   }
 
+  function compareVersionEntriesNewestFirst(
+    left: StoredRuleVersionIndexEntry,
+    right: StoredRuleVersionIndexEntry,
+  ): number {
+    const timestampDelta = Date.parse(right.savedAt) - Date.parse(left.savedAt);
+    if (Number.isFinite(timestampDelta) && timestampDelta !== 0) {
+      return timestampDelta;
+    }
+    return (
+      getVersionSequenceFromFileName(right.fileName) -
+      getVersionSequenceFromFileName(left.fileName)
+    );
+  }
+
   async function readRuleVersionsFromIndex(
     ruleId: RuleFileId,
     index: StoredRuleVersionIndexEntry[],
   ): Promise<ReadRuleVersionsResult> {
     const versionDir = getRuleVersionsDir(ruleId);
+    const orderedIndex = [...index].sort(compareVersionEntriesNewestFirst);
     const nextIndex: StoredRuleVersionIndexEntry[] = [];
     const versions: RuleVersionSnapshot[] = [];
-    let repaired = false;
+    let repaired = orderedIndex.some(
+      (entry, position) => entry !== index[position],
+    );
 
-    for (const entry of index) {
+    for (const entry of orderedIndex) {
       try {
         const content = await fsp.readFile(
           path.join(versionDir, entry.fileName),
@@ -747,6 +757,7 @@ export function createRulesWorkspaceService(
 
   async function reconcileProjectRule(
     meta: StoredRuleMeta,
+    db: RuleDB = getRuleDb(),
   ): Promise<RuleFileDescriptor> {
     const inspection = await inspectRuleSyncState(meta);
     if (inspection.syncStatus === meta.syncStatus) {
@@ -759,33 +770,8 @@ export function createRulesWorkspaceService(
       updatedAt: new Date().toISOString(),
     };
     await writeMeta(nextMeta);
-    await syncRuleIndex(nextMeta);
+    await syncRuleIndex(nextMeta, db);
     return buildDescriptor(nextMeta, inspection);
-  }
-
-  function descriptorFromRuleRecord(record: RuleRecord): RuleFileDescriptor {
-    return {
-      id: record.id,
-      platformId: record.platformId,
-      platformName: record.platformName,
-      platformIcon: record.platformIcon,
-      platformDescription: record.platformDescription,
-      name: resolveDisplayedRuleFileName(
-        record.canonicalFileName,
-        record.targetPath,
-      ),
-      description: record.description,
-      path: record.targetPath,
-      targetPath: record.targetPath,
-      managedPath: record.managedPath,
-      projectRootPath: record.projectRootPath ?? null,
-      exists: record.syncStatus !== "target-missing",
-      group:
-        record.scope === "project"
-          ? "workspace"
-          : ruleGroupForKnownId(record.id),
-      syncStatus: record.syncStatus,
-    };
   }
 
   function metaFromRuleRecord(record: RuleRecord): StoredRuleMeta {
@@ -836,19 +822,24 @@ export function createRulesWorkspaceService(
     ruleId: RuleFileId,
     index: StoredRuleVersionIndexEntry[],
   ): RuleVersionRecord[] {
-    return index.map((entry, indexPosition) => ({
+    const chronological = [...index].sort((left, right) =>
+      compareVersionEntriesNewestFirst(right, left),
+    );
+    return chronological.map((entry, indexPosition) => ({
       id: entry.id,
       ruleId,
-      version: index.length - indexPosition,
+      version: indexPosition + 1,
       filePath: path.join(getRuleVersionsDir(ruleId), entry.fileName),
       source: entry.source,
       createdAt: entry.savedAt,
     }));
   }
 
-  async function syncRuleIndex(meta: StoredRuleMeta): Promise<void> {
+  async function syncRuleIndex(
+    meta: StoredRuleMeta,
+    db: RuleDB = getRuleDb(),
+  ): Promise<void> {
     assertStorageAvailable();
-    const db = getRuleDb();
     const content = (await fileExists(meta.managedPath))
       ? await fsp.readFile(meta.managedPath, "utf-8")
       : "";
@@ -875,6 +866,7 @@ export function createRulesWorkspaceService(
 
   async function materializeGlobalRule(
     ruleId: KnownRuleFileId | CustomRuleFileId,
+    db: RuleDB = getRuleDb(),
   ): Promise<StoredRuleMeta> {
     const customTemplate = deps
       .getExtraGlobalRuleTemplates?.()
@@ -927,17 +919,16 @@ export function createRulesWorkspaceService(
 
     meta.syncStatus = await syncStatusForMeta(meta);
     await writeMeta(meta);
-    await syncRuleIndex(meta);
+    await syncRuleIndex(meta, db);
     return meta;
   }
 
   async function ensureGlobalRuleMaterialized(
     ruleId: KnownRuleFileId | CustomRuleFileId,
+    db: RuleDB = getRuleDb(),
   ): Promise<StoredRuleMeta> {
-    return coalesceInFlight(
-      pendingGlobalRuleMaterializations,
-      ruleId,
-      () => materializeGlobalRule(ruleId),
+    return coalesceInFlight(pendingGlobalRuleMaterializations, ruleId, () =>
+      materializeGlobalRule(ruleId, db),
     );
   }
 
@@ -958,48 +949,14 @@ export function createRulesWorkspaceService(
   }
 
   async function listCachedRuleDescriptors(): Promise<RuleFileDescriptor[]> {
-    const records = getRuleDb().getAll();
-    if (records.length > 0) {
-      const activeCustomRuleIds = getActiveCustomRuleIds();
-      const all = records.map(descriptorFromRuleRecord);
-      const filtered = (
-        await Promise.all(
-          all.map(async (descriptor) => {
-            if (descriptor.id.startsWith("project:")) {
-              return descriptor;
-            }
-
-            if (descriptor.platformId.startsWith("custom:")) {
-              return activeCustomRuleIds.has(descriptor.id as CustomRuleFileId)
-                ? descriptor
-                : null;
-            }
-
-            if (descriptor.exists) {
-              return descriptor;
-            }
-
-            const platform = getPlatformById(descriptor.platformId);
-            if (!platform) {
-              return null;
-            }
-
-            const rootDir = deps.getPlatformRootDir(platform);
-            return (await fileExists(rootDir)) ? descriptor : null;
-          }),
-        )
-      ).filter((item): item is RuleFileDescriptor => item !== null);
-
-      return filtered;
-    }
-
     return scanRuleDescriptors();
   }
 
   async function scanRuleDescriptors(): Promise<RuleFileDescriptor[]> {
+    const db = getRuleDb();
     const allGlobalDescriptors = await Promise.all(
       getAllGlobalRuleTemplates().map(async (template) =>
-        buildDescriptor(await ensureGlobalRuleMaterialized(template.id)),
+        buildDescriptor(await ensureGlobalRuleMaterialized(template.id, db)),
       ),
     );
 
@@ -1007,6 +964,13 @@ export function createRulesWorkspaceService(
       await Promise.all(
         allGlobalDescriptors.map(async (descriptor) => {
           if (descriptor.exists) {
+            return descriptor;
+          }
+
+          if (
+            descriptor.managedPath &&
+            (await fileExists(descriptor.managedPath))
+          ) {
             return descriptor;
           }
 
@@ -1032,7 +996,7 @@ export function createRulesWorkspaceService(
           return null;
         }
 
-        return reconcileProjectRule(meta);
+        return reconcileProjectRule(meta, db);
       }),
     );
 
