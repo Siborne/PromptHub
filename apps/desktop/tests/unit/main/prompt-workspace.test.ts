@@ -1,11 +1,15 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { writeCanonicalStorageAuthority } from "@prompthub/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { FolderDB } from "../../../src/main/database/folder";
 import { PromptDB } from "../../../src/main/database/prompt";
-import { SCHEMA_INDEXES, SCHEMA_TABLES } from "../../../src/main/database/schema";
+import {
+  SCHEMA_INDEXES,
+  SCHEMA_TABLES,
+} from "../../../src/main/database/schema";
 import DatabaseAdapter from "../../../src/main/database/sqlite";
 import {
   bootstrapPromptWorkspace,
@@ -17,6 +21,7 @@ import {
   configureRuntimePaths,
   getPromptsWorkspaceDir,
   getWorkspaceDir,
+  refreshRuntimeStorageContext,
   resetRuntimePaths,
 } from "../../../src/main/runtime-paths";
 
@@ -79,7 +84,9 @@ describe("prompt workspace storage", () => {
       tags: ["email", "support"],
       notes: "Keep the answer short.",
     });
-    promptDb.update(prompt.id, { userPrompt: "Reply to {{name}} with empathy." });
+    promptDb.update(prompt.id, {
+      userPrompt: "Reply to {{name}} with empathy.",
+    });
 
     const result = syncPromptWorkspaceFromDatabase(promptDb, folderDb);
 
@@ -118,12 +125,42 @@ describe("prompt workspace storage", () => {
     expect(fs.existsSync(versionFile)).toBe(true);
   });
 
+  it("never exports SQLite back into the legacy workspace under file authority", () => {
+    const prompt = promptDb.create({
+      title: "Canonical only",
+      userPrompt: "The file graph owns this content.",
+    });
+    writeCanonicalStorageAuthority(tempDir, {
+      consistencyId: "a".repeat(64),
+      operationId: "canonical-workspace-test",
+    });
+    refreshRuntimeStorageContext();
+
+    const result = bootstrapPromptWorkspace(promptDb, folderDb);
+
+    expect(result).toMatchObject({
+      quadrant: "db-only",
+      imported: false,
+      exported: false,
+      promptCount: 1,
+      folderCount: 0,
+      versionCount: 1,
+    });
+    expect(fs.existsSync(getPromptsWorkspaceDir())).toBe(false);
+    expect(promptDb.getById(prompt.id)?.userPrompt).toBe(
+      "The file graph owns this content.",
+    );
+  });
+
   it("imports workspace files into an empty database", () => {
     const workspaceDir = getWorkspaceDir();
     const promptsDir = getPromptsWorkspaceDir();
-    fs.mkdirSync(path.join(promptsDir, "ops", "deploy-check__prompt_1", "versions"), {
-      recursive: true,
-    });
+    fs.mkdirSync(
+      path.join(promptsDir, "ops", "deploy-check__prompt_1", "versions"),
+      {
+        recursive: true,
+      },
+    );
     writeLegacyFolderList(workspaceDir, [
       {
         id: "folder_ops",
@@ -282,7 +319,9 @@ Summarize the latest status.
     expect(result.quadrant).toBe("empty");
     expect(result.imported).toBe(false);
     expect(result.exported).toBe(false);
-    expect(fs.existsSync(path.join(getWorkspaceDir(), "folders.json"))).toBe(false);
+    expect(fs.existsSync(path.join(getWorkspaceDir(), "folders.json"))).toBe(
+      false,
+    );
     // prompts dir must not exist either, so subsequent boots don't see "ghost" workspace.
     expect(fs.existsSync(getPromptsWorkspaceDir())).toBe(false);
   });
@@ -325,7 +364,10 @@ Summarize the latest status.
       fs.existsSync(path.join(getPromptsWorkspaceDir(), "inbox-prompt.md")),
     ).toBe(true);
     expect(
-      fs.readFileSync(path.join(getPromptsWorkspaceDir(), "inbox-prompt.md"), "utf8"),
+      fs.readFileSync(
+        path.join(getPromptsWorkspaceDir(), "inbox-prompt.md"),
+        "utf8",
+      ),
     ).toContain("Unfiled prompt body");
     expect(promptDb.getById(prompt.id)?.folderId).toBeNull();
   });
@@ -412,9 +454,12 @@ Stale file content.
 
     expect(promptDb.getById(prompt.id)?.userPrompt).toBe("DB newer prompt");
     expect(fs.existsSync(legacyPromptDir)).toBe(false);
-    expect(fs.readFileSync(path.join(getPromptsWorkspaceDir(), "db-wins.md"), "utf8")).toContain(
-      "DB newer prompt",
-    );
+    expect(
+      fs.readFileSync(
+        path.join(getPromptsWorkspaceDir(), "db-wins.md"),
+        "utf8",
+      ),
+    ).toContain("DB newer prompt");
   });
 
   it("syncPromptWorkspaceFromDatabase trashes orphan prompt files instead of deleting", () => {
@@ -425,10 +470,7 @@ Stale file content.
     });
     syncPromptWorkspaceFromDatabase(promptDb, folderDb);
 
-    const promptDir = path.join(
-      getPromptsWorkspaceDir(),
-      "will-be-deleted.md",
-    );
+    const promptDir = path.join(getPromptsWorkspaceDir(), "will-be-deleted.md");
     expect(fs.existsSync(promptDir)).toBe(true);
 
     // Simulate deletion in DB.
@@ -473,11 +515,7 @@ Stale file content.
     const result = syncPromptWorkspaceFromDatabase(promptDb, folderDb);
     expect(result.promptCount).toBe(1);
 
-    const file = path.join(
-      getPromptsWorkspaceDir(),
-      "team",
-      "hello.md",
-    );
+    const file = path.join(getPromptsWorkspaceDir(), "team", "hello.md");
     expect(fs.existsSync(file)).toBe(true);
     expect(fs.readFileSync(file, "utf8")).toContain("Hi {{who}}");
   });
@@ -536,9 +574,9 @@ Should not come back.
     );
 
     // Marker was cleared so next boot behaves normally.
-    expect(
-      fs.existsSync(path.join(tempDir, ".prompthub-restore-marker")),
-    ).toBe(false);
+    expect(fs.existsSync(path.join(tempDir, ".prompthub-restore-marker"))).toBe(
+      false,
+    );
   });
 
   it("importPromptWorkspaceIntoDatabase resolves duplicate prompt.id by newer updatedAt, trashing losers", () => {
@@ -586,8 +624,214 @@ ${body}
     // Skipped set includes the loser path (absolute) so Phase 2 will not
     // re-sweep it. Winner must NOT appear in skipped set.
     const skippedArray = Array.from(result.skippedPromptPaths);
-    expect(skippedArray).toContain(path.resolve(path.join(dirOld, "prompt.md")));
-    expect(skippedArray).not.toContain(path.resolve(path.join(dirNew, "prompt.md")));
+    expect(skippedArray).toContain(
+      path.resolve(path.join(dirOld, "prompt.md")),
+    );
+    expect(skippedArray).not.toContain(
+      path.resolve(path.join(dirNew, "prompt.md")),
+    );
+  });
+
+  it("replaces the staged current Prompt set from files without mutating the workspace", () => {
+    const filePromptId = "file-authority-prompt";
+    const databaseOnlyId = "database-only-prompt";
+    const promptFile = path.join(
+      getPromptsWorkspaceDir(),
+      `file-authority__${filePromptId}`,
+      "prompt.md",
+    );
+    fs.mkdirSync(path.dirname(promptFile), { recursive: true });
+    writeLegacyFolderList(getWorkspaceDir(), []);
+    fs.writeFileSync(
+      promptFile,
+      `---
+id: ${JSON.stringify(filePromptId)}
+title: "File title"
+promptType: "text"
+currentVersion: 2
+createdAt: "2026-01-01T00:00:00.000Z"
+updatedAt: "2026-08-18T00:00:00.000Z"
+---
+<!-- PROMPTHUB:SYSTEM -->
+
+<!-- PROMPTHUB:USER -->
+File content wins.
+`,
+      "utf8",
+    );
+    for (const [id, title, content] of [
+      [filePromptId, "Database title", "Database content loses."],
+      [databaseOnlyId, "Database only", "Must not be resurrected."],
+    ]) {
+      promptDb.insertPromptDirect({
+        id,
+        title,
+        userPrompt: content,
+        variables: [],
+        tags: [],
+        images: [],
+        videos: [],
+        currentVersion: 1,
+        version: 1,
+        usageCount: 0,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
+    }
+    promptDb.insertVersionDirect({
+      id: "database-history-version",
+      promptId: filePromptId,
+      version: 1,
+      userPrompt: "Historical database content.",
+      variables: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    const databaseOnlyFolder = folderDb.create({
+      name: "Database-only folder",
+    });
+
+    const result = importPromptWorkspaceIntoDatabase(promptDb, folderDb, {
+      preserveSource: true,
+      replaceCurrentPromptSet: true,
+      strict: true,
+    });
+
+    expect(promptDb.getAll().map((prompt) => prompt.id)).toEqual([
+      filePromptId,
+    ]);
+    expect(promptDb.getById(filePromptId)?.userPrompt).toBe(
+      "File content wins.",
+    );
+    expect(promptDb.getVersions(filePromptId)).toHaveLength(1);
+    expect(folderDb.getById(databaseOnlyFolder.id)).toBeNull();
+    expect(result.promptIds).toEqual(new Set([filePromptId]));
+    expect(fs.readFileSync(promptFile, "utf8")).toContain("File content wins.");
+  });
+
+  it("strict read-only import rejects duplicate ids without moving either file", () => {
+    const duplicateId = "duplicate-read-only";
+    const paths = ["first", "second"].map((name, index) => {
+      const promptFile = path.join(
+        getPromptsWorkspaceDir(),
+        `${name}__${duplicateId}`,
+        "prompt.md",
+      );
+      fs.mkdirSync(path.dirname(promptFile), { recursive: true });
+      fs.writeFileSync(
+        promptFile,
+        `---\nid: ${duplicateId}\ntitle: ${name}\nupdatedAt: "2026-08-${17 + index}T00:00:00.000Z"\n---\n${name}`,
+        "utf8",
+      );
+      return promptFile;
+    });
+
+    expect(() =>
+      importPromptWorkspaceIntoDatabase(promptDb, folderDb, {
+        preserveSource: true,
+        replaceCurrentPromptSet: true,
+        strict: true,
+      }),
+    ).toThrow(`Duplicate Prompt id in workspace: ${duplicateId}`);
+    expect(paths.every((promptFile) => fs.existsSync(promptFile))).toBe(true);
+  });
+
+  it("strict read-only import rejects malformed folder metadata", () => {
+    const folderPath = path.join(
+      getPromptsWorkspaceDir(),
+      "broken-folder",
+      "_folder.json",
+    );
+    fs.mkdirSync(path.dirname(folderPath), { recursive: true });
+    fs.writeFileSync(folderPath, "{not json", "utf8");
+
+    expect(() =>
+      importPromptWorkspaceIntoDatabase(promptDb, folderDb, {
+        preserveSource: true,
+        replaceCurrentPromptSet: true,
+        strict: true,
+      }),
+    ).toThrow("failed to parse _folder.json");
+    expect(fs.readFileSync(folderPath, "utf8")).toBe("{not json");
+  });
+
+  it("strict replacement rejects file Prompts that reference database-only folders", () => {
+    const databaseOnlyFolder = folderDb.create({ name: "Database-only" });
+    const promptFile = path.join(getPromptsWorkspaceDir(), "prompt.md");
+    fs.mkdirSync(path.dirname(promptFile), { recursive: true });
+    fs.writeFileSync(
+      promptFile,
+      `---\nid: "prompt-1"\ntitle: "Prompt"\nfolderId: ${JSON.stringify(databaseOnlyFolder.id)}\n---\nContent`,
+      "utf8",
+    );
+
+    expect(() =>
+      importPromptWorkspaceIntoDatabase(promptDb, folderDb, {
+        preserveSource: true,
+        replaceCurrentPromptSet: true,
+        strict: true,
+      }),
+    ).toThrow("references a missing folder");
+  });
+
+  it("replaces existing nested folders in parent-first dependency order", () => {
+    const parent = folderDb.create({ name: "Parent" });
+    const child = folderDb.create({ name: "Child", parentId: parent.id });
+    writeLegacyFolderList(getWorkspaceDir(), [child, parent]);
+
+    importPromptWorkspaceIntoDatabase(promptDb, folderDb, {
+      preserveSource: true,
+      replaceCurrentPromptSet: true,
+      strict: true,
+    });
+
+    expect(
+      folderDb
+        .getAll()
+        .map((folder) => folder.id)
+        .sort(),
+    ).toEqual([child.id, parent.id].sort());
+    expect(folderDb.getById(child.id)?.parentId).toBe(parent.id);
+  });
+
+  it("rejects a cyclic strict file-owned folder graph", () => {
+    const first = folderDb.create({ name: "First" });
+    const second = folderDb.create({ name: "Second" });
+    writeLegacyFolderList(getWorkspaceDir(), [
+      { ...first, parentId: second.id },
+      { ...second, parentId: first.id },
+    ]);
+
+    expect(() =>
+      importPromptWorkspaceIntoDatabase(promptDb, folderDb, {
+        preserveSource: true,
+        replaceCurrentPromptSet: true,
+        strict: true,
+      }),
+    ).toThrow("Prompt folder graph contains a cycle");
+  });
+
+  it("imports strict parent-child Prompt files in dependency order", () => {
+    const promptsDir = getPromptsWorkspaceDir();
+    fs.mkdirSync(promptsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(promptsDir, "a-child.md"),
+      `---\nid: "child"\ntitle: "Child"\nparentId: "parent"\n---\nChild`,
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(promptsDir, "z-parent.md"),
+      `---\nid: "parent"\ntitle: "Parent"\n---\nParent`,
+      "utf8",
+    );
+
+    expect(() =>
+      importPromptWorkspaceIntoDatabase(promptDb, folderDb, {
+        preserveSource: true,
+        replaceCurrentPromptSet: true,
+        strict: true,
+      }),
+    ).not.toThrow();
+    expect(promptDb.getById("child")?.parentId).toBe("parent");
   });
 
   it("Q4 passes skippedPromptDirs to Phase 2 so insert-failing imports are not trashed as orphans", () => {

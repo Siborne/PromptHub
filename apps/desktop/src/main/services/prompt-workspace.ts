@@ -1,16 +1,25 @@
 import fs from "fs";
 import path from "path";
 
+import type * as Db from "@prompthub/db";
 import type { Folder, Prompt, PromptVersion } from "@prompthub/shared/types";
-
 import { FolderDB } from "../database/folder";
 import { PromptDB } from "../database/prompt";
 import {
   getWorkspaceDir,
   getPromptsWorkspaceDir,
   getRuntimeStorageContext,
-  getUserDataPath,
 } from "../runtime-paths";
+import {
+  clearPromptWorkspaceRestoreMarker,
+  hasPromptWorkspaceRestoreMarker,
+} from "./prompt-workspace-restore-marker";
+import {
+  orderFoldersForImport,
+  orderPromptsForImport,
+} from "./prompt-workspace-import-order";
+
+export { writeRestoreMarker } from "./prompt-workspace-restore-marker";
 
 const FOLDERS_FILE_NAME = "folders.json";
 const FOLDER_METADATA_FILE_NAME = "_folder.json";
@@ -22,55 +31,6 @@ const TRASH_CONFLICTS_SUBDIR = "conflicts";
 const TRASH_RETENTION = 5;
 const SYSTEM_MARKER = "<!-- PROMPTHUB:SYSTEM -->";
 const USER_MARKER = "<!-- PROMPTHUB:USER -->";
-const RESTORE_MARKER_NAME = ".prompthub-restore-marker";
-
-/**
- * Restore marker (v0.5.3, review-follow-up).
- *
- * Written by the IPC recovery handler after a successful database restore.
- * During the next `bootstrapPromptWorkspace` boot, the marker suppresses the
- * Phase-1 "workspace → DB" import so that stale prompts kept in the
- * on-disk workspace cannot "resurrect" records the user just rolled back
- * via recovery. Cleared after the DB → workspace re-sync completes.
- *
- * 恢复标记（v0.5.3，review 反馈修复）：
- * 数据恢复 IPC 成功后写入该标记。下一次 bootstrapPromptWorkspace 启动时，
- * 若检测到标记存在，则跳过 Phase 1（workspace → DB 导入），避免磁盘上
- * 残留的旧 prompt "复活"用户刚刚回滚掉的记录。DB → workspace 同步完成后清除。
- */
-function getRestoreMarkerPath(userDataPath?: string): string {
-  return path.join(userDataPath ?? getUserDataPath(), RESTORE_MARKER_NAME);
-}
-
-export function writeRestoreMarker(userDataPath?: string): void {
-  try {
-    const markerPath = getRestoreMarkerPath(userDataPath);
-    ensureDir(path.dirname(markerPath));
-    fs.writeFileSync(markerPath, new Date().toISOString(), "utf8");
-  } catch (error) {
-    console.warn("[prompt-workspace] failed to write restore marker:", error);
-  }
-}
-
-function hasRestoreMarker(userDataPath?: string): boolean {
-  try {
-    return fs.existsSync(getRestoreMarkerPath(userDataPath));
-  } catch {
-    return false;
-  }
-}
-
-function clearRestoreMarker(userDataPath?: string): void {
-  try {
-    const markerPath = getRestoreMarkerPath(userDataPath);
-    if (fs.existsSync(markerPath)) {
-      fs.unlinkSync(markerPath);
-    }
-  } catch (error) {
-    console.warn("[prompt-workspace] failed to clear restore marker:", error);
-  }
-}
-
 /**
  * On Windows and macOS (default HFS+/APFS), filesystems are case-insensitive.
  * `fs.readdirSync` may nonetheless return duplicate entries when a directory
@@ -111,6 +71,21 @@ interface PromptWorkspaceSyncResult {
  */
 interface PromptWorkspaceImportResult extends PromptWorkspaceSyncResult {
   skippedPromptPaths: Set<string>;
+  promptIds: Set<string>;
+}
+
+interface PromptWorkspaceImportOptions {
+  onlyIfNewer?: boolean;
+  preserveSource?: boolean;
+  replaceCurrentPromptSet?: boolean;
+  sourcePromptsDir?: string;
+  sourceWorkspaceDir?: string;
+  strict?: boolean;
+}
+
+interface ParsedPrompt {
+  prompt: Prompt;
+  filePath: string;
 }
 
 /**
@@ -280,16 +255,22 @@ function versionFrontmatter(version: PromptVersion): Record<string, unknown> {
   };
 }
 
-function readLegacyFoldersFile(workspaceDir: string): Folder[] {
+function readLegacyFoldersFile(workspaceDir: string, strict = false): Folder[] {
   const foldersFile = path.join(workspaceDir, FOLDERS_FILE_NAME);
   if (!fs.existsSync(foldersFile)) {
     return [];
   }
 
   try {
-    const parsed = JSON.parse(fs.readFileSync(foldersFile, "utf8")) as Folder[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(fs.readFileSync(foldersFile, "utf8")) as unknown;
+    if (!Array.isArray(parsed)) {
+      throw new Error("legacy folders.json must contain an array");
+    }
+    return parsed as Folder[];
   } catch (error) {
+    if (strict) {
+      throw new Error("failed to parse legacy folders.json", { cause: error });
+    }
     console.error(
       "[prompt-workspace] failed to parse legacy folders.json, treating as empty:",
       error,
@@ -326,13 +307,18 @@ function collectFolderMetadataFiles(rootDir: string): string[] {
   return files;
 }
 
-function readFolderMetadataFiles(promptsDir: string): Folder[] {
+function readFolderMetadataFiles(promptsDir: string, strict = false): Folder[] {
   return collectFolderMetadataFiles(promptsDir)
     .map((filePath) => {
       try {
         const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as Folder;
         return parsed;
       } catch (error) {
+        if (strict) {
+          throw new Error(`failed to parse ${FOLDER_METADATA_FILE_NAME}`, {
+            cause: error,
+          });
+        }
         console.error(
           `[prompt-workspace] failed to parse ${FOLDER_METADATA_FILE_NAME} at ${filePath}:`,
           error,
@@ -343,40 +329,21 @@ function readFolderMetadataFiles(promptsDir: string): Folder[] {
     .filter((folder): folder is Folder => folder !== null);
 }
 
-function readFoldersFile(workspaceDir: string, promptsDir: string): Folder[] {
+function readFoldersFile(
+  workspaceDir: string,
+  promptsDir: string,
+  strict = false,
+): Folder[] {
   const merged = new Map<string, Folder>();
 
-  for (const folder of readLegacyFoldersFile(workspaceDir)) {
+  for (const folder of readLegacyFoldersFile(workspaceDir, strict)) {
     merged.set(folder.id, folder);
   }
-  for (const folder of readFolderMetadataFiles(promptsDir)) {
+  for (const folder of readFolderMetadataFiles(promptsDir, strict)) {
     merged.set(folder.id, folder);
   }
 
   return [...merged.values()];
-}
-
-function canImportFolder(
-  folder: Folder,
-  insertedFolderIds: Set<string>,
-  pendingFolderIds: Set<string>,
-): boolean {
-  if (!folder.parentId) {
-    return true;
-  }
-
-  if (insertedFolderIds.has(folder.parentId)) {
-    return true;
-  }
-
-  // Parent still pending in this batch, so defer until a later pass.
-  if (pendingFolderIds.has(folder.parentId)) {
-    return false;
-  }
-
-  // Parent is not pending and not already in DB; allow the insert attempt so
-  // the caller can log the FK failure as a real missing-parent issue.
-  return true;
 }
 
 function getFolderMetadataPath(folderDir: string): string {
@@ -1079,13 +1046,14 @@ export function syncPromptWorkspaceFromDatabase(
  *                            为 true 时跳过 DB 中 updatedAt 比文件新的记录。
  */
 export function importPromptWorkspaceIntoDatabase(
-  promptDb: PromptDB,
-  folderDb: FolderDB,
-  options: { onlyIfNewer?: boolean } = {},
+  promptDb: Db.PromptDB,
+  folderDb: Db.FolderDB,
+  options: PromptWorkspaceImportOptions = {},
 ): PromptWorkspaceImportResult {
-  const workspaceDir = getWorkspaceDir();
-  const promptsDir = getPromptsWorkspaceDir();
-  const folders = readFoldersFile(workspaceDir, promptsDir);
+  const workspaceDir = options.sourceWorkspaceDir ?? getWorkspaceDir();
+  const promptsDir = options.sourcePromptsDir ?? getPromptsWorkspaceDir();
+  const folders = readFoldersFile(workspaceDir, promptsDir, options.strict);
+  const sourceFolderIds = new Set(folders.map((folder) => folder.id));
   const promptFiles = collectPromptFiles(promptsDir);
 
   const skippedPromptPaths = new Set<string>();
@@ -1096,6 +1064,7 @@ export function importPromptWorkspaceIntoDatabase(
       folderCount: 0,
       versionCount: 0,
       skippedPromptPaths,
+      promptIds: new Set(),
     };
   }
 
@@ -1104,75 +1073,36 @@ export function importPromptWorkspaceIntoDatabase(
   const existingFolders = options.onlyIfNewer
     ? new Map(folderDb.getAll().map((folder) => [folder.id, folder] as const))
     : null;
-  const insertedFolderIds = new Set(
-    folderDb.getAll().map((folder) => folder.id),
+  const existingFolderIds = new Set(
+    options.replaceCurrentPromptSet
+      ? []
+      : folderDb.getAll().map((folder) => folder.id),
   );
   let importedFolders = 0;
   let skippedFolders = 0;
-  const pendingFolders = [...folders];
-  while (pendingFolders.length > 0) {
-    const pendingFolderIds = new Set(pendingFolders.map((folder) => folder.id));
-    let progressMade = false;
-
-    for (let index = 0; index < pendingFolders.length; ) {
-      const folder = pendingFolders[index];
-      if (!canImportFolder(folder, insertedFolderIds, pendingFolderIds)) {
-        index += 1;
-        continue;
-      }
-
-      if (existingFolders) {
-        const existing = existingFolders.get(folder.id);
-        if (
-          existing &&
-          toEpochMs(existing.updatedAt) >= toEpochMs(folder.updatedAt)
-        ) {
-          insertedFolderIds.add(folder.id);
-          pendingFolders.splice(index, 1);
-          progressMade = true;
-          continue;
-        }
-      }
-
-      // v0.5.3: per-item try/catch — a single malformed folder (e.g. unknown
-      // columns from a newer/older schema, FK violation on parent_id) must not
-      // abort the entire bootstrap. Skip and log; the Release Notes instructs
-      // users to share startup.log if data is missing.
-      // v0.5.3: 单条 try/catch —— 单个畸形 folder（比如 schema 版本不匹配、父 id
-      // 外键冲突）不得中断整个 bootstrap。跳过并记录日志；若数据缺失，
-      // 用户可在 Release Notes 指引下提供 startup.log。
-      try {
-        folderDb.insertFolderDirect(folder);
-        insertedFolderIds.add(folder.id);
-        importedFolders++;
-      } catch (error) {
-        skippedFolders++;
-        console.error(
-          `[prompt-workspace] failed to import folder ${folder.id} (${folder.name}):`,
-          error,
-        );
-      }
-
-      pendingFolders.splice(index, 1);
-      progressMade = true;
+  const orderedFolders = orderFoldersForImport(
+    folders,
+    existingFolderIds,
+    options.strict === true,
+  );
+  for (const folder of orderedFolders) {
+    const existing = existingFolders?.get(folder.id);
+    if (
+      existing &&
+      toEpochMs(existing.updatedAt) >= toEpochMs(folder.updatedAt)
+    ) {
+      continue;
     }
-
-    if (!progressMade) {
-      // Remaining folders are stuck behind cycles or missing parents; attempt
-      // them once each so we surface the concrete FK errors in the log.
-      for (const folder of pendingFolders.splice(0)) {
-        try {
-          folderDb.insertFolderDirect(folder);
-          insertedFolderIds.add(folder.id);
-          importedFolders++;
-        } catch (error) {
-          skippedFolders++;
-          console.error(
-            `[prompt-workspace] failed to import folder ${folder.id} (${folder.name}):`,
-            error,
-          );
-        }
-      }
+    try {
+      folderDb.insertFolderDirect(folder);
+      importedFolders += 1;
+    } catch (error) {
+      if (options.strict) throw error;
+      skippedFolders += 1;
+      console.error(
+        `[prompt-workspace] failed to import folder ${folder.id} (${folder.name}):`,
+        error,
+      );
     }
   }
 
@@ -1187,21 +1117,21 @@ export function importPromptWorkspaceIntoDatabase(
   // 同 id 冲突按 updatedAt 选最新者为胜者，原先依赖遍历顺序可能出现
   // "内容来自 A 但版本来自 B" 的错配。落败副本移入 .trash/conflicts/
   // 并标记 skippedPromptPaths，确保 Phase 2 不把它们再当孤立项处理。
-  interface ParsedPrompt {
-    prompt: Prompt;
-    filePath: string;
-  }
   const parsedByFile: Array<ParsedPrompt | null> = [];
   let skippedPrompts = 0;
 
   for (const promptFile of promptFiles) {
     try {
       const prompt = parsePromptFile(promptFile);
+      if (options.strict && (!prompt.id || prompt.id === "undefined")) {
+        throw new Error(`Prompt file is missing an id: ${promptFile}`);
+      }
       parsedByFile.push({
         prompt,
         filePath: promptFile,
       });
     } catch (error) {
+      if (options.strict) throw error;
       skippedPrompts++;
       skippedPromptPaths.add(path.resolve(promptFile));
       parsedByFile.push(null);
@@ -1234,12 +1164,17 @@ export function importPromptWorkspaceIntoDatabase(
   }
 
   for (const loser of losers) {
+    if (options.strict) {
+      throw new Error(`Duplicate Prompt id in workspace: ${loser.prompt.id}`);
+    }
     console.warn(
       `[prompt-workspace] same-id conflict for prompt ${loser.prompt.id}: moving ${loser.filePath} to .trash/conflicts`,
     );
     skippedPromptPaths.add(path.resolve(loser.filePath));
     try {
-      moveToTrash(getPromptCleanupPath(loser.filePath), "conflict");
+      if (!options.preserveSource) {
+        moveToTrash(getPromptCleanupPath(loser.filePath), "conflict");
+      }
     } catch (error) {
       // If we can't move the loser, at least ensure Phase 2 doesn't trash it
       // again; user can clean up manually via the conflicts/ folder.
@@ -1254,10 +1189,21 @@ export function importPromptWorkspaceIntoDatabase(
   const existingPrompts = options.onlyIfNewer
     ? new Map(promptDb.getAll().map((prompt) => [prompt.id, prompt] as const))
     : null;
+  const supplementalVersions = options.replaceCurrentPromptSet
+    ? promptDb.getAll().flatMap((prompt) => promptDb.getVersions(prompt.id))
+    : [];
 
   let importedPrompts = 0;
   let versionCount = 0;
-  for (const { prompt, filePath } of byId.values()) {
+  const orderedPrompts = orderPromptsForImport(byId, options.strict === true);
+  for (const { prompt, filePath } of orderedPrompts) {
+    if (
+      options.strict &&
+      prompt.folderId &&
+      !sourceFolderIds.has(prompt.folderId)
+    ) {
+      throw new Error(`Prompt references a missing folder: ${prompt.id}`);
+    }
     if (existingPrompts) {
       const existing = existingPrompts.get(prompt.id);
       if (
@@ -1272,6 +1218,7 @@ export function importPromptWorkspaceIntoDatabase(
       promptDb.insertPromptDirect(prompt);
       importedPrompts++;
     } catch (error) {
+      if (options.strict) throw error;
       skippedPrompts++;
       skippedPromptPaths.add(path.resolve(filePath));
       console.error(
@@ -1289,11 +1236,31 @@ export function importPromptWorkspaceIntoDatabase(
         promptDb.insertVersionDirect(version);
         versionCount++;
       } catch (error) {
+        if (options.strict) throw error;
         console.error(
           `[prompt-workspace] failed to import version ${version.id} of prompt ${prompt.id}:`,
           error,
         );
       }
+    }
+  }
+
+  const promptIds = new Set(byId.keys());
+  if (options.replaceCurrentPromptSet) {
+    for (const existing of promptDb.getAll()) {
+      if (!promptIds.has(existing.id)) promptDb.delete(existing.id);
+    }
+    const currentPrompts = new Map(
+      promptDb.getAll().map((prompt) => [prompt.id, prompt] as const),
+    );
+    for (const version of supplementalVersions) {
+      const current = currentPrompts.get(version.promptId);
+      if (current && version.version <= current.currentVersion) {
+        promptDb.insertVersionDirect(version);
+      }
+    }
+    for (const existing of folderDb.getAll()) {
+      if (!sourceFolderIds.has(existing.id)) folderDb.delete(existing.id);
     }
   }
 
@@ -1309,6 +1276,7 @@ export function importPromptWorkspaceIntoDatabase(
     folderCount: importedFolders,
     versionCount,
     skippedPromptPaths,
+    promptIds,
   };
 }
 
@@ -1330,15 +1298,20 @@ export function bootstrapPromptWorkspace(
   folderDb: FolderDB,
 ): BootstrapResult {
   if (getRuntimeStorageContext().localAuthority === "canonical-files") {
-    const exported = syncPromptWorkspaceFromDatabase(promptDb, folderDb);
+    const prompts = promptDb.getAll();
+    const promptCount = prompts.length;
+    const folderCount = folderDb.getAll().length;
+    const versionCount = prompts.reduce(
+      (count, prompt) => count + prompt.currentVersion,
+      0,
+    );
     return {
-      quadrant:
-        exported.promptCount > 0 || exported.folderCount > 0
-          ? "db-only"
-          : "empty",
+      quadrant: promptCount > 0 || folderCount > 0 ? "db-only" : "empty",
       imported: false,
-      exported: exported.promptCount > 0 || exported.folderCount > 0,
-      ...exported,
+      exported: false,
+      promptCount,
+      folderCount,
+      versionCount,
     };
   }
   const workspaceDir = getWorkspaceDir();
@@ -1351,7 +1324,7 @@ export function bootstrapPromptWorkspace(
   const hasDatabaseData =
     promptDb.getAll().length > 0 || folderDb.getAll().length > 0;
   const hasWorkspaceData = workspaceHasPromptData(promptsDir, workspaceDir);
-  const restoreMarkerPresent = hasRestoreMarker();
+  const restoreMarkerPresent = hasPromptWorkspaceRestoreMarker();
 
   if (!hasDatabaseData && !hasWorkspaceData) {
     // Quadrant 1: fresh install or cleared state. Do nothing; avoid creating
@@ -1360,7 +1333,7 @@ export function bootstrapPromptWorkspace(
     if (restoreMarkerPresent) {
       // Stale marker from a previous restore that produced no data. Clean up.
       // 清理上次恢复遗留但未产生数据的 marker。
-      clearRestoreMarker();
+      clearPromptWorkspaceRestoreMarker();
     }
     return {
       quadrant: "empty",
@@ -1377,7 +1350,7 @@ export function bootstrapPromptWorkspace(
     // 象限 2：DB 有数据但工作区为空（0.5.1 → 0.5.3 升级路径）。
     const result = syncPromptWorkspaceFromDatabase(promptDb, folderDb);
     if (restoreMarkerPresent) {
-      clearRestoreMarker();
+      clearPromptWorkspaceRestoreMarker();
     }
     return {
       quadrant: "db-only",
@@ -1398,7 +1371,7 @@ export function bootstrapPromptWorkspace(
       // DB was empty despite marker — restore likely failed or produced no rows.
       // Clear the marker so next boot does not skip Phase 1 needlessly.
       // DB 为空说明恢复无效，清除 marker 以免下次启动继续跳 Phase 1。
-      clearRestoreMarker();
+      clearPromptWorkspaceRestoreMarker();
     }
     return {
       quadrant: "workspace-only",
@@ -1421,7 +1394,7 @@ export function bootstrapPromptWorkspace(
   // 让工作区对齐恢复后的 DB，完成后清除 marker。
   if (restoreMarkerPresent) {
     const exported = syncPromptWorkspaceFromDatabase(promptDb, folderDb);
-    clearRestoreMarker();
+    clearPromptWorkspaceRestoreMarker();
     return {
       quadrant: "both",
       imported: false,

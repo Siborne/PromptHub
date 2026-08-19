@@ -241,6 +241,155 @@ safety-point remediations remain owned by `database-migration-safety`.
   Desktop ESLint, Prettier, file-size checks, spec traceability, and the Desktop
   production build.
 
+### 2026-08-18 recovery retry regression
+
+- The live SQLite catalog passed `quick_check` and matched the inspected 0.6.0
+  upgrade safety point for Prompt and Prompt-version rows. Startup entered
+  recovery because the canonical catalog declared a missing Prompt manifest,
+  not because SQLite was corrupt.
+- The selected SQLite recovery failed before publication because its default
+  MCP collector invoked the ordinary compatibility migration for a populated
+  superseded library. That path requires a device-bound secret adapter, while
+  recovery only provided the later extracted-secret persistence sink.
+- Recovery now selects canonical or superseded MCP metadata without publishing
+  into the damaged root. The superseded input is a regular-file-only, 16 MiB
+  bounded read; checkpoint projection remains responsible for extracting and
+  securely persisting credentials.
+- The first manual reset expansion fixed `prompt:getAllMeta`, but a live retry
+  then collided on nested `skill:scanPlatformSkills`. This disproved the manual
+  channel-inventory approach because nested registration modules were outside
+  its static audit. The replacement derives the reset set from handlers actually
+  registered by `registerAllIPC` and rolls back partial attempts.
+- Focused verification passed: 15 Core canonical MCP tests and 7 Desktop
+  recovery/IPC tests. Core and Desktop typechecks, Desktop lint, Prettier,
+  file-size, spec governance, and traceability checks passed. The changed
+  release profile passed all 21 checks across governance, Core, CLI, Desktop's
+  eight unit shards, and self-hosted Web in 564.5 seconds with concurrency 2.
+  The Desktop production renderer, main, and preload build also passed.
+- That verification record predates the later
+  `skill:scanPlatformSkills` and missing-media failures and is retained only as
+  history; it is not the acceptance record for the file-authoritative fix.
+- Stable desktop recovery behavior was synchronized to
+  `spec/knowledge/behavior/desktop.md`; the active change remains open for the
+  separately scoped older-client refusal and legacy-workspace candidate.
+
+### File-authoritative Prompt recovery
+
+- The current `data/prompts` Markdown set is now the preferred candidate. A
+  private consistent SQLite image is used only as a staging vehicle: Markdown
+  replaces current Prompt rows, database-only Prompts are removed, and only
+  same-id history at or below the file-declared current version is restored.
+  Strict inspection does not move conflict files or write the source workspace.
+- The live inventory contains 127 Markdown Prompts with the same id set as the
+  127 current SQLite rows. SQLite contains 137 Prompt-version rows, so history
+  is treated as supplemental rather than as current content authority.
+- Three live Markdown Prompts reference one missing image. The identical image
+  exists in one validated recovery artifact and four upgrade safety points;
+  every inspected copy has SHA-256
+  `26c6f3b59704594638070aa5530b94fe67df2a5de45e7bd1c472ee9ac9bdf3df`.
+  Recovery resolves such media only from bounded validated roots and aborts on
+  missing, symlinked, traversal, special-file, or digest-divergent sources.
+- IPC rebinding now records every handler successfully registered through
+  `ipcMain.handle`, including nested modules. A partial registration attempt
+  removes its captured handlers before rethrowing; the next retry does not
+  depend on a complete manual constant list.
+- Final focused checks passed: 15 Core MCP recovery tests; 40 Desktop recovery,
+  candidate, IPC, workspace, and media tests after rerunning the two initially
+  exposed history-preservation failures; Desktop and Core typechecks; Desktop
+  lint; Prettier; file-size; spec governance; and traceability.
+- The changed release profile ran 29 checks with concurrency 2. Twenty-seven
+  checks passed, including Desktop typecheck, lint, seven unit shards, Core,
+  database, shared, CLI, mobile, and Web gates. Its initial file-size failure
+  was fixed and the standalone file-size gate then passed. Desktop shard 7
+  remained blocked by concurrent unrelated duplicate exports in
+  `src/renderer/services/ai.ts`; that file is outside this change. No production
+  build or live recovery publication was run from the resulting mixed working
+  tree.
+
+### 2026-08-18 final file-authority verification
+
+An intermediate Prompt workspace run exposed these file-authoritative recovery
+regressions:
+
+- database-only Folder removal returned `null` instead of the expected absent
+  record;
+- strict replacement accepted a Prompt referencing a Folder absent from the
+  file-owned set;
+- strict parent/child Prompt import attempted the child before its parent and
+  hit the foreign-key constraint.
+
+Desktop TypeScript also exposed an unsafe result-union narrowing. The final
+implementation added parent-first Folder and Prompt ordering, file-owned Folder
+validation, database-only Folder cleanup, and discriminated result handling.
+
+The dependency-order algorithms moved to `prompt-workspace-import-order.ts`,
+reducing `prompt-workspace.ts` from 1,498 to 1,428 lines while preserving linear
+`O(F + P)` graph traversal. Current verification passed all 22 Prompt workspace
+tests. The broader focused Desktop run passed 77 tests, and the focused Core
+storage run passed 64 tests after adding strict empty Rule-container handling,
+orphan Skill-owner projection, and deterministic duplicate Agent-profile
+projection.
+
+A copy of the exact pre-repair live data tree was repaired in a temporary root.
+The run completed in 11.144 seconds, produced 127 Prompts, 10 Folders, and 137
+Prompt versions in both files and SQLite, preserved 18 settings rows, created a
+recovery artifact, and returned `already-canonical` on the next startup check.
+Temporary data was removed after verification.
+
+The running development app reloaded the completed implementation and performed
+the same journaled self-heal on the active development root. Startup recorded
+`self-healed`, retained the prior tree under the recovery registry, initialized
+127 Prompts and 10 Folders, and detected zero recovery candidates. No recovery
+action was selected in the renderer.
+
+### AI model file-authority recovery
+
+- Renderer migration now preserves a populated file-owned AI provider/model
+  inventory even when the renderer snapshot contains default-empty arrays.
+- Completed beta migrations with zero canonical models and dangling model
+  routes inspect only managed upgrade safety points and restore only a bounded
+  regular config containing every routed model id. Publication reuses the
+  encrypted renderer vault and atomic canonical replacement; intentional empty
+  inventories remain untouched.
+- The active development root was repaired to one provider, seven models, and
+  four model routes. Both public config projections contain zero plaintext API
+  keys; the encrypted vault contains nine secret references. A read-only SQLite
+  audit found no `ai*` or `model*` setting keys, confirming that the database is
+  not the configuration owner.
+- `TEST-LEGACYREC-010` passed 19 Core migration tests and 47 Desktop recovery,
+  persistence IPC, and model-service UI tests. The recovery service reached
+  100% statement, branch, function, and line coverage. Core and Desktop
+  typechecks, targeted Desktop lint, Prettier, file-size, traceability, and
+  whitespace checks passed.
+- The final 0.6.0 quick release profile passed all 29 gates in 475.9 seconds,
+  including every Desktop test shard and the Core, CLI, shared, database,
+  mobile, and Web surfaces.
+
+### Managed Skill symlink migration repair
+
+- Fourteen Codex Skill links were confirmed as PromptHub activation records
+  whose stored targets use the removed legacy
+  `data/skills/<name--hash>/repo` layout. Every corresponding Skill id has a
+  complete current canonical workspace; the content was not deleted, but the
+  downstream links were not rebound after migration.
+- Startup now joins the bounded platform activation file to the current Skill
+  id/name inventory, accepts only the exact legacy PromptHub target shape, and
+  atomically renames a same-directory staged link over the superseded link.
+  External dangling links, mismatched activation records, unsafe workspaces,
+  non-link content, concurrent replacement, malformed or oversized state, and
+  publication failure remain unchanged.
+- The running development build exercised the production startup path and
+  rebound all 14 affected Codex links. All 14 now target their id-based
+  canonical workspaces, contain readable `SKILL.md` files, and report zero
+  broken links.
+- `TEST-LEGACYREC-011` passed eight filesystem reconciliation tests and two
+  default startup-wiring tests. Both new critical modules reached 100%
+  statement, branch, function, and line coverage. The broader Skill suite
+  passed 376 tests across 14 files; Desktop typecheck, targeted lint, Prettier,
+  file-size, traceability, and whitespace checks passed.
+- The final 0.6.0 quick release profile passed all 29 gates in 484.4 seconds
+  after the symlink migration repair.
+
 ## Remaining Risk
 
 Current recovery code and tests now prove the shared SQLite migration slice for
@@ -248,6 +397,7 @@ all four tagged schemas, including a four-version Prompt. They do not yet prove
 the v0.4.7/v0.4.8 Windows path transition, a v0.5.1 portable backup, or a v0.5.2
 upgrade-snapshot restore through the complete application path. Issues #89,
 #97, and #98 remain open and must not be marked locally done from this evidence.
-The current SQLite source can now repair the live downgrade corruption after an
-explicit user selection. Older-writer refusal and a separately validated legacy
-Markdown candidate remain pending under `T-LEGACYREC-013`.
+The file-authoritative path is covered with real SQLite and filesystem fixtures
+and by the journaled startup publication above. Because 0.5.9 is
+already distributed and contains no compatible gate, 0.6.0 cannot guarantee
+that manually launching that binary against the newer root is write-free.

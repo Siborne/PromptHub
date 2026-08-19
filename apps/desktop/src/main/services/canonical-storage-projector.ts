@@ -64,6 +64,11 @@ export interface CanonicalStorageProjectorOptions {
   deviceId?: string;
   operationalSourceDatabasePath?: string;
   publishedCanonicalRootPath?: string;
+  resolvePromptMediaSource?: (
+    prompt: unknown,
+    kind: "image" | "video",
+    reference: string,
+  ) => string;
 }
 
 export interface CanonicalStorageProjectionResult {
@@ -335,7 +340,7 @@ function collectGenerations(): CanonicalGenerationShadowInput[] {
   });
 }
 
-function resolvePromptMediaSource(
+function resolveDefaultPromptMediaSource(
   _prompt: unknown,
   kind: "image" | "video",
   reference: string,
@@ -411,7 +416,8 @@ export async function projectCanonicalStorageShadow(
       targetPath,
       ...storage,
       deviceId: options.deviceId,
-      resolvePromptMediaSource,
+      resolvePromptMediaSource:
+        options.resolvePromptMediaSource ?? resolveDefaultPromptMediaSource,
     });
     const stagedDatabase = stageCanonicalStorageDatabase(
       targetPath,

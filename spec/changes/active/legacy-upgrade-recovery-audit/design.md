@@ -194,34 +194,148 @@ comparison must use the repository's prerelease-aware version utility rather
 than numeric splitting.
 
 An existing canonical authority marker is necessary but not sufficient. Startup
-must validate the canonical catalog and every declared resource before returning
-`already-canonical`. Invalid authority produces a recovery-required result with
-read-only candidate metadata. SQLite, legacy Markdown, and safety points remain
-separate candidates; modification time or record count cannot select a winner.
-Only an explicit user choice may stage, validate, and atomically publish one
-candidate through the existing recovery boundary. Candidate inspection is
-linear in declared files and bounded by the existing catalog and recovery limits.
+validates the complete file graph before opening SQLite. SQLite is a derived
+catalog: a valid canonical graph is staged into a fresh catalog on startup and
+the live database is replaced through the canonical entry publication journal
+only when its authoritative hashes differ or it cannot be read. Readable
+compatibility and operational tables are copied into the staged catalog; an
+unreadable derived catalog is discarded rather than promoted to authority.
+Reconciliation is a bounded `O(E + B)` scan over canonical entries `E` and
+their bytes `B`, plus one staged SQLite image; it performs no network work and
+uses atomic catalog publication rather than in-place mutation.
 
-Until candidate selection is complete, desktop startup skips Prompt workspace
-synchronization for an invalid authority. This prevents the normal DB-to-graph
-publisher from repeatedly reading or replacing the damaged graph while keeping
-the application available for recovery operations.
+For the observed older-writer failure, startup first treats the current Markdown
+workspace as a deterministic repair input. It builds a private catalog from the
+exact file Prompt set, supplements only same-id history from a readable SQLite
+image, materializes a new Prompt graph, and copies all independently owned
+canonical domains without re-projecting them. The complete candidate is checked
+and published by the existing journaled storage restore, preserving the prior
+data tree as a recovery artifact. This keeps device secrets out of the repair
+dependency graph and makes a malformed MCP secret non-blocking.
 
-The current SQLite catalog is surfaced as an explicit recovery candidate when
-it passes read-only integrity and content inspection. Selecting that candidate
-creates a closed-database checkpoint, projects and validates the complete
-canonical shadow in staging, preserves the damaged active root as a journaled
-recovery artifact, and atomically publishes the selected catalog. Startup never
-selects this candidate automatically, and the ordinary first-publication API
-continues to reject an existing authority marker.
+Known empty legacy Rule containers (`rules/.versions` and `rules/projects`)
+may coexist with Rule bundles, but only as regular empty directories. A
+non-empty, symlinked, or type-substituted container is ambiguous and remains
+fail-closed. Derived SQLite also normalizes two file-valid compatibility cases
+without rewriting their bundles: an orphaned server Skill owner is projected
+as null unless the preserved server-authoritative user row exists, and among
+duplicate active Agent profile names on one platform only the newest
+`updatedAt` value (then greatest id) remains active while older profiles are
+projected archived. These are catalog-view decisions; file metadata remains
+unchanged.
+
+The current Prompt Markdown workspace is the preferred candidate when it has
+readable Prompt files. Recovery creates a private consistent image of the
+closed SQLite catalog, replaces the image's current Prompt rows with the exact
+file set, removes database-only Prompts, and retains only history attached to a
+remaining file Prompt id. The source workspace is read-only throughout this
+process. The staged catalog exists only to reuse the established canonical
+projector for validated supplemental history and non-Prompt domains; it is not
+allowed to choose or overwrite current Prompt content.
+
+Prompt media resolution uses a fixed list: active assets, validated recovery
+artifacts, and validated upgrade safety points. Resolution is by safe relative
+reference and regular file only. Every existing copy is streamed through
+SHA-256; a missing reference or differing hashes aborts staging. This scan is
+`O(P + V + M * R)` for Prompt files `P`, retained version rows `V`, referenced
+media `M`, and bounded trusted roots `R`, with constant-size hash buffers and no
+network work. A successful staged graph is published through the existing
+journaled authority boundary, which preserves the damaged active root.
+
+The repair runs automatically only when the Markdown set is unique, strictly
+parseable, bounded, and all referenced media resolve to identical hashes across
+allowlisted roots. Any ambiguity returns `recovery-required` without modifying
+the active tree. In that exceptional UI, file candidates sort ahead of SQLite
+regardless of modification time. SQLite-only recovery remains a lower-priority
+explicit fallback.
+
+Strict workspace staging treats the file Folder and Prompt parent graphs as
+exact sets and imports both in linear parent-before-child order. It rejects
+cycles, missing parents, symlinks, special files, undeclared files, files over
+16 MiB, and inventories over 100,000 entries. A database migration intent
+prevents a new cooperating client from opening during replacement; existing
+live or unknown client leases block publication. The full repair also uses the
+storage-maintenance intent already owned by the journaled restore.
+
+After canonical authority is restored, legacy workspace bootstrap is read-only:
+it reports catalog counts but never exports SQLite into `data/prompts`. This
+removes the reverse write that otherwise introduces undeclared Markdown files
+and invalidates the canonical graph on the next launch.
 
 MCP target-binding ids are opaque synchronization keys derived from target,
 scope, and an absolute path. Canonical projection therefore validates their
 length and control characters but does not apply resource-path separator rules.
 If any recovery path closes SQLite and then fails, it reopens the original
-catalog and re-registers all database-bound IPC handlers before returning the
-error. This prevents renderer stores from retaining services backed by the
-closed connection.
+catalog and re-registers all IPC handlers before returning the error. Handler
+registration is captured transactionally at runtime: the next registration
+removes the preceding successful set, and a failed partial attempt removes its
+own captured set before rethrowing. This covers nested registration modules
+without a drifting channel list and prevents renderer stores from retaining
+services backed by the closed connection.
+
+SQLite recovery resolves MCP input before checkpoint projection through a
+read-only compatibility selector. Existing canonical bundles are read with the
+desktop device secret adapter; when they are empty, the selector parses the
+exact superseded MCP library with a 16 MiB bound and without publishing or
+deleting it. Checkpoint materialization extracts credential values and the
+existing encrypted secret sink persists them before journaled publication.
+
+`registerAllIPC` re-registers database and non-database groups together, so its
+reset inventory covers every channel owned by those groups. This is broader
+than the database dependency itself but is required for idempotent recovery;
+otherwise the first omitted channel aborts the rebind and leaves SQLite open
+without usable renderer handlers.
+
+The 0.6.0 application can enforce this contract for its own and future version
+markers, but it cannot retrofit startup refusal into an already distributed
+0.5.9 binary. Manual launch of 0.5.9 against a 0.6.0 data root therefore remains
+a compatibility limitation; 0.6.0 must recover the resulting invalid authority
+without claiming that the old executable was prevented from writing.
+
+## `DES-LEGACYREC-012`: AI Model File Authority And Bounded Self-Heal
+
+Renderer migration treats a populated legacy `config/ai-models.json` as the
+pre-migration provider/model authority. Default arrays created by Zustand are
+not evidence that the user deleted the file inventory, so they cannot suppress
+it. Once migration succeeds, `config/providers.json` plus the encrypted vault
+become the canonical owner and `ai-models.json` remains a redacted compatibility
+document.
+
+Already-affected beta roots have an exact corruption signature: canonical
+models are empty while one or more route ids remain. Startup inspects at most
+the existing five managed upgrade safety points, newest first, reading only a
+regular `config/ai-models.json` no larger than 8 MiB. A candidate is eligible
+only when its model ids contain the complete routed-id set. The selected
+provider/model inventory is republished through `RendererPersistenceStore`, so
+credential encryption, staged rename, rollback, and verification remain owned
+by the existing persistence boundary. The repair is `O(C * (M + B))` for at
+most five candidates `C`, model records `M`, and bounded config bytes `B`; it
+does no network work and does not read SQLite. No exact candidate means no
+write, which distinguishes repair from ordinary user-directed restore.
+
+## `DES-LEGACYREC-013`: Managed Skill Symlink Reconciliation
+
+Canonical Skill startup materializes each portable bundle at the stable
+`cache/skill-workspaces/<skill-id>` path before downstream reconciliation.
+Platform activation files retain the exact Skill id and name that PromptHub
+distributed. Startup joins those two file-owned identities and inspects only
+the corresponding direct child in each configured Agent Skill directory.
+
+A link is eligible only when its activation key, record name, current Skill
+name, and Skill id all agree, and its stored target
+is an exact direct-child legacy managed repository at
+`data/skills/<container>/repo`. The replacement workspace and its `SKILL.md`
+must both be regular non-symlink entries inside the canonical workspace root.
+PromptHub creates a same-directory staged symlink, rechecks the original target,
+and atomically renames the stage over the old link. A failed precondition or
+rename leaves the original link unchanged. Ordinary external broken links are
+not adopted.
+
+Activation input is a regular non-symlink file no larger than 1 MiB with at
+most 512 records. With fixed platform count `P`, activation records `A`, and
+current Skills `S`, reconciliation is `O(S + P * A)` time and `O(S + A)`
+bounded memory, performs no recursive traversal or network work, and emits at
+most one startup summary rather than one exception per dangling link.
 
 ## Analyze Result
 
@@ -231,8 +345,10 @@ closed connection.
   independently for each.
 - #98 is not explained by the current all-version query. No query or schema
   change is justified until the tagged history fixture fails.
-- The current delivery cut has no material source-of-truth conflict: SQLite and
-  managed data remain canonical, while legacy artifacts are recovery inputs.
+- The user-confirmed recovery boundary treats files as the only durable local
+  authority. Current Prompt Markdown is the deterministic migration input when
+  an older writer damaged canonical Prompt bundles; SQLite is a rebuildable
+  index plus optional same-id history and operational-table supplement.
 
 ## Traceability
 
@@ -247,4 +363,6 @@ closed connection.
 | `FR-LEGACYREC-007`  | `DES-LEGACYREC-008`, `DES-LEGACYREC-009` | `TEST-LEGACYREC-007`                                             | `T-LEGACYREC-010` |
 | `FR-LEGACYREC-008`  | `DES-LEGACYREC-010`                      | `TEST-LEGACYREC-008`                                             | `T-LEGACYREC-011` |
 | `FR-LEGACYREC-009`  | `DES-LEGACYREC-011`                      | `TEST-LEGACYREC-009`                                             | `T-LEGACYREC-013` |
+| `FR-LEGACYREC-010`  | `DES-LEGACYREC-012`                      | `TEST-LEGACYREC-010`                                             | `T-LEGACYREC-014` |
+| `FR-LEGACYREC-011`  | `DES-LEGACYREC-013`                      | `TEST-LEGACYREC-011`                                             | `T-LEGACYREC-015` |
 | `NFR-LEGACYREC-001` | `DES-LEGACYREC-007`                      | `TEST-LEGACYREC-005`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-007` |

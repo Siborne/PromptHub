@@ -15,10 +15,25 @@ import {
   type PublishCanonicalStorageAuthorityOptions,
   type PublishCanonicalStorageAuthorityResult,
 } from "./canonical-storage-authority";
+import {
+  reconcileCanonicalStorageCatalog,
+  repairCanonicalStorageFromPromptWorkspace,
+  type RepairCanonicalStorageFromPromptWorkspaceResult,
+} from "./canonical-storage-self-heal";
 
 type AuthorityPublisher = (
   options: PublishCanonicalStorageAuthorityOptions,
 ) => Promise<PublishCanonicalStorageAuthorityResult>;
+
+type InvalidAuthorityRepairer = (options: {
+  activeRoot: string;
+  sourceDatabasePath: string;
+}) => Promise<RepairCanonicalStorageFromPromptWorkspaceResult>;
+
+type CatalogReconciler = (options: {
+  activeRoot: string;
+  databasePath: string;
+}) => { status: "current" | "rebuilt" };
 
 export interface EnsureCanonicalStorageAuthorityOnStartupOptions extends Omit<
   PublishCanonicalStorageAuthorityOptions,
@@ -30,15 +45,19 @@ export interface EnsureCanonicalStorageAuthorityOnStartupOptions extends Omit<
   publish?: AuthorityPublisher;
   prepareSourceDatabase?: () => void | Promise<void>;
   refreshRuntimeContext?: () => void;
+  repairInvalidAuthority?: InvalidAuthorityRepairer;
+  reconcileCatalog?: CatalogReconciler;
 }
 
 export type CanonicalStorageAuthorityStartupResult =
   | { status: "already-canonical" }
   | {
       status: "recovery-required";
-      reason: "invalid-canonical-prompt-graph";
+      reason: "invalid-canonical-prompt-graph" | "invalid-canonical-storage";
       error: string;
     }
+  | { status: "catalog-rebuilt" }
+  | { status: "self-healed"; recoveryArtifactPath: string }
   | { status: "waiting-renderer-migration" }
   | { status: "source-database-missing" }
   | ({ status: "published" } & Omit<
@@ -59,24 +78,81 @@ function assertRegularDatabaseOrMissing(databasePath: string): boolean {
   }
 }
 
+function canonicalPromptGraphError(activeRoot: string): string | null {
+  try {
+    readPromptCanonicalGraph(path.join(activeRoot, "data"));
+    return null;
+  } catch (error) {
+    return error instanceof Error
+      ? error.message
+      : "Canonical Prompt graph is invalid";
+  }
+}
+
+async function repairInvalidAuthority(
+  options: EnsureCanonicalStorageAuthorityOnStartupOptions,
+  activeRoot: string,
+  graphError: string,
+): Promise<CanonicalStorageAuthorityStartupResult> {
+  try {
+    const repaired = await (
+      options.repairInvalidAuthority ??
+      ((input) => repairCanonicalStorageFromPromptWorkspace(input))
+    )({
+      activeRoot,
+      sourceDatabasePath: path.resolve(options.sourceDatabasePath),
+    });
+    (options.refreshRuntimeContext ?? refreshRuntimeStorageContext)();
+    return {
+      status: "self-healed",
+      recoveryArtifactPath: repaired.recoveryArtifactPath,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Automatic file repair failed";
+    return {
+      status: "recovery-required",
+      reason: "invalid-canonical-prompt-graph",
+      error: `${graphError}; automatic file repair failed: ${message}`,
+    };
+  }
+}
+
+async function ensureExistingCanonicalAuthority(
+  options: EnsureCanonicalStorageAuthorityOnStartupOptions,
+  activeRoot: string,
+): Promise<CanonicalStorageAuthorityStartupResult> {
+  const graphError = canonicalPromptGraphError(activeRoot);
+  if (graphError) {
+    return repairInvalidAuthority(options, activeRoot, graphError);
+  }
+  try {
+    const result = (
+      options.reconcileCatalog ?? reconcileCanonicalStorageCatalog
+    )({
+      activeRoot,
+      databasePath: path.resolve(options.sourceDatabasePath),
+    });
+    return {
+      status:
+        result.status === "rebuilt" ? "catalog-rebuilt" : "already-canonical",
+    };
+  } catch (error) {
+    return {
+      status: "recovery-required",
+      reason: "invalid-canonical-storage",
+      error:
+        error instanceof Error ? error.message : "Canonical storage is invalid",
+    };
+  }
+}
+
 export async function ensureCanonicalStorageAuthorityOnStartup(
   options: EnsureCanonicalStorageAuthorityOnStartupOptions,
 ): Promise<CanonicalStorageAuthorityStartupResult> {
   const activeRoot = path.resolve(options.activeRoot);
   if (readCanonicalStorageAuthority(activeRoot)) {
-    try {
-      readPromptCanonicalGraph(path.join(activeRoot, "data"));
-      return { status: "already-canonical" };
-    } catch (error) {
-      return {
-        status: "recovery-required",
-        reason: "invalid-canonical-prompt-graph",
-        error:
-          error instanceof Error
-            ? error.message
-            : "Canonical Prompt graph is invalid",
-      };
-    }
+    return ensureExistingCanonicalAuthority(options, activeRoot);
   }
   if (!readRendererPersistenceMigrationMarker(activeRoot)) {
     return { status: "waiting-renderer-migration" };
@@ -98,6 +174,8 @@ export async function ensureCanonicalStorageAuthorityOnStartup(
     publish = publishCanonicalStorageAuthority,
     prepareSourceDatabase: _prepareSourceDatabase,
     refreshRuntimeContext = refreshRuntimeStorageContext,
+    repairInvalidAuthority: _repairInvalidAuthority,
+    reconcileCatalog: _reconcileCatalog,
     ...publicationOptions
   } = options;
   const result = await publish({

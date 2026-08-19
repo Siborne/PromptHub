@@ -9,9 +9,18 @@ import type { McpResourceSecretEncryption } from "../../../src/main/services/mcp
 const mocks = vi.hoisted(() => ({
   closeDatabase: vi.fn(),
   deriveLocalResourceDeviceId: vi.fn(() => "device-test"),
+  readMcpLibraryRecoverySource: vi.fn(),
+  listRecoveryArtifacts: vi.fn((): Array<{ directoryPath: string }> => []),
+  listUpgradeBackups: vi.fn(
+    async (): Promise<Array<{ backupPath: string }>> => [],
+  ),
+  stageFileAuthoritativePromptCatalog: vi.fn(),
+  createVerifiedPromptMediaResolver: vi.fn(() => vi.fn()),
+  repairCanonicalStorageFromPromptWorkspace: vi.fn(),
   recoverCanonicalStorageAuthorityFromDatabase: vi.fn(),
   writeMany: vi.fn(),
   createMcpResourceSecretStore: vi.fn(),
+  createCanonicalMcpResourceSecretStore: vi.fn(),
   logStartupEvent: vi.fn(),
   scrubPath: vi.fn((value: unknown) => value),
 }));
@@ -21,20 +30,42 @@ vi.mock("../../../src/main/database", () => ({
 }));
 vi.mock("@prompthub/core", () => ({
   deriveLocalResourceDeviceId: mocks.deriveLocalResourceDeviceId,
+  listRecoveryArtifacts: mocks.listRecoveryArtifacts,
+  readMcpLibraryRecoverySource: mocks.readMcpLibraryRecoverySource,
 }));
+vi.mock("../../../src/main/services/upgrade-backup", () => ({
+  listUpgradeBackups: mocks.listUpgradeBackups,
+}));
+vi.mock(
+  "../../../src/main/services/file-authoritative-prompt-recovery",
+  () => ({
+    stageFileAuthoritativePromptCatalog:
+      mocks.stageFileAuthoritativePromptCatalog,
+    createVerifiedPromptMediaResolver: mocks.createVerifiedPromptMediaResolver,
+  }),
+);
 vi.mock("../../../src/main/services/canonical-storage-authority", () => ({
   recoverCanonicalStorageAuthorityFromDatabase:
     mocks.recoverCanonicalStorageAuthorityFromDatabase,
 }));
+vi.mock("../../../src/main/services/canonical-storage-self-heal", () => ({
+  repairCanonicalStorageFromPromptWorkspace:
+    mocks.repairCanonicalStorageFromPromptWorkspace,
+}));
 vi.mock("../../../src/main/services/mcp-resource-secret-store", () => ({
   createMcpResourceSecretStore: mocks.createMcpResourceSecretStore,
+  createCanonicalMcpResourceSecretStore:
+    mocks.createCanonicalMcpResourceSecretStore,
 }));
 vi.mock("../../../src/main/startup-log", () => ({
   logStartupEvent: mocks.logStartupEvent,
   scrubPath: mocks.scrubPath,
 }));
 
-import { performCanonicalDatabaseRecovery } from "../../../src/main/services/canonical-storage-recovery";
+import {
+  performCanonicalDatabaseRecovery,
+  performCanonicalFileWorkspaceRecovery,
+} from "../../../src/main/services/canonical-storage-recovery";
 
 describe("canonical storage recovery orchestration", () => {
   const encryption: McpResourceSecretEncryption = {
@@ -47,6 +78,18 @@ describe("canonical storage recovery orchestration", () => {
     vi.clearAllMocks();
     mocks.createMcpResourceSecretStore.mockReturnValue({
       writeMany: mocks.writeMany,
+    });
+    mocks.createCanonicalMcpResourceSecretStore.mockReturnValue({
+      filePath: "/root/secrets/mcp-resource-secrets.json",
+      read: vi.fn(),
+      prepareUpdate: vi.fn(),
+    });
+    mocks.readMcpLibraryRecoverySource.mockReturnValue({
+      kind: "prompthub-mcp-library",
+      version: 1,
+      updatedAt: "2026-08-18T00:00:00.000Z",
+      servers: [],
+      bindings: [],
     });
   });
 
@@ -90,6 +133,18 @@ describe("canonical storage recovery orchestration", () => {
 
     expect(mocks.closeDatabase).toHaveBeenCalledOnce();
     expect(mocks.deriveLocalResourceDeviceId).toHaveBeenCalledWith("/root");
+    expect(mocks.createCanonicalMcpResourceSecretStore).toHaveBeenCalledWith({
+      filePath: "/root/secrets/mcp-resource-secrets.json",
+      encryption,
+    });
+    expect(mocks.readMcpLibraryRecoverySource).toHaveBeenCalledWith({
+      canonicalOptions: {
+        secretStore: expect.objectContaining({
+          filePath: "/root/secrets/mcp-resource-secrets.json",
+        }),
+      },
+      supersededPath: "/root/data/mcp/library.json",
+    });
     expect(
       mocks.recoverCanonicalStorageAuthorityFromDatabase,
     ).toHaveBeenCalledWith(
@@ -100,6 +155,10 @@ describe("canonical storage recovery orchestration", () => {
         checkpointPath: expect.stringContaining(
           "/root/cache/.canonical-recovery-checkpoint-",
         ),
+        mcpLibrary: expect.objectContaining({
+          kind: "prompthub-mcp-library",
+          servers: [],
+        }),
       }),
     );
     expect(mocks.createMcpResourceSecretStore).toHaveBeenCalledWith({
@@ -127,6 +186,46 @@ describe("canonical storage recovery orchestration", () => {
       event: "recovery:canonical_authority_rebuilt",
       sourcePath: "/root/data/prompthub.db",
       recoveryArtifactPath: "/root/recovery/operation-1",
+    });
+  });
+
+  it("repairs from files without reading unrelated device-bound secrets", async () => {
+    mocks.listRecoveryArtifacts.mockReturnValue([
+      { directoryPath: "/root/backups/recovery/one" },
+    ]);
+    mocks.listUpgradeBackups.mockResolvedValue([
+      { backupPath: "/root/backups/safety-points/upgrades/two" },
+    ]);
+    mocks.repairCanonicalStorageFromPromptWorkspace.mockResolvedValue({
+      recoveryArtifactPath: "/root/recovery/file",
+    });
+
+    const result = await performCanonicalFileWorkspaceRecovery({
+      activeRoot: "/root",
+      sourceDatabasePath: "/root/data/prompthub.db",
+      sourcePath: "/root/data/prompts",
+      encryption,
+      scheduleRelaunch: vi.fn(),
+      onSuccess: vi.fn(),
+      onFailure: vi.fn(),
+    });
+
+    expect(
+      mocks.repairCanonicalStorageFromPromptWorkspace,
+    ).toHaveBeenCalledWith({
+      activeRoot: "/root",
+      sourceDatabasePath: "/root/data/prompthub.db",
+      trustedRoots: [
+        "/root/backups/recovery/one",
+        "/root/backups/safety-points/upgrades/two",
+      ],
+    });
+    expect(mocks.readMcpLibraryRecoverySource).not.toHaveBeenCalled();
+    expect(mocks.createCanonicalMcpResourceSecretStore).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      success: true,
+      needsRestart: true,
+      recoveryArtifactPath: "/root/recovery/file",
     });
   });
 

@@ -328,20 +328,24 @@ function buildCanonicalState(
   const settings = parsePersistedState(input.settings);
   const selfHostedDeviceId = normalizeDeviceId(input.selfHostedDeviceId);
   const legacyAIConfig = asRecord(input.legacyAIConfig);
-  if (
-    settings.aiProviders === undefined &&
-    Array.isArray(legacyAIConfig.providers)
-  ) {
-    settings.aiProviders = legacyAIConfig.providers;
+  const legacyProviders = Array.isArray(legacyAIConfig.providers)
+    ? legacyAIConfig.providers
+    : [];
+  const legacyModels = Array.isArray(legacyAIConfig.models)
+    ? legacyAIConfig.models
+    : [];
+  const legacyModelRouteDefaults = asRecord(legacyAIConfig.modelRouteDefaults);
+  if (legacyProviders.length > 0 || settings.aiProviders === undefined) {
+    settings.aiProviders = legacyProviders;
   }
-  if (settings.aiModels === undefined && Array.isArray(legacyAIConfig.models)) {
-    settings.aiModels = legacyAIConfig.models;
+  if (legacyModels.length > 0 || settings.aiModels === undefined) {
+    settings.aiModels = legacyModels;
   }
   if (
-    settings.modelRouteDefaults === undefined &&
-    legacyAIConfig.modelRouteDefaults !== undefined
+    Object.keys(legacyModelRouteDefaults).length > 0 ||
+    settings.modelRouteDefaults === undefined
   ) {
-    settings.modelRouteDefaults = legacyAIConfig.modelRouteDefaults;
+    settings.modelRouteDefaults = legacyModelRouteDefaults;
   }
   const secrets: Record<string, string> = {};
   const appSettings = pickSettings(settings, APP_SETTING_KEYS);

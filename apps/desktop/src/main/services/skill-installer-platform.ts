@@ -54,14 +54,16 @@ type SkillPlatformIdentity = Pick<
   "id" | "name" | "source_id" | "source_url" | "local_repo_path"
 >;
 
-interface PlatformActivationRecord {
+export interface PlatformActivationRecord {
   skillId: string;
   skillName: string;
 }
 
-type PlatformActivationMap = Record<string, PlatformActivationRecord>;
+export type PlatformActivationMap = Record<string, PlatformActivationRecord>;
 
-const PLATFORM_ACTIVATION_STATE_FILE = ".prompthub-platform-activations.json";
+export const PLATFORM_ACTIVATION_STATE_FILE =
+  ".prompthub-platform-activations.json";
+export const MAX_PLATFORM_ACTIVATION_RECORDS = 512;
 
 function getPlatformActivationStatePath(platform: SkillPlatform): string {
   return path.join(
@@ -80,13 +82,23 @@ async function readPlatformActivationState(
 
   try {
     const raw = await fs.readFile(statePath, "utf-8");
+    return parsePlatformActivationState(raw);
+  } catch {
+    return {};
+  }
+}
+
+export function parsePlatformActivationState(
+  raw: string,
+): PlatformActivationMap {
+  try {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return {};
     }
-
+    const entries = Object.entries(parsed);
     return Object.fromEntries(
-      Object.entries(parsed).filter(
+      entries.filter(
         ([, value]) =>
           value &&
           typeof value === "object" &&

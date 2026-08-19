@@ -200,10 +200,7 @@ describe("prompt canonical export", () => {
 
     materializePromptCanonicalGraph(target, {
       prompts: [parentPrompt, childPrompt],
-      promptVersions: [
-        version(parentPrompt.id),
-        version(childPrompt.id),
-      ],
+      promptVersions: [version(parentPrompt.id), version(childPrompt.id)],
       folders: [parentFolder, childFolder],
       promptRelations: [],
       outputFormatItems: [],
@@ -383,6 +380,11 @@ describe("prompt canonical export", () => {
       "utf8",
     );
     fs.mkdirSync(path.join(target, "prompthub.db.lock"));
+    const migrationIntentPath = path.join(
+      target,
+      "prompthub.db.migration-intent.json",
+    );
+    fs.writeFileSync(migrationIntentPath, "{}\n", "utf8");
 
     expect(readPromptCanonicalGraph(target).snapshot.prompts).toHaveLength(1);
 
@@ -390,6 +392,13 @@ describe("prompt canonical export", () => {
     fs.writeFileSync(clientsPath, "not a directory", "utf8");
     expect(() => readPromptCanonicalGraph(target)).toThrow(
       /database coordination path is invalid/u,
+    );
+
+    fs.rmSync(clientsPath);
+    fs.rmSync(migrationIntentPath);
+    fs.mkdirSync(migrationIntentPath);
+    expect(() => readPromptCanonicalGraph(target)).toThrow(
+      /database migration intent path is invalid/u,
     );
   });
 

@@ -91,6 +91,7 @@ async function getChildDirectories(
         const stat = await fs.stat(candidate);
         if (stat.isDirectory()) directories.push(candidate);
       } catch (error: unknown) {
+        if (getErrorCode(error) === "ENOENT") continue;
         console.warn(
           `Failed resolving skill symlink: ${candidate}, skipping`,
           error,

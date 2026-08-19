@@ -196,28 +196,52 @@ describe("upgrade-backup-startup", () => {
     expect(result.snapshot).toBeNull();
   });
 
-  it("does not create a snapshot when downgrading", async () => {
+  it("refuses an older writer before migration and leaves the marker unchanged", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     seedUserData(userDataPath);
     fs.mkdirSync(getUpgradeBackupRoot(userDataPath), { recursive: true });
     fs.writeFileSync(
       getLastRunVersionMarkerPath(userDataPath),
       JSON.stringify({
-        version: "0.5.5",
+        version: "0.6.0-beta.1",
         updatedAt: "2026-01-01T00:00:00.000Z",
       }),
       "utf8",
     );
 
-    const result = await runUpgradeBackupStartupTasks(userDataPath, "0.5.4");
-
-    expect(result.status).toBe("not-an-upgrade");
-    expect(result.snapshot).toBeNull();
+    await expect(
+      runUpgradeBackupStartupTasks(userDataPath, "0.5.9"),
+    ).rejects.toThrow(
+      "was last opened by newer PromptHub version 0.6.0-beta.1",
+    );
 
     const marker = JSON.parse(
       fs.readFileSync(getLastRunVersionMarkerPath(userDataPath), "utf8"),
     ) as { version: string };
-    expect(marker.version).toBe("0.5.4");
+    expect(marker.version).toBe("0.6.0-beta.1");
+    expect(
+      fs.existsSync(
+        path.join(getUpgradeBackupRoot(userDataPath), ".legacy-migrated"),
+      ),
+    ).toBe(false);
+  });
+
+  it("uses prerelease ordering when protecting a stable-version data root", async () => {
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    seedUserData(userDataPath);
+    fs.mkdirSync(getUpgradeBackupRoot(userDataPath), { recursive: true });
+    fs.writeFileSync(
+      getLastRunVersionMarkerPath(userDataPath),
+      JSON.stringify({
+        version: "0.6.0",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      "utf8",
+    );
+
+    await expect(
+      runUpgradeBackupStartupTasks(userDataPath, "0.6.0-beta.2"),
+    ).rejects.toThrow("was last opened by newer PromptHub version 0.6.0");
   });
 
   it("treats empty userData as a non-fatal no-op and still advances the marker", async () => {

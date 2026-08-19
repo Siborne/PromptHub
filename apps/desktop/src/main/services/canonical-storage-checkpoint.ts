@@ -93,7 +93,7 @@ function writeJsonExclusive(filePath: string, value: unknown): void {
   }
 }
 
-function createConsistencyId(
+export function createCanonicalStorageConsistencyId(
   promptGraphHash: string,
   resourceCatalogHash: string,
 ): string {
@@ -169,7 +169,7 @@ export function verifyCanonicalStorageCheckpointContent(
   );
   try {
     const rebuilt = stageCanonicalStorageDatabase(canonicalPath, rebuiltPath);
-    const consistencyId = createConsistencyId(
+    const consistencyId = createCanonicalStorageConsistencyId(
       rebuilt.promptGraphHash,
       rebuilt.resourceCatalogHash,
     );
@@ -238,7 +238,7 @@ function buildCheckpointManifest(
     kind: CHECKPOINT_KIND,
     version: CHECKPOINT_VERSION,
     createdAt: projection.materialized.manifest.createdAt,
-    consistencyId: createConsistencyId(
+    consistencyId: createCanonicalStorageConsistencyId(
       staged.promptGraphHash,
       staged.resourceCatalogHash,
     ),

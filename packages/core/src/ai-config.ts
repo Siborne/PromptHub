@@ -233,7 +233,7 @@ function assertNonEmpty(value: string | undefined, name: string): string {
   return normalized;
 }
 
-function parseConfig(raw: string): CoreAIConfigFile {
+export function parseCoreAIConfig(raw: string): CoreAIConfigFile {
   const parsed = JSON.parse(raw) as Partial<CoreAIConfigFile>;
   if (parsed.kind !== "prompthub-ai-config" || parsed.version !== 1) {
     throw new AIConfigError("INVALID_CONFIG", "AI 配置文件格式不受支持");
@@ -266,7 +266,7 @@ export class CoreAIConfigService {
     }
 
     try {
-      return parseConfig(fs.readFileSync(filePath, "utf8"));
+      return parseCoreAIConfig(fs.readFileSync(filePath, "utf8"));
     } catch (error) {
       if (error instanceof AIConfigError) {
         throw error;

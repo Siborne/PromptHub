@@ -88,17 +88,106 @@ case.
 
 An application version older than the last version that wrote the active data
 root MUST fail before database, canonical resource, or legacy workspace writes.
-When a canonical authority marker exists but its declared graph is missing,
-unsafe, or inconsistent, startup MUST enter an explicit recovery-required state
-instead of trusting the marker or rebuilding from SQLite or legacy Markdown.
-PromptHub MUST preserve and identify each validated recovery candidate and MUST
-require an explicit source selection before replacing the active canonical
-graph.
+When a canonical authority marker exists, the file graph is the durable source
+of truth and SQLite is a rebuildable projection. Startup MUST validate the file
+graph before opening SQLite. A valid graph MUST automatically repair a missing,
+corrupt, or logically stale SQLite projection without showing recovery UI.
+
+When the canonical Prompt graph was damaged by an older writer but the current
+legacy Prompt Markdown workspace is complete, unique, parseable, and has
+deterministically resolvable media, startup MUST automatically stage and
+journal-publish a repaired canonical graph from those files. SQLite MAY supply
+same-id Prompt history and non-authoritative operational rows only; it MUST NOT
+select current Prompt content. Explicit recovery selection is required only
+when the file inputs are missing, unsafe, malformed, duplicate, or divergent.
+Modification time and SQLite row count MUST NOT outrank a valid file source.
 
 Canonical recovery MUST accept existing MCP target-binding identities derived
 from an absolute target path. If recovery fails after SQLite is closed, the
 application MUST reopen the original database and rebind database-backed IPC
 handlers before reporting the retryable failure to the renderer.
+
+When the selected SQLite catalog is projected while canonical MCP bundles are
+empty, recovery MUST read the exact superseded `data/mcp/library.json` as a
+bounded, non-publishing input. Credential values MUST be materialized only in
+the staged checkpoint and persisted through the device-bound secret sink;
+recovery MUST NOT run the ordinary compatibility publisher against the damaged
+active root. The failure rebind MUST remove every handler that `registerAllIPC`
+will register again, including handlers registered by nested domain modules.
+The reset set MUST be derived from successful registration rather than a
+manually maintained channel inventory, and partial registration failure MUST
+remove the handlers registered by that failed attempt.
+
+When the current legacy Prompt Markdown workspace is complete enough to form a
+recovery candidate, its files MUST be authoritative for the current Prompt
+set, Folder graph, and current Prompt fields. SQLite MAY supplement version history only for
+Prompt ids still present in the file workspace and MUST NOT overwrite current
+file content or resurrect database-only Prompts. Candidate validation and
+recovery MUST NOT move, rewrite, or delete the source Markdown files. Missing
+Prompt media MAY be sourced only from the active asset root or validated,
+allowlisted recovery/upgrade artifacts. Multiple copies of one reference MUST
+have the same SHA-256 digest; missing, unsafe, or divergent copies MUST fail
+before publication. The rebuilt graph MUST still use staged validation and the
+journaled authority publication boundary.
+
+Automatic repair MUST reject malformed or cyclic Folder/Prompt parent graphs,
+undeclared workspace files, symlinks, oversized files, and unbounded
+inventories. A missing or unreadable SQLite file MUST NOT hide an otherwise
+valid file recovery candidate. Catalog replacement MUST hold the migration and
+storage-maintenance intents and MUST refuse to run while another database
+client lease is live.
+
+Canonical startup MUST NOT export SQLite back into the legacy Markdown layout.
+After successful conversion, managed canonical bundles remain the file
+authority and the pre-conversion Markdown tree remains available in the
+journaled recovery artifact. A corrupt or unreadable device-local MCP secret
+store MUST NOT block Prompt graph self-heal because unrelated canonical MCP,
+Skill, Rule, Plugin, Agent, and Generation bundles are preserved byte-for-byte.
+Exact empty legacy Rule containers MAY coexist with canonical Rule bundles;
+non-empty or unsafe substitutions MUST fail before publication. Rebuilding the
+local catalog MUST preserve server Skill ownership only when its
+server-authoritative user row is available, otherwise it MUST project a null
+local owner without rewriting the Skill bundle. Duplicate active Agent profile
+names MUST be resolved deterministically in the derived catalog by retaining
+the newest profile active and projecting older duplicates archived, without
+rewriting their bundles.
+
+### `FR-LEGACYREC-010`: File-authoritative AI model migration and repair
+
+Before renderer persistence migration, a non-empty `config/ai-models.json`
+provider/model inventory MUST outrank default-empty renderer arrays and MUST be
+published into `config/providers.json` plus the encrypted device vault. The
+migration MUST NOT replace that file-owned inventory with empty arrays.
+
+For a completed 0.6.0 renderer migration whose canonical model list is empty
+while model routes still reference model ids, startup MUST inspect only the
+bounded managed upgrade safety points, newest first. It MAY automatically
+restore a candidate only when it is a regular bounded AI config file and
+contains every currently routed model id. Restoration MUST use the existing
+atomic renderer-persistence publication and encrypted vault, preserve route
+assignments, redact the compatibility AI file, and be idempotent. An
+intentionally empty list with no routed ids, an unsafe candidate, or no exact
+candidate MUST remain unchanged rather than selecting an approximate backup.
+
+### `FR-LEGACYREC-011`: Preserve managed Skill symlink distributions
+
+When canonical Skill migration replaces a legacy PromptHub-managed repository
+path with an id-based materialized workspace, existing Agent Skill symlinks
+created by PromptHub MUST remain usable. After canonical workspaces are
+materialized and before Agent Skill discovery, startup MUST reconcile a
+symlink only when the platform activation record identifies the same current
+Skill id and name and the link's stored target has the exact legacy
+`data/skills/<managed-container>/repo` shape beneath the active data root.
+This applies whether the superseded target still exists or has become dangling.
+
+The replacement target MUST be the current regular, non-symlink canonical
+workspace for that Skill and MUST contain a regular `SKILL.md`. Replacement
+MUST use a same-directory staged link and atomic rename so failure before
+publication preserves the original link.
+Arbitrary external dangling links, missing or mismatched activation records,
+unsafe workspaces, non-link user content, and ambiguous records MUST remain
+unchanged. Reconciliation MUST be bounded, idempotent, local-only, and MUST NOT
+delete either the canonical Skill package or an external source directory.
 
 ### `NFR-LEGACYREC-001`: Bounded audit resources
 
@@ -145,8 +234,42 @@ directory or load a complete database or media archive into memory.
 - `TEST-LEGACYREC-009`: launch an older version against a newer-version marker
   and assert no database, canonical resource, legacy workspace, or version
   marker write occurs. Corrupt a catalog-declared Prompt bundle while retaining
-  divergent SQLite and legacy workspace candidates; assert startup reports
-  recovery-required and leaves every source unchanged until explicit selection.
+  divergent SQLite and legacy workspace candidates; assert a valid unique
+  Markdown workspace automatically repairs the canonical graph, rebuilds the
+  SQLite projection, preserves same-id history, and does not show recovery UI.
+  Assert duplicate ids, malformed files, missing/divergent media, unsafe paths,
+  and publication failure remain recovery-required and leave the active source
+  unchanged.
   Exercise a path-derived MCP binding id and a failed recovery; assert the id
   survives canonical projection and subsequent IPC reads use the reopened
-  database rather than the closed connection.
+  database rather than the closed connection. Project a credential-bearing
+  superseded MCP library without mutating it, reject oversized or unsafe
+  metadata, and reproduce a second `prompt:getAllMeta` registration during
+  recovery rebinding. Reproduce the nested `skill:scanPlatformSkills` collision
+  and a partial registration failure, then assert both retries cleanly remove
+  only handlers captured from the preceding attempt. Recover from divergent
+  SQLite/current Markdown fixtures and assert Markdown owns the current Prompt
+  set and body while valid same-id database history remains supplemental.
+  Assert candidate inspection leaves duplicate Markdown files untouched, and
+  exercise missing media, identical allowlisted backup copies, divergent
+  backup copies, symlinks, and path traversal before journaled publication.
+  Corrupt or stale the derived SQLite catalog beneath a valid canonical graph
+  and assert startup atomically rebuilds it; a second startup MUST be idempotent.
+  Assert canonical bootstrap performs no DB-to-legacy-workspace write and an
+  invalid MCP secret value cannot block Prompt self-heal. Assert exact legacy
+  Folder ownership, parent-before-child import, bounded workspace inspection,
+  missing-SQLite candidate discovery, and live-client replacement refusal.
+- `TEST-LEGACYREC-010`: migrate default-empty renderer provider/model arrays
+  beside a populated file-owned AI config and assert the complete inventory,
+  routes, and encrypted credentials survive. Reproduce the completed-migration
+  state with zero models and dangling routes, then restore from the newest
+  bounded upgrade candidate containing every routed id. Assert restart
+  idempotency, redaction, intentional-empty no-op behavior, malformed/symlink
+  rejection, and atomic publication rollback.
+- `TEST-LEGACYREC-011`: materialize a canonical Skill workspace beside a
+  platform activation record and a link to the exact legacy managed
+  repository layout. Assert startup atomically rebinds it by Skill id, keeps
+  the Skill readable for both retained and missing old targets, and is
+  idempotent. Assert external dangling links,
+  mismatched ids/names, unsafe or missing workspaces, oversized/malformed state,
+  non-link content, and injected replacement failure remain unchanged.

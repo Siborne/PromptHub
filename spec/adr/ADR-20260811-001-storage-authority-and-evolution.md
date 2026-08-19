@@ -90,9 +90,9 @@ layout epoch.
 - Requirements:
   `spec/changes/active/database-migration-safety/specs/data-storage/spec.md`
 - Requirements:
-  `spec/changes/active/official-cloud-backup-and-saas-platform/specs/`
+  `spec/changes/archive/2026/08/2026-08-18-official-cloud-backup-and-saas-platform/specs/`
 - Change: `spec/changes/active/database-migration-safety/`
-- Change: `spec/changes/active/official-cloud-backup-and-saas-platform/`
+- Change: `spec/changes/archive/2026/08/2026-08-18-official-cloud-backup-and-saas-platform/`
 - Rule: `spec/rules/storage-evolution-rules.md`
 - Issue: none
 - Supersedes / superseded by: refines the target beyond

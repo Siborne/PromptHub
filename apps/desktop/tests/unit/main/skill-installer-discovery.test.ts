@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   collectSkillDirs,
@@ -31,6 +31,7 @@ describe("skill installer discovery", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -45,6 +46,36 @@ describe("skill installer discovery", () => {
     const discovered = await collectSkillDirs(tmpDir);
 
     expect(discovered).toEqual([skillDir]);
+  });
+
+  it("silently skips a broken local symlink without hiding valid skills", async () => {
+    const skillDir = await writeSkill(tmpDir, "valid", "valid");
+    await fs.symlink(
+      path.join(tmpDir, "missing-target"),
+      path.join(tmpDir, "broken"),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const discovered = await collectSkillDirs(tmpDir);
+
+    expect(discovered).toEqual([skillDir]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("retains a diagnostic for non-missing symlink resolution failures", async () => {
+    const skillDir = await writeSkill(tmpDir, "valid", "valid");
+    const loopingLink = path.join(tmpDir, "looping-link");
+    await fs.symlink(loopingLink, loopingLink);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const discovered = await collectSkillDirs(tmpDir);
+
+    expect(discovered).toEqual([skillDir]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]?.[0]).toContain(loopingLink);
+    expect((warn.mock.calls[0]?.[1] as NodeJS.ErrnoException).code).not.toBe(
+      "ENOENT",
+    );
   });
 
   it("does not discover remote packages through symlinks or ignored generated directories", async () => {

@@ -4,7 +4,7 @@
 
 - Phase: analyze
 - Status: test-design-ready
-- Primary requirements: `FR-LEGACYREC-001` through `FR-LEGACYREC-005`
+- Primary requirements: `FR-LEGACYREC-001` through `FR-LEGACYREC-011`
 - Related issues: #89, #97, #98
 - Related migration mechanism change: `database-migration-safety`
 - Current delivery cut: historical fixture audit and only the remediation that a
@@ -37,6 +37,14 @@ to test those existing boundaries, not to add a second recovery framework.
 - Verify that a Prompt with at least four ordered versions retains its oldest,
   intermediate, and latest records through import, migration, restart, UI
   loading, and rollback for #98.
+- Preserve the file-owned `config/ai-models.json` inventory when renderer
+  persistence migrates default-empty provider/model arrays. For roots already
+  affected by the 0.6.0 beta migration, repair only the unambiguous
+  empty-model/dangling-route state from a bounded managed upgrade safety point.
+- Preserve PromptHub-owned Agent Skill symlink distributions when canonical
+  migration replaces legacy slug-based managed repositories with stable
+  id-based workspaces. Rebind only links proven by both the platform activation
+  record and the exact legacy PromptHub target layout.
 - Reuse current database, recovery, IPC, and renderer boundaries; change
   production behavior only where a fixture exposes a current failure.
 
@@ -61,6 +69,12 @@ to test those existing boundaries, not to add a second recovery framework.
 - Every applied recovery uses the existing pre-recovery/insurance snapshot and
   atomic publish boundary. A failed attempt leaves the active data unchanged and
   cleans task-owned staging resources.
+- AI model repair never scans outside the five managed upgrade safety points,
+  never selects a candidate that lacks any currently routed model id, and
+  republishes recovered credentials only through the encrypted renderer vault.
+- Skill link repair never adopts an arbitrary external dangling link, never
+  matches by display name alone, and restores the original link if staged
+  replacement cannot complete.
 - Fixtures are synthetic and contain no user credentials, personal paths, or
   production data.
 

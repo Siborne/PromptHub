@@ -55,17 +55,47 @@
       (`FR-LEGACYREC-008`, `DES-LEGACYREC-010`, `TEST-LEGACYREC-008`).
   - MCP and Plugin migration also accepts the pre-sync null renderer device ID
     and uses a stable root-scoped local identity for device-local metadata.
-- [ ] `T-LEGACYREC-013` Add an explicit older-client startup refusal and a
-      recovery-required state for an authority marker whose declared canonical
-      graph is invalid. Preserve both SQLite and legacy-workspace candidates and
-      require explicit source selection before publication
+- [x] `T-LEGACYREC-013` Add an explicit older-client startup refusal and
+      file-authoritative self-heal for an authority marker whose declared
+      canonical graph is invalid. Preserve both SQLite and legacy-workspace
+      candidates and require explicit selection only for ambiguous files
       (`FR-LEGACYREC-009`, `DES-LEGACYREC-011`, `TEST-LEGACYREC-009`).
-  - Implemented the invalid-graph validation and Prompt workspace write gate.
+  - Completed invalid-graph validation; replace the temporary recovery-only gate
+    with deterministic startup self-heal and remove canonical DB-to-workspace
+    bootstrap writes.
   - Completed the current SQLite slice: integrity-check and preview the catalog,
     require explicit selection, and publish through staged, journaled canonical
     recovery with rollback coverage.
   - Recovery now accepts path-derived MCP binding ids and, after a failed
     publication, reopens SQLite and rebinds every database IPC handler before
     returning control to the renderer.
-  - Pending: older-client refusal and a separately validated legacy-workspace
-    candidate.
+  - Reproduced and repaired the 0.6.0 recovery retry failure: credential-bearing
+    superseded MCP metadata is now read without publishing into the damaged
+    root.
+  - The live nested `skill:scanPlatformSkills` collision invalidated the first
+    manual rebind inventory and established the regression boundary for the
+    file-authoritative Prompt candidate.
+  - Completed the file-authoritative recovery slice: runtime-captured IPC
+    rebinding, exact Markdown current Prompt replacement, same-id history
+    supplementation, database-only Prompt removal, source-preserving strict
+    import, and digest-consistent media lookup across validated artifacts.
+  - Completed automatic file self-heal, derived catalog reconciliation,
+    exceptional candidate ordering, prerelease-aware older-client refusal,
+    exact empty Rule compatibility handling, orphan Skill-owner projection,
+    duplicate Agent-profile projection, and final live-fixture verification.
+  - The 2026-08-18 verification gate is satisfied: database-only Folder
+    removal, missing file-owned Folder rejection, parent-first Prompt import,
+    and the `CanonicalStorageAuthorityStartupResult` narrowing now pass the
+    22-test Prompt workspace suite and Desktop typecheck. The separately listed
+    self-heal, catalog, candidate-ordering, and older-client work is covered by
+    the final focused verification recorded in `implementation.md`.
+- [x] `T-LEGACYREC-014` Preserve populated file-owned AI model configuration
+      over renderer default-empty arrays, and automatically repair the exact
+      empty-model/dangling-route beta state from a matching managed upgrade
+      safety point through atomic encrypted canonical publication
+      (`FR-LEGACYREC-010`, `DES-LEGACYREC-012`, `TEST-LEGACYREC-010`).
+- [x] `T-LEGACYREC-015` Reconcile PromptHub-owned legacy Agent Skill
+      symlinks from the exact legacy managed-repository layout to the current
+      canonical workspace by activation Skill id, with bounded state parsing,
+      atomic replacement, idempotency, and adversarial filesystem coverage
+      (`FR-LEGACYREC-011`, `DES-LEGACYREC-013`, `TEST-LEGACYREC-011`).

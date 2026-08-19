@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { recoverDatabaseClientLock } from "@prompthub/db";
+import { compareVersions } from "../../utils/version";
 
 import {
   createUpgradeDataSnapshot,
@@ -33,17 +34,7 @@ export interface UpgradeBackupStartupResult {
 }
 
 export function compareAppVersions(a: string, b: string): number {
-  const partsA = a.replace(/^v/, "").split(".").map(Number);
-  const partsB = b.replace(/^v/, "").split(".").map(Number);
-
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i += 1) {
-    const numA = partsA[i] || 0;
-    const numB = partsB[i] || 0;
-    if (numA > numB) return 1;
-    if (numA < numB) return -1;
-  }
-
-  return 0;
+  return compareVersions(a, b);
 }
 
 export function getLastRunVersionMarkerPath(userDataPath: string): string {
@@ -115,8 +106,17 @@ export async function runUpgradeBackupStartupTasks(
   userDataPath: string,
   currentVersion: string,
 ): Promise<UpgradeBackupStartupResult> {
-  const migration = await migrateLegacyUpgradeBackups(userDataPath);
   const previousVersion = await readLastRunVersion(userDataPath);
+  if (
+    previousVersion &&
+    compareAppVersions(currentVersion, previousVersion) < 0
+  ) {
+    throw new Error(
+      `This data was last opened by newer PromptHub version ${previousVersion}. ` +
+        `Version ${currentVersion} will not modify it.`,
+    );
+  }
+  const migration = await migrateLegacyUpgradeBackups(userDataPath);
 
   if (!previousVersion) {
     await writeLastRunVersion(userDataPath, currentVersion);
@@ -130,7 +130,7 @@ export async function runUpgradeBackupStartupTasks(
     };
   }
 
-  if (compareAppVersions(previousVersion, currentVersion) >= 0) {
+  if (compareAppVersions(previousVersion, currentVersion) === 0) {
     await writeLastRunVersion(userDataPath, currentVersion);
     return {
       migration,

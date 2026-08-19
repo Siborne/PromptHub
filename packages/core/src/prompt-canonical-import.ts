@@ -259,11 +259,20 @@ function inventoryRoot(
         relativePath === ".layout-state.json" ||
         relativePath === ".authority-state.json" ||
         relativePath === "prompthub.db" ||
+        relativePath === "prompthub.db.migration-intent.json" ||
         relativePath === "prompthub.db-wal" ||
         relativePath === "prompthub.db-shm" ||
         relativePath === "prompthub.db-journal" ||
         relativePath === "operations"
       ) {
+        if (
+          relativePath === "prompthub.db.migration-intent.json" &&
+          !stat.isFile()
+        ) {
+          throw new Error(
+            "canonical graph database migration intent path is invalid",
+          );
+        }
         if (relativePath === "operations" && !stat.isDirectory()) {
           throw new Error("canonical graph operations path is invalid");
         }

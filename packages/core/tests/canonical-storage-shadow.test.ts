@@ -30,7 +30,10 @@ import {
   readCanonicalStorageShadow,
   stageCanonicalStorageDatabase,
 } from "../src/canonical-storage-shadow";
-import { materializeSkillResourceBundle } from "../src/skill-resource-schema";
+import {
+  materializeSkillResourceBundle,
+  readSkillResourceBundle,
+} from "../src/skill-resource-schema";
 
 const roots: string[] = [];
 
@@ -114,6 +117,8 @@ function rule(): RuleFileContent {
     name: "AGENTS.md",
     description: "Global rules",
     path: "/Users/example/.codex/AGENTS.md",
+    targetPath: "/Users/example/.codex/AGENTS.md",
+    projectRootPath: null,
     exists: true,
     group: "assistant",
     content: "# Rules\n",
@@ -403,6 +408,38 @@ describe("complete canonical storage shadow", () => {
       1,
       1,
     );
+    new AgentProviderProfileDB(operational).insertProfileGraphDirect(
+      {
+        id: "profile-1",
+        platformId: "codex",
+        name: "OpenAI",
+        providerKind: "openai",
+        protocol: "openai-responses",
+        endpoint: "https://api.openai.com/v1",
+        config: {},
+        secretRef: "agent-provider:profile-1",
+        source: "manual",
+        archived: false,
+        createdAt: Date.parse("2026-08-11T00:00:00.000Z"),
+        updatedAt: Date.parse("2026-08-11T01:00:00.000Z"),
+      },
+      [],
+    );
+    operational.run(
+      `INSERT INTO agent_provider_snapshots (
+         id, platform_id, provider_profile_id, native_digest,
+         redacted_snapshot, backup_ref, operation, result, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      "snapshot-1",
+      "codex",
+      "profile-1",
+      "digest",
+      "{}",
+      null,
+      "activate",
+      "verified",
+      1,
+    );
     operational.close();
 
     const databasePath = path.join(base, "rebuilt.db");
@@ -433,6 +470,7 @@ describe("complete canonical storage shadow", () => {
       ).toBe("OpenAI");
       expect(new RuleDB(database).getById("codex-global")).toMatchObject({
         currentVersion: 1,
+        targetPath: "",
         managedPath: path.join(
           publishedCanonicalRootPath,
           "rules",
@@ -470,6 +508,12 @@ describe("complete canonical storage shadow", () => {
           "source-1",
         ),
       ).toEqual({ adapter_id: "jsonl" });
+      expect(
+        database.get(
+          "SELECT provider_profile_id FROM agent_provider_snapshots WHERE id = ?",
+          "snapshot-1",
+        ),
+      ).toEqual({ provider_profile_id: "profile-1" });
       expect(database.pragma("user_version")).toEqual([
         { user_version: CURRENT_DATABASE_SCHEMA_VERSION },
       ]);
@@ -488,7 +532,7 @@ describe("complete canonical storage shadow", () => {
     }
   });
 
-  it("removes a failed staged database when canonical ownership is invalid", () => {
+  it("projects orphaned server Skill ownership locally without rewriting the bundle", () => {
     const base = root();
     const owned = skill();
     owned.ownerUserId = "server-user";
@@ -504,11 +548,100 @@ describe("complete canonical storage shadow", () => {
       },
       skills: [{ skill: owned, versions: [], packageFiles: [] }],
     });
-    const databasePath = path.join(base, "failed.db");
-    expect(() =>
-      stageCanonicalStorageDatabase(targetPath, databasePath),
-    ).toThrow(/server-owned Skill/u);
-    expect(fs.existsSync(databasePath)).toBe(false);
+    const databasePath = path.join(base, "rebuilt.db");
+    stageCanonicalStorageDatabase(targetPath, databasePath);
+    const database = new DatabaseAdapter(databasePath, { readOnly: true });
+    expect(
+      database.get("SELECT owner_user_id FROM skills WHERE id = ?", owned.id),
+    ).toEqual({ owner_user_id: null });
+    database.close();
+    expect(
+      readSkillResourceBundle(path.join(targetPath, "skills", owned.id)).skill
+        .ownerUserId,
+    ).toBe("server-user");
+
+    const operationalPath = path.join(base, "operational.db");
+    const operational = new DatabaseAdapter(operationalPath);
+    operational.exec(SCHEMA_TABLES);
+    operational.exec(SCHEMA_INDEXES);
+    operational.run(
+      `INSERT INTO users (id, username, password_hash, role, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      "server-user",
+      "owner",
+      "hash",
+      "user",
+      1,
+      1,
+    );
+    operational.close();
+    const ownedDatabasePath = path.join(base, "owned.db");
+    stageCanonicalStorageDatabase(targetPath, ownedDatabasePath, {
+      operationalSourceDatabasePath: operationalPath,
+    });
+    const ownedDatabase = new DatabaseAdapter(ownedDatabasePath, {
+      readOnly: true,
+    });
+    expect(
+      ownedDatabase.get(
+        "SELECT owner_user_id FROM skills WHERE id = ?",
+        owned.id,
+      ),
+    ).toEqual({ owner_user_id: "server-user" });
+    ownedDatabase.close();
+  });
+
+  it("deterministically archives older duplicate Agent profile names in SQLite only", () => {
+    const base = root();
+    const targetPath = path.join(base, "duplicate-agent-names");
+    const profile = {
+      id: "profile-newer",
+      platformId: "qwen",
+      name: "Qwen Primary",
+      providerKind: "openai" as const,
+      protocol: "openai-responses" as const,
+      endpoint: null,
+      config: {},
+      secretRef: null,
+      source: "manual" as const,
+      archived: false,
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    materializeCanonicalStorageShadow({
+      targetPath,
+      prompts: emptyPrompts(),
+      agentProviders: [
+        { profile, modelMappings: [] },
+        {
+          profile: {
+            ...profile,
+            id: "profile-older",
+            name: "qWEN pRIMARY",
+            updatedAt: 1,
+          },
+          modelMappings: [],
+        },
+      ],
+    });
+
+    const databasePath = path.join(base, "agents.db");
+    stageCanonicalStorageDatabase(targetPath, databasePath);
+    const database = new DatabaseAdapter(databasePath, { readOnly: true });
+    expect(
+      database.all(
+        "SELECT id, archived FROM agent_provider_profiles ORDER BY id",
+      ),
+    ).toEqual([
+      { id: "profile-newer", archived: 0 },
+      { id: "profile-older", archived: 1 },
+    ]);
+    database.close();
+    expect(
+      readCanonicalStorageShadow(targetPath).agentProviders.map(
+        (entry) => entry.profile.archived,
+      ),
+    ).toEqual([false, false]);
   });
 
   it("materializes default empty domains and rejects duplicate domain identities", () => {
@@ -659,6 +792,147 @@ describe("complete canonical storage shadow", () => {
     }
   });
 
+  it("coexists with exact independently owned MCP and Plugin metadata files", () => {
+    const targetPath = path.join(root(), "metadata-coexistence");
+    materializeCanonicalStorageShadow({
+      targetPath,
+      prompts: emptyPrompts(),
+    });
+    const entries = [
+      ["mcp", "library.json"],
+      ["mcp", "market-sources.json"],
+      ["plugins", "library.json"],
+      ["plugins", "market-cache.json"],
+      ["plugins", "versions.json"],
+    ] as const;
+    for (const [domain, fileName] of entries) {
+      const domainPath = path.join(targetPath, domain);
+      fs.mkdirSync(domainPath, { recursive: true });
+      fs.writeFileSync(path.join(domainPath, fileName), "{}\n", "utf8");
+    }
+
+    expect(readCanonicalStorageShadow(targetPath).domainCounts).toMatchObject({
+      "mcp-servers": 0,
+      plugins: 0,
+    });
+  });
+
+  it("coexists with exact empty legacy Rule workspace directories", () => {
+    const targetPath = path.join(root(), "rule-metadata-coexistence");
+    materializeCanonicalStorageShadow({
+      targetPath,
+      prompts: emptyPrompts(),
+    });
+    for (const directory of [".versions", "projects"]) {
+      fs.mkdirSync(path.join(targetPath, "rules", directory), {
+        recursive: true,
+      });
+    }
+
+    expect(readCanonicalStorageShadow(targetPath).domainCounts.rules).toBe(0);
+  });
+
+  it.each([".versions", "projects"])(
+    "rejects populated or type-substituted Rule metadata directory %s",
+    (directory) => {
+      const populated = path.join(root(), `populated-${directory}`);
+      materializeCanonicalStorageShadow({
+        targetPath: populated,
+        prompts: emptyPrompts(),
+      });
+      fs.mkdirSync(path.join(populated, "rules", directory), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(populated, "rules", directory, "unexpected"),
+        "data",
+        "utf8",
+      );
+      expect(() => readCanonicalStorageShadow(populated)).toThrow(
+        `canonical rules metadata directory is invalid: ${directory}`,
+      );
+
+      const substituted = path.join(root(), `substituted-${directory}`);
+      materializeCanonicalStorageShadow({
+        targetPath: substituted,
+        prompts: emptyPrompts(),
+      });
+      fs.mkdirSync(path.join(substituted, "rules"), { recursive: true });
+      fs.writeFileSync(
+        path.join(substituted, "rules", directory),
+        "data",
+        "utf8",
+      );
+      expect(() => readCanonicalStorageShadow(substituted)).toThrow(
+        `canonical rules metadata directory is invalid: ${directory}`,
+      );
+    },
+  );
+
+  it.each([".versions", "projects"])(
+    "rejects a symlink substituted for Rule metadata directory %s",
+    (directory) => {
+      if (process.platform === "win32") return;
+      const base = root();
+      const targetPath = path.join(base, `linked-${directory}`);
+      materializeCanonicalStorageShadow({
+        targetPath,
+        prompts: emptyPrompts(),
+      });
+      fs.mkdirSync(path.join(targetPath, "rules"), { recursive: true });
+      fs.symlinkSync(base, path.join(targetPath, "rules", directory));
+
+      expect(() => readCanonicalStorageShadow(targetPath)).toThrow(
+        `canonical rules metadata directory is invalid: ${directory}`,
+      );
+    },
+  );
+
+  it.each([
+    ["mcp", "library.json"],
+    ["mcp", "market-sources.json"],
+    ["plugins", "library.json"],
+    ["plugins", "market-cache.json"],
+    ["plugins", "versions.json"],
+  ] as const)(
+    "rejects a directory substituted for %s/%s",
+    (domain, fileName) => {
+      const targetPath = path.join(root(), `${domain}-${fileName}`);
+      materializeCanonicalStorageShadow({
+        targetPath,
+        prompts: emptyPrompts(),
+      });
+      fs.mkdirSync(path.join(targetPath, domain, fileName), {
+        recursive: true,
+      });
+
+      expect(() => readCanonicalStorageShadow(targetPath)).toThrow(
+        `canonical ${domain} metadata is invalid: ${fileName}`,
+      );
+    },
+  );
+
+  it.each([
+    ["mcp", "library.json"],
+    ["plugins", "market-cache.json"],
+  ] as const)("rejects a symlink substituted for %s/%s", (domain, fileName) => {
+    if (process.platform === "win32") return;
+    const base = root();
+    const targetPath = path.join(base, `${domain}-linked-metadata`);
+    materializeCanonicalStorageShadow({
+      targetPath,
+      prompts: emptyPrompts(),
+    });
+    const linkTarget = path.join(base, "metadata.json");
+    fs.writeFileSync(linkTarget, "{}\n", "utf8");
+    fs.mkdirSync(path.join(targetPath, domain), { recursive: true });
+    fs.symlinkSync(linkTarget, path.join(targetPath, domain, fileName));
+
+    expect(() => readCanonicalStorageShadow(targetPath)).toThrow(
+      `canonical ${domain} metadata is invalid: ${fileName}`,
+    );
+  });
+
   it("rebuilds project rules and generation slots linked to a canonical Prompt", () => {
     const base = root();
     const outputFile = path.join(base, "output.png");
@@ -692,7 +966,13 @@ describe("complete canonical storage shadow", () => {
     const projectRule: RuleFileContent = {
       ...rule(),
       id: "project:demo",
+      platformId: "workspace",
+      platformName: "Demo",
       name: "PROJECT.md",
+      path: "/Users/example/demo/PROJECT.md",
+      targetPath: "/Users/example/demo/PROJECT.md",
+      projectRootPath: "/Users/example/demo",
+      group: "workspace",
       versions: [
         {
           ...rule().versions[0]!,
@@ -723,9 +1003,11 @@ describe("complete canonical storage shadow", () => {
     expect(rebuilt.preservedDatabaseCounts).toEqual({});
     const database = new DatabaseAdapter(databasePath, { readOnly: true });
     try {
-      expect(new RuleDB(database).getById("project:demo")?.scope).toBe(
-        "project",
-      );
+      expect(new RuleDB(database).getById("project:demo")).toMatchObject({
+        scope: "project",
+        targetPath: "/Users/example/demo/PROJECT.md",
+        projectRootPath: "/Users/example/demo",
+      });
       expect(
         database.get(
           "SELECT source_prompt_id, completed_at FROM generation_batches WHERE id = ?",

@@ -150,6 +150,19 @@ export const LOCAL_DATABASE_AUTHORITY_TABLES = Object.freeze({
   ],
 } as const);
 
+const CANONICAL_DOMAIN_METADATA_FILES: Readonly<
+  Record<string, ReadonlySet<string>>
+> = Object.freeze({
+  mcp: new Set(["library.json", "market-sources.json"]),
+  plugins: new Set(["library.json", "market-cache.json", "versions.json"]),
+});
+
+const CANONICAL_DOMAIN_EMPTY_METADATA_DIRECTORIES: Readonly<
+  Record<string, ReadonlySet<string>>
+> = Object.freeze({
+  rules: new Set([".versions", "projects"]),
+});
+
 export interface StageCanonicalStorageDatabaseOptions {
   operationalSourceDatabasePath?: string;
   publishedCanonicalRootPath?: string;
@@ -324,12 +337,35 @@ function childBundlePaths(rootPath: string, domain: string): string[] {
   const stat = fs.lstatSync(domainPath);
   if (!stat.isDirectory() || stat.isSymbolicLink())
     throw new Error(`canonical ${domain} root is invalid`);
+  const metadataFiles = CANONICAL_DOMAIN_METADATA_FILES[domain];
+  const emptyMetadataDirectories =
+    CANONICAL_DOMAIN_EMPTY_METADATA_DIRECTORIES[domain];
   return fs
     .readdirSync(domainPath, { withFileTypes: true })
-    .map((entry) => {
+    .flatMap((entry) => {
+      if (metadataFiles?.has(entry.name)) {
+        if (!entry.isFile() || entry.isSymbolicLink()) {
+          throw new Error(
+            `canonical ${domain} metadata is invalid: ${entry.name}`,
+          );
+        }
+        return [];
+      }
+      if (emptyMetadataDirectories?.has(entry.name)) {
+        if (
+          !entry.isDirectory() ||
+          entry.isSymbolicLink() ||
+          fs.readdirSync(path.join(domainPath, entry.name)).length > 0
+        ) {
+          throw new Error(
+            `canonical ${domain} metadata directory is invalid: ${entry.name}`,
+          );
+        }
+        return [];
+      }
       if (!entry.isDirectory() || entry.isSymbolicLink())
         throw new Error(`canonical ${domain} entry is invalid: ${entry.name}`);
-      return path.join(domainPath, entry.name);
+      return [path.join(domainPath, entry.name)];
     })
     .sort(compareText);
 }
@@ -436,14 +472,6 @@ function quickCheck(database: InstanceType<typeof DatabaseAdapter>): void {
     throw new Error("canonical storage staged database failed quick_check");
 }
 
-function preservedTableNames(): string[] {
-  return [
-    ...LOCAL_DATABASE_AUTHORITY_TABLES.compatibility,
-    ...LOCAL_DATABASE_AUTHORITY_TABLES.serverAuthoritative,
-    ...LOCAL_DATABASE_AUTHORITY_TABLES.operational,
-  ];
-}
-
 function tableColumns(
   database: InstanceType<typeof DatabaseAdapter>,
   table: string,
@@ -456,13 +484,14 @@ function tableColumns(
 function copyPreservedDatabaseState(
   target: InstanceType<typeof DatabaseAdapter>,
   sourcePath: string | undefined,
+  tables: readonly string[],
 ): Record<string, number> {
   if (!sourcePath) return {};
   const source = new DatabaseAdapter(sourcePath, { readOnly: true });
   try {
     const counts: Record<string, number> = {};
     target.transaction(() => {
-      for (const table of preservedTableNames()) {
+      for (const table of tables) {
         const sourceColumns = tableColumns(source, table);
         const targetColumns = tableColumns(target, table);
         if (
@@ -505,6 +534,41 @@ function copyPreservedDatabaseState(
   }
 }
 
+function skillForLocalProjection(
+  database: InstanceType<typeof DatabaseAdapter>,
+  skill: Skill,
+): Skill {
+  if (!skill.ownerUserId) return skill;
+  const owner = database.get(
+    "SELECT id FROM users WHERE id = ?",
+    skill.ownerUserId,
+  );
+  return owner ? skill : { ...skill, ownerUserId: undefined };
+}
+
+function activeAgentProfileIds(
+  entries: readonly ReadAgentProviderResourceResult[],
+): Set<string> {
+  const winners = new Map<string, AgentProviderProfile>();
+  for (const entry of entries) {
+    const profile = entry.profile;
+    if (profile.archived) continue;
+    const normalizedName = profile.name.replace(/[A-Z]/g, (value) =>
+      value.toLowerCase(),
+    );
+    const key = `${profile.platformId}\0${normalizedName}`;
+    const current = winners.get(key);
+    if (
+      !current ||
+      profile.updatedAt > current.updatedAt ||
+      (profile.updatedAt === current.updatedAt && profile.id > current.id)
+    ) {
+      winners.set(key, profile);
+    }
+  }
+  return new Set([...winners.values()].map((profile) => profile.id));
+}
+
 function projectCanonicalRules(
   database: InstanceType<typeof DatabaseAdapter>,
   publishedRootPath: string,
@@ -540,8 +604,8 @@ function projectCanonicalRules(
       canonicalFileName: entry.rule.name,
       description: entry.rule.description,
       managedPath,
-      targetPath: managedPath,
-      projectRootPath: null,
+      targetPath: entry.rule.targetPath ?? "",
+      projectRootPath: entry.rule.projectRootPath ?? null,
       syncStatus: "target-missing",
       currentVersion: versions.length,
       contentHash: crypto
@@ -630,16 +694,20 @@ export function stageCanonicalStorageDatabase(
     const database = new DatabaseAdapter(databasePath);
     let preservedDatabaseCounts: Record<string, number> = {};
     try {
+      preservedDatabaseCounts = copyPreservedDatabaseState(
+        database,
+        options.operationalSourceDatabasePath,
+        [
+          ...LOCAL_DATABASE_AUTHORITY_TABLES.compatibility,
+          ...LOCAL_DATABASE_AUTHORITY_TABLES.serverAuthoritative,
+        ],
+      );
       const records = bundleCatalogRecords(rootPath);
       database.transaction(() => {
         const skillDb = new SkillDB(database);
         for (const entry of storage.skills) {
-          if (entry.skill.ownerUserId)
-            throw new Error(
-              `local canonical catalog cannot rebuild server-owned Skill: ${entry.skill.id}`,
-            );
           skillDb.insertSkillDirect({
-            ...entry.skill,
+            ...skillForLocalProjection(database, entry.skill),
             local_repo_path: path.join(
               publishedRootPath,
               "skills",
@@ -647,20 +715,31 @@ export function stageCanonicalStorageDatabase(
               "files",
             ),
           });
-          for (const version of entry.versions)
+          for (const version of entry.versions) {
             skillDb.insertVersionDirect(version);
+          }
         }
         projectCanonicalRules(database, publishedRootPath, storage.rules);
         const agentDb = new AgentProviderProfileDB(database);
-        for (const entry of storage.agentProviders)
-          agentDb.insertProfileGraphDirect(entry.profile, entry.modelMappings);
+        const activeProfiles = activeAgentProfileIds(storage.agentProviders);
+        for (const entry of storage.agentProviders) {
+          const profile =
+            entry.profile.archived || activeProfiles.has(entry.profile.id)
+              ? entry.profile
+              : { ...entry.profile, archived: true };
+          agentDb.insertProfileGraphDirect(profile, entry.modelMappings);
+        }
         projectCanonicalGenerations(database, storage.generations);
         new CanonicalResourceDB(database).replaceAll(records);
       })();
-      preservedDatabaseCounts = copyPreservedDatabaseState(
-        database,
-        options.operationalSourceDatabasePath,
-      );
+      preservedDatabaseCounts = {
+        ...preservedDatabaseCounts,
+        ...copyPreservedDatabaseState(
+          database,
+          options.operationalSourceDatabasePath,
+          LOCAL_DATABASE_AUTHORITY_TABLES.operational,
+        ),
+      };
       quickCheck(database);
     } finally {
       database.close();

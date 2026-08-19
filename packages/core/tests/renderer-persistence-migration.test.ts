@@ -430,9 +430,9 @@ describe("renderer persistence migration", () => {
         networkProxy: { mode: "system" },
       },
       legacyAIConfig: {
-        providers: [{ id: "ignored-provider" }],
-        models: [{ id: "ignored-model" }],
-        modelRouteDefaults: { chat: "ignored" },
+        providers: [],
+        models: [],
+        modelRouteDefaults: {},
       },
       skillStore: {
         customStoreSources: [

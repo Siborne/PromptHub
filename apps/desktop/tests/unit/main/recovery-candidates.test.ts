@@ -10,8 +10,10 @@ import {
 
 import {
   buildCanonicalDatabaseRecoveryCandidate,
+  buildCurrentFileWorkspaceRecoveryCandidate,
   buildResidualLegacyRecoveryCandidate,
   buildStandaloneDbBackupCandidate,
+  compareRecoveryCandidates,
   findRecoveryCandidateByPath,
   listStandaloneDatabaseBackupFiles,
   previewRecoveryCandidate,
@@ -311,6 +313,108 @@ describe("recovery-candidates", () => {
       previewAvailable: true,
       truncated: false,
     });
+  });
+
+  it("prefers the current Markdown workspace as an explicit file-authoritative candidate", async () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-file-recovery-candidate-"),
+    );
+    tempDirs.push(userDataPath);
+    const promptsPath = path.join(userDataPath, "data", "prompts");
+    fs.mkdirSync(promptsPath, { recursive: true });
+    fs.writeFileSync(
+      path.join(promptsPath, "source.md"),
+      `---\nid: "prompt-file"\ntitle: "File Prompt"\n---\nFile content`,
+      "utf8",
+    );
+    const databasePath = path.join(userDataPath, "data", "prompthub.db");
+    createTestDatabase(databasePath, { prompts: 2, folders: 1, skills: 1 });
+
+    const candidate = buildCurrentFileWorkspaceRecoveryCandidate(
+      userDataPath,
+      databasePath,
+    );
+
+    expect(candidate).toMatchObject({
+      sourcePath: promptsPath,
+      sourceType: "current-file-workspace",
+      promptCount: 1,
+      folderCount: 1,
+      skillCount: 1,
+      dataSources: ["workspace", "sqlite"],
+      previewAvailable: true,
+    });
+    await expect(previewRecoveryCandidate(candidate!)).resolves.toMatchObject({
+      previewAvailable: true,
+      items: [
+        expect.objectContaining({ kind: "prompt", title: "File Prompt" }),
+      ],
+    });
+  });
+
+  it("offers the file-authoritative candidate when SQLite is missing or unreadable", () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-file-only-recovery-candidate-"),
+    );
+    tempDirs.push(userDataPath);
+    const promptsPath = path.join(userDataPath, "data", "prompts");
+    fs.mkdirSync(promptsPath, { recursive: true });
+    fs.writeFileSync(
+      path.join(promptsPath, "source.md"),
+      `---\nid: "prompt-file"\ntitle: "File Prompt"\n---\nFile content`,
+      "utf8",
+    );
+    const databasePath = path.join(userDataPath, "data", "prompthub.db");
+
+    expect(
+      buildCurrentFileWorkspaceRecoveryCandidate(userDataPath, databasePath),
+    ).toMatchObject({
+      sourceType: "current-file-workspace",
+      promptCount: 1,
+      folderCount: 0,
+      skillCount: 0,
+      dbSizeBytes: 0,
+      dataSources: ["workspace"],
+    });
+
+    fs.writeFileSync(databasePath, Buffer.alloc(4096, 1));
+    expect(
+      buildCurrentFileWorkspaceRecoveryCandidate(userDataPath, databasePath),
+    ).toMatchObject({
+      sourceType: "current-file-workspace",
+      dataSources: ["workspace"],
+    });
+  });
+
+  it("sorts a file-authoritative candidate ahead of a newer SQLite candidate", () => {
+    const candidates = [
+      {
+        sourceType: "current-canonical-db" as const,
+        sourcePath: "/newer.db",
+        displayPath: "/newer.db",
+        promptCount: 10,
+        folderCount: 0,
+        skillCount: 0,
+        dataSources: ["sqlite" as const],
+        previewAvailable: true,
+        lastModified: "2026-08-18T12:00:00.000Z",
+      },
+      {
+        sourceType: "current-file-workspace" as const,
+        sourcePath: "/files",
+        displayPath: "/files",
+        promptCount: 1,
+        folderCount: 0,
+        skillCount: 0,
+        dataSources: ["workspace" as const],
+        previewAvailable: true,
+        lastModified: "2026-08-17T12:00:00.000Z",
+      },
+    ];
+
+    expect(candidates.sort(compareRecoveryCandidates)[0]?.sourceType).toBe(
+      "current-file-workspace",
+    );
   });
 
   it("rejects an invalid current SQLite catalog as a canonical recovery candidate", () => {

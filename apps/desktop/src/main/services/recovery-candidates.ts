@@ -18,6 +18,29 @@ import {
   getDataLayoutMigrationMarkerPath,
 } from "./data-layout-migration";
 
+export function compareRecoveryCandidates(
+  left: RecoveryCandidate,
+  right: RecoveryCandidate,
+): number {
+  const authorityRank = (candidate: RecoveryCandidate): number =>
+    candidate.sourceType === "current-file-workspace" ? 0 : 1;
+  const rank = authorityRank(left) - authorityRank(right);
+  if (rank !== 0) return rank;
+  const leftTime = left.lastModified
+    ? new Date(left.lastModified).getTime()
+    : 0;
+  const rightTime = right.lastModified
+    ? new Date(right.lastModified).getTime()
+    : 0;
+  if (leftTime !== rightTime) return rightTime - leftTime;
+  if (left.promptCount !== right.promptCount) {
+    return right.promptCount - left.promptCount;
+  }
+  return (
+    right.folderCount + right.skillCount - (left.folderCount + left.skillCount)
+  );
+}
+
 const PREVIEW_LIMIT = 12;
 
 function countWorkspacePromptFiles(targetPath: string): number {
@@ -27,18 +50,29 @@ function countWorkspacePromptFiles(targetPath: string): number {
 
   let stat: fs.Stats;
   try {
-    stat = fs.statSync(targetPath);
+    stat = fs.lstatSync(targetPath);
   } catch {
     return 0;
   }
 
+  if (stat.isSymbolicLink()) return 0;
   if (!stat.isDirectory()) {
-    return path.basename(targetPath) === "prompt.md" ? 1 : 0;
+    return stat.isFile() &&
+      targetPath.endsWith(".md") &&
+      path.basename(targetPath) !== "_folder.json"
+      ? 1
+      : 0;
   }
 
   let total = 0;
   const entries = fs.readdirSync(targetPath, { withFileTypes: true });
   for (const entry of entries) {
+    if (
+      entry.isSymbolicLink() ||
+      [".trash", ".versions", "versions"].includes(entry.name)
+    ) {
+      continue;
+    }
     total += countWorkspacePromptFiles(path.join(targetPath, entry.name));
   }
   return total;
@@ -226,14 +260,19 @@ function listGeneratedDatabaseBackupsInDirectory(
       .filter(
         (entry) =>
           entry.isFile() &&
-          /^prompthub\.db(?:$|\.(?:backup(?:-before)?-|pre-recovery-|integrity-backup-|legacy-conflict-).+)/i.test(
-            entry.name,
-          ),
+          (entry.name === "prompthub.db" ||
+            isGeneratedDatabaseBackupFileName(entry.name)),
       )
       .map((entry) => path.join(directoryPath, entry.name));
   } catch {
     return [];
   }
+}
+
+export function isGeneratedDatabaseBackupFileName(fileName: string): boolean {
+  return /^prompthub\.db\.(?:backup(?:-before)?-|pre-recovery-|integrity-backup-|legacy-conflict-).+/iu.test(
+    fileName,
+  );
 }
 
 export function buildDirectoryRecoveryCandidate(
@@ -382,7 +421,7 @@ export function buildCanonicalDatabaseRecoveryCandidate(
       dataSources: ruleCount > 0 ? ["sqlite", "rules"] : ["sqlite"],
       contentCounts: ruleCount > 0 ? { rules: ruleCount } : undefined,
       description:
-        "The current SQLite catalog is intact and can rebuild the damaged canonical file graph.",
+        "The current SQLite catalog passed integrity checks. Select it only when the Markdown workspace is incomplete or incorrect.",
       backupId: null,
       fromVersion: null,
       toVersion: null,
@@ -396,6 +435,78 @@ export function buildCanonicalDatabaseRecoveryCandidate(
       // ignore close errors
     }
   }
+}
+
+export function buildCurrentFileWorkspaceRecoveryCandidate(
+  activeRoot: string,
+  databasePath: string,
+): RecoveryCandidate | null {
+  const dataPath = path.join(activeRoot, "data");
+  const promptsPath = path.join(activeRoot, "data", "prompts");
+  const promptCount = countWorkspacePromptFiles(promptsPath);
+  if (promptCount === 0) return null;
+
+  let dbSizeBytes = 0;
+  let folderCount = Math.max(
+    readWorkspaceFolderCount(path.join(dataPath, "folders.json")),
+    countDirectEntriesSafe(path.join(dataPath, "folders")),
+  );
+  let skillCount = countDirectEntriesSafe(path.join(dataPath, "skills"));
+  const dataSources: RecoveryDataSource[] = ["workspace"];
+  let database: DatabaseAdapter.Database | null = null;
+  try {
+    const databaseStats = fs.lstatSync(databasePath);
+    if (!databaseStats.isFile() || databaseStats.isSymbolicLink()) {
+      throw new Error("SQLite catalog is unsafe");
+    }
+    database = new DatabaseAdapter(databasePath, { readOnly: true });
+    const quickCheck = database.pragma("quick_check") as Array<{
+      quick_check?: unknown;
+    }>;
+    if (quickCheck.length !== 1 || quickCheck[0]?.quick_check !== "ok") {
+      throw new Error("SQLite catalog failed quick_check");
+    }
+    dbSizeBytes = databaseStats.size;
+    folderCount = readCandidateTableCount(database, "folders", true);
+    skillCount = readCandidateTableCount(database, "skills", true);
+    dataSources.push("sqlite");
+  } catch {
+    // Files remain recoverable without their disposable SQLite projection.
+  } finally {
+    try {
+      database?.close();
+    } catch {
+      // Ignore close failures during read-only candidate inspection.
+    }
+  }
+  return {
+    sourcePath: promptsPath,
+    sourceType: "current-file-workspace",
+    displayName: "Current Markdown workspace",
+    displayPath: promptsPath,
+    promptCount,
+    folderCount,
+    skillCount,
+    dbSizeBytes,
+    lastModified: latestModifiedIso(promptsPath),
+    previewAvailable: true,
+    dataSources,
+    description:
+      "Markdown files own the current Prompt set and content; SQLite contributes validated same-Prompt history only.",
+    backupId: null,
+    fromVersion: null,
+    toVersion: null,
+  };
+}
+
+export function buildCurrentCanonicalRecoveryCandidates(
+  activeRoot: string,
+  databasePath: string,
+): RecoveryCandidate[] {
+  return [
+    buildCurrentFileWorkspaceRecoveryCandidate(activeRoot, databasePath),
+    buildCanonicalDatabaseRecoveryCandidate(databasePath),
+  ].filter((candidate): candidate is RecoveryCandidate => candidate !== null);
 }
 
 export function findRecoveryCandidateByPath(
@@ -462,12 +573,17 @@ function collectWorkspacePromptFiles(basePath: string): string[] {
   if (stat.isSymbolicLink()) return [];
 
   if (!stat.isDirectory()) {
-    return path.basename(basePath) === "prompt.md" ? [basePath] : [];
+    return stat.isFile() &&
+      basePath.endsWith(".md") &&
+      path.basename(basePath) !== "_folder.json"
+      ? [basePath]
+      : [];
   }
 
   const files: string[] = [];
   const entries = fs.readdirSync(basePath, { withFileTypes: true });
   for (const entry of entries) {
+    if ([".trash", ".versions", "versions"].includes(entry.name)) continue;
     files.push(...collectWorkspacePromptFiles(path.join(basePath, entry.name)));
   }
   return files;
@@ -870,6 +986,10 @@ export async function previewRecoveryCandidate(
 
   if (candidate.sourceType === "current-residual") {
     return previewFromWorkspace(candidate.sourcePath);
+  }
+
+  if (candidate.sourceType === "current-file-workspace") {
+    return previewFromWorkspace(path.resolve(candidate.sourcePath, "..", ".."));
   }
 
   let stat: fs.Stats | null = null;

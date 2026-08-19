@@ -97,12 +97,59 @@ describe("canonical storage startup", () => {
     });
     materializeEmptyPromptGraph(input.activeRoot);
     const publish = vi.fn();
+    const reconcileCatalog = vi.fn().mockReturnValue({ status: "current" });
 
     await expect(
-      ensureCanonicalStorageAuthorityOnStartup({ ...input, publish }),
+      ensureCanonicalStorageAuthorityOnStartup({
+        ...input,
+        publish,
+        reconcileCatalog,
+      }),
     ).resolves.toEqual({ status: "already-canonical" });
     expect(publish).not.toHaveBeenCalled();
+    expect(reconcileCatalog).toHaveBeenCalledWith({
+      activeRoot: input.activeRoot,
+      databasePath: input.sourceDatabasePath,
+    });
     expect(input.prepareSourceDatabase).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds a stale SQLite projection without showing recovery", async () => {
+    const input = fixture();
+    writeCanonicalStorageAuthority(input.activeRoot, {
+      consistencyId: "a".repeat(64),
+      operationId: "existing-authority",
+    });
+    materializeEmptyPromptGraph(input.activeRoot);
+
+    await expect(
+      ensureCanonicalStorageAuthorityOnStartup({
+        ...input,
+        reconcileCatalog: vi.fn().mockReturnValue({ status: "rebuilt" }),
+      }),
+    ).resolves.toEqual({ status: "catalog-rebuilt" });
+  });
+
+  it("requests recovery instead of aborting startup when other canonical files are invalid", async () => {
+    const input = fixture();
+    writeCanonicalStorageAuthority(input.activeRoot, {
+      consistencyId: "a".repeat(64),
+      operationId: "existing-authority",
+    });
+    materializeEmptyPromptGraph(input.activeRoot);
+
+    await expect(
+      ensureCanonicalStorageAuthorityOnStartup({
+        ...input,
+        reconcileCatalog: vi.fn(() => {
+          throw new Error("canonical Skill bundle is incomplete");
+        }),
+      }),
+    ).resolves.toEqual({
+      status: "recovery-required",
+      reason: "invalid-canonical-storage",
+      error: "canonical Skill bundle is incomplete",
+    });
   });
 
   it("requires recovery when the authority Prompt graph is incomplete", async () => {
@@ -121,16 +168,56 @@ describe("canonical storage startup", () => {
     });
     fs.writeFileSync(catalogPath, JSON.stringify(catalog));
     const publish = vi.fn();
+    const repairInvalidAuthority = vi
+      .fn()
+      .mockRejectedValue(new Error("duplicate Markdown Prompt id"));
 
     await expect(
-      ensureCanonicalStorageAuthorityOnStartup({ ...input, publish }),
+      ensureCanonicalStorageAuthorityOnStartup({
+        ...input,
+        publish,
+        repairInvalidAuthority,
+      }),
     ).resolves.toMatchObject({
       status: "recovery-required",
       reason: "invalid-canonical-prompt-graph",
-      error: expect.stringContaining("canonical graph file is missing"),
+      error: expect.stringContaining("duplicate Markdown Prompt id"),
     });
     expect(publish).not.toHaveBeenCalled();
+    expect(repairInvalidAuthority).toHaveBeenCalledOnce();
     expect(input.prepareSourceDatabase).not.toHaveBeenCalled();
+  });
+
+  it("self-heals an invalid Prompt graph from deterministic files", async () => {
+    const input = fixture();
+    writeCanonicalStorageAuthority(input.activeRoot, {
+      consistencyId: "a".repeat(64),
+      operationId: "invalid-authority",
+    });
+    materializeEmptyPromptGraph(input.activeRoot);
+    const catalogPath = path.join(input.activeRoot, "data", "catalog.json");
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+    catalog.files.push({
+      path: "prompts/missing/manifest.json",
+      size: 1,
+      sha256: "f".repeat(64),
+    });
+    fs.writeFileSync(catalogPath, JSON.stringify(catalog));
+    const refreshRuntimeContext = vi.fn();
+
+    await expect(
+      ensureCanonicalStorageAuthorityOnStartup({
+        ...input,
+        repairInvalidAuthority: vi.fn().mockResolvedValue({
+          recoveryArtifactPath: "/recovery/prior",
+        }),
+        refreshRuntimeContext,
+      }),
+    ).resolves.toEqual({
+      status: "self-healed",
+      recoveryArtifactPath: "/recovery/prior",
+    });
+    expect(refreshRuntimeContext).toHaveBeenCalledOnce();
   });
 
   it("publishes once and refreshes runtime paths only after commit", async () => {
