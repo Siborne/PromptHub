@@ -41,6 +41,33 @@ against an isolated `0.5.9` upgrade fixture before uploading Windows artifacts.
 - Then the Windows x64 build job fails
 - And the release job cannot publish or refresh release assets
 
+### FR-WINSTART-003 Same-Version Replacement Publication
+
+After an explicit maintainer decision to reuse the withdrawn
+`v0.6.0-beta.1`, PromptHub MUST replace that exact tag and draft release only
+from a clean, pushed candidate that has passed the current full release gate.
+The remote tag update MUST compare against the previously observed tag target,
+and the release workflow MUST preserve the existing draft state while replacing
+same-name assets in place. The release MUST remain private until the tag target,
+asset inventory, update manifests, packaged Windows x64 upgrade startup, and
+macOS signing/notarization evidence all match the replacement candidate.
+
+#### Scenario: Existing beta draft is refreshed
+
+- Given `v0.6.0-beta.1` still points to the withdrawn candidate
+- And its GitHub release remains a draft prerelease
+- When the verified replacement tag is pushed with the expected old tag target
+- Then the workflow edits the existing release without auto-publishing it
+- And uploads the complete replacement asset inventory with clobber semantics
+- And promotion remains a separate explicit action after artifact verification
+
+#### Scenario: Remote tag changed after inspection
+
+- Given the observed remote tag target no longer matches the expected old value
+- When the replacement push is attempted
+- Then the push fails instead of overwriting the unexpected tag
+- And the existing draft and assets remain unchanged
+
 ### NFR-WINSTART-001 Isolation And Cleanup
 
 The packaged startup smoke must not read or write the runner's normal PromptHub
@@ -80,6 +107,9 @@ must terminate and clean up its own process and files.
   workflow, including Windows packaged startup, passes.
 - `AC-WINSTART-004`: A successful packaged launch is not turned into a false
   failure by the bounded Windows process-handle release race.
+- `AC-WINSTART-005`: Same-tag replacement preserves the draft boundary,
+  replaces assets only after full verification, and refuses an unexpected
+  remote tag target.
 
 ## Traceability
 
@@ -87,4 +117,5 @@ must terminate and clean up its own process and files.
 | ------------------ | ------------------ | ------------------------------------------------------------- | ---------------------------------- |
 | `FR-WINSTART-001`  | `DES-WINSTART-001` | `TEST-WINSTART-001`, `TEST-WINSTART-005`                      | `T-WINSTART-001`, `T-WINSTART-005` |
 | `FR-WINSTART-002`  | `DES-WINSTART-002` | `TEST-WINSTART-002`                                           | `T-WINSTART-002`                   |
+| `FR-WINSTART-003`  | `DES-WINSTART-004` | `TEST-WINSTART-007`                                           | `T-WINSTART-007`, `T-WINSTART-008` |
 | `NFR-WINSTART-001` | `DES-WINSTART-003` | `TEST-WINSTART-003`, `TEST-WINSTART-004`, `TEST-WINSTART-006` | `T-WINSTART-003`, `T-WINSTART-006` |

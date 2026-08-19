@@ -88,7 +88,7 @@ describe("release workflow secret guards", () => {
     expect(workflowSource).toContain("MAC_TIMESTAMP_RETRY_LIMIT=2");
     expect(workflowSource).toContain("The timestamp service is not available");
     expect(workflowSource).toContain("MAC_TIMESTAMP_RETRY_DELAY_SECONDS=60");
-    expect(workflowSource).toContain("exit \"$package_status\"");
+    expect(workflowSource).toContain('exit "$package_status"');
   });
 
   it("gates optional publishers through non-secret readiness outputs", () => {
@@ -103,5 +103,21 @@ describe("release workflow secret guards", () => {
     const ifLines = getIfLines(workflowSource).join("\n");
     expect(ifLines).toContain("steps.publish_secrets.outputs.homebrew_ready");
     expect(ifLines).toContain("steps.publish_secrets.outputs.r2_ready");
+  });
+
+  it("replaces an existing same-tag release in place while preserving draft state", () => {
+    expect(workflowSource).toContain(
+      'if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then',
+    );
+    expect(workflowSource).toContain(
+      'IS_DRAFT=$(gh release view "${GITHUB_REF_NAME}" --json isDraft -q .isDraft)',
+    );
+    expect(workflowSource).toContain("--draft=${IS_DRAFT}");
+    expect(workflowSource).toContain('gh release upload "${GITHUB_REF_NAME}"');
+    expect(workflowSource).toContain("--clobber");
+    expect(workflowSource).toContain("--draft=true");
+    expect(workflowSource).not.toContain(
+      "gh release edit ${GITHUB_REF_NAME} --draft=false",
+    );
   });
 });

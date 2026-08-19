@@ -57,6 +57,29 @@ recursive-removal errors. The retry budget is 20 attempts at 250 ms intervals;
 non-transient and exhausted failures remain fatal. It never changes system
 proxy, runner-global PromptHub data, or existing processes.
 
+## DES-WINSTART-004 Leased Same-Tag Draft Replacement
+
+The replacement reuses the repository's existing draft-first release branch
+rather than deleting and recreating the GitHub release. Before changing remote
+state, the release operator records the current annotated tag object, peeled
+commit, draft identity, and asset digest inventory. The candidate commit must be
+clean, pushed, and fully verified. The tag is then updated with an explicit
+expected-old-value lease so concurrent or unexpected remote movement fails
+closed.
+
+The existing release workflow already distinguishes creation from refresh. For
+an existing release it reads `isDraft`, edits title/notes while preserving that
+value, and uploads the complete deterministic asset set with `--clobber`.
+Regression coverage locks those clauses in place. Publication is not part of
+the tag push: after all platform jobs finish, the operator verifies the remote
+tag, asset names/digests, update manifests, Windows packaged cold start, and
+macOS signing/notarization results before explicitly promoting the prerelease.
+
+The remote mutation count is bounded: one leased tag update, one workflow run,
+one in-place upload per fixed release asset, and one final promotion. There is
+no retry loop around tag mutation or release promotion. A failed build leaves
+the refreshed release as a draft; an unexpected tag value prevents mutation.
+
 ## Verification
 
 - `TEST-WINSTART-001`: Focused Vitest regressions reject read-only fsync handles
@@ -75,6 +98,9 @@ proxy, runner-global PromptHub data, or existing processes.
 - `TEST-WINSTART-003`: GitHub Actions manual release workflow passes the Windows
   x64 packaged upgrade smoke and the full platform matrix before tagging or
   publication.
+- `TEST-WINSTART-007`: Release workflow source regression requires the existing
+  release branch to preserve `isDraft`, upload with `--clobber`, and create new
+  releases as drafts without an automatic promotion command.
 
 ## Complexity
 
