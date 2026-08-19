@@ -1,10 +1,14 @@
-import { useState, useEffect, useMemo, useCallback, useRef, useId } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+  useId,
+} from "react";
 import { Modal, Button, Input, Textarea, UnsavedChangesDialog } from "../ui";
 import { handleMarkdownListKeyDown } from "../ui/Textarea";
-import { Select } from "../ui/Select";
 import {
-  HashIcon,
-  XIcon,
   ImageIcon,
   Maximize2Icon,
   Minimize2Icon,
@@ -14,10 +18,9 @@ import {
   Loader2Icon,
   PlayIcon,
   VideoIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
   SaveIcon,
   MessageSquareTextIcon,
+  XIcon,
 } from "lucide-react";
 
 import { usePromptStore } from "../../stores/prompt.store";
@@ -32,12 +35,6 @@ import type {
   Prompt,
   UpdatePromptDTO,
 } from "@prompthub/shared/types";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
-import rehypeHighlight from "rehype-highlight";
-import { defaultSchema } from "hast-util-sanitize";
-import { renderFolderIcon } from "../layout/folderIconHelper";
 import {
   buildPromptPayload,
   createPromptFormData,
@@ -50,8 +47,15 @@ import {
 } from "./prompt-modal-utils";
 import { usePromptMediaManager } from "./usePromptMediaManager";
 import { usePromptNativeFullscreen } from "./usePromptNativeFullscreen";
-import { resolvePromptMarkdownHref } from "./prompt-markdown-url";
-import { resolveLocalImageSrc, resolveLocalVideoSrc } from "../../utils/media-url";
+import {
+  resolveLocalImageSrc,
+  resolveLocalVideoSrc,
+} from "../../utils/media-url";
+import {
+  EditPromptMoreSettings,
+  PromptEditorField,
+} from "./EditPromptSections";
+import { usePromptMarkdownPreview } from "./usePromptMarkdownPreview";
 
 /* Existing code */
 // Add initialData to props
@@ -70,6 +74,7 @@ export function EditPromptModal({
 }: EditPromptModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
+  const renderMarkdownPreview = usePromptMarkdownPreview();
   const titleInputId = useId();
   const systemPromptInputId = useId();
   const systemPromptEnInputId = useId();
@@ -113,7 +118,9 @@ export function EditPromptModal({
   // 属性面板折叠状态
   const [showAttributes, setShowAttributes] = useState(false);
   const fullscreenTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const sourceSuggestionsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sourceSuggestionsCloseTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const isMountedRef = useRef(true);
   const isOpenRef = useRef(isOpen);
   const modalSessionRef = useRef(0);
@@ -123,8 +130,12 @@ export function EditPromptModal({
   const sourceHistory = useSettingsStore((state) => state.sourceHistory);
   const addSourceHistory = useSettingsStore((state) => state.addSourceHistory);
   const aiModels = useSettingsStore((state) => state.aiModels);
-  const scenarioModelDefaults = useSettingsStore((state) => state.scenarioModelDefaults);
-  const modelRouteDefaults = useSettingsStore((state) => state.modelRouteDefaults);
+  const scenarioModelDefaults = useSettingsStore(
+    (state) => state.scenarioModelDefaults,
+  );
+  const modelRouteDefaults = useSettingsStore(
+    (state) => state.modelRouteDefaults,
+  );
   const translationModel = useMemo(() => {
     return resolveScenarioModel(
       aiModels,
@@ -323,92 +334,6 @@ export function EditPromptModal({
     onClose();
   };
 
-  const sanitizeSchema: any = useMemo(() => {
-    const schema = {
-      ...defaultSchema,
-      attributes: { ...defaultSchema.attributes },
-    };
-    schema.attributes.code = [...(schema.attributes.code || []), ["className"]];
-    schema.attributes.span = [...(schema.attributes.span || []), ["className"]];
-    schema.attributes.pre = [...(schema.attributes.pre || []), ["className"]];
-    return schema;
-  }, []);
-
-  const rehypePlugins = useMemo(
-    () => [
-      [rehypeHighlight, { ignoreMissing: true }] as any,
-      [rehypeSanitize, sanitizeSchema] as any,
-    ],
-    [sanitizeSchema],
-  );
-
-  const markdownComponents = useMemo(
-    () => ({
-      h1: (props: any) => (
-        <h1 className="text-2xl font-bold mb-4 text-foreground" {...props} />
-      ),
-      h2: (props: any) => (
-        <h2
-          className="text-xl font-semibold mb-3 mt-5 text-foreground"
-          {...props}
-        />
-      ),
-      h3: (props: any) => (
-        <h3
-          className="text-lg font-semibold mb-3 mt-4 text-foreground"
-          {...props}
-        />
-      ),
-      p: (props: any) => (
-        <p className="mb-3 leading-relaxed text-foreground/90" {...props} />
-      ),
-      ul: (props: any) => (
-        <ul className="list-disc pl-5 mb-3 space-y-1" {...props} />
-      ),
-      ol: (props: any) => (
-        <ol className="list-decimal pl-5 mb-3 space-y-1" {...props} />
-      ),
-      li: (props: any) => <li className="leading-relaxed" {...props} />,
-      code: (props: any) => (
-        <code
-          className="px-1 py-0.5 rounded bg-muted font-mono text-[13px]"
-          {...props}
-        />
-      ),
-      pre: (props: any) => (
-        <pre
-          className="p-3 rounded-lg bg-muted overflow-x-auto text-[13px] leading-relaxed"
-          {...props}
-        />
-      ),
-      blockquote: (props: any) => (
-        <blockquote
-          className="border-l-4 border-border pl-3 text-muted-foreground italic mb-3"
-          {...props}
-        />
-      ),
-      hr: () => <hr className="my-4 border-border" />,
-      a: ({ href, children, ...props }: any) => {
-        const safeHref = resolvePromptMarkdownHref(href);
-        if (!safeHref) {
-          return <span {...props}>{children}</span>;
-        }
-        return (
-          <a
-            className="text-primary hover:underline"
-            {...props}
-            href={safeHref}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {children}
-          </a>
-        );
-      },
-    }),
-    [],
-  );
-
   // 获取所有已存在的标签
   const existingTags = useMemo(
     () => mergePromptTagCatalog(prompts, promptTagCatalog),
@@ -497,10 +422,7 @@ export function EditPromptModal({
     setNotes(rewriteSnapshot.notes);
     setRewriteSnapshot(null);
     setRewriteSummary(null);
-    showToast(
-      t("prompt.aiRewriteUndoDone"),
-      "success",
-    );
+    showToast(t("prompt.aiRewriteUndoDone"), "success");
   };
 
   const handleRewritePrompt = async () => {
@@ -510,18 +432,12 @@ export function EditPromptModal({
     }
 
     if (!rewriteInstruction.trim()) {
-      showToast(
-        t("prompt.aiRewriteNeedsInstruction"),
-        "error",
-      );
+      showToast(t("prompt.aiRewriteNeedsInstruction"), "error");
       return;
     }
 
     if (!userPrompt.trim()) {
-      showToast(
-        t("prompt.aiRewriteNeedsContent"),
-        "error",
-      );
+      showToast(t("prompt.aiRewriteNeedsContent"), "error");
       return;
     }
 
@@ -574,21 +490,15 @@ export function EditPromptModal({
       }
 
       setRewriteSummary(
-        rewritten.summary ||
-          t("prompt.aiRewriteSummaryDefault"),
+        rewritten.summary || t("prompt.aiRewriteSummaryDefault"),
       );
-      showToast(
-        t("prompt.aiRewriteDone"),
-        "success",
-      );
+      showToast(t("prompt.aiRewriteDone"), "success");
     } catch (error) {
       if (!canApplyAsyncResult(rewriteSession)) {
         return;
       }
       showToast(
-        error instanceof Error
-          ? error.message
-          : t("prompt.aiRewriteFailed"),
+        error instanceof Error ? error.message : t("prompt.aiRewriteFailed"),
         "error",
       );
     } finally {
@@ -675,12 +585,7 @@ export function EditPromptModal({
       if (!canApplyAsyncResult(translateSession)) {
         return;
       }
-      showToast(
-        e instanceof Error
-          ? e.message
-          : t("common.error"),
-        "error",
-      );
+      showToast(e instanceof Error ? e.message : t("common.error"), "error");
     } finally {
       if (canApplyAsyncResult(translateSession)) {
         setIsTranslating(false);
@@ -704,10 +609,7 @@ export function EditPromptModal({
       userPromptEn || (isMainContentEnglish ? userPrompt : "");
 
     if (!englishSystem && !englishUser) {
-      showToast(
-        t("prompt.noEnglishContentToTranslate"),
-        "error",
-      );
+      showToast(t("prompt.noEnglishContentToTranslate"), "error");
       return;
     }
 
@@ -881,9 +783,7 @@ export function EditPromptModal({
   const renderReferenceMediaSection = () => (
     <div
       className={`space-y-2 rounded-xl border border-dashed p-3 transition-colors ${
-        isDraggingMedia
-          ? "border-primary bg-primary/5"
-          : "border-transparent"
+        isDraggingMedia ? "border-primary bg-primary/5" : "border-transparent"
       }`}
       onDragOver={handleMediaDragOver}
       onDragLeave={handleMediaDragLeave}
@@ -1098,13 +998,7 @@ export function EditPromptModal({
             <div className="flex-1 overflow-auto p-6">
               <div className="prose prose-sm max-w-none markdown-content">
                 {fullscreenValue ? (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={rehypePlugins}
-                    components={markdownComponents}
-                  >
-                    {fullscreenValue}
-                  </ReactMarkdown>
+                  renderMarkdownPreview(fullscreenValue)
                 ) : (
                   <div className="text-muted-foreground text-sm italic">
                     {t("prompt.noContent", "暂无内容")}
@@ -1226,10 +1120,7 @@ export function EditPromptModal({
             </div>
             <p className="text-xs text-muted-foreground">
               {promptType === "text" &&
-                t(
-                  "prompt.typeTextDesc",
-                  "Test with chat models (e.g. GPT-4)",
-                )}
+                t("prompt.typeTextDesc", "Test with chat models (e.g. GPT-4)")}
               {promptType === "image" &&
                 t(
                   "prompt.typeImageDesc",
@@ -1305,7 +1196,9 @@ export function EditPromptModal({
               variant="primary"
               size="sm"
               onClick={handleRewritePrompt}
-              disabled={isRewritingPrompt || !canRewrite || !rewriteInstruction.trim()}
+              disabled={
+                isRewritingPrompt || !canRewrite || !rewriteInstruction.trim()
+              }
             >
               {isRewritingPrompt ? (
                 <Loader2Icon
@@ -1322,199 +1215,34 @@ export function EditPromptModal({
           </div>
         </div>
 
-        {/* 可折叠的更多设置面板 */}
-        <div className="border border-border/50 rounded-xl bg-muted/20 overflow-hidden">
-          <button
-            type="button"
-            aria-expanded={showAttributes}
-            onClick={() => setShowAttributes(!showAttributes)}
-            className="flex items-center gap-2 px-4 py-3 w-full text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
-          >
-            {showAttributes ? (
-              <ChevronDownIcon
-                className="w-4 h-4 text-muted-foreground"
-                aria-hidden="true"
-              />
-            ) : (
-              <ChevronRightIcon
-                className="w-4 h-4 text-muted-foreground"
-                aria-hidden="true"
-              />
-                )}
-            <span>{t("prompt.moreSettings", "More Settings")}</span>
-            {!showAttributes && (
-              <span className="text-xs text-muted-foreground ml-2 font-normal truncate max-w-[400px]">
-                {[
-                  folders.find((f) => f.id === folderId)?.name,
-                  tags.length > 0
-                    ? `${tags.length} ${t("prompt.tags", "tags")}`
-                    : null,
-                  promptType !== "image" && images.length + videos.length > 0
-                    ? `${images.length + videos.length} ${t("prompt.media", "media")}`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" • ")}
-              </span>
-            )}
-          </button>
-
-          {showAttributes && (
-            <div className="px-4 pb-4 space-y-4 animate-in fade-in slide-in-from-top-1">
-              {/* 文件夹 */}
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-foreground">
-                  {t("prompt.folderOptional")}
-                </label>
-                <Select
-                  value={folderId || ""}
-                  onChange={(val) => setFolderId(val || undefined)}
-                  placeholder={t("prompt.noFolder")}
-                  options={[
-                    { value: "", label: t("prompt.noFolder") },
-                    ...folders.map((folder) => ({
-                      value: folder.id,
-                      label: (
-                        <div className="flex items-center gap-2">
-                          <span className="shrink-0 flex items-center justify-center w-4 h-4 text-muted-foreground">
-                            {renderFolderIcon(folder.icon)}
-                          </span>
-                          <span className="truncate">{folder.name}</span>
-                        </div>
-                      ),
-                    })),
-                  ]}
-                />
-              </div>
-
-              {/* 标签 */}
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-foreground">
-                  {t("prompt.tagsOptional")}
-                </label>
-                {/* 已选标签 */}
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary text-white"
-                    >
-                      <HashIcon className="w-3 h-3" aria-hidden="true" />
-                      {tag}
-                      <button
-                        type="button"
-                        aria-label={t("prompt.removeTag", { tag })}
-                        onClick={() => handleRemoveTag(tag)}
-                        className="ml-1 hover:text-white/70"
-                      >
-                        <XIcon className="w-3 h-3" aria-hidden="true" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                {/* 已有标签选择 */}
-                {existingTags.length > 0 && (
-                  <div className="mb-2">
-                    <div className="text-xs text-muted-foreground mb-1.5">
-                      {t("prompt.selectExistingTags")}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {existingTags
-                        .filter((t) => !tags.includes(t))
-                        .map((tag) => (
-                          <button
-                            key={tag}
-                            type="button"
-                            onClick={() => setTags([...tags, tag])}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-muted hover:bg-accent transition-colors"
-                          >
-                            <HashIcon className="w-3 h-3" aria-hidden="true" />
-                            {tag}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                )}
-                {/* 新建标签 */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder={t("prompt.enterTagHint")}
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={handleTagKeyDown}
-                    className="flex-1 h-10 px-4 rounded-xl bg-muted/50 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-background transition-all duration-base"
-                  />
-                  <Button variant="secondary" size="md" onClick={handleAddTag}>
-                    {t("prompt.addTag")}
-                  </Button>
-                </div>
-              </div>
-
-              {/* 来源 / Source */}
-              <div className="space-y-1.5 relative">
-                <label className="block text-sm font-medium text-foreground">
-                  {t("prompt.sourceOptional") || "Source (Optional)"}
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder={
-                      t("prompt.sourcePlaceholder") ||
-                      "Record prompt source (e.g. website, book)"
-                    }
-                    value={source}
-                    onChange={(e) => setSource(e.target.value)}
-                    onFocus={handleSourceFocus}
-                    onBlur={handleSourceBlur}
-                    className="w-full h-10 px-4 rounded-xl bg-muted/50 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-background transition-all duration-base"
-                  />
-                  {showSourceSuggestions && sourceHistory.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-                      {sourceHistory
-                        .filter((s) =>
-                          s.toLowerCase().includes(source.toLowerCase()),
-                        )
-                        .slice(0, 8)
-                        .map((item, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            className="w-full px-3 py-2 text-sm text-left hover:bg-accent/50 transition-colors truncate"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              setSource(item);
-                              setShowSourceSuggestions(false);
-                            }}
-                          >
-                            {item}
-                          </button>
-                        ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 备注 / Notes */}
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-foreground">
-                  {t("prompt.notesOptional", "备注（可选）")}
-                </label>
-                <textarea
-                  placeholder={t(
-                    "prompt.notesPlaceholder",
-                    "记录关于这个 Prompt 的个人笔记...",
-                  )}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full min-h-[80px] px-4 py-3 rounded-xl bg-muted/50 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-background transition-all duration-base resize-none"
-                />
-              </div>
-
-              {promptType !== "image" && renderReferenceMediaSection()}
-            </div>
-          )}
-        </div>
+        <EditPromptMoreSettings
+          existingTags={existingTags}
+          folderId={folderId}
+          folders={folders}
+          mediaCount={images.length + videos.length}
+          notes={notes}
+          onAddTag={handleAddTag}
+          onNotesChange={setNotes}
+          onRemoveTag={handleRemoveTag}
+          onSourceBlur={handleSourceBlur}
+          onSourceFocus={handleSourceFocus}
+          onTagKeyDown={handleTagKeyDown}
+          promptType={promptType}
+          referenceMedia={renderReferenceMediaSection()}
+          setFolderId={setFolderId}
+          setShowAttributes={setShowAttributes}
+          setShowSourceSuggestions={setShowSourceSuggestions}
+          setSource={setSource}
+          setTagInput={setTagInput}
+          setTags={setTags}
+          showAttributes={showAttributes}
+          showSourceSuggestions={showSourceSuggestions}
+          source={source}
+          sourceHistory={sourceHistory}
+          t={t}
+          tagInput={tagInput}
+          tags={tags}
+        />
 
         {/* 英文版本切换 */}
         {/* 英文版本切换 / Toggle English Version (Hide if language is English) */}
@@ -1549,8 +1277,7 @@ export function EditPromptModal({
                       : "bg-primary/10 text-primary hover:bg-primary/20"
                   }`}
                   title={
-                    translateToEnglishDisabledReason ||
-                    translateToEnglishLabel
+                    translateToEnglishDisabledReason || translateToEnglishLabel
                   }
                   aria-label={translateToEnglishLabel}
                 >
@@ -1560,10 +1287,7 @@ export function EditPromptModal({
                       aria-hidden="true"
                     />
                   ) : (
-                    <SparklesIcon
-                      className="w-3.5 h-3.5"
-                      aria-hidden="true"
-                    />
+                    <SparklesIcon className="w-3.5 h-3.5" aria-hidden="true" />
                   )}
                   → EN
                 </button>
@@ -1595,10 +1319,7 @@ export function EditPromptModal({
                       aria-hidden="true"
                     />
                   ) : (
-                    <SparklesIcon
-                      className="w-3.5 h-3.5"
-                      aria-hidden="true"
-                    />
+                    <SparklesIcon className="w-3.5 h-3.5" aria-hidden="true" />
                   )}
                   EN →
                 </button>
@@ -1634,188 +1355,44 @@ export function EditPromptModal({
           </div>
         )}
 
-        {/* System Prompt */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor={systemPromptInputId}
-              className="block text-sm font-medium text-foreground"
-            >
-              {t("prompt.systemPromptOptional")}
-            </label>
-            <button
-              type="button"
-              aria-label={t("prompt.fullscreen", "Fullscreen Edit")}
-              onClick={() => enterNativeFullscreen("system")}
-              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border"
-              title={t("prompt.fullscreen", "全屏编辑")}
-            >
-              <Maximize2Icon className="w-4 h-4" aria-hidden="true" />
-            </button>
-          </div>
-          {/* 分屏布局：左边编辑 + 右边预览 */}
-          <div className="flex rounded-xl border border-border overflow-hidden min-h-[200px]">
-            {/* 左边：编辑区 */}
-            <div className="w-1/2 border-r border-border flex flex-col">
-              <Textarea
-                id={systemPromptInputId}
-                placeholder={t("prompt.systemPromptPlaceholder")}
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                className="flex-1 min-h-[200px] rounded-none border-0"
-                enableMarkdownList
-              />
-            </div>
-            {/* 右边：实时预览 */}
-            <div className="w-1/2 flex flex-col bg-muted/30">
-              <div className="px-3 py-1.5 border-b border-border bg-muted/50 text-xs font-medium text-muted-foreground shrink-0">
-                {t("prompt.preview", "预览")}
-              </div>
-              <div className="flex-1 overflow-auto p-4">
-                <div className="prose prose-sm max-w-none markdown-content">
-                  {systemPrompt ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={rehypePlugins}
-                      components={markdownComponents}
-                    >
-                      {systemPrompt}
-                    </ReactMarkdown>
-                  ) : (
-                    <div className="text-muted-foreground text-sm italic">
-                      {t("prompt.noContent", "暂无内容")}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-          {/* System Prompt English */}
-          {showEnglishVersion && (
-            <div className="mt-2 pl-4 border-l-2 border-primary/20 space-y-2">
-              <div className="flex items-center gap-2">
-                <label
-                  htmlFor={systemPromptEnInputId}
-                  className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"
-                >
-                  <span className="bg-primary/10 text-primary px-1 rounded text-[10px]">
-                    EN
-                  </span>
-                  {t("prompt.systemPromptEn")}
-                </label>
-                <button
-                  type="button"
-                  aria-label={t("prompt.fullscreen")}
-                  onClick={() => enterNativeFullscreen("systemEn")}
-                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title={t("prompt.fullscreen")}
-                >
-                  <Maximize2Icon className="w-3 h-3" aria-hidden="true" />
-                </button>
-              </div>
-              <Textarea
-                id={systemPromptEnInputId}
-                placeholder="Enter English System Prompt..."
-                value={systemPromptEn}
-                onChange={(e) => setSystemPromptEn(e.target.value)}
-                className="min-h-[80px]"
-                enableMarkdownList
-              />
-            </div>
-          )}
-        </div>
+        <PromptEditorField
+          englishId={systemPromptEnInputId}
+          englishLabel={t("prompt.systemPromptEn")}
+          englishPlaceholder="Enter English System Prompt..."
+          englishValue={systemPromptEn}
+          id={systemPromptInputId}
+          label={t("prompt.systemPromptOptional")}
+          minHeight={200}
+          onChange={(event) => setSystemPrompt(event.target.value)}
+          onEnglishChange={(event) => setSystemPromptEn(event.target.value)}
+          onEnglishFullscreen={() => enterNativeFullscreen("systemEn")}
+          onFullscreen={() => enterNativeFullscreen("system")}
+          placeholder={t("prompt.systemPromptPlaceholder")}
+          renderPreview={renderMarkdownPreview}
+          showEnglishVersion={showEnglishVersion}
+          t={t}
+          value={systemPrompt}
+        />
 
-        {/* User Prompt */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor={userPromptInputId}
-              className="block text-sm font-medium text-foreground"
-            >
-              {t("prompt.userPromptLabel")}
-              <span className="ml-2 text-xs text-destructive">*</span>
-            </label>
-            <button
-              type="button"
-              aria-label={t("prompt.fullscreen", "Fullscreen Edit")}
-              onClick={() => enterNativeFullscreen("user")}
-              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border"
-              title={t("prompt.fullscreen", "全屏编辑")}
-            >
-              <Maximize2Icon className="w-4 h-4" aria-hidden="true" />
-            </button>
-          </div>
-          {/* 分屏布局：左边编辑 + 右边预览 */}
-          <div className="flex rounded-xl border border-border overflow-hidden min-h-[280px]">
-            {/* 左边：编辑区 */}
-            <div className="w-1/2 border-r border-border flex flex-col">
-              <Textarea
-                id={userPromptInputId}
-                placeholder={t("prompt.userPromptPlaceholder")}
-                value={userPrompt}
-                onChange={(e) => setUserPrompt(e.target.value)}
-                className="flex-1 min-h-[280px] rounded-none border-0"
-                enableMarkdownList
-              />
-            </div>
-            {/* 右边：实时预览 */}
-            <div className="w-1/2 flex flex-col bg-muted/30">
-              <div className="px-3 py-1.5 border-b border-border bg-muted/50 text-xs font-medium text-muted-foreground shrink-0">
-                {t("prompt.preview", "预览")}
-              </div>
-              <div className="flex-1 overflow-auto p-4">
-                <div className="prose prose-sm max-w-none markdown-content">
-                  {userPrompt ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={rehypePlugins}
-                      components={markdownComponents}
-                    >
-                      {userPrompt}
-                    </ReactMarkdown>
-                  ) : (
-                    <div className="text-muted-foreground text-sm italic">
-                      {t("prompt.noContent", "暂无内容")}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-          {/* User Prompt English */}
-          {showEnglishVersion && (
-            <div className="mt-2 pl-4 border-l-2 border-primary/20 space-y-2">
-              <div className="flex items-center gap-2">
-                <label
-                  htmlFor={userPromptEnInputId}
-                  className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"
-                >
-                  <span className="bg-primary/10 text-primary px-1 rounded text-[10px]">
-                    EN
-                  </span>
-                  {t("prompt.userPromptEn")}
-                </label>
-                <button
-                  type="button"
-                  aria-label={t("prompt.fullscreen")}
-                  onClick={() => enterNativeFullscreen("userEn")}
-                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title={t("prompt.fullscreen")}
-                >
-                  <Maximize2Icon className="w-3 h-3" aria-hidden="true" />
-                </button>
-              </div>
-              <Textarea
-                id={userPromptEnInputId}
-                placeholder="Enter English User Prompt..."
-                value={userPromptEn}
-                onChange={(e) => setUserPromptEn(e.target.value)}
-                className="min-h-[120px]"
-                enableMarkdownList
-              />
-            </div>
-          )}
-        </div>
+        <PromptEditorField
+          englishId={userPromptEnInputId}
+          englishLabel={t("prompt.userPromptEn")}
+          englishPlaceholder="Enter English User Prompt..."
+          englishValue={userPromptEn}
+          id={userPromptInputId}
+          label={t("prompt.userPromptLabel")}
+          minHeight={280}
+          onChange={(event) => setUserPrompt(event.target.value)}
+          onEnglishChange={(event) => setUserPromptEn(event.target.value)}
+          onEnglishFullscreen={() => enterNativeFullscreen("userEn")}
+          onFullscreen={() => enterNativeFullscreen("user")}
+          placeholder={t("prompt.userPromptPlaceholder")}
+          renderPreview={renderMarkdownPreview}
+          required
+          showEnglishVersion={showEnglishVersion}
+          t={t}
+          value={userPrompt}
+        />
       </div>
 
       {/* 未保存更改提示弹窗 */}

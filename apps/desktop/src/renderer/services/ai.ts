@@ -1,10 +1,6 @@
-import type { AIProtocol, AITransportResponse } from "@prompthub/shared/types";
 import {
   buildChatEndpointFromBase,
   buildHeadersForProtocol,
-  buildModelsEndpointFromBase,
-  getBaseUrl,
-  normalizeApiUrlInput,
   resolveAIProtocol,
   resolveProtocolBase,
 } from "@prompthub/shared/utils/ai-protocol";
@@ -17,14 +13,11 @@ import type {
   ChatCompletionResult,
   ChatMessage,
   ChatMessageContent,
-  ChatMessageContentPart,
-  FetchModelsResult,
   ImageGenerationRequest,
   ImageGenerationResponse,
   ImageParams,
   ImageReferenceAttachment,
   ImageTestResult,
-  ModelInfo,
   MultiModelCompareResult,
   PromptRewriteInput,
   PromptRewriteResult,
@@ -36,9 +29,28 @@ import {
   polishSkillContentWithCompletion,
   rewritePromptDraftWithCompletion,
 } from "./ai-content-workflows";
+import {
+  createFetchResponseLike,
+  createResponseLike,
+  getAITransport,
+  getErrorMessageFromResponse,
+  getFormattedErrorMessageFromResponse,
+  isGptImageModel,
+  requestAIEndpoint,
+  type ResponseLike,
+} from "./ai-request";
+import {
+  normalizeAssistantContent,
+  toAnthropicMessageContent,
+} from "./ai-anthropic";
 
 export type * from "./ai-types";
 export { buildMessagesFromPrompt } from "./ai-content-workflows";
+export {
+  fetchAvailableModels,
+  getApiEndpointPreview,
+  getImageApiEndpointPreview,
+} from "./ai-model-discovery";
 
 export {
   getBaseUrl,
@@ -52,27 +64,6 @@ export {
  * 大部分国内外服务商都兼容 OpenAI 格式
  */
 
-type AnthropicMessageContentPart =
-  | { type: "text"; text: string }
-  | {
-      type: "image";
-      source: {
-        type: "base64";
-        media_type: string;
-        data: string;
-      };
-    };
-
-interface ResponseLike {
-  ok: boolean;
-  status: number;
-  statusText: string;
-  headers: Record<string, string>;
-  text: () => Promise<string>;
-  json: <T = unknown>() => Promise<T>;
-  error?: string;
-}
-
 interface StreamState {
   fullContent: string;
   thinkingContent: string;
@@ -84,157 +75,6 @@ const IMAGE_GENERATION_TIMEOUT_MS = 300_000;
 const AI_CONNECTION_TEST_MAX_TOKENS = 8;
 const AI_CONNECTION_TEST_TIMEOUT_MS = 12_000;
 const AI_CONNECTION_TEST_PROMPT = "Reply with exactly: OK";
-
-function getAITransport() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  return window.api?.ai ?? null;
-}
-
-function createResponseLike(response: AITransportResponse): ResponseLike {
-  return {
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-    text: async () => response.body,
-    json: async <T = unknown>() => JSON.parse(response.body) as T,
-    error: response.error,
-  };
-}
-
-function createFetchResponseLike(response: Response): ResponseLike {
-  return {
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    headers: Object.fromEntries(response.headers.entries()),
-    text: async () => response.text(),
-    json: async <T = unknown>() => response.json() as Promise<T>,
-  };
-}
-
-async function requestAIEndpoint(request: {
-  method: "GET" | "POST";
-  url: string;
-  headers: Record<string, string>;
-  body?: string;
-  timeoutMs?: number;
-}): Promise<ResponseLike> {
-  const transport = getAITransport();
-  if (transport) {
-    return createResponseLike(await transport.request(request));
-  }
-
-  return createFetchResponseLike(
-    await fetch(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-    }),
-  );
-}
-
-function getResponseHeader(
-  headers: Record<string, string>,
-  name: string,
-): string {
-  const lowerName = name.toLowerCase();
-  const match = Object.entries(headers).find(
-    ([key]) => key.toLowerCase() === lowerName,
-  );
-  return match?.[1] ?? "";
-}
-
-function isHtmlErrorPayload(
-  text: string,
-  headers: Record<string, string>,
-): boolean {
-  const contentType = getResponseHeader(headers, "content-type").toLowerCase();
-  const trimmed = text.trimStart().toLowerCase();
-  return (
-    contentType.includes("text/html") ||
-    trimmed.startsWith("<!doctype html") ||
-    trimmed.startsWith("<html")
-  );
-}
-
-function extractHtmlTitle(text: string): string | null {
-  const match = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return match?.[1]?.replace(/\s+/g, " ").trim() || null;
-}
-
-function formatGatewayTimeoutMessage(
-  operation: string,
-  status: number,
-): string {
-  return `${operation} gateway timed out (${status}). The provider or proxy did not finish before its own timeout.`;
-}
-
-function isGptImageModel(model: string): boolean {
-  return model.trim().toLowerCase().startsWith("gpt-image-");
-}
-
-function parseStructuredErrorMessage(text: string): string | null {
-  try {
-    const errorJson = JSON.parse(text);
-    const message =
-      errorJson.error?.message ||
-      errorJson.error?.status ||
-      errorJson.error?.type ||
-      errorJson.message ||
-      errorJson.detail ||
-      (typeof errorJson.error === "string" ? errorJson.error : null);
-
-    if (!message) {
-      return null;
-    }
-
-    if (errorJson.error?.code) {
-      return `${message} (code: ${errorJson.error.code})`;
-    }
-    if (errorJson.error?.type && errorJson.error.type !== message) {
-      return `[${errorJson.error.type}] ${message}`;
-    }
-    return message;
-  } catch {
-    return null;
-  }
-}
-
-async function getFormattedErrorMessageFromResponse(
-  response: ResponseLike,
-  options: {
-    operation?: string;
-    fallback?: string;
-    maxTextLength?: number;
-  } = {},
-): Promise<string> {
-  const errorText = response.error ?? (await response.text());
-  const operation = options.operation ?? "API request";
-  const fallback = options.fallback ?? `API 请求失败 (${response.status})`;
-
-  if (response.status === 504) {
-    return formatGatewayTimeoutMessage(operation, response.status);
-  }
-
-  const structuredMessage = parseStructuredErrorMessage(errorText);
-  if (structuredMessage) {
-    return structuredMessage;
-  }
-
-  if (errorText && isHtmlErrorPayload(errorText, response.headers)) {
-    const title = extractHtmlTitle(errorText);
-    return title ? `${fallback}: ${title}` : fallback;
-  }
-
-  if (errorText) {
-    return errorText.slice(0, options.maxTextLength ?? 200);
-  }
-
-  return fallback;
-}
 
 function createStreamState(): StreamState {
   return {
@@ -335,62 +175,6 @@ function finalizeStreamState(
     content: state.fullContent,
     thinkingContent: state.thinkingContent || undefined,
   };
-}
-
-function normalizeAssistantContent(content: ChatMessageContent): string {
-  if (typeof content === "string") {
-    return content;
-  }
-
-  return content
-    .filter(
-      (part): part is Extract<ChatMessageContentPart, { type: "text" }> =>
-        part.type === "text",
-    )
-    .map((part) => part.text)
-    .join("");
-}
-
-function toAnthropicMessageContent(
-  content: ChatMessageContent,
-): string | AnthropicMessageContentPart[] {
-  if (typeof content === "string") {
-    return content;
-  }
-
-  const parts = content.flatMap((part): AnthropicMessageContentPart[] => {
-    if (part.type === "text") {
-      return [{ type: "text", text: part.text }];
-    }
-
-    if (part.type === "image_url") {
-      const match = part.image_url.url.match(/^data:(.+?);base64,(.+)$/);
-      if (!match) {
-        return [];
-      }
-
-      return [
-        {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: match[1],
-            data: match[2],
-          },
-        },
-      ];
-    }
-
-    return [];
-  });
-
-  return parts.length > 0 ? parts : "";
-}
-
-async function getErrorMessageFromResponse(
-  response: ResponseLike,
-): Promise<string> {
-  return getFormattedErrorMessageFromResponse(response);
 }
 
 /**
@@ -1703,277 +1487,4 @@ export async function multiModelCompare(
     messages,
     options,
   );
-}
-
-// ============ 获取模型列表 ============
-// ============ Get Model List ============
-
-interface AnthropicModelsPayload {
-  data?: Array<{
-    id?: string;
-    display_name?: string;
-    created_at?: string;
-  }>;
-}
-
-interface OpenAIModelsPayload {
-  data?: Array<{
-    id?: string;
-    owned_by?: string;
-    created?: number;
-  }>;
-}
-
-interface GeminiModelsPayload {
-  models?: Array<{
-    name?: string;
-    displayName?: string;
-    description?: string;
-  }>;
-}
-
-interface ArrayModelPayloadItem {
-  id?: string;
-  model?: string;
-  name?: string;
-}
-
-/**
- * Get complete API endpoint preview (for display)
- * 如果用户输入以 # 结尾，则不自动填充后续路径
- * 如果用户没有输入 /v1，会自动补全
- * 对于 Gemini API，使用 OpenAI 兼容端点
- * Get complete API endpoint preview (for display)
- * If the input ends with #, do not auto-fill the subsequent path
- * Auto-complete /v1 if user didn't input it
- * Use OpenAI-compatible endpoint for Gemini API
- */
-export function getApiEndpointPreview(
-  apiUrl: string,
-  protocol: AIProtocol = "openai",
-): string {
-  if (!apiUrl) return "";
-  return buildChatEndpointFromBase(resolveProtocolBase(apiUrl, protocol));
-}
-
-/**
- * Get image generation API endpoint preview (for display)
- * 如果用户输入以 # 结尾，则不自动填充后续路径
- * 获取生图 API 端点预览（用于显示）
- */
-export function getImageApiEndpointPreview(apiUrl: string): string {
-  if (!apiUrl) return "";
-
-  // If ends with #, just return the part before # without any auto-fill
-  // 如果以 # 结尾，直接返回 # 之前的部分，不进行任何自动填充
-  if (apiUrl.trim().endsWith("#")) {
-    return apiUrl.trim().slice(0, -1);
-  }
-
-  const baseUrl = getBaseUrl(apiUrl);
-
-  // Gemini is not OpenAI's images/generations specification
-  // Gemini（Google Generative Language API）并非 OpenAI 的 images/generations 规范
-  if (baseUrl.includes("generativelanguage.googleapis.com")) {
-    const geminiBaseUrl = baseUrl.replace(/\/openai$/, "");
-    if (geminiBaseUrl.match(/\/v\d+(?:beta)?$/)) {
-      return geminiBaseUrl + "/models";
-    }
-    return geminiBaseUrl + "/v1beta/models";
-  }
-
-  let endpoint = apiUrl.replace(/\/$/, "");
-
-  // If already contains images/generations, use directly
-  // 如果已经包含 images/generations，直接使用
-  if (endpoint.includes("/images/generations")) {
-    return endpoint;
-  } else if (endpoint.endsWith("/chat/completions")) {
-    // Replace chat/completions with images/generations
-    // 替换 chat/completions 为 images/generations
-    return endpoint.replace(/\/chat\/completions$/, "/images/generations");
-  } else if (endpoint.match(/\/v\d+$/)) {
-    // If ends with /v1, /v2, /v3, etc., append /images/generations
-    // 如果以 /v1, /v2, /v3 等结尾，追加 /images/generations
-    return endpoint + "/images/generations";
-  } else {
-    // Default append /v1/images/generations
-    // 默认追加 /v1/images/generations
-    return endpoint + "/v1/images/generations";
-  }
-}
-
-/**
- * Fetch available model list from API
- * 从 API 获取可用模型列表
- */
-export async function fetchAvailableModels(
-  apiUrl: string,
-  apiKey: string,
-  apiProtocol: AIProtocol = "openai",
-): Promise<FetchModelsResult> {
-  if (!apiKey || !apiUrl) {
-    return {
-      success: false,
-      models: [],
-      error: "Please fill in API Key and API URL first",
-    };
-    // 请先填写 API Key 和 API 地址
-  }
-
-  try {
-    const endpoint = buildModelsEndpointFromBase(
-      resolveProtocolBase(apiUrl, apiProtocol),
-    );
-    const resolvedProtocol = resolveAIProtocol({
-      apiProtocol,
-      provider: "",
-      apiUrl,
-    });
-    const headers = buildHeadersForProtocol(resolvedProtocol, apiKey, {
-      accept: "application/json",
-      useNativeGeminiAuth: resolvedProtocol === "gemini",
-    });
-
-    const transport = getAITransport();
-    const response = transport
-      ? createResponseLike(
-          await transport.request({
-            method: "GET",
-            url: endpoint,
-            headers,
-            timeoutMs: 12_000,
-          }),
-        )
-      : createFetchResponseLike(
-          await fetch(endpoint, {
-            method: "GET",
-            headers,
-          }),
-        );
-
-    if (!response.ok) {
-      const errorText = response.error ?? (await response.text());
-      const reason =
-        response.status === 401 || response.status === 403
-          ? "auth"
-          : response.status === 0 && /timeout/i.test(errorText)
-            ? "network"
-            : response.status === 404 ||
-                response.status === 405 ||
-                response.status === 501
-              ? "unsupported"
-              : "http";
-      return {
-        success: false,
-        models: [],
-        error:
-          response.status === 0
-            ? errorText.substring(0, 120)
-            : `获取模型列表失败: ${response.status} - ${errorText.substring(0, 100)}`,
-        reason,
-        endpoint,
-        status: response.status,
-        // Failed to get model list
-      };
-    }
-
-    const data = await response.json<
-      | AnthropicModelsPayload
-      | OpenAIModelsPayload
-      | GeminiModelsPayload
-      | ArrayModelPayloadItem[]
-    >();
-
-    if (
-      apiProtocol === "anthropic" &&
-      "data" in data &&
-      Array.isArray(data.data)
-    ) {
-      const models = data.data
-        .filter((m: { id?: string }) => typeof m.id === "string")
-        .map(
-          (m: { id: string; display_name?: string; created_at?: string }) => ({
-            id: m.id,
-            name: m.display_name || m.id,
-            owned_by: "Anthropic",
-            created: m.created_at ? Date.parse(m.created_at) : undefined,
-          }),
-        )
-        .sort((a: ModelInfo, b: ModelInfo) => a.id.localeCompare(b.id));
-
-      return { success: true, models };
-    }
-
-    // OpenAI 格式的响应
-    // OpenAI format response
-    if ("data" in data && Array.isArray(data.data)) {
-      const models = data.data
-        .filter((m: { id?: string }) => m.id) // 过滤掉没有 id 的 / Filter out those without id
-        .map((m: { id: string; owned_by?: string; created?: number }) => ({
-          id: m.id,
-          name: m.id,
-          owned_by: m.owned_by,
-          created: m.created,
-        }))
-        .sort((a: ModelInfo, b: ModelInfo) => a.id.localeCompare(b.id));
-
-      return { success: true, models };
-    }
-
-    // Gemini 格式的响应 / Gemini format response
-    if ("models" in data && Array.isArray(data.models)) {
-      const models = data.models
-        .filter((m: { name?: string }) => m.name)
-        .map(
-          (m: { name: string; displayName?: string; description?: string }) => {
-            // Gemini returns "models/gemini-pro", we need "gemini-pro" for OpenAI compatible endpoint
-            const id = m.name.replace(/^models\//, "");
-            return {
-              id: id,
-              name: m.displayName ? `${m.displayName} (${id})` : id,
-              owned_by: "Google",
-              description: m.description,
-            };
-          },
-        )
-        .sort((a: ModelInfo, b: ModelInfo) => a.id.localeCompare(b.id));
-
-      return { success: true, models };
-    }
-
-    // 某些 API 直接返回数组
-    // Some APIs return array directly
-    if (Array.isArray(data)) {
-      const models = data
-        .filter((m: { id?: string; model?: string }) => m.id || m.model)
-        .map((m: { id?: string; model?: string; name?: string }) => ({
-          id: m.id || m.model || "",
-          name: m.name || m.id || m.model,
-        }));
-      return { success: true, models };
-    }
-
-    return {
-      success: false,
-      models: [],
-      error: "无法解析模型列表响应",
-      reason: "unsupported",
-      endpoint,
-    };
-    // Cannot parse model list response
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "获取模型列表失败";
-    return {
-      success: false,
-      models: [],
-      error: message,
-      reason:
-        message.toLowerCase().includes("failed to fetch") ||
-        message.toLowerCase().includes("network")
-          ? "network"
-          : "http",
-      // Failed to get model list
-    };
-  }
 }
