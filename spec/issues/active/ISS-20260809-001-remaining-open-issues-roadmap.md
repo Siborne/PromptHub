@@ -12,11 +12,11 @@
 
 ## Current Execution Cut
 
-The current implementation queue starts with the shared database migration
-mechanism used by Desktop, CLI, and self-hosted Web. The current source audit has
-identified present-tense atomicity, host-order, backup-plan, and compatibility
-gaps under `database-migration-safety`; these do not depend on a historical issue
-reproducing first.
+The shared database migration mechanism was completed and archived on
+2026-08-12 under `2026-08-12-database-migration-safety`. The current executable
+queue is the tagged historical recovery corpus under
+`legacy-upgrade-recovery-audit`; accepted design and external-dependency
+backlogs below are not active implementation changes.
 
 The #89/#97/#98 audit remains the tagged historical evidence corpus. It verifies
 legacy path, backup, and Prompt-history behavior against the redesigned runner,
@@ -26,7 +26,7 @@ but it does not define or delay current migration safety work.
 
 | Class                                                   | Issues                                      | Local meaning                                                                                                                             |
 | ------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Current database migration safety                       | #89, #97, #98 as regression evidence        | Active mechanism work under `database-migration-safety`; current defects are addressed independently from historical reproduction.        |
+| Delivered database migration safety                     | #89, #97, #98 as regression evidence        | Completed mechanism work is archived under `2026-08-12-database-migration-safety`; historical recovery remains separate.                    |
 | Current historical audit                                | #89, #97, #98                               | Tagged fixtures under `legacy-upgrade-recovery-audit`; do not claim issue completion before end-to-end evidence.                          |
 | Existing correctness work already underway              | #185, #190, #191, #192, #193, #194, #203    | Preserve their current changes and verification gates; do not expand them inside the historical audit.                                    |
 | Local design backlog                                    | #44, #74, #195, #196, #197, #198            | Designs are retained and implementation can be scheduled after the historical audit as independently reversible work.                     |
@@ -39,8 +39,8 @@ but it does not define or delay current migration safety work.
 
 | Order | Program                    | Issues          | Authoritative change            | Exit condition                                                                                                       |
 | ----- | -------------------------- | --------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| 1     | Current migration baseline | Shared SQLite   | `database-migration-safety`     | Empty/current/legacy/partial/newer states and every migration step have executable fixtures.                         |
-| 2     | Atomic migration core      | Shared SQLite   | `database-migration-safety`     | Ordered compatibility, transaction rollback, host reconciliation, and safety-point tests pass.                       |
+| 1     | Migration baseline         | Shared SQLite   | archived `database-migration-safety` | Completed: empty/current/legacy/partial/newer states and migration steps have executable fixtures.               |
+| 2     | Atomic migration core      | Shared SQLite   | archived `database-migration-safety` | Completed: ordered compatibility, rollback, host reconciliation, and safety-point tests are recorded.           |
 | 3     | Tagged historical corpus   | #89, #97, #98   | `legacy-upgrade-recovery-audit` | Deterministic v0.4.7/v0.4.8/v0.5.1/v0.5.2 path, backup, and Prompt-history fixtures pass through the current runner. |
 | 4     | Convergence                | Shared + issues | Both changes                    | Stable migration/recovery docs and local issue evidence match verified restart and rollback behavior.                |
 
@@ -48,9 +48,9 @@ but it does not define or delay current migration safety work.
 
 | Program                     | Issues         | Authoritative change             | Scheduling condition                                                                        |
 | --------------------------- | -------------- | -------------------------------- | ------------------------------------------------------------------------------------------- |
-| Workspace live refresh      | #198, #199     | `desktop-workspace-live-refresh` | Start after historical recovery work; preserve drafts and avoid polling/watchers.           |
-| Agent Rules source matrix   | #196, #197     | `rules-agent-source-matrix`      | Start when official/versioned source evidence is assembled.                                 |
-| Prompt workspace completion | #44, #74, #195 | `prompt-workspace-completion`    | Ship the three tracks independently; multi-message storage requires its own migration gate. |
+| Workspace live refresh      | #198, #199     | archived design `desktop-workspace-live-refresh` | Start after historical recovery work; preserve drafts and avoid polling/watchers.           |
+| Agent Rules source matrix   | #196, #197     | archived design `rules-agent-source-matrix`      | Start when official/versioned source evidence is assembled.                                 |
+| Prompt workspace completion | #44, #74, #195 | archived design `prompt-workspace-completion`    | Ship the three tracks independently; multi-message storage requires its own migration gate. |
 
 Existing work for #185, #190 through #194, and #203 keeps its own active change,
 tests, and convergence gates. This roadmap does not merge those changes into the
@@ -60,11 +60,11 @@ historical audit or declare them paused/completed.
 
 | Program                      | Issues     | Authoritative change                  | Reason for deferral                                                                                 |
 | ---------------------------- | ---------- | ------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Windows trust and signing    | #92        | `windows-code-signing-and-reputation` | Requires protected certificate/provider setup and clean Windows release infrastructure.             |
-| Mobile WebDAV distribution   | #15        | `mobile-webdav-distribution`          | Requires Android/iOS packaging, secure mobile credentials, and store/device verification.           |
-| Collaborative Prompt sharing | #106       | `cloud-collaborative-prompt-sharing`  | Requires a server-owned workspace, ACL, audit, and conflict service rather than a local-only patch. |
-| Marketplace expansion        | #132, #177 | `marketplace-expansion`               | Requires verified external contracts and must not rely on guessed endpoints or scraping.            |
-| Git backup transports        | #27        | `git-backup-transports`               | Requires remote credentials, encrypted snapshot transport, and GitHub/Gitee integration evidence.   |
+| Windows trust and signing    | #92        | archived design `windows-code-signing-and-reputation` | Requires protected certificate/provider setup and clean Windows release infrastructure.             |
+| Mobile WebDAV distribution   | #15        | archived design `mobile-webdav-distribution`          | Requires Android/iOS packaging, secure mobile credentials, and store/device verification.           |
+| Collaborative Prompt sharing | #106       | archived design `cloud-collaborative-prompt-sharing`  | Requires a server-owned workspace, ACL, audit, and conflict service rather than a local-only patch. |
+| Marketplace expansion        | #132, #177 | archived design `marketplace-expansion`               | Requires verified external contracts and must not rely on guessed endpoints or scraping.            |
+| Git backup transports        | #27        | archived design `git-backup-transports`               | Requires remote credentials, encrypted snapshot transport, and GitHub/Gitee integration evidence.   |
 
 These changes remain design records so their data, security, and compatibility
 boundaries are not lost. `accepted` means valid backlog work, not implementation

@@ -68,7 +68,7 @@ receipts after verifying targets, but rollback itself performs no deletion.
 
 - Issue: https://github.com/legeling/PromptHub/issues/194
 - Project-level Skill distribution:
-  `spec/changes/active/project-skill-management/`
+  `spec/changes/archive/2026/08/2026-08-18-project-skill-management/`
 - Agent management boundary:
   `spec/changes/active/agent-management-workbench/`
 - Stable behavior/reference:

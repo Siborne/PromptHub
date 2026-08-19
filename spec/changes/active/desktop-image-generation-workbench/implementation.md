@@ -128,7 +128,7 @@
   - one model per batch in the first release.
   - generation records and originals are local-only in the first release.
 - Navigation reference:
-  - `spec/changes/active/app-shell-left-rail/` remains unchanged because no global item
+  - `spec/changes/archive/2026/08/2026-08-18-app-shell-left-rail/` remains unchanged because no global item
     is added.
 - Sync reference:
   - `spec/changes/active/web-sync-contract-completion/` continues its existing supported

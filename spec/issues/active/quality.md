@@ -1,5 +1,13 @@
 # 活跃问题追踪：质量与工具链
 
+## 2026-08-18
+
+### 未解决
+
+- `Q-006` 测试类型逃逸与动态快照遗留
+  - `desktop-renderer-ui-test-coverage` 已完成既定组件覆盖提升，但仓库旧 main、service、store 与 integration 测试仍存在 `as any`、`@ts-ignore` 或动态 `toMatchSnapshot()`。
+  - 该横跨历史测试的清理属于持续质量债，不再用一个已完成的 renderer 覆盖 change 长期占据 active；后续按触及模块分批移除，并保持新增测试零增量。
+
 ## 2026-07-11
 
 ### 已解决

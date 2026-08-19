@@ -3,7 +3,7 @@
 ## Status
 
 - Phase: converge
-- Status: review-pending
+- Status: release-pending
 
 ## Shipped
 

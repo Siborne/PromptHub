@@ -120,7 +120,7 @@ PromptHub 已经支持 image Prompt、参考图、图片生成模型配置和单
 - Stable behavior: `spec/knowledge/behavior/desktop.md`
 - Prompt boundary: `spec/knowledge/behavior/prompt-workspace.md`
 - Data layout: `spec/knowledge/structure/data-layout-v0.5.5-zh.md`
-- Navigation reference: `spec/changes/active/app-shell-left-rail/`; this change does
+- Navigation reference: `spec/changes/archive/2026/08/2026-08-18-app-shell-left-rail/`; this change does
   not add or alter a global-rail item.
 - Current implementation:
   `apps/desktop/src/renderer/components/prompt/AiTestModal.tsx`,

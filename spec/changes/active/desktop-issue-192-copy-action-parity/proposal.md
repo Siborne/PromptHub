@@ -57,7 +57,7 @@ only after the canonical flow has assembled the final content.
 
 - Issue: https://github.com/legeling/PromptHub/issues/192
 - Original feature:
-  `spec/changes/active/prompt-output-format-contribution/`
+  `spec/changes/archive/2026/08/2026-08-18-prompt-output-format-contribution/`
 - Stable behavior:
   `spec/knowledge/behavior/prompt-workspace.md`
 - Governing rules:

@@ -2,8 +2,8 @@
 
 ## Status
 
-Implementation and scoped verification are complete. The change remains active
-until it is included in a published release.
+Status: release-pending. Implementation and scoped verification are complete.
+The change remains active until it is included in a published release.
 
 ## Delivered
 
@@ -58,7 +58,7 @@ tests/unit/main/agent-session-index-operations.test.ts` — passed, 86 tests.
 - `pnpm --filter @prompthub/core typecheck` — passed.
 - `pnpm --filter @prompthub/desktop typecheck` — passed.
 - `pnpm --filter @prompthub/desktop test -- --run
-  tests/unit/components/platform-icon.test.tsx` — passed, 16 tests; the
+tests/unit/components/platform-icon.test.tsx` — passed, 16 tests; the
   regression tests verify the rendered `pi.svg` and `oh-my-pi.svg` paths,
   official geometry and light-theme backing.
 - `pnpm spec:test` — passed after regenerating the active-change index.
