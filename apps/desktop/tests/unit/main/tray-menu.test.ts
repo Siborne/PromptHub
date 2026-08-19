@@ -4,7 +4,12 @@
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, expect, it, vi } from "vitest";
 
-import type { AppCommand } from "@prompthub/shared/types";
+import type {
+  AgentUsageMetric,
+  AgentUsageQuota,
+  AppCommand,
+} from "@prompthub/shared/types";
+import type { AgentUsageTrayEntry } from "../../../src/main/services/agent-usage-tray-projection";
 import {
   buildTrayMenuTemplate,
   getTrayMenuLabels,
@@ -31,46 +36,313 @@ function clickItem(
   (item?.click as () => void)();
 }
 
+function percentageMetric(
+  id: string,
+  label: string,
+  remainingPercent: number,
+  resetsAt: number | null = null,
+): AgentUsageMetric {
+  return {
+    id,
+    label,
+    scope: { kind: "account" },
+    period: { kind: "calendar", unit: "week" },
+    value: { kind: "percentage", remainingPercent },
+    resetsAt,
+  };
+}
+
+function usageEntry(
+  id: string,
+  name: string,
+  overrides: Partial<AgentUsageTrayEntry> = {},
+): AgentUsageTrayEntry {
+  const quota: AgentUsageQuota = {
+    schemaVersion: 2,
+    agentId: id,
+    adapter: `${id}-test`,
+    status: "ok",
+    source: "provider",
+    plan: "LEVEL_INTERMEDIATE",
+    fetchedAt: 1_800_000_000_000,
+    metrics: [percentageMetric("weekly", "Weekly quota", 34)],
+  };
+  return {
+    id,
+    name,
+    isLoading: false,
+    isStale: false,
+    quota,
+    ...overrides,
+  };
+}
+
 describe("tray asset menu", () => {
-  it("opens the rendered Agent quota surface instead of appending percentages to native labels", () => {
-    const labels = getTrayMenuLabels("zh");
-    const onOpenAgentUsage = vi.fn();
-    const template = buildTrayMenuTemplate({
-      agentManagementEnabled: true,
-      isWindowVisible: true,
-      labels,
-      onCommand: vi.fn(),
-      onOpenAgentUsage,
-      onQuit: vi.fn(),
-      onToggleWindow: vi.fn(),
-    });
-
-    const item = template.find((entry) => entry.label === labels.agentUsage);
-    expect(item?.submenu).toBeUndefined();
-    expect(item?.label).not.toMatch(/\d+%/);
-    clickItem(template, labels.agentUsage);
-    expect(onOpenAgentUsage).toHaveBeenCalledOnce();
-  });
-
-  it("can omit the redundant quota command from the macOS action menu", () => {
-    const labels = getTrayMenuLabels("zh");
-    const template = buildTrayMenuTemplate({
-      agentManagementEnabled: true,
-      includeAgentUsage: false,
-      isWindowVisible: true,
-      labels,
-      onCommand: vi.fn(),
-      onQuit: vi.fn(),
-      onToggleWindow: vi.fn(),
-    });
-
-    expect(template.some((entry) => entry.label === labels.agentUsage)).toBe(
-      false,
+  it("renders every verified named loading row and quota action inside the native menu", () => {
+    const labels = getTrayMenuLabels("en");
+    const onRefreshAgentUsage = vi.fn();
+    const onCommand = vi.fn<(command: AppCommand) => void>();
+    const agentUsageEntries = [
+      ["claude", "Claude Code"],
+      ["codex", "Codex"],
+      ["kimi", "Kimi Code"],
+      ["antigravity", "Antigravity"],
+      ["gemini", "Gemini"],
+      ["copilot", "GitHub Copilot"],
+      ["grok", "Grok Build"],
+    ].map(([id, name]) =>
+      usageEntry(id, name, { isLoading: true, quota: null }),
     );
-    expect(template.some((entry) => entry.label === labels.manageAgents)).toBe(
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: true,
+      agentUsageEntries,
+      isWindowVisible: true,
+      labels,
+      onCommand,
+      onRefreshAgentUsage,
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+    });
+
+    const usageMenu = getSubmenu(template, labels.agentUsage);
+    expect(usageMenu.slice(0, 7).map((item) => item.label)).toEqual([
+      "Claude Code — Loading…",
+      "Codex — Loading…",
+      "Kimi Code — Loading…",
+      "Antigravity — Loading…",
+      "Gemini — Loading…",
+      "GitHub Copilot — Loading…",
+      "Grok Build — Loading…",
+    ]);
+    expect(usageMenu.slice(0, 7).every((item) => item.enabled === false)).toBe(
       true,
     );
+    clickItem(usageMenu, labels.refreshAgentUsage);
+    clickItem(usageMenu, labels.openAgents);
+    expect(onRefreshAgentUsage).toHaveBeenCalledOnce();
+    expect(onCommand).toHaveBeenCalledWith({ type: "agent:manage" });
   });
+
+  it("projects plain native plan, metric, reset and cached text safely", () => {
+    const labels = getTrayMenuLabels("en");
+    const now = 1_800_000_000_000;
+    const entry = usageEntry("codex", "Codex", {
+      isStale: true,
+      quota: {
+        ...usageEntry("codex", "Codex").quota!,
+        metrics: [
+          percentageMetric("weekly", "Weekly quota", 34, now + 86_400_000),
+          {
+            ...percentageMetric("custom", "Credits\u0000\nprivate", 81),
+            period: { kind: "lifetime" },
+          },
+        ],
+      },
+    });
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: true,
+      agentUsageEntries: [entry],
+      isWindowVisible: true,
+      labels,
+      now: () => now,
+      onCommand: vi.fn(),
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+    });
+
+    const usageMenu = getSubmenu(template, labels.agentUsage);
+    const codex = usageMenu.find(
+      (item) => item.label === "Codex — 34% remaining · Cached",
+    );
+    expect(Array.isArray(codex?.submenu)).toBe(true);
+    const details = codex?.submenu as MenuItemConstructorOptions[];
+    expect(details.map((item) => item.label)).toEqual([
+      "Plan: Allegretto",
+      "Cached",
+      "Weekly quota — 34% remaining · Resets in 1d 0h",
+      "Credits private — 81% remaining",
+    ]);
+    expect(JSON.stringify(template)).not.toMatch(/[\u0000\n]/);
+    expect(details.every((item) => item.enabled === false)).toBe(true);
+    expect(codex).not.toHaveProperty("icon");
+  });
+
+  it("keeps provider states explicit instead of rendering fake percentages", () => {
+    const labels = getTrayMenuLabels("en");
+    const statuses = [
+      ["claude", "Claude Code", "no-credentials", "Not connected"],
+      ["kimi", "Kimi Code", "expired", "Credentials expired"],
+      ["gemini", "Gemini", "unavailable", "Usage unavailable"],
+    ] as const;
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: true,
+      agentUsageEntries: statuses.map(([id, name, status]) =>
+        usageEntry(id, name, {
+          quota: {
+            ...usageEntry(id, name).quota!,
+            status,
+            plan: null,
+            metrics: [],
+          },
+        }),
+      ),
+      isWindowVisible: true,
+      labels,
+      onCommand: vi.fn(),
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+    });
+
+    const usageMenu = getSubmenu(template, labels.agentUsage);
+    expect(usageMenu.slice(0, 3).map((item) => item.label)).toEqual(
+      statuses.map(([, name, , statusLabel]) => `${name} — ${statusLabel}`),
+    );
+    expect(JSON.stringify(usageMenu)).not.toContain("0%");
+  });
+
+  it("formats bounded native metric semantics without custom visual elements", () => {
+    const labels = getTrayMenuLabels("en");
+    const now = 1_800_000_000_000;
+    const metrics: AgentUsageMetric[] = [
+      {
+        ...percentageMetric("daily", "Daily", 60),
+        period: { kind: "calendar", unit: "day" },
+        value: { kind: "unlimited" },
+      },
+      {
+        ...percentageMetric("monthly", "Monthly", 50),
+        period: { kind: "calendar", unit: "month" },
+        value: {
+          kind: "amount",
+          remainingPercent: 50,
+          remainingAmount: 5,
+          limitAmount: 10,
+          unit: "credits\u0000",
+        },
+      },
+      {
+        ...percentageMetric("billing", "Billing", 0),
+        period: { kind: "calendar", unit: "billing-cycle" },
+        value: { kind: "unknown" },
+      },
+      {
+        ...percentageMetric("rolling-custom", "Rolling", 20, now + 7_200_000),
+        period: { kind: "rolling", durationSeconds: 18_000 },
+      },
+      {
+        ...percentageMetric("provider", "Provider", 70, now - 1),
+        period: { kind: "provider-defined", label: "provider" },
+      },
+      {
+        ...percentageMetric("model", "ignored", 0, Number.NaN),
+        scope: { kind: "model", id: "model", label: "Model\nName" },
+        period: { kind: "lifetime" },
+        value: { kind: "unknown" },
+      },
+      {
+        ...percentageMetric("amount-empty", "Amount", 60),
+        period: { kind: "lifetime" },
+        value: {
+          kind: "amount",
+          remainingPercent: 60,
+          remainingAmount: 6,
+          limitAmount: 10,
+          unit: "\u0000",
+        },
+      },
+      {
+        ...percentageMetric("fallback", "\u0000", 90),
+        period: { kind: "lifetime" },
+      },
+    ];
+    const entry = usageEntry("codex", "Codex", {
+      quota: {
+        ...usageEntry("codex", "Codex").quota!,
+        plan: "--",
+        metrics,
+      },
+    });
+    const empty = usageEntry("claude", "Claude Code", {
+      quota: {
+        ...usageEntry("claude", "Claude Code").quota!,
+        plan: null,
+        metrics: [],
+      },
+    });
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: true,
+      agentUsageEntries: [entry, empty],
+      isWindowVisible: true,
+      labels,
+      now: () => now,
+      onCommand: vi.fn(),
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+    });
+
+    const usageMenu = getSubmenu(template, labels.agentUsage);
+    const codex = usageMenu.find((item) =>
+      String(item.label).startsWith("Codex — 20% remaining"),
+    );
+    const details = codex?.submenu as MenuItemConstructorOptions[];
+    expect(details.map((item) => item.label)).toEqual([
+      "Daily quota — Unlimited",
+      "Monthly quota — 50% remaining · 5/10 credits",
+      "Billing cycle — Unknown",
+      "5-hour window — 20% remaining · Resets in 2h 0m",
+      "Provider quota — 70% remaining · Reset pending",
+      "Model Name — Unknown",
+      "Amount — 60% remaining · 6/10",
+      "Provider quota — 90% remaining",
+    ]);
+    expect(details.some((item) => "icon" in item)).toBe(false);
+    expect(
+      usageMenu.find((item) => String(item.label).startsWith("Claude Code —"))
+        ?.submenu,
+    ).toEqual([
+      {
+        enabled: false,
+        label: "The provider did not report a quota",
+      },
+    ]);
+  });
+
+  it("caps native metric count and dynamic label length", () => {
+    const labels = getTrayMenuLabels("en");
+    const metrics = Array.from({ length: 70 }, (_, index) => ({
+      ...percentageMetric(`custom-${index}`, `x${"y".repeat(300)}`, 50),
+      period: { kind: "lifetime" } as const,
+    }));
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: true,
+      agentUsageEntries: [
+        usageEntry("custom", `A${"b".repeat(300)}`, {
+          quota: {
+            ...usageEntry("custom", "Custom").quota!,
+            agentId: "custom",
+            plan: null,
+            metrics,
+          },
+        }),
+      ],
+      isWindowVisible: true,
+      labels,
+      onCommand: vi.fn(),
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+    });
+
+    const usageMenu = getSubmenu(template, labels.agentUsage);
+    const entry = usageMenu[0];
+    expect(String(entry.label).length).toBeLessThanOrEqual(180);
+    expect(entry.submenu as MenuItemConstructorOptions[]).toHaveLength(64);
+    expect(
+      (entry.submenu as MenuItemConstructorOptions[]).every(
+        (item) => String(item.label).length <= 180,
+      ),
+    ).toBe(true);
+  });
+
   it("routes every current Agent asset through its product-correct command", () => {
     const labels = getTrayMenuLabels("zh");
     const onCommand = vi.fn<(command: AppCommand) => void>();
@@ -268,7 +540,8 @@ describe("tray asset menu", () => {
     const agentsMenu = getSubmenu(template, labels.agents);
     const claudeMenu = getSubmenu(agentsMenu, "Claude Code");
     expect(() => clickItem(claudeMenu, "Primary")).not.toThrow();
-    expect(() => clickItem(template, labels.agentUsage)).not.toThrow();
+    const usageMenu = getSubmenu(template, labels.agentUsage);
+    expect(() => clickItem(usageMenu, labels.refreshAgentUsage)).not.toThrow();
   });
 });
 
@@ -300,22 +573,30 @@ describe("tray menu localization", () => {
   });
 
   it.each(SUPPORTED_TRAY_MENU_LANGUAGES)(
-    "projects rendered quota navigation through the %s native dictionary",
+    "projects quota status and actions through the %s native dictionary",
     (language) => {
       const labels = getTrayMenuLabels(language);
-      const onOpenAgentUsage = vi.fn();
+      const onRefreshAgentUsage = vi.fn();
       const template = buildTrayMenuTemplate({
         agentManagementEnabled: true,
+        agentUsageEntries: [
+          usageEntry("claude", "Claude Code", {
+            isLoading: true,
+            quota: null,
+          }),
+        ],
         isWindowVisible: true,
         labels,
         onCommand: vi.fn(),
-        onOpenAgentUsage,
+        onRefreshAgentUsage,
         onQuit: vi.fn(),
         onToggleWindow: vi.fn(),
       });
 
-      clickItem(template, labels.agentUsage);
-      expect(onOpenAgentUsage).toHaveBeenCalledOnce();
+      const usageMenu = getSubmenu(template, labels.agentUsage);
+      expect(usageMenu[0].label).toContain(labels.usageLoading);
+      clickItem(usageMenu, labels.refreshAgentUsage);
+      expect(onRefreshAgentUsage).toHaveBeenCalledOnce();
     },
   );
 });

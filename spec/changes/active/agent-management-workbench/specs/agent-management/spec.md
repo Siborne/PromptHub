@@ -2924,63 +2924,59 @@ the selected Codex root and remain outside PromptHub backup and sync.
 
 ### `FR-AGENT-093`: Bounded Agent Quotas In The Menu Bar
 
-On macOS, the PromptHub menu bar MUST expose a tray-anchored rendered quota
-popover for every Agent whose usage adapter is verified and enabled. Each
-summary MUST identify the Agent with its existing product artwork, display the
-most constrained remaining percentage using tabular numerals and a progress
-indicator, and expose all returned metrics with localized labels, remaining
-percentages and reset times.
-Plan metadata and provider states such as missing credentials, expired access
-or unavailable usage MUST remain explicit rather than becoming fake zeroes.
+The PromptHub menu bar MUST expose Agent quotas through Electron's native menu
+on macOS, Windows and Linux. It MUST NOT create a renderer BrowserWindow,
+vibrancy shell, custom cards, product-icon rows, plan badges, ring/progress
+graphics or expansion controls for the menu-bar quota surface.
 
-The popover MUST reuse the same main-process usage service as the Agent
-workspace. Opening the popover MUST render the current renderer cache
-immediately and MUST NOT wait on provider network calls. Refresh work MUST be deduplicated,
-bounded to at most two provider requests at once, timed out by the owning
-adapter, and isolated so one provider failure cannot remove other provider
-results. A failed refresh MUST preserve the last rendered snapshot, and
-rendered copy or logs MUST NOT expose credentials or raw provider errors.
+The native Agent Quotas submenu MUST list every verified and enabled usage
+adapter in stable registry order. Successful rows expose a compact most-
+constrained summary plus plain native submenu lines for plan, every bounded
+metric and reset time. Missing credentials, expired access, unavailable usage,
+loading and successful responses with no metrics remain explicit rather than
+becoming fake zeroes.
 
-#### Scenario: Open a populated quota popover without blocking
+The native projection MUST reuse the same process-wide usage service as the
+Agent workspace. Menu construction MUST use the latest in-memory snapshot and
+MUST NOT wait on provider network calls. Refresh work remains deduplicated,
+bounded to at most two providers at once, timed out by the owning adapter and
+isolated per provider. A failed refresh preserves a prior successful snapshot
+as stale, and no menu label or log may expose credentials, provider bodies,
+control characters or raw errors.
 
-- Given cached quota snapshots exist for ChatGPT and Claude Code
-- When the user primary-clicks the PromptHub menu bar icon
-- Then a tray-anchored popover immediately shows both Agent summaries and their metric details
-- And no intermediate Agent Quotas menu item is required on macOS
-- And provider identity and plan precede a named metric, compact tabular remaining value, slim progress and reset time
-- And a background refresh may replace the snapshot after it completes
-- And no menu action waits synchronously for that refresh
+#### Scenario: Open native quotas without blocking
 
-#### Scenario: Keep ordinary tray actions available
-
-- Given PromptHub is running on macOS
-- When the user secondary-clicks the PromptHub menu bar icon
-- Then the native action menu opens without a duplicate Agent Quotas command
-- And quick add, Agent management, settings, update and quit actions remain available
+- Given one or more cached quota snapshots exist
+- When the user opens the PromptHub tray menu and selects Agent Quotas
+- Then the operating system renders the menu and quota submenus
+- And the current snapshot appears synchronously without a renderer window
+- And every metric, reset time and optional plan is plain native menu text
+- And background refresh does not block the menu
 
 #### Scenario: Open quotas before the first snapshot exists
 
-- Given PromptHub has started but one or more verified quota adapters have not completed their first request
-- When the user opens the Agent quota popover
-- Then every verified Agent remains visible in stable registry order with an explicit loading state
-- And each completed adapter replaces only its own loading row without waiting for slower providers
-- And the rendered surface never collapses the whole inventory into one anonymous loading row
+- Given one or more verified adapters have not completed their first request
+- When the native Agent Quotas submenu opens
+- Then every currently verified Agent appears in stable order with a named loading row
+- And settled providers update the next native menu snapshot independently
+- And the inventory never collapses into one anonymous loading item
 
 #### Scenario: Degrade one provider without losing the others
 
 - Given one Agent adapter rejects while another returns a valid quota snapshot
-- When PromptHub refreshes the quota popover
+- When the quota projection refreshes
 - Then the failed Agent receives a bounded unavailable state
 - And the valid Agent remains visible with its metrics
-- And no rejected error text or credential material reaches the popover
+- And a previous successful row is retained and marked cached when its refresh fails
+- And no rejected error text or credential material reaches the native menu
 
-#### Scenario: Reuse and release the quota popover
+#### Scenario: Remove the rendered quota surface
 
-- Given the quota popover has already been created
-- When the user opens it again from the same tray icon
-- Then PromptHub repositions and reuses the existing renderer window rather than creating another process surface
-- And losing focus hides the popover without discarding cached quota presentation
-- And destroying the tray or quitting PromptHub closes the owned popover window
+- Given PromptHub previously mounted `surface=agent-usage` in a frameless window
+- When the native menu implementation is installed
+- Then the renderer popover component, queue model, custom CSS, locale keys,
+  BrowserWindow factory and popover controller no longer exist
+- And tray destruction has no secondary quota-window resource to release
 
 ### `FR-AGENT-094`: Dense And Safe Conversation Pagination
 
@@ -4192,3 +4188,86 @@ workspace.
 - Then DeepSeek Harness appears immediately after Codex
 - And its row uses the official DeepSeek Harness title and theme-aware fish mark
 - And the relative order of the user's previously saved Agent entries is unchanged
+
+### `FR-AGENT-128`: File-Authoritative Agent Skill Inventory
+
+The direct Agent Skills workspace MUST scan the resolved native Skill directory
+when the current renderer session has no completed result. Persisted scan rows
+MUST NOT be treated as durable inventory across application restarts. Until the
+first scan completes, the workspace MUST show loading rather than a zero count;
+a failed scan MUST remain distinguishable from a successful empty directory.
+
+#### Scenario: Open Codex Skills directly after restart
+
+- Given the native Codex Skill directory contains valid Skill packages
+- And a prior renderer session cached an empty scan result
+- When the user restarts PromptHub and opens Codex Skills directly
+- Then PromptHub discards the persisted derived scan result
+- And performs one bounded scan of the current Codex Skill directory
+- And renders the discovered Skill packages without requiring manual refresh
+
+### `FR-AGENT-129`: Truthful Bounded Agent Asset Summaries
+
+The Agent Overview MUST hydrate supported Skills, MCP, Rules, and Plugins
+summaries from each owning domain through bounded local summary reads. It MUST
+distinguish unrequested, initial loading, successful empty, ready, refreshing,
+stale, and initial failure states, and MUST NOT present an unknown or failed
+inventory as zero. Summary hydration MUST use a concurrency ceiling of two and
+MUST NOT load remote markets, run MCP health checks, read Rules bodies, load
+full Plugin or MCP libraries, perform cross-domain validation, start a watcher,
+or poll.
+
+#### Scenario: Open Overview with a cold renderer cache
+
+- Given Codex has native Skills, MCP servers, Rules, and Plugins
+- And the renderer stores have no current-session summary
+- When the user opens Codex Overview
+- Then each supported cell first shows a non-numeric loading state
+- And PromptHub reads only the four domain-owned summary sources
+- And each successful cell displays the observed count
+- And no more than two domain summary hydrators run concurrently
+
+#### Scenario: Initial summary load fails
+
+- Given an Agent asset source cannot be read and no prior summary exists
+- When its summary loader fails
+- Then Overview shows a load failure instead of zero
+- And the direct asset workspace shows a failure state with Retry
+- And it does not simultaneously show the successful-empty message
+
+#### Scenario: Refresh fails after a successful read
+
+- Given a domain has a successful cached summary
+- When a forced refresh fails
+- Then the last successful rows and count remain visible
+- And the surface reports that refresh failed and cached data is shown
+
+#### Scenario: A declared Rules path is absent
+
+- Given a Rules descriptor is known but its native file does not exist
+- When Overview projects the Rules summary
+- Then the descriptor is not counted as an installed Rule
+- And the direct Rules workspace may still offer its existing create action
+
+### `FR-AGENT-130`: Layered Native Config Editor Surfaces
+
+The Agent Config Files workspace MUST distinguish the application shell, file
+navigator, workspace title bar, editor toolbar, editing canvas, gutter, and
+status bar with the existing semantic surface tokens. In the light theme, the
+title bar and primary editing canvas MUST use the card surface so they remain
+visibly distinct from the gray application background and secondary file tree.
+The implementation MUST NOT hardcode white or break the paired dark-theme
+surface hierarchy.
+
+The primary canvas treatment MUST be owned by the shared file editor and code
+editor rather than by a Codex-only selector. It MUST NOT change file discovery,
+selection, editing, save, allowlist, or native file-manager behavior.
+
+#### Scenario: Open a native config file in the light theme
+
+- Given a detected Agent exposes one or more verified native config files
+- When the user opens Config Files and selects a text file
+- Then the title bar and main editor canvas use the semantic card surface
+- And the file tree remains a quieter secondary surface separated by a divider
+- And the code gutter remains subtly distinct from the editing canvas
+- And no raw light-only color overrides the dark-theme token pairing

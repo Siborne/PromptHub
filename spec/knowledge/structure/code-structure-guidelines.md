@@ -11,16 +11,11 @@ This document defines the code organization rules for PromptHub, with a focus on
 
 ## Current Hotspots
 
-These files are large enough to slow down review and raise change risk:
-
-- `src/renderer/components/settings/AISettings.tsx`
-- `src/renderer/components/layout/MainContent.tsx`
-- `src/renderer/services/database.ts`
-- `src/main/services/skill-installer.ts`
-- `src/renderer/components/prompt/CreatePromptModal.tsx`
-- `src/renderer/components/skill/SkillFullDetailPage.tsx`
-
-Large files are not automatically wrong, but they should be treated as refactor candidates when touched.
+The enforced source-file limit is 2,000 lines, with 1,500 lines as the preferred
+ceiling. The previously baselined files now fit below the preferred ceiling, so
+`config/file-line-limit-baseline.json` is empty. Files reported by
+`pnpm lint:file-size` at or above the review threshold remain candidates for
+further concern-based extraction when touched.
 
 ## Practical Thresholds
 
@@ -52,6 +47,8 @@ Examples:
 - `SkillFullDetailPage.tsx` and `SkillDetailView.tsx` now share version-restore helpers through `src/renderer/components/skill/detail-utils.ts`.
 - Backup and restore workflows now live in `src/renderer/services/database-backup.ts` instead of being coupled to every IndexedDB helper.
 - `CreatePromptModal.tsx` and `EditPromptModal.tsx` now share prompt form utilities and modal behavior through `src/renderer/components/prompt/prompt-modal-utils.ts`, `src/renderer/components/prompt/usePromptMediaManager.ts`, and `src/renderer/components/prompt/usePromptNativeFullscreen.ts`.
+- `apps/desktop/src/renderer/components/prompt/EditPromptModal.tsx` delegates editor sections and Markdown preview rendering to sibling modules.
+- `apps/desktop/src/renderer/components/prompt/AiTestModal.tsx` delegates provider labels, attachment limits, and shared modal types to `ai-test-modal-config.ts`.
 
 ### Renderer services
 
@@ -75,7 +72,7 @@ For sync features specifically:
 
 ### Main-process services
 
-For large service classes such as `skill-installer.ts`, split by capability:
+For large service classes such as `apps/desktop/src/main/services/skill-installer.ts`, split by capability:
 
 - path resolution and validation
 - repo read/write operations
@@ -114,11 +111,27 @@ Before merging a structural change, verify:
 
 Pair this with the regression checklist in `spec/knowledge/structure/refactor-regression-checklist.md` so extraction work stays behavior-safe.
 
+## Recent Concern-Based Extractions
+
+- Desktop main-process data-path, native-shell, and window-control IPC registration
+  now live outside `apps/desktop/src/main/index.ts`.
+- AI request transport, Anthropic normalization, and model discovery now live
+  outside `apps/desktop/src/renderer/services/ai.ts`.
+- MCP health and import workflows now live outside
+  `packages/core/src/mcp-library.ts`.
+- Dream Skin argument parsing and operation UI now live in sibling injector
+  modules.
+- CLI Rules bundle import/validation coverage and shared Agent Skills target
+  coverage now live in focused test files instead of extending the general
+  command suites beyond the 1,000-line default.
+- Prompt workspace restore-marker persistence now lives in
+  `prompt-workspace-restore-marker.ts`; `prompt-workspace.ts` retains bootstrap
+  orchestration and the existing public `writeRestoreMarker` export.
+- Prompt and Folder dependency ordering for strict workspace imports now lives
+  in `prompt-workspace-import-order.ts`, keeping graph policy separate from
+  filesystem and database orchestration.
+
 ## Next Refactor Queue
 
-Recommended next targets:
-
-1. Split `AISettings.tsx` into provider list, model editor, and default-model sections.
-2. Break `MainContent.tsx` into prompt list orchestration, selection actions, and modal coordination.
-3. Split `CreatePromptModal.tsx` into media handling, translation helpers, and fullscreen editor state.
-4. Decompose `skill-installer.ts` into repo IO utilities and Git/platform orchestration modules.
+Use the current `pnpm lint:file-size` report rather than a static list. Prioritize
+files at or above the review threshold when a related behavior change is made.

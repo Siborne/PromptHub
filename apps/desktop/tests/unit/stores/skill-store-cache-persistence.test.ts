@@ -14,6 +14,7 @@ import {
   getProjectScanPaths,
   useSkillStore,
 } from "../../../src/renderer/stores/skill.store";
+import { partializeSkillState } from "../../../src/renderer/stores/skill/skill-store-persistence";
 import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
 import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
 import { SKILL_PACKAGE_FINGERPRINT_ALGORITHM } from "@prompthub/shared/utils/skill-source-update";
@@ -105,6 +106,37 @@ describe("skill store", () => {
         localRepoPath: "/managed/skills/managed-package--abc123",
       }),
     );
+  });
+
+  it("does not persist filesystem-derived Agent Skill scan results", async () => {
+    const staleAgentScanState = {
+      codex: {
+        result: {
+          platform: null as never,
+          skillsDir: "/Users/test/.codex/skills",
+          scannedSkills: [],
+        },
+        isScanning: false,
+        scannedAt: 1,
+        error: null,
+      },
+    };
+    useSkillStore.setState({ agentScanState: staleAgentScanState });
+
+    expect(
+      partializeSkillState(useSkillStore.getState()).agentScanState,
+    ).toEqual({});
+
+    localStorage.setItem(
+      "skill-store",
+      JSON.stringify({
+        state: { agentScanState: staleAgentScanState },
+        version: 0,
+      }),
+    );
+    await useSkillStore.persist.rehydrate();
+
+    expect(useSkillStore.getState().agentScanState).toEqual({});
   });
 
   describe("remoteStoreEntries cache and persistence", () => {

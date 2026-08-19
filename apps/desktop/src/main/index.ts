@@ -1,10 +1,8 @@
 import {
   app,
   BrowserWindow,
-  shell,
   ipcMain,
   dialog,
-  Notification,
   Tray,
   Menu,
   nativeImage,
@@ -14,8 +12,6 @@ import {
 } from "electron";
 import {
   applyStorageRootChange,
-  classifyStorageRoot,
-  createRendererPersistenceStore,
   getStorageDiagnostic,
   recoverJournaledStorageRestore,
   recoverPendingStorageRootChangeSync,
@@ -100,7 +96,8 @@ import {
   verifyRestoredStorageRoot,
 } from "./services/storage-database-inspection";
 import {
-  buildCanonicalDatabaseRecoveryCandidate,
+  buildCurrentCanonicalRecoveryCandidates,
+  compareRecoveryCandidates,
   buildDirectoryRecoveryCandidate,
   buildResidualLegacyRecoveryCandidate,
   buildStandaloneDbBackupCandidate,
@@ -111,7 +108,6 @@ import {
 } from "./services/recovery-candidates";
 import { getRecoveryCandidatePaths } from "./services/recovery-paths";
 import { logStartupEvent, scrubPath } from "./startup-log";
-import { openDirectoryPath } from "./shell-open-path";
 import { shouldOpenStartupDevTools } from "./devtools-policy";
 import { handleExternalWindowOpen } from "./external-links";
 import { resolveLocalMediaProtocolPath } from "./local-media-protocol";
@@ -122,12 +118,16 @@ import { handleLegacyDesktopCliInvocation } from "./legacy-cli-invocation";
 import { getTrayMenuLabels } from "./tray-menu";
 import type { AgentProviderRuntime } from "./services/agent-provider-runtime";
 import { handleAgentProviderTraySelection } from "./services/agent-provider-tray-handler";
-import { createDefaultAgentUsagePopoverWindowController } from "./agent-usage-popover-window";
+import { agentUsageService } from "./services/agent-usage-runtime";
 import { startAgentDeepLinkRouting } from "./agent-deep-link-router";
 import { ensureCanonicalStorageAuthorityOnStartup } from "./services/canonical-storage-startup";
 import { createMcpResourceSecretStore } from "./services/mcp-resource-secret-store";
-import { performCanonicalDatabaseRecovery } from "./services/canonical-storage-recovery";
-
+import { performSelectedCanonicalRecovery } from "./services/canonical-storage-recovery";
+import { registerDataPathChangeIPC } from "./services/data-path-change-ipc";
+import { registerWindowControlIPC } from "./ipc/window-control.ipc";
+import { registerNativeShellIPC } from "./ipc/native-shell.ipc";
+import { readRendererSettingsWithAIRecovery } from "./services/renderer-ai-config-recovery";
+import { reconcileManagedSkillSymlinksOnStartup } from "./services/skill-platform-symlink-startup";
 let mainWindow: BrowserWindow | null = null;
 let minimizeToTray = false;
 // Database instance (module-level for access in createWindow)
@@ -146,10 +146,10 @@ let isDebugMode = false;
 async function applyStoredNetworkProxySettings(
   db: Database.Database,
 ): Promise<void> {
-  const canonical = createRendererPersistenceStore({
-    rootPath: getUserDataPath(),
+  const canonical = await readRendererSettingsWithAIRecovery({
+    activeRoot: getUserDataPath(),
     encryption: safeStorage,
-  }).readHydratedStateSync();
+  });
   if (canonical.migrationComplete) {
     await applyNetworkProxySettings(canonical.settings.networkProxy);
     return;
@@ -294,8 +294,6 @@ const dispatchFromTray = (command: AppCommand) =>
     sendCommand: (pendingCommand) =>
       sendToMainWindow(IPC_CHANNELS.APP_COMMAND, pendingCommand),
   });
-const agentUsagePopoverController =
-  createDefaultAgentUsagePopoverWindowController(isDev);
 const trayController = createTrayController({
   agentManagementEnabled: true,
   buildMenu: (template) => Menu.buildFromTemplate(template),
@@ -309,6 +307,8 @@ const trayController = createTrayController({
   isDev,
   loadAgentProviderGroups: () =>
     agentProviderRuntime?.trayService.listGroups() ?? Promise.resolve([]),
+  loadAgentUsage: (agentId, options) =>
+    agentUsageService.getUsage(agentId, options),
   onAgentProviderProfile: (agentId, profileId) => {
     const runtime = agentProviderRuntime;
     if (!runtime) return;
@@ -327,8 +327,6 @@ const trayController = createTrayController({
     });
   },
   onCommand: dispatchFromTray,
-  onOpenAgentUsage: () =>
-    void agentUsagePopoverController.show(trayController.getBounds()),
   onQuit: () => {
     isQuitting = true;
     app.quit();
@@ -582,183 +580,45 @@ async function createWindow() {
   });
 }
 
-// Register window control IPC
-// 注册窗口控制 IPC
-ipcMain.on("window:minimize", () => {
-  mainWindow?.minimize();
-});
-
-ipcMain.on("window:maximize", () => {
-  if (mainWindow?.isMaximized()) {
-    mainWindow.unmaximize();
-  } else {
-    mainWindow?.maximize();
-  }
-});
-
-ipcMain.on("window:close", () => {
-  mainWindow?.close();
-});
-
-// Fullscreen control
-// 全屏控制
-ipcMain.on("window:enterFullscreen", () => {
-  mainWindow?.setFullScreen(true);
-});
-
-ipcMain.on("window:exitFullscreen", () => {
-  mainWindow?.setFullScreen(false);
-});
-
-ipcMain.handle("window:isFullscreen", () => {
-  return mainWindow?.isFullScreen() ?? false;
-});
-
-ipcMain.handle("window:isVisible", () => {
-  return mainWindow?.isVisible() ?? false;
-});
-
-ipcMain.on("window:toggleVisibility", () => {
-  if (mainWindow) {
-    toggleWindowForShowApp(mainWindow, emitWindowVisibility);
-  }
-});
-
-ipcMain.on("window:toggleFullscreen", () => {
-  if (mainWindow) {
-    mainWindow.setFullScreen(!mainWindow.isFullScreen());
-  }
-});
-
-// Configure auto launch on login
-ipcMain.on(
-  "app:setAutoLaunch",
-  (_event, enabled: boolean, minimizeOnLaunch?: boolean) => {
-    if (typeof enabled !== "boolean") {
-      console.error("app:setAutoLaunch requires enabled to be a boolean");
-      return;
-    }
-    const startHidden = enabled && minimizeOnLaunch === true;
-    // Pass `--hidden` as a launch arg so Windows (and any other platform where
-    // `openAsHidden` is not honored by the OS) can still detect that the app
-    // should start minimized (#115).
-    try {
-      app.setLoginItemSettings({
-        openAtLogin: enabled,
-        openAsHidden: startHidden,
-        args: startHidden ? ["--hidden"] : [],
-      });
-    } catch (error) {
-      // Never crash the main process from a settings toggle — this IPC is
-      // fire-and-forget from the renderer, so a structured error response
-      // is not available here. Log for support visibility.
-      console.error(
-        "app:setAutoLaunch failed to apply login item settings:",
-        error instanceof Error ? error.message : error,
-      );
-    }
-  },
-);
-
-ipcMain.handle(IPC_CHANNELS.APP_RELAUNCH, () => {
-  scheduleAppRelaunch();
-  return { success: true };
-});
-
-registerAppRuntimeIPC();
-
-// Configure minimize-to-tray behavior
-// 设置最小化到托盘
-ipcMain.on("app:setMinimizeToTray", (_event, enabled: boolean) => {
-  minimizeToTray = enabled;
-  if (enabled) {
-    createTray();
-  } else {
-    destroyTray();
-  }
-});
-
-// Set close action (Windows)
-// 设置关闭行为 (Windows)
-ipcMain.on(
-  "app:setCloseAction",
-  (_event, action: "ask" | "minimize" | "exit") => {
-    if (action !== "ask" && action !== "minimize" && action !== "exit") {
-      console.error(
-        "app:setCloseAction requires action to be 'ask', 'minimize', or 'exit'",
-      );
-      return;
-    }
+registerWindowControlIPC({
+  emitVisibility: emitWindowVisibility,
+  getWindow: () => mainWindow,
+  onCloseAction: (action) => {
     closeAction = action;
-    // Ensure tray exists when minimizing to tray
-    // 如果设置为最小化到托盘，确保托盘已创建
-    if (action === "minimize" && process.platform === "win32") {
-      createTray();
-    }
+    if (action === "minimize" && process.platform === "win32") createTray();
   },
-);
-
-// Set debug mode
-// 设置调试模式
-ipcMain.on("app:setDebugMode", (_event, enabled: boolean) => {
-  isDebugMode = enabled;
-});
-
-// Toggle DevTools
-// 切换开发者工具
-ipcMain.on("window:toggleDevTools", () => {
-  mainWindow?.webContents.toggleDevTools();
-});
-
-// Handle close dialog result
-// 处理关闭对话框结果
-ipcMain.on(
-  "window:closeDialogResult",
-  (_event, data: { action: "minimize" | "exit"; remember: boolean }) => {
-    if (!data || typeof data !== "object") {
-      console.error("window:closeDialogResult requires a non-null data object");
-      pendingCloseAction = false;
-      return;
-    }
-    if (data.action !== "minimize" && data.action !== "exit") {
-      console.error(
-        "window:closeDialogResult requires action to be 'minimize' or 'exit'",
-      );
-      pendingCloseAction = false;
-      return;
-    }
+  onCloseDialogCancel: () => {
     pendingCloseAction = false;
-
-    if (data.remember) {
-      closeAction = data.action;
-    }
-
-    if (data.action === "minimize") {
+  },
+  onCloseDialogResult: ({ action, remember }) => {
+    pendingCloseAction = false;
+    if (remember) closeAction = action;
+    if (action === "minimize") {
       mainWindow?.hide();
-      // Ensure tray exists
-      // 确保托盘已创建
       createTray();
     } else {
-      // Quit app
-      // 退出应用
       isQuitting = true;
       mainWindow?.close();
     }
   },
-);
-
-// User cancelled close dialog (do nothing; allow it to show again next time)
-// 用户关闭/取消了关闭对话框（不做任何动作，只允许下次再次弹出）
-ipcMain.on("window:closeDialogCancel", () => {
-  pendingCloseAction = false;
+  onDebugMode: (enabled) => {
+    isDebugMode = enabled;
+  },
+  onMinimizeToTray: (enabled) => {
+    minimizeToTray = enabled;
+    if (enabled) createTray();
+    else destroyTray();
+  },
+  scheduleRelaunch: () => scheduleAppRelaunch(),
 });
+
+registerAppRuntimeIPC();
 
 function createTray() {
   trayController.create();
 }
 
 function destroyTray() {
-  agentUsagePopoverController.destroy();
   trayController.destroy();
 }
 
@@ -834,6 +694,7 @@ ipcMain.handle("data:getStatus", () => {
 let cachedRecoveryResult: RecoveryCandidate[] | null = null;
 let transientRecoveryResult: RecoveryCandidate[] | null = null;
 let canonicalRecoveryRequired = false;
+let canonicalRecoveryReason: string | null = null;
 const RECOVERY_DISMISS_MARKER = ".recovery-dismissed";
 let recoveryAttemptedThisSession = false;
 
@@ -869,18 +730,19 @@ ipcMain.handle(
       transientRecoveryResult = null;
       return [];
     }
-
     const results: RecoveryCandidate[] = [];
     if (canonicalRecoveryRequired) {
-      const currentCatalog =
-        buildCanonicalDatabaseRecoveryCandidate(getDatabasePath());
-      if (currentCatalog) results.push(currentCatalog);
+      results.push(
+        ...buildCurrentCanonicalRecoveryCandidates(
+          currentPath,
+          getDatabasePath(),
+        ),
+      );
     }
     const residualCandidate = buildResidualLegacyRecoveryCandidate(currentPath);
     if (residualCandidate) {
       results.push(residualCandidate);
     }
-
     const isDbEmpty = !!appDb && isDatabaseEmpty(appDb);
     // When the user explicitly requests a scan (ignoreDismissMarker: true) from
     // the Settings page, always scan all candidate paths regardless of DB state.
@@ -959,17 +821,7 @@ ipcMain.handle(
           ) === index
         );
       })
-      .sort((a, b) => {
-        const timeA = a.lastModified ? new Date(a.lastModified).getTime() : 0;
-        const timeB = b.lastModified ? new Date(b.lastModified).getTime() : 0;
-        if (timeA !== timeB) {
-          return timeB - timeA;
-        }
-        if (a.promptCount !== b.promptCount) {
-          return b.promptCount - a.promptCount;
-        }
-        return b.folderCount + b.skillCount - (a.folderCount + a.skillCount);
-      });
+      .sort(compareRecoveryCandidates);
 
     logStartupEvent({
       event: "recovery:candidates_detected",
@@ -1051,15 +903,16 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
     sourcePath: scrubPath(sourcePath),
     currentPath: scrubPath(app.getPath("userData")),
   });
-
   const currentPath = app.getPath("userData");
   const selectedCandidate = findRecoveryCandidateByPath(
     transientRecoveryResult ?? cachedRecoveryResult ?? [],
     sourcePath,
   );
-
-  if (selectedCandidate?.sourceType === "current-canonical-db") {
-    return performCanonicalDatabaseRecovery({
+  if (
+    selectedCandidate?.sourceType === "current-file-workspace" ||
+    selectedCandidate?.sourceType === "current-canonical-db"
+  ) {
+    return performSelectedCanonicalRecovery(selectedCandidate.sourceType, {
       activeRoot: currentPath,
       sourceDatabasePath: getDatabasePath(),
       sourcePath,
@@ -1067,6 +920,7 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
       scheduleRelaunch: scheduleAppRelaunch,
       onSuccess: () => {
         canonicalRecoveryRequired = false;
+        canonicalRecoveryReason = null;
         cachedRecoveryResult = null;
         transientRecoveryResult = null;
       },
@@ -1076,7 +930,6 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
       },
     });
   }
-
   if (path.resolve(sourcePath) === path.resolve(currentPath)) {
     try {
       closeDatabase();
@@ -1222,134 +1075,6 @@ ipcMain.handle("data:dismissRecovery", () => {
 
 registerPortableSnapshotIPC(isE2E ? () => undefined : scheduleAppRelaunch);
 
-/**
- * Build the list of candidate paths where a previous database might reside.
- * On Windows this includes %APPDATA%/PromptHub (the Electron default).
- */
-type DataPathChangeAction = "migrate" | "switch" | "overwrite";
-
-interface DataPathSummary {
-  promptCount: number;
-  folderCount: number;
-  skillCount: number;
-  available: boolean;
-  error?: string;
-}
-
-function getObjectNumberValue(source: unknown, key: string): number {
-  if (!source || typeof source !== "object") {
-    return 0;
-  }
-
-  const value = Reflect.get(source, key);
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function databaseTableExists(
-  db: Database.Database,
-  tableName: string,
-): boolean {
-  const row = db
-    .prepare(
-      "SELECT 1 AS exists_flag FROM sqlite_master WHERE type = 'table' AND name = ?",
-    )
-    .get(tableName);
-  return getObjectNumberValue(row, "exists_flag") === 1;
-}
-
-function countDatabaseTable(db: Database.Database, tableName: string): number {
-  if (!databaseTableExists(db, tableName)) {
-    return 0;
-  }
-
-  const row = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get();
-  return getObjectNumberValue(row, "count");
-}
-
-function summarizeDatabase(db: Database.Database): DataPathSummary {
-  return {
-    promptCount: countDatabaseTable(db, "prompts"),
-    folderCount: countDatabaseTable(db, "folders"),
-    skillCount: countDatabaseTable(db, "skills"),
-    available: true,
-  };
-}
-
-function summarizeDataPath(targetPath: string): DataPathSummary {
-  const resolvedTargetPath = path.resolve(targetPath);
-  const currentPath = path.resolve(app.getPath("userData"));
-
-  try {
-    if (appDb && resolvedTargetPath === currentPath) {
-      return summarizeDatabase(appDb);
-    }
-
-    const classification = classifyStorageRoot(resolvedTargetPath);
-    const dbPath = classification.databasePath;
-    if (!dbPath || !fs.existsSync(dbPath)) {
-      return {
-        promptCount: 0,
-        folderCount: 0,
-        skillCount: 0,
-        available: false,
-      };
-    }
-
-    const db = new Database(dbPath, { readOnly: true });
-    try {
-      return summarizeDatabase(db);
-    } finally {
-      db.close();
-    }
-  } catch (error) {
-    return {
-      promptCount: 0,
-      folderCount: 0,
-      skillCount: 0,
-      available: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-function isSensitiveDataPathTarget(resolvedNewPath: string): string | null {
-  const sensitiveRoots = [
-    "/etc",
-    "/usr",
-    "/bin",
-    "/sbin",
-    "/var",
-    "/tmp",
-    "/System",
-    "/Library",
-    "C:\\Windows",
-    "C:\\Program Files",
-  ];
-
-  const candidate = path.resolve(resolvedNewPath);
-  return (
-    sensitiveRoots.find((root) => {
-      const sensitiveRoot = path.resolve(root);
-      const relative = path.relative(sensitiveRoot, candidate);
-      return (
-        relative === "" ||
-        (relative !== ".." &&
-          !relative.startsWith(`..${path.sep}`) &&
-          !path.isAbsolute(relative))
-      );
-    }) ?? null
-  );
-}
-
-function isPathInside(parentPath: string, childPath: string): boolean {
-  const resolvedParent = path.resolve(parentPath);
-  const resolvedChild = path.resolve(childPath);
-  return (
-    resolvedChild !== resolvedParent &&
-    resolvedChild.startsWith(`${resolvedParent}${path.sep}`)
-  );
-}
-
 function scheduleAppRelaunch(delayMs = 0): void {
   const relaunch = () => {
     app.relaunch();
@@ -1364,234 +1089,23 @@ function scheduleAppRelaunch(delayMs = 0): void {
   relaunch();
 }
 
-async function applyDataPathChange(
-  newPath: string,
-  action: DataPathChangeAction,
-): Promise<{
-  success: boolean;
-  message?: string;
-  newPath?: string;
-  needsRestart?: boolean;
-  backupPath?: string;
-  error?: string;
-}> {
-  if (typeof newPath !== "string" || newPath.trim().length === 0) {
-    return {
-      success: false,
-      error: "data path change requires a non-empty newPath string",
-    };
-  }
-  if (action !== "migrate" && action !== "switch" && action !== "overwrite") {
-    return {
-      success: false,
-      error: `Unsupported data path change action: ${action}`,
-    };
-  }
-
-  const currentPath = app.getPath("userData");
-  const resolvedTargetPath = path.resolve(newPath);
-  if (path.resolve(currentPath) === resolvedTargetPath) {
-    return {
-      success: true,
-      message: "Data directory is already current",
-      newPath: resolvedTargetPath,
-      needsRestart: false,
-    };
-  }
-
-  const sensitiveRoot = isSensitiveDataPathTarget(resolvedTargetPath);
-  if (sensitiveRoot) {
-    return {
-      success: false,
-      error: `Cannot use system directory as data directory: ${resolvedTargetPath}`,
-    };
-  }
-
-  if (action !== "switch" && isPathInside(currentPath, resolvedTargetPath)) {
-    return {
-      success: false,
-      error:
-        "Cannot migrate data into a child directory of the current data directory",
-    };
-  }
-
-  let databaseClosed = false;
-  try {
-    if (action !== "switch") {
-      closeDatabase();
-      appDb = null;
-      databaseClosed = true;
-    }
-    const result = await applyStorageRootChange({
-      action,
-      sourceRoot: currentPath,
-      targetRoot: resolvedTargetPath,
-      controlDirectory: getStorageOperationControlDirectory(
-        app.getPath("appData"),
-      ),
-      publishBootPointer: (rootPath) =>
-        writeConfiguredDataPath(app.getPath("appData"), rootPath),
-      verifyDatabase: verifyDataRootDatabase,
-      includeSecrets: true,
-    });
-    scheduleAppRelaunch(500);
-    return {
-      success: true,
-      message:
-        action === "switch"
-          ? "Data directory switched"
-          : `Successfully migrated ${result.copiedFiles} files`,
-      newPath: resolvedTargetPath,
-      needsRestart: true,
-      backupPath: result.recoveryArtifactPath,
-    };
-  } catch (error) {
-    if (databaseClosed) {
-      try {
-        appDb = initDatabase();
-      } catch (reopenError) {
-        console.error(
-          "[DataPath] Failed to reopen source database:",
-          reopenError,
-        );
-      }
-    }
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
-  }
-}
-
-ipcMain.handle(
-  "data:previewDataPathChange",
-  async (_event, newPath: string) => {
-    if (typeof newPath !== "string" || newPath.trim().length === 0) {
-      return {
-        success: false,
-        error: "data:previewDataPathChange requires a non-empty newPath string",
-      };
-    }
-
-    const currentPath = app.getPath("userData");
-    const resolvedTargetPath = path.resolve(newPath);
-    const classification = classifyStorageRoot(resolvedTargetPath);
-    if (classification.kind === "invalid" || classification.kind === "mixed") {
-      return {
-        success: false,
-        error:
-          classification.reason ??
-          `Cannot use ${classification.kind} data directory: ${resolvedTargetPath}`,
-      };
-    }
-    if (classification.kind === "unknown") {
-      return {
-        success: false,
-        error: `Target is a non-empty directory not owned by PromptHub: ${classification.unknownEntries.join(", ")}`,
-      };
-    }
-    const isCurrentPath = path.resolve(currentPath) === resolvedTargetPath;
-    const hasPromptHubData =
-      classification.kind === "canonical" || classification.kind === "legacy";
-
-    return {
-      success: true,
-      targetPath: resolvedTargetPath,
-      currentPath,
-      exists: classification.kind !== "missing",
-      hasPromptHubData,
-      isCurrentPath,
-      markers: classification.databasePath
-        ? [
-            {
-              name: path.relative(
-                resolvedTargetPath,
-                classification.databasePath,
-              ),
-            },
-          ]
-        : [],
-      currentSummary: summarizeDataPath(currentPath),
-      targetSummary: summarizeDataPath(resolvedTargetPath),
-      recommendedAction: isCurrentPath
-        ? "switch"
-        : hasPromptHubData
-          ? "switch"
-          : "migrate",
-    };
+/**
+ * Build the list of candidate paths where a previous database might reside.
+ * On Windows this includes %APPDATA%/PromptHub (the Electron default).
+ */
+registerDataPathChangeIPC({
+  closeDatabase: () => {
+    closeDatabase();
+    appDb = null;
   },
-);
-
-ipcMain.handle(
-  "data:applyDataPathChange",
-  async (_event, params: { newPath?: unknown; action?: unknown }) => {
-    const newPath = typeof params?.newPath === "string" ? params.newPath : "";
-    const action =
-      params?.action === "switch" ||
-      params?.action === "overwrite" ||
-      params?.action === "migrate"
-        ? params.action
-        : "migrate";
-    return applyDataPathChange(newPath, action);
+  getDatabase: () => appDb,
+  reopenDatabase: () => {
+    appDb = initDatabase();
   },
-);
-
-// Migrate data to a new directory
-// 迁移数据到新目录
-ipcMain.handle("data:migrate", async (_event, newPath: string) => {
-  return applyDataPathChange(newPath, "migrate");
+  scheduleRelaunch: scheduleAppRelaunch,
 });
 
-// Open a folder in the system file manager
-// 在文件管理器中打开文件夹
-ipcMain.handle("shell:openPath", async (_event, folderPath: string) => {
-  const homePath = app.getPath("home");
-  return openDirectoryPath(folderPath, {
-    appDataPath: app.getPath("appData"),
-    homePath,
-    localAppDataPath:
-      process.env.LOCALAPPDATA || path.join(homePath, "AppData", "Local"),
-    lstatSync: fs.lstatSync,
-    openPath: (targetPath) => shell.openPath(targetPath),
-    showItemInFolder: (targetPath) => shell.showItemInFolder(targetPath),
-    statSync: fs.statSync,
-  });
-});
-
-// Show system notification
-// 发送系统通知
-ipcMain.handle(
-  "notification:show",
-  async (_event, options: { title: string; body: string }) => {
-    if (!options || typeof options !== "object") {
-      throw new Error("notification:show requires a non-null options object");
-    }
-    if (typeof options.title !== "string" || typeof options.body !== "string") {
-      throw new Error(
-        "notification:show requires title and body to be strings",
-      );
-    }
-    if (Notification.isSupported()) {
-      // Resolve icon path
-      // 获取图标路径
-      let iconPath: string;
-      if (isDev) {
-        iconPath = path.join(__dirname, "../../resources/icon.png");
-      } else {
-        iconPath = path.join(process.resourcesPath, "icon.png");
-      }
-
-      const notification = new Notification({
-        title: options.title,
-        body: options.body,
-        icon: iconPath,
-      });
-      notification.show();
-      return true;
-    }
-    return false;
-  },
-);
+registerNativeShellIPC(isDev);
 
 // App startup
 // 应用启动
@@ -1754,6 +1268,7 @@ app.whenReady().then(async () => {
     }
 
     canonicalRecoveryRequired = false;
+    canonicalRecoveryReason = null;
     try {
       const activeRoot = getUserDataPath();
       const authorityStartup = await ensureCanonicalStorageAuthorityOnStartup({
@@ -1779,6 +1294,10 @@ app.whenReady().then(async () => {
       });
       canonicalRecoveryRequired =
         authorityStartup.status === "recovery-required";
+      canonicalRecoveryReason =
+        authorityStartup.status === "recovery-required"
+          ? authorityStartup.reason
+          : null;
       logStartupEvent({
         event: "startup:canonical_storage_authority",
         ...authorityStartup,
@@ -1800,6 +1319,7 @@ app.whenReady().then(async () => {
     // 初始化数据库
     const db = initDatabase();
     applyE2ESeed(db);
+    await reconcileManagedSkillSymlinksOnStartup(db);
     try {
       await applyStoredNetworkProxySettings(db);
       logStartupEvent({
@@ -1831,13 +1351,9 @@ app.whenReady().then(async () => {
     } catch {
       // ignore
     }
-    // v0.5.3: Wrap bootstrapPromptWorkspace in try/catch to prevent startup crash
-    // if workspace directory operations fail (e.g., permission issues on Windows
-    // upgrades). A workspace bootstrap failure should not block the app — users
-    // can still access their data via the DB; workspace files can resync later.
-    // v0.5.3: 用 try/catch 包裹 bootstrapPromptWorkspace，避免工作区目录操作失败
-    // （如 Windows 升级后权限问题）阻塞整个启动流程。工作区引导失败不应阻塞应用，
-    // 用户仍可通过数据库访问数据，工作区文件可稍后重新同步。
+    // Legacy workspace bootstrap remains isolated from startup. Canonical mode
+    // is read-only here because file authority and SQLite reconciliation have
+    // already completed before the database was opened.
     try {
       await bootstrapRuleWorkspace();
     } catch (error) {
@@ -1858,7 +1374,7 @@ app.whenReady().then(async () => {
         );
         logStartupEvent({
           event: "startup:bootstrap_workspace_recovery_required",
-          reason: "invalid-canonical-prompt-graph",
+          reason: canonicalRecoveryReason ?? "invalid-canonical-storage",
         });
       } else {
         const bootstrapResult = bootstrapPromptWorkspace(
@@ -1963,7 +1479,6 @@ app.on("window-all-closed", () => {
 // 应用退出前清理
 app.on("before-quit", () => {
   isQuitting = true;
-  agentUsagePopoverController.destroy();
   closeDatabase();
 });
 

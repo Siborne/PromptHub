@@ -75,7 +75,7 @@ renderer-provided deletion paths remain out of scope.
 
 ## Scope Addendum 2026-08-10: Unified Quota Presentation
 
-The delivered quota adapters already normalize six providers into one
+The delivered quota adapters normalize every currently verified provider into one
 `metrics[]` collection, but the remaining `window`/`quota` split still encodes
 renderer choices. Overview consequently mixes large rings and progress bars,
 uses inconsistent used/remaining directions, reconstructs Antigravity groups
@@ -85,8 +85,8 @@ This follow-up retains all current provider endpoints, credential ownership,
 cache and concurrency limits while replacing that presentation-bound contract
 with typed scope, period and value semantics. Every Agent adapter will only map
 provider data. A shared presentation model will group and order those metrics,
-and Overview plus the menu-bar popover will use the same semantic visualization
-selector and state components. Resettable percentage windows use compact rings;
+and Overview plus the native menu-bar projection will use the same plan,
+remaining-value and primary-metric helpers. Resettable percentage windows use compact rings in Overview;
 absolute, monthly, lifetime and provider-defined totals use horizontal remaining
 bars. Detailed inventory, composition, capacity and verification rules live in
 `quota-presentation-design.md`.
@@ -236,8 +236,8 @@ bars. Detailed inventory, composition, capacity and verification rules live in
 - Stable platform assets: `spec/knowledge/reference/agent-platforms.md`
 - Stable Skill behavior: `spec/knowledge/behavior/skills.md`
 - Stable Rules behavior: `spec/knowledge/behavior/rules-workspace.md`
-- Platform preview: `spec/changes/active/platform-workbench-prototype/`
-- Existing platform configuration: `spec/changes/active/project-skill-management/`
+- Platform preview: `spec/changes/archive/2026/08/2026-08-18-platform-workbench-prototype/`
+- Existing platform configuration: `spec/changes/archive/2026/08/2026-08-18-project-skill-management/`
 - Agent asset tray actions: `spec/changes/archive/2026/07/2026-07-28-desktop-agent-asset-tray-actions/`
 - CC Switch capability comparison: `cc-switch-coverage.md`
 - Screen-level UI design: `ui-design.md`
@@ -542,14 +542,17 @@ Confirmed with the maintainer on 2026-08-06:
    `provider-preset-catalog-design.md`. Selective reference only, no runtime code copied.
 6. Detailed design: `provider-preset-catalog-design.md`.
 
-## Scope Addendum 2026-08-04: Menu Bar Agent Quotas
+## Scope Addendum 2026-08-04: Menu Bar Agent Quotas (Presentation Superseded)
 
 The macOS PromptHub menu bar should surface the same provider-owned Agent quota
 snapshots already used by the Agent Overview, without introducing a second
-credential reader. The first delivery covers the six evidence-backed adapters:
+credential reader. The first delivery covered six evidence-backed adapters:
 Claude Code, ChatGPT/Codex, Kimi Code, Antigravity, Gemini and GitHub Copilot.
+Grok Build was verified later; the current inventory is derived from the shared
+capability registry rather than frozen at that initial list.
 
-On macOS, a primary click on the PromptHub menu-bar icon opens the
+The following rendered-popover presentation was superseded by the explicit
+2026-08-19 native-menu decision. Historically, a primary click opened the
 tray-anchored rendered popover directly, without an intermediate quota menu
 item. A secondary click preserves the native action menu; Windows and Linux
 retain the existing native-menu interaction. The popover reads the last renderer cache immediately,
@@ -560,7 +563,7 @@ provider errors in rendered copy or logs. PromptHub adapts CodexBar's actual
 usage-card hierarchy -- product identity and plan first, followed by a named
 metric, compact remaining value, slim progress and reset time -- to the existing
 React/Electron boundary without vendoring its SwiftUI implementation or branded
-assets.
+assets. No current implementation may recreate that renderer surface.
 
 ## Scope Addendum 2026-08-06: Conversation History Density And Cursor Safety
 
@@ -759,6 +762,38 @@ refresh replaces the bounded list without returning the entire History panel
 to its blocking loading screen. No transcript body cache, watcher, timer,
 network request or unbounded background worker is added.
 
+## Scope Addendum 2026-08-19: File-Authoritative Agent Skill Inventory
+
+The direct Agent Skills tab must not treat a missing or persisted renderer scan
+result as proof that the native Skill directory is empty. Files below the
+resolved Agent Skill path remain the inventory source of truth. A cold direct
+open performs one bounded scan, keeps current-session rows while refreshing,
+and presents scan failure separately from a successful empty inventory.
+
+Agent Skill scan results are derived UI cache, not durable user data. They must
+not survive an application restart and suppress a new filesystem scan. This
+change adds no watcher, database row, network request or background polling.
+
+## Scope Addendum 2026-08-19: Truthful Cross-Domain Asset Summaries
+
+Agent Overview must not present an uninitialized renderer cache as a real empty
+Skills, MCP, Rules, or Plugins inventory. The four asset domains share one
+visible lifecycle vocabulary: not requested, initial loading, ready,
+refreshing with cached data, refresh failed with cached data, and initial load
+failed. A zero count is valid only after the owning source has completed a
+successful read; failures remain visible and offer a retry path on the direct
+domain surface.
+
+This scope resolves the conflict between the live-summary requirement in
+`FR-AGENT-022` and the former cold-cache `O(0)` rule in `FR-PERF-15`. Overview
+may hydrate summary-grade, local, read-only state from each domain owner, with
+at most two domain hydrators in flight. It must not call MCP health checks,
+marketplace loaders, Plugin libraries or markets, Rules body reads, full-domain
+validation, remote services, watchers, or polling. The summary sources remain
+the native Agent Skill directory, MCP target presets/status, Rules file
+descriptors, and Plugin target matrix; Zustand only caches those observations
+for the renderer session.
+
 ## Scope Addendum 2026-08-11: Provider Terminology And Native Ownership
 
 The Agent Provider & Model workspace calls user-managed entries providers,
@@ -799,3 +834,32 @@ an existing PromptHub provider.
 The visible buttons and context-menu commands invoke the same existing dialogs.
 This follow-up does not create another import path, write contract or durable
 state, and runtimes without local PromptHub import continue to omit that action.
+
+## Scope Addendum 2026-08-19: Native Menu Bar Quotas
+
+The menu-bar quota surface must use Electron's operating-system-native menu
+instead of a frameless renderer window styled to resemble a native popover.
+The custom quota BrowserWindow, vibrancy shell, renderer bootstrap branch,
+product-card rows, ring/progress visuals, plan badges and expand controls are
+removed rather than restyled.
+
+The native menu must retain the useful product behavior already owned by the
+main process: every currently verified Agent row in stable order, explicit loading and
+failure states, cached non-blocking presentation, plan/metric/reset details,
+manual refresh, at most two provider requests in flight and per-provider
+failure isolation. The Agent workspace usage banner remains a separate in-app
+surface and is outside this menu-bar presentation correction.
+
+## Scope Addendum 2026-08-19: Native Config Editor Surface Hierarchy
+
+The Agent Config Files workspace must restore a clear hierarchy between the
+secondary file navigator and the primary editing canvas. In the light theme,
+the workspace title bar and editor canvas use the existing card surface while
+the application shell and file tree retain their quieter background/muted
+surfaces. The dark theme uses the paired semantic tokens rather than a raw
+white override.
+
+This correction belongs to the shared file-editor composition, not a
+Codex-only skin. It changes no config discovery, read/write contract, editor
+state, file allowlist, persistence, IPC, filesystem operation, network request,
+timer, watcher, or process lifecycle.

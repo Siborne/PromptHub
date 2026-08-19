@@ -68,9 +68,14 @@ describe("rules store", () => {
     });
   });
 
-  it("retains missing global descriptors without exposing them in the standalone Rules list", async () => {
+  it("keeps a file-owned global rule visible when its deployment target is missing", async () => {
     const missing = descriptor({ exists: false });
-    const read = vi.fn();
+    const recoverable = content({
+      exists: false,
+      content: "# Recoverable managed rule",
+      syncStatus: "target-missing",
+    });
+    const read = vi.fn().mockResolvedValue(recoverable);
     installWindowMocks({
       api: {
         rules: {
@@ -85,13 +90,13 @@ describe("rules store", () => {
     expect(useRulesStore.getState()).toEqual(
       expect.objectContaining({
         availableFiles: [missing],
-        files: [],
-        selectedRuleId: null,
-        currentFile: null,
+        files: [missing],
+        selectedRuleId: "claude-global",
+        currentFile: recoverable,
         hasLoadedFiles: true,
       }),
     );
-    expect(read).not.toHaveBeenCalled();
+    expect(read).toHaveBeenCalledWith("claude-global");
   });
 
   it("creates a missing rule through the existing save contract and selects it", async () => {
@@ -119,6 +124,26 @@ describe("rules store", () => {
       }),
     );
     expect(scheduleAllSaveSync).toHaveBeenCalledWith("rules:create");
+  });
+
+  it("leaves loading and exposes a retryable error when inventory loading fails", async () => {
+    installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockRejectedValue(new Error("RULE_LIST_FAILED")),
+        },
+      },
+    });
+
+    await useRulesStore.getState().loadFiles({ selectInitial: false });
+
+    expect(useRulesStore.getState()).toEqual(
+      expect.objectContaining({
+        error: "RULE_LIST_FAILED",
+        hasLoadedFiles: false,
+        isLoading: false,
+      }),
+    );
   });
 
   it("keeps a missing rule retryable when creation fails", async () => {

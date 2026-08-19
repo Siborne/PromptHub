@@ -1061,16 +1061,6 @@
       "customProviderDesc": "The default provider is a custom third-party endpoint. Usage quota is only available for the official subscription. Check the Provider & Model tab for the active provider.",
       "retry": "Retry"
     },
-    "usagePopover": {
-      "title": "Agent quotas",
-      "subtitle": "Live subscription usage",
-      "cached": "Cached",
-      "agentLabel": "{{agent}} quota",
-      "refresh": "Refresh quotas",
-      "showDetails": "Show {{agent}} quota details",
-      "hideDetails": "Hide {{agent}} quota details",
-      "progressLabel": "{{agent}}, {{metric}}: {{remaining}}% remaining"
-    },
     "overview": "Overview",
     "providerAndModel": "Provider & Model",
     "appearanceTab": "Appearance",
@@ -1153,6 +1143,9 @@
     "rulesPath": "Rules",
     "notAvailable": "Not available",
     "assetLoadFailed": "Asset inventory could not be loaded.",
+    "assetLoading": "Loading asset inventory…",
+    "assetRefreshing": "Refreshing asset inventory…",
+    "assetRefreshFailedCached": "Refresh failed; showing cached data.",
     "capabilities": "Capabilities",
     "openAsset": "Open {{asset}}",
     "openAgentSettings": "Open Agent settings",
@@ -3633,6 +3626,7 @@
     "previewTruncated": "Preview is truncated. Restore the source to inspect all items.",
     "sourceType": {
       "current-residual": "Current directory residuals",
+      "current-file-workspace": "Current Markdown workspace",
       "current-canonical-db": "Current SQLite catalog",
       "external-user-data": "Previous data directory",
       "upgrade-backup": "Automatic upgrade backup",

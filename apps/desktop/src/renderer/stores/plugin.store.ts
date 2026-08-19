@@ -52,7 +52,11 @@ interface PluginState {
   searchQuery: string;
   isLoading: boolean;
   error: string | null;
+  hasLoadedTargetInventory: boolean;
+  isLoadingTargetInventory: boolean;
+  targetInventoryError: string | null;
   load: (options?: { force?: boolean }) => Promise<void>;
+  loadTargetInventory: (options?: { force?: boolean }) => Promise<void>;
   setSelectedTab: (tab: PluginState["selectedTab"]) => void;
   setSelectedMarketSourceId: (sourceId: string) => void;
   setLibraryViewMode: (mode: PluginLibraryViewMode) => void;
@@ -271,6 +275,8 @@ function normalizePersistedPluginMarketEntries(
   );
 }
 
+let pluginTargetInventoryInFlight: Promise<void> | null = null;
+
 export const usePluginStore = create<PluginState>()(
   persist(
     (set, get) => ({
@@ -291,6 +297,51 @@ export const usePluginStore = create<PluginState>()(
       searchQuery: "",
       isLoading: false,
       error: null,
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+
+      loadTargetInventory: (options) => {
+        if (pluginTargetInventoryInFlight) {
+          return pluginTargetInventoryInFlight;
+        }
+        const current = get();
+        if (
+          !options?.force &&
+          (current.hasLoadedTargetInventory ||
+            current.isLoadingTargetInventory ||
+            current.targetInventoryError)
+        ) {
+          return Promise.resolve();
+        }
+
+        set({
+          isLoadingTargetInventory: true,
+          targetInventoryError: null,
+        });
+        const request = (async (): Promise<void> => {
+          try {
+            const targetMatrix = await window.api.plugin.getTargetMatrix();
+            set({
+              targetMatrix,
+              hasLoadedTargetInventory: true,
+              isLoadingTargetInventory: false,
+              targetInventoryError: null,
+            });
+          } catch (error) {
+            const message = getErrorMessage(error);
+            set({
+              isLoadingTargetInventory: false,
+              targetInventoryError: message,
+            });
+            throw error instanceof Error ? error : new Error(message);
+          } finally {
+            pluginTargetInventoryInFlight = null;
+          }
+        })();
+        pluginTargetInventoryInFlight = request;
+        return request;
+      },
 
       load: async (options) => {
         set({ isLoading: true, error: null });
@@ -317,9 +368,9 @@ export const usePluginStore = create<PluginState>()(
           const libraryPromise = window.api.plugin
             .getLibrary()
             .then((library) => set({ library }));
-          const targetMatrixPromise = window.api.plugin
-            .getTargetMatrix()
-            .then((targetMatrix) => set({ targetMatrix }));
+          const targetMatrixPromise = get().loadTargetInventory({
+            force: true,
+          });
           const marketEntriesPromise = Promise.all(
             prioritizePluginMarketSources(
               marketSources,

@@ -31,8 +31,7 @@ import {
   type AgentAssetInventory,
 } from "./use-agent-asset-domain";
 
-const PASSIVE_ASSET_INVENTORY_OPTIONS = {
-  eagerDomains: [],
+const OVERVIEW_ASSET_INVENTORY_OPTIONS = {
   validate: false,
 } as const;
 
@@ -55,6 +54,7 @@ function NavCellShell({
   primaryClassName,
   secondary,
   secondaryClassName,
+  isBusy,
   onSelect,
 }: {
   icon: LucideIcon;
@@ -63,12 +63,14 @@ function NavCellShell({
   primaryClassName?: string;
   secondary?: string;
   secondaryClassName?: string;
+  isBusy?: boolean;
   onSelect: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onSelect}
+      aria-busy={isBusy || undefined}
       className="flex items-start gap-3 rounded-md border border-border/70 bg-muted/15 px-4 py-3.5 text-left transition-colors hover:border-primary/40 hover:bg-accent"
     >
       <Icon
@@ -155,28 +157,51 @@ function AssetNavCell({
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
-  const { isLoading, items } = inventory;
+  const { items, loadState } = inventory;
   const managedCount =
     domain === "skills"
       ? items.filter((item) => item.state === "managed").length
       : 0;
-  const secondary =
-    inventory.status === "failed"
-      ? t("agents.assetLoadFailed", "Asset inventory could not be loaded.")
-      : domain === "skills"
-        ? t("agents.overviewNav.managedExternal", {
-            managed: managedCount,
-            external: items.length - managedCount,
-          })
-        : t(`agents.capabilityStatus.${assetDomainStatus(agent, domain)}`);
+  let secondary: string;
+  if (loadState === "failed" || inventory.status === "failed") {
+    secondary = t(
+      "agents.assetLoadFailed",
+      "Asset inventory could not be loaded.",
+    );
+  } else if (loadState === "idle" || loadState === "loading") {
+    secondary = t("agents.assetLoading", "Loading asset inventory…");
+  } else if (loadState === "refreshing") {
+    secondary = t("agents.assetRefreshing", "Refreshing asset inventory…");
+  } else if (loadState === "stale") {
+    secondary = t(
+      "agents.assetRefreshFailedCached",
+      "Refresh failed; showing cached data.",
+    );
+  } else if (domain === "skills") {
+    secondary = t("agents.overviewNav.managedExternal", {
+      managed: managedCount,
+      external: items.length - managedCount,
+    });
+  } else {
+    secondary = t(
+      `agents.capabilityStatus.${assetDomainStatus(agent, domain)}`,
+    );
+  }
+  const hasObservedInventory =
+    loadState === "ready" ||
+    loadState === "refreshing" ||
+    loadState === "stale";
   return (
     <NavCellShell
       icon={icon}
       label={label}
-      primary={
-        isLoading || inventory.status === "failed" ? "—" : String(items.length)
-      }
+      primary={hasObservedInventory ? String(items.length) : "—"}
       secondary={secondary}
+      isBusy={
+        loadState === "idle" ||
+        loadState === "loading" ||
+        loadState === "refreshing"
+      }
       onSelect={onSelect}
     />
   );
@@ -410,7 +435,7 @@ function OverviewNavGrid({
   const { t } = useTranslation();
   const inventories = useAgentAssetInventoryMap(
     agent,
-    PASSIVE_ASSET_INVENTORY_OPTIONS,
+    OVERVIEW_ASSET_INVENTORY_OPTIONS,
   );
   if (agent.workspaceKind === "plugin-harness") {
     return (

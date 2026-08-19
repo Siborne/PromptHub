@@ -3,14 +3,21 @@ import type {
   Menu,
   MenuItemConstructorOptions,
   NativeImage,
-  Rectangle,
   Tray,
 } from "electron";
-import type { AppCommand } from "@prompthub/shared/types";
+import type {
+  AgentUsageQueryOptions,
+  AgentUsageQuota,
+  AppCommand,
+} from "@prompthub/shared/types";
 
 import { loadMacTrayTemplateIcon, resolveMacTrayIconPaths } from "./tray-icon";
 import { buildTrayMenuTemplate, getTrayMenuLabels } from "./tray-menu";
 import type { AgentProviderTrayGroup } from "./services/agent-provider-tray-service";
+import {
+  createAgentUsageTrayProjection,
+  type AgentUsageTrayProjection,
+} from "./services/agent-usage-tray-projection";
 
 interface TrayControllerOptions {
   agentManagementEnabled: boolean;
@@ -24,9 +31,12 @@ interface TrayControllerOptions {
   getWindowVisibility: () => boolean;
   isDev: boolean;
   loadAgentProviderGroups?: () => Promise<AgentProviderTrayGroup[]>;
+  loadAgentUsage?: (
+    agentId: string,
+    options?: AgentUsageQueryOptions,
+  ) => Promise<AgentUsageQuota>;
   onAgentProviderProfile?: (agentId: string, profileId: string) => void;
   onCommand: (command: AppCommand) => void;
-  onOpenAgentUsage?: () => void;
   onQuit: () => void;
   onToggleWindow: () => void;
   platform: NodeJS.Platform;
@@ -35,9 +45,9 @@ interface TrayControllerOptions {
 export interface TrayController {
   create: () => void;
   destroy: () => void;
-  getBounds: () => Rectangle | null;
   refresh: () => void;
   reloadAgentProviders: () => Promise<void>;
+  reloadAgentUsage: (forceRefresh?: boolean) => Promise<void>;
 }
 
 function loadPlatformTrayIcon(options: TrayControllerOptions): NativeImage {
@@ -82,9 +92,12 @@ export function createTrayController(
   options: TrayControllerOptions,
 ): TrayController {
   let tray: Tray | null = null;
-  let contextMenu: Menu | null = null;
   let agentProviderGroups: AgentProviderTrayGroup[] = [];
   let providerLoadGeneration = 0;
+  let usageProjection: AgentUsageTrayProjection | null = null;
+
+  const reloadAgentUsage = (forceRefresh = false): Promise<void> =>
+    usageProjection?.refresh({ forceRefresh }) ?? Promise.resolve();
 
   const refresh = () => {
     if (!tray) return;
@@ -92,18 +105,24 @@ export function createTrayController(
     const template = buildTrayMenuTemplate({
       agentManagementEnabled: options.agentManagementEnabled,
       agentProviderGroups,
-      includeAgentUsage: options.platform !== "darwin",
+      agentUsageEntries: usageProjection?.getSnapshot() ?? [],
       isWindowVisible: options.getWindowVisibility(),
       labels: getTrayMenuLabels(locale),
       onAgentProviderProfile: options.onAgentProviderProfile,
       onCommand: options.onCommand,
-      onOpenAgentUsage: options.onOpenAgentUsage,
+      onRefreshAgentUsage: () => void reloadAgentUsage(true),
       onQuit: options.onQuit,
       onToggleWindow: options.onToggleWindow,
     });
-    contextMenu = options.buildMenu(template);
-    if (options.platform !== "darwin") {
-      tray.setContextMenu(contextMenu);
+    tray.setContextMenu(options.buildMenu(template));
+  };
+
+  const ensureUsageProjection = () => {
+    if (!usageProjection && options.loadAgentUsage) {
+      usageProjection = createAgentUsageTrayProjection({
+        getUsage: options.loadAgentUsage,
+        onChange: refresh,
+      });
     }
   };
 
@@ -130,16 +149,17 @@ export function createTrayController(
       icon = loadFallbackTrayIcon(options);
     }
 
+    ensureUsageProjection();
     tray = options.createTray(icon);
     tray.setToolTip("PromptHub");
     refresh();
     void reloadAgentProviders();
+    void reloadAgentUsage();
     if (options.platform === "darwin") {
-      tray.on("click", options.onOpenAgentUsage ?? options.onToggleWindow);
-      tray.on("right-click", () => {
+      tray.on("mouse-down", () => {
         refresh();
         void reloadAgentProviders();
-        if (tray && contextMenu) tray.popUpContextMenu(contextMenu);
+        void reloadAgentUsage();
       });
     } else {
       tray.on("click", options.onToggleWindow);
@@ -148,16 +168,17 @@ export function createTrayController(
 
   const destroy = () => {
     providerLoadGeneration += 1;
+    usageProjection?.destroy();
+    usageProjection = null;
     tray?.destroy();
     tray = null;
-    contextMenu = null;
   };
 
   return {
     create,
     destroy,
-    getBounds: () => tray?.getBounds() ?? null,
     refresh,
     reloadAgentProviders,
+    reloadAgentUsage,
   };
 }

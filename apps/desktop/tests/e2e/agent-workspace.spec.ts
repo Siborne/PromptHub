@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import fs from "fs";
 import { createServer } from "http";
 import os from "os";
@@ -20,6 +20,22 @@ async function selectAgent(page: Page, name: string): Promise<void> {
   await expect(agent).toBeVisible();
   await agent.click();
   await search.fill("");
+}
+
+async function chooseAllProviderValues(dialog: Locator): Promise<void> {
+  await expect(dialog).toBeVisible();
+  const groups = dialog.locator("fieldset");
+  await expect(groups.first()).toBeVisible();
+  const count = await groups.count();
+  expect(count).toBeGreaterThan(0);
+  for (let index = 0; index < count; index++) {
+    const choices = groups.nth(index).getByRole("radio");
+    await expect(choices).toHaveCount(2);
+    const choice = choices.nth(1);
+    await expect(choice).toHaveAccessibleName(/Use provider value/);
+    await choice.check();
+    await expect(choice).toBeChecked();
+  }
 }
 
 test.describe("E2E: Agent workspace", () => {
@@ -421,9 +437,7 @@ test.describe("E2E: Agent workspace", () => {
       await expect(page.getByText("legacy-e2e-secret")).toHaveCount(0);
       await expect(page.getByText("Credential available")).toBeVisible();
 
-      await page
-        .getByRole("button", { name: "Add custom provider" })
-        .click();
+      await page.getByRole("button", { name: "Add custom provider" }).click();
       const codexProfile = page.getByRole("region", {
         name: "Add provider",
       });
@@ -459,16 +473,11 @@ test.describe("E2E: Agent workspace", () => {
         stream: true,
       });
       await expect(page.locator("body")).not.toContainText("e2e-secret-token");
-      await page.getByRole("button", { name: "Activate" }).click();
+      await page.getByRole("switch", { name: "Activate E2E gateway" }).click();
       const activation = page.getByRole("dialog", {
         name: "Review provider activation",
       });
-      const useProfileChoices = activation.getByRole("radio", {
-        name: "Use provider value",
-      });
-      for (let index = 0; index < (await useProfileChoices.count()); index++) {
-        await useProfileChoices.nth(index).check();
-      }
+      await chooseAllProviderValues(activation);
       await activation
         .getByRole("button", { name: "Activate provider" })
         .click();
@@ -521,9 +530,7 @@ test.describe("E2E: Agent workspace", () => {
       await expect(
         page.getByRole("navigation", { name: "Providers" }),
       ).toBeVisible();
-      await page
-        .getByRole("button", { name: "Add custom provider" })
-        .click();
+      await page.getByRole("button", { name: "Add custom provider" }).click();
       const qwenProfile = page.getByRole("region", {
         name: "Add provider",
       });
@@ -548,17 +555,13 @@ test.describe("E2E: Agent workspace", () => {
       await qwenProfile.getByRole("button", { name: "Save provider" }).click();
       await expect(page.getByText("Credential available")).toBeVisible();
       await expect(page.locator("body")).not.toContainText("qwen-e2e-secret");
-      await page.getByRole("button", { name: "Activate" }).click();
+      await page
+        .getByRole("switch", { name: "Activate Qwen E2E gateway" })
+        .click();
       const qwenActivation = page.getByRole("dialog", {
         name: "Review provider activation",
       });
-      const qwenProfileChoices = qwenActivation.getByRole("radio", {
-        name: "Use provider value",
-      });
-      await expect(qwenProfileChoices.first()).toBeVisible();
-      for (let index = 0; index < (await qwenProfileChoices.count()); index++) {
-        await qwenProfileChoices.nth(index).check();
-      }
+      await chooseAllProviderValues(qwenActivation);
       await qwenActivation
         .getByRole("button", { name: "Activate provider" })
         .click();
@@ -600,9 +603,7 @@ test.describe("E2E: Agent workspace", () => {
         page.getByRole("heading", { name: "OpenCode" }),
       ).toBeVisible();
       await page.getByRole("tab", { name: "Provider & Model" }).click();
-      await page
-        .getByRole("button", { name: "Add custom provider" })
-        .click();
+      await page.getByRole("button", { name: "Add custom provider" }).click();
       const openCodeProfile = page.getByRole("region", {
         name: "Add provider",
       });
@@ -625,21 +626,13 @@ test.describe("E2E: Agent workspace", () => {
       await expect(page.locator("body")).not.toContainText(
         "opencode-e2e-secret",
       );
-      await page.getByRole("button", { name: "Activate" }).click();
+      await page
+        .getByRole("switch", { name: "Activate OpenCode E2E gateway" })
+        .click();
       const openCodeActivation = page.getByRole("dialog", {
         name: "Review provider activation",
       });
-      const openCodeProfileChoices = openCodeActivation.getByRole("radio", {
-        name: "Use provider value",
-      });
-      await expect(openCodeProfileChoices.first()).toBeVisible();
-      for (
-        let index = 0;
-        index < (await openCodeProfileChoices.count());
-        index++
-      ) {
-        await openCodeProfileChoices.nth(index).check();
-      }
+      await chooseAllProviderValues(openCodeActivation);
       await openCodeActivation
         .getByRole("button", { name: "Activate provider" })
         .click();

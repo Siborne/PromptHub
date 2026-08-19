@@ -41,29 +41,7 @@ export function sanitizePersistedProjectScanState(
 }
 
 export function sanitizePersistedAgentScanState(
-  stateByAgent: Record<string, AgentSkillScanState>,
+  _stateByAgent: Record<string, AgentSkillScanState>,
 ): Record<string, AgentSkillScanState> {
-  return Object.fromEntries(
-    Object.entries(stateByAgent)
-      .filter(([, state]) => Boolean(state))
-      .map(([platformId, state]) => [
-        platformId,
-        {
-          result: state.result
-            ? {
-                ...state.result,
-                scannedSkills: Array.isArray(state.result.scannedSkills)
-                  ? state.result.scannedSkills.map((skill) => ({
-                      ...skill,
-                      instructions: "",
-                    }))
-                  : [],
-              }
-            : null,
-          isScanning: false,
-          scannedAt: state.scannedAt,
-          error: state.error ?? null,
-        },
-      ]),
-  );
+  return {};
 }

@@ -88,7 +88,7 @@ function listMcpServers(platformId: string): AgentAssetTargetState[] {
 function listRules(platformId: string): AgentAssetTargetState[] {
   return useRulesStore
     .getState()
-    .files.filter((file) => file.platformId === platformId)
+    .files.filter((file) => file.platformId === platformId && file.exists)
     .map((file) => ({
       id: file.id,
       kind: "rule",

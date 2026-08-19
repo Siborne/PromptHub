@@ -60,9 +60,9 @@ describe("Agent overview Web capability boundary", () => {
   it("does not invoke Desktop asset loaders when the server disables assets", async () => {
     const loadSkills = vi.fn();
     const scanSkills = vi.fn();
-    const loadMcp = vi.fn();
+    const loadMcpTargetInventory = vi.fn();
     const loadRules = vi.fn();
-    const loadPlugins = vi.fn();
+    const loadPluginTargetInventory = vi.fn();
     useSkillStore.setState({
       skills: [],
       isLoading: false,
@@ -70,13 +70,19 @@ describe("Agent overview Web capability boundary", () => {
       loadSkills,
       scanAgentPlatformSkills: scanSkills,
     });
-    useMcpStore.setState({ library: null, load: loadMcp });
+    useMcpStore.setState({
+      hasLoadedTargetInventory: false,
+      loadTargetInventory: loadMcpTargetInventory,
+    });
     useRulesStore.setState({
       files: [],
       hasLoadedFiles: false,
       loadFiles: loadRules,
     });
-    usePluginStore.setState({ library: null, load: loadPlugins });
+    usePluginStore.setState({
+      hasLoadedTargetInventory: false,
+      loadTargetInventory: loadPluginTargetInventory,
+    });
 
     renderWithI18n(
       <AgentOverviewPanel agent={webAgent} onNavigate={vi.fn()} />,
@@ -85,8 +91,8 @@ describe("Agent overview Web capability boundary", () => {
     await waitFor(() => expect(listForTarget).not.toHaveBeenCalled());
     expect(loadSkills).not.toHaveBeenCalled();
     expect(scanSkills).not.toHaveBeenCalled();
-    expect(loadMcp).not.toHaveBeenCalled();
+    expect(loadMcpTargetInventory).not.toHaveBeenCalled();
     expect(loadRules).not.toHaveBeenCalled();
-    expect(loadPlugins).not.toHaveBeenCalled();
+    expect(loadPluginTargetInventory).not.toHaveBeenCalled();
   });
 });

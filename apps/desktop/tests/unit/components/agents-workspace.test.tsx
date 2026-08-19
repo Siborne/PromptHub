@@ -1220,6 +1220,13 @@ describe("Agent workspace shell", () => {
     fireEvent.click(configTab);
 
     const editor = await screen.findByTestId("agent-config-editor");
+    expect(
+      screen.getByRole("heading", { name: /native config files/i })
+        .parentElement,
+    ).toHaveClass("bg-card");
+    expect(screen.getByTestId("agent-config-files-workbench")).toHaveClass(
+      "bg-background",
+    );
     expect(editor).toHaveAttribute("data-local-path", "~/.claude");
     expect(editor).toHaveAttribute("data-source-key", "agent-config:claude");
     expect(editor).toHaveAttribute("data-structural-mutations", "false");

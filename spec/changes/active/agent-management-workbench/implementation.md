@@ -3688,3 +3688,129 @@ clientWidth`, the table wrapper owned horizontal overflow, and the inspected
   mobile surfaces in 685.2 seconds. The current machine has no installed `dsh`
   executable or Harness profile, so fixture-backed tests prove the adapter
   contract but a live package installation remains unverified.
+
+### File-Authoritative Agent Skill Inventory
+
+- Completed `FR-AGENT-128` / `DES-AGENT-146` / `TEST-AGENT-208` /
+  `T-AGENT-217`. The direct Agent Skills workspace now starts the existing
+  bounded native-directory scan when the current session has no result instead
+  of rendering an uninitialized store as `0 skills`.
+- Agent Skill scan results are no longer persisted across application restarts.
+  Old persisted empty results are discarded during hydration, while
+  current-session results remain shared by Overview and Skill surfaces.
+- Initial scan, scan failure and a successful empty inventory now render as
+  distinct states. No database schema, watcher, polling loop or network request
+  was added.
+- Focused Agent workspace and Skill cache regressions passed 3 files / 47
+  tests. Desktop TypeScript, affected ESLint, Prettier, file-size governance and
+  `git diff --check` passed. `pnpm verify:release:quick` passed all 29 release
+  checks in 873.3 seconds.
+
+### Truthful Cross-Domain Agent Asset Summaries
+
+- Implemented `FR-AGENT-129` / `DES-AGENT-147` / `TEST-AGENT-209` /
+  `T-AGENT-218`. Agent Overview now hydrates supported Skills, MCP, Rules and
+  Plugins from owner-scoped local summary loaders with a two-domain concurrency
+  ceiling. The Overview does not load MCP/Plugin markets or full libraries, run
+  MCP health checks, read Rules bodies, call remote sources, or run cross-domain
+  validation.
+- The four summaries now distinguish idle, initial loading, ready, refreshing,
+  stale and initial failure. Counts appear only after a successful observation;
+  cached counts remain visible during refresh and after refresh failure. Skills,
+  MCP and Plugins share an accessible initial-failure body with Retry, while
+  Rules preserves its descriptor/read/create workflow and now exits initial
+  loading correctly on descriptor failure.
+- MCP target presets/status and Plugin target matrix have independently cached,
+  in-flight-deduplicated summary actions. Rules summary loading lists
+  descriptors without selecting a file, and the aggregate excludes declared
+  Rules paths whose native file does not exist. All state remains renderer
+  session data; no schema, IPC, persistence layout, network request, watcher,
+  timer or process was added.
+- Final focused verification passed 8 files and 69 tests, including successful
+  and empty summaries, initial failure and Retry, cached stale rows, non-Error
+  rejection normalization, in-flight deduplication, failed-owner queue
+  isolation, the summary I/O allowlist and the two-domain concurrency ceiling.
+  The full desktop Vitest suite also passed on the production batch; the final
+  affected suite passed after the test-only assertion follow-up. Desktop
+  TypeScript, affected ESLint and Prettier, file-size governance, change
+  traceability and scoped diff hygiene passed.
+- Targeted V8 coverage across the 11 included production modules was 65.22%
+  statements and 80.40% branches. The changed adapter reached 100% coverage,
+  and every new summary-lifecycle decision listed above is exercised. Remaining
+  uncovered legacy paths are pre-existing card detail/edit/action branches in
+  the large Skills, MCP and Plugins panels plus unrelated CRUD, import/export,
+  reorder and sync branches in the MCP, Plugins and Rules stores. No live
+  Electron GUI, end-to-end suite, production build or release harness was run
+  for this renderer/store-only delta.
+
+### Native Tray Quota Reversion
+
+- `FR-AGENT-093` is revised by `DES-AGENT-148` / `TEST-AGENT-210` /
+  `T-AGENT-219`. The product decision removes the rendered tray quota surface
+  and restores the operating-system-native menu while retaining the existing
+  process-wide usage service and bounded refresh semantics.
+- Deleted the renderer popover component and queue model, main-process popover
+  controller/window factory, `surface=agent-usage` bootstrap branch, transparent
+  popover CSS, seven renderer locale blocks and their three obsolete focused
+  suites. macOS, Windows and Linux now install one Electron native menu; no
+  secondary quota window, product-card row, icon, badge, ring, progress track or
+  expand control remains in the tray path.
+- Added a focused main-process projection that derives every `supported` usage
+  adapter from the shared capability registry while preserving the established
+  preferred order. This fixes the old six-item hardcode by including Grok Build
+  and automatically admits future verified adapters. It keeps two workers,
+  single-flight reloads, Agent-id validation, redacted failure normalization,
+  stale-success retention and destroy/recreate isolation. Native menu labels are
+  bounded, control-character-free and localized across seven languages.
+- Moved plan normalization, remaining-percent clamping and primary-metric
+  selection into a shared pure utility reused by renderer Overview and native
+  tray projection. The new shared utility and the tray projection/controller/
+  menu each reached 100% statement, branch, function and line coverage.
+- Focused Desktop verification passed 8 files / 111 tests; the three coverage
+  suites passed 50 tests, and the full shared package passed 48 tests. Desktop
+  and shared TypeScript, affected ESLint, Prettier, production build, file-size,
+  traceability, generated index and scoped diff hygiene passed.
+- The full Desktop Vitest run was attempted and remains red for an unrelated
+  existing SkillManager fixture gap: 607/608 files and 5,415/5,422 tests passed;
+  all seven failures are in `skill-ui.integration.test.tsx`, where
+  `remoteStoreEntries` is undefined before `Object.values` at
+  `SkillManager.tsx:406`. No live Electron GUI, Playwright E2E or release harness
+  was run. This active umbrella remains open for its other tasks.
+
+### Native Config Editor Surface Hierarchy
+
+- Completed `FR-AGENT-130` / `DES-AGENT-149` / `TEST-AGENT-211` /
+  `T-AGENT-220`. The Agent Config Files title bar now uses the semantic card
+  surface, while the shared file editor keeps its file tree secondary and makes
+  the right editor pane the primary card surface.
+- `SkillCodeEditor` now applies the same card token to both its host and the
+  CodeMirror root. The existing muted gutter, toolbar, active-line and status
+  treatments remain intact, so light mode gains a visible white canvas and dark
+  mode keeps the paired token contrast without a raw white override.
+- The correction is shared by every `SkillFileEditor` consumer and adds no
+  Agent-specific stylesheet, nested card, state, dependency, IPC, file I/O,
+  network request, timer, watcher, port or process.
+- Focused verification passed 3 files / 64 tests. Desktop TypeScript, affected
+  ESLint, file-size governance, change traceability, generated index check and
+  the production renderer/main/preload build passed. Prettier passed for every
+  affected file except `agents-workspace.test.tsx`: the current formatter also
+  rewrites a pre-existing unrelated `await act` block around line 581, so that
+  mechanical diff was intentionally not retained; the new config-surface
+  assertions themselves match the formatter output.
+- Replacement-candidate verification repaired the stale SkillManager fixture
+  and the complete Desktop suite passed 610 files / 5,434 tests. The isolated
+  `agent-config-files` Electron E2E passed, including redaction, edit/save and
+  encrypted-backup behavior. Its screenshot and the final `agent-workspace`
+  screenshot were inspected directly and show the gray secondary file tree
+  against the white primary editor canvas in light mode.
+- The wider Agent workspace E2E initially exposed only stale test interaction:
+  provider activation had moved from a detail `Activate` button to per-row
+  switches, and the test used a non-waiting radio count before the asynchronous
+  activation plan rendered. The test now uses the current switches, waits for
+  the dialog and each resolution group, asserts both choices, and checks every
+  selected provider value. Its minimal built-artifact rerun passed 1/1 without
+  changing production activation guards.
+- No public screenshot asset was replaced because `docs/imgs/` and
+  `website/public/imgs/` contain no Agent workspace, native quota menu or Agent
+  config-editor counterpart. The task-owned E2E screenshots remain verification
+  evidence rather than a mismatched replacement for an unrelated stable image.

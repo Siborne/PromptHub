@@ -6,7 +6,9 @@ import type {
   McpMarketSource,
   McpMarketTemplate,
   McpServerConfig,
+  McpTargetStatusEntry,
 } from "@prompthub/shared/types/mcp";
+import type { McpTargetPreset } from "@prompthub/core";
 
 const cachedTemplate: McpMarketTemplate = {
   id: "modelcontextprotocol:cached-server",
@@ -63,6 +65,30 @@ const mcpLibrary: McpLibraryFile = {
   servers: [filesystemServer, slackServer],
 };
 
+const claudePreset: McpTargetPreset = {
+  id: "claude-global",
+  label: "Claude Code",
+  path: "/Users/test/.claude.json",
+  platformId: "claude",
+  scope: "global",
+  target: "claude",
+};
+
+const claudeTargetStatus: McpTargetStatusEntry = {
+  exists: true,
+  path: "/Users/test/.claude.json",
+  presetId: "claude-global",
+  serverNames: ["filesystem"],
+};
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 function resetMcpStoreForTest() {
   useMcpStore.setState({
     library: null,
@@ -85,6 +111,9 @@ function resetMcpStoreForTest() {
     pendingPluginChildDeployServerIds: [],
     isLoading: false,
     error: null,
+    hasLoadedTargetInventory: false,
+    isLoadingTargetInventory: false,
+    targetInventoryError: null,
   });
 }
 
@@ -93,6 +122,91 @@ describe("mcp store remote market cache persistence", () => {
     localStorage.clear();
     resetMcpStoreForTest();
     localStorage.clear();
+  });
+
+  it("deduplicates lightweight target inventory reads without loading markets or health", async () => {
+    const targetStatusGate = createDeferred<McpTargetStatusEntry[]>();
+    window.api.mcp = {
+      ...(window.api.mcp ?? {}),
+      getTargetPresets: vi.fn().mockResolvedValue([claudePreset]),
+      getTargetStatus: vi.fn(() => targetStatusGate.promise),
+      getLibrary: vi.fn(),
+      listMarket: vi.fn(),
+      listMarketSources: vi.fn(),
+      replaceMarketSources: vi.fn(),
+      checkAllServers: vi.fn(),
+    };
+
+    const first = useMcpStore.getState().loadTargetInventory();
+    const second = useMcpStore.getState().loadTargetInventory();
+
+    expect(window.api.mcp.getTargetPresets).toHaveBeenCalledTimes(1);
+    expect(window.api.mcp.getTargetStatus).toHaveBeenCalledTimes(1);
+    expect(useMcpStore.getState().isLoadingTargetInventory).toBe(true);
+    expect(window.api.mcp.getLibrary).not.toHaveBeenCalled();
+    expect(window.api.mcp.listMarket).not.toHaveBeenCalled();
+    expect(window.api.mcp.listMarketSources).not.toHaveBeenCalled();
+    expect(window.api.mcp.checkAllServers).not.toHaveBeenCalled();
+
+    targetStatusGate.resolve([claudeTargetStatus]);
+    await Promise.all([first, second]);
+
+    expect(useMcpStore.getState()).toEqual(
+      expect.objectContaining({
+        targetPresets: [claudePreset],
+        targetStatus: [claudeTargetStatus],
+        hasLoadedTargetInventory: true,
+        isLoadingTargetInventory: false,
+        targetInventoryError: null,
+      }),
+    );
+
+    vi.mocked(window.api.mcp.getTargetStatus).mockRejectedValueOnce(
+      "non-error failure",
+    );
+    await expect(
+      useMcpStore.getState().loadTargetInventory({ force: true }),
+    ).rejects.toThrow("non-error failure");
+  });
+
+  it("retains cached target rows after refresh failure and supports a forced retry", async () => {
+    useMcpStore.setState({
+      targetPresets: [claudePreset],
+      targetStatus: [claudeTargetStatus],
+      hasLoadedTargetInventory: true,
+    });
+    window.api.mcp = {
+      ...(window.api.mcp ?? {}),
+      getTargetPresets: vi.fn().mockResolvedValue([claudePreset]),
+      getTargetStatus: vi.fn().mockRejectedValueOnce(new Error("read failed")),
+    };
+
+    await expect(
+      useMcpStore.getState().loadTargetInventory({ force: true }),
+    ).rejects.toThrow("read failed");
+
+    expect(useMcpStore.getState()).toEqual(
+      expect.objectContaining({
+        targetPresets: [claudePreset],
+        targetStatus: [claudeTargetStatus],
+        hasLoadedTargetInventory: true,
+        isLoadingTargetInventory: false,
+        targetInventoryError: "read failed",
+      }),
+    );
+
+    vi.mocked(window.api.mcp.getTargetStatus).mockResolvedValueOnce([]);
+    await useMcpStore.getState().loadTargetInventory({ force: true });
+
+    expect(useMcpStore.getState()).toEqual(
+      expect.objectContaining({
+        targetPresets: [claudePreset],
+        targetStatus: [],
+        hasLoadedTargetInventory: true,
+        isLoadingTargetInventory: false,
+        targetInventoryError: null,
+      }),
+    );
   });
 
   it("persists only loaded remote market entries and strips transient state", () => {

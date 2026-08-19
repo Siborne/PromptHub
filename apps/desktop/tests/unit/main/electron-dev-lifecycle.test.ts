@@ -25,6 +25,8 @@ describe("Electron development lifecycle", () => {
     expect(viteConfig).toContain('args.startup(["."])');
     expect(rendererEntry).toContain("<RendererErrorBoundary");
     expect(rendererEntry).toContain("<ToastProvider>");
+    expect(rendererEntry).not.toContain("AgentUsagePopover");
+    expect(rendererEntry).not.toContain("surface=agent-usage");
   });
 
   it("keeps renderer document, module, and HMR traffic on one loopback family", () => {
@@ -50,6 +52,7 @@ describe("Electron development lifecycle", () => {
     expect(viteConfig).toContain("await args.startup");
     expect(mainEntry).toContain('"http://127.0.0.1:5173"');
     expect(mainEntry).not.toContain('"http://localhost:5173"');
+    expect(mainEntry).not.toContain("AgentUsagePopoverWindowController");
     expect(mainEntry).toMatch(
       /function emitWindowVisibility\(isVisible: boolean\) \{\s+if \(isQuitting\) return;/,
     );

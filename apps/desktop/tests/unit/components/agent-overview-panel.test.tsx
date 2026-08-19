@@ -1,4 +1,10 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,7 +13,6 @@ import type {
   ManagedAgentSummary,
 } from "@prompthub/shared/types";
 import { AgentOverviewPanel } from "../../../src/renderer/components/agent/AgentOverviewPanel";
-import { agentAssetAggregationService } from "../../../src/renderer/services/agent-asset-domain-adapters";
 import { useMcpStore } from "../../../src/renderer/stores/mcp.store";
 import { usePluginStore } from "../../../src/renderer/stores/plugin.store";
 import { useRulesStore } from "../../../src/renderer/stores/rules.store";
@@ -21,6 +26,25 @@ import { installWindowMocks } from "../../helpers/window";
 
 function renderWithI18n(ui: ReactElement) {
   return renderWithI18nBase(ui, { settleAsyncEffects: true });
+}
+
+const originalStoreActions = {
+  loadSkills: useSkillStore.getState().loadSkills,
+  scanAgentPlatformSkills: useSkillStore.getState().scanAgentPlatformSkills,
+  loadMcpTargetInventory: useMcpStore.getState().loadTargetInventory,
+  loadRules: useRulesStore.getState().loadFiles,
+  loadPluginTargetInventory: usePluginStore.getState().loadTargetInventory,
+};
+
+function createDeferred(): {
+  promise: Promise<void>;
+  resolve: () => void;
+} {
+  let resolve!: () => void;
+  const promise = new Promise<void>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
 }
 
 const claudeAgent: ManagedAgentSummary = {
@@ -186,6 +210,8 @@ function seedStores() {
         isScanning: false,
       },
     },
+    loadSkills: originalStoreActions.loadSkills,
+    scanAgentPlatformSkills: originalStoreActions.scanAgentPlatformSkills,
   });
   useMcpStore.setState({
     library: {
@@ -213,6 +239,10 @@ function seedStores() {
         serverNames: ["fs", "web"],
       },
     ],
+    hasLoadedTargetInventory: true,
+    isLoadingTargetInventory: false,
+    targetInventoryError: null,
+    loadTargetInventory: originalStoreActions.loadMcpTargetInventory,
   });
   useRulesStore.setState({
     hasLoadedFiles: true,
@@ -230,6 +260,9 @@ function seedStores() {
         group: "assistant",
       },
     ],
+    isLoading: false,
+    error: null,
+    loadFiles: originalStoreActions.loadRules,
   });
   usePluginStore.setState({
     library: {
@@ -284,6 +317,10 @@ function seedStores() {
         ],
       },
     ],
+    hasLoadedTargetInventory: true,
+    isLoadingTargetInventory: false,
+    targetInventoryError: null,
+    loadTargetInventory: originalStoreActions.loadPluginTargetInventory,
   });
 }
 
@@ -293,42 +330,409 @@ describe("AgentOverviewPanel", () => {
     seedStores();
   });
 
-  it("keeps overview asset summaries passive on a cold cache", async () => {
-    const loadSkills = vi.fn();
-    const scanSkills = vi.fn();
-    const loadMcp = vi.fn();
-    const loadRules = vi.fn();
-    const loadPlugins = vi.fn();
-    const listForTarget = vi.spyOn(
-      agentAssetAggregationService,
-      "listForTarget",
-    );
+  it("hydrates cold Overview counts through summary-only domain reads", async () => {
+    const managedSkill = createSkillFixture({
+      local_repo_path: "/Users/demo/skills/write",
+    });
+    window.api.skill.getAll = vi.fn().mockResolvedValue([managedSkill]);
+    window.api.skill.scanPlatformSkills = vi.fn().mockResolvedValue({
+      platform: null,
+      skillsDir: "~/.claude/skills",
+      scannedSkills: [
+        {
+          ...createScannedSkillFixture({
+            localPath: "/Users/demo/skills/write",
+          }),
+          installMode: "copy",
+          platformSkillPath: "~/.claude/skills/write",
+        },
+        {
+          ...createScannedSkillFixture({
+            name: "external",
+            localPath: "~/.claude/skills/external",
+          }),
+          installMode: "copy",
+          platformSkillPath: "~/.claude/skills/external",
+        },
+      ],
+    });
+    window.api.mcp.getTargetPresets = vi.fn().mockResolvedValue([
+      {
+        id: "preset-claude",
+        target: "claude",
+        scope: "global",
+        label: "Claude Code",
+        path: "~/.claude.json",
+        platformId: "claude",
+      },
+    ]);
+    window.api.mcp.getTargetStatus = vi.fn().mockResolvedValue([
+      {
+        presetId: "preset-claude",
+        path: "~/.claude.json",
+        exists: true,
+        serverNames: ["filesystem"],
+      },
+    ]);
+    window.api.rules.list = vi.fn().mockResolvedValue([
+      {
+        id: "claude-global",
+        platformId: "claude",
+        platformName: "Claude Code",
+        platformIcon: "Sparkles",
+        platformDescription: "Global Claude rules",
+        name: "CLAUDE.md",
+        description: "Global Claude rules",
+        path: "~/.claude/CLAUDE.md",
+        exists: true,
+        group: "assistant",
+      },
+    ]);
+    window.api.plugin.getTargetMatrix = vi.fn().mockResolvedValue([
+      {
+        id: "claude",
+        displayName: "Claude Code",
+        status: "native",
+        enabled: true,
+        installedPlugins: [
+          {
+            id: "plugin-formatter",
+            name: "formatter",
+            displayName: "Formatter",
+            inventory: {
+              skills: 0,
+              mcpServers: 0,
+              apps: 0,
+              commands: 0,
+              hooks: 0,
+              agents: 0,
+              assets: 0,
+              docs: 0,
+              lspServers: 0,
+              scripts: 0,
+            },
+          },
+        ],
+      },
+    ]);
     useSkillStore.setState({
       skills: [],
       isLoading: false,
       agentScanState: {},
-      loadSkills,
-      scanAgentPlatformSkills: scanSkills,
     });
-    useMcpStore.setState({ library: null, load: loadMcp });
+    useMcpStore.setState({
+      library: null,
+      targetPresets: [],
+      targetStatus: [],
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+    });
     useRulesStore.setState({
       files: [],
       hasLoadedFiles: false,
-      loadFiles: loadRules,
+      isLoading: false,
+      error: null,
     });
-    usePluginStore.setState({ library: null, load: loadPlugins });
+    usePluginStore.setState({
+      library: null,
+      targetMatrix: [],
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+    });
 
     await renderWithI18n(
       <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
     );
 
-    expect(loadSkills).not.toHaveBeenCalled();
-    expect(scanSkills).not.toHaveBeenCalled();
-    expect(loadMcp).not.toHaveBeenCalled();
+    const skillsCell = screen.getByRole("button", { name: /^skills/i });
+    const mcpCell = screen.getByRole("button", { name: /^mcp/i });
+    const rulesCell = screen.getByRole("button", { name: /^rules/i });
+    const pluginsCell = screen.getByRole("button", { name: /^plugins/i });
+    expect(await within(skillsCell).findByText("2")).toBeVisible();
+    expect(
+      within(skillsCell).getByText("1 managed · 1 external"),
+    ).toBeVisible();
+    expect(await within(mcpCell).findByText("1")).toBeVisible();
+    expect(await within(rulesCell).findByText("1")).toBeVisible();
+    expect(await within(pluginsCell).findByText("1")).toBeVisible();
+
+    expect(window.api.skill.getAll).toHaveBeenCalledTimes(1);
+    expect(window.api.skill.scanPlatformSkills).toHaveBeenCalledWith("claude");
+    expect(window.api.mcp.getTargetPresets).toHaveBeenCalledTimes(1);
+    expect(window.api.mcp.getTargetStatus).toHaveBeenCalledTimes(1);
+    expect(window.api.rules.list).toHaveBeenCalledTimes(1);
+    expect(window.api.plugin.getTargetMatrix).toHaveBeenCalledTimes(1);
+    expect(window.api.mcp.getLibrary).not.toHaveBeenCalled();
+    expect(window.api.mcp.listMarket).not.toHaveBeenCalled();
+    expect(window.api.mcp.listMarketSources).not.toHaveBeenCalled();
+    expect(window.api.mcp.checkAllServers).not.toHaveBeenCalled();
+    expect(window.api.rules.scan).not.toHaveBeenCalled();
+    expect(window.api.rules.read).not.toHaveBeenCalled();
+    expect(window.api.plugin.getLibrary).not.toHaveBeenCalled();
+    expect(window.api.plugin.listMarket).not.toHaveBeenCalled();
+    expect(window.api.plugin.listMarketSources).not.toHaveBeenCalled();
+  });
+
+  it("runs at most two cold domain summary hydrators concurrently", async () => {
+    const gates = Array.from({ length: 4 }, () => createDeferred());
+    let active = 0;
+    let maxActive = 0;
+    const tracked = <T,>(index: number, result: T, complete: () => void) =>
+      vi.fn(async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await gates[index].promise;
+        complete();
+        active -= 1;
+        return result;
+      });
+    const scanResult = {
+      platform: null as never,
+      skillsDir: "~/.claude/skills",
+      scannedSkills: [],
+    };
+    const scanSkills = tracked(0, scanResult, () => {
+      useSkillStore.setState({
+        agentScanState: {
+          claude: { result: scanResult, isScanning: false, error: null },
+        },
+      });
+    });
+    const loadMcp = tracked(1, undefined, () => {
+      useMcpStore.setState({
+        hasLoadedTargetInventory: true,
+        isLoadingTargetInventory: false,
+        targetInventoryError: null,
+      });
+    });
+    const loadRules = tracked(2, undefined, () => {
+      useRulesStore.setState({ hasLoadedFiles: true, isLoading: false });
+    });
+    const loadPlugins = tracked(3, undefined, () => {
+      usePluginStore.setState({
+        hasLoadedTargetInventory: true,
+        isLoadingTargetInventory: false,
+        targetInventoryError: null,
+      });
+    });
+    useSkillStore.setState({
+      skills: [],
+      agentScanState: {},
+      loadSkills: vi.fn().mockResolvedValue(undefined),
+      scanAgentPlatformSkills: scanSkills,
+    });
+    useMcpStore.setState({
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+      loadTargetInventory: loadMcp,
+    });
+    useRulesStore.setState({
+      hasLoadedFiles: false,
+      isLoading: false,
+      error: null,
+      loadFiles: loadRules,
+    });
+    usePluginStore.setState({
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+      loadTargetInventory: loadPlugins,
+    });
+
+    await renderWithI18n(
+      <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
+    );
+
+    await waitFor(() => {
+      expect(scanSkills).toHaveBeenCalledTimes(1);
+      expect(loadMcp).toHaveBeenCalledTimes(1);
+    });
     expect(loadRules).not.toHaveBeenCalled();
     expect(loadPlugins).not.toHaveBeenCalled();
-    expect(listForTarget).not.toHaveBeenCalled();
-    listForTarget.mockRestore();
+    expect(maxActive).toBe(2);
+    expect(
+      within(screen.getByRole("button", { name: /^skills/i })).getByText(
+        "Loading asset inventory…",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText("0 managed · 0 external")).toBeNull();
+
+    await act(async () => {
+      gates[0].resolve();
+      gates[1].resolve();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(loadRules).toHaveBeenCalledTimes(1);
+      expect(loadPlugins).toHaveBeenCalledTimes(1);
+    });
+    expect(maxActive).toBe(2);
+
+    await act(async () => {
+      gates[2].resolve();
+      gates[3].resolve();
+      await Promise.resolve();
+    });
+  });
+
+  it("continues later domain summaries when one owner rejects", async () => {
+    const scanResult = {
+      platform: null as never,
+      skillsDir: "~/.claude/skills",
+      scannedSkills: [],
+    };
+    const loadRules = vi.fn().mockResolvedValue(undefined);
+    const loadPlugins = vi.fn().mockResolvedValue(undefined);
+    useSkillStore.setState({
+      skills: [],
+      agentScanState: {
+        claude: { result: scanResult, isScanning: false, error: null },
+      },
+      loadSkills: vi.fn().mockResolvedValue(undefined),
+    });
+    useMcpStore.setState({
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+      loadTargetInventory: vi.fn().mockRejectedValue(new Error("MCP failed")),
+    });
+    useRulesStore.setState({
+      hasLoadedFiles: false,
+      isLoading: false,
+      error: null,
+      loadFiles: loadRules,
+    });
+    usePluginStore.setState({
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+      loadTargetInventory: loadPlugins,
+    });
+
+    await renderWithI18n(
+      <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
+    );
+
+    await waitFor(() => {
+      expect(loadRules).toHaveBeenCalledTimes(1);
+      expect(loadPlugins).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("distinguishes initial failures from a successful empty inventory", async () => {
+    useSkillStore.setState({
+      skills: [],
+      agentScanState: {
+        claude: { result: null, isScanning: false, error: "scan failed" },
+      },
+    });
+    useMcpStore.setState({
+      targetPresets: [],
+      targetStatus: [],
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: "MCP failed",
+    });
+    useRulesStore.setState({
+      files: [],
+      hasLoadedFiles: false,
+      isLoading: false,
+      error: "Rules failed",
+    });
+    usePluginStore.setState({
+      targetMatrix: [],
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: "Plugins failed",
+    });
+
+    await renderWithI18n(
+      <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
+    );
+
+    expect(
+      screen.getAllByText("Asset inventory could not be loaded."),
+    ).toHaveLength(4);
+    expect(screen.queryByText("0 managed · 0 external")).toBeNull();
+  });
+
+  it("renders zero only after each owner reports a successful empty result", async () => {
+    useSkillStore.setState({
+      skills: [],
+      agentScanState: {
+        claude: {
+          result: {
+            platform: null as never,
+            skillsDir: "~/.claude/skills",
+            scannedSkills: [],
+          },
+          isScanning: false,
+          error: null,
+        },
+      },
+    });
+    useMcpStore.setState({
+      targetPresets: [],
+      targetStatus: [],
+      hasLoadedTargetInventory: true,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+    });
+    useRulesStore.setState({
+      files: [],
+      hasLoadedFiles: true,
+      isLoading: false,
+      error: null,
+    });
+    usePluginStore.setState({
+      targetMatrix: [],
+      hasLoadedTargetInventory: true,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+    });
+
+    await renderWithI18n(
+      <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
+    );
+
+    for (const label of ["Skills", "MCP", "Rules", "Plugins"]) {
+      const cell = screen.getByRole("button", {
+        name: new RegExp(`^${label}`, "i"),
+      });
+      expect(within(cell).getByText("0")).toBeVisible();
+    }
+    expect(screen.getByText("0 managed · 0 external")).toBeVisible();
+  });
+
+  it("keeps cached counts visible while refreshing or after refresh failure", async () => {
+    useMcpStore.setState({
+      hasLoadedTargetInventory: true,
+      isLoadingTargetInventory: true,
+      targetInventoryError: null,
+    });
+    usePluginStore.setState({
+      hasLoadedTargetInventory: true,
+      isLoadingTargetInventory: false,
+      targetInventoryError: "refresh failed",
+    });
+
+    await renderWithI18n(
+      <AgentOverviewPanel agent={claudeAgent} onNavigate={vi.fn()} />,
+    );
+
+    const mcpCell = screen.getByRole("button", { name: /^mcp/i });
+    expect(within(mcpCell).getByText("2")).toBeVisible();
+    expect(
+      within(mcpCell).getByText("Refreshing asset inventory…"),
+    ).toBeVisible();
+    const pluginsCell = screen.getByRole("button", { name: /^plugins/i });
+    expect(within(pluginsCell).getByText("2")).toBeVisible();
+    expect(
+      within(pluginsCell).getByText("Refresh failed; showing cached data."),
+    ).toBeVisible();
   });
 
   it("renders real domain counts from the owning stores and IPC summaries", async () => {

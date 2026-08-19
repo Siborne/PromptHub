@@ -486,13 +486,26 @@ describe("AgentRulesWorkspace", () => {
     });
   });
 
-  it("loads the Rules inventory once when the shared store has not initialized", async () => {
-    const list = vi.fn().mockResolvedValue([descriptor()]);
+  it("loads the Rules inventory once and reads only the current Agent rule", async () => {
+    const unrelated = descriptor({
+      id: "gemini-global",
+      platformId: "gemini",
+      platformName: "Gemini CLI",
+      name: "GEMINI.md",
+      path: "/Users/test/.gemini/GEMINI.md",
+    });
+    const list = vi.fn().mockResolvedValue([unrelated, descriptor()]);
+    const read = vi.fn().mockImplementation(async (ruleId: string) => {
+      if (ruleId !== "claude-global") {
+        throw new Error(`Unexpected unrelated Rule read: ${ruleId}`);
+      }
+      return content();
+    });
     const { api } = installWindowMocks({
       api: {
         rules: {
           list,
-          read: vi.fn().mockResolvedValue(content()),
+          read,
         },
       },
     });
@@ -508,6 +521,7 @@ describe("AgentRulesWorkspace", () => {
     ).toHaveValue("# Claude rules");
     expect(list).toHaveBeenCalledTimes(1);
     expect(api.rules.read).toHaveBeenCalledWith("claude-global");
+    expect(api.rules.read).toHaveBeenCalledTimes(1);
   });
 
   it("registers and creates a Cursor project rule from the selected project", async () => {
@@ -671,6 +685,29 @@ describe("AgentRulesWorkspace", () => {
     ).toHaveValue("# Claude rules");
     expect(read).toHaveBeenCalledTimes(1);
     expect(scan).not.toHaveBeenCalled();
+  });
+
+  it("shows an initial descriptor failure instead of an endless loading state", async () => {
+    const list = vi.fn().mockRejectedValue(new Error("RULE_LIST_FAILED"));
+    const scan = vi.fn().mockResolvedValue([]);
+    installWindowMocks({ api: { rules: { list, scan } } });
+
+    await act(async () => {
+      await renderWithI18n(<AgentRulesWorkspace agent={claudeAgent} />, {
+        language: "en",
+      });
+    });
+
+    expect(
+      await screen.findByText("Asset inventory could not be loaded."),
+    ).toBeVisible();
+    expect(screen.queryByText("Loading Rules...")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await Promise.resolve();
+    });
+    expect(scan).toHaveBeenCalledTimes(1);
   });
 
   it("supports custom platform fallback, Windows path normalization, and unavailable Agents", async () => {

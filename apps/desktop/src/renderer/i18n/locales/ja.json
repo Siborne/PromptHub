@@ -1060,16 +1060,6 @@
       "customProviderDesc": "既定のプロバイダーはサードパーティのエンドポイントです。クォータデータは公式サブスクリプションでのみ利用できます。現在のプロバイダーは「プロバイダーとモデル」タブで確認してください。",
       "retry": "再試行"
     },
-    "usagePopover": {
-      "title": "Agent クォータ",
-      "subtitle": "サブスクリプション使用状況",
-      "cached": "キャッシュ",
-      "agentLabel": "{{agent}} クォータ",
-      "refresh": "クォータを更新",
-      "showDetails": "{{agent}} のクォータ詳細を表示",
-      "hideDetails": "{{agent}} のクォータ詳細を隠す",
-      "progressLabel": "{{agent}}、{{metric}}：残り {{remaining}}%"
-    },
     "overview": "概要",
     "providerAndModel": "プロバイダーとモデル",
     "appearanceTab": "外観",
@@ -1152,6 +1142,9 @@
     "rulesPath": "Rules",
     "notAvailable": "利用不可",
     "assetLoadFailed": "アセット一覧を読み込めませんでした。",
+    "assetLoading": "アセット一覧を読み込み中…",
+    "assetRefreshing": "アセット一覧を更新中…",
+    "assetRefreshFailedCached": "更新に失敗しました。キャッシュ済みデータを表示しています。",
     "capabilities": "管理機能",
     "openAsset": "{{asset}} を開く",
     "openAgentSettings": "Agent 設定を開く",
@@ -3593,6 +3586,7 @@
     "previewTruncated": "プレビューは一部のみ表示しています。完全な内容は復元後に確認できます。",
     "sourceType": {
       "current-residual": "現在のディレクトリの残留データ",
+      "current-file-workspace": "現在の Markdown ワークスペース",
       "current-canonical-db": "現在の SQLite データベース",
       "external-user-data": "以前のデータディレクトリ",
       "upgrade-backup": "自動アップグレードバックアップ",

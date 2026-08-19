@@ -1061,16 +1061,6 @@
       "customProviderDesc": "当前默认 Provider 是第三方端点，配额数据仅对官方订阅可用。请前往「供应商与模型」页查看当前 Provider。",
       "retry": "重试"
     },
-    "usagePopover": {
-      "title": "Agent 额度",
-      "subtitle": "订阅用量实时概览",
-      "cached": "缓存数据",
-      "agentLabel": "{{agent}} 额度",
-      "refresh": "刷新额度",
-      "showDetails": "展开 {{agent}} 额度详情",
-      "hideDetails": "收起 {{agent}} 额度详情",
-      "progressLabel": "{{agent}}，{{metric}}：剩余 {{remaining}}%"
-    },
     "overview": "概览",
     "providerAndModel": "供应商与模型",
     "appearanceTab": "外观",
@@ -1153,6 +1143,9 @@
     "rulesPath": "Rules",
     "notAvailable": "暂不可用",
     "assetLoadFailed": "无法加载资产清单。",
+    "assetLoading": "正在加载资产清单…",
+    "assetRefreshing": "正在刷新资产清单…",
+    "assetRefreshFailedCached": "刷新失败，正在显示缓存数据。",
     "capabilities": "管理能力",
     "openAsset": "打开 {{asset}}",
     "openAgentSettings": "打开 Agent 设置",
@@ -3631,6 +3624,7 @@
     "previewTruncated": "预览只展示部分条目，恢复后可查看完整数据。",
     "sourceType": {
       "current-residual": "当前目录残留数据",
+      "current-file-workspace": "当前 Markdown 工作区",
       "current-canonical-db": "当前 SQLite 数据库",
       "external-user-data": "旧数据目录",
       "upgrade-backup": "自动升级备份",

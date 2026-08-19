@@ -593,3 +593,23 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 
 - [x] `TEST-AGENT-207` 先复现旧版已保存完整 Agent 顺序时，新注册的 DeepSeek Harness 被排到清单末尾、首屏看起来像未接入的问题；覆盖纯顺序合并、Agent 管理行位置以及共享官方标题/图标投影。
 - [x] `T-AGENT-216` 按 `FR-AGENT-127` / `DES-AGENT-145` 让 Skill 与 Agent 管理共用当前注册表感知的偏好顺序合并；保留用户已有相对顺序，不重置设置、不新增持久化字段、不复制 DeepSeek 身份或图标映射。
+
+## File-Authoritative Agent Skill Inventory Follow-up
+
+- [x] `TEST-AGENT-208` 先复现直接打开 Agent Skills 时不触发扫描、持久化空结果在重启后继续伪装为真实空目录的问题；覆盖首次 loading、单次文件扫描、发现结果和旧缓存丢弃。
+- [x] `T-AGENT-217` 按 `FR-AGENT-128` / `DES-AGENT-146` 将 Agent Skill scan 收敛为 session-scoped derived cache；直接 Skills 页负责冷启动扫描，失败与成功空目录分离，不新增 DB、watcher、轮询或网络请求。
+
+## Truthful Cross-Domain Asset Summary Follow-up
+
+- [x] `TEST-AGENT-209` 先复现 Overview 冷缓存永远未知、Skills 未加载却显示 `0 managed · 0 external`、MCP/Plugin 首次失败同时显示成功空态、缺失 Rules 文件被计数的问题；覆盖四域摘要成功/空/首次失败/重试/缓存后刷新失败、摘要 I/O 白名单和最多两域并发。
+- [x] `T-AGENT-218` 按 `FR-AGENT-129` / `DES-AGENT-147` 为 Skills/MCP/Rules/Plugins 增加 owner-scoped 轻量摘要加载和统一生命周期；Overview 不得触发市场、健康检查、规则正文、全量库、跨域校验、网络、watcher、轮询、schema 或 IPC 变更。
+
+## Native Tray Quota Follow-up
+
+- [x] `TEST-AGENT-210` 先复现 macOS 主点击打开自绘额度 BrowserWindow、原生动作菜单缺少额度子菜单及 Grok verified adapter 被旧六项硬编码遗漏的问题；覆盖能力注册表派生的具名 loading 行、原生套餐/指标/重置文本、七语言状态、两路并发、single-flight、单 Provider 失败隔离、缓存失败保留、动态文案清理、强制刷新和销毁后迟到结果隔离。
+- [x] `T-AGENT-219` 按修订后的 `FR-AGENT-093` / `DES-AGENT-148` 删除额度 popover renderer、window/controller、专属 CSS/i18n/tests，并将所有平台接回 Electron 原生 tray menu；保留共享 usage service，不新增凭据、IPC、持久化、watcher、timer、端口或进程。
+
+## Native Config Editor Surface Hierarchy Follow-up
+
+- [x] `TEST-AGENT-211` 先锁定 Agent 配置页标题栏、共享文件编辑器右侧主画布和 CodeMirror host 使用 `card` 语义面；同时保留文件树的次级灰面，并禁止用 raw white 规避深色主题。
+- [x] `T-AGENT-220` 按 `FR-AGENT-130` / `DES-AGENT-149` 在共享文件编辑器边界恢复主次表面对比；不得新增 Codex 专属皮肤、嵌套卡片、状态、IPC、文件 I/O、网络请求或后台生命周期。

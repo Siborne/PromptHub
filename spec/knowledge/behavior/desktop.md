@@ -24,6 +24,12 @@
   普通文件，不能执行它做版本探测。只有 pnpm/npm 安装独立 CLI 成功后，才可再次确认并
   删除完全匹配的旧 wrapper；安装失败或文件已被替换时必须保留。
 
+### 2.2 Desktop Application Shell
+
+- 桌面一级模块由统一的 `AppModule` 状态驱动，当前稳定模块包括 Prompt、Skill、Agent、Rules、MCP 与 Plugin；设置入口固定在一级 rail 底部。
+- 一级模块的显隐与顺序使用同一份持久化偏好。恢复旧快照时必须过滤未知项与重复项；当前模块被隐藏时必须回退到第一个可见模块。
+- 收起侧栏时只保留一级 rail，二级模块面板整体隐藏，主内容区使用释放后的空间；二级面板不得维护另一份一级模块选择状态。
+
 ### 3. Stable Internal Sources
 
 - 长期工程边界和代码结构治理见 `spec/knowledge/structure/code-structure-guidelines.md`。
@@ -44,6 +50,7 @@
 - renderer、`packages/core` 与 Web 服务的 endpoint、鉴权头和旧配置协议推断统一由 `packages/shared/utils/ai-protocol.ts` 派生；业务调用层不得维护自己的副本。URL 尾部 `#` 表示在标准化后禁止继续自动追加协议路径。
 - `Anthropic` 当前稳定行为为原生 `POST /v1/messages` 非流式聊天与 `GET /v1/models` 模型发现；在补齐原生 SSE 解析前，桌面端不应把 Claude 原生协议暴露为可流式聊天能力。
 - AI workbench 的“测试模型 / 测试默认模型 / 测试连接”是轻量探活，不是长文本生成或性能压测；聊天模型测试必须使用短 prompt、小 token 上限、非流式、关闭 thinking，并带显式测试超时，避免本地 OpenAI-compatible 模型因为继承 2048 token、stream 或 thinking 配置而被拖慢。
+- renderer persistence 迁移前，非空 `config/ai-models.json` 是模型清单的文件真相源，Zustand 默认空数组不得覆盖它。迁移后由 `config/providers.json` 与设备加密 vault 持有 canonical 配置，`ai-models.json` 仅保留脱敏兼容投影。若 beta 迁移留下“模型为空但路由仍指向模型 id”的状态，启动只可从最多五个受管升级安全点中选择包含全部路由 id 的精确候选并原子修复；无精确候选或无悬空路由时不得自动恢复。
 
 ### 5.1 Agent Provider And Model Configuration
 
@@ -55,6 +62,12 @@
 - Antigravity 的 Skills/MCP root 仍是 `~/.gemini/config`，模型设置单独解析到 `~/.gemini/antigravity-cli/settings.json`。Claw family 只用于展示分组，各成员继续使用自己的 root、文件格式和安全边界，不得继承 OpenClaw adapter。
 - native model adapter 只能向 renderer 返回 model、provider、脱敏 endpoint、可用模型与 credential status；API key、token 和独立 secret store 不得进入 IPC。写入只更新模型选择字段，并使用 2 MiB 有界读取、symlink/路径 containment 校验、私有备份、并发修改检测、原子替换、语义重读和失败回滚。
 - CoPaw 只更新全局配置明确选中的 active Agent workspace；不得读取其 provider secret store。NanoClaw 的模型来源是 per-Agent-Group `container_configs`，在 Provider context 增加显式 child target 前继续保持 planned，不得选择任意 group 或修改生成的 container 文件。
+
+### 5.2 Agent Native Config Editor Surfaces
+
+- Agent 配置文件页使用统一的共享文件编辑器，不为单个 Agent 复制编辑器或主题样式。
+- 浅色主题下，配置页标题栏、共享文件编辑器右侧主画布和 CodeMirror 编辑面使用 `card` 语义面；应用 shell 与文件树保持较安静的 `background` / `muted` 语义面，并通过既有 divider 分层。
+- 深色主题继续使用同一组配对语义 token；配置编辑器不得硬编码 white、专属灰阶或绕过全局主题变量。该表面层级不改变文件发现、allowlist、读写、保存、文件管理器动作或 IPC 边界。
 
 ### 6. Prompt AI Workbench Boundaries
 
@@ -116,21 +129,22 @@
 
 ### 9.4 Desktop Tray Agent Quotas
 
+- 状态栏额度只能通过 Electron 原生 `Menu` / submenu 呈现；不得为额度创建 renderer `BrowserWindow`、vibrancy 外壳、自绘卡片、产品图标行、套餐胶囊、环形/条形进度或展开控件。macOS、Windows 与 Linux 共享同一原生菜单信息层级。
 - 原生状态栏菜单必须复用 Agent 工作区的进程级 usage service，不得创建第二套凭据读取、网络请求或额度缓存。
 - 菜单打开时先同步展示最近一次内存快照，再在后台通过 adapter 自身的 60 秒缓存更新；只有用户点击“刷新额度”时才绕过缓存。
 - 首次快照尚未完成时，菜单必须按稳定 registry 顺序同步展示每个已验证 Agent 的具名 loading 行；两路有界并发中的单项结果完成后，只替换对应 Agent 行，不等待其他 Provider。
 - 额度投影只覆盖已经验证的 usage adapter，Provider 请求最多两路并发。单个平台失败必须被隔离并显示明确的未连接、凭据过期或暂不可用状态，不得伪造成 `0%`。
 - 紧凑摘要使用最紧张指标的剩余百分比；子菜单显示全部指标、重置时间和套餐。动态名称、指标和错误必须经过有界、无控制字符的安全投影，凭据和原始 Provider 错误不得进入菜单或日志。
-- Agent Overview 与菜单栏额度视图必须复用版本化的 scope/period/value 契约和同一套 presentation model。所有百分比和金额都统一表示“剩余”；有限滚动窗口与日/周窗口无论上报百分比还是绝对量都使用紧凑圆环，月度、账期、总量和 provider-defined 指标使用水平进度条，`unlimited` / `unknown` 不得伪造成 `0%`。成功态不重复显示“数据由服务商上报”，缓存刷新仅由刷新控件表达忙碌状态，刷新失败影响可信度时才明确标记旧数据。
+- Agent Overview 与菜单栏额度必须复用版本化的 scope/period/value 契约和共享的 plan、剩余百分比、主指标纯函数。所有百分比和金额都统一表示“剩余”；Overview 可按 period 语义使用圆环或水平进度条，原生菜单只使用系统文本行表达相同数值、套餐和重置时间，不模拟图表。`unlimited` / `unknown` 不得伪造成 `0%`，刷新失败影响可信度时必须明确标记缓存数据。
 - Agent Overview 的路径详情默认展开，resolved path 与 open-folder 动作无需额外点击即可访问。
 - Antigravity baseline 额度只认 `RetrieveUserQuotaSummary` 的 Gemini 与 Claude/GPT 分组 5h/weekly 窗口；`GetUserStatus` 只提供套餐身份，其旧 `monthlyPromptCredits` / `availablePromptCredits` 字段不得显示为总额度。AI credits 属于 baseline 用尽后的 overage，只有独立且已验证的余额来源与类型化契约落地后才能展示。
 - 额度组合按 account、model-group、feature、model scope 排序，不得按 Agent id 分支。单个 model 列表默认最多展示四项，展开后全量仍限制为 64 项并在额度区域内部滚动；Provider 动态 id、label 和 unit 必须在 main 侧清理和限长后才能进入 IPC。
 - Kimi Code 当前 credential 的短期 access token 到期或在 usage 请求返回 `401` 时，主进程必须按官方 refresh contract 有界续期并最多重试一次 usage；续期必须与原生 CLI 共用锁语义、锁后重读、同进程合并并以 `0600` 原子替换当前 credential，未知字段保持不变，legacy credential 不得被写入。
 - Kimi Code 额度只将 coding usages 的顶层 `usage` 作为周额度、`limits[]` 作为滚动窗口；当前 `remaining`/`limit` 与旧 `used`/`limit` 都必须兼容，`300 TIME_UNIT_MINUTE` 必须归一为 5 小时。跨 Kimi 产品共享的月度会员总额度不得从不可信 `totalQuota` 或本地用量推算。
-- Kimi Code 套餐 badge 使用公开 tempo 名称，不展示内部 `LEVEL_*` 枚举；当前映射为 `Moderato`、`Allegretto`、`Allegro`、`Vivace`，未知值只做安全可读化。
+- Kimi Code 套餐在 Overview 使用现有 badge、在原生菜单使用普通文本行，两者都只显示公开 tempo 名称，不展示内部 `LEVEL_*` 枚举；当前映射为 `Moderato`、`Allegretto`、`Allegro`、`Vivace`，未知值只做安全可读化。
 - Kimi Code 历史列表通过有界 `session_index.jsonl` 候选读取 `state.json`，过滤没有 `lastPrompt` 的默认 `New Session` 空壳；可读会话仍以 contained `agents/main/wire.jsonl` 作为精确正文来源，但大小覆盖永久删除所拥有的完整 session 目录，正文仍按 2 MiB 上限只读投影。
 - Grok Build usage 只接受有界 `auth.json` 中 `https://auth.x.ai::` 官方主机记录，由 main 进程使用 bearer token 并行查询官方 user 与 billing 端点；正常刷新复用 60 秒缓存，每个请求使用 10 秒超时，token、账户身份和原始响应不得进入 renderer、日志或持久化存储。
-- Grok Build 的 `subscriptionTier` 通过共享套餐 formatter 显示为公开可读名称；billing 的 `creditUsagePercent` 必须转换为剩余百分比，并以 provider current-period end 作为账户级周额度重置时间。周额度复用共享圆环，不得新增 Grok 专用前端。
+- Grok Build 的 `subscriptionTier` 通过共享套餐 formatter 显示为公开可读名称；billing 的 `creditUsagePercent` 必须转换为剩余百分比，并以 provider current-period end 作为账户级周额度重置时间。Overview 周额度复用共享圆环，原生菜单使用普通文本，不得新增 Grok 专用前端。
 - Grok Build 历史列表以 contained `chat_history.jsonl` 的精确 real path 作为正文来源；会话大小覆盖永久删除所拥有的完整 session 目录，包括 summary 和该会话的运行附件。
 
 ### 9.5 Agent Conversation Storage Actions
@@ -201,6 +215,19 @@
 - 用户可保存当前登录、以 write-only 方式新增完整 `auth.json`、查看脱敏账号摘要并切换账号。切换只允许原子替换 `auth.json`，必须在成功前重读校验，失败时恢复此前原始字节；当前登录被 Codex 刷新或尚未保存时必须先更新或保留对应快照。
 - 账号管理不得返回或记录 token，不得修改 `config.toml`、供应商档案、模型、MCP、会话或其他 Codex 文件，也不得隐式联网验证。当前账号不可删除。
 
+### 9.16 Canonical Data Recovery
+
+- canonical 文件是本地持久数据的唯一真相源，SQLite 只是可重建目录和运行期投影。桌面启动必须先校验文件图；文件有效而 SQLite 缺失、损坏或逻辑陈旧时，应原子重建 SQLite，不展示恢复弹窗。
+- 当前版本低于持久化的 last-run version 时，必须在备份迁移、数据库打开和任何 workspace 写入前拒绝启动，且不得把版本 marker 向下改写；版本比较必须遵守 prerelease 顺序。
+- canonical Prompt 图被旧版本破坏，但当前 Markdown 工作区唯一、可严格解析且媒体可确定解析时，启动应自动把 Markdown 转换为已验证的 canonical bundle 并 journal 发布；只有重复 ID、解析失败、缺失/冲突媒体、危险路径或其它文件歧义才进入显式恢复。
+- 从 SQLite 恢复时，superseded MCP metadata 只能作为有界、普通文件、只读输入参与 staged checkpoint；含凭据字段必须经设备加密 secret sink 持久化，不得先在损坏的 active root 上运行普通兼容迁移。
+- SQLite 关闭后的恢复失败必须先重新打开原 catalog，再完整移除并重绑 `registerAllIPC` 所有 handler，随后才向 renderer 返回可重试错误；重复注册不得因遗漏 Prompt metadata、tag 或其他非数据库 handler 而中断。
+- 当前 Prompt Markdown 工作区可读时，恢复必须以文件中的 Prompt 集合和当前内容为准；SQLite 只可补充仍属于这些 Prompt 的版本历史，不得覆盖文件内容或复活仅存在于数据库的 Prompt。检查和恢复不得移动或改写源 Markdown。
+- 文件恢复同样以 `_folder.json`/`folders.json` 的 Folder 集合为准，并按父项优先的线性顺序导入 Folder 与 Prompt；缺失父项、环、符号链接、特殊/未声明/超限文件和超限清单都必须在发布前失败。SQLite 替换期间必须阻止新迁移客户端并拒绝活跃或未知客户端。
+- 缺失媒体只可从 active assets、已验证 recovery artifact 或升级 safety point 中补齐；所有同名候选必须是普通文件且 SHA-256 一致，否则在发布前失败。IPC 重绑集合必须由实际成功注册动态捕获，嵌套 handler 和部分注册失败不得依赖手工列表。
+- canonical authority 生效后，启动不得再把 SQLite 导出到旧 Markdown 工作区；转换前的 Markdown 由 journaled recovery artifact 保留。Prompt 自愈必须原样保留其它 canonical 领域，因此设备 MCP secret 损坏不得阻断 Prompt/SQLite 重建。
+- canonical catalog 可忽略严格为空的 `rules/.versions` 与 `rules/projects` 兼容目录，但必须拒绝非空、符号链接或类型替换。缺失服务端用户行的 Skill owner 只在派生 SQLite 中降为 null；同平台同名活跃 Agent profile 只在派生 SQLite 中按 `updatedAt`、id 稳定保留一个活跃项，其余投影为 archived；源 bundle 均不得改写。
+
 ### 10. Renderer List Virtualization
 
 - 桌面端 renderer 必须用 `@tanstack/react-virtual` 把以下四个长列表场景控制在 O(visible) 量级：
@@ -229,6 +256,15 @@
 
 ### 13. MCP Store Source And Update Boundaries
 
+- My MCP 的当前定义和版本以 `data/mcp/<server-id>/` 下的 canonical bundle
+  为唯一真源；SQLite、renderer 状态以及 Agent/project 原生 MCP 文件都是派生投影。
+  设备 binding 位于 `config/devices/mcp-bindings.json`。非空 literal `env`/header
+  只进入设备绑定加密 vault；空值表示尚未配置，保留在 bundle 文件中且不创建 vault
+  entry。
+- renderer 获取 My MCP 清单时，即使设备 vault 缺失、不可读或无法解密，也必须从
+  已验证 bundle 返回完整定义，并把不可用凭据保持为 `[REDACTED]`；不得清空列表或
+  回退 SQLite。需要真实凭据的执行、分发和修改仍必须严格失败，bundle/schema/path
+  错误也不得被密钥降级掩盖。
 - MCP 自定义商店源的网络授权真相源位于主进程管理的数据文件中；renderer 只保留兼容展示镜像。新增、编辑、启停和删除来源必须先由主进程原子持久化成功，renderer 才能提交状态。
 - MCP 商店抓取 IPC 必须同时携带 `sourceId` 与目标 URL。主进程只允许已注册来源的相同 origin 和受限 pathname；只有用户显式注册的自定义来源可获得私网和私网 HTTP 权限，内置来源不得继承该权限，重定向仍需逐跳复验。
 - 从内置、MCP Registry、自定义来源或未来 PromptHub Official Store 安装的 MCP 必须保存稳定模板身份、版本和来源字段 fingerprint。更新检查使用安装基线、本地配置和当前模板三方对账，不得把 Agent 目标文件同步冒充为上游版本更新。

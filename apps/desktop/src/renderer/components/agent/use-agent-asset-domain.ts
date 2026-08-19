@@ -15,9 +15,15 @@ import { useMcpStore } from "../../stores/mcp.store";
 import { usePluginStore } from "../../stores/plugin.store";
 import { useRulesStore } from "../../stores/rules.store";
 import { useSkillStore } from "../../stores/skill.store";
-import { useEnsureSkillLibraryLoaded } from "../skill/use-ensure-skill-library-loaded";
 
 export type AgentAssetDomain = "skills" | "mcp" | "rules" | "plugins";
+export type AgentAssetLoadState =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "refreshing"
+  | "stale"
+  | "failed";
 
 export interface AgentAssetItem {
   id: string;
@@ -29,6 +35,7 @@ export interface AgentAssetItem {
 export interface AgentAssetInventory {
   items: AgentAssetItem[];
   isLoading: boolean;
+  loadState: AgentAssetLoadState;
   status: AgentAssetDomainResult["status"];
   errorCode?: AgentAssetDomainResult["errorCode"];
   refresh: () => void;
@@ -52,6 +59,44 @@ const DOMAIN_KIND = {
   rules: "rule",
   plugins: "plugin",
 } as const;
+
+interface AgentAssetLoadFacts {
+  error: string | null | undefined;
+  hasLoaded: boolean;
+  isLoading: boolean;
+}
+
+function resolveLoadState(facts: AgentAssetLoadFacts): AgentAssetLoadState {
+  if (facts.hasLoaded) {
+    if (facts.isLoading) return "refreshing";
+    return facts.error ? "stale" : "ready";
+  }
+  if (facts.isLoading) return "loading";
+  return facts.error ? "failed" : "idle";
+}
+
+async function runBoundedSummaryTasks(
+  tasks: Array<() => Promise<unknown>>,
+  shouldStop: () => boolean,
+): Promise<void> {
+  let nextIndex = 0;
+  const worker = async (): Promise<void> => {
+    while (!shouldStop()) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const task = tasks[index];
+      if (!task) return;
+      try {
+        await task();
+      } catch {
+        // Owning stores retain the typed lifecycle state surfaced by the UI.
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(2, tasks.length) }, () => worker()),
+  );
+}
 
 function emptyAggregate(platformId: string): AgentAssetAggregate {
   return {
@@ -126,67 +171,84 @@ export function useAgentAssetInventoryMap(
     agent.capabilities.assets.status === "partial";
   const skillLibrary = useSkillStore((state) => state.skills);
   const skillScan = useSkillStore((state) => state.agentScanState[agent.id]);
-  const scanSkills = useSkillStore((state) => state.scanAgentPlatformSkills);
-  const mcpLibrary = useMcpStore((state) => state.library);
   const mcpPresets = useMcpStore((state) => state.targetPresets);
   const mcpStatus = useMcpStore((state) => state.targetStatus);
-  const loadMcp = useMcpStore((state) => state.load);
+  const mcpLoaded = useMcpStore((state) => state.hasLoadedTargetInventory);
+  const mcpLoading = useMcpStore((state) => state.isLoadingTargetInventory);
+  const mcpError = useMcpStore((state) => state.targetInventoryError);
+  const loadMcp = useMcpStore((state) => state.loadTargetInventory);
   const ruleFiles = useRulesStore((state) => state.files);
   const rulesLoaded = useRulesStore((state) => state.hasLoadedFiles);
+  const rulesLoading = useRulesStore((state) => state.isLoading);
+  const rulesError = useRulesStore((state) => state.error);
   const loadRules = useRulesStore((state) => state.loadFiles);
-  const pluginLibrary = usePluginStore((state) => state.library);
   const pluginTargets = usePluginStore((state) => state.targetMatrix);
-  const loadPlugins = usePluginStore((state) => state.load);
+  const pluginsLoaded = usePluginStore(
+    (state) => state.hasLoadedTargetInventory,
+  );
+  const pluginsLoading = usePluginStore(
+    (state) => state.isLoadingTargetInventory,
+  );
+  const pluginsError = usePluginStore((state) => state.targetInventoryError);
+  const loadPlugins = usePluginStore((state) => state.loadTargetInventory);
   const [validation, setValidation] = useState<AgentAssetAggregate | null>(
     null,
   );
-  useEnsureSkillLibraryLoaded(
-    eagerSkills && assetsEnabled && Boolean(agent.paths.skills),
-  );
 
   useEffect(() => {
-    if (
-      eagerSkills &&
-      assetsEnabled &&
-      agent.paths.skills &&
-      agent.isDetected &&
-      !skillScan?.result &&
-      !skillScan?.isScanning
-    ) {
-      void scanSkills(agent.id).catch(() => undefined);
+    if (!assetsEnabled) return;
+    let cancelled = false;
+    const tasks: Array<() => Promise<unknown>> = [];
+
+    if (eagerSkills && agent.paths.skills && agent.isDetected) {
+      tasks.push(async () => {
+        const state = useSkillStore.getState();
+        const scan = state.agentScanState[agent.id];
+        const requests: Promise<unknown>[] = [];
+        if (state.skills.length === 0 && !state.isLoading) {
+          requests.push(state.loadSkills({ preferCache: true }));
+        }
+        if (!scan?.result && !scan?.isScanning && !scan?.error) {
+          requests.push(state.scanAgentPlatformSkills(agent.id));
+        }
+        await Promise.allSettled(requests);
+      });
     }
+    if (eagerMcp && agent.paths.mcp) {
+      tasks.push(() => loadMcp());
+    }
+    if (eagerRules && agent.paths.rules) {
+      tasks.push(() => {
+        const state = useRulesStore.getState();
+        if (state.hasLoadedFiles || state.isLoading || state.error) {
+          return Promise.resolve();
+        }
+        return loadRules({ selectInitial: false });
+      });
+    }
+    if (eagerPlugins && agent.paths.plugins) {
+      tasks.push(() => loadPlugins());
+    }
+
+    void runBoundedSummaryTasks(tasks, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [
     agent.id,
     agent.isDetected,
+    agent.paths.mcp,
+    agent.paths.plugins,
+    agent.paths.rules,
     agent.paths.skills,
     assetsEnabled,
-    eagerSkills,
-    scanSkills,
-    skillScan?.isScanning,
-    skillScan?.result,
-  ]);
-  useEffect(() => {
-    if (eagerMcp && assetsEnabled && agent.paths.mcp && !mcpLibrary)
-      void loadMcp();
-  }, [agent.paths.mcp, assetsEnabled, eagerMcp, loadMcp, mcpLibrary]);
-  useEffect(() => {
-    if (eagerRules && assetsEnabled && agent.paths.rules && !rulesLoaded)
-      void loadRules();
-  }, [agent.paths.rules, assetsEnabled, eagerRules, loadRules, rulesLoaded]);
-  useEffect(() => {
-    if (
-      eagerPlugins &&
-      assetsEnabled &&
-      agent.paths.plugins &&
-      !pluginLibrary
-    )
-      void loadPlugins();
-  }, [
-    agent.paths.plugins,
-    assetsEnabled,
+    eagerMcp,
     eagerPlugins,
+    eagerRules,
+    eagerSkills,
+    loadMcp,
     loadPlugins,
-    pluginLibrary,
+    loadRules,
   ]);
 
   const aggregate = useMemo(
@@ -238,23 +300,19 @@ export function useAgentAssetInventoryMap(
   ]);
 
   const refreshSkills = useCallback(() => {
-    if (assetsEnabled && agent.isDetected) void scanSkills(agent.id);
-  }, [agent.id, agent.isDetected, assetsEnabled, scanSkills]);
+    if (assetsEnabled && agent.isDetected) {
+      void useSkillStore.getState().scanAgentPlatformSkills(agent.id);
+    }
+  }, [agent.id, agent.isDetected, assetsEnabled]);
   const refreshMcp = useCallback(() => {
-    if (assetsEnabled) void loadMcp();
+    if (assetsEnabled) void loadMcp({ force: true });
   }, [assetsEnabled, loadMcp]);
-  const refreshRules = useCallback(
-    () => {
-      if (assetsEnabled) void loadRules({ force: true });
-    },
-    [assetsEnabled, loadRules],
-  );
-  const refreshPlugins = useCallback(
-    () => {
-      if (assetsEnabled) void loadPlugins({ force: true });
-    },
-    [assetsEnabled, loadPlugins],
-  );
+  const refreshRules = useCallback(() => {
+    if (assetsEnabled) void loadRules({ force: true });
+  }, [assetsEnabled, loadRules]);
+  const refreshPlugins = useCallback(() => {
+    if (assetsEnabled) void loadPlugins({ force: true });
+  }, [assetsEnabled, loadPlugins]);
 
   return useMemo(() => {
     const current = aggregate;
@@ -267,15 +325,20 @@ export function useAgentAssetInventoryMap(
         : null;
     const build = (
       domain: AgentAssetDomain,
-      isLoading: boolean,
+      facts: AgentAssetLoadFacts,
       refresh: () => void,
     ): AgentAssetInventory => {
       const result = byKind.get(DOMAIN_KIND[domain]);
       const validated = validationByKind?.get(DOMAIN_KIND[domain]);
+      const loadState = resolveLoadState(facts);
       return {
         items: mapItems(result, t),
-        isLoading,
-        status: validated?.status ?? result?.status ?? "failed",
+        isLoading: loadState === "loading" || loadState === "refreshing",
+        loadState,
+        status:
+          loadState === "failed"
+            ? "failed"
+            : (validated?.status ?? result?.status ?? "failed"),
         errorCode: validated?.errorCode ?? result?.errorCode,
         refresh,
       };
@@ -283,24 +346,55 @@ export function useAgentAssetInventoryMap(
     return {
       skills: build(
         "skills",
-        Boolean(agent.isDetected && !skillScan?.result),
+        {
+          error: skillScan?.error,
+          hasLoaded: Boolean(skillScan?.result),
+          isLoading: Boolean(skillScan?.isScanning),
+        },
         refreshSkills,
       ),
-      mcp: build("mcp", !mcpLibrary, refreshMcp),
-      rules: build("rules", !rulesLoaded, refreshRules),
-      plugins: build("plugins", !pluginLibrary, refreshPlugins),
+      mcp: build(
+        "mcp",
+        { error: mcpError, hasLoaded: mcpLoaded, isLoading: mcpLoading },
+        refreshMcp,
+      ),
+      rules: build(
+        "rules",
+        {
+          error: rulesError,
+          hasLoaded: rulesLoaded,
+          isLoading: rulesLoading,
+        },
+        refreshRules,
+      ),
+      plugins: build(
+        "plugins",
+        {
+          error: pluginsError,
+          hasLoaded: pluginsLoaded,
+          isLoading: pluginsLoading,
+        },
+        refreshPlugins,
+      ),
     };
   }, [
     agent.id,
-    agent.isDetected,
     aggregate,
-    mcpLibrary,
-    pluginLibrary,
+    mcpError,
+    mcpLoaded,
+    mcpLoading,
+    pluginsError,
+    pluginsLoaded,
+    pluginsLoading,
     refreshMcp,
     refreshPlugins,
     refreshRules,
     refreshSkills,
+    rulesError,
     rulesLoaded,
+    rulesLoading,
+    skillScan?.error,
+    skillScan?.isScanning,
     skillScan?.result,
     t,
     validation,

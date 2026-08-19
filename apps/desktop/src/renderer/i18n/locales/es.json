@@ -1061,16 +1061,6 @@
       "customProviderDesc": "El proveedor predeterminado es un punto de conexión personalizado de terceros. Los datos de cuota solo están disponibles para la suscripción oficial. Consulta la pestaña Proveedor y modelo para ver el proveedor activo.",
       "retry": "Reintentar"
     },
-    "usagePopover": {
-      "title": "Cuotas de Agents",
-      "subtitle": "Uso de suscripciones en vivo",
-      "cached": "En caché",
-      "agentLabel": "Cuota de {{agent}}",
-      "refresh": "Actualizar cuotas",
-      "showDetails": "Mostrar detalles de cuota de {{agent}}",
-      "hideDetails": "Ocultar detalles de cuota de {{agent}}",
-      "progressLabel": "{{agent}}, {{metric}}: {{remaining}} % restante"
-    },
     "overview": "Resumen",
     "providerAndModel": "Proveedor y modelo",
     "appearanceTab": "Apariencia",
@@ -1153,6 +1143,9 @@
     "rulesPath": "Rules",
     "notAvailable": "No disponible",
     "assetLoadFailed": "No se pudo cargar el inventario de recursos.",
+    "assetLoading": "Cargando el inventario de recursos…",
+    "assetRefreshing": "Actualizando el inventario de recursos…",
+    "assetRefreshFailedCached": "La actualización falló; se muestran los datos en caché.",
     "capabilities": "Capacidades de gestión",
     "openAsset": "Abrir {{asset}}",
     "openAgentSettings": "Abrir ajustes de Agent",
@@ -3593,6 +3586,7 @@
     "previewTruncated": "La vista previa está truncada. Restaure la fuente para ver todos los elementos.",
     "sourceType": {
       "current-residual": "Residuos del directorio actual",
+      "current-file-workspace": "Espacio de trabajo Markdown actual",
       "current-canonical-db": "Base de datos SQLite actual",
       "external-user-data": "Directorio de datos anterior",
       "upgrade-backup": "Copia automática de actualización",

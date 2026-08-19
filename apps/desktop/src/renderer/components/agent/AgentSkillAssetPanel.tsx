@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BookOpenIcon,
@@ -60,6 +60,8 @@ export interface AgentSkillAssetsController {
   skillsDir: string;
   librarySkills: Skill[];
   isScanning: boolean;
+  hasScanResult: boolean;
+  scanError: string | null;
   query: string;
   setQuery: (value: string) => void;
   filter: AgentSkillAssetFilter;
@@ -121,7 +123,22 @@ export function useAgentSkillAssets(
   const scanResult = scanState?.result ?? null;
   const skillsDir = scanResult?.skillsDir ?? "";
   const isScanning = Boolean(scanState?.isScanning);
+  const scanError = scanState?.error ?? null;
   useEnsureSkillLibraryLoaded();
+
+  useEffect(() => {
+    if (!agent.paths.skills || scanResult || isScanning || scanError) {
+      return;
+    }
+    void scanAgentPlatformSkills(agent.id).catch(() => undefined);
+  }, [
+    agent.id,
+    agent.paths.skills,
+    isScanning,
+    scanAgentPlatformSkills,
+    scanError,
+    scanResult,
+  ]);
 
   const rows = useMemo<AgentSkillAssetRow[]>(
     () =>
@@ -396,6 +413,8 @@ export function useAgentSkillAssets(
     skillsDir,
     librarySkills,
     isScanning,
+    hasScanResult: Boolean(scanResult),
+    scanError,
     query,
     setQuery,
     filter,
@@ -602,6 +621,16 @@ export function AgentSkillAssetPanel({
       refreshLabel={t("agents.refreshCurrentAsset", "Refresh current view")}
       onRefresh={() => void assets.refresh()}
       isRefreshing={assets.isScanning}
+      alert={
+        assets.scanError && assets.hasScanResult ? (
+          <div
+            role="alert"
+            className="mx-5 mt-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          >
+            {t("skill.agentScanFailed", "Failed to scan agent skills")}
+          </div>
+        ) : null
+      }
       primaryAction={
         <AgentAssetPrimaryAction
           onClick={() => assets.setInstallModalOpen(true)}
@@ -610,8 +639,22 @@ export function AgentSkillAssetPanel({
         />
       }
       gridTestId="agent-skill-grid"
-      isLoading={assets.isScanning}
+      isLoading={
+        assets.isScanning || (!assets.hasScanResult && !assets.scanError)
+      }
       loadingLabel={t("skill.scanning", "Scanning...")}
+      failureState={
+        assets.scanError
+          ? {
+              message: t(
+                "skill.agentScanFailed",
+                "Failed to scan agent skills",
+              ),
+              retryLabel: t("common.retry", "Retry"),
+              onRetry: () => void assets.refresh(),
+            }
+          : undefined
+      }
       isEmpty={assets.visibleRows.length === 0}
       emptyState={
         <div className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center">

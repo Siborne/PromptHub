@@ -1016,8 +1016,10 @@ function App() {
         // `autoInstallOnAppQuit=true` and empty workspace scenarios, this
         // produced an instant restart loop with no user-visible data.
         //
-        // The DataRecoveryDialog below is the only legitimate path to invoke
-        // recovery — the user must explicitly confirm, so a loop is impossible.
+        // The renderer never starts recovery automatically. Main-process
+        // startup may self-heal deterministic file-authoritative cases before
+        // SQLite opens; this dialog is reserved for ambiguous candidates that
+        // still require an explicit user choice.
         // See: https://github.com/legeling/PromptHub v0.5.2 regression.
         if (!isWebRuntime()) {
           try {
@@ -1265,7 +1267,9 @@ function App() {
             databases={recoverableDatabases}
             allowStartFresh={
               !recoverableDatabases.some(
-                (candidate) => candidate.sourceType === "current-canonical-db",
+                (candidate) =>
+                  candidate.sourceType === "current-canonical-db" ||
+                  candidate.sourceType === "current-file-workspace",
               )
             }
           />

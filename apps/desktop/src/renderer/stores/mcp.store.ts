@@ -72,7 +72,11 @@ interface McpState {
   pendingPluginChildDeployServerIds: string[];
   isLoading: boolean;
   error: string | null;
+  hasLoadedTargetInventory: boolean;
+  isLoadingTargetInventory: boolean;
+  targetInventoryError: string | null;
   load: () => Promise<void>;
+  loadTargetInventory: (options?: { force?: boolean }) => Promise<void>;
   loadMarketSource: (sourceId?: string, force?: boolean) => Promise<void>;
   loadMoreMarketSource: (sourceId?: string) => Promise<void>;
   refreshTargetStatus: () => Promise<void>;
@@ -242,38 +246,28 @@ function resolveMarketSourceId(
   return sources[0]?.id ?? DEFAULT_MCP_MARKET_SOURCE_ID;
 }
 
-async function loadMcpSnapshot(): Promise<{
+async function loadMcpWorkspaceSnapshot(): Promise<{
   library: McpLibraryFile;
   marketTemplates: McpMarketTemplate[];
   marketSources: McpMarketSource[];
-  targetPresets: McpTargetPreset[];
-  targetStatus: McpTargetStatusEntry[];
   healthChecks: McpHealthCheckResult[];
 }> {
-  const [
-    library,
-    marketTemplates,
-    marketSources,
-    targetPresets,
-    targetStatus,
-    healthChecks,
-  ] = await Promise.all([
-    window.api.mcp.getLibrary(),
-    window.api.mcp.listMarket(),
-    window.api.mcp.listMarketSources(),
-    window.api.mcp.getTargetPresets(),
-    window.api.mcp.getTargetStatus(),
-    window.api.mcp.checkAllServers(),
-  ]);
+  const [library, marketTemplates, marketSources, healthChecks] =
+    await Promise.all([
+      window.api.mcp.getLibrary(),
+      window.api.mcp.listMarket(),
+      window.api.mcp.listMarketSources(),
+      window.api.mcp.checkAllServers(),
+    ]);
   return {
     library,
     marketTemplates,
     marketSources,
-    targetPresets,
-    targetStatus,
     healthChecks,
   };
 }
+
+let mcpTargetInventoryInFlight: Promise<void> | null = null;
 
 function toRegisteredMcpMarketSources(
   sources: CustomStoreSource[],
@@ -365,11 +359,63 @@ export const useMcpStore = create<McpState>()(
       pendingPluginChildDeployServerIds: [],
       isLoading: false,
       error: null,
+      hasLoadedTargetInventory: false,
+      isLoadingTargetInventory: false,
+      targetInventoryError: null,
+
+      loadTargetInventory: (options) => {
+        if (mcpTargetInventoryInFlight) {
+          return mcpTargetInventoryInFlight;
+        }
+        const current = get();
+        if (
+          !options?.force &&
+          (current.hasLoadedTargetInventory ||
+            current.isLoadingTargetInventory ||
+            current.targetInventoryError)
+        ) {
+          return Promise.resolve();
+        }
+
+        set({
+          isLoadingTargetInventory: true,
+          targetInventoryError: null,
+        });
+        const request = (async (): Promise<void> => {
+          try {
+            const [targetPresets, targetStatus] = await Promise.all([
+              window.api.mcp.getTargetPresets(),
+              window.api.mcp.getTargetStatus(),
+            ]);
+            set({
+              targetPresets,
+              targetStatus,
+              hasLoadedTargetInventory: true,
+              isLoadingTargetInventory: false,
+              targetInventoryError: null,
+            });
+          } catch (error) {
+            const message = getErrorMessage(error);
+            set({
+              isLoadingTargetInventory: false,
+              targetInventoryError: message,
+            });
+            throw error instanceof Error ? error : new Error(message);
+          } finally {
+            mcpTargetInventoryInFlight = null;
+          }
+        })();
+        mcpTargetInventoryInFlight = request;
+        return request;
+      },
 
       load: async () => {
         set({ isLoading: true, error: null });
         try {
-          const snapshot = await loadMcpSnapshot();
+          const [snapshot] = await Promise.all([
+            loadMcpWorkspaceSnapshot(),
+            get().loadTargetInventory({ force: true }),
+          ]);
           const migration = reconcileMcpMarketSourceMigration(
             snapshot.marketSources,
             get().customStoreSources,
@@ -392,7 +438,7 @@ export const useMcpStore = create<McpState>()(
             ),
             selectedMarketSourceId,
             selectedTargetId:
-              get().selectedTargetId ?? snapshot.targetPresets[0]?.id ?? null,
+              get().selectedTargetId ?? get().targetPresets[0]?.id ?? null,
             selectedServerId:
               get().selectedServerId ?? snapshot.library.servers[0]?.id ?? null,
             isLoading: false,
@@ -403,8 +449,26 @@ export const useMcpStore = create<McpState>()(
       },
 
       refreshTargetStatus: async () => {
-        const targetStatus = await window.api.mcp.getTargetStatus();
-        set({ targetStatus });
+        set({
+          isLoadingTargetInventory: true,
+          targetInventoryError: null,
+        });
+        try {
+          const targetStatus = await window.api.mcp.getTargetStatus();
+          set({
+            targetStatus,
+            hasLoadedTargetInventory: true,
+            isLoadingTargetInventory: false,
+            targetInventoryError: null,
+          });
+        } catch (error) {
+          const message = getErrorMessage(error);
+          set({
+            isLoadingTargetInventory: false,
+            targetInventoryError: message,
+          });
+          throw error instanceof Error ? error : new Error(message);
+        }
       },
 
       selectServer: (id) => set({ selectedServerId: id }),

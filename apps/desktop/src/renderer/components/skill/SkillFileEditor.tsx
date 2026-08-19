@@ -1083,7 +1083,7 @@ export function SkillFileEditor({
         />
 
         {/* Right: editor */}
-        <div className="skill-file-editor__editor">
+        <div className="skill-file-editor__editor bg-card">
           {!selectedFile || !currentFile ? (
             <div className="skill-file-editor__editor-empty">
               <FileTextIcon

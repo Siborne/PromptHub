@@ -825,7 +825,7 @@ inputs only and are not generic asset distribution targets.
 | `FR-AGENT-090`                                                                                                        | `DES-AGENT-105`                                                                                                                                                        | `TEST-AGENT-125`                                                                                                                                                                                     | `T-AGENT-162`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-091`                                                                                                        | `DES-AGENT-106`                                                                                                                                                        | `TEST-AGENT-126`                                                                                                                                                                                     | `T-AGENT-163`                                                                                                                                                                                                                                                                               |
 | `FR-AGENT-092`                                                                                                        | `DES-AGENT-107`                                                                                                                                                        | `TEST-AGENT-127`                                                                                                                                                                                     | `T-AGENT-164`                                                                                                                                                                                                                                                                               |
-| `FR-AGENT-093`                                                                                                        | `DES-AGENT-108`, `DES-AGENT-109`, `DES-AGENT-110`                                                                                                                      | `TEST-AGENT-128`, `TEST-AGENT-129`, `TEST-AGENT-131`, `TEST-AGENT-132`                                                                                                                               | `T-AGENT-165`, `T-AGENT-166`, `T-AGENT-168`, `T-AGENT-169`                                                                                                                                                                                                                                  |
+| `FR-AGENT-093`                                                                                                        | `DES-AGENT-108`, `DES-AGENT-109`, superseded `DES-AGENT-110`, `DES-AGENT-148`                                                                                          | `TEST-AGENT-128`, `TEST-AGENT-129`, historical `TEST-AGENT-131/132`, `TEST-AGENT-210`                                                                                                                | `T-AGENT-165`, `T-AGENT-166`, historical `T-AGENT-168/169`, `T-AGENT-219`                                                                                                                                                                                                                   |
 | `NFR-AGENT-001`, `NFR-AGENT-002`, `NFR-AGENT-003`, `NFR-AGENT-004`, `NFR-AGENT-005`, `NFR-AGENT-006`, `NFR-AGENT-007` | `DES-AGENT-005`, `DES-AGENT-008`, `DES-AGENT-009`, `DES-AGENT-014`, `DES-AGENT-015`, `DES-AGENT-060` in `ui-resilience-designs.md`                                     | `TEST-AGENT-004`, `TEST-AGENT-007`, `TEST-AGENT-009`, `TEST-AGENT-011`, `TEST-AGENT-012`, `TEST-AGENT-015`, `TEST-AGENT-016`, `TEST-AGENT-017`, `TEST-AGENT-018`, `TEST-AGENT-047`, `TEST-AGENT-048` | `T-AGENT-025`, `T-AGENT-035`, `T-AGENT-036`, `T-AGENT-037`, `T-AGENT-038`, `T-AGENT-039`, `T-AGENT-082`, `T-AGENT-083`, `T-AGENT-115`                                                                                                                                                       |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-057` in `ui-resilience-designs.md`                                                                                                                          | `TEST-AGENT-076`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-112`                                                                                                                                                                                                                                                                |
 | `NFR-AGENT-004`, `NFR-AGENT-006`                                                                                      | `DES-AGENT-058` in `ui-resilience-designs.md`                                                                                                                          | `TEST-AGENT-077`                                                                                                                                                                                     | `T-AGENT-025`, `T-AGENT-113`                                                                                                                                                                                                                                                                |
@@ -2200,21 +2200,21 @@ changes.
 ## `DES-AGENT-108`: Cached Native Menu Quota Projection
 
 `agent-usage-runtime.ts` owns one process-wide `AgentUsageService` used by both
-Agent IPC and a new main-process tray projection service. The projection owns a
-fixed allowlist of the six verified usage adapters and resolves their display
-names from the existing platform registry. It maps only the public
+Agent IPC and a main-process tray projection service. The projection derives
+every `supported` usage adapter and display name from the shared platform and
+capability registries while preserving the established preferred ordering. It maps only the public
 `AgentUsageQuota` contract; credentials, provider response bodies and raw
 exceptions never enter the tray model.
 
 The projection evaluates `P` providers with `O(P + M)` time and `O(P + M)`
-snapshot memory, where `M` is the total returned metric count. `P` is currently
-six and provider I/O runs through a two-worker queue, so network concurrency is
+snapshot memory, where `M` is the total returned metric count. Provider I/O
+runs through a two-worker queue, so network concurrency is
 `O(1)` and cannot fan out without bound. Each adapter retains its existing
 10-second request timeout and 60-second cache. A rejected provider becomes a
 sanitized unavailable item while successful peers remain intact.
 
-`TrayController` owns the last successful presentation and one in-flight quota
-reload. Menu creation and each macOS `mouse-down` first rebuild synchronously
+The focused projection owns the last successful presentation and one in-flight
+quota reload. Menu creation and each macOS `mouse-down` first rebuild synchronously
 from that presentation, then request an asynchronous refresh. Repeated opens
 join the in-flight request rather than issuing duplicate work; destroy advances
 the generation so late results cannot recreate or mutate an owned tray.
@@ -2230,8 +2230,8 @@ view implementation or vendoring third-party source.
 
 ## `DES-AGENT-109`: Incremental Quota Projection And Kimi Token Renewal
 
-The tray projection starts with six typed loading rows derived from the existing
-verified-adapter allowlist. Provider work remains a two-worker queue, but each
+The tray projection starts with typed loading rows derived from the shared
+verified usage-capability inventory. Provider work remains a two-worker queue, but each
 settled item is reported to `TrayController` immediately and merged by stable
 Agent id. This keeps cold-start rendering at `O(P)` memory and lets a later menu
 open use partial results instead of waiting for the slowest provider. The final
@@ -2254,44 +2254,12 @@ credentials; transport and write failures become sanitized unavailable states.
 The helper coalesces refreshes within this process, so repeated workspace and
 tray reads do not rotate the same refresh token concurrently.
 
-## `DES-AGENT-110`: Rendered Tray Quota Popover
+## `DES-AGENT-110`: Rendered Tray Quota Popover (Superseded)
 
-On macOS, `TrayController` routes the primary tray click directly to one
-frameless `BrowserWindow`; it does not require a localized quota command or
-native submenu. A secondary click explicitly calls `Tray.popUpContextMenu()`
-with the remaining native commands. Windows and Linux continue using the native
-context menu and keep its quota command because their tray interaction contract
-differs. The focused popover controller anchors below or above
-`Tray.getBounds()`, clamps the window to the nearest display work area, reuses
-it across opens, hides it on blur and destroys it with the tray/application
-lifecycle. It loads the existing renderer entry with `surface=agent-usage`; the
-normal application bootstrap is not mounted for that surface.
-
-On macOS the frameless window uses Electron's native `vibrancy: "popover"`
-material with an active visual-effect state. The renderer shell stays
-transparent so the system blur, tint and window shadow remain visible instead
-of painting an opaque white card. Windows and Linux keep the existing opaque
-renderer fallback because those platforms do not provide the same native
-popover material contract.
-
-The rendered surface uses the existing `PlatformIcon` assets, theme tokens and
-seven-locale i18n resources. It adapts CodexBar's `UsageMenuCardView` hierarchy
-to React: compact product identity and normalized plan, then the most
-constrained metric label, a small inline tabular remaining value, slim progress
-track and reset text. Optional expansion reveals remaining metrics using the
-same hierarchy. Loading, missing credentials, expired credentials and
-unavailable states never render fake zero values. SwiftUI source and CodexBar
-assets are not copied because they cross an incompatible runtime and licensing
-boundary; only the verified information architecture is reproduced with
-PromptHub components.
-
-The renderer calls the existing `AGENT_USAGE_GET` contract with an optional
-validated `forceRefresh` flag. One fixed six-Agent queue runs at concurrency two
-and publishes each settled result independently. Existing local successful
-snapshots render first; failed refreshes leave them in place. The process-wide
-main usage service remains the only provider/credential owner and keeps its
-adapter timeout and 60-second cache. Popover state is presentation-only and no
-database, filesystem, backup or sync contract changes.
+Superseded on 2026-08-19 by `DES-AGENT-148` after explicit product feedback.
+The identifier remains only as historical context for the removed renderer
+implementation. Current code MUST NOT create or mount the rendered tray quota
+popover described by this former design.
 
 ## `DES-AGENT-112`: Conversation Toolbar And Cursor Boundary
 
@@ -3397,3 +3365,128 @@ network access, persistence migration, process launch, or background work.
 | Requirement    | Design          | Verification     | Task          |
 | -------------- | --------------- | ---------------- | ------------- |
 | `FR-AGENT-127` | `DES-AGENT-145` | `TEST-AGENT-207` | `T-AGENT-216` |
+
+## `DES-AGENT-146`: Session-Scoped Agent Skill Scan
+
+`useAgentSkillAssets` owns cold-load readiness for the direct Agent Skills
+workspace. When the current session has no result and no scan is in flight, it
+invokes the existing `skill:scanPlatformSkills` contract once. Existing rows
+remain visible during explicit refresh; an initial missing result renders the
+loading state, while the store's scan error renders a retryable failure state.
+
+`agentScanState` remains shared in memory by Overview, the direct Agent tab and
+the Skills module, but `partializeSkillState` and persisted-state merge discard
+it. Native Agent Skill directories are the source of truth, so a restart always
+requires fresh observation. The existing bounded discovery performs `O(D + F)`
+filesystem work for at most 1,000 discovered directories plus the validated
+package files; it performs no network I/O and adds no watcher or polling loop.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-128` | `DES-AGENT-146` | `TEST-AGENT-208` | `T-AGENT-217` |
+
+## `DES-AGENT-147`: Bounded Asset Summary Hydration And Lifecycle
+
+The owning renderer stores expose summary-grade loaders instead of making
+Overview invoke their full workspace loaders. Skills reuses the bounded native
+directory scan and local managed-Skill read. MCP reads only target presets and
+target status. Rules lists file descriptors without selecting or reading a
+rule body. Plugins reads only the target compatibility matrix. Overview starts
+only domains supported by the selected Agent, schedules no more than two domain
+hydrators concurrently, and disables cross-domain validation. Each owner
+deduplicates an in-flight summary load and retains successful rows when a later
+refresh fails.
+
+`AgentAssetInventory` derives one state from owner facts:
+`idle`, `loading`, `ready`, `refreshing`, `stale`, or `failed`. Initial loading
+and failure never emit a numeric count. Refreshing and stale states keep the
+last successful count, with explicit secondary text. A successful empty result
+is the only state that renders zero. The shared Skills, MCP, and Plugins
+management surface renders a dedicated failure body with an accessible retry
+button when no rows have ever loaded; a refresh failure remains an alert above
+cached rows. Rules keeps its existing richer missing-file and retry states.
+
+The Rules aggregate excludes declared descriptors whose native file does not
+exist, so a known writable path is not misreported as an installed rule. All
+loads are local, bounded by existing IPC/service limits, and session-cached.
+For `D` supported domains and `N` returned summary rows, scheduling is `O(D)`
+with a fixed concurrency ceiling of two and projection is `O(N)` time and
+space. No schema, IPC contract, persistence layout, network request, watcher,
+timer, process, or background service is added.
+
+Analyze gate: `FR-AGENT-022` requires live owner summaries while archived
+`FR-PERF-15` and stable performance section 9 previously prohibited every cold
+Overview read. The selected resolution narrows the prohibition to deep or
+high-fan-out work and permits bounded summary-grade hydration. The user's
+2026-08-19 report confirms that an indefinitely unknown/false-empty Overview is
+not acceptable product behavior. There are no unresolved material decisions or
+`[待确认]` items.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-129` | `DES-AGENT-147` | `TEST-AGENT-209` | `T-AGENT-218` |
+
+## `DES-AGENT-148`: Native Tray Quota Projection
+
+`TrayController` owns one Electron `Menu` on every desktop platform. It builds
+the Agent Quotas submenu from a main-process snapshot and installs that menu on
+the tray; macOS no longer routes primary click to a custom BrowserWindow. The
+renderer entry has one application bootstrap path, and all popover-only
+renderer, window, controller, CSS and locale assets are deleted.
+
+A focused main-process projection derives typed rows from the shared verified
+usage-capability registry, keeps the existing preferred order and calls the
+process-wide `AgentUsageService`. It uses a two-worker
+queue, deduplicates an in-flight reload, validates returned Agent identity,
+normalizes thrown failures to a redacted unavailable result and retains a
+successful row as stale when a later refresh is unavailable. Each settled row
+publishes a new cached native-menu snapshot without mutating an already-open
+OS menu instance.
+
+`tray-menu.ts` remains the presentation boundary. It consumes shared pure plan,
+remaining-percent and primary-metric helpers, bounds dynamic metrics to the
+existing 64-item contract, strips control characters and caps every dynamic
+label. The native hierarchy is Agent summary -> optional plan + metric/reset
+lines, followed by Refresh Quotas and Open Agent Workspace commands. For `P`
+verified providers and `M` metrics, refresh is `O(P + M)` time, `O(P + M)` snapshot
+space and `O(1)` network concurrency capped at two. No new credential,
+renderer IPC, database, filesystem, backup, sync, watcher, timer, port or
+process owner is introduced.
+
+Analyze gate: this design intentionally replaces the rendered-surface clauses
+of `FR-AGENT-093` and `DES-AGENT-110`; the user's 2026-08-19 instruction is the
+explicit product decision. `DES-AGENT-108/109` remain valid for native
+projection, cache, bounded concurrency and Kimi renewal. There are no unresolved
+material choices or `[待确认]` items.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-093` | `DES-AGENT-148` | `TEST-AGENT-210` | `T-AGENT-219` |
+
+## `DES-AGENT-149`: Shared File-Editor Surface Hierarchy
+
+`AgentConfigFilesPanel` keeps the application `background` token as its shell
+and uses the `card` token for the native-config title bar. The reusable
+`SkillFileEditor` owns the split-pane hierarchy: its file tree remains the
+secondary muted surface, while the right editor pane is a card surface. The
+shared `SkillCodeEditor` host and CodeMirror root use that same card token; the
+existing translucent muted gutter, toolbar, active-line and status treatments
+then composite against the primary surface instead of a second gray canvas.
+
+This applies the hierarchy at the shared editor boundary rather than adding an
+Agent- or Codex-specific stylesheet. It uses no raw `white`, hex color, new
+token, nested card shell, shadow, animation, or dependency. Existing borders,
+focus states, selection states, keyboard navigation and dark-theme variables
+remain unchanged.
+
+Rendering remains `O(1)` and adds no state, allocation proportional to file
+size, filesystem or database I/O, network request, IPC, timer, watcher, port,
+or process. Analyze gate: the July neutral-tone pass made the config header
+muted, but it did not require every workspace layer to share one fill. The
+user's 2026-08-19 visual report resolves that presentation ambiguity while
+preserving the neutral semantic palette. There are no unresolved material
+choices or `[待确认]` items.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-130` | `DES-AGENT-149` | `TEST-AGENT-211` | `T-AGENT-220` |

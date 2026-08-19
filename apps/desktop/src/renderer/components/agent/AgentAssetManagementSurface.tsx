@@ -9,6 +9,12 @@ export interface AgentAssetFilterOption {
   testId: string;
 }
 
+export interface AgentAssetFailureState {
+  message: string;
+  retryLabel: string;
+  onRetry: () => void;
+}
+
 interface AgentAssetManagementSurfaceProps<T> {
   domain: "skills" | "mcp" | "plugins";
   query: string;
@@ -26,6 +32,7 @@ interface AgentAssetManagementSurfaceProps<T> {
   gridTestId: string;
   isLoading: boolean;
   loadingLabel: string;
+  failureState?: AgentAssetFailureState;
   isEmpty: boolean;
   emptyState: ReactNode;
   page: BoundedPage<T>;
@@ -73,6 +80,7 @@ export function AgentAssetManagementSurface<T>({
   gridTestId,
   isLoading,
   loadingLabel,
+  failureState,
   isEmpty,
   emptyState,
   page,
@@ -146,6 +154,24 @@ export function AgentAssetManagementSurface<T>({
               className="mr-2 h-4 w-4 animate-spin"
             />
             {loadingLabel}
+          </div>
+        ) : failureState && page.total === 0 ? (
+          <div
+            role="alert"
+            className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center"
+          >
+            <p className="max-w-md text-sm leading-6 text-destructive">
+              {failureState.message}
+            </p>
+            <button
+              type="button"
+              onClick={failureState.onRetry}
+              disabled={isRefreshing}
+              className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
+            >
+              <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
+              {failureState.retryLabel}
+            </button>
           </div>
         ) : isEmpty ? (
           emptyState

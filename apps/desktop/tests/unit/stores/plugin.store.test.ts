@@ -144,6 +144,9 @@ function resetPluginStore() {
     searchQuery: "",
     isLoading: false,
     error: null,
+    hasLoadedTargetInventory: false,
+    isLoadingTargetInventory: false,
+    targetInventoryError: null,
   });
   localStorage.clear();
 }
@@ -172,6 +175,76 @@ describe("plugin store", () => {
       versionDelete: vi.fn(),
       deletePlugin: vi.fn(),
     };
+  });
+
+  it("deduplicates lightweight target inventory reads without loading libraries or markets", async () => {
+    const targetGate = createDeferred<PluginTargetCompatibility[]>();
+    vi.mocked(window.api.plugin.getTargetMatrix).mockImplementation(
+      () => targetGate.promise,
+    );
+
+    const first = usePluginStore.getState().loadTargetInventory();
+    const second = usePluginStore.getState().loadTargetInventory();
+
+    expect(window.api.plugin.getTargetMatrix).toHaveBeenCalledTimes(1);
+    expect(usePluginStore.getState().isLoadingTargetInventory).toBe(true);
+    expect(window.api.plugin.getLibrary).not.toHaveBeenCalled();
+    expect(window.api.plugin.listMarket).not.toHaveBeenCalled();
+    expect(window.api.plugin.listMarketSources).not.toHaveBeenCalled();
+
+    targetGate.resolve(targetMatrix);
+    await Promise.all([first, second]);
+
+    expect(usePluginStore.getState()).toEqual(
+      expect.objectContaining({
+        targetMatrix,
+        hasLoadedTargetInventory: true,
+        isLoadingTargetInventory: false,
+        targetInventoryError: null,
+      }),
+    );
+
+    vi.mocked(window.api.plugin.getTargetMatrix).mockRejectedValueOnce(
+      "non-error failure",
+    );
+    await expect(
+      usePluginStore.getState().loadTargetInventory({ force: true }),
+    ).rejects.toThrow("non-error failure");
+  });
+
+  it("retains cached target rows after refresh failure and supports a forced retry", async () => {
+    usePluginStore.setState({
+      targetMatrix,
+      hasLoadedTargetInventory: true,
+    });
+    vi.mocked(window.api.plugin.getTargetMatrix).mockRejectedValueOnce(
+      new Error("matrix failed"),
+    );
+
+    await expect(
+      usePluginStore.getState().loadTargetInventory({ force: true }),
+    ).rejects.toThrow("matrix failed");
+
+    expect(usePluginStore.getState()).toEqual(
+      expect.objectContaining({
+        targetMatrix,
+        hasLoadedTargetInventory: true,
+        isLoadingTargetInventory: false,
+        targetInventoryError: "matrix failed",
+      }),
+    );
+
+    vi.mocked(window.api.plugin.getTargetMatrix).mockResolvedValueOnce([]);
+    await usePluginStore.getState().loadTargetInventory({ force: true });
+
+    expect(usePluginStore.getState()).toEqual(
+      expect.objectContaining({
+        targetMatrix: [],
+        hasLoadedTargetInventory: true,
+        isLoadingTargetInventory: false,
+        targetInventoryError: null,
+      }),
+    );
   });
 
   it("loads the selected plugin marketplace before slower background sources", async () => {

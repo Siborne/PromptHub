@@ -39,7 +39,10 @@ interface RulesState {
   isRewriting: boolean;
   error: string | null;
   hasLoadedFiles: boolean;
-  loadFiles: (options?: { force?: boolean }) => Promise<void>;
+  loadFiles: (options?: {
+    force?: boolean;
+    selectInitial?: boolean;
+  }) => Promise<void>;
   selectRule: (ruleId: RuleFileId) => Promise<void>;
   setSearchQuery: (query: string) => void;
   setDraftContent: (content: string) => void;
@@ -111,7 +114,7 @@ function filterVisibleRuleFiles(
       return true;
     }
 
-    return file.exists && !disabledSet.has(file.platformId);
+    return !disabledSet.has(file.platformId);
   });
 }
 
@@ -143,7 +146,7 @@ export const useRulesStore = create<RulesState>((set, get) => ({
   hasLoadedFiles: false,
 
   loadFiles: async (options) => {
-    if (get().hasLoadedFiles && !options?.force) {
+    if ((get().hasLoadedFiles || get().isLoading) && !options?.force) {
       return;
     }
 
@@ -162,7 +165,9 @@ export const useRulesStore = create<RulesState>((set, get) => ({
         currentSelectedRuleId &&
         files.some((file) => file.id === currentSelectedRuleId)
           ? currentSelectedRuleId
-          : (files[0]?.id ?? null);
+          : options?.selectInitial === false
+            ? null
+            : (files[0]?.id ?? null);
       set({
         availableFiles: allFiles,
         files,
@@ -171,7 +176,7 @@ export const useRulesStore = create<RulesState>((set, get) => ({
         hasLoadedFiles: true,
       });
 
-      if (selectedRuleId) {
+      if (selectedRuleId && options?.selectInitial !== false) {
         // When force-scanning, clear currentFile so selectRule's early-return guard
         // doesn't skip re-reading the file from disk.
         if (options?.force) {

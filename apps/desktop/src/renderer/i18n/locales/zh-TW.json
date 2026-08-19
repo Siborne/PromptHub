@@ -1060,16 +1060,6 @@
       "customProviderDesc": "目前預設 Provider 為第三方端點，配額資料僅適用於官方訂閱。請前往「供應商與模型」分頁查看目前的 Provider。",
       "retry": "重試"
     },
-    "usagePopover": {
-      "title": "Agent 額度",
-      "subtitle": "訂閱用量即時概覽",
-      "cached": "快取資料",
-      "agentLabel": "{{agent}} 額度",
-      "refresh": "重新整理額度",
-      "showDetails": "展開 {{agent}} 額度詳情",
-      "hideDetails": "收合 {{agent}} 額度詳情",
-      "progressLabel": "{{agent}}，{{metric}}：剩餘 {{remaining}}%"
-    },
     "overview": "概覽",
     "providerAndModel": "供應商與模型",
     "appearanceTab": "外觀",
@@ -1152,6 +1142,9 @@
     "rulesPath": "Rules",
     "notAvailable": "暫不可用",
     "assetLoadFailed": "無法載入資產清單。",
+    "assetLoading": "正在載入資產清單…",
+    "assetRefreshing": "正在重新整理資產清單…",
+    "assetRefreshFailedCached": "重新整理失敗，正在顯示快取資料。",
     "capabilities": "管理能力",
     "openAsset": "開啟 {{asset}}",
     "openAgentSettings": "開啟 Agent 設定",
@@ -3593,6 +3586,7 @@
     "previewTruncated": "預覽只顯示部分項目，復原後可查看完整資料。",
     "sourceType": {
       "current-residual": "目前目錄殘留資料",
+      "current-file-workspace": "目前 Markdown 工作區",
       "current-canonical-db": "目前 SQLite 資料庫",
       "external-user-data": "舊資料目錄",
       "upgrade-backup": "自動升級備份",

@@ -178,6 +178,24 @@ describe("SkillFileEditor", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses the card surface for the primary editor pane", async () => {
+    const { container } = await renderWithI18n(
+      <SkillFileEditor skillId="skill-1" isOpen={true} mode="inline" />,
+      { language: "en" },
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("SKILL.md").length).toBeGreaterThan(0);
+    });
+
+    expect(container.querySelector(".skill-file-editor__editor")).toHaveClass(
+      "bg-card",
+    );
+    expect(container.querySelector(".skill-file-editor__tree")).not.toHaveClass(
+      "bg-card",
+    );
+  });
+
   it("limits an Agent config editor to allowlisted files and supports missing declarations", async () => {
     const listLocalFilesByPath = vi.fn().mockResolvedValue([
       { path: "config.toml", isDirectory: false, size: 64 },

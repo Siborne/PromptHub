@@ -3,6 +3,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
+import type { AgentUsageQuota } from "@prompthub/shared/types";
 import { createTrayController } from "../../../src/main/tray-controller";
 
 function createHarness(
@@ -12,7 +13,7 @@ function createHarness(
     preferredEmpty?: boolean;
     alternateEmpty?: boolean;
     withoutProviderLoader?: boolean;
-    withoutUsageOpener?: boolean;
+    withoutUsageLoader?: boolean;
   } = {},
 ) {
   const handlers = new Map<string, () => void>();
@@ -59,10 +60,21 @@ function createHarness(
   const getStoredLanguage = vi.fn<() => string | null>(() => null);
   const onCommand = vi.fn();
   const onAgentProviderProfile = vi.fn();
-  const onOpenAgentUsage = vi.fn();
   const onQuit = vi.fn();
   const onToggleWindow = vi.fn();
   const loadAgentProviderGroups = vi.fn(async () => []);
+  const loadAgentUsage = vi.fn(
+    async (agentId: string): Promise<AgentUsageQuota> => ({
+      schemaVersion: 2,
+      agentId,
+      adapter: `${agentId}-test`,
+      status: "ok",
+      source: "provider",
+      plan: null,
+      fetchedAt: 1,
+      metrics: [],
+    }),
+  );
 
   const controller = createTrayController({
     agentManagementEnabled: true,
@@ -76,9 +88,9 @@ function createHarness(
     getWindowVisibility: () => true,
     isDev: overrides.isDev ?? true,
     ...(overrides.withoutProviderLoader ? {} : { loadAgentProviderGroups }),
+    ...(overrides.withoutUsageLoader ? {} : { loadAgentUsage }),
     onAgentProviderProfile,
     onCommand,
-    ...(overrides.withoutUsageOpener ? {} : { onOpenAgentUsage }),
     onQuit,
     onToggleWindow,
     platform: overrides.platform ?? "darwin",
@@ -94,8 +106,8 @@ function createHarness(
     getStoredLanguage,
     handlers,
     loadAgentProviderGroups,
+    loadAgentUsage,
     onAgentProviderProfile,
-    onOpenAgentUsage,
     onToggleWindow,
     preferredImage,
     tray,
@@ -103,7 +115,7 @@ function createHarness(
 }
 
 describe("tray controller", () => {
-  it("opens quotas directly on macOS and keeps actions on right click", () => {
+  it("installs the native quota menu on macOS without a rendered click surface", () => {
     const harness = createHarness();
     harness.controller.create();
 
@@ -113,23 +125,22 @@ describe("tray controller", () => {
     expect(harness.preferredImage.setTemplateImage).toHaveBeenCalledWith(true);
     expect(harness.preferredImage.resize).not.toHaveBeenCalled();
     expect(harness.tray.setToolTip).toHaveBeenCalledWith("PromptHub");
-    expect(harness.handlers.has("click")).toBe(true);
-    expect(harness.handlers.has("right-click")).toBe(true);
-    expect(harness.tray.setContextMenu).not.toHaveBeenCalled();
-
-    harness.handlers.get("click")?.();
-    expect(harness.onOpenAgentUsage).toHaveBeenCalledOnce();
+    expect(harness.handlers.has("mouse-down")).toBe(true);
+    expect(harness.handlers.has("click")).toBe(false);
+    expect(harness.handlers.has("right-click")).toBe(false);
+    expect(harness.tray.setContextMenu).toHaveBeenCalled();
+    expect(harness.loadAgentUsage).toHaveBeenCalledTimes(2);
 
     harness.getStoredLanguage.mockReturnValue("zh");
-    harness.handlers.get("right-click")?.();
+    harness.handlers.get("mouse-down")?.();
     const latestTemplate = harness.buildMenu.mock.calls.at(-1)?.[0];
     expect(latestTemplate[0].label).toBe("添加 Agent 资产");
     expect(
       latestTemplate.some(
         (item: { label?: string }) => item.label === "Agent 额度",
       ),
-    ).toBe(false);
-    expect(harness.tray.popUpContextMenu).toHaveBeenCalledOnce();
+    ).toBe(true);
+    expect(harness.tray.popUpContextMenu).not.toHaveBeenCalled();
   });
 
   it("uses the platform icon and left-click toggle outside macOS", () => {
@@ -225,7 +236,18 @@ describe("tray controller", () => {
     harness.controller.destroy();
     harness.controller.destroy();
     expect(harness.tray.destroy).toHaveBeenCalledOnce();
-    expect(harness.controller.getBounds()).toBeNull();
+  });
+
+  it("recreates the native quota projection when the tray is enabled again", () => {
+    const harness = createHarness();
+    harness.controller.create();
+    expect(harness.loadAgentUsage).toHaveBeenCalledTimes(2);
+    harness.controller.destroy();
+
+    harness.controller.create();
+
+    expect(harness.createTray).toHaveBeenCalledTimes(2);
+    expect(harness.loadAgentUsage).toHaveBeenCalledTimes(4);
   });
 
   it("loads provider profiles into the existing Agent menu and routes switches", async () => {
@@ -272,17 +294,83 @@ describe("tray controller", () => {
     );
   });
 
-  it("falls back to the app window when a macOS quota surface is unavailable", () => {
-    const harness = createHarness({ withoutUsageOpener: true });
+  it("routes the native refresh command through a forced bounded reload", async () => {
+    const harness = createHarness();
     harness.controller.create();
-    harness.handlers.get("click")?.();
-    expect(harness.onToggleWindow).toHaveBeenCalledOnce();
-    expect(harness.controller.getBounds()).toEqual({
-      x: 500,
-      y: 0,
-      width: 24,
-      height: 24,
+    await harness.controller.reloadAgentUsage();
+    harness.loadAgentUsage.mockClear();
+
+    const latestTemplate = harness.buildMenu.mock.calls.at(-1)?.[0];
+    const usageItem = latestTemplate.find(
+      (item: { label?: string }) => item.label === "Agent Quotas",
+    );
+    const refreshItem = usageItem.submenu.find(
+      (item: { label?: string }) => item.label === "Refresh Quotas",
+    );
+    refreshItem.click();
+
+    await vi.waitFor(() => {
+      expect(harness.loadAgentUsage).toHaveBeenCalledWith("claude", {
+        forceRefresh: true,
+      });
+      expect(harness.loadAgentUsage).toHaveBeenCalledWith("codex", {
+        forceRefresh: true,
+      });
     });
+  });
+
+  it("allows the optional usage loader to be omitted", async () => {
+    const harness = createHarness({ withoutUsageLoader: true });
+    harness.controller.create();
+
+    await expect(
+      harness.controller.reloadAgentUsage(),
+    ).resolves.toBeUndefined();
+    expect(harness.loadAgentUsage).not.toHaveBeenCalled();
+    expect(harness.tray.setContextMenu).toHaveBeenCalled();
+  });
+
+  it("ignores late quota results after the tray is destroyed", async () => {
+    let resolveUsage: ((quota: AgentUsageQuota) => void) | undefined;
+    const harness = createHarness();
+    harness.loadAgentUsage.mockImplementation(
+      (agentId: string) =>
+        new Promise((resolve) => {
+          if (!resolveUsage) resolveUsage = resolve;
+          else
+            resolve({
+              schemaVersion: 2,
+              agentId,
+              adapter: `${agentId}-test`,
+              status: "ok",
+              source: "provider",
+              plan: null,
+              fetchedAt: 1,
+              metrics: [],
+            });
+        }),
+    );
+
+    harness.controller.create();
+    const pending = harness.controller.reloadAgentUsage();
+    const menuUpdatesBeforeDestroy =
+      harness.tray.setContextMenu.mock.calls.length;
+    harness.controller.destroy();
+    resolveUsage?.({
+      schemaVersion: 2,
+      agentId: "claude",
+      adapter: "claude-test",
+      status: "ok",
+      source: "provider",
+      plan: null,
+      fetchedAt: 1,
+      metrics: [],
+    });
+    await pending;
+
+    expect(harness.tray.setContextMenu).toHaveBeenCalledTimes(
+      menuUpdatesBeforeDestroy,
+    );
   });
 
   it("ignores a late provider load after the tray is destroyed", async () => {
@@ -306,6 +394,8 @@ describe("tray controller", () => {
 
     harness.controller.create();
     const pending = harness.controller.reloadAgentProviders();
+    const menuUpdatesBeforeDestroy =
+      harness.tray.setContextMenu.mock.calls.length;
     harness.controller.destroy();
     resolveGroups?.([
       {
@@ -317,7 +407,9 @@ describe("tray controller", () => {
     ]);
     await pending;
 
-    expect(harness.tray.setContextMenu).not.toHaveBeenCalled();
+    expect(harness.tray.setContextMenu).toHaveBeenCalledTimes(
+      menuUpdatesBeforeDestroy,
+    );
   });
 
   it("keeps the current menu when provider refresh fails", async () => {

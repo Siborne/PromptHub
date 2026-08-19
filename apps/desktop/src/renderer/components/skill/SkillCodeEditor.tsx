@@ -176,7 +176,7 @@ function buildTheme() {
       "--skill-code-invalid": "#dc2626",
       "--skill-code-inserted": "#16a34a",
       height: "100%",
-      backgroundColor: "hsl(var(--background))",
+      backgroundColor: "hsl(var(--card))",
       color: "hsl(var(--foreground))",
       fontSize: "0.8rem",
       overflow: "hidden",
@@ -391,7 +391,7 @@ export function SkillCodeEditor({
       ref={hostRef}
       data-testid={testId}
       data-language={languageName}
-      className={`skill-code-editor h-full min-h-0 overflow-hidden ${className}`}
+      className={`skill-code-editor h-full min-h-0 overflow-hidden bg-card ${className}`}
     />
   );
 }

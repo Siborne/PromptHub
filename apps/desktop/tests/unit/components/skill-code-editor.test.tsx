@@ -52,6 +52,7 @@ describe("SkillCodeEditor", () => {
       "data-language",
       "typescript",
     );
+    expect(screen.getByTestId("skill-code-editor")).toHaveClass("bg-card");
     expect(container.querySelector(".cm-content")).toHaveTextContent(
       "export const value",
     );

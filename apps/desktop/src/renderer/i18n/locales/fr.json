@@ -1061,16 +1061,6 @@
       "customProviderDesc": "Le fournisseur par défaut est un point de terminaison tiers personnalisé. Les données de quota ne sont disponibles que pour l'abonnement officiel. Consultez l'onglet Fournisseur et modèle pour voir le fournisseur actif.",
       "retry": "Réessayer"
     },
-    "usagePopover": {
-      "title": "Quotas des Agents",
-      "subtitle": "Utilisation des abonnements en direct",
-      "cached": "En cache",
-      "agentLabel": "Quota {{agent}}",
-      "refresh": "Actualiser les quotas",
-      "showDetails": "Afficher les détails du quota {{agent}}",
-      "hideDetails": "Masquer les détails du quota {{agent}}",
-      "progressLabel": "{{agent}}, {{metric}} : {{remaining}} % restants"
-    },
     "overview": "Vue d’ensemble",
     "providerAndModel": "Fournisseur et modèle",
     "appearanceTab": "Apparence",
@@ -1153,6 +1143,9 @@
     "rulesPath": "Rules",
     "notAvailable": "Indisponible",
     "assetLoadFailed": "L’inventaire des ressources n’a pas pu être chargé.",
+    "assetLoading": "Chargement de l’inventaire des ressources…",
+    "assetRefreshing": "Actualisation de l’inventaire des ressources…",
+    "assetRefreshFailedCached": "L’actualisation a échoué ; les données en cache restent affichées.",
     "capabilities": "Fonctions de gestion",
     "openAsset": "Ouvrir {{asset}}",
     "openAgentSettings": "Ouvrir les réglages Agent",
@@ -3594,6 +3587,7 @@
     "previewTruncated": "L’aperçu est tronqué. Restaurez la source pour voir l’ensemble des éléments.",
     "sourceType": {
       "current-residual": "Résidus du répertoire actuel",
+      "current-file-workspace": "Espace de travail Markdown actuel",
       "current-canonical-db": "Base SQLite actuelle",
       "external-user-data": "Ancien répertoire de données",
       "upgrade-backup": "Sauvegarde automatique de mise à niveau",

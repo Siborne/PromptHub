@@ -1,8 +1,18 @@
 import type {
   AgentQuotaScope,
   AgentUsageMetric,
-  AgentUsageQuota,
 } from "@prompthub/shared/types";
+import {
+  formatAgentUsagePlan,
+  getPrimaryUsageMetric,
+  getUsageMetricRemainingPercent,
+} from "@prompthub/shared/utils/agent-usage-presentation";
+
+export {
+  formatAgentUsagePlan,
+  getPrimaryUsageMetric,
+  getUsageMetricRemainingPercent,
+};
 
 export const MAX_AGENT_USAGE_METRICS = 64;
 export const COLLAPSED_MODEL_METRICS = 4;
@@ -26,60 +36,6 @@ export interface AgentUsagePresentation {
 export interface AgentUsagePresentationOptions {
   expanded?: boolean;
   modelLimit?: number;
-}
-
-const KIMI_MEMBERSHIP_PLAN_NAMES: Record<string, string> = {
-  LEVEL_FREE: "Free",
-  LEVEL_BASIC: "Adagio",
-  LEVEL_STANDARD: "Moderato",
-  LEVEL_INTERMEDIATE: "Allegretto",
-  LEVEL_ADVANCED: "Allegro",
-  LEVEL_PREMIUM: "Vivace",
-};
-
-const GROK_MEMBERSHIP_PLAN_NAMES: Record<string, string> = {
-  XFREE: "X Free",
-  XBASIC: "X Basic",
-  XPREMIUM: "X Premium",
-  XPREMIUMPLUS: "X Premium+",
-  SUPERGROK: "SuperGrok",
-  SUPERGROKLITE: "SuperGrok Lite",
-  SUPERGROKPLUS: "SuperGrok Plus",
-  SUPERGROKHEAVY: "SuperGrok Heavy",
-};
-
-export function formatAgentUsagePlan(plan: string): string {
-  const trimmed = plan.trim();
-  const kimiPlan = KIMI_MEMBERSHIP_PLAN_NAMES[trimmed.toUpperCase()];
-  if (kimiPlan) return kimiPlan;
-  const grokPlan =
-    GROK_MEMBERSHIP_PLAN_NAMES[
-      trimmed.replace(/[^A-Za-z0-9]+/g, "").toUpperCase()
-    ];
-  if (grokPlan) return grokPlan;
-  const normalized = trimmed.replace(/^level[_\s-]+/i, "");
-  if (!normalized) return "";
-  if (!/[_-]/.test(normalized)) {
-    return normalized === normalized.toUpperCase()
-      ? `${normalized[0].toUpperCase()}${normalized.slice(1).toLowerCase()}`
-      : normalized;
-  }
-  return normalized
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((part) => `${part[0].toUpperCase()}${part.slice(1).toLowerCase()}`)
-    .join(" ");
-}
-
-export function getUsageMetricRemainingPercent(
-  metric: AgentUsageMetric,
-): number | null {
-  if (metric.value.kind !== "percentage" && metric.value.kind !== "amount") {
-    return null;
-  }
-  const value = metric.value.remainingPercent;
-  if (!Number.isFinite(value)) return null;
-  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 export function getAgentUsageTone(remaining: number): AgentUsageTone {
@@ -197,18 +153,4 @@ export function buildAgentUsagePresentation(
   }
 
   return { groups: ordered, hiddenModelCount, truncatedCount };
-}
-
-export function getPrimaryUsageMetric(
-  quota: AgentUsageQuota,
-): AgentUsageMetric | null {
-  let primary: AgentUsageMetric | null = null;
-  let lowestRemaining = Number.POSITIVE_INFINITY;
-  for (const metric of quota.metrics) {
-    const remaining = getUsageMetricRemainingPercent(metric);
-    if (remaining === null || remaining >= lowestRemaining) continue;
-    primary = metric;
-    lowestRemaining = remaining;
-  }
-  return primary ?? quota.metrics[0] ?? null;
 }

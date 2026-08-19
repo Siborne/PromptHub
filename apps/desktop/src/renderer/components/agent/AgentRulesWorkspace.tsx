@@ -90,7 +90,7 @@ function useAgentRuleRetry(
       return;
     }
     forcedScanAttemptRef.current = selectionKey;
-    void loadFiles({ force: true });
+    void loadFiles({ force: true, selectInitial: false });
   }, [forcedScanAttemptRef, loadFiles, selectRule, selectionKey, targetRule]);
 }
 
@@ -116,13 +116,13 @@ function useAgentRuleSynchronization(input: AgentRuleSyncInput): () => void {
     if (!hasLoadedFiles) {
       if (initialLoadAttemptRef.current === selectionKey) return;
       initialLoadAttemptRef.current = selectionKey;
-      void loadFiles();
+      void loadFiles({ selectInitial: false });
       return;
     }
     if (!targetRule) {
       if (forcedScanAttemptRef.current === selectionKey) return;
       forcedScanAttemptRef.current = selectionKey;
-      void loadFiles({ force: true });
+      void loadFiles({ force: true, selectInitial: false });
       return;
     }
     if (!targetRule.exists) return;
@@ -179,7 +179,7 @@ function useAgentRuleWorkspaceState(agent: ManagedAgentSummary) {
   return {
     createRule,
     error,
-    isLoading: isLoading || !hasLoadedFiles,
+    isLoading: isLoading || (!hasLoadedFiles && !error),
     isSaving,
     isTargetReady:
       Boolean(targetRule?.exists) && currentFile?.id === targetRule?.id,
@@ -273,7 +273,10 @@ function AgentRuleStatus({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex min-h-48 flex-1 flex-col items-center justify-center gap-4 px-6 py-12 text-center">
+    <div
+      role={error ? "alert" : undefined}
+      className="flex min-h-48 flex-1 flex-col items-center justify-center gap-4 px-6 py-12 text-center"
+    >
       {error ? (
         <AlertCircleIcon
           aria-hidden="true"
@@ -295,7 +298,7 @@ function AgentRuleStatus({
       <button
         type="button"
         onClick={onRetry}
-        className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+        className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
         <RefreshCwIcon aria-hidden="true" className="h-4 w-4" />
         {t("common.retry", "Retry")}
@@ -340,8 +343,10 @@ function ProjectRulesWorkspace({ agent }: { agent: ManagedAgentSummary }) {
   );
 
   useEffect(() => {
-    if (!hasLoadedFiles && !isLoading) void loadFiles();
-  }, [hasLoadedFiles, isLoading, loadFiles]);
+    if (!hasLoadedFiles && !isLoading && !error) {
+      void loadFiles({ selectInitial: false });
+    }
+  }, [error, hasLoadedFiles, isLoading, loadFiles]);
 
   useEffect(() => {
     if (targetRule?.exists && currentFile?.id !== targetRule.id && !isLoading) {

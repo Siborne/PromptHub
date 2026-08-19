@@ -31,7 +31,7 @@ export function AgentConfigFilesPanel({
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-5 py-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border bg-card px-5 py-3">
         <FileCogIcon
           aria-hidden="true"
           className="h-4 w-4 shrink-0 text-muted-foreground"
@@ -56,7 +56,10 @@ export function AgentConfigFilesPanel({
           </button>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div
+        data-testid="agent-config-files-workbench"
+        className="min-h-0 flex-1 overflow-hidden bg-background"
+      >
         <SkillFileEditor
           skillId={`agent:${agent.id}`}
           localPath={agent.paths.root}

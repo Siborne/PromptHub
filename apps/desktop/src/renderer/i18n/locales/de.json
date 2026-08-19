@@ -1061,16 +1061,6 @@
       "customProviderDesc": "Der Standardanbieter ist ein benutzerdefinierter Drittanbieter-Endpunkt. Kontingentdaten sind nur für das offizielle Abonnement verfügbar. Den aktiven Anbieter finden Sie im Tab „Anbieter und Modell“.",
       "retry": "Erneut versuchen"
     },
-    "usagePopover": {
-      "title": "Agent-Kontingente",
-      "subtitle": "Aktuelle Abonnementnutzung",
-      "cached": "Zwischengespeichert",
-      "agentLabel": "{{agent}}-Kontingent",
-      "refresh": "Kontingente aktualisieren",
-      "showDetails": "Kontingentdetails für {{agent}} anzeigen",
-      "hideDetails": "Kontingentdetails für {{agent}} ausblenden",
-      "progressLabel": "{{agent}}, {{metric}}: {{remaining}} % verbleibend"
-    },
     "overview": "Übersicht",
     "providerAndModel": "Anbieter und Modell",
     "appearanceTab": "Erscheinungsbild",
@@ -1153,6 +1143,9 @@
     "rulesPath": "Rules",
     "notAvailable": "Nicht verfügbar",
     "assetLoadFailed": "Das Asset-Inventar konnte nicht geladen werden.",
+    "assetLoading": "Asset-Inventar wird geladen…",
+    "assetRefreshing": "Asset-Inventar wird aktualisiert…",
+    "assetRefreshFailedCached": "Aktualisierung fehlgeschlagen; zwischengespeicherte Daten werden angezeigt.",
     "capabilities": "Verwaltungsfunktionen",
     "openAsset": "{{asset}} öffnen",
     "openAgentSettings": "Agent-Einstellungen öffnen",
@@ -3593,6 +3586,7 @@
     "previewTruncated": "Die Vorschau ist gekürzt. Stellen Sie die Quelle wieder her, um alle Einträge zu sehen.",
     "sourceType": {
       "current-residual": "Reste im aktuellen Verzeichnis",
+      "current-file-workspace": "Aktueller Markdown-Arbeitsbereich",
       "current-canonical-db": "Aktuelle SQLite-Datenbank",
       "external-user-data": "Früheres Datenverzeichnis",
       "upgrade-backup": "Automatisches Upgrade-Backup",

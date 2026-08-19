@@ -465,6 +465,12 @@ export function AgentPluginAssetPanel({
   const targetMatrix = usePluginStore((state) => state.targetMatrix);
   const isLoading = usePluginStore((state) => state.isLoading);
   const error = usePluginStore((state) => state.error);
+  const isLoadingTargetInventory = usePluginStore(
+    (state) => state.isLoadingTargetInventory,
+  );
+  const targetInventoryError = usePluginStore(
+    (state) => state.targetInventoryError,
+  );
   const load = usePluginStore((state) => state.load);
   const importLocalPluginPackage = usePluginStore(
     (state) => state.importLocalPluginPackage,
@@ -584,10 +590,10 @@ export function AgentPluginAssetPanel({
   const pluginPage = useBoundedPage(visibleCards, 60, visibleCards);
 
   useEffect(() => {
-    if (!library && !isLoading) {
+    if (!library && !isLoading && !error && !targetInventoryError) {
       void load();
     }
-  }, [isLoading, library, load]);
+  }, [error, isLoading, library, load, targetInventoryError]);
 
   useEffect(() => {
     if (selectedPluginId && !selectedPlugin) {
@@ -755,6 +761,8 @@ export function AgentPluginAssetPanel({
       defaultValue: "{{count}} pending",
     }),
   };
+  const loadError = error ?? targetInventoryError;
+  const loadingInventory = isLoading || isLoadingTargetInventory;
 
   const deleteDialog = (
     <AgentPluginDeleteDialog
@@ -878,9 +886,9 @@ export function AgentPluginAssetPanel({
         }
         refreshLabel={t("agents.refreshCurrentAsset", "Refresh current view")}
         onRefresh={() => void refresh()}
-        isRefreshing={isLoading}
+        isRefreshing={loadingInventory}
         alert={
-          error ? (
+          loadError && pluginPage.total > 0 ? (
             <div
               role="alert"
               className="mx-5 mt-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
@@ -896,8 +904,20 @@ export function AgentPluginAssetPanel({
           />
         }
         gridTestId="agent-plugin-grid"
-        isLoading={isLoading}
+        isLoading={loadingInventory}
         loadingLabel={t("plugin.scanningPlugin", "Loading Plugins...")}
+        failureState={
+          loadError
+            ? {
+                message: t(
+                  "plugin.assetLoadFailed",
+                  "Plugins could not be loaded.",
+                ),
+                retryLabel: t("common.retry", "Retry"),
+                onRetry: () => void load(),
+              }
+            : undefined
+        }
         isEmpty={visibleCards.length === 0}
         emptyState={
           <div className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center">

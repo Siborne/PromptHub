@@ -267,7 +267,14 @@ export function AgentMcpAssetPanel({
   const targetStatus = useMcpStore((state) => state.targetStatus);
   const isLoading = useMcpStore((state) => state.isLoading);
   const error = useMcpStore((state) => state.error);
+  const isLoadingTargetInventory = useMcpStore(
+    (state) => state.isLoadingTargetInventory,
+  );
+  const targetInventoryError = useMcpStore(
+    (state) => state.targetInventoryError,
+  );
   const load = useMcpStore((state) => state.load);
+  const loadTargetInventory = useMcpStore((state) => state.loadTargetInventory);
   const refreshTargetStatus = useMcpStore((state) => state.refreshTargetStatus);
   const createServer = useMcpStore((state) => state.createServer);
   const applyTarget = useMcpStore((state) => state.applyTarget);
@@ -352,8 +359,10 @@ export function AgentMcpAssetPanel({
   );
 
   useEffect(() => {
-    if (!library && !isLoading) void load();
-  }, [isLoading, library, load]);
+    if (!library && !isLoading && !error && !targetInventoryError) {
+      void load();
+    }
+  }, [error, isLoading, library, load, targetInventoryError]);
 
   useEffect(() => {
     if (selectedCardKey && !selectedCard) setSelectedCardKey(null);
@@ -387,8 +396,7 @@ export function AgentMcpAssetPanel({
   const refresh = async (): Promise<void> => {
     setIsRefreshing(true);
     try {
-      await load();
-      await refreshTargetStatus();
+      await Promise.all([load(), loadTargetInventory({ force: true })]);
     } catch (actionError) {
       showToast(getErrorMessage(actionError), "error");
     } finally {
@@ -513,6 +521,8 @@ export function AgentMcpAssetPanel({
       defaultValue: "{{count}} disabled",
     }),
   };
+  const loadError = error ?? targetInventoryError;
+  const loadingInventory = isLoading || isLoadingTargetInventory;
 
   if (selectedCard) {
     const isBusy = busyServerKey === selectedCard.key;
@@ -582,9 +592,9 @@ export function AgentMcpAssetPanel({
         onFilterChange={(filterKey) => setFilter(filterKey as AgentMcpFilter)}
         refreshLabel={t("agents.refreshCurrentAsset", "Refresh current view")}
         onRefresh={() => void refresh()}
-        isRefreshing={isLoading || isRefreshing}
+        isRefreshing={loadingInventory || isRefreshing}
         alert={
-          error ? (
+          loadError && page.total > 0 ? (
             <div
               role="alert"
               className="mx-5 mt-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
@@ -610,8 +620,20 @@ export function AgentMcpAssetPanel({
         }
         listTestId="mcp-agent-server-list"
         gridTestId="mcp-agent-grid"
-        isLoading={isLoading}
+        isLoading={loadingInventory}
         loadingLabel={t("mcp.loading", "Loading MCP...")}
+        failureState={
+          loadError
+            ? {
+                message: t(
+                  "mcp.assetLoadFailed",
+                  "MCP targets could not be loaded.",
+                ),
+                retryLabel: t("common.retry", "Retry"),
+                onRetry: () => void load(),
+              }
+            : undefined
+        }
         isEmpty={visibleCards.length === 0}
         emptyState={
           <div className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center">

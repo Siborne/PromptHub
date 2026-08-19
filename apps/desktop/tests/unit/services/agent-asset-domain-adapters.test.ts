@@ -229,7 +229,7 @@ describe("renderer Agent asset domain adapters", () => {
     ]);
   });
 
-  it("uses explicit empty and metadata fallbacks from owning stores", () => {
+  it("excludes missing Rules descriptors and uses Plugin metadata fallbacks", () => {
     useRulesStore.setState({
       files: [
         {
@@ -281,12 +281,7 @@ describe("renderer Agent asset domain adapters", () => {
 
     expect(
       claude.domains.find((domain) => domain.kind === "rule")?.items,
-    ).toEqual([
-      expect.objectContaining({
-        id: "rule-without-sync-state",
-        state: "detected",
-      }),
-    ]);
+    ).toEqual([]);
     expect(
       claude.domains.find((domain) => domain.kind === "plugin")?.items,
     ).toEqual([
