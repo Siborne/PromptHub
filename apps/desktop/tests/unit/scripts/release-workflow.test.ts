@@ -84,10 +84,17 @@ describe("release workflow secret guards", () => {
     expect(desktopMainSource).toContain('app.setPath("appData"');
   });
 
-  it("retries macOS packaging only when Apple's timestamp service is unavailable", () => {
-    expect(workflowSource).toContain("MAC_TIMESTAMP_RETRY_LIMIT=2");
+  it("retries only known transient Apple packaging failures", () => {
+    expect(workflowSource).toContain("MAC_PACKAGE_RETRY_LIMIT=3");
     expect(workflowSource).toContain("The timestamp service is not available");
-    expect(workflowSource).toContain("MAC_TIMESTAMP_RETRY_DELAY_SECONDS=60");
+    expect(workflowSource).toContain("Could not find base64 encoded ticket");
+    expect(workflowSource).toContain(
+      "Failed to staple your application with code: 65",
+    );
+    expect(workflowSource).toContain("MAC_PACKAGE_RETRY_DELAY_SECONDS=60");
+    expect(workflowSource).toContain(
+      'if [ "$package_attempt" -ge "$MAC_PACKAGE_RETRY_LIMIT" ] || [ -z "$retry_reason" ]; then',
+    );
     expect(workflowSource).toContain('exit "$package_status"');
   });
 

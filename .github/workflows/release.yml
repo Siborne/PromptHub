@@ -173,10 +173,10 @@ jobs:
             elif [ "${{ matrix.platform }}" = "mac" ]; then
               pnpm vite build
 
-              MAC_TIMESTAMP_RETRY_LIMIT=2
-              MAC_TIMESTAMP_RETRY_DELAY_SECONDS=60
+              MAC_PACKAGE_RETRY_LIMIT=3
+              MAC_PACKAGE_RETRY_DELAY_SECONDS=60
               package_attempt=1
-              while [ "$package_attempt" -le "$MAC_TIMESTAMP_RETRY_LIMIT" ]; do
+              while [ "$package_attempt" -le "$MAC_PACKAGE_RETRY_LIMIT" ]; do
                 package_log="${RUNNER_TEMP}/prompthub-mac-package-${{ matrix.arch }}-${package_attempt}.log"
                 set +e
                 PROMPTHUB_MAC_RELEASE_SIGN=true pnpm electron-builder --config electron-builder.config.cjs --mac --${{ matrix.arch }} --publish never 2>&1 | tee "$package_log"
@@ -186,12 +186,20 @@ jobs:
                 if [ "$package_status" -eq 0 ]; then
                   break
                 fi
-                if [ "$package_attempt" -ge "$MAC_TIMESTAMP_RETRY_LIMIT" ] || ! grep -Fq "The timestamp service is not available" "$package_log"; then
+
+                retry_reason=""
+                if grep -Fq "The timestamp service is not available" "$package_log"; then
+                  retry_reason="Apple timestamp service unavailable"
+                elif grep -Fq "Could not find base64 encoded ticket" "$package_log" || grep -Fq "Failed to staple your application with code: 65" "$package_log"; then
+                  retry_reason="Apple notarization ticket not yet available"
+                fi
+
+                if [ "$package_attempt" -ge "$MAC_PACKAGE_RETRY_LIMIT" ] || [ -z "$retry_reason" ]; then
                   exit "$package_status"
                 fi
 
-                echo "::warning::Apple timestamp service unavailable; retrying macOS packaging in ${MAC_TIMESTAMP_RETRY_DELAY_SECONDS}s."
-                sleep "$MAC_TIMESTAMP_RETRY_DELAY_SECONDS"
+                echo "::warning::${retry_reason}; retrying macOS packaging in ${MAC_PACKAGE_RETRY_DELAY_SECONDS}s."
+                sleep "$MAC_PACKAGE_RETRY_DELAY_SECONDS"
                 find dist -maxdepth 1 -type d -name 'mac*' -exec rm -rf {} +
                 package_attempt=$((package_attempt + 1))
               done

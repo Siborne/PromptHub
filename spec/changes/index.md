@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 26 |
+| Active | 27 |
 | Archived | 224 |
 | Legacy | 1 |
 
@@ -24,6 +24,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-upgrade-snapshot-lock-recovery` | active | `spec/changes/active/desktop-upgrade-snapshot-lock-recovery/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
 | `legacy-upgrade-recovery-audit` | active | `spec/changes/active/legacy-upgrade-recovery-audit/` |
+| `macos-notary-ticket-propagation-retry` | in progress | `spec/changes/active/macos-notary-ticket-propagation-retry/` |
 | `mcp-version-history-and-projection-safety` | active | `spec/changes/active/mcp-version-history-and-projection-safety/` |
 | `mobile-prompt-persistence-hardening` | release-pending | `spec/changes/active/mobile-prompt-persistence-hardening/` |
 | `pi-agent-separation` | release-pending | `spec/changes/active/pi-agent-separation/` |
