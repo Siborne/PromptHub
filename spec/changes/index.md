@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 27 |
-| Archived | 224 |
+| Active | 25 |
+| Archived | 226 |
 | Legacy | 1 |
 
 ## Active
@@ -24,7 +24,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-upgrade-snapshot-lock-recovery` | active | `spec/changes/active/desktop-upgrade-snapshot-lock-recovery/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
 | `legacy-upgrade-recovery-audit` | active | `spec/changes/active/legacy-upgrade-recovery-audit/` |
-| `macos-notary-ticket-propagation-retry` | in progress | `spec/changes/active/macos-notary-ticket-propagation-retry/` |
 | `mcp-version-history-and-projection-safety` | active | `spec/changes/active/mcp-version-history-and-projection-safety/` |
 | `mobile-prompt-persistence-hardening` | release-pending | `spec/changes/active/mobile-prompt-persistence-hardening/` |
 | `pi-agent-separation` | release-pending | `spec/changes/active/pi-agent-separation/` |
@@ -41,7 +40,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
 | `web-agent-service-parity` | active | `spec/changes/active/web-agent-service-parity/` |
 | `web-sync-contract-completion` | active | `spec/changes/active/web-sync-contract-completion/` |
-| `windows-packaged-upgrade-startup-gate` | release-pending | `spec/changes/active/windows-packaged-upgrade-startup-gate/` |
 
 ## Archived
 
@@ -270,7 +268,9 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-08-18-rules-agent-source-matrix` | archived | `spec/changes/archive/2026/08/2026-08-18-rules-agent-source-matrix/` |
 | `2026-08-18-skill-uninstall-lifecycle` | archived | `spec/changes/archive/2026/08/2026-08-18-skill-uninstall-lifecycle/` |
 | `2026-08-18-windows-code-signing-and-reputation` | archived | `spec/changes/archive/2026/08/2026-08-18-windows-code-signing-and-reputation/` |
+| `2026-08-19-macos-notary-ticket-propagation-retry` | archived | `spec/changes/archive/2026/08/2026-08-19-macos-notary-ticket-propagation-retry/` |
 | `2026-08-19-republish-0-5-9-20260714` | archived | `spec/changes/archive/2026/08/2026-08-19-republish-0-5-9-20260714/` |
+| `2026-08-19-windows-packaged-upgrade-startup-gate` | archived | `spec/changes/archive/2026/08/2026-08-19-windows-packaged-upgrade-startup-gate/` |
 
 ## Legacy
 

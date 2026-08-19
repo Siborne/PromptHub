@@ -2,9 +2,9 @@
 
 ## Status
 
-Status: release-pending. Implementation is fully verified.
-`v0.6.0-beta.1` remains withdrawn as a draft; the successful
-replacement-candidate verification does not republish or retag the release.
+Status: completed and archived on 2026-08-19. The verified replacement was
+published as the `v0.6.0-beta.1` GitHub Prerelease after the leased tag move,
+platform matrix, artifact checks, and explicit promotion all completed.
 
 ## Implemented
 
@@ -88,54 +88,30 @@ replacement-candidate verification does not republish or retag the release.
   unsupported directory `fsync` as best effort, matching the repository's other
   atomic marker publishers. A regression reproduces the Windows error after
   rename and requires the committed marker to remain usable.
-- The real Windows GitHub Actions runner remains required before release
-  approval.
 
 ## Publication State
 
-- No code or build-matrix blocker remains for this startup fix.
 - On 2026-08-19 the maintainer explicitly authorized reusing and overwriting
   `v0.6.0-beta.1` instead of creating `beta.2`.
-- The existing tag still points at the withdrawn candidate and the release
-  remains a draft. They are intentionally preserved until the current dirty
-  worktree is reduced to a clean, pushed candidate and the current quick/full
-  plus platform gates pass.
-- The pre-replacement remote baseline is recorded in
+- The pre-replacement remote baseline is preserved in
   `replacement-baseline.json`: annotated tag object, peeled commit, draft
   identity, and all 20 asset names, sizes, and GitHub SHA-256 digests.
-- Candidate preflight repaired the only known Desktop-suite red state without
-  weakening production code: `skill-ui.integration.test.tsx` now supplies the
-  complete current Skill store contract (`registrySkills`, remote stores,
-  registry loading, gallery columns, and pending child deployment state). Its
-  focused integration suite passes 1 file / 11 tests; the prior seven failures
-  all stopped at the stale mock before rendering.
-- The complete Desktop Vitest suite now passes 610 files / 5,434 tests in
-  664.42 seconds. Its stderr contains existing deprecation, React `act`, mock,
-  jsdom navigation, and expected failure-path logs but no test failure. The
-  delegated test process exited without leaving a Vitest worker.
-- On the frozen replacement candidate, `pnpm verify:release:quick` passed all
-  29 checks in 1,230.1 seconds and `pnpm verify:release` passed all 42 checks in
-  796.3 seconds with zero failed or blocked checks. The full profile includes
-  Core/Desktop performance budgets, four Desktop integration shards, Desktop
-  build and bundle budget, built-artifact Electron smoke, CLI/Web builds,
-  self-hosted Web smoke, Cloudflare dry-run build and Mobile checks.
-- Release documentation is synchronized across the root and six translated
-  user READMEs plus the website changelog. `docs/README.md` remains unchanged
-  because it is only a documentation router. Website generated stable metadata
-  and default downloads remain `0.5.9` as required for a beta.
-- Isolated Agent config-files E2E passed and its screenshot confirms the gray
-  file tree / white primary editor hierarchy. The broader Agent workspace E2E
-  passed after its stale activation-button calls and non-waiting plan lookup
-  were updated to the existing per-provider switch contract; production
-  activation behavior was not relaxed. No matching public Agent screenshot
-  exists, so unrelated stable screenshots were intentionally retained.
-- `candidate-scope.md` freezes included replacement deltas, non-claims,
-  worktree/sensitive-file audit results, verification state, and the remaining
-  external mutation boundary.
-- The repository workflow already refreshes an existing release in place,
-  preserves its draft state, and uploads deterministic assets with `--clobber`.
-  `TEST-WINSTART-007` locks this replacement path and passed with the complete
-  release-workflow suite: 1 file / 8 tests. File-size governance, spec
-  traceability, generated index and diff hygiene also passed. The leased tag
-  update, replacement workflow run, asset verification and explicit promotion
-  remain pending under `T-WINSTART-008`.
+- The annotated tag was moved with an expected-old-value lease. Its final tag
+  object is `d665fc5e307f0dd7eb0413fe654784b87a6c13f8`, peeled to candidate commit
+  `6c08b5e84d70ecb41b32030b00e2e04fae96319a`.
+- Candidate preflight passed the complete Desktop Vitest suite: 610 files /
+  5,434 tests. `pnpm verify:release:quick` passed 29/29 checks, and the final
+  `pnpm verify:release` passed 42/42 checks with zero failed or blocked checks.
+- Final Desktop Release run `32265536666` passed the full verification and all
+  platform jobs. Windows x64 passed the real packaged `0.5.9` upgrade cold
+  start; Windows arm64 packaging and both signed/notarized macOS architectures
+  also passed.
+- Release job `96116662419` merged the updater manifests, verified artifact
+  hashes, and replaced all 20 assets with `--clobber` while preserving the
+  draft boundary.
+- After independent tag, asset, updater-manifest, GHCR, and stable Latest
+  checks, the existing draft was explicitly promoted. Ten representative
+  public asset URLs across Windows, macOS, Linux, CLI, and updater manifests
+  returned HTTP 200.
+- GitHub now exposes `v0.6.0-beta.1` as a public prerelease while stable
+  `v0.5.9` remains Latest. No release task remains for this startup fix.

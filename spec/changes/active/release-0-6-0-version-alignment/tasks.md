@@ -18,5 +18,5 @@
 - [x] `T-REL-006` Add the failing GHCR prerelease-isolation regression, then
       restrict the mutable `latest` alias to stable tag refs (`FR-REL-003`,
       `DES-REL-004`, `TEST-REL-006`).
-- [ ] `T-REL-007` Verify the corrected tag workflow publishes beta-versioned
+- [x] `T-REL-007` Verify the corrected tag workflow publishes beta-versioned
       images without changing stable `latest`, then record remote evidence.

@@ -69,13 +69,15 @@ future work that remains outside the beta contract.
   activation switches and made to await the asynchronous activation plan. The
   inspected config screenshot shows the intended gray tree / white editor
   contrast; no matching public screenshot asset exists.
-- The tag-triggered platform matrix, replacement draft asset integrity and
-  explicit prerelease promotion remain mandatory after the final candidate is
-  committed and pushed.
+- Final tag-triggered Desktop Release run `32265536666` passed the complete
+  platform matrix. The release job verified hashes and refreshed all 20 draft
+  assets; independent checks then confirmed the tag target, updater manifests,
+  public asset URLs, GHCR isolation, and stable Latest boundary.
 
-## Remaining Mutation Boundary
+## Completed Mutation Boundary
 
-No current working-tree commit, `main` push, tag rewrite, beta draft asset
-replacement, or prerelease promotion has occurred as part of this scope freeze.
-Those steps remain ordered under `T-WINSTART-008` and require the repository's
-submission gate plus current full release evidence.
+The candidate commits were pushed to `main`; the annotated tag was moved with
+an expected-old-value lease to commit
+`6c08b5e84d70ecb41b32030b00e2e04fae96319a`; the existing draft assets were
+replaced in place; and the verified draft was explicitly promoted as a public
+prerelease on 2026-08-19. `T-WINSTART-008` is complete.

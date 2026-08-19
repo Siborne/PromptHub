@@ -23,6 +23,11 @@
 - The GHCR metadata rule now emits `latest` only for a tag ref whose ref name
   has no prerelease suffix. Beta images retain explicit semver, source-tag and
   commit-SHA tags.
+- Stable recovery workflow run `32259627093` restored GHCR `latest` to the
+  published `0.5.9` image before the replacement beta was promoted.
+- Final Self-Hosted Web run `32265536642` published only the explicit
+  `0.6.0-beta.1`, `v0.6.0-beta.1`, and `sha-6c08b5e` tags for the beta
+  candidate; it did not publish `latest`.
 
 ## Verification
 
@@ -66,13 +71,18 @@
   failed or blocked checks, and a maximum concurrency of two. Performance,
   Desktop unit/integration/build/bundle/E2E, CLI/Web builds, Web smoke,
   Cloudflare dry-run and Mobile gates all passed.
-- Read-only GHCR inspection confirmed the pre-existing `latest` alias still
-  points at withdrawn beta revision `2ed96c7f` with manifest digest
-  `sha256:c9b4c4f3b7a463146685144a4f4f4b8ef23e2b07c5d16c9d51a9c1e2fcd33664`.
-  The explicit stable `0.5.9` image remains available at digest
-  `sha256:e8d6214030a27090a443ca38d4b5f07d4331af09d9a20b71e5138090bd8a2e40`;
-  `T-REL-007` must restore `latest` to that stable image before beta
-  publication completes.
+- Stable recovery workflow run `32259627093` completed successfully. Read-only
+  registry inspection confirmed both `latest` and `0.5.9` resolve to manifest
+  digest
+  `sha256:110d9c320236a7bc41fc624b564db58b1f71c13a110ee02b198e0024abc3784e`,
+  version `0.5.9`, revision
+  `1e933ae29726361982c5ce7b49bc4f4c6da326ba`.
+- Final Self-Hosted Web run `32265536642` completed successfully at commit
+  `6c08b5e84d70ecb41b32030b00e2e04fae96319a`. The explicit
+  `0.6.0-beta.1` and `v0.6.0-beta.1` tags resolve to manifest digest
+  `sha256:5e83e5cdc63392cf2367e13587d8a1991fe7efe73b776f3383cb6ef6a6784526`,
+  version `0.6.0-beta.1`, and the same candidate revision. A post-publication
+  check reconfirmed that stable `latest` was unchanged.
 
 ## Analyze
 
@@ -103,8 +113,8 @@ this change has no visible product UI delta.
 
 ## Follow-ups
 
-- Complete `T-REL-006` and retag the replacement candidate, then verify the
-  versioned beta image is present while stable `latest` keeps the `0.5.9`
-  manifest digest.
-- Desktop signing, artifact publication, and promotion remain governed by the
-  `v0.6.0-beta.1` replacement release change.
+- Keep this change active until the stable `0.6.0` release is published and
+  stable-facing website metadata, downloads, and GHCR `latest` are explicitly
+  promoted together.
+- The `v0.6.0-beta.1` replacement publication is complete; it does not promote
+  any stable-facing surface from `0.5.9`.

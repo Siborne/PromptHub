@@ -2,8 +2,10 @@
 
 ## Status
 
-In progress. The failing remote evidence is Desktop Release run `32260133354`,
-attempt 2, macOS arm64 job `96101796201`.
+Completed and archived on 2026-08-19. The failing remote evidence was Desktop
+Release run `32260133354`, attempt 2, macOS arm64 job `96101796201`. The final
+tag matrix passed in Desktop Release run `32265536666` at commit
+`6c08b5e84d70ecb41b32030b00e2e04fae96319a`.
 
 ## Evidence
 
@@ -32,5 +34,11 @@ found`; stapler could not find the base64 ticket and exited with Error 65.
 - Traceability and generated-index checks passed for all active changes.
 - `pnpm verify:release` passed 42/42 checks with zero failed or blocked checks,
   including performance, Desktop unit/integration/build/bundle/E2E, CLI/Web
-  builds, Web smoke, Cloudflare dry-run, and Mobile gates. The final remote
-  platform matrix remains pending.
+  builds, Web smoke, Cloudflare dry-run, and Mobile gates.
+- Final Desktop Release run `32265536666` passed verification, Linux, Windows
+  x64, Windows arm64, macOS x64, macOS arm64, and the Release job. Both macOS
+  architectures passed signing, notarization, stapling, and Gatekeeper checks;
+  neither required an extra packaging attempt in the successful run.
+- The Release job verified the merged update manifests and all artifact hashes,
+  then replaced the 20 draft assets. The draft was promoted separately only
+  after the platform matrix and public asset inventory were verified.

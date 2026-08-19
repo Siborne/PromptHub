@@ -27,12 +27,13 @@ advertising nonexistent `0.6.0` downloads.
   - record `0.6.0` as a release preparation
   - keep public stable downloads and badges on the latest explicit stable
     release record
-  - publish prerelease Web images under versioned GHCR tags without moving the
-    stable `latest` image
+  - publish and verify prerelease Web images under versioned GHCR tags without
+    moving the stable `latest` image
   - verify the explicit public stable release boundary
 - Out of scope:
   - creating or pushing a `v0.6.0` tag
-  - publishing GitHub Release assets, container images, or package registries
+  - publishing the stable `v0.6.0` GitHub Release, container alias, or package
+    registry versions
   - changing historical `0.5.9` release records and download history
   - changing the independent private package versions under `packages/*`
 

@@ -22,7 +22,7 @@
       `TEST-WINSTART-007`): lock the existing-release workflow contract so a
       same-tag replacement preserves draft state and replaces assets with
       clobber semantics without automatic publication.
-- [ ] `T-WINSTART-008` (`FR-WINSTART-003`, `DES-WINSTART-004`,
+- [x] `T-WINSTART-008` (`FR-WINSTART-003`, `DES-WINSTART-004`,
       `TEST-WINSTART-007`): freeze and verify the current candidate, record the
       old remote tag/release inventory, push the replacement tag with an
       expected-old-value lease, verify the refreshed draft assets and platform
