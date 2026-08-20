@@ -19,13 +19,14 @@ the full checkpoint path. The catalog builder then uses
 - same parent directory as the destination
 - unchanged create, verify, rename, and SQLite sidecar cleanup sequence
 
-The startup checkpoint target uses `.canonical-checkpoint-<uuid>`, and
-`createCanonicalStorageCheckpoint()` uses `.checkpoint-stage-<uuid>` in the
-same parent. This removes the earlier target-basename duplication from every
-ancestor of the temporary SQLite catalogs. With the release smoke's long
-Windows runner profile, the resulting database and `.lock` paths retain
-explicit headroom below the VFS limit rather than relying on a short leaf name
-inside an already overlong directory.
+Startup and selected-database recovery checkpoint targets both use
+`.canonical-checkpoint-<uuid>`, and `createCanonicalStorageCheckpoint()` uses
+`.checkpoint-stage-<uuid>` in the same parent. This removes the earlier
+target-basename duplication from every ancestor of the temporary SQLite
+catalogs and avoids reintroducing a longer recovery-only ancestor. With the
+release smoke's long Windows runner profile, the resulting database and `.lock`
+paths retain explicit headroom below the VFS limit rather than relying on a
+short leaf name inside an already overlong directory.
 
 Naming is `O(1)` time and space. Catalog construction remains `O(B + R)` for
 canonical bytes and records; no additional scan, copy, database open, or
@@ -75,9 +76,9 @@ the required black-box coverage.
 
 - `TEST-WINCAT-001`: Core and Desktop filesystem/SQLite regressions capture the
   verification database and actual stage used for long checkpoint/catalog
-  destinations, including the checkpoint directory stage, and assert basename
-  budgets, sibling placement, target independence, successful publication, and
-  existing failure cleanup.
+  destinations, including startup/recovery checkpoint targets and the
+  checkpoint directory stage, and assert basename budgets, sibling placement,
+  target independence, successful publication, and existing failure cleanup.
 - `TEST-WINCAT-002`: Desktop unit/contract tests cover the release-only auto-exit
   guard, both signal orders, exactly-once exit, migration failure behavior, two
   launches, per-launch event boundaries, clean exit, and workflow blocking

@@ -31,9 +31,10 @@ detect a failure that appears when the same profile is opened again.
 - Keep canonical SQLite verification and stage filenames short and independent
   of the checkpoint/destination basename while preserving same-directory
   publication and atomic rename.
-- Keep the checkpoint target and its pre-publication directory stage bounded as
-  well; a short SQLite basename is insufficient when an internally amplified
-  parent path already consumes the Windows VFS budget.
+- Keep startup and selected-database recovery checkpoint targets, plus their
+  pre-publication directory stage, bounded as well; a short SQLite basename is
+  insufficient when an internally amplified parent path already consumes the
+  Windows VFS budget.
 - Preserve existing stage cleanup for create, quick-check, graph-hash, and
   destination-race failures.
 - Extend the packaged Windows x64 upgrade smoke to launch the same isolated

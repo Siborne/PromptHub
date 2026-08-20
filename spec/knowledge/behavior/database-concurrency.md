@@ -91,6 +91,8 @@
 
 - PromptHub 自有临时 SQLite 必须使用 `packages/db` 的有界 label + full UUID
   sibling 路径；不得把任意目标 basename、PID 和另一组 UUID 逐层重复到临时库路径。
+- 自动启动与用户选择数据库恢复所创建的 canonical checkpoint 祖先目录必须使用同一
+  固定有界 UUID 形式；恢复场景不得额外叠加操作名或 PID 消耗 SQLite 路径预算。
 - 当前操作可证明拥有的临时数据库在成功转交或失败清理时，必须处理数据库本体、
   `-journal`、`-shm`、`-wal` 和 `node-sqlite3-wasm` 的相邻 `.lock` 目录；不得借此
   删除 operational `.clients` 或绕过 live/unknown owner 规则。

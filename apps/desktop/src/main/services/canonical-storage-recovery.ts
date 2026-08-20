@@ -88,7 +88,7 @@ function recoverSelectedDatabase(
     checkpointPath: path.join(
       options.activeRoot,
       "cache",
-      `.canonical-recovery-checkpoint-${process.pid}-${crypto.randomUUID()}`,
+      `.canonical-checkpoint-${crypto.randomUUID()}`,
     ),
     deviceId: deriveLocalResourceDeviceId(options.activeRoot),
     mcpLibrary,

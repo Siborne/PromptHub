@@ -33,9 +33,10 @@ Canonical SQLite verification and stage basenames MUST have a fixed upper bound
 independent of checkpoint and destination basenames. Each temporary database
 MUST remain a unique sibling on the owning filesystem so publication retains
 same-filesystem behavior, atomic rename, and bounded cleanup.
-Checkpoint target/stage directory names controlled by PromptHub MUST also be
-bounded and MUST NOT duplicate one another, because they are ancestors of the
-SQLite paths subject to the Windows VFS limit.
+Startup and selected-database recovery checkpoint target/stage directory names
+controlled by PromptHub MUST also be bounded and MUST NOT duplicate one
+another, because they are ancestors of the SQLite paths subject to the Windows
+VFS limit.
 
 #### Scenario: Long verification catalog basename
 
@@ -45,6 +46,15 @@ SQLite paths subject to the Windows VFS limit.
 - **And** the checkpoint stage does not copy the checkpoint target basename
 - **And** both remain within the documented fixed basename budget
 - **And** failure removes the stage and SQLite sidecars
+
+#### Scenario: selected-database recovery creates a checkpoint
+
+- **Given** a user selects a database recovery source under a long Windows
+  profile path
+- **When** PromptHub creates the canonical recovery checkpoint
+- **Then** its task-owned checkpoint basename uses the same bounded UUID form as
+  startup
+- **And** it does not append a PID or repeat a recovery-specific prefix
 
 ### `FR-WINCAT-002`: Release Gate Covers The Same Profile Twice
 

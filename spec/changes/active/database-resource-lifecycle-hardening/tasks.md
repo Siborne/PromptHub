@@ -3,7 +3,8 @@
 - [x] `T-DBLIFE-001` (`NFR-DBLIFE-001`, `NFR-DBLIFE-002`,
       `DES-DBLIFE-001`, `TEST-DBLIFE-001`): add the bounded task-owned database
       primitive and adopt complete artifact cleanup across canonical, recovery,
-      checkpoint, and safety-point paths.
+      checkpoint, and safety-point paths, including bounded automatic and
+      selected-database recovery checkpoint ancestors.
 - [x] `T-DBLIFE-002` (`FR-DBLIFE-001`, `DES-DBLIFE-003`,
       `TEST-DBLIFE-003`): close Cherry Studio, Hermes, Cherry Skill, and NanoClaw
       handles on every validation and paired-open failure.

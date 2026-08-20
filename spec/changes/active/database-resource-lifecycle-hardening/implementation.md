@@ -14,6 +14,8 @@ pending, so publication is not yet claimed.
 - The canonical checkpoint directory stage duplicated its long target basename,
   so bounded leaf filenames alone did not keep the complete SQLite path within
   budget.
+- The selected-database recovery caller still added a longer recovery label and
+  PID to its checkpoint ancestor after automatic startup had been bounded.
 - Task-owned database cleanup loops omitted `.lock` in Core, DB, and Desktop
   failure paths.
 - Cherry Studio and Hermes could leak an opened connection during schema
@@ -36,6 +38,8 @@ pending, so publication is not yet claimed.
 - Canonical startup now uses `.canonical-checkpoint-<uuid>` and checkpoint
   construction uses `.checkpoint-stage-<uuid>`, removing the long duplicated
   ancestor that still put a short SQLite leaf over the Windows budget.
+- Selected-database recovery now uses the same `.canonical-checkpoint-<uuid>`
+  target instead of `.canonical-recovery-checkpoint-<pid>-<uuid>`.
 - Cherry Studio and Hermes close stores rejected during schema validation;
   Cherry Skill closes capability-probe failures; NanoClaw closes its inbound
   database when its paired outbound database cannot open.
@@ -66,6 +70,8 @@ pending, so publication is not yet claimed.
   instrument source outside `packages/core`, so it reported 0 files for that
   cross-package helper despite all 10 tests executing; this tooling limitation
   is recorded rather than presented as numeric coverage.
+- The selected-database recovery checkpoint regression passed 6/6 tests after
+  the final audit finding; Desktop typecheck and focused ESLint passed.
 - Static Windows modeling with the release smoke's long root puts final
   verification/catalog-stage/post-publication verify paths at 198/194/199
   characters and their `.lock` paths at 203/199/204, respectively. The real

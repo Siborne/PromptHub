@@ -27,6 +27,8 @@ weakness elsewhere.
   names and complete artifact cleanup.
 - Apply complete cleanup to canonical catalog/checkpoint/rebuild, safety-point,
   and file-authoritative recovery temporaries.
+- Remove avoidable checkpoint-directory amplification from both automatic
+  startup and selected-database recovery.
 - Close Cherry Studio, Hermes, and NanoClaw database handles on every validation
   and multi-open failure path.
 - Add failure, lock-artifact, path-boundary, and integration regressions.

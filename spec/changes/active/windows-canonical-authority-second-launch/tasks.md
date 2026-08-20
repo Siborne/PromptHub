@@ -2,8 +2,9 @@
 
 - [x] `T-WINCAT-001` (`NFR-WINCAT-001`, `DES-WINCAT-001`,
       `TEST-WINCAT-001`): add failing long-path regressions, bound both the
-      checkpoint hierarchy and same-directory verification/stage database
-      basenames, and retain success/failure cleanup.
+      startup/recovery checkpoint hierarchy and same-directory
+      verification/stage database basenames, and retain success/failure
+      cleanup.
 - [x] `T-WINCAT-002` (`FR-WINCAT-001`, `FR-WINCAT-002`,
       `DES-WINCAT-002`, `TEST-WINCAT-002`): add the fail-closed release-only
       clean-exit control, wait for both window readiness and durable renderer

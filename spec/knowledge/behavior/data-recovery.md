@@ -145,11 +145,11 @@
   graph、SQLite、fresh reopen 与运行期 context 刷新全部成功才提交。失败继续使用旧
   authority，不得留下 marker 指向半成品。
 - Windows 上 canonical SQLite 临时库必须使用与目标 basename 无关的固定有界 sibling
-  名称，checkpoint target/stage 祖先目录也不得彼此重复，避免 UUID-bearing 路径逐层
-  放大后超过 SQLite VFS 路径预算。任务自有临时库清理必须覆盖 SQLite sidecars 和
-  相邻 `.lock`。升级发布门禁必须在同一隔离 profile 上完成首次 renderer migration
-  handoff 和第二次 canonical authority publication；只验证第一次 window ready 不足以
-  证明升级后可重启。
+  名称；自动启动与用户选择数据库恢复的 checkpoint target 必须共用固定有界 UUID
+  形式，checkpoint stage 也不得重复 target，避免路径逐层放大后超过 SQLite VFS 路径
+  预算。任务自有临时库清理必须覆盖 SQLite sidecars 和相邻 `.lock`。升级发布门禁必须
+  在同一隔离 profile 上完成首次 renderer migration handoff 和第二次 canonical
+  authority publication；只验证第一次 window ready 不足以证明升级后可重启。
 - 资源 schema 转换必须使用 durable publication journal。转换中断后启动时先完成或
   回滚 journal；未知较新 schema 不得被旧客户端降级写回，用户 revision 不随 schema
   转换递增。

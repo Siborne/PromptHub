@@ -2,6 +2,7 @@
  * @vitest-environment node
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import path from "node:path";
 import type { ExtractedMcpSecret } from "@prompthub/core";
 
 import type { McpResourceSecretEncryption } from "../../../src/main/services/mcp-resource-secret-store";
@@ -93,7 +94,7 @@ describe("canonical storage recovery orchestration", () => {
     });
   });
 
-  it("closes SQLite and rebuilds canonical storage with device-bound secrets", async () => {
+  it("closes SQLite and rebuilds through a bounded checkpoint with device-bound secrets", async () => {
     const onSuccess = vi.fn();
     const onFailure = vi.fn();
     const scheduleRelaunch = vi.fn();
@@ -152,15 +153,21 @@ describe("canonical storage recovery orchestration", () => {
         activeRoot: "/root",
         sourceDatabasePath: "/root/data/prompthub.db",
         deviceId: "device-test",
-        checkpointPath: expect.stringContaining(
-          "/root/cache/.canonical-recovery-checkpoint-",
-        ),
+        checkpointPath: expect.any(String),
         mcpLibrary: expect.objectContaining({
           kind: "prompthub-mcp-library",
           servers: [],
         }),
       }),
     );
+    const recoveryOptions = mocks.recoverCanonicalStorageAuthorityFromDatabase
+      .mock.calls[0]?.[0] as { checkpointPath?: unknown } | undefined;
+    const checkpointPath = String(recoveryOptions?.checkpointPath);
+    expect(path.dirname(checkpointPath)).toBe(path.join("/root", "cache"));
+    expect(path.basename(checkpointPath)).toMatch(
+      /^\.canonical-checkpoint-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
+    expect(path.basename(checkpointPath).length).toBeLessThanOrEqual(64);
     expect(mocks.createMcpResourceSecretStore).toHaveBeenCalledWith({
       filePath: "/root/secrets/mcp-resource-secrets.json",
       encryption,

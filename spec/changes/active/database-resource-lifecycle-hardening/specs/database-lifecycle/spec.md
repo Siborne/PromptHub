@@ -22,13 +22,22 @@ lock without the existing lease policy.
 
 PromptHub-owned temporary SQLite basenames MUST use a validated fixed label and
 a full UUID, remain at or below 64 characters, and not incorporate an arbitrary
-destination basename.
+destination basename. PromptHub-owned checkpoint ancestors that contain these
+databases MUST likewise use a bounded UUID form rather than adding operation
+names and process identifiers without a fixed budget.
 
 #### Scenario: caller provides an unsafe or oversized label
 
 - **When** a temporary database path is requested with traversal, separators,
   an empty value, or a label that would exceed the basename budget
 - **Then** path construction fails before creating a file
+
+#### Scenario: canonical recovery prepares a checkpoint
+
+- **When** automatic startup or selected-database recovery prepares a canonical
+  checkpoint
+- **Then** the checkpoint basename is bounded independently of the active root
+- **And** both flows use the same fixed-size UUID form
 
 ### `FR-DBLIFE-001`: External Session Store Validation Releases Handles
 

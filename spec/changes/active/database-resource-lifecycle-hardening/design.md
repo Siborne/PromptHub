@@ -22,7 +22,9 @@ Canonical catalog, full-storage catalog, checkpoint verification/snapshot,
 catalog self-heal, file-authoritative recovery, and consistent-image failure
 paths use the database primitive. Checkpoint directory staging remains a
 separate bounded same-parent directory because it contains a complete tree, not
-only SQLite artifacts.
+only SQLite artifacts. Both automatic startup and selected-database recovery
+use the same `.canonical-checkpoint-<uuid>` target form; a recovery label or PID
+does not add another unbounded ancestor segment.
 
 No success-path data, schema, hash, quick-check, rename, or publication order
 changes.

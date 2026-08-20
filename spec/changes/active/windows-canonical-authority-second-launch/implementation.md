@@ -46,6 +46,10 @@ external-store handle findings are tracked separately in
   repeating the target basename. Under the deliberately long Windows release
   profile, the final verification, build-stage, and post-publication database
   lock paths model at 203, 199, and 204 characters rather than exceeding 260.
+- The database-wide follow-up found that selected-database recovery still used
+  `.canonical-recovery-checkpoint-<pid>-<uuid>`. Recovery now shares the bounded
+  `.canonical-checkpoint-<uuid>` form, so the same path amplification cannot
+  return outside normal startup.
 - The packaged Windows smoke keeps one deliberately long runner-owned profile
   for two launches. The first launch requires the upgrade safety snapshot,
   `waiting-renderer-migration`, and `window_ready`; the second reads only newly
@@ -101,6 +105,9 @@ basename.
   tests and Desktop 121/121 tests across release smoke, canonical publication,
   recovery, safety points, and affected external database adapters. DB, Core,
   and Desktop typechecks plus targeted Desktop ESLint passed.
+- The final selected-database recovery checkpoint regression passed 6/6 tests;
+  Desktop typecheck, focused ESLint, spec governance, and formatting passed
+  after the recovery-only ancestor was shortened.
 - The release-smoke lifecycle helper reached 100% statement, branch, function,
   and line coverage. Core canonical path/cleanup coverage reached 99.52%
   statements/lines, 98.37% branches, and 100% functions across the two touched
