@@ -341,11 +341,13 @@ Common global flags:
 
 Full changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 
-### v0.6.0-beta.1 (2026-08-19, replacement preview)
+### v0.6.0-beta.1 (2026-08-20, replacement preview)
 
 - The unified Agent workbench manages Skills, MCP, Plugins, Rules, providers/models, config files, quotas, and session history in one place
-- File-first canonical authority, recovery candidates, self-heal, and a packaged Windows `0.5.9` upgrade cold-start gate protect preview user data
-- This refresh replaces the withdrawn draft under the same beta tag; the latest stable release remains `v0.5.9`
+- File-first canonical authority, recovery candidates, self-heal, and a packaged Windows `0.5.9` two-launch upgrade gate protect preview user data
+- Bounded SQLite temporary paths fix the post-upgrade second-launch failure; this refresh replaces the affected preview in place under the same beta tag
+- Existing installs of the old `v0.6.0-beta.1` must manually download and overwrite-install the fixed package because a same-version replacement does not trigger auto-update
+- The latest stable release remains `v0.5.9`
 
 ### v0.5.9 (2026-07-09, stable)
 

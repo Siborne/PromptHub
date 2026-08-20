@@ -324,11 +324,13 @@ Options globales courantes :
 
 Journal complet : **[CHANGELOG.md](../CHANGELOG.md)**
 
-### v0.6.0-beta.1 (2026-08-19, aperçu de remplacement)
+### v0.6.0-beta.1 (2026-08-20, aperçu de remplacement)
 
 - Le workspace Agent unifié gère Skills, MCP, Plugins, Rules, fournisseurs/modèles, fichiers de configuration, quotas et historique au même endroit
-- L'autorité canonical orientée fichiers, les candidats de récupération, l'auto-réparation et le démarrage à froid Windows packagé depuis `0.5.9` protègent les données de préversion
-- Cette version remplace le draft retiré sous le même tag beta ; la dernière version stable reste `v0.5.9`
+- L'autorité canonical orientée fichiers, les candidats de récupération, l'auto-réparation et un gate Windows packagé à deux démarrages depuis `0.5.9` protègent les données de préversion
+- Des chemins temporaires SQLite bornés corrigent le deuxième démarrage après une installation par-dessus l'existante ; cette version remplace l'aperçu affecté sous le même tag beta
+- Les installations existantes de l'ancienne `v0.6.0-beta.1` doivent télécharger et réinstaller manuellement le paquet corrigé, car un remplacement avec la même version ne déclenche pas la mise à jour automatique
+- La dernière version stable reste `v0.5.9`
 
 ### v0.5.9 (2026-07-09, stable)
 

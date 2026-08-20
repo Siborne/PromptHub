@@ -324,11 +324,13 @@ Häufige globale Flags:
 
 Vollständiges Changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 
-### v0.6.0-beta.1 (2026-08-19, Ersatz-Preview)
+### v0.6.0-beta.1 (2026-08-20, Ersatz-Preview)
 
 - Der einheitliche Agent-Workspace verwaltet Skills, MCP, Plugins, Rules, Provider/Modelle, Konfigurationsdateien, Kontingente und Verläufe an einem Ort
-- File-first canonical authority, Wiederherstellungskandidaten, Self-Heal und ein paketierter Windows-`0.5.9`-Upgrade-Kaltstart-Gate schützen Preview-Daten
-- Dieser Stand ersetzt den zurückgezogenen Draft unter demselben Beta-Tag; die aktuelle Stable bleibt `v0.5.9`
+- File-first canonical authority, Wiederherstellungskandidaten, Self-Heal und ein paketierter Windows-`0.5.9`-Upgrade-Gate mit zwei Starts schützen Preview-Daten
+- Begrenzte SQLite-Temporärpfade beheben den zweiten Start nach einer Überschreibinstallation; die betroffene Preview wird unter demselben Beta-Tag ersetzt
+- Bereits installierte alte `v0.6.0-beta.1`-Pakete müssen manuell heruntergeladen und überschrieben werden, da ein Ersatz mit derselben Version kein Auto-Update auslöst
+- Die aktuelle Stable bleibt `v0.5.9`
 
 ### v0.5.9 (2026-07-09, Stable)
 

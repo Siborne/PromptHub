@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [0.6.0-beta.1] - 2026-08-19
+## [0.6.0-beta.1] - 2026-08-20
 
 ### 新功能 / Features
 
@@ -15,6 +15,10 @@
 
 ### 问题修复 / Fixes
 
+- **Windows 覆盖安装后二次启动修复**：canonical SQLite 验证库与 stage 库改用有界的同目录随机名称，避免第二次启动进入文件权威发布时超过 Windows SQLite VFS 路径上限；Windows x64 发布门禁现在会在同一升级档案上连续完成两次正常启动
+  - **Windows Second-Launch Fix After Overwrite Install**: Canonical SQLite verification and stage databases now use bounded random sibling names so second-launch file-authority publication stays within the Windows SQLite VFS path limit; the Windows x64 release gate now completes two clean launches against the same upgraded profile
+- **数据库失败清理与外部会话句柄**：任务自有 SQLite 现在统一清理 journal/WAL sidecars 与相邻 `.lock`，canonical checkpoint 不再放大父路径；Cherry Studio、Hermes 与 NanoClaw 的无效 schema 或成对数据库打开失败会关闭已取得的连接
+  - **Database Failure Cleanup and External Session Handles**: Task-owned SQLite now consistently removes journal/WAL sidecars and adjacent `.lock` directories, canonical checkpoints no longer amplify parent paths, and Cherry Studio, Hermes, and NanoClaw close acquired connections after invalid schemas or paired-store open failures
 - **替换候选的升级与恢复安全**：补上 Windows x64 从 `0.5.9` 升级到候选包的真实冷启动门禁，并完善 canonical 文件图自愈、SQLite/Markdown 候选恢复、媒体补齐、AI 模型配置恢复和旧 Agent Skill 链接收敛
   - **Replacement Candidate Upgrade and Recovery Safety**: Added a real packaged Windows x64 cold-start gate for `0.5.9` upgrades and hardened canonical graph self-heal, SQLite/Markdown candidate recovery, media restoration, AI model configuration recovery, and legacy Agent Skill link reconciliation
 - **Agent 数据与原生交互修正**：Overview 不再把未加载或失败资产显示为 `0`，额度回到系统原生菜单，配置编辑器恢复文件树与主编辑画布的语义层级
@@ -28,8 +32,8 @@
 
 ### 维护 / Maintenance
 
-- **同版本 Draft 原位替换**：保留 `v0.6.0-beta.1` 版本号，以带旧值校验的 tag 更新和 draft `--clobber` 资产替换覆盖已撤回候选；所有平台门禁完成前不会自动公开
-  - **In-Place Same-Version Draft Replacement**: Reuses `v0.6.0-beta.1` through a leased tag update and draft asset replacement with `--clobber`; the prerelease is not promoted automatically before all platform gates pass
+- **同版本 Prerelease 原位替换**：保留 `v0.6.0-beta.1` 版本号，以带旧值校验的 tag 更新和 `--clobber` 资产替换覆盖受影响的预览包；完整验证、Windows 双启动及平台签名门禁全部通过后才进入 Release job。已安装同版本的用户不会收到“更高版本”自动更新，需要手动覆盖安装修复包
+  - **In-Place Same-Version Prerelease Replacement**: Reuses `v0.6.0-beta.1` through a leased tag update and `--clobber` asset replacement for the affected preview; the Release job remains blocked on full verification, the Windows two-launch smoke, and platform signing gates. Existing installs of the same version will not see a newer-version auto-update and must manually overwrite-install the fixed package
 - **大型模块与测试拆分**：按职责拆分 AI 请求、Prompt 编辑器、canonical 恢复、MCP 持久化、macOS injector 与 CLI 测试热点，并收紧文件行数基线
   - **Large Module and Test Splits**: Split AI requests, Prompt editors, canonical recovery, MCP persistence, the macOS injector, and CLI test hotspots by responsibility while tightening file-size baselines
 - **0.6.0-beta.1 预览版准备**：Desktop、CLI、自部署 Web、Cloudflare Worker 与 Mobile 使用明确的 prerelease 版本；官网稳定版徽标和下载链接继续指向已发布的 `0.5.9`
