@@ -167,7 +167,7 @@ export async function ensureCanonicalStorageAuthorityOnStartup(
       path.join(
         activeRoot,
         "cache",
-        `.canonical-authority-checkpoint-${process.pid}-${crypto.randomUUID()}`,
+        `.canonical-checkpoint-${crypto.randomUUID()}`,
       ),
   );
   const {

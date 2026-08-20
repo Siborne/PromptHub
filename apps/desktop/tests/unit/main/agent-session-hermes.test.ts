@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Database from "../../../src/main/database/sqlite";
 import { createHermesSessionAdapter } from "../../../src/main/services/agent-session-hermes";
@@ -21,6 +21,7 @@ describe("Hermes session adapter", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await fs.rm(homeDir, { recursive: true, force: true });
   });
 
@@ -293,5 +294,24 @@ describe("Hermes session adapter", () => {
     await expect(adapter.list(20, 0)).rejects.toThrow(
       "AGENT_SESSION_STORE_INVALID",
     );
+  });
+
+  it("closes the opened store when schema validation fails", async () => {
+    await fs.writeFile(databasePath, "not sqlite");
+    const close = vi.spyOn(Database.prototype, "close");
+
+    await expect(
+      createHermesSessionAdapter(hermesRoot).list(20, 0),
+    ).rejects.toThrow("AGENT_SESSION_STORE_INVALID");
+    expect(close).toHaveBeenCalledOnce();
+
+    await fs.rm(databasePath);
+    const incomplete = new Database(databasePath);
+    incomplete.exec("CREATE TABLE unrelated (id TEXT PRIMARY KEY)");
+    incomplete.close();
+    await expect(
+      createHermesSessionAdapter(hermesRoot).list(20, 0),
+    ).rejects.toThrow("AGENT_SESSION_STORE_INVALID");
+    expect(close).toHaveBeenCalledTimes(3);
   });
 });

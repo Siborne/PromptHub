@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 
 import Database from "./adapter";
+import { cleanupOwnedTemporaryDatabase } from "./owned-temporary-database";
 
 export const DATABASE_SAFETY_POINT_FORMAT_VERSION = 1;
 
@@ -253,9 +254,7 @@ export function createConsistentDatabaseImage(
       sha256: hashFileSync(targetPath),
     };
   } catch (error) {
-    for (const suffix of ["", "-journal", "-shm", "-wal"]) {
-      fs.rmSync(`${targetPath}${suffix}`, { force: true });
-    }
+    cleanupOwnedTemporaryDatabase(targetPath);
     throw error;
   }
 }
@@ -495,6 +494,7 @@ export function createDatabaseSafetyPoint(
     );
     return { id, directoryPath, manifest };
   } catch (error) {
+    cleanupOwnedTemporaryDatabase(path.join(stagingPath, DATABASE_IMAGE_NAME));
     fs.rmSync(stagingPath, { recursive: true, force: true });
     throw error;
   }

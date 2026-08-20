@@ -218,7 +218,7 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
 
-      - name: Run packaged Windows x64 upgrade startup smoke
+      - name: Run packaged Windows x64 two-launch upgrade startup smoke
         if: matrix.platform == 'win' && matrix.arch == 'x64'
         shell: pwsh
         working-directory: apps/desktop

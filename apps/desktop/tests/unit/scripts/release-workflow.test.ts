@@ -48,9 +48,9 @@ describe("release workflow secret guards", () => {
     expect(unsafeIfLines).toEqual([]);
   });
 
-  it("blocks Windows release artifacts on a packaged x64 upgrade cold start", () => {
+  it("blocks Windows release artifacts on a packaged x64 two-launch upgrade smoke", () => {
     expect(workflowSource).toContain(
-      "Run packaged Windows x64 upgrade startup smoke",
+      "Run packaged Windows x64 two-launch upgrade startup smoke",
     );
     expect(workflowSource).toContain(
       "node --experimental-strip-types scripts/smoke-windows-packaged-startup.mts",
@@ -58,6 +58,21 @@ describe("release workflow secret guards", () => {
     expect(workflowSource).toContain(
       "matrix.platform == 'win' && matrix.arch == 'x64'",
     );
+    expect(packagedStartupSmokeSource).toContain(
+      'expectedCanonicalStatus: "waiting-renderer-migration"',
+    );
+    expect(packagedStartupSmokeSource).toContain(
+      'expectedCanonicalStatus: "published"',
+    );
+    expect(packagedStartupSmokeSource).toContain(
+      'expectedMigrationStatus: "migrated"',
+    );
+    expect(packagedStartupSmokeSource).toContain(
+      'expectedMigrationStatus: "already-complete"',
+    );
+    expect(
+      packagedStartupSmokeSource.match(/await launchPackagedApp\(/g) ?? [],
+    ).toHaveLength(2);
   });
 
   it("loads the packaged startup smoke with Node strip-types", () => {
@@ -78,9 +93,7 @@ describe("release workflow secret guards", () => {
     const environmentKey = "PROMPTHUB_PACKAGED_STARTUP_SMOKE_APP_DATA";
 
     expect(packagedStartupSmokeSource).toContain(environmentKey);
-    expect(desktopMainSource).toContain(
-      "resolvePackagedStartupSmokeAppDataPath",
-    );
+    expect(desktopMainSource).toContain("resolvePackagedStartupSmokeSetup");
     expect(desktopMainSource).toContain('app.setPath("appData"');
   });
 

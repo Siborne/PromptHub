@@ -657,4 +657,32 @@ describe("prompt canonical export", () => {
     );
     expect(originalExists(racePath)).toBe(false);
   });
+
+  it("uses a bounded sibling stage for long UUID-bearing catalog destinations", () => {
+    const root = createRoot();
+    const target = path.join(root, "canonical-data");
+    materializePromptCanonicalGraph(target, {
+      prompts: [prompt("prompt-1")],
+      promptVersions: [version("prompt-1")],
+      folders: [],
+      promptRelations: [],
+      outputFormatItems: [],
+    });
+    const destinationBasename = `catalog-${"a".repeat(96)}-123e4567-e89b-12d3-a456-426614174000.db`;
+    const databasePath = path.join(root, destinationBasename);
+    const originalRename = fs.renameSync.bind(fs);
+    let stagedPath: string | undefined;
+    vi.spyOn(fs, "renameSync").mockImplementation((source, destination) => {
+      stagedPath = String(source);
+      return originalRename(source, destination);
+    });
+
+    expect(
+      stagePromptCanonicalDatabase(target, databasePath).databasePath,
+    ).toBe(databasePath);
+    expect(stagedPath).toBeDefined();
+    expect(path.dirname(stagedPath!)).toBe(path.dirname(databasePath));
+    expect(path.basename(stagedPath!).length).toBeLessThanOrEqual(64);
+    expect(path.basename(stagedPath!)).not.toContain(destinationBasename);
+  });
 });

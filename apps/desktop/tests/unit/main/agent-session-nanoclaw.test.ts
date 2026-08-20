@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Database from "../../../src/main/database/sqlite";
 import { createNanoClawSessionAdapter } from "../../../src/main/services/agent-session-nanoclaw";
@@ -27,6 +27,7 @@ describe("NanoClaw session adapter", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await fs.rm(homeDir, { recursive: true, force: true });
   });
 
@@ -137,6 +138,17 @@ describe("NanoClaw session adapter", () => {
       total: 1,
       adapter: "nanoclaw-v2-sqlite",
     });
+  });
+
+  it("closes inbound when the paired outbound database cannot open", async () => {
+    writeStore();
+    await fs.rm(path.join(sessionDir, "outbound.db"));
+    const close = vi.spyOn(Database.prototype, "close");
+
+    await expect(
+      createNanoClawSessionAdapter([installRoot]).list(20, 0),
+    ).resolves.toMatchObject({ total: 0, sessions: [] });
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("pages visible user and assistant messages without dropping large replies", async () => {

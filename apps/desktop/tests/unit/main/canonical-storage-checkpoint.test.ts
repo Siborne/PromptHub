@@ -7,7 +7,7 @@ import path from "path";
 
 import { closeDatabase, DatabaseAdapter, initDatabase } from "@prompthub/db";
 import { writeRuntimeLayoutState } from "@prompthub/core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createCanonicalStorageCheckpoint,
@@ -240,5 +240,40 @@ describe("canonical storage checkpoint", () => {
         .readdirSync(path.dirname(targetPath))
         .some((name) => name.startsWith(".canonical-source-")),
     ).toBe(false);
+  });
+
+  it("uses a bounded sibling directory stage for a long checkpoint target", async () => {
+    const input = fixture();
+    const longTargetPath = path.join(
+      input.root,
+      `checkpoint-${"a".repeat(100)}-123e4567-e89b-12d3-a456-426614174000`,
+    );
+    const originalRename = fs.renameSync.bind(fs);
+    let stagePath: string | undefined;
+    vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+      if (path.resolve(String(target)) === path.resolve(longTargetPath)) {
+        stagePath = String(source);
+      }
+      return originalRename(source, target);
+    });
+
+    await createCanonicalStorageCheckpoint({
+      ...input,
+      targetPath: longTargetPath,
+      readRules: async () => [],
+      mcpLibrary: mcpLibrary("secret-value"),
+      plugins: [],
+      pluginVersions: new Map(),
+      generations: [],
+      deviceId: "device-1",
+      persistExtractedMcpSecrets: () => undefined,
+    });
+
+    expect(stagePath).toBeDefined();
+    expect(path.dirname(stagePath!)).toBe(path.dirname(longTargetPath));
+    expect(path.basename(stagePath!).length).toBeLessThanOrEqual(64);
+    expect(path.basename(stagePath!)).not.toContain(
+      path.basename(longTargetPath),
+    );
   });
 });

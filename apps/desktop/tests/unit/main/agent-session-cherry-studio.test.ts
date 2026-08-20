@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Database from "../../../src/main/database/sqlite";
 import { createAgentSessionService } from "../../../src/main/services/agent-session-service";
@@ -20,6 +20,7 @@ describe("Cherry Studio Agent session adapter", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await fs.rm(homeDir, { recursive: true, force: true });
   });
 
@@ -355,5 +356,21 @@ describe("Cherry Studio Agent session adapter", () => {
     await expect(missing.read("cherry-studio", "../escape")).rejects.toThrow(
       "AGENT_SESSION_ID_INVALID",
     );
+  });
+
+  it("closes the opened store when schema validation fails", async () => {
+    const incompletePath = path.join(cherryRoot, "Data", "cherrystudio.sqlite");
+    const incomplete = new Database(incompletePath);
+    incomplete.exec("CREATE TABLE unrelated (id TEXT PRIMARY KEY)");
+    incomplete.close();
+    const close = vi.spyOn(Database.prototype, "close");
+
+    await expect(
+      createAgentSessionService({
+        homeDir,
+        cherryStudioRootDir: cherryRoot,
+      }).list("cherry-studio", { limit: 20 }),
+    ).rejects.toThrow("AGENT_SESSION_STORE_INVALID");
+    expect(close).toHaveBeenCalledOnce();
   });
 });

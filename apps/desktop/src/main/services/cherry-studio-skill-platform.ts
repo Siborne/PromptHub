@@ -161,24 +161,30 @@ async function openCherryStudioDb(
     }
 
     const db = new DatabaseAdapter(dbPath);
-    const modernTable = db.get(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'skills'",
-    );
-    if (modernTable) {
-      return { db, schema: "modern", path: dbPath };
-    }
+    let handoff = false;
+    try {
+      const modernTable = db.get(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'skills'",
+      );
+      if (modernTable) {
+        handoff = true;
+        return { db, schema: "modern", path: dbPath };
+      }
 
-    const legacyTable = db.get(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_global_skill'",
-    );
-    if (legacyTable) {
-      return { db, schema: "legacy", path: dbPath };
-    }
+      const legacyTable = db.get(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_global_skill'",
+      );
+      if (legacyTable) {
+        handoff = true;
+        return { db, schema: "legacy", path: dbPath };
+      }
 
-    db.close();
-    throw new Error(
-      `Cherry Studio database is missing supported skills table: ${dbPath}`,
-    );
+      throw new Error(
+        `Cherry Studio database is missing supported skills table: ${dbPath}`,
+      );
+    } finally {
+      if (!handoff) db.close();
+    }
   }
 
   return null;

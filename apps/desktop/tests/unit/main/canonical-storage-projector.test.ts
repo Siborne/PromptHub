@@ -115,6 +115,44 @@ describe("canonical storage production projector", () => {
     ).toBe(result.stagedDatabase.promptGraphHash);
   });
 
+  it("uses a bounded sibling verification database for long target names", async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-canonical-projector-long-target-"),
+    );
+    roots.push(root);
+    configureRuntimePaths({ userDataPath: root });
+    const database = initDatabase(path.join(root, "prompthub.db"));
+    const targetBasename = `canonical-${"a".repeat(96)}-123e4567-e89b-12d3-a456-426614174000`;
+    const targetPath = path.join(root, targetBasename);
+
+    const result = await projectCanonicalStorageShadow({
+      database,
+      targetPath,
+      readRules: async () => [],
+      mcpLibrary: {
+        kind: "prompthub-mcp-library",
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        servers: [],
+        bindings: [],
+      },
+      plugins: [],
+      pluginVersions: new Map(),
+      generations: [],
+    });
+
+    expect(path.dirname(result.verificationDatabasePath)).toBe(
+      path.dirname(targetPath),
+    );
+    expect(
+      path.basename(result.verificationDatabasePath).length,
+    ).toBeLessThanOrEqual(64);
+    expect(path.basename(result.verificationDatabasePath)).not.toContain(
+      targetBasename,
+    );
+    expect(fs.existsSync(result.verificationDatabasePath)).toBe(true);
+  });
+
   it.skipIf(process.platform === "win32")(
     "fails closed and removes the staged shadow when a managed package contains a symlink",
     async () => {

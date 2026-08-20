@@ -120,28 +120,31 @@ function openReadOnly(filePath: string): Database.Database {
 
 function readMessages(sessionDir: string): NanoMessage[] {
   const inbound = openReadOnly(path.join(sessionDir, "inbound.db"));
-  const outbound = openReadOnly(path.join(sessionDir, "outbound.db"));
   try {
-    validateTable(inbound, "messages_in");
-    validateTable(outbound, "messages_out");
-    const incoming = parseRows(
-      inbound.all(
-        "SELECT id, seq, timestamp, kind, content FROM messages_in ORDER BY seq",
-      ),
-      "user",
-    );
-    const outgoing = parseRows(
-      outbound.all(
-        "SELECT id, seq, timestamp, kind, content FROM messages_out ORDER BY seq",
-      ),
-      "assistant",
-    );
-    return [...incoming, ...outgoing].sort(
-      (left, right) => Number(left.entry.id) - Number(right.entry.id),
-    );
+    const outbound = openReadOnly(path.join(sessionDir, "outbound.db"));
+    try {
+      validateTable(inbound, "messages_in");
+      validateTable(outbound, "messages_out");
+      const incoming = parseRows(
+        inbound.all(
+          "SELECT id, seq, timestamp, kind, content FROM messages_in ORDER BY seq",
+        ),
+        "user",
+      );
+      const outgoing = parseRows(
+        outbound.all(
+          "SELECT id, seq, timestamp, kind, content FROM messages_out ORDER BY seq",
+        ),
+        "assistant",
+      );
+      return [...incoming, ...outgoing].sort(
+        (left, right) => Number(left.entry.id) - Number(right.entry.id),
+      );
+    } finally {
+      outbound.close();
+    }
   } finally {
     inbound.close();
-    outbound.close();
   }
 }
 

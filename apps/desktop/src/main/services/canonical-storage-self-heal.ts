@@ -25,6 +25,8 @@ import {
   FolderDB,
   PromptDB,
   inspectDatabaseClientLeases,
+  cleanupOwnedTemporaryDatabase,
+  createOwnedTemporaryDatabasePath,
 } from "@prompthub/db";
 
 import {
@@ -93,9 +95,7 @@ function hashFile(filePath: string): string {
 }
 
 function removeDatabaseFiles(databasePath: string): void {
-  for (const suffix of DATABASE_SUFFIXES) {
-    fs.rmSync(`${databasePath}${suffix}`, { force: true });
-  }
+  cleanupOwnedTemporaryDatabase(databasePath);
 }
 
 function readCatalogHashes(databasePath: string): CatalogHashes {
@@ -213,9 +213,9 @@ function reconcileCatalogWithMaintenance(options: {
   recoverCanonicalEntryPublication(options.activeRoot, CATALOG_PUBLICATION_KEY);
   assertDatabaseClientsClosed(options.databasePath);
   const dataPath = path.join(options.activeRoot, "data");
-  const stagedPath = path.join(
+  const stagedPath = createOwnedTemporaryDatabasePath(
     dataPath,
-    `.prompthub.db.rebuild-${process.pid}-${crypto.randomUUID()}`,
+    "catalog-rebuild",
   );
   try {
     const catalogIsReadable = isReadableCatalog(options.databasePath);
@@ -328,7 +328,6 @@ function clearLegacyPromptLayout(candidateDataPath: string): void {
   removeDatabaseFiles(databasePath);
   fs.rmSync(`${databasePath}.migration-intent.json`, { force: true });
   fs.rmSync(`${databasePath}.clients`, { recursive: true, force: true });
-  fs.rmSync(`${databasePath}.lock`, { recursive: true, force: true });
 }
 
 function mergePromptGraph(graphPath: string, candidateDataPath: string): void {
@@ -481,10 +480,9 @@ export async function repairCanonicalStorageFromPromptWorkspace(
   const sourceDatabasePath = path.resolve(options.sourceDatabasePath);
   const now = options.now ?? new Date();
   const operationId = `canonical-file-repair-${crypto.randomUUID()}`;
-  const stagedPromptDatabasePath = path.join(
-    activeRoot,
-    "cache",
-    `.file-authoritative-startup-${process.pid}-${crypto.randomUUID()}.db`,
+  const stagedPromptDatabasePath = createOwnedTemporaryDatabasePath(
+    path.join(activeRoot, "cache"),
+    "prompt-recovery",
   );
   const migration = acquireDatabaseMigrationIntent(sourceDatabasePath);
   try {

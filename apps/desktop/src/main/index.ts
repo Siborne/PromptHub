@@ -87,7 +87,7 @@ import {
 } from "./services/data-layout-migration";
 import { listUpgradeBackups } from "./services/upgrade-backup";
 import { runUpgradeBackupStartupTasks } from "./services/upgrade-backup-startup";
-import { resolvePackagedStartupSmokeAppDataPath } from "./testing/release-smoke-profile";
+import * as packagedStartupSmokeProfile from "./testing/release-smoke-profile";
 import { performJournaledDatabaseRecovery } from "./services/journaled-database-recovery";
 import { registerPortableSnapshotIPC } from "./services/portable-snapshot-ipc";
 import {
@@ -231,23 +231,29 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ]);
-
 const isE2E = isE2EEnabled();
 const isLegacyCliInvocation = process.argv.includes("--cli");
-const packagedStartupSmokeAppDataPath = resolvePackagedStartupSmokeAppDataPath({
-  env: process.env,
-  isPackaged: app.isPackaged,
-  platform: process.platform,
-});
-if (packagedStartupSmokeAppDataPath) {
-  fs.mkdirSync(packagedStartupSmokeAppDataPath, { recursive: true });
-  const stats = fs.lstatSync(packagedStartupSmokeAppDataPath);
+const packagedStartupSmoke =
+  packagedStartupSmokeProfile.resolvePackagedStartupSmokeSetup({
+    env: process.env,
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    onExit: () => setImmediate(() => app.quit()),
+    logMigration: (status) =>
+      logStartupEvent({
+        event: "startup:renderer_persistence_migration",
+        status,
+      }),
+  });
+if (packagedStartupSmoke.appDataPath) {
+  fs.mkdirSync(packagedStartupSmoke.appDataPath, { recursive: true });
+  const stats = fs.lstatSync(packagedStartupSmoke.appDataPath);
   if (!stats.isDirectory() || stats.isSymbolicLink()) {
     throw new Error(
       "Packaged startup smoke AppData must be a regular directory",
     );
   }
-  app.setPath("appData", packagedStartupSmokeAppDataPath);
+  app.setPath("appData", packagedStartupSmoke.appDataPath);
 }
 configureE2ETestProfile();
 if (!isE2E) {
@@ -352,6 +358,7 @@ function registerDatabaseBoundIpc(database: Database.Database): void {
       agentProviderRuntime = runtime;
       void trayController.reloadAgentProviders();
     },
+    packagedStartupSmoke.controller.onRendererPersistenceMigration,
   );
 }
 
@@ -1443,6 +1450,10 @@ app.whenReady().then(async () => {
 
     await createWindow();
     logStartupEvent({ event: "startup:window_ready" });
+    packagedStartupSmoke.controller.onWindowReady();
+    if (packagedStartupSmoke.controller.enabled) {
+      return;
+    }
     agentDeepLinkRouter.connect(dispatchFromTray);
     agentDeepLinkRouter.acceptArgv(process.argv);
 

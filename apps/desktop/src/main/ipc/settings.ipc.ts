@@ -15,6 +15,7 @@ import type {
   CoreAIProviderConfig,
   MarketplaceSourceRecord,
   RendererPersistenceMigrationInput,
+  RendererPersistenceMigrationResult,
   RendererPersistenceStore,
 } from '@prompthub/core';
 import {
@@ -244,7 +245,12 @@ function persistSharedAIConfig(newSettings: Partial<Settings>): void {
  */
 export function registerSettingsIPC(
   db: Database.Database,
-  options: { rendererPersistence?: RendererPersistenceStore } = {},
+  options: {
+    rendererPersistence?: RendererPersistenceStore;
+    onRendererPersistenceMigration?: (
+      result: RendererPersistenceMigrationResult,
+    ) => void;
+  } = {},
 ): void {
   // Get settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async () => {
@@ -398,6 +404,7 @@ export function registerSettingsIPC(
         legacyAIConfig: input?.legacyAIConfig ?? coreAIConfigService.read(),
       });
       scrubRendererSecretSettingsRows(db);
+      options.onRendererPersistenceMigration?.(result);
       return result;
     },
   );

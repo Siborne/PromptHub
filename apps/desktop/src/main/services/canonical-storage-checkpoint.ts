@@ -14,6 +14,8 @@ import {
   createConsistentDatabaseImage,
   DatabaseAdapter,
   inspectDatabaseClientLeases,
+  cleanupOwnedTemporaryDatabase,
+  createOwnedTemporaryDatabasePath,
 } from "@prompthub/db";
 
 import {
@@ -163,9 +165,9 @@ export function verifyCanonicalStorageCheckpointContent(
   const canonicalPath = path.resolve(canonicalPathValue);
   const manifest = parseManifest(manifestValue);
   readCanonicalStorageShadow(canonicalPath);
-  const rebuiltPath = path.join(
+  const rebuiltPath = createOwnedTemporaryDatabasePath(
     path.dirname(canonicalPath),
-    `.catalog.verify-${process.pid}-${crypto.randomUUID()}.db`,
+    "catalog-verify",
   );
   try {
     const rebuilt = stageCanonicalStorageDatabase(canonicalPath, rebuiltPath);
@@ -185,7 +187,7 @@ export function verifyCanonicalStorageCheckpointContent(
     }
     return manifest;
   } finally {
-    fs.rmSync(rebuiltPath, { force: true });
+    cleanupOwnedTemporaryDatabase(rebuiltPath);
   }
 }
 
@@ -297,7 +299,7 @@ export async function createCanonicalStorageCheckpoint(
   }
   const stagePath = path.join(
     parentPath,
-    `.${path.basename(targetPath)}.stage-${process.pid}-${crypto.randomUUID()}`,
+    `.checkpoint-stage-${crypto.randomUUID()}`,
   );
   fs.mkdirSync(stagePath, { mode: 0o700 });
   try {
@@ -387,9 +389,9 @@ export async function createCanonicalCheckpointFromClosedDatabase(
         operationId,
         operationKind: "canonical-checkpoint",
       });
-  const snapshotPath = path.join(
+  const snapshotPath = createOwnedTemporaryDatabasePath(
     path.dirname(path.resolve(options.targetPath)),
-    `.canonical-source-${process.pid}-${crypto.randomUUID()}.db`,
+    "canonical-source",
   );
   try {
     return await createFromDatabaseImage(
@@ -398,9 +400,7 @@ export async function createCanonicalCheckpointFromClosedDatabase(
       snapshotPath,
     );
   } finally {
-    for (const suffix of ["", "-journal", "-shm", "-wal"]) {
-      fs.rmSync(`${snapshotPath}${suffix}`, { force: true });
-    }
+    cleanupOwnedTemporaryDatabase(snapshotPath);
     maintenance?.release();
   }
 }

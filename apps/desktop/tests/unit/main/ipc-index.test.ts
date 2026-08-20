@@ -154,4 +154,32 @@ describe("ipc index registration order", () => {
     });
     expect(() => registerAllIPC({} as never, vi.fn())).not.toThrow();
   });
+
+  it("preserves the renderer migration callback across backup database rebinds", async () => {
+    let rebind: ((database: never) => void) | undefined;
+    registerBackupIPCMock.mockImplementationOnce(
+      (_setDbRef: unknown, onDatabaseRebind: (database: never) => void) => {
+        rebind = onDatabaseRebind;
+      },
+    );
+    const migrationCallback = vi.fn();
+    const { registerAllIPC } = await import("../../../src/main/ipc/index");
+
+    registerAllIPC({} as never, vi.fn(), vi.fn(), migrationCallback);
+    expect(registerSettingsIPCMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        onRendererPersistenceMigration: migrationCallback,
+      }),
+    );
+    expect(rebind).toBeDefined();
+
+    rebind?.({} as never);
+    expect(registerSettingsIPCMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        onRendererPersistenceMigration: migrationCallback,
+      }),
+    );
+  });
 });

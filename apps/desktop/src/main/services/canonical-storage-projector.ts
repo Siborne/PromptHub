@@ -26,6 +26,8 @@ import {
   PromptDB,
   RuleDB,
   SkillDB,
+  cleanupOwnedTemporaryDatabase,
+  createOwnedTemporaryDatabasePath,
 } from "@prompthub/db";
 import type {
   GenerationBatchManifest,
@@ -409,7 +411,10 @@ export async function projectCanonicalStorageShadow(
       `Canonical storage projection target already exists: ${targetPath}`,
     );
   }
-  const verificationDatabasePath = `${targetPath}.catalog-${crypto.randomUUID()}.db`;
+  const verificationDatabasePath = createOwnedTemporaryDatabasePath(
+    path.dirname(targetPath),
+    "canonical-catalog",
+  );
   try {
     const storage = await collectCanonicalStorageInput(options);
     const materialized = materializeCanonicalStorageShadow({
@@ -436,7 +441,7 @@ export async function projectCanonicalStorageShadow(
     };
   } catch (error) {
     fs.rmSync(targetPath, { recursive: true, force: true });
-    fs.rmSync(verificationDatabasePath, { force: true });
+    cleanupOwnedTemporaryDatabase(verificationDatabasePath);
     throw error;
   }
 }

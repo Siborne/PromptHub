@@ -8,6 +8,7 @@ import {
   DatabaseAdapter,
   RuleDB,
   SkillDB,
+  cleanupOwnedTemporaryDatabase,
   type CanonicalResourceRecord,
 } from "@prompthub/db";
 import type { GenerationBatchManifest, Prompt } from "@prompthub/shared/types";
@@ -767,7 +768,7 @@ export function stageCanonicalStorageDatabase(
       reopened.close();
     }
   } catch (error) {
-    fs.rmSync(databasePath, { force: true });
+    cleanupOwnedTemporaryDatabase(databasePath);
     throw error;
   }
 }

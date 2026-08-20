@@ -28,6 +28,8 @@ const MAX_DIAGNOSTIC_FILES = 200;
 const MAX_DIAGNOSTIC_LOG_CHARS = 64 * 1024;
 const PACKAGED_STARTUP_SMOKE_APP_DATA_ENV =
   "PROMPTHUB_PACKAGED_STARTUP_SMOKE_APP_DATA";
+const PACKAGED_STARTUP_SMOKE_AUTO_EXIT_ENV =
+  "PROMPTHUB_PACKAGED_STARTUP_SMOKE_AUTO_EXIT";
 
 interface StartupEvent {
   event?: unknown;
@@ -142,35 +144,91 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function waitForUpgradeWindow(
+type ExpectedCanonicalStatus = "waiting-renderer-migration" | "published";
+type ExpectedMigrationStatus = "migrated" | "already-complete";
+
+interface LaunchResult {
+  events: StartupEvent[];
+  nextEventOffset: number;
+}
+
+interface LaunchOptions {
+  executablePath: string;
+  environment: NodeJS.ProcessEnv;
+  logPath: string;
+  rootPath: string;
+  eventOffset: number;
+  expectedCanonicalStatus: ExpectedCanonicalStatus;
+  expectedMigrationStatus: ExpectedMigrationStatus;
+}
+
+function readLaunchEvents(
+  logPath: string,
+  eventOffset: number,
+): StartupEvent[] {
+  return readStartupEvents(logPath).slice(eventOffset);
+}
+
+function findStartupFailure(events: StartupEvent[]): StartupEvent | undefined {
+  return events.find((entry) =>
+    [
+      "startup:upgrade_backup_failed_to_bootstrap",
+      "startup:canonical_storage_authority_failed",
+    ].includes(String(entry.event)),
+  );
+}
+
+function launchIsReady(
+  events: StartupEvent[],
+  expectedCanonicalStatus: ExpectedCanonicalStatus,
+  expectedMigrationStatus: ExpectedMigrationStatus,
+): boolean {
+  const windowReady = events.some(
+    (entry) => entry.event === "startup:window_ready",
+  );
+  const canonicalReady = events.some(
+    (entry) =>
+      entry.event === "startup:canonical_storage_authority" &&
+      entry.status === expectedCanonicalStatus,
+  );
+  const migrationReady = events.some(
+    (entry) =>
+      entry.event === "startup:renderer_persistence_migration" &&
+      entry.status === expectedMigrationStatus,
+  );
+  if (expectedCanonicalStatus === "published") {
+    return canonicalReady && migrationReady && windowReady;
+  }
+  const upgradeCreated = events.some(
+    (entry) =>
+      entry.event === "startup:upgrade_backup" &&
+      entry.status === "snapshot-created",
+  );
+  return upgradeCreated && canonicalReady && migrationReady && windowReady;
+}
+
+async function waitForPackagedLaunch(
   child: ChildProcessWithoutNullStreams,
   logPath: string,
+  eventOffset: number,
+  expectedCanonicalStatus: ExpectedCanonicalStatus,
+  expectedMigrationStatus: ExpectedMigrationStatus,
   getOutput: () => string,
-): Promise<void> {
+): Promise<StartupEvent[]> {
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const events = readStartupEvents(logPath);
-    const startupFailure = events.find((entry) =>
-      [
-        "startup:upgrade_backup_failed_to_bootstrap",
-        "startup:canonical_storage_authority_failed",
-      ].includes(String(entry.event)),
-    );
+    const events = readLaunchEvents(logPath, eventOffset);
+    const startupFailure = findStartupFailure(events);
     if (startupFailure) {
       throw new Error(
         `Packaged startup reported ${String(startupFailure.event)}: ${String(startupFailure.error ?? "unknown error")}`,
       );
     }
-
-    const upgradeCreated = events.some(
-      (entry) =>
-        entry.event === "startup:upgrade_backup" &&
-        entry.status === "snapshot-created",
-    );
-    const windowReady = events.some(
-      (entry) => entry.event === "startup:window_ready",
-    );
-    if (upgradeCreated && windowReady) return;
+    if (
+      launchIsReady(events, expectedCanonicalStatus, expectedMigrationStatus)
+    ) {
+      return events;
+    }
     if (child.exitCode !== null) {
       throw new Error(
         `Packaged app exited before startup completed (code ${child.exitCode}).\n${getOutput()}`,
@@ -191,6 +249,63 @@ function stopProcessTree(child: ChildProcessWithoutNullStreams): void {
   });
 }
 
+function spawnPackagedApp(
+  executablePath: string,
+  environment: NodeJS.ProcessEnv,
+): ChildProcessWithoutNullStreams {
+  return spawn(executablePath, [], {
+    env: environment,
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+}
+
+async function launchPackagedApp({
+  executablePath,
+  environment,
+  logPath,
+  rootPath,
+  eventOffset,
+  expectedCanonicalStatus,
+  expectedMigrationStatus,
+}: LaunchOptions): Promise<LaunchResult> {
+  let output = "";
+  const child = spawnPackagedApp(executablePath, environment);
+  child.stdout.on("data", (chunk: Buffer) => {
+    output = appendBounded(output, chunk);
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    output = appendBounded(output, chunk);
+  });
+
+  try {
+    const events = await waitForPackagedLaunch(
+      child,
+      logPath,
+      eventOffset,
+      expectedCanonicalStatus,
+      expectedMigrationStatus,
+      () => output,
+    );
+    await waitForPackagedProcessExit(child, PROCESS_EXIT_GRACE_MS);
+    if (child.exitCode !== 0) {
+      throw new Error(
+        `Packaged app did not exit cleanly after startup (code ${child.exitCode}).\n${output}`,
+      );
+    }
+    return {
+      events,
+      nextEventOffset: readStartupEvents(logPath).length,
+    };
+  } catch (error) {
+    console.error(formatFailureDiagnostics(rootPath, output));
+    throw error;
+  } finally {
+    stopProcessTree(child);
+    await waitForPackagedProcessExit(child, PROCESS_EXIT_GRACE_MS);
+  }
+}
+
 async function main(): Promise<void> {
   if (process.platform !== "win32") {
     throw new Error("The packaged Windows startup smoke must run on Windows");
@@ -204,19 +319,19 @@ async function main(): Promise<void> {
     );
   }
 
+  const runnerTemp = process.env.RUNNER_TEMP ?? os.tmpdir();
   const root = fs.mkdtempSync(
-    path.join(process.env.RUNNER_TEMP ?? os.tmpdir(), "prompthub-win-startup-"),
+    path.join(runnerTemp, "prompthub-win-startup-long-profile-"),
   );
-  const appDataPath = path.join(root, "AppData", "Roaming");
-  const localAppDataPath = path.join(root, "AppData", "Local");
-  const userProfilePath = path.join(root, "User");
-  fs.mkdirSync(localAppDataPath, { recursive: true });
-  fs.mkdirSync(userProfilePath, { recursive: true });
-  const userDataPath = seedUpgradeProfile(appDataPath);
-  const logPath = path.join(userDataPath, "logs", "startup.log");
-  let output = "";
-  const child = spawn(executablePath, [], {
-    env: {
+  try {
+    const appDataPath = path.join(root, "AppData", "Roaming");
+    const localAppDataPath = path.join(root, "AppData", "Local");
+    const userProfilePath = path.join(root, "User");
+    fs.mkdirSync(localAppDataPath, { recursive: true });
+    fs.mkdirSync(userProfilePath, { recursive: true });
+    const userDataPath = seedUpgradeProfile(appDataPath);
+    const logPath = path.join(userDataPath, "logs", "startup.log");
+    const environment = {
       ...process.env,
       APPDATA: appDataPath,
       LOCALAPPDATA: localAppDataPath,
@@ -224,32 +339,37 @@ async function main(): Promise<void> {
       HOME: userProfilePath,
       CI: "true",
       [PACKAGED_STARTUP_SMOKE_APP_DATA_ENV]: appDataPath,
+      [PACKAGED_STARTUP_SMOKE_AUTO_EXIT_ENV]: "true",
       ELECTRON_ENABLE_LOGGING: "1",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  child.stdout.on("data", (chunk: Buffer) => {
-    output = appendBounded(output, chunk);
-  });
-  child.stderr.on("data", (chunk: Buffer) => {
-    output = appendBounded(output, chunk);
-  });
-
-  try {
-    try {
-      await waitForUpgradeWindow(child, logPath, () => output);
-    } catch (error) {
-      console.error(formatFailureDiagnostics(root, output));
-      throw error;
-    }
+    };
+    const initialEventCount = readStartupEvents(logPath).length;
+    const firstLaunch = await launchPackagedApp({
+      executablePath,
+      environment,
+      logPath,
+      rootPath: root,
+      eventOffset: initialEventCount,
+      expectedCanonicalStatus: "waiting-renderer-migration",
+      expectedMigrationStatus: "migrated",
+    });
+    const secondLaunch = await launchPackagedApp({
+      executablePath,
+      environment,
+      logPath,
+      rootPath: root,
+      eventOffset: firstLaunch.nextEventOffset,
+      expectedCanonicalStatus: "published",
+      expectedMigrationStatus: "already-complete",
+    });
+    console.log("Packaged Windows 0.5.9 upgrade startup passed two launches.");
     console.log(
-      "Packaged Windows 0.5.9 upgrade startup reached a loaded window.",
+      JSON.stringify(
+        { firstLaunch: firstLaunch.events, secondLaunch: secondLaunch.events },
+        null,
+        2,
+      ),
     );
-    console.log(fs.readFileSync(logPath, "utf8"));
   } finally {
-    stopProcessTree(child);
-    await waitForPackagedProcessExit(child, PROCESS_EXIT_GRACE_MS);
     await removePackagedStartupRoot(root);
   }
 }

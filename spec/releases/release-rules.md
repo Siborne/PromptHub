@@ -68,9 +68,11 @@
 - A desktop release cannot be approved from source tests and packaging success
   alone. The release workflow must launch the packaged application on each
   natively executable release platform required by the current gate.
-- Windows x64 candidates must pass an isolated packaged cold start that follows
-  a supported stable-to-candidate upgrade path and creates the pre-upgrade
-  safety snapshot before the window finishes loading.
+- Windows x64 candidates must pass two isolated packaged starts against the
+  same profile that follows a supported stable-to-candidate upgrade path. The
+  first start must create the pre-upgrade safety snapshot, durably complete the
+  renderer persistence handoff, and exit normally; the second must publish or
+  reconcile canonical authority and load the window without a startup error.
 - A build job that cannot execute its target architecture must be reported as
   packaging-only evidence and must not be described as startup validation.
 - A startup failure blocks release publication even when all installers and
@@ -143,8 +145,11 @@ When the workflow packages the Windows x64 desktop candidate:
 
 - it seeds an isolated profile representing an upgrade from the supported
   stable release
-- it launches the unpacked packaged executable rather than the source Electron
-  entry
-- it requires both the upgrade safety snapshot and loaded renderer window
-- it fails the build before artifact upload when startup exits, errors, or
-  times out
+- it launches the unpacked packaged executable twice rather than the source
+  Electron entry, reusing the same isolated profile
+- the first launch requires the upgrade safety snapshot, renderer persistence
+  migration, and loaded renderer window before a normal exit
+- the second launch requires canonical authority publication or reconciliation
+  and a loaded renderer window
+- it fails the build before artifact upload when either launch exits early,
+  reports a startup error, or times out

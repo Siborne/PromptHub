@@ -38,7 +38,10 @@ describe("settings renderer persistence IPC", () => {
 
   it("routes migration, canonical updates, device identity, and IDB state through main", async () => {
     const persistence = {
-      migrate: vi.fn(async () => ({ status: "migrated", redactLegacyKeys: [] })),
+      migrate: vi.fn(async () => ({
+        status: "migrated",
+        redactLegacyKeys: [],
+      })),
       readHydratedState: vi.fn(async () => ({
         migrationComplete: true,
         settings: { language: "de" },
@@ -58,11 +61,12 @@ describe("settings renderer persistence IPC", () => {
       prepare: vi.fn(() => ({ all: vi.fn(() => []), run: vi.fn() })),
       transaction: vi.fn((callback: () => void) => callback),
     };
-    const { registerSettingsIPC } = await import(
-      "../../../src/main/ipc/settings.ipc"
-    );
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    const onRendererPersistenceMigration = vi.fn();
     registerSettingsIPC(database as never, {
       rendererPersistence: persistence,
+      onRendererPersistenceMigration,
     });
 
     await handlers.get(IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_MIGRATE)?.(
@@ -100,13 +104,21 @@ describe("settings renderer persistence IPC", () => {
         }),
       }),
     );
-    expect(persistence.replaceSettings).toHaveBeenCalledWith({ language: "fr" });
+    expect(persistence.replaceSettings).toHaveBeenCalledWith({
+      language: "fr",
+    });
     expect(persistence.replaceMarketplaceSources).toHaveBeenCalledWith(
       "skill",
       [],
     );
-    expect(persistence.replaceRecoveryPaths).toHaveBeenCalledWith(["/recovery"]);
+    expect(persistence.replaceRecoveryPaths).toHaveBeenCalledWith([
+      "/recovery",
+    ]);
     expect(persistence.markIndexedDbMigrationDone).toHaveBeenCalledOnce();
+    expect(onRendererPersistenceMigration).toHaveBeenCalledWith({
+      status: "migrated",
+      redactLegacyKeys: [],
+    });
 
     const settings = await handlers.get(IPC_CHANNELS.SETTINGS_GET)?.({});
     expect(settings.language).toBe("de");
@@ -123,10 +135,11 @@ describe("settings renderer persistence IPC", () => {
       isIndexedDbMigrationDone: vi.fn(),
       markIndexedDbMigrationDone: vi.fn(),
     };
-    const { registerSettingsIPC } = await import(
-      "../../../src/main/ipc/settings.ipc"
-    );
-    registerSettingsIPC({} as never, { rendererPersistence: persistence as never });
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC({} as never, {
+      rendererPersistence: persistence as never,
+    });
 
     await expect(
       handlers.get(
@@ -134,5 +147,85 @@ describe("settings renderer persistence IPC", () => {
       )?.({}, "unknown", []),
     ).rejects.toThrow(/domain/iu);
     expect(persistence.replaceMarketplaceSources).not.toHaveBeenCalled();
+  });
+
+  it("does not notify migration completion when persistence migration fails", async () => {
+    const onRendererPersistenceMigration = vi.fn();
+    const persistence = {
+      migrate: vi.fn().mockRejectedValue(new Error("migration failed")),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC({} as never, {
+      rendererPersistence: persistence as never,
+      onRendererPersistenceMigration,
+    });
+
+    await expect(
+      handlers.get(IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_MIGRATE)?.(
+        {},
+        {},
+      ),
+    ).rejects.toThrow("migration failed");
+    expect(onRendererPersistenceMigration).not.toHaveBeenCalled();
+  });
+
+  it("does not notify migration completion when secret scrubbing fails", async () => {
+    const onRendererPersistenceMigration = vi.fn();
+    const persistence = {
+      migrate: vi.fn(async () => ({
+        status: "migrated" as const,
+        redactLegacyKeys: [],
+      })),
+    };
+    const database = {
+      prepare: vi.fn(() => ({ run: vi.fn() })),
+      transaction: vi.fn(() => {
+        throw new Error("secret scrub failed");
+      }),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC(database as never, {
+      rendererPersistence: persistence as never,
+      onRendererPersistenceMigration,
+    });
+
+    await expect(
+      handlers.get(IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_MIGRATE)?.(
+        {},
+        {},
+      ),
+    ).rejects.toThrow("secret scrub failed");
+    expect(onRendererPersistenceMigration).not.toHaveBeenCalled();
+  });
+
+  it("forwards an already-complete migration result after scrubbing", async () => {
+    const onRendererPersistenceMigration = vi.fn();
+    const persistence = {
+      migrate: vi.fn(async () => ({
+        status: "already-complete" as const,
+        redactLegacyKeys: ["prompthub-settings"],
+      })),
+    };
+    const database = {
+      prepare: vi.fn(() => ({ run: vi.fn() })),
+      transaction: vi.fn((callback: () => void) => callback),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC(database as never, {
+      rendererPersistence: persistence as never,
+      onRendererPersistenceMigration,
+    });
+
+    await handlers.get(IPC_CHANNELS.SETTINGS_RENDERER_PERSISTENCE_MIGRATE)?.(
+      {},
+      {},
+    );
+    expect(onRendererPersistenceMigration).toHaveBeenCalledWith({
+      status: "already-complete",
+      redactLegacyKeys: ["prompthub-settings"],
+    });
   });
 });

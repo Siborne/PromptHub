@@ -206,11 +206,16 @@ async function withStore<T>(
   if (!store) return empty;
   const stat = await fs.stat(store.sourcePath);
   const revision = `${stat.size}:${stat.mtimeMs}`;
-  let database: Database.Database;
+  let database: Database.Database | undefined;
   try {
     database = new Database(store.sourcePath, { readOnly: true });
     validateSchema(database, store.schema);
   } catch (error) {
+    try {
+      database?.close();
+    } catch {
+      // Preserve the invalid-store classification.
+    }
     if (
       error instanceof Error &&
       error.message === "AGENT_SESSION_STORE_INVALID"

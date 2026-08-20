@@ -29,6 +29,12 @@ export type {
   DatabaseSafetyPointRetention,
 } from "./database-safety-point";
 export {
+  cleanupOwnedTemporaryDatabase,
+  createOwnedTemporaryDatabasePath,
+  OWNED_TEMPORARY_DATABASE_MAX_BASENAME_LENGTH,
+  OWNED_TEMPORARY_DATABASE_MAX_LABEL_LENGTH,
+} from "./owned-temporary-database";
+export {
   CURRENT_DATABASE_SCHEMA_VERSION,
   CURRENT_LEGACY_SCHEMA_MIGRATION_NAMES,
   DATABASE_MIGRATION_MANIFEST,

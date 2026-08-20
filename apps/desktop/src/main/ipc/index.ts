@@ -55,6 +55,7 @@ import {
   coreAIConfigService,
   createRendererPersistenceStore,
   type CoreAIConfigFile,
+  type RendererPersistenceMigrationResult,
 } from "@prompthub/core";
 import { getUserDataPath } from "../runtime-paths";
 import { configureCanonicalGithubTokenReader } from "../settings/settings-readers";
@@ -402,6 +403,9 @@ function registerAllIpcGroups(
   setDbRef: (db: Database.Database) => void,
   onAgentProviderRuntime: (runtime: AgentProviderRuntime) => void = () =>
     undefined,
+  onRendererPersistenceMigration: (
+    result: RendererPersistenceMigrationResult,
+  ) => void = () => undefined,
 ): void {
   const promptDB = new PromptDB(db);
   const folderDB = new FolderDB(db);
@@ -427,13 +431,19 @@ function registerAllIpcGroups(
   registerIpcGroup("settings", () =>
     registerSettingsIPC(db, {
       rendererPersistence,
+      onRendererPersistenceMigration,
     }),
   );
   registerIpcGroup("cloud", () => registerCloudIPC());
   registerIpcGroup("security", () => registerSecurityIPC(db));
   registerIpcGroup("backup", () =>
     registerBackupIPC(setDbRef, (nextDb) =>
-      registerAllIPC(nextDb, setDbRef, onAgentProviderRuntime),
+      registerAllIPC(
+        nextDb,
+        setDbRef,
+        onAgentProviderRuntime,
+        onRendererPersistenceMigration,
+      ),
     ),
   );
   registerIpcGroup("cli", () => registerCliIPC());
@@ -610,6 +620,9 @@ export function registerAllIPC(
   setDbRef: (db: Database.Database) => void,
   onAgentProviderRuntime: (runtime: AgentProviderRuntime) => void = () =>
     undefined,
+  onRendererPersistenceMigration: (
+    result: RendererPersistenceMigrationResult,
+  ) => void = () => undefined,
 ): void {
   resetAllRegisteredIpcHandlers();
   const captured = new Set<string>();
@@ -620,7 +633,12 @@ export function registerAllIPC(
   }) as typeof ipcMain.handle;
 
   try {
-    registerAllIpcGroups(db, setDbRef, onAgentProviderRuntime);
+    registerAllIpcGroups(
+      db,
+      setDbRef,
+      onAgentProviderRuntime,
+      onRendererPersistenceMigration,
+    );
     registeredAllIpcChannels = captured;
   } catch (error) {
     for (const channel of captured) ipcMain.removeHandler(channel);

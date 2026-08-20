@@ -5,6 +5,7 @@ import path from "node:path";
 import { getUserDataPath } from "@prompthub/core";
 import {
   closeDatabase,
+  cleanupOwnedTemporaryDatabase,
   createConsistentDatabaseImage,
   DatabaseAdapter,
   FolderDB,
@@ -26,9 +27,7 @@ export interface FileAuthoritativePromptCatalogResult {
 }
 
 function removeDatabaseFiles(databasePath: string): void {
-  for (const suffix of ["", "-journal", "-shm", "-wal"]) {
-    fs.rmSync(`${databasePath}${suffix}`, { force: true });
-  }
+  cleanupOwnedTemporaryDatabase(databasePath);
 }
 
 function assertWorkspaceFile(filePath: string, allowedName: RegExp): void {
@@ -224,27 +223,36 @@ export function stageFileAuthoritativePromptCatalog(options: {
     options.targetDatabasePath,
   );
   const database = new DatabaseAdapter(options.targetDatabasePath);
+  let completed = false;
+  let closeError: unknown;
   try {
-    const result = importFileAuthoritativePrompts(database, options.activeRoot);
+    const importResult = importFileAuthoritativePrompts(
+      database,
+      options.activeRoot,
+    );
     const retainedVersionCount = validateStagedPromptCatalog(database);
-    if (result.promptIds.size === 0 && result.folderCount === 0) {
+    if (importResult.promptIds.size === 0 && importResult.folderCount === 0) {
       throw new Error("File-authoritative Prompt workspace contains no data");
     }
-    return {
+    const result = {
       databasePath: options.targetDatabasePath,
-      promptCount: result.promptIds.size,
-      folderCount: result.folderCount,
+      promptCount: importResult.promptIds.size,
+      folderCount: importResult.folderCount,
       retainedVersionCount,
     };
-  } catch (error) {
-    database.close();
-    fs.rmSync(options.targetDatabasePath, { force: true });
-    throw error;
+    completed = true;
+    return result;
   } finally {
     try {
       database.close();
-    } catch {
-      // The failure path may already have closed the staged database.
+    } catch (error) {
+      closeError = error;
+    }
+    if (!completed || closeError) {
+      cleanupOwnedTemporaryDatabase(options.targetDatabasePath);
+    }
+    if (closeError && completed) {
+      throw closeError;
     }
   }
 }

@@ -8,6 +8,8 @@ import {
   PromptDB,
   PromptOutputFormatDB,
   PromptRelationDB,
+  cleanupOwnedTemporaryDatabase,
+  createOwnedTemporaryDatabasePath,
   SCHEMA_INDEXES,
   SCHEMA_TABLES,
   recordCurrentDatabaseMigration,
@@ -133,9 +135,10 @@ function assertLocalOwnership(snapshot: PromptCanonicalGraphSnapshot): void {
   }
 }
 
-function orderParentsFirst<
-  T extends { id: string; parentId?: string | null },
->(values: readonly T[], label: string): T[] {
+function orderParentsFirst<T extends { id: string; parentId?: string | null }>(
+  values: readonly T[],
+  label: string,
+): T[] {
   const byId = new Map(values.map((value) => [value.id, value]));
   const children = new Map<string, T[]>();
   const roots: T[] = [];
@@ -242,9 +245,7 @@ function verifyStageDatabase(
 }
 
 function cleanupDatabaseStage(stagePath: string): void {
-  for (const suffix of ["", "-journal", "-shm", "-wal"]) {
-    fs.rmSync(`${stagePath}${suffix}`, { force: true });
-  }
+  cleanupOwnedTemporaryDatabase(stagePath);
 }
 
 function counts(
@@ -278,9 +279,9 @@ export function stagePromptCanonicalDatabase(
   const graphHash = calculatePromptCanonicalGraphHash(normalizedSnapshot);
   const parentPath = path.dirname(targetDatabasePath);
   fs.mkdirSync(parentPath, { recursive: true });
-  const stagePath = path.join(
+  const stagePath = createOwnedTemporaryDatabasePath(
     parentPath,
-    `.${path.basename(targetDatabasePath)}.stage-${process.pid}-${crypto.randomUUID()}`,
+    "catalog-stage",
   );
   try {
     createStageDatabase(stagePath, normalizedSnapshot);

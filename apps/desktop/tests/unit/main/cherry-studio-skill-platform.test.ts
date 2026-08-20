@@ -5,7 +5,7 @@ import * as crypto from "crypto";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import DatabaseAdapter from "../../../src/main/database/sqlite";
 import {
@@ -214,6 +214,7 @@ describe("cherry-studio-skill-platform", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
 
@@ -366,6 +367,29 @@ describe("cherry-studio-skill-platform", () => {
     await expect(
       getCherryStudioSkillStatus(CHERRY_PLATFORM, "svg", options()),
     ).resolves.toBe(true);
+  });
+
+  it("closes the database when capability probing throws", async () => {
+    const sourceDir = await writeSkillPackage(
+      "probe-failure",
+      "---\nname: probe-failure\n---\ncontent",
+    );
+    await fs.mkdir(path.join(tempRoot, "Data", "Skills", "probe-failure"), {
+      recursive: true,
+    });
+    await fs.copyFile(
+      path.join(sourceDir, "SKILL.md"),
+      path.join(tempRoot, "Data", "Skills", "probe-failure", "SKILL.md"),
+    );
+    const close = vi.spyOn(DatabaseAdapter.prototype, "close");
+    vi.spyOn(DatabaseAdapter.prototype, "get").mockImplementationOnce(() => {
+      throw new Error("capability probe failed");
+    });
+
+    await expect(
+      getCherryStudioSkillStatus(CHERRY_PLATFORM, "probe-failure", options()),
+    ).rejects.toThrow("capability probe failed");
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("prefers the current Data/cherrystudio.sqlite registry over a compatible legacy database", async () => {

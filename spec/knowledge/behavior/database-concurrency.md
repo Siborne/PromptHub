@@ -87,6 +87,16 @@
 - Desktop 的 Skill 本机仓库发现属于 host reconciliation，不属于共享 schema
   migration。CLI 或 Web 先打开数据库不得把 Desktop 后续 reconciliation 标记为已完成。
 
+### 7. Task-Owned Databases And External Stores
+
+- PromptHub 自有临时 SQLite 必须使用 `packages/db` 的有界 label + full UUID
+  sibling 路径；不得把任意目标 basename、PID 和另一组 UUID 逐层重复到临时库路径。
+- 当前操作可证明拥有的临时数据库在成功转交或失败清理时，必须处理数据库本体、
+  `-journal`、`-shm`、`-wal` 和 `node-sqlite3-wasm` 的相邻 `.lock` 目录；不得借此
+  删除 operational `.clients` 或绕过 live/unknown owner 规则。
+- 外部 Agent 会话数据库在 schema validation、成对数据库的后续 open 或能力探测
+  失败时，必须关闭已经打开的 handle；只有成功返回的 handle 才转交给调用方。
+
 ## Stable Scenarios
 
 ### Scenario: CLI writes while Desktop is open

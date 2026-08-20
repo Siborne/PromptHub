@@ -15,6 +15,9 @@
 
 - 在高风险布局迁移或升级前，应具备保险快照、预备份或等价的可回滚手段。
 - 恢复或迁移失败后，不应把用户留在半恢复或半迁移状态。
+- Rule 恢复只发布 PromptHub 托管正文、元数据、历史和 SQLite 投影，不得隐式写入、
+  创建或跟随符号链接改写外部 target。导入后只派生同步状态，外部写入必须由显式保存、
+  部署或冲突解决触发；失败时恢复导入前的可读托管状态。
 - 完整恢复、portable restore、升级恢复和数据库恢复必须先在不可见 stage 中准备
   候选，校验容量、路径、symlink、schema、hash、SQLite quick-check 与领域数量，
   再通过 durable journal 发布。任一 DB、文件、配置或领域步骤失败时必须回滚；
@@ -141,6 +144,12 @@
   保存为一个有界 UUID safety point，再 stage canonical tree 和重建目录；只有 hash、
   graph、SQLite、fresh reopen 与运行期 context 刷新全部成功才提交。失败继续使用旧
   authority，不得留下 marker 指向半成品。
+- Windows 上 canonical SQLite 临时库必须使用与目标 basename 无关的固定有界 sibling
+  名称，checkpoint target/stage 祖先目录也不得彼此重复，避免 UUID-bearing 路径逐层
+  放大后超过 SQLite VFS 路径预算。任务自有临时库清理必须覆盖 SQLite sidecars 和
+  相邻 `.lock`。升级发布门禁必须在同一隔离 profile 上完成首次 renderer migration
+  handoff 和第二次 canonical authority publication；只验证第一次 window ready 不足以
+  证明升级后可重启。
 - 资源 schema 转换必须使用 durable publication journal。转换中断后启动时先完成或
   回滚 journal；未知较新 schema 不得被旧客户端降级写回，用户 revision 不随 schema
   转换递增。

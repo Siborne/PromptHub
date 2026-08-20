@@ -255,7 +255,7 @@ describe("canonical storage startup", () => {
       now: new Date("2026-08-12T01:00:00.000Z"),
     });
     expect(publish.mock.calls[0]?.[0].checkpointPath).toMatch(
-      /cache[/\\]\.canonical-authority-checkpoint-/u,
+      /cache[/\\]\.canonical-checkpoint-[0-9a-f-]{36}$/u,
     );
     expect(refreshRuntimeContext).toHaveBeenCalledOnce();
   });
