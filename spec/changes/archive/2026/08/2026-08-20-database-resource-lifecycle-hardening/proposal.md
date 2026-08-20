@@ -2,8 +2,8 @@
 
 ## Status
 
-- Phase: verify
-- Status: release-pending
+- Phase: converge
+- Status: complete
 - Audited: 2026-08-20
 
 ## Why
@@ -55,6 +55,6 @@ weakness elsewhere.
 
 ## Related Records
 
-- `spec/changes/active/windows-canonical-authority-second-launch/`
+- `spec/changes/archive/2026/08/2026-08-20-windows-canonical-authority-second-launch/`
 - `spec/knowledge/behavior/database-concurrency.md`
 - `spec/knowledge/behavior/data-recovery.md`

@@ -2,10 +2,8 @@
 
 ## Status
 
-Status: release-pending. The repository-wide database audit, implementation,
-focused tests, typechecks, lint, and changed-behavior coverage are complete.
-The clean full release harness and real packaged Windows two-launch gate remain
-pending, so publication is not yet claimed.
+Status: published. The repository-wide database lifecycle fixes are included
+in the 2026-08-20 `v0.6.0-beta.1` same-version replacement.
 
 ## Audit Evidence
 
@@ -24,6 +22,11 @@ pending, so publication is not yet claimed.
 - The 53 discovered production SQLite transaction call sites contain no async
   callbacks. Main database lease, migration-intent, integrity, and normal
   shutdown ownership were consistent with stable database-concurrency rules.
+- Remote issue cross-check kept separate problem boundaries explicit: `#89`
+  and `#98` are historical data-root/version-history reports, `#198` is runtime
+  refresh behavior, and `#210` is a Rules import/restore data-loss defect under
+  its own active change. None was closed or misreported as fixed by this SQLite
+  lifecycle replacement.
 
 ## Implemented
 
@@ -78,5 +81,12 @@ pending, so publication is not yet claimed.
   Windows packaged run remains the authoritative platform gate.
 - The current shared worktree line-limit command is blocked by unrelated,
   pre-existing Rules work above its legacy baselines. The release candidate
-  will run the complete line and release gates from an isolated clean worktree
-  containing only committed release changes.
+  therefore ran the complete line and release gates from an isolated clean
+  worktree containing only committed release changes.
+- The isolated release candidate passed all 42 release checks, including line
+  limits, builds, unit/integration shards, and built-artifact E2E. Manual run
+  `32355673880` and tag run `32357771862` both passed the real Windows x64
+  two-launch gate and the full signed platform matrix.
+- Self-Hosted Web run `32357771879` published beta GHCR digest
+  `sha256:4433613a0da98f1b24d06a8f08ab1f92166bca0fbe8ab085904b5046532b6374`
+  without changing stable `latest` or `0.5.9`.

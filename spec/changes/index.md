@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 27 |
-| Archived | 226 |
+| Active | 25 |
+| Archived | 228 |
 | Legacy | 1 |
 
 ## Active
@@ -18,7 +18,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `agent-management-workbench` | active | `spec/changes/active/agent-management-workbench/` |
 | `agent-provider-protocol-bridge` | active | `spec/changes/active/agent-provider-protocol-bridge/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
-| `database-resource-lifecycle-hardening` | release-pending | `spec/changes/active/database-resource-lifecycle-hardening/` |
 | `desktop-image-generation-workbench` | active | `spec/changes/active/desktop-image-generation-workbench/` |
 | `desktop-issue-192-copy-action-parity` | active | `spec/changes/active/desktop-issue-192-copy-action-parity/` |
 | `desktop-prompt-list-projection` | active | `spec/changes/active/desktop-prompt-list-projection/` |
@@ -41,7 +40,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
 | `web-agent-service-parity` | active | `spec/changes/active/web-agent-service-parity/` |
 | `web-sync-contract-completion` | active | `spec/changes/active/web-sync-contract-completion/` |
-| `windows-canonical-authority-second-launch` | release-pending | `spec/changes/active/windows-canonical-authority-second-launch/` |
 
 ## Archived
 
@@ -273,6 +271,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-08-19-macos-notary-ticket-propagation-retry` | archived | `spec/changes/archive/2026/08/2026-08-19-macos-notary-ticket-propagation-retry/` |
 | `2026-08-19-republish-0-5-9-20260714` | archived | `spec/changes/archive/2026/08/2026-08-19-republish-0-5-9-20260714/` |
 | `2026-08-19-windows-packaged-upgrade-startup-gate` | archived | `spec/changes/archive/2026/08/2026-08-19-windows-packaged-upgrade-startup-gate/` |
+| `2026-08-20-database-resource-lifecycle-hardening` | archived | `spec/changes/archive/2026/08/2026-08-20-database-resource-lifecycle-hardening/` |
+| `2026-08-20-windows-canonical-authority-second-launch` | archived | `spec/changes/archive/2026/08/2026-08-20-windows-canonical-authority-second-launch/` |
 
 ## Legacy
 

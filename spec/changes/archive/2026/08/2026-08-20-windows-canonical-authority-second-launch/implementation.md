@@ -2,9 +2,8 @@
 
 ## Status
 
-Status: release-pending. Implementation, focused verification, and the local
-quick release harness passed. Real packaged Windows two-launch evidence and a
-replacement release remain pending, so no published fix is claimed yet.
+Status: published. The bounded path and database lifecycle fixes are included
+in the 2026-08-20 `v0.6.0-beta.1` same-version replacement.
 
 ## Reported Evidence
 
@@ -31,7 +30,7 @@ was insufficient: the checkpoint directory stage still duplicated its long
 target basename, so the complete path could remain over budget under the
 deliberately long Windows release profile. The broader task-owned cleanup and
 external-store handle findings are tracked separately in
-`spec/changes/active/database-resource-lifecycle-hardening/`.
+`spec/changes/archive/2026/08/2026-08-20-database-resource-lifecycle-hardening/`.
 
 ## Implemented
 
@@ -91,7 +90,7 @@ basename.
   that internal ordering helper. The new stage naming and all changed branches
   are covered.
 - The packaged two-launch smoke cannot run on this non-Windows host. A real
-  Windows x64 release runner remains mandatory.
+  Windows x64 release runner supplied the final platform evidence.
 - `pnpm verify:release:quick` passed all 29 checks with zero failed or blocked
   checks in 1,016.5 seconds at maximum concurrency two. The delegated runner
   left no Vitest, pnpm, verification process, or service port behind.
@@ -108,6 +107,18 @@ basename.
 - The final selected-database recovery checkpoint regression passed 6/6 tests;
   Desktop typecheck, focused ESLint, spec governance, and formatting passed
   after the recovery-only ancestor was shortened.
+- Final isolated candidate `ae5e923f447575f3222693fb3da943d874270ace`
+  passed `pnpm verify:release` 42/42 in 550.8 seconds.
+- Manual full-platform run `32355673880` passed. Windows x64 proved both the
+  first `waiting-renderer-migration` / `migrated` launch and the second
+  `published` / `already-complete` launch against the same profile; release was
+  skipped because the run had no tag.
+- Tag run `32357771862` passed all platform, signing, notarization, two-launch,
+  manifest, asset, and release jobs. Annotated tag object
+  `28bea7d43a0faf5bdc1280de6d8d72660a777063` peels to the final candidate.
+- The published release remains non-draft Prerelease with 20 refreshed assets;
+  the Windows x64 installer digest is
+  `sha256:8b24f4600b0cb8ee14d5e4637b03532e9e372f97832a222f382612a26bb4f390`.
 - The release-smoke lifecycle helper reached 100% statement, branch, function,
   and line coverage. Core canonical path/cleanup coverage reached 99.52%
   statements/lines, 98.37% branches, and 100% functions across the two touched

@@ -2,8 +2,8 @@
 
 ## Status
 
-- Phase: verify
-- Status: release-pending
+- Phase: converge
+- Status: complete
 - Reported: 2026-08-20
 
 ## Why
