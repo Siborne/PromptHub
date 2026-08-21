@@ -25,10 +25,12 @@ import { validateMaterializedSkillPackage } from "./skill-package-validation";
 import { assertStagedRemoteSkillPackageSafe } from "./skill-update-safety";
 import {
   PENDING_INSTALL_MARKER,
+  type PackageReplacement,
   type PackageRecoveryManifest,
   type SkillPackageLifecycleDependencies,
   type StagedSkillPackage,
 } from "./skill-package-lifecycle";
+import { getOperationsDir, getRuntimeStorageContext } from "../runtime-paths";
 
 const RECOVERY_FILE = "recovery.json";
 const DEFAULT_STAGING_LEASE_MS = 60 * 60 * 1000;
@@ -286,6 +288,26 @@ async function createStagingRoot(skillsDir: string): Promise<string> {
   const lifecycleRoot = getSkillPackageLifecycleRoot(skillsDir);
   await fs.mkdir(lifecycleRoot, { recursive: true });
   return fs.mkdtemp(path.join(lifecycleRoot, "op-"));
+}
+
+async function createCanonicalStagingRoot(): Promise<string> {
+  const lifecycleRoot = path.join(
+    getOperationsDir(),
+    "skill-package-lifecycle",
+  );
+  await fs.mkdir(lifecycleRoot, { recursive: true });
+  return fs.mkdtemp(path.join(lifecycleRoot, "op-"));
+}
+
+function beginCanonicalPublication(
+  stagedRepoPath: string,
+): Promise<PackageReplacement> {
+  return Promise.resolve({
+    repoPath: stagedRepoPath,
+    recovery: { repoPath: stagedRepoPath, hadOriginal: false },
+    commit: () => Promise.resolve(),
+    rollback: () => Promise.resolve(),
+  });
 }
 
 async function writeRecoveryManifest(
@@ -587,7 +609,12 @@ export async function cleanupAbandonedSkillPackageOperations(
   options: CleanupOptions = {},
 ): Promise<void> {
   const skillsDir = options.skillsDir ?? getSkillsDirAccessor();
-  const lifecycleRoot = getSkillPackageLifecycleRoot(skillsDir);
+  const canonical =
+    options.skillsDir === undefined &&
+    getRuntimeStorageContext().localAuthority === "canonical-files";
+  const lifecycleRoot = canonical
+    ? path.join(getOperationsDir(), "skill-package-lifecycle")
+    : getSkillPackageLifecycleRoot(skillsDir);
   const now = (options.now ?? Date.now)();
   const leaseMs = options.leaseMs ?? DEFAULT_STAGING_LEASE_MS;
   const recoverAll = options.recoverAll === true;
@@ -624,19 +651,26 @@ export function createDesktopSkillPackageLifecycleDependencies(
   options: DesktopLifecycleOptions = {},
 ): SkillPackageLifecycleDependencies {
   const skillsDir = options.skillsDir ?? getSkillsDirAccessor();
+  const canonical =
+    options.skillsDir === undefined &&
+    getRuntimeStorageContext().localAuthority === "canonical-files";
   return {
     db,
-    createStagingRoot: () => createStagingRoot(skillsDir),
+    createStagingRoot: () =>
+      canonical ? createCanonicalStagingRoot() : createStagingRoot(skillsDir),
     stagePackage,
-    beginReplacement: (skill, stagedRepoPath, beforeApply) =>
-      SkillInstaller.beginManagedRepoReplacement(
-        skill,
-        stagedRepoPath,
-        beforeApply,
-      ),
+    beginReplacement: canonical
+      ? (_skill, stagedRepoPath) => beginCanonicalPublication(stagedRepoPath)
+      : (skill, stagedRepoPath, beforeApply) =>
+          SkillInstaller.beginManagedRepoReplacement(
+            skill,
+            stagedRepoPath,
+            beforeApply,
+          ),
     readFilesSnapshot,
-    deleteManagedContainer: (skill) =>
-      SkillInstaller.deleteManagedVariantContainer(skill),
+    deleteManagedContainer: canonical
+      ? () => Promise.resolve()
+      : (skill) => SkillInstaller.deleteManagedVariantContainer(skill),
     recordReplacement: writeRecoveryManifest,
     cleanupStagingRoot: (stagingRoot) =>
       recoverOperationRoot(db, stagingRoot, skillsDir),

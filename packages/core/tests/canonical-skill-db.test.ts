@@ -113,6 +113,47 @@ describe("canonical Skill database adapter", () => {
     );
   });
 
+  it("restores the pending row and bundle when package finalization cannot publish", () => {
+    const pending = skillDb.create({
+      name: "unsafe-finalization",
+      protocol_type: "skill",
+      content: "Pending",
+      is_favorite: false,
+      source_last_error: "PACKAGE_OPERATION_PENDING",
+    });
+    const bundlePath = path.join(root, "data", "skills", pending.id);
+    const before = readSkillResourceBundle(bundlePath);
+    const unsafeSource = path.join(root, "unsafe-source");
+    fs.mkdirSync(unsafeSource);
+    fs.writeFileSync(path.join(unsafeSource, "SKILL.md"), "# Unsafe\n");
+    fs.symlinkSync(sourcePath, path.join(unsafeSource, "linked"));
+
+    expect(() =>
+      skillDb.finalizePackageInstall(
+        pending.id,
+        {
+          content: "Installed",
+          local_repo_path: unsafeSource,
+          source_last_error: null,
+        },
+        "Initial store install",
+        [{ relativePath: "SKILL.md", content: "# Unsafe\n" }],
+      ),
+    ).toThrow(/symbolic link/u);
+
+    expect(skillDb.getById(pending.id)).toMatchObject({
+      content: "Pending",
+      currentVersion: 0,
+      source_last_error: "PACKAGE_OPERATION_PENDING",
+    });
+    expect(skillDb.getVersions(pending.id)).toHaveLength(0);
+    const restored = readSkillResourceBundle(bundlePath);
+    expect(restored.bundleManifest.revision).toBe(
+      before.bundleManifest.revision,
+    );
+    expect(restored.skill.content).toBe("Pending");
+  });
+
   it("hydrates canonical Skill workspaces only once per database connection", () => {
     const created = skillDb.create({
       name: "one-shot-hydration",
