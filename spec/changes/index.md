@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 26 |
-| Archived | 228 |
+| Active | 25 |
+| Archived | 229 |
 | Legacy | 1 |
 
 ## Active
@@ -35,7 +35,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `rules-issue-193-missing-project-reconciliation` | active | `spec/changes/active/rules-issue-193-missing-project-reconciliation/` |
 | `rules-managed-copies` | active | `spec/changes/active/rules-managed-copies/` |
 | `self-hosted-skill-sync-reliability` | active | `spec/changes/active/self-hosted-skill-sync-reliability/` |
-| `skill-package-canonical-finalization` | active | `spec/changes/active/skill-package-canonical-finalization/` |
 | `skills-issue-194-shared-global-target` | active | `spec/changes/active/skills-issue-194-shared-global-target/` |
 | `sync-issue-191-safety-report-contract` | active | `spec/changes/active/sync-issue-191-safety-report-contract/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
@@ -274,6 +273,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-08-19-windows-packaged-upgrade-startup-gate` | archived | `spec/changes/archive/2026/08/2026-08-19-windows-packaged-upgrade-startup-gate/` |
 | `2026-08-20-database-resource-lifecycle-hardening` | archived | `spec/changes/archive/2026/08/2026-08-20-database-resource-lifecycle-hardening/` |
 | `2026-08-20-windows-canonical-authority-second-launch` | archived | `spec/changes/archive/2026/08/2026-08-20-windows-canonical-authority-second-launch/` |
+| `2026-08-21-skill-package-canonical-finalization` | archived | `spec/changes/archive/2026/08/2026-08-21-skill-package-canonical-finalization/` |
 
 ## Legacy
 

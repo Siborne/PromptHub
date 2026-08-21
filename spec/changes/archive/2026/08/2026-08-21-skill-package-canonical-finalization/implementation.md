@@ -43,7 +43,15 @@ inside it. Canonical verification correctly rejected those undeclared entries.
 
 ## Release State
 
-The fix is locally implemented and verified. It has not been committed,
-packaged, published, or accepted through a packaged cold-start/reopen run. The
-public `v0.6.0-beta.1` therefore still contains the reported failure until the
-replacement prerelease operation is completed.
+Commit `494d57d7da654b8380e4b81f8f51fc5c72e6b7f7` was pushed to `main`.
+Untagged candidate run `32450618343` passed full verification and all platform
+builds, including the Windows x64 two-launch packaged upgrade smoke and signed,
+notarized macOS x64/arm64 artifacts.
+
+The annotated `v0.6.0-beta.1` tag was moved with an expected-old-value lease to
+tag object `e85f3d1b3af5b67a8fdd7ae526ba04874ad07588`, peeled to the verified commit.
+Tagged Desktop run `32452004626` replaced all 20 prerelease assets and tagged
+Self-Hosted Web run `32452004602` published beta GHCR digest
+`sha256:2ffd84fd8e5b6e4d79ee0107160ba2ec7f1a8ce41441256d7bcdb24131169e17`.
+The release remains non-draft and prerelease; representative public asset URLs
+returned HTTP 200, while GHCR `latest` retained the stable digest.

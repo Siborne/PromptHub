@@ -15,6 +15,8 @@
 
 ### 问题修复 / Fixes
 
+- **Skill 安装与更新恢复可用**：canonical file authority 下的 package 暂存移出 `data/skills`，不再把 legacy `.prompthub` 管理目录写入 canonical bundle；SQLite finalize、版本快照、bundle 原子发布和可写 workspace 现在由同一持久化边界完成并在失败时整体回滚
+  - **Skill Install and Update Restored**: Package staging now stays outside `data/skills` under canonical file authority, preventing legacy `.prompthub` management data from contaminating canonical bundles; one persistence boundary now owns SQLite finalization, version snapshots, atomic bundle publication, writable workspace hydration, and complete rollback
 - **Windows 覆盖安装后二次启动修复**：canonical SQLite 验证库与 stage 库改用有界的同目录随机名称，避免第二次启动进入文件权威发布时超过 Windows SQLite VFS 路径上限；Windows x64 发布门禁现在会在同一升级档案上连续完成两次正常启动
   - **Windows Second-Launch Fix After Overwrite Install**: Canonical SQLite verification and stage databases now use bounded random sibling names so second-launch file-authority publication stays within the Windows SQLite VFS path limit; the Windows x64 release gate now completes two clean launches against the same upgraded profile
 - **数据库失败清理与外部会话句柄**：任务自有 SQLite 现在统一清理 journal/WAL sidecars 与相邻 `.lock`，canonical checkpoint 不再放大父路径；Cherry Studio、Hermes 与 NanoClaw 的无效 schema 或成对数据库打开失败会关闭已取得的连接

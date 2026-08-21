@@ -2,9 +2,9 @@
 
 ## Status
 
-Release pending. The local implementation and release gates are complete, but
-the replacement `v0.6.0-beta.1` artifacts have not been published or accepted
-through the packaged application.
+Complete. The replacement `v0.6.0-beta.1` prerelease was published on
+2026-08-21 after local, untagged candidate, tagged release, packaged startup,
+platform signing, public asset, and container-isolation gates passed.
 
 ## Problem
 

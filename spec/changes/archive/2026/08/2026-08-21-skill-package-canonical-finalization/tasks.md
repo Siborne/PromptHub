@@ -10,5 +10,5 @@
       gates, and the release harness required for Beta replacement.
 - [x] `T-SKCF-005`: Converge stable Skill behavior docs and implementation
       evidence; keep publishing as a separate explicit operation.
-- [ ] `T-SKCF-006`: Commit the verified release unit, replace the Beta
+- [x] `T-SKCF-006`: Commit the verified release unit, replace the Beta
       prerelease artifacts, and complete packaged cold-start/reopen acceptance.
