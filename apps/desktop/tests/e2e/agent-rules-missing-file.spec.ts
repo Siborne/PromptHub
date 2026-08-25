@@ -4,6 +4,11 @@ import os from "os";
 import path from "path";
 
 import {
+  writeCanonicalStorageAuthority,
+  writeRuntimeLayoutState,
+} from "@prompthub/core";
+
+import {
   closePromptHub,
   launchPromptHub,
   sendAppCommand,
@@ -110,5 +115,104 @@ test("creates Kiro's declared global steering entry", async () => {
     expect(fs.readFileSync(rulePath, "utf8")).toBe("");
   } finally {
     await closePromptHub(app, userDataDir);
+  }
+});
+
+test("saves, restores, and reloads Agent rule history", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "prompthub-agent-rule-history-e2e-"),
+  );
+  writeRuntimeLayoutState(userDataDir);
+  writeCanonicalStorageAuthority(userDataDir, {
+    consistencyId: "f".repeat(64),
+    operationId: "agent-rule-history-e2e",
+  });
+  const homeDir = path.join(userDataDir, "home");
+  const geminiDir = path.join(homeDir, ".gemini");
+  const rulePath = path.join(geminiDir, "GEMINI.md");
+  fs.mkdirSync(geminiDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(geminiDir, "settings.json"),
+    JSON.stringify({ language: "en" }),
+    "utf8",
+  );
+  const launchOptions = {
+    userDataDir,
+    env: { HOME: homeDir, USERPROFILE: homeDir },
+  };
+  let activeApp = (await launchPromptHub(null, launchOptions)).app;
+
+  try {
+    let page = await activeApp.firstWindow();
+    await setAppLanguage(page, "en");
+    await sendAppCommand(activeApp, { type: "agent:manage" });
+    await selectAgent(page, "Gemini");
+    await page.getByRole("tab", { name: "Rules" }).click();
+    await page.getByRole("button", { name: "Create GEMINI.md" }).click();
+
+    const firstRevision = "# First rule revision\n\nKeep exact history bytes.";
+    const secondRevision = "# Second rule revision\n\nReplace the first draft.";
+    let editor = page.getByRole("textbox", { name: "Rule Content" });
+    await editor.fill(firstRevision);
+    await page.getByRole("button", { name: "Save and overwrite file" }).click();
+    await expect
+      .poll(() => fs.readFileSync(rulePath, "utf8"))
+      .toBe(firstRevision);
+
+    await editor.fill(secondRevision);
+    await page.getByRole("button", { name: "Save and overwrite file" }).click();
+    await expect
+      .poll(() => fs.readFileSync(rulePath, "utf8"))
+      .toBe(secondRevision);
+
+    await page.getByRole("button", { name: /^Version Snapshots/ }).click();
+    const history = page.getByRole("dialog", { name: "Version Snapshots" });
+    const firstSnapshot = history
+      .getByRole("button")
+      .filter({ hasText: "# First rule revision" });
+    await expect(firstSnapshot).toBeVisible();
+    await firstSnapshot.click();
+    await history.getByRole("button", { name: "Restore to Draft" }).click();
+    editor = page.getByRole("textbox", { name: "Rule Content" });
+    await expect(editor).toContainText("# First rule revision");
+    await expect(editor).toContainText("Keep exact history bytes.");
+    expect(fs.readFileSync(rulePath, "utf8")).toBe(secondRevision);
+    await page.getByRole("button", { name: "Save and overwrite file" }).click();
+    await expect
+      .poll(() => fs.readFileSync(rulePath, "utf8"))
+      .toBe(firstRevision);
+
+    await closePromptHub(activeApp, userDataDir, { preserveUserDataDir: true });
+    const relaunched = await launchPromptHub(null, launchOptions);
+    activeApp = relaunched.app;
+    page = relaunched.page;
+    await sendAppCommand(activeApp, { type: "agent:manage" });
+    await selectAgent(page, "Gemini");
+    await page.getByRole("tab", { name: "Rules" }).click();
+    editor = page.getByRole("textbox", { name: "Rule Content" });
+    await expect(editor).toContainText("# First rule revision");
+    await expect(editor).toContainText("Keep exact history bytes.");
+    expect(fs.readFileSync(rulePath, "utf8")).toBe(firstRevision);
+    await page.getByRole("button", { name: /^Version Snapshots/ }).click();
+    const reloadedHistory = page.getByRole("dialog", {
+      name: "Version Snapshots",
+    });
+    const secondSnapshot = reloadedHistory
+      .getByRole("button")
+      .filter({ hasText: "# Second rule revision" });
+    await expect(secondSnapshot).toBeVisible();
+    await secondSnapshot
+      .locator("..")
+      .getByRole("button", { name: "Delete snapshot" })
+      .click();
+    const deleteDialog = page.getByRole("alertdialog", {
+      name: "Delete snapshot",
+    });
+    await deleteDialog.getByRole("button", { name: "Delete" }).click();
+    await expect(secondSnapshot).toHaveCount(0);
+    expect(fs.readFileSync(rulePath, "utf8")).toBe(firstRevision);
+  } finally {
+    await closePromptHub(activeApp, userDataDir);
   }
 });
