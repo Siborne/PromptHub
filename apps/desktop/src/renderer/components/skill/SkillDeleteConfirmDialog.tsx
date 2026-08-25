@@ -90,11 +90,11 @@ function DeleteConfirmationMessage(props: CopyRemovalOptionProps) {
         {confirmation.distributionSummary.hasDistribution
           ? t(
               "skill.deleteDistributedHint",
-              "This removes the skill from PromptHub. Source files are preserved. Distributed symlinks will be removed because they point back to PromptHub.",
+              "Deletes this Skill's PromptHub record, managed package, and version history. Linked external source folders are preserved. Distributed symlinks will be removed because they point back to PromptHub.",
             )
           : t(
               "skill.deleteSourceOnlyHint",
-              "Only removes this skill from the PromptHub library. Source files are preserved.",
+              "Deletes this Skill's PromptHub record, managed package, and version history. Linked external source folders are preserved.",
             )}
       </p>
       {confirmation.distributionSummary.hasSymlink ? (

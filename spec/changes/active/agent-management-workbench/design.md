@@ -25,6 +25,15 @@ existing Skill / MCP / Rules / Plugin services
   -> no duplicate Agent-owned asset store
 ```
 
+## `DES-AGENT-150`: Skill Delete Ownership Copy
+
+Keep the existing main-process ownership rule as the single deletion boundary:
+`SkillInstaller.isManagedRepoPath()` permits managed-container cleanup, while
+linked external paths never enter that operation. The detail and batch dialogs
+reuse the existing delete hint keys and describe both sides of the contract in
+one truthful message, so no renderer path inference or new IPC contract is
+introduced. Distribution copy and symlink controls remain separate.
+
 ## `DES-AGENT-001`: Domain Model And Terms
 
 ### Managed Agent

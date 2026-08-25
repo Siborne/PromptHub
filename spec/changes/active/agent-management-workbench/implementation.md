@@ -6,6 +6,16 @@
 - Status: in-progress
 - Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
 
+## Skill delete ownership correction (2026-08-25)
+
+- `FR-AGENT-131 -> DES-AGENT-150 -> TEST-AGENT-212 -> T-AGENT-221`.
+- Kept the existing managed/external deletion boundary and corrected the detail,
+  batch, and seven-locale confirmation copy. Managed packages and version state
+  are deleted; linked external source folders are preserved.
+- Focused Vitest passed 23 tests, the desktop production build passed, and the
+  real Electron Skill lifecycle passed with two restarts plus durable DB and
+  filesystem assertions.
+
 ## DeepSeek Harness Agent management order upgrade (2026-08-14)
 
 - Reproduced the missing-looking Agent row with an older persisted order that

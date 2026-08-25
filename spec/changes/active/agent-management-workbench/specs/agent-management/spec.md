@@ -2,6 +2,30 @@
 
 ## Added Requirements
 
+### `FR-AGENT-131`: Skill Delete Must Describe Source Ownership
+
+Deleting a Skill from My Skills MUST state that its PromptHub record, managed
+package, and version history are removed. The same confirmation MUST state that
+linked external source folders are preserved. Copy and symlink distribution
+cleanup MUST remain an independent choice and MUST NOT imply that unrelated
+Agent or project files are deleted.
+
+#### Scenario: Delete a PromptHub-managed Skill
+
+- Given a manually created Skill owns a PromptHub-managed package and versions
+- When the user confirms deletion
+- Then the managed package, canonical package state, DB row, and versions are
+  removed
+- And restarting PromptHub does not resurrect the Skill
+- And unrelated files in Agent skill roots remain unchanged
+
+#### Scenario: Delete a linked external Skill
+
+- Given a Skill references a linked external source folder
+- When the user confirms deletion
+- Then PromptHub metadata and managed canonical state are removed
+- And the external source folder is preserved
+
 ### `FR-AGENT-001`: Preset Agents Are First-Class Managed Objects
 
 The system MUST expose every user-enabled built-in Agent platform and every enabled custom Agent platform as first-class managed Agents. It MUST reuse the existing platform registry and MUST NOT require or silently create a duplicate Agent Profile record. Missing deep-management adapters MUST NOT remove an enabled Agent from the workspace.

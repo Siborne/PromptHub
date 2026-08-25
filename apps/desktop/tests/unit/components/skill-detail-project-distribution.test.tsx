@@ -375,7 +375,7 @@ describe("Skill detail project distribution", () => {
 
     expect(
       screen.getByText(
-        "Only removes this skill from the PromptHub library. Source files are preserved.",
+        "Deletes this Skill's PromptHub record, managed package, and version history. Linked external source folders are preserved.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -394,11 +394,13 @@ describe("Skill detail project distribution", () => {
     fireEvent.click(screen.getByTitle("删除"));
 
     expect(
-      screen.getByText("只会从 PromptHub 资料库中移除此 Skill。源文件会保留。"),
+      screen.getByText(
+        "会删除此 Skill 的 PromptHub 记录、托管包和版本历史。外部链接的源文件夹会保留。",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Only removes this skill from the PromptHub library. Source files are preserved.",
+        "Deletes this Skill's PromptHub record, managed package, and version history. Linked external source folders are preserved.",
       ),
     ).not.toBeInTheDocument();
   });
