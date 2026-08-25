@@ -2,6 +2,20 @@
 
 ## Added Requirements
 
+### `FR-AGENT-133`: Usage Reads Require A Detected Agent
+
+PromptHub MUST reject an Agent usage read before any credential, process,
+network, or helper probe when that Agent's resolved installation root is not
+detected. Startup tray refresh MUST NOT create an absent Agent root or make an
+undetected Agent appear in the management workspace.
+
+#### Scenario: Tray refresh sees an absent Antigravity root
+
+- Given Antigravity is not detected in the isolated user profile
+- When the startup tray refreshes supported usage adapters
+- Then no Antigravity usage helper is started
+- And no Antigravity or Gemini root is created or reported as installed
+
 ### `FR-AGENT-132`: Provider Names Are Display Labels
 
 Provider Profile identity MUST use the stable profile ID. Exact-case and

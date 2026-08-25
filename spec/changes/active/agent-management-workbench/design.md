@@ -25,6 +25,15 @@ existing Skill / MCP / Rules / Plugin services
   -> no duplicate Agent-owned asset store
 ```
 
+## `DES-AGENT-152`: Installation-Gated Usage Reads
+
+Keep the existing resolved Agent root as the installation boundary. The shared
+main-process usage service checks that root once before dispatching to any
+provider adapter. An absent root returns the typed `agent-not-installed` result
+without reading credentials, listing processes, starting a helper, or issuing a
+network request. This places one guard before every usage caller instead of
+special-casing the tray or Antigravity adapter.
+
 ## `DES-AGENT-151`: Stable Provider Identity
 
 `agent_provider_profiles.id` remains the only Provider Profile identity. Remove

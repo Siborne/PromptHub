@@ -33,6 +33,7 @@ function createHarness(): Harness {
   const service = createAgentUsageService({
     resolveConfigRoot: () => GROK_ROOT,
     fetchImpl: fetchImpl as unknown as typeof fetch,
+    pathExists: vi.fn(async () => true),
     readFile: vi.fn(async (filePath: string) => {
       if (filePath !== GROK_AUTH_PATH || auth === null)
         throw new Error("ENOENT");

@@ -34,6 +34,7 @@ import {
 
 export interface AgentUsageServiceOptions {
   resolveConfigRoot?: (agentId: string) => string;
+  pathExists?: (candidate: string) => Promise<boolean>;
   commandRunner?: NativeCommandRunner;
   fetchImpl?: typeof fetch;
   readFile?: (filePath: string) => Promise<string>;
@@ -208,6 +209,15 @@ function defaultResolveConfigRoot(agentId: string): string {
     throw new Error(`Unknown Agent platform: ${agentId}`);
   }
   return getPlatformRootDir(platform);
+}
+
+async function defaultPathExists(candidate: string): Promise<boolean> {
+  try {
+    await fs.access(candidate);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function hashedKeychainService(configRoot: string): string {
@@ -656,6 +666,7 @@ export function createAgentUsageService(
 ): AgentUsageService {
   const resolveConfigRoot =
     options.resolveConfigRoot ?? defaultResolveConfigRoot;
+  const pathExists = options.pathExists ?? defaultPathExists;
   const commandRunner = options.commandRunner ?? createNativeCommandRunner();
   const fetchImpl = options.fetchImpl ?? fetch;
   const readFile =
@@ -1380,6 +1391,12 @@ export function createAgentUsageService(
     // Resolving the config root through the platform registry doubles as the
     // agentId allowlist check; unknown ids throw before any lookup happens.
     const configRoot = resolveConfigRoot(agentId);
+    if (!(await pathExists(configRoot))) {
+      return buildQuota(agentId, "unavailable", now(), {
+        adapter: "agent-installation-guard-v1",
+        errorCode: "agent-not-installed",
+      });
+    }
     if (agentId === "codex") {
       return queryCodexUsage(agentId);
     }

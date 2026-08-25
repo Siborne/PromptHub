@@ -6,6 +6,18 @@
 - Status: in-progress
 - Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
 
+## Undetected Agent usage side-effect correction (2026-08-25)
+
+- `FR-AGENT-133 -> DES-AGENT-152 -> TEST-AGENT-214 -> T-AGENT-223`.
+- The shared main-process usage service now verifies the resolved Agent root
+  before any adapter work. An absent Agent cannot trigger credential reads,
+  process discovery, an Antigravity background helper, or network requests
+  through startup tray refresh.
+- Verification passed: 120 focused usage-service tests, desktop typecheck,
+  traceability, production build, and one real Electron startup/tray scan. Full
+  evidence is recorded in
+  `ISS-20260825-003-agent-usage-undetected-side-effect.md`.
+
 ## Provider display-label identity correction (2026-08-25)
 
 - `FR-AGENT-132 -> DES-AGENT-151 -> TEST-AGENT-213 -> T-AGENT-222`.

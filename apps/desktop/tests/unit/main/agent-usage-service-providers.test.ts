@@ -34,6 +34,7 @@ const CLOUDCODE_BASE = "https://cloudcode-pa.googleapis.com/v1internal";
 interface Harness {
   service: ReturnType<typeof createAgentUsageService>;
   fetchImpl: ReturnType<typeof vi.fn>;
+  antigravityLocalGetUsage: ReturnType<typeof vi.fn>;
   commandRunner: {
     resolve: ReturnType<typeof vi.fn>;
     run: ReturnType<typeof vi.fn>;
@@ -57,6 +58,7 @@ function createHarness(
     platform?: NodeJS.Platform;
     antigravityLocalResult?: AntigravityLocalUsageResult;
     kimiOAuthTokenService?: KimiOAuthTokenService;
+    pathExists?: boolean;
   } = {},
 ): Harness {
   const files = new Map<string, string>();
@@ -76,6 +78,10 @@ function createHarness(
     if (entries === undefined) throw new Error("ENOENT");
     return entries;
   });
+  const antigravityLocalGetUsage = vi.fn(
+    async (): Promise<AntigravityLocalUsageResult> =>
+      options.antigravityLocalResult ?? { kind: "not-running" },
+  );
   const service = createAgentUsageService({
     resolveConfigRoot: (agentId: string) => {
       const roots: Record<string, string> = {
@@ -92,20 +98,19 @@ function createHarness(
     commandRunner,
     readFile,
     readDir,
+    pathExists: vi.fn(async () => options.pathExists ?? true),
     now: () => INITIAL_CLOCK,
     homeDir: HOME,
     platform: options.platform ?? "linux",
     antigravityLocalClient: {
-      getUsage: vi.fn(
-        async (): Promise<AntigravityLocalUsageResult> =>
-          options.antigravityLocalResult ?? { kind: "not-running" },
-      ),
+      getUsage: antigravityLocalGetUsage,
     },
     kimiOAuthTokenService: options.kimiOAuthTokenService,
   });
   return {
     service,
     fetchImpl,
+    antigravityLocalGetUsage,
     commandRunner,
     setFile: (filePath, raw) => {
       if (raw === null) files.delete(filePath);
@@ -580,6 +585,28 @@ function antigravityModelsPayload() {
 
 describe("Agent usage service (Antigravity adapter)", () => {
   describe("credential resolution", () => {
+    it("does not probe an Agent whose configured root is not detected", async () => {
+      const h = createHarness({
+        pathExists: false,
+        platform: "darwin",
+        antigravityLocalResult: {
+          kind: "ok",
+          plan: "Pro",
+          metrics: [],
+        },
+      });
+
+      await expect(h.service.getUsage("antigravity")).resolves.toMatchObject({
+        agentId: "antigravity",
+        adapter: "agent-installation-guard-v1",
+        status: "unavailable",
+        errorCode: "agent-not-installed",
+      });
+      expect(h.antigravityLocalGetUsage).not.toHaveBeenCalled();
+      expect(h.commandRunner.resolve).not.toHaveBeenCalled();
+      expect(h.fetchImpl).not.toHaveBeenCalled();
+    });
+
     it("prefers the running Antigravity desktop session over stale stored tokens", async () => {
       const h = createHarness({
         platform: "darwin",

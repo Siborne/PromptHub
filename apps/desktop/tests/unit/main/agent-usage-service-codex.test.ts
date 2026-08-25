@@ -93,6 +93,7 @@ function createHarness(): Harness {
     commandRunner,
     fetchImpl: fetchImpl as unknown as typeof fetch,
     readFile,
+    pathExists: vi.fn(async () => true),
     now: () => clock,
     platform: "darwin",
   });

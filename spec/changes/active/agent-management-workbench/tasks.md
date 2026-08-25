@@ -12,6 +12,7 @@
 - [x] `T-AGENT-008` 确认外部会话正文保持平台所有、本地、按需读取且不进入同步；PromptHub 不编辑 transcript。删除优先调用平台原生命令，raw-file adapter 仅在另行通过回收站/回滚测试后提供删除。
 - [x] `T-AGENT-009` 确认本地代理、协议转换、故障转移、请求拦截和 OAuth 账户池属于高风险独立范围，当前变更不实现。
 - [x] `T-AGENT-010` 完成实现前 Analyze：阶段状态与范围决策已统一；全部 FR/NFR、DES、TEST、T 定义唯一且进入追踪表；无阻塞性待确认。
+- [x] `T-AGENT-223` 按 `FR-AGENT-133` / `DES-AGENT-152` 在共享 usage service 入口阻止未检测 Agent 的凭据、进程、helper 与网络探测，并用真实 Electron 启动验证不会创建或显示缺失的 Antigravity/Gemini root。
 - [x] `T-AGENT-222` 按 `FR-AGENT-132` / `DES-AGENT-151` 移除 Provider display-name 唯一索引，增加版本化 legacy migration，并覆盖 fresh schema、旧库迁移、exact/case-only duplicate、rename、restart 与 canonical SQLite rebuild。
 - [x] `T-AGENT-221` 按 `FR-AGENT-131` / `DES-AGENT-150` 修正 Skill 详情与批量删除确认文案、7 locales 和真实 Electron 生命周期断言；保持现有 managed/external 删除边界，不新增 IPC 或路径推断。
 - [x] `T-AGENT-073` 将 31 平台深度能力声明固化为 machine-readable shared contract；路径能力只从 canonical registry 派生，renderer 不再维护 provider/session/usage 平台 allowlist。
@@ -20,6 +21,7 @@ UI screen structure, interaction states, responsive behavior and component bound
 
 ## Test-First Verification Contracts
 
+- [x] `TEST-AGENT-214` 未检测 Agent usage 副作用：单元测试断言缺失 root 时不调用 Antigravity local helper、keychain resolver 或网络；真实 Electron 启动等待 tray quota scan 后断言 Antigravity/Gemini 均不可见且 `.gemini` 不存在。
 - [x] `TEST-AGENT-213` Provider display label identity：DB 黑盒允许同平台 exact/case-only duplicate 与重名 rename；迁移测试从旧 unique index 原位升级并保留稳定 ID；canonical shadow rebuild 保留同名图；真实 Electron 创建同名 Provider 后重启仍按 ID 分离且不改原生配置。
 - [x] `TEST-AGENT-212` Skill 删除所有权：组件断言确认文案明确删除 PromptHub 记录、托管包和版本历史并保留外部链接源；main IPC 断言外部路径不进入 managed 删除；真实 Electron 用例断言托管包、canonical state、DB/版本在删除和重启后消失，且无关 Agent 文件不变。
 - [x] `TEST-AGENT-001` Agent registry 回归：enabled built-in、enabled custom、configured-but-not-detected 均可见；常用/安装/配置/置顶排序正确；disabled built-in/custom 隐藏；侧栏仅保留搜索；置顶操作垂直居中；不自动创建 Profile。
