@@ -6,6 +6,20 @@
 - Status: in-progress
 - Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
 
+## Non-secret MCP encryption-gate correction (2026-08-25)
+
+- `FR-AGENT-134 -> DES-AGENT-153 -> TEST-AGENT-215 -> T-AGENT-224`.
+- Canonical MCP secret-store staging now requires device encryption only when
+  the transaction contains extracted secret values. Empty secret maps can use
+  the full canonical lifecycle in unsigned runtimes; non-empty secrets retain
+  the existing fail-closed boundary.
+- Verification status is recorded in
+  `ISS-20260825-004-mcp-non-secret-encryption-gate.md`.
+- Verification passed: 5 focused secret-store tests, 17 canonical MCP library
+  tests, desktop typecheck, Prettier, traceability, production build, and one
+  real Electron lifecycle covering create/read/update, two restarts, canonical
+  bundle durability, delete, and final absence.
+
 ## Undetected Agent usage side-effect correction (2026-08-25)
 
 - `FR-AGENT-133 -> DES-AGENT-152 -> TEST-AGENT-214 -> T-AGENT-223`.

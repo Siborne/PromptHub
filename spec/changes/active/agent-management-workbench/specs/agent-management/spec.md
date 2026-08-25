@@ -2,6 +2,20 @@
 
 ## Added Requirements
 
+### `FR-AGENT-134`: Non-Secret MCP Writes Do Not Require Encryption
+
+Creating, updating, deleting, and restarting an MCP server whose direct secret
+maps are empty MUST succeed when the device encryption provider is unavailable.
+Any non-empty secret value MUST continue to fail before canonical publication
+unless device encryption is available.
+
+#### Scenario: Create a non-secret stdio MCP in an unsigned runtime
+
+- Given device encryption is unavailable
+- When the user saves an MCP containing only name, command, args, and references
+- Then the canonical MCP resource and version are published
+- And no plaintext secret is written
+
 ### `FR-AGENT-133`: Usage Reads Require A Detected Agent
 
 PromptHub MUST reject an Agent usage read before any credential, process,

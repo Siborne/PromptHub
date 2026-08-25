@@ -230,8 +230,8 @@ export function createCanonicalMcpResourceSecretStore(options: {
       return value;
     },
     prepareUpdate(stagePath, input) {
-      requireEncryption(options.encryption);
       const persisted = loadSync();
+      if (input.secrets.length > 0) requireEncryption(options.encryption);
       const next: PersistedMcpResourceSecrets = {
         kind: STORE_KIND,
         version: 1,

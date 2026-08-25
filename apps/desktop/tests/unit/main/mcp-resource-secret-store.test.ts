@@ -91,6 +91,34 @@ describe("MCP canonical resource secret store", () => {
     expect(fs.existsSync(filePath)).toBe(false);
   });
 
+  it("allows an empty canonical update when no secret needs encryption", () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-mcp-secrets-"),
+    );
+    roots.push(root);
+    const filePath = path.join(root, "secrets", "mcp-resource-secrets.json");
+    const stagePath = path.join(root, "secrets", ".stage.json");
+    const store = createCanonicalMcpResourceSecretStore({
+      filePath,
+      encryption: {
+        ...encryption,
+        isEncryptionAvailable: () => false,
+      },
+    });
+
+    expect(() =>
+      store.prepareUpdate(stagePath, {
+        secrets: [],
+        retainRefs: new Set(),
+      }),
+    ).not.toThrow();
+    expect(JSON.parse(fs.readFileSync(stagePath, "utf8"))).toEqual({
+      kind: "prompthub-mcp-resource-secret-store",
+      version: 1,
+      secrets: {},
+    });
+  });
+
   it("rejects conflicting values for one immutable secret reference", async () => {
     const { filePath, store } = fixture();
     await store.writeMany([

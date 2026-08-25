@@ -25,6 +25,15 @@ existing Skill / MCP / Rules / Plugin services
   -> no duplicate Agent-owned asset store
 ```
 
+## `DES-AGENT-153`: Demand-Driven MCP Encryption
+
+Keep the canonical MCP transaction and device-bound secret store. Its staged
+update requires encryption only when `extractedSecrets` is non-empty. Empty
+updates and encrypted-reference cleanup can filter or publish ciphertext
+without encryption or decryption. Any new or changed secret still checks
+encryption before the staged file is written, so publication remains atomic and
+fail-closed for confidential values.
+
 ## `DES-AGENT-152`: Installation-Gated Usage Reads
 
 Keep the existing resolved Agent root as the installation boundary. The shared
