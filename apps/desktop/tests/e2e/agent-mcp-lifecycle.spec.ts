@@ -22,6 +22,63 @@ import {
 const SERVER_NAME = "agent-mcp-lifecycle";
 const DISPLAY_NAME = "Agent MCP Lifecycle";
 const UPDATED_DISPLAY_NAME = "Agent MCP Lifecycle Updated";
+const SECRET_REFERENCE = "MCP_LIFECYCLE_TOKEN";
+
+interface CapturedToast {
+  message: string;
+  type: "error" | "info" | "success" | "warning";
+}
+
+async function installToastRecorder(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const targetWindow = window as typeof window & {
+      __PROMPTHUB_E2E_TOASTS__?: CapturedToast[];
+    };
+    targetWindow.__PROMPTHUB_E2E_TOASTS__ = [];
+
+    const record = (element: Element) => {
+      if (
+        element.getAttribute("data-e2e-toast-recorded") === "true" ||
+        !element.classList.contains("pointer-events-auto")
+      ) {
+        return;
+      }
+      const message = element.querySelector("span")?.textContent?.trim();
+      if (!message) return;
+      const className = element.getAttribute("class") ?? "";
+      const type = className.includes("bg-red-50")
+        ? "error"
+        : className.includes("bg-yellow-50")
+          ? "warning"
+          : className.includes("bg-blue-50")
+            ? "info"
+            : "success";
+      element.setAttribute("data-e2e-toast-recorded", "true");
+      targetWindow.__PROMPTHUB_E2E_TOASTS__?.push({ message, type });
+    };
+
+    new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          record(node);
+          node.querySelectorAll(".pointer-events-auto").forEach(record);
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+async function readCapturedToasts(page: Page): Promise<CapturedToast[]> {
+  return page.evaluate(
+    () =>
+      (
+        window as typeof window & {
+          __PROMPTHUB_E2E_TOASTS__?: CapturedToast[];
+        }
+      ).__PROMPTHUB_E2E_TOASTS__ ?? [],
+  );
+}
 
 async function openMcpLibrary(app: ElectronApplication, page: Page) {
   await sendAppCommand(app, { type: "asset:create", asset: "mcp" });
@@ -31,7 +88,7 @@ async function openMcpLibrary(app: ElectronApplication, page: Page) {
   await expect(dialog).not.toBeVisible();
 }
 
-test("creates, reads, updates, restarts, and deletes a non-secret MCP server", async () => {
+test("creates, reads, updates, distributes, reconciles, removes, restarts, and deletes MCP", async () => {
   test.setTimeout(90_000);
 
   const userDataDir = fs.mkdtempSync(
@@ -45,6 +102,19 @@ test("creates, reads, updates, restarts, and deletes a non-secret MCP server", a
   const homeDir = path.join(userDataDir, "home");
   const emptyBinDir = path.join(homeDir, "empty-bin");
   fs.mkdirSync(emptyBinDir, { recursive: true });
+  const codexConfigPath = path.join(homeDir, ".codex", "config.toml");
+  fs.mkdirSync(path.dirname(codexConfigPath), { recursive: true });
+  fs.writeFileSync(
+    codexConfigPath,
+    [
+      'model = "gpt-5"',
+      "",
+      "[mcp_servers.unrelated]",
+      'command = "keep-me"',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
 
   const launchOptions = {
     userDataDir,
@@ -62,6 +132,7 @@ test("creates, reads, updates, restarts, and deletes a non-secret MCP server", a
       minimizeOnLaunch: false,
       autoCheckUpdate: false,
     });
+    await installToastRecorder(page);
 
     await sendAppCommand(activeApp, { type: "asset:create", asset: "mcp" });
     const createDialog = page.getByRole("dialog", { name: "New MCP" });
@@ -70,6 +141,9 @@ test("creates, reads, updates, restarts, and deletes a non-secret MCP server", a
     await createDialog.getByLabel("Display Name").fill(DISPLAY_NAME);
     await createDialog.getByLabel("Command").fill("node");
     await createDialog.getByLabel("Args").fill("server.js\n--alpha");
+    await createDialog
+      .getByLabel("Environment references")
+      .fill(`AUTH_TOKEN=${SECRET_REFERENCE}`);
     await createDialog.getByRole("button", { name: "Save" }).click();
 
     await expect(
@@ -86,15 +160,89 @@ test("creates, reads, updates, restarts, and deletes a non-secret MCP server", a
       displayName: DISPLAY_NAME,
       command: "node",
       args: ["server.js", "--alpha"],
-      env: {},
-      envRefs: {},
+      env: undefined,
+      envRefs: { AUTH_TOKEN: `\${${SECRET_REFERENCE}}` },
     });
 
     const bundlePath = path.join(userDataDir, "data", "mcp", serverId);
     expect(fs.existsSync(path.join(bundlePath, "server.json"))).toBe(true);
     expect(fs.existsSync(path.join(bundlePath, "manifest.json"))).toBe(true);
+    const canonicalServer = JSON.parse(
+      fs.readFileSync(path.join(bundlePath, "server.json"), "utf8"),
+    );
+    expect(canonicalServer.server.envRefs).toEqual({
+      AUTH_TOKEN: `\${${SECRET_REFERENCE}}`,
+    });
+    expect(canonicalServer.server.env).toBeUndefined();
+
+    await sendAppCommand(activeApp, { type: "asset:create", asset: "mcp" });
+    const duplicateDialog = page.getByRole("dialog", { name: "New MCP" });
+    await duplicateDialog.getByRole("button", { name: /Manual setup/ }).click();
+    await duplicateDialog.getByLabel("Name", { exact: true }).fill(SERVER_NAME);
+    await duplicateDialog.getByLabel("Display Name").fill("Duplicate MCP");
+    await duplicateDialog.getByLabel("Command").fill("node");
+    await duplicateDialog.getByRole("button", { name: "Save" }).click();
+    const duplicateError = `MCP 服务名已存在: ${SERVER_NAME}`;
+    await expect
+      .poll(async () =>
+        (await readCapturedToasts(page))
+          .filter((toast) => toast.type === "error")
+          .map((toast) => toast.message),
+      )
+      .toEqual([expect.stringContaining(duplicateError)]);
+    await expect(duplicateDialog).toBeVisible();
+    expect(
+      (await page.evaluate(() => window.api.mcp.getLibrary())).servers,
+    ).toHaveLength(1);
+    await duplicateDialog.getByRole("button", { name: "Close" }).click();
 
     await page.getByTestId(`mcp-server-card-${serverId}`).click();
+    fs.appendFileSync(
+      codexConfigPath,
+      [
+        "",
+        `[mcp_servers.${SERVER_NAME}]`,
+        'command = "external-before-apply"',
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    await page.getByRole("button", { name: "Codex", exact: true }).click();
+    const overwriteConfirmation = new Promise<string>((resolve) => {
+      page.once("dialog", async (dialog) => {
+        resolve(dialog.message());
+        await dialog.accept();
+      });
+    });
+    await page.getByRole("button", { name: /Apply to 1 platform/ }).click();
+    expect(await overwriteConfirmation).toContain(SERVER_NAME);
+    await expect(
+      page.getByText("MCP applied", { exact: true }).last(),
+    ).toBeVisible();
+
+    let codexConfig = fs.readFileSync(codexConfigPath, "utf8");
+    expect(codexConfig).toContain('model = "gpt-5"');
+    expect(codexConfig).toContain("[mcp_servers.unrelated]");
+    expect(codexConfig).toContain('command = "keep-me"');
+    expect(codexConfig).toContain(`[mcp_servers.${SERVER_NAME}]`);
+    expect(codexConfig).toContain('args = ["server.js", "--alpha"]');
+    expect(codexConfig).toContain(`AUTH_TOKEN = "\${${SECRET_REFERENCE}}"`);
+
+    const bindingPath = path.join(
+      userDataDir,
+      "config",
+      "devices",
+      "mcp-bindings.json",
+    );
+    expect(fs.existsSync(bindingPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(bindingPath, "utf8")).bindings).toEqual([
+      expect.objectContaining({
+        path: codexConfigPath,
+        serverIds: [serverId],
+        target: "codex",
+      }),
+    ]);
+
     await page.getByRole("button", { name: "Edit MCP" }).click();
     const editor = page.getByTestId("mcp-server-form");
     await expect(editor.getByLabel("Name", { exact: true })).toHaveValue(
@@ -122,6 +270,69 @@ test("creates, reads, updates, restarts, and deletes a non-secret MCP server", a
       args: ["server.js", "--beta"],
     });
 
+    codexConfig = fs.readFileSync(codexConfigPath, "utf8");
+    expect(codexConfig).toContain('args = ["server.js", "--alpha"]');
+    expect(codexConfig).not.toContain('args = ["server.js", "--beta"]');
+
+    await page.getByRole("button", { name: "Check sync" }).click();
+    await expect(page.getByText("Needs sync", { exact: true })).toBeVisible();
+    await page
+      .getByRole("button", { name: "Sync distributed targets" })
+      .click();
+    await expect(
+      page.getByText("1 target(s) synced", { exact: true }).last(),
+    ).toBeVisible();
+    codexConfig = fs.readFileSync(codexConfigPath, "utf8");
+    expect(codexConfig).toContain('args = ["server.js", "--beta"]');
+    expect(codexConfig).toContain("[mcp_servers.unrelated]");
+
+    fs.writeFileSync(
+      codexConfigPath,
+      codexConfig.replace('command = "node"', 'command = "external-node"'),
+      "utf8",
+    );
+    await page.getByRole("button", { name: "Check sync" }).click();
+    await expect(
+      page.getByText("External edit", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("1 target(s) need review", { exact: true }).last(),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Sync distributed targets" })
+      .click();
+    await expect(
+      page
+        .getByText("0 target(s) synced, 1 need review", { exact: true })
+        .last(),
+    ).toBeVisible();
+    expect(fs.readFileSync(codexConfigPath, "utf8")).toContain(
+      'command = "external-node"',
+    );
+
+    const firstRunToasts = await readCapturedToasts(page);
+    expect(firstRunToasts).toEqual(
+      expect.arrayContaining([
+        { message: "MCP saved", type: "success" },
+        { message: "MCP applied", type: "success" },
+        expect.objectContaining({
+          message: expect.stringContaining(duplicateError),
+          type: "error",
+        }),
+        { message: "1 target(s) need review", type: "warning" },
+        {
+          message: "0 target(s) synced, 1 need review",
+          type: "warning",
+        },
+      ]),
+    );
+    expect(firstRunToasts.filter((toast) => toast.type === "error")).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining(duplicateError),
+        type: "error",
+      }),
+    ]);
+
     await closePromptHub(activeApp, userDataDir, {
       preserveUserDataDir: true,
     });
@@ -131,6 +342,7 @@ test("creates, reads, updates, restarts, and deletes a non-secret MCP server", a
     activeApp = launched.app;
     page = launched.page;
     await page.setViewportSize({ width: 1440, height: 900 });
+    await installToastRecorder(page);
     await openMcpLibrary(activeApp, page);
 
     library = await page.evaluate(() => window.api.mcp.getLibrary());
@@ -141,6 +353,26 @@ test("creates, reads, updates, restarts, and deletes a non-secret MCP server", a
       args: ["server.js", "--beta"],
     });
     await page.getByTestId(`mcp-server-card-${serverId}`).click();
+    await expect(
+      page.getByText("1 target(s) distributed", { exact: true }).first(),
+    ).toBeVisible();
+    expect(fs.readFileSync(codexConfigPath, "utf8")).toContain(
+      'command = "external-node"',
+    );
+
+    await page.getByTitle("Remove from platform").click();
+    await expect(
+      page.getByText("MCP removed", { exact: true }).last(),
+    ).toBeVisible();
+    codexConfig = fs.readFileSync(codexConfigPath, "utf8");
+    expect(codexConfig).toContain('model = "gpt-5"');
+    expect(codexConfig).toContain("[mcp_servers.unrelated]");
+    expect(codexConfig).toContain('command = "keep-me"');
+    expect(codexConfig).not.toContain(`[mcp_servers.${SERVER_NAME}]`);
+    expect(JSON.parse(fs.readFileSync(bindingPath, "utf8")).bindings).toEqual(
+      [],
+    );
+
     await page.getByRole("button", { name: "Delete" }).click();
     const deleteDialog = page.getByRole("alertdialog", { name: "Delete MCP" });
     await expect(deleteDialog).toBeVisible();
@@ -155,6 +387,16 @@ test("creates, reads, updates, restarts, and deletes a non-secret MCP server", a
       })
       .toBe(0);
     expect(fs.existsSync(bundlePath)).toBe(false);
+    const secondRunToasts = await readCapturedToasts(page);
+    expect(secondRunToasts).toEqual(
+      expect.arrayContaining([
+        { message: "MCP removed", type: "success" },
+        { message: "MCP deleted", type: "success" },
+      ]),
+    );
+    expect(secondRunToasts.filter((toast) => toast.type === "error")).toEqual(
+      [],
+    );
 
     await closePromptHub(activeApp, userDataDir, {
       preserveUserDataDir: true,
@@ -170,6 +412,9 @@ test("creates, reads, updates, restarts, and deletes a non-secret MCP server", a
       })
       .toBe(0);
     expect(fs.existsSync(bundlePath)).toBe(false);
+    codexConfig = fs.readFileSync(codexConfigPath, "utf8");
+    expect(codexConfig).toContain("[mcp_servers.unrelated]");
+    expect(codexConfig).not.toContain(`[mcp_servers.${SERVER_NAME}]`);
   } finally {
     if (activeApp) await closePromptHub(activeApp, userDataDir);
     else if (fs.existsSync(userDataDir))
