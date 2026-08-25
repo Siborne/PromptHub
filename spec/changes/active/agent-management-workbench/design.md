@@ -25,6 +25,17 @@ existing Skill / MCP / Rules / Plugin services
   -> no duplicate Agent-owned asset store
 ```
 
+## `DES-AGENT-154`: Separate Plugin Materialization From Canonical Resources
+
+Keep `data/plugins/<resource-id>` strict: every visible child is a complete
+canonical resource bundle. In canonical mode, local, Git, update, and snapshot
+package materialization uses bounded cache workspace instead of that namespace.
+`PluginLibraryStorage.write` publishes from the workspace, rereads the canonical
+result, removes the consumed workspace, and returns canonical paths to callers.
+Legacy metadata mode retains its existing managed-package layout. Package copy
+and canonical publication remain linear in file count and bytes, with one
+temporary copy and one canonical copy during the transaction.
+
 ## `DES-AGENT-153`: Demand-Driven MCP Encryption
 
 Keep the canonical MCP transaction and device-bound secret store. Its staged

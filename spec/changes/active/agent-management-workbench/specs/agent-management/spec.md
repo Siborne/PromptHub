@@ -2,6 +2,22 @@
 
 ## Added Requirements
 
+### `FR-AGENT-135`: Plugin Materialization Must Not Enter The Canonical Bundle Namespace
+
+Installing, updating, or restoring a Plugin while canonical files are
+authoritative MUST materialize incoming package bytes outside
+`data/plugins/<resource-id>`. Publication MUST return the canonical bundle view,
+remove its temporary materialization, and leave malformed or unrelated
+directories unable to masquerade as canonical resources.
+
+#### Scenario: Import a local Plugin under canonical authority
+
+- Given a valid local Plugin package has not yet been published
+- When the user imports it into My Plugins
+- Then the package is validated and published as one canonical Plugin bundle
+- And the temporary package copy is removed
+- And restart, distribution, removal, and delete use the canonical copy
+
 ### `FR-AGENT-134`: Non-Secret MCP Writes Do Not Require Encryption
 
 Creating, updating, deleting, and restarting an MCP server whose direct secret

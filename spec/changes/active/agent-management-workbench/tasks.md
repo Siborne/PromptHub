@@ -12,6 +12,7 @@
 - [x] `T-AGENT-008` 确认外部会话正文保持平台所有、本地、按需读取且不进入同步；PromptHub 不编辑 transcript。删除优先调用平台原生命令，raw-file adapter 仅在另行通过回收站/回滚测试后提供删除。
 - [x] `T-AGENT-009` 确认本地代理、协议转换、故障转移、请求拦截和 OAuth 账户池属于高风险独立范围，当前变更不实现。
 - [x] `T-AGENT-010` 完成实现前 Analyze：阶段状态与范围决策已统一；全部 FR/NFR、DES、TEST、T 定义唯一且进入追踪表；无阻塞性待确认。
+- [x] `T-AGENT-225` 按 `FR-AGENT-135` / `DES-AGENT-154` 隔离 canonical Plugin bundle namespace 与 package materialization，返回 canonical paths，并覆盖本地导入、distribution、restart 与 delete。
 - [x] `T-AGENT-224` 按 `FR-AGENT-134` / `DES-AGENT-153` 将 canonical MCP secret-store 加密门禁收窄到非空 extracted secrets，并覆盖 unavailable encryption、完整 CRUD、canonical bundle、restart 与 delete。
 - [x] `T-AGENT-223` 按 `FR-AGENT-133` / `DES-AGENT-152` 在共享 usage service 入口阻止未检测 Agent 的凭据、进程、helper 与网络探测，并用真实 Electron 启动验证不会创建或显示缺失的 Antigravity/Gemini root。
 - [x] `T-AGENT-222` 按 `FR-AGENT-132` / `DES-AGENT-151` 移除 Provider display-name 唯一索引，增加版本化 legacy migration，并覆盖 fresh schema、旧库迁移、exact/case-only duplicate、rename、restart 与 canonical SQLite rebuild。
@@ -22,6 +23,7 @@ UI screen structure, interaction states, responsive behavior and component bound
 
 ## Test-First Verification Contracts
 
+- [x] `TEST-AGENT-216` Plugin canonical materialization：先复现本地导入把 `data/plugins/<normalized-id>` 误判成缺 manifest canonical bundle；单元测试断言只发布 raw stable ID bundle 且返回 canonical files；真实 Electron 覆盖 UI import Toast、package inventory、Codex copy distribution/removal、restart、UI delete 与最终 restart 无残留。
 - [x] `TEST-AGENT-215` MCP 非秘密生命周期：单元测试先复现空 secret 更新在 unavailable encryption 下错误失败，并保持非空 secret 失败分支；真实 Electron 完成 create/read/update、canonical resource/version、restart、delete 与再次 restart 后无残留。
 - [x] `TEST-AGENT-214` 未检测 Agent usage 副作用：单元测试断言缺失 root 时不调用 Antigravity local helper、keychain resolver 或网络；真实 Electron 启动等待 tray quota scan 后断言 Antigravity/Gemini 均不可见且 `.gemini` 不存在。
 - [x] `TEST-AGENT-213` Provider display label identity：DB 黑盒允许同平台 exact/case-only duplicate 与重名 rename；迁移测试从旧 unique index 原位升级并保留稳定 ID；canonical shadow rebuild 保留同名图；真实 Electron 创建同名 Provider 后重启仍按 ID 分离且不改原生配置。

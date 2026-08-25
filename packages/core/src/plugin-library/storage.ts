@@ -42,6 +42,7 @@ import {
 import { buildPreviewCacheEntry } from "./marketplace";
 import {
   readPluginPackageSnapshot,
+  removePluginMaterialization,
   remapRestoredPluginPackage,
   writePluginPackageSnapshot,
 } from "./package-materialization";
@@ -121,6 +122,16 @@ export class PluginLibraryStorage {
         library: next,
         versions: this.readVersions(),
       });
+      const restored = normalizeLibrary(readCanonicalPluginLibrary());
+      const restoredPaths = new Map(
+        restored.plugins.map((plugin) => [plugin.id, plugin.managedPath]),
+      );
+      for (const plugin of next.plugins) {
+        if (restoredPaths.get(plugin.id) !== plugin.managedPath) {
+          removePluginMaterialization(plugin.managedPath);
+        }
+      }
+      return restored;
     } else {
       writeJsonFileAtomic(getPluginLibraryFilePath(), next);
     }

@@ -6,6 +6,23 @@
 - Status: in-progress
 - Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
 
+## Plugin canonical materialization correction (2026-08-25)
+
+- `FR-AGENT-135 -> DES-AGENT-154 -> TEST-AGENT-216 -> T-AGENT-225`.
+- Canonical-mode Plugin imports, source updates, Git packages, and snapshot
+  restores now materialize outside `data/plugins`. Storage publishes the package
+  into its stable-ID canonical bundle, returns the reread canonical paths, and
+  removes the consumed materialization. Legacy metadata mode keeps its existing
+  layout.
+- Verification status is recorded in
+  `ISS-20260825-005-plugin-canonical-materialization-collision.md`.
+- Verification passed: 14 canonical Plugin tests, 51 related Plugin tests,
+  core and desktop typechecks, Prettier, traceability, production build, and one
+  real Electron import, distribution, removal, restart, delete, and
+  final-restart lifecycle. The same run exposed a separate local-source
+  projection gap recorded as
+  `ISS-20260825-006-plugin-local-source-projection-missing.md`.
+
 ## Non-secret MCP encryption-gate correction (2026-08-25)
 
 - `FR-AGENT-134 -> DES-AGENT-153 -> TEST-AGENT-215 -> T-AGENT-224`.

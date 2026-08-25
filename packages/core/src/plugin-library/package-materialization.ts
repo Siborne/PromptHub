@@ -14,6 +14,7 @@ import type {
   PluginSourceUpdateCheck,
 } from "@prompthub/shared/types/plugin";
 
+import { getCacheDir, getRuntimeStorageContext } from "../runtime-paths";
 import {
   CODEX_PLUGIN_MANIFEST_FILE,
   CorePluginError,
@@ -39,12 +40,29 @@ import {
 } from "./package-validation";
 import { normalizePluginSafetyReport } from "./normalization";
 
+function getPluginMaterializationDir(): string {
+  return getRuntimeStorageContext().localAuthority === "canonical-files"
+    ? path.join(getCacheDir(), "plugin-materializations")
+    : getManagedPluginsDir();
+}
+
+export function removePluginMaterialization(managedPath?: string): void {
+  if (!managedPath) return;
+  const root = path.resolve(getPluginMaterializationDir());
+  const candidate = path.resolve(managedPath);
+  const relative = path.relative(root, candidate);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return;
+  }
+  fs.rmSync(candidate, { recursive: true, force: true });
+}
+
 export function copyPluginPackageToManagedPath(
   sourcePath: string,
   pluginId: string,
 ): MaterializedPluginPackage {
   const managedPath = path.join(
-    getManagedPluginsDir(),
+    getPluginMaterializationDir(),
     normalizeSlug(pluginId) || "plugin",
   );
   const tempPath = `${managedPath}.tmp-${process.pid}-${Date.now()}`;
@@ -369,7 +387,10 @@ export function buildUpdatedPluginFromPreview(
 }
 
 function getRestoredPluginManagedPath(pluginId: string): string {
-  return path.join(getManagedPluginsDir(), normalizeSlug(pluginId) || "plugin");
+  return path.join(
+    getPluginMaterializationDir(),
+    normalizeSlug(pluginId) || "plugin",
+  );
 }
 
 export function writePluginPackageSnapshot(snapshot: PluginPackageSnapshot): {
@@ -705,7 +726,7 @@ export async function materializeGitPackage(
 ): Promise<MaterializedPluginPackage> {
   const source = getMarketGitPackageSource(entry);
   const pluginRoot = path.join(
-    getManagedPluginsDir(),
+    getPluginMaterializationDir(),
     normalizeSlug(pluginId) || "plugin",
   );
   const tempRoot = `${pluginRoot}.tmp-${process.pid}-${Date.now()}`;

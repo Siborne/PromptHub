@@ -127,6 +127,49 @@ describe("canonical Plugin library", () => {
     expect(fs.existsSync(bundlePath)).toBe(false);
   });
 
+  it("imports a local package without exposing materialization as a canonical bundle", () => {
+    fs.mkdirSync(path.join(packagePath, "commands"), { recursive: true });
+    fs.mkdirSync(path.join(packagePath, "workflows"), { recursive: true });
+    fs.writeFileSync(
+      path.join(packagePath, ".codex-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "writing-tools",
+        commands: ["./commands/review.md"],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(packagePath, "commands", "review.md"),
+      "review\n",
+    );
+    fs.writeFileSync(
+      path.join(packagePath, "workflows", "release.md"),
+      "release\n",
+    );
+
+    const result = new CorePluginLibraryService().importLocalPluginPackage({
+      sourcePath: packagePath,
+      sourceTargetId: "codex",
+      sourceTargetName: "Codex",
+    });
+    const bundlePath = path.join(
+      root,
+      "data",
+      "plugins",
+      "agent-codex:writing-tools",
+    );
+
+    expect(result.plugin.localPackagePath).toBe(path.join(bundlePath, "files"));
+    expect(
+      fs.readFileSync(
+        path.join(bundlePath, "files", "commands", "review.md"),
+        "utf8",
+      ),
+    ).toBe("review\n");
+    expect(fs.readdirSync(path.join(root, "data", "plugins")).sort()).toEqual([
+      "agent-codex:writing-tools",
+    ]);
+  });
+
   it("rolls back bundle and device projection publication together", () => {
     writeCanonicalPluginState({
       library: library([plugin(packagePath)]),

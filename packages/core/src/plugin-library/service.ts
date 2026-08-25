@@ -263,14 +263,17 @@ function persistInstalledPlugin(
     plugins: [...library.plugins, plugin],
   };
   try {
-    persist(nextLibrary);
+    const persistedLibrary = persist(nextLibrary);
+    const persistedPlugin =
+      persistedLibrary.plugins.find((entry) => entry.id === plugin.id) ??
+      plugin;
+    return { plugin: persistedPlugin, library: persistedLibrary, warnings };
   } catch (error) {
     if (plugin.managedPath) {
       fs.rmSync(plugin.managedPath, { recursive: true, force: true });
     }
     throw error;
   }
-  return { plugin, library: nextLibrary, warnings };
 }
 
 function assertPluginIsNew(
@@ -328,7 +331,17 @@ function persistSourceUpdate(
     ),
   };
   try {
-    persist(nextLibrary);
+    const persistedLibrary = persist(nextLibrary);
+    const persistedPlugin =
+      persistedLibrary.plugins.find((entry) => entry.id === plugin.id) ??
+      plugin;
+    return {
+      status: "updated",
+      plugin: persistedPlugin,
+      library: persistedLibrary,
+      check,
+      warnings: check.preview?.warnings ?? [],
+    };
   } catch (error) {
     if (
       materialized?.managedPath &&
@@ -338,13 +351,6 @@ function persistSourceUpdate(
     }
     throw error;
   }
-  return {
-    status: "updated",
-    plugin,
-    library: nextLibrary,
-    check,
-    warnings: check.preview?.warnings ?? [],
-  };
 }
 
 function buildPackageSourceEntry(
