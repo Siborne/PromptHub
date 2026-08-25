@@ -20,6 +20,7 @@ import {
   parsePluginDeviceProjectionDocument,
   readPluginResourceBundle,
   type PluginPackagePayloadSource,
+  type PluginDeviceProjectionDocument,
   type ReadPluginResourceResult,
 } from "./plugin-resource-schema";
 import {
@@ -137,9 +138,9 @@ function listBundles(): LoadedPlugin[] {
 
 function readProjection(
   plugins: readonly LoadedPlugin[],
-): Record<string, string[]> {
+): Pick<PluginDeviceProjectionDocument, "sources" | "targets"> {
   const filePath = projectionPath();
-  if (!fs.existsSync(filePath)) return {};
+  if (!fs.existsSync(filePath)) return { sources: {}, targets: {} };
   const stats = fs.lstatSync(filePath);
   if (!stats.isFile() || stats.isSymbolicLink())
     throw new Error("Canonical Plugin projection path is unsafe");
@@ -152,7 +153,7 @@ function readProjection(
       ),
     },
   );
-  return document.targets;
+  return document;
 }
 
 export function readCanonicalPluginLibrary(): PluginLibraryFile {
@@ -162,7 +163,14 @@ export function readCanonicalPluginLibrary(): PluginLibraryFile {
   const plugins = loaded
     .map(({ resource }) => ({
       ...resource.plugin,
-      distributedTargetIds: projections[resource.plugin.id] ?? [],
+      source: {
+        ...resource.plugin.source,
+        ...(resource.plugin.source.kind === "local" &&
+        projections.sources[resource.plugin.id]
+          ? { url: projections.sources[resource.plugin.id] }
+          : {}),
+      },
+      distributedTargetIds: projections.targets[resource.plugin.id] ?? [],
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
   return {
@@ -332,27 +340,42 @@ export function writeCanonicalPluginState(input: {
       const expectedPlugins = [...plugins.values()].sort((left, right) =>
         left.id.localeCompare(right.id),
       );
-      if (
+      const pluginMetadataMatches =
         stableJson(
           restoredLibrary.plugins.map((plugin) =>
             createPortablePluginResourceEntry(plugin),
           ),
-        ) !==
-          stableJson(
-            expectedPlugins.map((plugin) =>
-              createPortablePluginResourceEntry(plugin),
+        ) ===
+        stableJson(
+          expectedPlugins.map((plugin) =>
+            createPortablePluginResourceEntry(plugin),
+          ),
+        );
+      const versionsMatch =
+        stableJson(restoredVersions.versions) ===
+        stableJson(
+          portableVersions(
+            input.versions.versions.filter((version) =>
+              plugins.has(version.pluginId),
             ),
-          ) ||
-        stableJson(restoredVersions.versions) !==
-          stableJson(
-            portableVersions(
-              input.versions.versions.filter((version) =>
-                plugins.has(version.pluginId),
-              ),
-            ),
-          )
-      ) {
-        throw new Error("Canonical Plugin publication verification failed");
+          ),
+        );
+      const projectionMatches =
+        stableJson(
+          createPluginDeviceProjectionDocument({
+            deviceId: localProjectionDeviceId(),
+            plugins: restoredLibrary.plugins,
+          }),
+        ) === stableJson(projection);
+      if (!pluginMetadataMatches || !versionsMatch || !projectionMatches) {
+        const mismatches = [
+          !pluginMetadataMatches && "metadata",
+          !versionsMatch && "versions",
+          !projectionMatches && "device projection",
+        ].filter(Boolean);
+        throw new Error(
+          `Canonical Plugin publication verification failed: ${mismatches.join(", ")}`,
+        );
       }
     },
   });

@@ -6,6 +6,22 @@
 - Status: in-progress
 - Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
 
+## Plugin local-source projection correction (2026-08-25)
+
+- `FR-AGENT-136 -> DES-AGENT-155 -> TEST-AGENT-217 -> T-AGENT-226`.
+- Completed. The canonical bundle remains the durable Plugin authority; only
+  the original bounded absolute local source locator is stored in the existing
+  device-owned projection. Legacy projections remain readable, and missing,
+  malformed, or symbolic-link source roots fail before publication.
+- Verification passed: 19 canonical tests with focused coverage, 51 related
+  Plugin tests, Core and Desktop typechecks, traceability, Prettier, production
+  build, and one real Electron lifecycle covering import, package durability,
+  distribution/removal, restart, source update, old-package snapshot, delete,
+  and final restart absence.
+- The real update exposed a separate snapshot-order defect; its root cause,
+  fix, and verification are recorded in `ISS-20260825-007` and committed
+  independently.
+
 ## Plugin canonical materialization correction (2026-08-25)
 
 - `FR-AGENT-135 -> DES-AGENT-154 -> TEST-AGENT-216 -> T-AGENT-225`.

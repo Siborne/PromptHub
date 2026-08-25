@@ -3,7 +3,7 @@
 ## Record
 
 - ID: `ISS-20260825-006`
-- Status: design_confirmation_required
+- Status: local_done (release pending)
 - Severity: high Plugin update blocker
 - Owning change: `spec/changes/active/agent-management-workbench/`
 - First local triage: 2026-08-25
@@ -24,21 +24,32 @@ package paths and accepts only HTTP(S) values for `source.url`. The canonical
 reread therefore returns a local source with no device-local location, while
 `buildPreviewForLocalSource` requires that location for every update check.
 
-## Design Decision Required
+## Resolution
 
-The portable canonical resource must not expose device-local absolute paths.
-Supporting local source updates therefore requires a device-owned projection
-for Plugin source locations, with containment, stale-path, backup, migration,
-and deletion behavior defined. Persisting the absolute path in the portable
-Plugin resource would weaken the current privacy and portability boundary and
-is not recommended.
+The package remains durably owned by its canonical bundle under
+`data/plugins/<plugin-id>`. The existing device projection now stores the
+bounded absolute source locator by Plugin ID. Canonical reread overlays that
+locator only for local Plugins; portable resources and version snapshots still
+strip it. Legacy projection files without source locators remain readable, and
+deletion removes the locator through the existing atomic publication.
 
-## Verification Needed After Decision
+Source roots are revalidated before comparison. Missing roots return
+`MISSING_SOURCE`; symbolic-link roots and malformed projection paths fail
+closed without changing the canonical bundle or versions.
 
-- Local source identity survives canonical reread and application restart on
-  the same device without entering the portable resource bundle.
-- A second local revision reports `remote-changed`, creates a recoverable
-  snapshot, publishes updated package bytes, and removes temporary materialized
-  files.
-- Missing, moved, malformed, and symlinked source locations fail closed without
-  changing the canonical Plugin or its versions.
+Traceability: `FR-AGENT-136 -> DES-AGENT-155 -> TEST-AGENT-217 ->
+T-AGENT-226`.
+
+## Verification
+
+- 19 canonical resource/library tests passed, including legacy projection,
+  Unicode and special paths, malformed/relative/oversized paths, unknown IDs,
+  canonical reread, update, snapshot, missing source, and symbolic-link source.
+- 51 related Plugin validation, distribution, import, version, and source
+  reconciliation tests passed.
+- Core and Desktop typechecks, traceability, Prettier, and the desktop
+  production build passed.
+- The real Electron lifecycle passed import, durable canonical package checks,
+  copy distribution/removal, restart, source update, previous-package snapshot,
+  UI delete, and final restart absence while preserving an unrelated target
+  file.

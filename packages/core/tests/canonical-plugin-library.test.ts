@@ -127,13 +127,17 @@ describe("canonical Plugin library", () => {
     expect(fs.existsSync(bundlePath)).toBe(false);
   });
 
-  it("imports a local package without exposing materialization as a canonical bundle", () => {
+  it("persists a local source outside the canonical bundle and updates after reread", async () => {
     fs.mkdirSync(path.join(packagePath, "commands"), { recursive: true });
+    fs.mkdirSync(path.join(packagePath, "skills", "reviewer"), {
+      recursive: true,
+    });
     fs.mkdirSync(path.join(packagePath, "workflows"), { recursive: true });
     fs.writeFileSync(
       path.join(packagePath, ".codex-plugin", "plugin.json"),
       JSON.stringify({
         name: "writing-tools",
+        version: "1.0.0",
         commands: ["./commands/review.md"],
       }),
     );
@@ -142,11 +146,21 @@ describe("canonical Plugin library", () => {
       "review\n",
     );
     fs.writeFileSync(
+      path.join(packagePath, "skills", "reviewer", "SKILL.md"),
+      "---\nname: reviewer\n---\n\nReview carefully.\n",
+    );
+    fs.writeFileSync(
       path.join(packagePath, "workflows", "release.md"),
       "release\n",
     );
+    fs.writeFileSync(path.join(packagePath, ".mcp.json"), "{}\n");
+    fs.writeFileSync(path.join(packagePath, "README.md"), "unrelated\n");
 
-    const result = new CorePluginLibraryService().importLocalPluginPackage({
+    const targetPath = path.join(root, "target", "writing-tools");
+    const service = new CorePluginLibraryService({
+      resolvePluginTargetPath: () => targetPath,
+    });
+    const result = service.importLocalPluginPackage({
       sourcePath: packagePath,
       sourceTargetId: "codex",
       sourceTargetName: "Codex",
@@ -159,6 +173,7 @@ describe("canonical Plugin library", () => {
     );
 
     expect(result.plugin.localPackagePath).toBe(path.join(bundlePath, "files"));
+    expect(result.plugin.source.url).toBe(packagePath);
     expect(
       fs.readFileSync(
         path.join(bundlePath, "files", "commands", "review.md"),
@@ -168,6 +183,83 @@ describe("canonical Plugin library", () => {
     expect(fs.readdirSync(path.join(root, "data", "plugins")).sort()).toEqual([
       "agent-codex:writing-tools",
     ]);
+    expect(
+      fs.readFileSync(path.join(bundlePath, "plugin.json"), "utf8"),
+    ).not.toContain(packagePath);
+    expect(
+      JSON.parse(
+        fs.readFileSync(
+          path.join(root, "config", "devices", "plugin-projections.json"),
+          "utf8",
+        ),
+      ).sources,
+    ).toEqual({ "agent-codex:writing-tools": packagePath });
+    service.distributePlugin({
+      pluginId: result.plugin.id,
+      targetIds: ["codex"],
+      mode: "copy",
+    });
+    service.removePluginDistribution({
+      pluginId: result.plugin.id,
+      targetIds: ["codex"],
+    });
+
+    fs.writeFileSync(
+      path.join(packagePath, "commands", "review.md"),
+      "review v2\n",
+    );
+    fs.writeFileSync(
+      path.join(packagePath, ".codex-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "writing-tools",
+        version: "2.0.0",
+        commands: ["./commands/review.md"],
+      }),
+    );
+    const restarted = new CorePluginLibraryService();
+    await expect(
+      restarted.getPluginSourceUpdateStatus(result.plugin.id),
+    ).resolves.toMatchObject({
+      status: "update-available",
+      localModified: false,
+      remoteChanged: true,
+    });
+    await expect(
+      restarted.updatePluginFromSource(result.plugin.id),
+    ).resolves.toMatchObject({ status: "updated" });
+    expect(
+      fs.readFileSync(
+        path.join(bundlePath, "files", "commands", "review.md"),
+        "utf8",
+      ),
+    ).toBe("review v2\n");
+    expect(
+      readCanonicalPluginVersions().versions[0].packageSnapshot?.files.find(
+        (file) => file.relativePath === "commands/review.md",
+      )?.contentBase64,
+    ).toBe(Buffer.from("review\n").toString("base64"));
+
+    const sourceTarget = `${packagePath}-target`;
+    fs.renameSync(packagePath, sourceTarget);
+    fs.symlinkSync(sourceTarget, packagePath, "dir");
+    const revision =
+      readPluginResourceBundle(bundlePath).bundleManifest.revision;
+    await expect(
+      restarted.getPluginSourceUpdateStatus(result.plugin.id),
+    ).rejects.toMatchObject({ code: "INVALID_PATH" });
+    expect(readPluginResourceBundle(bundlePath).bundleManifest.revision).toBe(
+      revision,
+    );
+    expect(readCanonicalPluginVersions().versions).toHaveLength(1);
+
+    fs.rmSync(packagePath);
+    fs.rmSync(sourceTarget, { recursive: true });
+    await expect(
+      restarted.getPluginSourceUpdateStatus(result.plugin.id),
+    ).rejects.toMatchObject({ code: "MISSING_SOURCE" });
+    expect(readPluginResourceBundle(bundlePath).bundleManifest.revision).toBe(
+      revision,
+    );
   });
 
   it("rolls back bundle and device projection publication together", () => {

@@ -25,6 +25,22 @@ existing Skill / MCP / Rules / Plugin services
   -> no duplicate Agent-owned asset store
 ```
 
+## `DES-AGENT-155`: Canonical Plugin With Device-Local Source Projection
+
+Keep the existing `data/plugins/<plugin-id>` canonical bundle as the durable
+Plugin authority. Extend the existing device projection under
+`config/devices/plugin-projections.json` with a bounded Plugin-ID-to-absolute-
+source-path map. Canonical resources and version snapshots continue stripping
+local paths; reread overlays a local source path only for a local Plugin on the
+same device. Legacy projection files without the map remain readable.
+
+Projection creation and parsing validate known Plugin IDs, absolute bounded
+paths, duplicate targets, and document size. The projection participates in the
+existing atomic canonical publication and deletion transaction. Source package
+validation rejects symbolic-link roots before update comparison. Reads and
+writes remain `O(P)` for at most 10,000 Plugins, with no watcher, network call,
+database schema, or extra package copy.
+
 ## `DES-AGENT-154`: Separate Plugin Materialization From Canonical Resources
 
 Keep `data/plugins/<resource-id>` strict: every visible child is a complete

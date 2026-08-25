@@ -9,7 +9,9 @@ import type {
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  createPluginDeviceProjectionDocument,
   materializePluginResourceBundle,
+  parsePluginDeviceProjectionDocument,
   readPluginResourceBundle,
 } from "../src/plugin-resource-schema";
 
@@ -49,6 +51,7 @@ function plugin(base: string): PluginLibraryEntry {
       packagePath: "packages/writing-tools",
       localRepositoryPath: path.join(base, "source"),
       localPackagePath: path.join(base, "source", "packages", "writing-tools"),
+      url: path.join(base, "source"),
     },
     isFavorite: true,
     tags: ["writing"],
@@ -149,6 +152,7 @@ describe("Plugin canonical resource schema", () => {
     expect(restored.plugin).not.toHaveProperty("distributedTargetIds");
     expect(restored.plugin).not.toHaveProperty("localRepositoryPath");
     expect(restored.plugin.source).not.toHaveProperty("localRepositoryPath");
+    expect(restored.plugin.source).not.toHaveProperty("url");
     expect(restored.versionPackageFiles.get(1)?.[0]).toMatchObject({
       relativePath: ".codex-plugin/plugin.json",
       size: Buffer.byteLength('{"name":"writing-tools"}\n'),
@@ -160,6 +164,109 @@ describe("Plugin canonical resource schema", () => {
     expect(restored.packageFiles.map((file) => file.path)).toEqual([
       ".codex-plugin/plugin.json",
     ]);
+  });
+
+  it("round-trips bounded local source paths only in device projections", () => {
+    const base = root();
+    const entry = plugin(base);
+    entry.source.url = path.join(base, "来源 path#1");
+    const document = createPluginDeviceProjectionDocument({
+      deviceId: "device-1",
+      plugins: [entry],
+    });
+
+    expect(document.sources).toEqual({
+      "plugin-1": path.join(base, "来源 path#1"),
+    });
+    expect(
+      parsePluginDeviceProjectionDocument(JSON.stringify(document), {
+        expectedDeviceId: "device-1",
+        knownPluginIds: new Set(["plugin-1"]),
+      }).sources,
+    ).toEqual(document.sources);
+
+    const legacy = { ...document } as Record<string, unknown>;
+    delete legacy.sources;
+    expect(
+      parsePluginDeviceProjectionDocument(JSON.stringify(legacy), {
+        expectedDeviceId: "device-1",
+        knownPluginIds: new Set(["plugin-1"]),
+      }).sources,
+    ).toEqual({});
+
+    expect(() =>
+      createPluginDeviceProjectionDocument({
+        deviceId: "device-1",
+        plugins: [
+          {
+            ...entry,
+            source: { ...entry.source, url: "../relative-source" },
+          },
+        ],
+      }),
+    ).toThrow(/source path/u);
+
+    for (const invalidPath of [
+      "",
+      `${base}/source/../other`,
+      `${path.join(base, "source")}\n`,
+      `/${"x".repeat(16 * 1024)}`,
+    ]) {
+      expect(() =>
+        createPluginDeviceProjectionDocument({
+          deviceId: "device-1",
+          plugins: [
+            {
+              ...entry,
+              source: { ...entry.source, url: invalidPath },
+            },
+          ],
+        }),
+      ).toThrow(/source path/u);
+    }
+
+    const withoutSource = {
+      ...entry,
+      source: { kind: "http", url: "https://example.test/plugin" },
+    } as PluginLibraryEntry;
+    expect(
+      createPluginDeviceProjectionDocument({
+        deviceId: "device-1",
+        plugins: [withoutSource],
+      }).sources,
+    ).toEqual({});
+
+    expect(() =>
+      parsePluginDeviceProjectionDocument(
+        JSON.stringify({ ...document, sources: [] }),
+        {
+          expectedDeviceId: "device-1",
+          knownPluginIds: new Set(["plugin-1"]),
+        },
+      ),
+    ).toThrow(/header/u);
+    expect(() =>
+      parsePluginDeviceProjectionDocument(
+        JSON.stringify({ ...document, sources: { "plugin-1": 42 } }),
+        {
+          expectedDeviceId: "device-1",
+          knownPluginIds: new Set(["plugin-1"]),
+        },
+      ),
+    ).toThrow(/source path/u);
+    expect(() =>
+      parsePluginDeviceProjectionDocument(
+        JSON.stringify({
+          ...document,
+          targets: {},
+          sources: { unknown: path.join(base, "source") },
+        }),
+        {
+          expectedDeviceId: "device-1",
+          knownPluginIds: new Set(["plugin-1"]),
+        },
+      ),
+    ).toThrow(/unknown Plugin/u);
   });
 
   it("rejects foreign versions and unsafe package paths", () => {

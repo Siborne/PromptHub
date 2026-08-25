@@ -192,6 +192,37 @@ test("imports, distributes, restarts, and deletes a local Plugin", async () => {
       version: "1.0.0",
       distributedTargetIds: [],
     });
+    writePluginSource(sourcePath, "2.0.0", "review v2\n");
+    const updateCheck = await page.evaluate(
+      (pluginId) => window.api.plugin.getPluginSourceUpdateStatus(pluginId),
+      PLUGIN_ID,
+    );
+    expect(updateCheck).toMatchObject({
+      status: "update-available",
+      localModified: false,
+      remoteChanged: true,
+    });
+    const update = await page.evaluate(
+      (pluginId) => window.api.plugin.updatePluginFromSource(pluginId),
+      PLUGIN_ID,
+    );
+    expect(update).toMatchObject({ status: "updated" });
+    expect(
+      fs.readFileSync(
+        path.join(bundlePath, "files", "commands", "review.md"),
+        "utf8",
+      ),
+    ).toBe("review v2\n");
+    const versions = await page.evaluate(
+      (pluginId) => window.api.plugin.versionGetAll(pluginId),
+      PLUGIN_ID,
+    );
+    expect(versions).toHaveLength(1);
+    expect(
+      versions[0].packageSnapshot?.files.find(
+        (file) => file.relativePath === "commands/review.md",
+      )?.contentBase64,
+    ).toBe(Buffer.from("review v1\n").toString("base64"));
     const card = page.getByRole("button", {
       name: /^writing-tools\. Deterministic Agent Plugin fixture/,
     });

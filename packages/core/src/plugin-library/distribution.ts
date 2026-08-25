@@ -78,7 +78,15 @@ export function assertReadableDirectory(
   if (!directoryPath.trim()) {
     throw new CorePluginError("MISSING_SOURCE", `${label} 路径为空`);
   }
-  const stat = fs.existsSync(directoryPath) ? fs.statSync(directoryPath) : null;
+  const stat = fs.existsSync(directoryPath)
+    ? fs.lstatSync(directoryPath)
+    : null;
+  if (stat?.isSymbolicLink()) {
+    throw new CorePluginError(
+      "INVALID_PATH",
+      `${label} 不能是软链接: ${directoryPath}`,
+    );
+  }
   if (!stat?.isDirectory()) {
     throw new CorePluginError(
       "MISSING_SOURCE",

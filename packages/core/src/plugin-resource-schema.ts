@@ -29,6 +29,7 @@ export const PLUGIN_DEVICE_PROJECTION_KIND =
   "prompthub-plugin-device-projections";
 
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
+const MAX_LOCAL_SOURCE_PATH_BYTES = 16 * 1024;
 const MAX_SNAPSHOT_FILES = 2_000;
 const MAX_SNAPSHOT_FILE_BYTES = 5 * 1024 * 1024;
 const TRUST_LEVELS = new Set(["official", "verified", "community", "custom"]);
@@ -97,6 +98,7 @@ export interface PluginDeviceProjectionDocument {
   deviceId: string;
   updatedAt: string;
   targets: Record<string, string[]>;
+  sources: Record<string, string>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -142,6 +144,21 @@ function assertTimestamp(
     typeof value !== "string" ||
     !Number.isFinite(Date.parse(value)) ||
     new Date(value).toISOString() !== value
+  ) {
+    throw new Error(`Plugin resource ${label} is invalid`);
+  }
+}
+
+function assertLocalSourcePath(
+  value: unknown,
+  label: string,
+): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    Buffer.byteLength(value, "utf8") > MAX_LOCAL_SOURCE_PATH_BYTES ||
+    !path.isAbsolute(value) ||
+    path.normalize(value) !== value ||
+    /\p{Cc}/u.test(value)
   ) {
     throw new Error(`Plugin resource ${label} is invalid`);
   }
@@ -720,6 +737,7 @@ export function createPluginDeviceProjectionDocument(input: {
   plugins: readonly PluginLibraryEntry[];
 }): PluginDeviceProjectionDocument {
   assertId(input.deviceId, "device id");
+  const sources: Record<string, string> = {};
   const targets: Record<string, string[]> = {};
   const seen = new Set<string>();
   let latest = 0;
@@ -735,6 +753,10 @@ export function createPluginDeviceProjectionDocument(input: {
     if (new Set(values).size !== values.length)
       throw new Error("Plugin device projection contains duplicate targets");
     if (values.length > 0) targets[plugin.id] = [...values].sort();
+    if (plugin.source?.kind === "local" && plugin.source.url !== undefined) {
+      assertLocalSourcePath(plugin.source.url, "projection source path");
+      sources[plugin.id] = plugin.source.url;
+    }
     latest = Math.max(latest, plugin.updatedAt);
   }
   return {
@@ -743,6 +765,7 @@ export function createPluginDeviceProjectionDocument(input: {
     deviceId: input.deviceId,
     updatedAt: new Date(latest).toISOString(),
     targets,
+    sources,
   };
 }
 
@@ -768,18 +791,30 @@ export function parsePluginDeviceProjectionDocument(
     value.kind !== PLUGIN_DEVICE_PROJECTION_KIND ||
     value.version !== 1 ||
     value.deviceId !== options.expectedDeviceId ||
-    !isRecord(value.targets)
+    !isRecord(value.targets) ||
+    (value.sources !== undefined && !isRecord(value.sources))
   ) {
     throw new Error("Plugin device projection header is invalid");
   }
   assertTimestamp(value.updatedAt, "projection updatedAt");
-  const plugins = Object.entries(value.targets).map(([pluginId, targetIds]) => {
+  const targets = value.targets as Record<string, unknown>;
+  const sources = (value.sources ?? {}) as Record<string, unknown>;
+  const pluginIds = new Set([...Object.keys(targets), ...Object.keys(sources)]);
+  const plugins = [...pluginIds].map((pluginId) => {
+    const targetIds = targets[pluginId] ?? [];
     if (!options.knownPluginIds.has(pluginId) || !Array.isArray(targetIds))
       throw new Error("Plugin device projection references an unknown Plugin");
+    const sourcePath = sources[pluginId];
+    if (sourcePath !== undefined)
+      assertLocalSourcePath(sourcePath, "projection source path");
     return {
       id: pluginId,
       updatedAt: Date.parse(value.updatedAt as string),
       distributedTargetIds: targetIds,
+      source: {
+        kind: "local",
+        ...(sourcePath === undefined ? {} : { url: sourcePath }),
+      },
     } as PluginLibraryEntry;
   });
   const parsed = createPluginDeviceProjectionDocument({

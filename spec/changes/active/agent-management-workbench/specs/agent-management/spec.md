@@ -2,6 +2,24 @@
 
 ## Added Requirements
 
+### `FR-AGENT-136`: Local Plugin Sources Remain Device-Owned
+
+Importing a local Plugin MUST publish the complete package under
+`data/plugins/<plugin-id>` as the durable PromptHub-owned copy. The original
+absolute source path MUST remain device-local, MUST NOT enter the portable
+Plugin resource, and MUST survive canonical reread and application restart so
+that update checks can compare and publish later source revisions.
+
+#### Scenario: Update a local Plugin after restart
+
+- Given a local Plugin was imported and its canonical package was published
+- And the original source package changed after PromptHub restarted
+- When the user checks and applies the source update
+- Then PromptHub reads the device-local source locator
+- And snapshots the previous canonical package before publishing the revision
+- And missing, malformed, or symbolic-link source roots fail without changing
+  the canonical package or version history
+
 ### `FR-AGENT-135`: Plugin Materialization Must Not Enter The Canonical Bundle Namespace
 
 Installing, updating, or restoring a Plugin while canonical files are

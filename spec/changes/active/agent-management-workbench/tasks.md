@@ -12,6 +12,7 @@
 - [x] `T-AGENT-008` 确认外部会话正文保持平台所有、本地、按需读取且不进入同步；PromptHub 不编辑 transcript。删除优先调用平台原生命令，raw-file adapter 仅在另行通过回收站/回滚测试后提供删除。
 - [x] `T-AGENT-009` 确认本地代理、协议转换、故障转移、请求拦截和 OAuth 账户池属于高风险独立范围，当前变更不实现。
 - [x] `T-AGENT-010` 完成实现前 Analyze：阶段状态与范围决策已统一；全部 FR/NFR、DES、TEST、T 定义唯一且进入追踪表；无阻塞性待确认。
+- [x] `T-AGENT-226` 按 `FR-AGENT-136` / `DES-AGENT-155` 将本地 Plugin 来源保存到现有 device projection，并覆盖 canonical reread、restart、update、snapshot、删除和不安全来源失败回滚。
 - [x] `T-AGENT-225` 按 `FR-AGENT-135` / `DES-AGENT-154` 隔离 canonical Plugin bundle namespace 与 package materialization，返回 canonical paths，并覆盖本地导入、distribution、restart 与 delete。
 - [x] `T-AGENT-224` 按 `FR-AGENT-134` / `DES-AGENT-153` 将 canonical MCP secret-store 加密门禁收窄到非空 extracted secrets，并覆盖 unavailable encryption、完整 CRUD、canonical bundle、restart 与 delete。
 - [x] `T-AGENT-223` 按 `FR-AGENT-133` / `DES-AGENT-152` 在共享 usage service 入口阻止未检测 Agent 的凭据、进程、helper 与网络探测，并用真实 Electron 启动验证不会创建或显示缺失的 Antigravity/Gemini root。
@@ -23,6 +24,7 @@ UI screen structure, interaction states, responsive behavior and component bound
 
 ## Test-First Verification Contracts
 
+- [x] `TEST-AGENT-217` Plugin 本地来源持久化：先复现 canonical reread/restart 丢失本地来源；断言包内容只保存在 `data/plugins/<id>` canonical bundle，绝对来源路径仅进入 device projection，更新创建旧包快照并发布新包，legacy projection 可读，畸形/缺失/软链接来源不产生写入。
 - [x] `TEST-AGENT-216` Plugin canonical materialization：先复现本地导入把 `data/plugins/<normalized-id>` 误判成缺 manifest canonical bundle；单元测试断言只发布 raw stable ID bundle 且返回 canonical files；真实 Electron 覆盖 UI import Toast、package inventory、Codex copy distribution/removal、restart、UI delete 与最终 restart 无残留。
 - [x] `TEST-AGENT-215` MCP 非秘密生命周期：单元测试先复现空 secret 更新在 unavailable encryption 下错误失败，并保持非空 secret 失败分支；真实 Electron 完成 create/read/update、canonical resource/version、restart、delete 与再次 restart 后无残留。
 - [x] `TEST-AGENT-214` 未检测 Agent usage 副作用：单元测试断言缺失 root 时不调用 Antigravity local helper、keychain resolver 或网络；真实 Electron 启动等待 tray quota scan 后断言 Antigravity/Gemini 均不可见且 `.gemini` 不存在。
