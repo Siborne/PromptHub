@@ -184,7 +184,13 @@ export function readPluginPackageSnapshot(
 
   return {
     pluginId: plugin.id,
-    files,
+    files: files.sort((left, right) =>
+      left.relativePath === right.relativePath
+        ? 0
+        : left.relativePath < right.relativePath
+          ? -1
+          : 1,
+    ),
   };
 }
 

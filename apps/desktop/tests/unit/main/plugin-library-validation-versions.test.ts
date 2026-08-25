@@ -421,7 +421,7 @@ describe("CorePluginLibraryService", () => {
     expect(snapshot.library.plugins).toHaveLength(1);
     expect(snapshot.packages).toHaveLength(1);
     expect(
-      snapshot.packages?.[0]?.files.map((file) => file.relativePath).sort(),
+      snapshot.packages?.[0]?.files.map((file) => file.relativePath),
     ).toEqual([
       ".codex-plugin/plugin.json",
       "README.md",
