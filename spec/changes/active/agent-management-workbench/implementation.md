@@ -6,6 +6,19 @@
 - Status: in-progress
 - Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
 
+## Provider display-label identity correction (2026-08-25)
+
+- `FR-AGENT-132 -> DES-AGENT-151 -> TEST-AGENT-213 -> T-AGENT-222`.
+- Removed the active case-insensitive Provider name index and added the
+  `allow_duplicate_agent_provider_profile_names_v1` migration. Stable profile
+  IDs remain the identity across DB rows, canonical bundles, restart, and
+  projection rebuild. Canonical rebuild no longer archives same-name profiles
+  through a name-derived winner; no name-derived renderer or IPC behavior was
+  added.
+- Verification passed: 14 desktop DB/migration tests, 22 core canonical
+  projection tests, desktop and core typechecks, traceability, production build,
+  and 4 real Electron Provider workbench tests.
+
 ## Skill delete ownership correction (2026-08-25)
 
 - `FR-AGENT-131 -> DES-AGENT-150 -> TEST-AGENT-212 -> T-AGENT-221`.
@@ -477,7 +490,7 @@
 - Provider Profile persistence foundation (2026-07-28, `FR-AGENT-003` to `FR-AGENT-006`, `DES-AGENT-004`, `TEST-AGENT-003`, `T-AGENT-074`; partial `T-AGENT-012`):
   - Added shared typed records and inputs for Provider Profiles, model mappings, and redacted activation snapshots. Contracts contain `secretRef` only and no secret-value field.
   - Added `agent_provider_profiles`, `agent_provider_model_mappings`, and `agent_provider_snapshots` to fresh schema and existing-user initialization. Migration `agent_provider_profiles_v1` is idempotent, participates in the pre-migration backup gate, and does not import or mutate native Agent configuration.
-  - Added platform/archive/update and snapshot-history indexes plus a case-insensitive unique active profile name per platform. Profile deletion cascades mappings and preserves audit snapshots with `provider_profile_id = NULL`.
+  - Added platform/archive/update and snapshot-history query indexes. Provider identity uses the stable profile ID, so exact-case and case-only duplicate display names can coexist. Profile deletion cascades mappings and preserves audit snapshots with `provider_profile_id = NULL`.
   - Added `AgentProviderProfileDB` CRUD, archive, monotonic optimistic timestamp checks, mapping upsert, bounded snapshot history, and transactional profile-with-mappings creation.
   - The failing regression initially reported six failures because the DB class/tables/migration did not exist. The completed focused suite passed 8 tests; the migration/locking/source-update regression passed 3 files / 19 tests. DB, shared, and desktop typechecks, affected lint, and the file-size gate passed.
   - Session source/index schema remains open under `T-AGENT-012`. Provider activation, secure secret resolution, renderer IPC, backup payload integration, and native config reconciliation are not claimed by this persistence batch.

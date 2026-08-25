@@ -53,13 +53,16 @@ describe("AgentProviderProfileDB", () => {
         { type: "table", name: "agent_provider_model_mappings" },
         { type: "table", name: "agent_provider_snapshots" },
         { type: "index", name: "idx_agent_provider_profiles_platform" },
-        { type: "index", name: "idx_agent_provider_profiles_active_name" },
         {
           type: "index",
           name: "idx_agent_provider_snapshots_platform_created",
         },
       ]),
     );
+    expect(objects).not.toContainEqual({
+      type: "index",
+      name: "idx_agent_provider_profiles_active_name",
+    });
 
     expect(() =>
       database
@@ -84,7 +87,7 @@ describe("AgentProviderProfileDB", () => {
     ).toThrow();
   });
 
-  it("persists non-secret profile metadata and enforces active names per platform", () => {
+  it("persists non-secret metadata and treats names as duplicate display labels", () => {
     const profile = profiles.createProfile({
       platformId: "codex",
       name: "DeepSeek",
@@ -109,16 +112,35 @@ describe("AgentProviderProfileDB", () => {
       secret_ref: "agent-provider:codex:deepseek",
     });
 
-    expect(() =>
-      profiles.createProfile({
-        platformId: "codex",
-        name: "deepseek",
-        providerKind: "custom",
-        protocol: "responses",
-        config: {},
-        source: "manual",
-      }),
-    ).toThrow();
+    const exactDuplicate = profiles.createProfile({
+      platformId: "codex",
+      name: "DeepSeek",
+      providerKind: "custom",
+      protocol: "responses",
+      endpoint: "https://duplicate.example/v1",
+      config: {},
+      source: "manual",
+    });
+    const caseDuplicate = profiles.createProfile({
+      platformId: "codex",
+      name: "deepseek",
+      providerKind: "custom",
+      protocol: "responses",
+      endpoint: "https://case-duplicate.example/v1",
+      config: {},
+      source: "manual",
+    });
+    const activeCodex = profiles.listProfiles({ platformId: "codex" });
+    expect(activeCodex).toHaveLength(3);
+    expect(new Set(activeCodex.map((item) => item.id)).size).toBe(3);
+
+    const renamed = profiles.updateProfile(
+      exactDuplicate.id,
+      { name: "deepseek" },
+      exactDuplicate.updatedAt,
+    );
+    expect(renamed).toMatchObject({ id: exactDuplicate.id, name: "deepseek" });
+    expect(caseDuplicate.name).toBe("deepseek");
 
     const otherPlatform = profiles.createProfile({
       platformId: "claude",
@@ -132,13 +154,13 @@ describe("AgentProviderProfileDB", () => {
 
     const archived = profiles.archiveProfile(profile.id, profile.updatedAt);
     expect(archived.archived).toBe(true);
-    expect(profiles.listProfiles({ platformId: "codex" })).toEqual([]);
+    expect(profiles.listProfiles({ platformId: "codex" })).toHaveLength(2);
     expect(
       profiles.listProfiles({
         platformId: "codex",
         includeArchived: true,
       }),
-    ).toEqual([archived]);
+    ).toHaveLength(3);
 
     expect(() =>
       profiles.createProfile({
@@ -701,5 +723,71 @@ describe("Agent provider profile migration", () => {
         .readdirSync(tempDir)
         .filter((entry) => entry.startsWith("prompthub.db.backup-")),
     ).toEqual([]);
+  });
+
+  it("drops the legacy active-name index and preserves stable profile ids", () => {
+    const current = initDatabase(dbPath);
+    const original = new AgentProviderProfileDB(current).createProfile({
+      platformId: "claude",
+      name: "Shared Label",
+      providerKind: "custom",
+      protocol: "anthropic",
+      config: {},
+      source: "manual",
+    });
+    closeDatabase();
+
+    const legacy = new Database(dbPath);
+    legacy
+      .prepare("DELETE FROM schema_migrations WHERE name = ?")
+      .run("allow_duplicate_agent_provider_profile_names_v1");
+    legacy.exec(
+      `CREATE UNIQUE INDEX idx_agent_provider_profiles_active_name
+       ON agent_provider_profiles(platform_id, LOWER(name))
+       WHERE archived = 0`,
+    );
+    legacy.close();
+
+    const migrated = initDatabase(dbPath);
+    expect(
+      migrated
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+        )
+        .get("idx_agent_provider_profiles_active_name"),
+    ).toBeNull();
+    expect(
+      migrated
+        .prepare("SELECT name FROM schema_migrations WHERE name = ?")
+        .get("allow_duplicate_agent_provider_profile_names_v1"),
+    ).toEqual({ name: "allow_duplicate_agent_provider_profile_names_v1" });
+
+    const profiles = new AgentProviderProfileDB(migrated);
+    const exactDuplicate = profiles.createProfile({
+      platformId: "claude",
+      name: "Shared Label",
+      providerKind: "custom",
+      protocol: "anthropic",
+      config: {},
+      source: "manual",
+    });
+    const caseDuplicate = profiles.createProfile({
+      platformId: "claude",
+      name: "shared label",
+      providerKind: "custom",
+      protocol: "anthropic",
+      config: {},
+      source: "manual",
+    });
+    expect(
+      new Set(
+        profiles.listProfiles({ platformId: "claude" }).map((item) => item.id),
+      ),
+    ).toEqual(new Set([original.id, exactDuplicate.id, caseDuplicate.id]));
+
+    closeDatabase();
+    initDatabase(dbPath);
+    closeDatabase();
+    expect(listDatabaseSafetyPoints(dbPath)).toHaveLength(1);
   });
 });

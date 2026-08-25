@@ -306,6 +306,31 @@ describe("complete canonical storage shadow", () => {
             },
           ],
         },
+        {
+          profile: {
+            id: "profile-2",
+            platformId: "codex",
+            name: "OpenAI",
+            providerKind: "openai-compatible",
+            protocol: "openai-responses",
+            endpoint: "https://gateway.example/v1",
+            config: {},
+            secretRef: null,
+            source: "manual",
+            archived: false,
+            createdAt: Date.parse("2026-08-11T00:30:00.000Z"),
+            updatedAt: Date.parse("2026-08-11T01:30:00.000Z"),
+          },
+          modelMappings: [
+            {
+              id: "mapping-2",
+              providerProfileId: "profile-2",
+              routeKey: "primary",
+              modelId: "gpt-gateway",
+              parameters: {},
+            },
+          ],
+        },
       ],
       generations: [
         {
@@ -320,7 +345,7 @@ describe("complete canonical storage shadow", () => {
       rules: 1,
       "mcp-servers": 1,
       plugins: 1,
-      "agent-providers": 1,
+      "agent-providers": 2,
       generations: 1,
     });
     expect(materialized.extractedMcpSecrets).toHaveLength(1);
@@ -333,7 +358,9 @@ describe("complete canonical storage shadow", () => {
     expect(
       fs.existsSync(path.join(targetPath, "plugins", "custom%3Aplugin-1")),
     ).toBe(true);
-    expect(restored.agentProviders[0].profile.id).toBe("profile-1");
+    expect(
+      new Set(restored.agentProviders.map((item) => item.profile.id)),
+    ).toEqual(new Set(["profile-1", "profile-2"]));
     expect(restored.generations[0].manifest.id).toBe("batch-1");
     fs.writeFileSync(path.join(targetPath, "prompthub.db"), "catalog");
     fs.writeFileSync(path.join(targetPath, ".layout-state.json"), "{}\n");
@@ -448,7 +475,7 @@ describe("complete canonical storage shadow", () => {
       operationalSourceDatabasePath: operationalPath,
       publishedCanonicalRootPath,
     });
-    expect(rebuilt.resourceCount).toBe(6);
+    expect(rebuilt.resourceCount).toBe(7);
     expect(rebuilt.preservedDatabaseCounts).toMatchObject({
       settings: 1,
       users: 1,
@@ -465,9 +492,18 @@ describe("complete canonical storage shadow", () => {
           "files",
         ),
       });
-      expect(
-        new AgentProviderProfileDB(database).getProfileById("profile-1")?.name,
-      ).toBe("OpenAI");
+      const rebuiltProfiles = new AgentProviderProfileDB(database).listProfiles(
+        {
+          platformId: "codex",
+        },
+      );
+      expect(rebuiltProfiles).toHaveLength(2);
+      expect(new Set(rebuiltProfiles.map((item) => item.id))).toEqual(
+        new Set(["profile-1", "profile-2"]),
+      );
+      expect(rebuiltProfiles.every((item) => item.name === "OpenAI")).toBe(
+        true,
+      );
       expect(new RuleDB(database).getById("codex-global")).toMatchObject({
         currentVersion: 1,
         targetPath: "",
@@ -492,7 +528,7 @@ describe("complete canonical storage shadow", () => {
       ).toEqual({
         sha256: crypto.createHash("sha256").update(outputBytes).digest("hex"),
       });
-      expect(new CanonicalResourceDB(database).list()).toHaveLength(6);
+      expect(new CanonicalResourceDB(database).list()).toHaveLength(7);
       expect(
         database.get(
           "SELECT value FROM settings WHERE key = ?",
@@ -591,7 +627,7 @@ describe("complete canonical storage shadow", () => {
     ownedDatabase.close();
   });
 
-  it("deterministically archives older duplicate Agent profile names in SQLite only", () => {
+  it("preserves duplicate Agent profile labels as separate stable ids", () => {
     const base = root();
     const targetPath = path.join(base, "duplicate-agent-names");
     const profile = {
@@ -634,7 +670,7 @@ describe("complete canonical storage shadow", () => {
       ),
     ).toEqual([
       { id: "profile-newer", archived: 0 },
-      { id: "profile-older", archived: 1 },
+      { id: "profile-older", archived: 0 },
     ]);
     database.close();
     expect(

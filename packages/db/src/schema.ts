@@ -430,9 +430,6 @@ CREATE INDEX IF NOT EXISTS idx_canonical_resources_type_updated
   ON canonical_resources(resource_type, updated_at DESC, resource_id);
 CREATE INDEX IF NOT EXISTS idx_agent_provider_profiles_platform
   ON agent_provider_profiles(platform_id, archived, updated_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_provider_profiles_active_name
-  ON agent_provider_profiles(platform_id, LOWER(name))
-  WHERE archived = 0;
 CREATE INDEX IF NOT EXISTS idx_agent_provider_model_mappings_profile
   ON agent_provider_model_mappings(provider_profile_id, route_key);
 CREATE INDEX IF NOT EXISTS idx_agent_provider_snapshots_platform_created

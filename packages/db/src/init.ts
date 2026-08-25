@@ -469,6 +469,11 @@ export function initDatabase(
       markMigration("agent_provider_profiles_v1");
     }
 
+    if (!hasMigration("allow_duplicate_agent_provider_profile_names_v1")) {
+      db!.run("DROP INDEX IF EXISTS idx_agent_provider_profiles_active_name");
+      markMigration("allow_duplicate_agent_provider_profile_names_v1");
+    }
+
     if (!hasMigration("agent_session_index_v1")) {
       const requiredSessionTables = [
         "agent_session_sources",

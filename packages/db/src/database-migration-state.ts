@@ -209,6 +209,13 @@ const CURRENT_DATABASE_SCHEMA_INVARIANTS: DatabaseSchemaInvariants =
             "90009359c490a98ccaeac0058caac2727263dfbdbfbbae4766e61a0c79eb0ae8",
           destructive: true,
         },
+        {
+          migrationId: "legacy-013",
+          name: "allow_duplicate_agent_provider_profile_names_v1",
+          checksum:
+            "56b5ced9ab22768e44352785ff0df6ca5157a11470140797f4b4d7e906c12735",
+          destructive: true,
+        },
       ].map((entry) => Object.freeze(entry)),
     ),
   });

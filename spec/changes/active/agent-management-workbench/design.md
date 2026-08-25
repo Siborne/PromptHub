@@ -25,6 +25,19 @@ existing Skill / MCP / Rules / Plugin services
   -> no duplicate Agent-owned asset store
 ```
 
+## `DES-AGENT-151`: Stable Provider Identity
+
+`agent_provider_profiles.id` remains the only Provider Profile identity. Remove
+the partial unique index on `(platform_id, LOWER(name))`; keep the existing
+platform/list query index. A transactional legacy migration drops the obsolete
+index before schema indexes are installed, records its immutable migration
+name, and leaves profile rows, model mappings, canonical bundles, and secret
+references unchanged. Dropping the obsolete index is a one-time operation
+bounded by that index's pages; steady-state profile writes become cheaper, and
+the existing platform/archive query index keeps list reads indexed. The shared
+migration transaction and pre-migration safety point provide rollback and
+recovery. No renderer validation or name-derived lookup is added.
+
 ## `DES-AGENT-150`: Skill Delete Ownership Copy
 
 Keep the existing main-process ownership rule as the single deletion boundary:

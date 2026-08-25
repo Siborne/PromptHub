@@ -547,29 +547,6 @@ function skillForLocalProjection(
   return owner ? skill : { ...skill, ownerUserId: undefined };
 }
 
-function activeAgentProfileIds(
-  entries: readonly ReadAgentProviderResourceResult[],
-): Set<string> {
-  const winners = new Map<string, AgentProviderProfile>();
-  for (const entry of entries) {
-    const profile = entry.profile;
-    if (profile.archived) continue;
-    const normalizedName = profile.name.replace(/[A-Z]/g, (value) =>
-      value.toLowerCase(),
-    );
-    const key = `${profile.platformId}\0${normalizedName}`;
-    const current = winners.get(key);
-    if (
-      !current ||
-      profile.updatedAt > current.updatedAt ||
-      (profile.updatedAt === current.updatedAt && profile.id > current.id)
-    ) {
-      winners.set(key, profile);
-    }
-  }
-  return new Set([...winners.values()].map((profile) => profile.id));
-}
-
 function projectCanonicalRules(
   database: InstanceType<typeof DatabaseAdapter>,
   publishedRootPath: string,
@@ -722,13 +699,8 @@ export function stageCanonicalStorageDatabase(
         }
         projectCanonicalRules(database, publishedRootPath, storage.rules);
         const agentDb = new AgentProviderProfileDB(database);
-        const activeProfiles = activeAgentProfileIds(storage.agentProviders);
         for (const entry of storage.agentProviders) {
-          const profile =
-            entry.profile.archived || activeProfiles.has(entry.profile.id)
-              ? entry.profile
-              : { ...entry.profile, archived: true };
-          agentDb.insertProfileGraphDirect(profile, entry.modelMappings);
+          agentDb.insertProfileGraphDirect(entry.profile, entry.modelMappings);
         }
         projectCanonicalGenerations(database, storage.generations);
         new CanonicalResourceDB(database).replaceAll(records);

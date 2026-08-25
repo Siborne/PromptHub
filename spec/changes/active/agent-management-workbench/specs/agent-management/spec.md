@@ -2,6 +2,21 @@
 
 ## Added Requirements
 
+### `FR-AGENT-132`: Provider Names Are Display Labels
+
+Provider Profile identity MUST use the stable profile ID. Exact-case and
+case-only duplicate display names MUST coexist within one platform, including
+after rename, archive, restart, migration from the former unique-name schema,
+and canonical SQLite projection rebuild. Name collisions MUST NOT mutate an
+existing profile or its secret reference.
+
+#### Scenario: Duplicate labels remain separate
+
+- Given one platform already has an active Provider named `Shared Label`
+- When another Provider is created as `Shared Label` or `shared label`
+- Then each Provider has a distinct stable ID and independent configuration
+- And restart and canonical projection rebuild preserve all records
+
 ### `FR-AGENT-131`: Skill Delete Must Describe Source Ownership
 
 Deleting a Skill from My Skills MUST state that its PromptHub record, managed
