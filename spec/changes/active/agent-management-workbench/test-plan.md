@@ -456,3 +456,9 @@ package failed validation. Its manifest, size, or file paths are invalid`.
   `ISS-20260825-009`: native deletion left a stale local-index row. Commit
   `da95f78b` removes the exact index row only after native deletion succeeds;
   the rerun passed all three cases.
+- `OBS-AGENT-015`: The converged serial Agent E2E surface passed 19 tests in one
+  worker across discovery, Provider, Skill, MCP, Rules, Plugin, Config Files,
+  Sessions, and the shared workspace. The settings persistence case remains
+  excluded from the green aggregate because `ISS-20260825-008` still fails with
+  a committed Agent root of `undefined`; it is reported separately rather than
+  hidden by the passing domains.
