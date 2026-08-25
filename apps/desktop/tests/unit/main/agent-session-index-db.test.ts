@@ -286,6 +286,42 @@ describe("AgentSessionIndexDB", () => {
     );
   });
 
+  it("removes only the requested session from one source", () => {
+    const source = registerSource();
+    index.commitScan({
+      sourceId: source.id,
+      mode: "full",
+      adapterVersion: "1",
+      scannedAt: 100,
+      status: "ok",
+      records: [
+        {
+          externalId: "session-a",
+          title: "Session A",
+          sourcePath: "/sessions/a.jsonl",
+          sourceStatus: "present",
+        },
+        {
+          externalId: "session-b",
+          title: "Session B",
+          sourcePath: "/sessions/b.jsonl",
+          sourceStatus: "present",
+        },
+      ],
+    });
+
+    expect(index.removeSession(source.id, "session-a")).toBe(true);
+    expect(index.getSessionByExternalId(source.id, "session-a")).toBeNull();
+    expect(index.getSessionByExternalId(source.id, "session-b")).not.toBeNull();
+    expect(index.removeSession(source.id, "session-a")).toBe(false);
+    expect(() => index.removeSession("bad\0source", "session-b")).toThrow(
+      "sourceId",
+    );
+    expect(() => index.removeSession(source.id, "bad\0session")).toThrow(
+      "externalId",
+    );
+  });
+
   it("rolls back invalid scans and records failures without rewriting rows", () => {
     const source = registerSource();
     index.commitScan({

@@ -427,6 +427,42 @@ test("submits Agent History title and project search with Enter", async ({}, tes
       path: testInfo.outputPath("agent-session-more-locations.png"),
       animations: "disabled",
     });
+    await page.keyboard.press("Escape");
+
+    const markdownPath = testInfo.outputPath("migration-check.md");
+    await app.evaluate(({ dialog }, filePath) => {
+      Reflect.set(dialog, "showSaveDialog", async () => ({
+        canceled: false,
+        filePath,
+      }));
+    }, markdownPath);
+    await page.getByRole("button", { name: "Export conversation" }).click();
+    await page.getByRole("menuitem", { name: "Export Markdown" }).click();
+    await expect.poll(() => fs.existsSync(markdownPath)).toBe(true);
+    const markdown = fs.readFileSync(markdownPath, "utf8");
+    expect(markdown).toContain("Database migration");
+    expect(markdown).toContain("body-only-search-phrase");
+    expect(markdown).not.toContain("session_meta");
+
+    const jsonPath = testInfo.outputPath("migration-check.json");
+    await app.evaluate(({ dialog }, filePath) => {
+      Reflect.set(dialog, "showSaveDialog", async () => ({
+        canceled: false,
+        filePath,
+      }));
+    }, jsonPath);
+    await page.getByRole("button", { name: "Export conversation" }).click();
+    await page.getByRole("menuitem", { name: "Export JSON" }).click();
+    await expect.poll(() => fs.existsSync(jsonPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(jsonPath, "utf8"))).toMatchObject({
+      version: 1,
+      agentId: "codex",
+      sessionId: "22222222-2222-4222-8222-222222222222",
+      entries: [
+        { role: "user", text: "Database migration" },
+        { role: "assistant", text: "body-only-search-phrase" },
+      ],
+    });
   } finally {
     await closePromptHub(app, userDataDir);
   }
@@ -437,13 +473,15 @@ test("projects Claude cwd labels and hides internal transcript records", async (
     path.join(os.tmpdir(), "prompthub-claude-session-e2e-"),
   );
   const { homeDir, sessionPath } = prepareClaudeHome(userDataDir);
-  const { app, page } = await launchPromptHub(null, {
+  const launchOptions = {
     userDataDir,
     env: { HOME: homeDir, USERPROFILE: homeDir },
-  });
+  };
+  let activeApp = (await launchPromptHub(null, launchOptions)).app;
 
   try {
-    await openClaudeSessions(app, page);
+    let page = await activeApp.firstWindow();
+    await openClaudeSessions(activeApp, page);
     await expect(page.getByText("Visible question").first()).toBeVisible();
     await expect(page.getByText("Visible answer")).toBeVisible();
     await expect(page.getByText("Event", { exact: true })).toHaveCount(0);
@@ -469,8 +507,18 @@ test("projects Claude cwd labels and hides internal transcript records", async (
       path: testInfo.outputPath("agent-session-claude-projection.png"),
       animations: "disabled",
     });
+
+    await closePromptHub(activeApp, userDataDir, {
+      preserveUserDataDir: true,
+    });
+    const relaunched = await launchPromptHub(null, launchOptions);
+    activeApp = relaunched.app;
+    page = relaunched.page;
+    await openClaudeSessions(activeApp, page);
+    await expect(page.getByText("No sessions found.")).toBeVisible();
+    expect(fs.existsSync(sessionPath)).toBe(false);
   } finally {
-    await closePromptHub(app, userDataDir);
+    await closePromptHub(activeApp, userDataDir);
   }
 });
 

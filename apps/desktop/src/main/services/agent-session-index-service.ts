@@ -284,14 +284,22 @@ export function createAgentSessionIndexService(
     };
   }
 
+  async function deleteSession(
+    agentId: string,
+    sessionId: string,
+  ): Promise<void> {
+    const source = getState(agentId).source;
+    await options.reader.delete(agentId, sessionId);
+    if (source) options.index.removeSession(source.id, sessionId);
+  }
+
   return {
     getState,
     setEnabled,
     refresh,
     list,
     canDelete: (agentId: string): boolean => options.reader.canDelete(agentId),
-    delete: (agentId: string, sessionId: string): Promise<void> =>
-      options.reader.delete(agentId, sessionId),
+    delete: deleteSession,
     read: (
       agentId: string,
       sessionId: string,

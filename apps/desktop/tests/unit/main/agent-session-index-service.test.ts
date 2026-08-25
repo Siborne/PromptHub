@@ -212,6 +212,36 @@ describe("Agent session index service", () => {
     );
   });
 
+  it("removes deleted native sessions from the optional local index", async () => {
+    const unindexedPath = await writeClaudeSession(
+      homeDir,
+      "workspace",
+      SESSION_A,
+      claudeLine(SESSION_A, "Unindexed session"),
+    );
+    await service.delete("claude", SESSION_A);
+    expect(await fs.stat(unindexedPath).catch(() => null)).toBeNull();
+    expect(index.listSources({ platformId: "claude" })).toEqual([]);
+
+    const indexedPath = await writeClaudeSession(
+      homeDir,
+      "workspace",
+      SESSION_A,
+      claudeLine(SESSION_A, "Indexed session"),
+    );
+    const source = service.setEnabled("claude", true).source!;
+    await service.refresh("claude");
+    expect(index.getSessionByExternalId(source.id, SESSION_A)).not.toBeNull();
+
+    await service.delete("claude", SESSION_A);
+
+    expect(await fs.stat(indexedPath).catch(() => null)).toBeNull();
+    expect(index.getSessionByExternalId(source.id, SESSION_A)).toBeNull();
+    await expect(
+      service.list("claude", { limit: 10, offset: 0 }),
+    ).resolves.toMatchObject({ sessions: [], total: 0, hasMore: false });
+  });
+
   it("limits Cline live search to title and project metadata", async () => {
     const snapshotPath = path.join(
       homeDir,

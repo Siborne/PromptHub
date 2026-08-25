@@ -422,6 +422,17 @@ export class AgentSessionIndexDB {
     return row ? this.sessionFromRow(row) : null;
   }
 
+  removeSession(sourceId: string, externalId: string): boolean {
+    return (
+      this.db.run(
+        `DELETE FROM agent_session_index
+         WHERE source_id = ? AND external_id = ?`,
+        boundedText(sourceId, "sourceId", 128),
+        boundedText(externalId, "externalId", 512),
+      ).changes === 1
+    );
+  }
+
   listSessions(input: AgentSessionIndexListInput): AgentSessionIndexListResult {
     const sourceId = boundedText(input.sourceId, "sourceId", 128);
     const limit = Math.min(
