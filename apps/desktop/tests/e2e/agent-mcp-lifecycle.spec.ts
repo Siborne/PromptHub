@@ -421,3 +421,143 @@ test("creates, reads, updates, distributes, reconciles, removes, restarts, and d
       fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
+
+test("rejects malformed config and keeps HTTP credentials outside renderer and canonical files", async () => {
+  test.setTimeout(60_000);
+
+  const userDataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "prompthub-mcp-http-import-e2e-"),
+  );
+  writeRuntimeLayoutState(userDataDir);
+  writeCanonicalStorageAuthority(userDataDir, {
+    consistencyId: "d".repeat(64),
+    operationId: "mcp-http-import-e2e",
+  });
+  const homeDir = path.join(userDataDir, "home");
+  const codexConfigPath = path.join(homeDir, ".codex", "config.toml");
+  fs.mkdirSync(path.dirname(codexConfigPath), { recursive: true });
+  fs.writeFileSync(codexConfigPath, 'model = "gpt-5"\n', "utf8");
+
+  const headerSecret = "Bearer e2e-http-secret";
+  const tenantSecret = "e2e-tenant-secret";
+  const validConfig = JSON.stringify({
+    mcpServers: {
+      "secure-http": {
+        url: "https://mcp.example.invalid/api",
+        headers: {
+          Authorization: headerSecret,
+          "X-Tenant": tenantSecret,
+        },
+      },
+    },
+  });
+  let activeApp: ElectronApplication | null = null;
+
+  try {
+    const launched = await launchPromptHub(null, {
+      userDataDir,
+      env: { HOME: homeDir, USERPROFILE: homeDir },
+    });
+    activeApp = launched.app;
+    const { page } = launched;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setAppSettings(page, {
+      language: "en",
+      minimizeOnLaunch: false,
+      autoCheckUpdate: false,
+    });
+    await installToastRecorder(page);
+
+    await sendAppCommand(activeApp, { type: "asset:create", asset: "mcp" });
+    const createDialog = page.getByRole("dialog", { name: "New MCP" });
+    await createDialog.getByRole("button", { name: /Paste config/ }).click();
+    const configInput = createDialog.getByLabel("MCP config JSON or TOML");
+    const mcpRoot = path.join(userDataDir, "data", "mcp");
+    const initialMcpEntries = fs.readdirSync(mcpRoot).sort();
+    await configInput.fill("{not-json");
+    await createDialog.getByRole("button", { name: "Import config" }).click();
+    await expect(
+      createDialog.getByText("Invalid MCP config content"),
+    ).toBeVisible();
+    await expect(createDialog).toBeVisible();
+    expect(
+      (await page.evaluate(() => window.api.mcp.getLibrary())).servers,
+    ).toEqual([]);
+    expect(fs.readdirSync(mcpRoot).sort()).toEqual(initialMcpEntries);
+
+    await configInput.fill(validConfig);
+    await createDialog.getByRole("button", { name: "Import config" }).click();
+    await expect(createDialog).not.toBeVisible();
+    await expect(
+      page.getByText("1 MCP source(s) added", { exact: true }).last(),
+    ).toBeVisible();
+
+    const library = await page.evaluate(() => window.api.mcp.getLibrary());
+    expect(library.servers).toHaveLength(1);
+    const server = library.servers[0];
+    expect(server).toMatchObject({
+      name: "secure-http",
+      transport: "streamable-http",
+      url: "https://mcp.example.invalid/api",
+      headers: {
+        Authorization: "[REDACTED]",
+        "X-Tenant": "[REDACTED]",
+      },
+    });
+    await expect(page.locator("body")).not.toContainText(headerSecret);
+    await expect(page.locator("body")).not.toContainText(tenantSecret);
+
+    const bundlePath = path.join(userDataDir, "data", "mcp", server.id);
+    const canonicalText = fs.readFileSync(
+      path.join(bundlePath, "server.json"),
+      "utf8",
+    );
+    expect(canonicalText).not.toContain(headerSecret);
+    expect(canonicalText).not.toContain(tenantSecret);
+    const canonicalDocument = JSON.parse(canonicalText);
+    expect(canonicalDocument.server.headers).toBeUndefined();
+    expect(
+      Object.keys(canonicalDocument.secretReferences.headers).sort(),
+    ).toEqual(["Authorization", "X-Tenant"]);
+    expect(
+      Object.values(canonicalDocument.secretReferences.headers).join("\n"),
+    ).not.toContain("secret");
+    const versionText = fs
+      .readdirSync(path.join(bundlePath, "versions"))
+      .map((name) =>
+        fs.readFileSync(path.join(bundlePath, "versions", name), "utf8"),
+      )
+      .join("\n");
+    expect(versionText).not.toContain(headerSecret);
+    expect(versionText).not.toContain(tenantSecret);
+
+    const secretStorePath = path.join(
+      userDataDir,
+      "secrets",
+      "mcp-resource-secrets.json",
+    );
+    const secretStoreText = fs.readFileSync(secretStorePath, "utf8");
+    expect(secretStoreText).not.toContain(headerSecret);
+    expect(secretStoreText).not.toContain(tenantSecret);
+    expect(fs.statSync(secretStorePath).mode & 0o777).toBe(0o600);
+
+    await page.getByTestId(`mcp-server-card-${server.id}`).click();
+    await page.getByRole("button", { name: "Codex", exact: true }).click();
+    await page.getByRole("button", { name: /Apply to 1 platform/ }).click();
+    await expect(
+      page.getByText("MCP applied", { exact: true }).last(),
+    ).toBeVisible();
+    const codexConfig = fs.readFileSync(codexConfigPath, "utf8");
+    expect(codexConfig).toContain('model = "gpt-5"');
+    expect(codexConfig).toContain('url = "https://mcp.example.invalid/api"');
+    expect(codexConfig).toContain(headerSecret);
+    expect(codexConfig).toContain(tenantSecret);
+    expect(
+      (await readCapturedToasts(page)).filter(({ type }) => type === "error"),
+    ).toEqual([]);
+  } finally {
+    if (activeApp) await closePromptHub(activeApp, userDataDir);
+    else if (fs.existsSync(userDataDir))
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
