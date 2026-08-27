@@ -9,3 +9,9 @@
 - [x] `T-INFISTAR-004` Move the partner table above the download section in all
       seven README locales and keep the personal donation section unchanged
       (`FR-INFISTAR-001`, `TEST-INFISTAR-001..003`).
+- [x] `T-INFISTAR-005` Replace rewritten tables with the unmodified sponsor
+      banner and exact supplied campaign copy on all public sponsor surfaces
+      (`FR-INFISTAR-004`).
+- [x] `T-INFISTAR-006` Verify source/asset hashes, exact copy and link parity,
+      Markdown formatting, rendered website output, website build, and spec
+      traceability (`FR-INFISTAR-001`, `FR-INFISTAR-004`).

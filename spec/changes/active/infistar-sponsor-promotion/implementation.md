@@ -2,58 +2,61 @@
 
 ## Status
 
-Local implementation and focused verification are complete. Publication and
-change archival remain pending because this work has not been committed or
-released.
+The sponsor-provided creative has replaced the earlier rewritten tables. Local
+implementation and focused verification are complete; publication and change
+archival remain pending.
 
 ## Traceability
 
-| Requirement       | Design        | Verification                              | Task                  |
-| ----------------- | ------------- | ----------------------------------------- | --------------------- |
-| `FR-INFISTAR-001` | Placement     | `TEST-INFISTAR-001` locale/link parity    | `T-INFISTAR-001..002` |
-| `FR-INFISTAR-002` | Copy Boundary | `TEST-INFISTAR-002` disclosure scan       | `T-INFISTAR-001..003` |
-| `FR-INFISTAR-003` | Copy Boundary | `TEST-INFISTAR-003` placeholder rejection | `T-INFISTAR-001..003` |
+| Requirement       | Design            | Verification                         | Task                  |
+| ----------------- | ----------------- | ------------------------------------ | --------------------- |
+| `FR-INFISTAR-001` | Placement         | `TEST-INFISTAR-001` placement parity | `T-INFISTAR-001..006` |
+| `FR-INFISTAR-002` | Superseded        | Replaced by `TEST-INFISTAR-004`      | `T-INFISTAR-005..006` |
+| `FR-INFISTAR-003` | Superseded        | Replaced by `TEST-INFISTAR-004`      | `T-INFISTAR-005..006` |
+| `FR-INFISTAR-004` | Creative Boundary | `TEST-INFISTAR-004` creative parity  | `T-INFISTAR-005..006` |
 
 ## Analyze Gate
 
 - The change is documentation-only and does not alter provider presets, runtime
   routing, application UI, or release metadata.
-- The affiliate URL returned HTTP 200 and normalized to the same host and query
-  parameters without dropping the referral identity.
-- The supplied fixed-benefit wording is unresolved and is not publishable as a
-  guaranteed offer.
+- The maintainer requires the sponsor-provided image and Chinese campaign copy
+  to remain unchanged and explicitly rejects appended disclosures or rewritten
+  qualifications.
+- The only approved transformation is adding the supplied `infistar.cc` URL to
+  the banner and the existing `专属推广链接` phrase.
 
 ## Implemented Surfaces
 
-- Added the disclosed partner table to the root README and all six localized
-  README files.
-- Positioned each README table after the contents and before the download
-  section; the bottom sponsor section now contains only personal donation
-  methods.
-- Added the same commercial boundary to `docs/sponsors.md` and the Chinese and
-  English website backer pages.
-- Preserved the supplied affiliate identity in every registration link.
+- Stored the supplied banner unchanged under the repository documentation and
+  website public-asset trees.
+- Replaced the rewritten tables in the root README, six localized README files,
+  public sponsor record, and Chinese/English website backer pages with the same
+  sponsor-supplied Chinese campaign block.
+- Positioned each README campaign after the contents and before the download
+  section; the bottom sponsor section contains only personal donation methods.
+- Linked only the banner and the existing `专属推广链接` phrase to the supplied
+  `infistar.cc` registration URL.
 - Kept the existing community donation records and donation methods unchanged.
 
 ## Verification
 
-- `TEST-INFISTAR-001`: a deterministic locale scan confirmed exactly two copies
-  of the affiliate URL in each of the ten public documents and confirmed the
-  partner identity in every file.
-- `TEST-INFISTAR-002`: the same scan confirmed a localized affiliate disclosure
-  in every document.
-- `TEST-INFISTAR-003`: the scan rejected unresolved fixed-benefit wording; no
-  fixed USD credit or first-deposit promise is present.
-- A placement scan confirmed that every localized partner table appears before
-  the download anchor, occurs once, and is no longer nested under the bottom
-  personal sponsor section.
-- Prettier check passed for all ten changed public Markdown documents.
-- The affiliate URL returned HTTP 200 and preserved `aff=RX9CVLVQ` and
-  `ref_source=link` after redirect normalization.
-- `pnpm --dir website build` passed and generated both backer pages with the
-  table, links, and disclosure. The build emitted only the existing stale
-  Browserslist-data advisory.
-- Spec index and traceability checks passed after the implementation record was
+- `TEST-INFISTAR-001`: the placement scan confirmed one campaign block in every
+  README locale before the download anchor.
+- `TEST-INFISTAR-004`: both committed image copies and the built website asset
+  match the source PNG at SHA-256
+  `429c0ebe67945ec9b2175cab246757232025d4fba38a78c5d49c8db0e2fb5234`.
+- The exact-copy scan confirmed the supplied title and five body lines appear
+  once on each of the ten public sponsor surfaces, with exactly two
+  `infistar.cc` registration links and no legacy `www` URL.
+- The absence scan confirmed that the removed rewritten tables, translations,
+  affiliate notices, and qualification text are not present on those surfaces.
+- Prettier and `git diff --check` passed for the changed public documents and
+  active change records.
+- The campaign URL returned HTTP 200 without changing the affiliate query.
+- `pnpm --dir website build` passed. Both generated backer pages contain the
+  linked banner, exact campaign copy, and benefit line; the build emitted only
+  the existing stale Browserslist-data advisory.
+- Spec index and traceability checks passed after the correction record was
   updated.
 
 ## Release Boundary

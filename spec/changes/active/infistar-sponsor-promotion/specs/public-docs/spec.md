@@ -6,32 +6,37 @@
 
 PromptHub's sponsor sections MUST identify Infistar.ai as a current sponsor and
 model-service support partner and MUST provide the supplied affiliate
-registration URL. In each README locale, the partner table MUST appear after
+registration URL. In each README locale, the campaign block MUST appear after
 the contents and before the download section so the offer is visible without
 displacing the project introduction or primary download action.
 
-### `FR-INFISTAR-002`: Commercial disclosure
+### `FR-INFISTAR-002`: Commercial disclosure (superseded)
 
-Every localized promotion MUST identify the registration URL as an affiliate or
-promotional link, state that PromptHub may receive promotional benefit, and
-attribute model availability, pricing, credits, and service terms to
-Infistar.ai.
+Superseded by `FR-INFISTAR-004`. The sponsor-approved creative MUST NOT receive
+additional disclosure, qualification, or rewritten marketing text.
 
-### `FR-INFISTAR-003`: No unconfirmed benefit promise
+### `FR-INFISTAR-003`: No unconfirmed benefit promise (superseded)
 
-The public copy MUST NOT promise a fixed USD credit or first-deposit discount
-until the sponsor has supplied one confirmed offer. It MUST direct readers to
-the registration page for current benefits.
+Superseded by `FR-INFISTAR-004`. The maintainer explicitly approved the supplied
+benefit line as part of the campaign copy and requires it to remain unchanged.
+
+### `FR-INFISTAR-004`: Sponsor creative fidelity
+
+Every public sponsor surface MUST use the supplied 1456 × 180 PNG without image
+editing and MUST reproduce the supplied Chinese campaign title and five body
+lines without rewriting or translation. The only content transformation is to
+link the banner and the existing `专属推广链接` phrase to
+`https://infistar.cc/register?aff=RX9CVLVQ&ref_source=link`.
 
 ## Scenarios
 
 ### `AC-INFISTAR-001`: Reader follows the partner offer
 
-Given a reader on any supported README locale, the sponsor table exposes the
-same affiliate URL and makes the commercial relationship visible before the
-reader follows it.
+Given a reader on any supported README locale, the sponsor campaign exposes the
+same banner, approved copy, and registration URL before the download section.
 
-### `AC-INFISTAR-002`: Sponsor changes its offer
+### `AC-INFISTAR-002`: Public copy remains exact
 
-When Infistar.ai changes models, prices, credits, or promotional terms, the
-PromptHub documentation does not retain a contradictory fixed-value promise.
+When the campaign is rendered from any public sponsor surface, no translated
+table, affiliate disclosure, qualification, or other PromptHub-authored copy is
+inserted into the sponsor-provided material.

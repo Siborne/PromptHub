@@ -62,13 +62,19 @@ PromptHub 把你的 Prompt、SKILL.md 和專案級 AI 編程資產放進一個�
 
 ---
 
-### 模型服務合作夥伴
+### PromptHub × Infistar.ai 无限星河｜全模型 API · 高效管理与测试 AI 资产
 
-感謝 **Infistar.ai 無限星河** 贊助並為 PromptHub 提供模型服務支援。
+[![Infistar.cc 一站式全球大模型 API 服务平台](./imgs/sponsors/infistar-banner.png)](https://infistar.cc/register?aff=RX9CVLVQ&ref_source=link)
 
-| 合作夥伴                                                                                  | 模型服務與適用情境                                                                                                                                                                                                                                       | PromptHub 使用者入口                                                                                                                                                                                                                                  |
-| :---------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **[Infistar.ai 無限星河](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)** | 提供相容 OpenAI 標準介面的多模型 API，涵蓋 ChatGPT、Claude、Gemini、Kimi、GLM、DeepSeek 等模型，適用於 Prompt 測試、AI 生成、翻譯潤飾、Skill 工作流程與多模型效果比較。贊助方表示，其服務提供高併發通道與多節點備援，部分模型價格可低至官方管道約 1 折。 | **[透過專屬推廣連結註冊並查看目前福利](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)**<br><sub>這是推廣連結，PromptHub 可能從符合條件的註冊或使用中獲得推廣收益。模型、可用性、價格、額度與活動規則均以 Infistar.ai 頁面為準。</sub> |
+感谢 Infistar.ai 无限星河 赞助并为 PromptHub 提供模型服务支持！
+
+⚡ 稳定支持多模型测试：提供企业级高并发通道与多节点冗余，价格低至官方渠道 1 折，满足 Prompt 测试、AI生成、翻译润色及多模型并行对比等场景。
+
+🧠 一个 API Key 接入主流模型：全面支持 ChatGPT、Claude、Gemini、Kimi、GLM、DeepSeek 等模型，兼容 OpenAI 标准接口，可在 PromptHub 中快速完成Provider与模型配置。
+
+🛠️ 赋能Prompt与Skill工作流：适用于Prompt优化、Skill生成、图片Prompt反推及不同模型效果对比，帮助用户更高效地管理和复用AI编程资产。
+
+🎁 PromptHub用户专属福利：通过 [专属推广链接](https://infistar.cc/register?aff=RX9CVLVQ&ref_source=link) 注册并完成首次调用，即可领取 [5美元等值测试额度 / 首充专属优惠]！
 
 ---
 

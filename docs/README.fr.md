@@ -62,13 +62,19 @@ Vos données restent sur votre machine.
 
 ---
 
-### Partenaire de services de modèles
+### PromptHub × Infistar.ai 无限星河｜全模型 API · 高效管理与测试 AI 资产
 
-Merci à **Infistar.ai** de sponsoriser PromptHub et de fournir un soutien en services de modèles.
+[![Infistar.cc 一站式全球大模型 API 服务平台](./imgs/sponsors/infistar-banner.png)](https://infistar.cc/register?aff=RX9CVLVQ&ref_source=link)
 
-| Partenaire                                                                       | Service de modèles et usages                                                                                                                                                                                                                                                                                                                                                                                                                                        | Offre pour les utilisateurs de PromptHub                                                                                                                                                                                                                                                                                                                                                       |
-| :------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **[Infistar.ai](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)** | Propose une API multimodèle compatible avec l'interface standard OpenAI, couvrant ChatGPT, Claude, Gemini, Kimi, GLM, DeepSeek et d'autres modèles pour les tests de prompts, la génération IA, la traduction et la réécriture, les workflows Skill et la comparaison de modèles. Selon le sponsor, le service s'appuie sur des canaux à forte concurrence et une redondance multinœud, avec certains modèles à partir d'environ 10 % du prix des canaux officiels. | **[S'inscrire via le lien d'affiliation et consulter l'offre actuelle](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)**<br><sub>Il s'agit d'un lien d'affiliation. PromptHub peut recevoir un avantage promotionnel pour les inscriptions ou usages admissibles. Les modèles, la disponibilité, les prix, les crédits et les conditions sont déterminés par Infistar.ai.</sub> |
+感谢 Infistar.ai 无限星河 赞助并为 PromptHub 提供模型服务支持！
+
+⚡ 稳定支持多模型测试：提供企业级高并发通道与多节点冗余，价格低至官方渠道 1 折，满足 Prompt 测试、AI生成、翻译润色及多模型并行对比等场景。
+
+🧠 一个 API Key 接入主流模型：全面支持 ChatGPT、Claude、Gemini、Kimi、GLM、DeepSeek 等模型，兼容 OpenAI 标准接口，可在 PromptHub 中快速完成Provider与模型配置。
+
+🛠️ 赋能Prompt与Skill工作流：适用于Prompt优化、Skill生成、图片Prompt反推及不同模型效果对比，帮助用户更高效地管理和复用AI编程资产。
+
+🎁 PromptHub用户专属福利：通过 [专属推广链接](https://infistar.cc/register?aff=RX9CVLVQ&ref_source=link) 注册并完成首次调用，即可领取 [5美元等值测试额度 / 首充专属优惠]！
 
 ---
 
