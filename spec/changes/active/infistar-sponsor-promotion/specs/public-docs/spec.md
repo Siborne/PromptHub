@@ -24,9 +24,16 @@ benefit line as part of the campaign copy and requires it to remain unchanged.
 
 Every public sponsor surface MUST use the supplied 1456 × 180 PNG without image
 editing and MUST reproduce the supplied Chinese campaign title and five body
-lines without rewriting or translation. The only content transformation is to
-link the banner and the existing `专属推广链接` phrase to
+lines without rewriting or translation, except that the campaign title MUST use
+the international-domain brand `infistar.cc` in place of `Infistar.ai`. The
+only other content transformation is to link the banner and the existing
+`专属推广链接` phrase to
 `https://infistar.cc/register?aff=RX9CVLVQ&ref_source=link`.
+
+Each surface MUST place the complete campaign inside one row of a single-column
+partner table. The table currently contains only the Infistar entry and MUST
+allow future partners to be added as additional rows without restructuring the
+surrounding document.
 
 ## Scenarios
 
@@ -40,3 +47,9 @@ same banner, approved copy, and registration URL before the download section.
 When the campaign is rendered from any public sponsor surface, no translated
 table, affiliate disclosure, qualification, or other PromptHub-authored copy is
 inserted into the sponsor-provided material.
+
+### `AC-INFISTAR-003`: Partner inventory expands
+
+Given the current one-partner inventory, the table renders one Infistar row.
+When another partner is accepted, its campaign can be appended as another row
+under the existing partner-table header.

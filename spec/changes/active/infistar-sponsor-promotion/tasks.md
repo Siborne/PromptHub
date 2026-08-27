@@ -15,3 +15,9 @@
 - [x] `T-INFISTAR-006` Verify source/asset hashes, exact copy and link parity,
       Markdown formatting, rendered website output, website build, and spec
       traceability (`FR-INFISTAR-001`, `FR-INFISTAR-004`).
+- [x] `T-INFISTAR-007` Use `infistar.cc` in the campaign title across all public
+      sponsor surfaces while leaving the banner and body copy unchanged
+      (`FR-INFISTAR-004`).
+- [x] `T-INFISTAR-008` Place the complete Infistar campaign in the first row of
+      a reusable single-column partner table on every public sponsor surface
+      (`FR-INFISTAR-004`, `AC-INFISTAR-003`).

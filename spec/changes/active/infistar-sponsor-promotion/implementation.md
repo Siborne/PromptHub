@@ -36,6 +36,11 @@ archival remain pending.
   section; the bottom sponsor section contains only personal donation methods.
 - Linked only the banner and the existing `专属推广链接` phrase to the supplied
   `infistar.cc` registration URL.
+- Updated only the campaign-title brand token from `Infistar.ai` to
+  `infistar.cc` across all public sponsor surfaces; the banner and body copy are
+  unchanged.
+- Wrapped each complete campaign block in the first row of a single-column
+  partner table so future sponsors can be added as additional rows.
 - Kept the existing community donation records and donation methods unchanged.
 
 ## Verification
@@ -48,6 +53,12 @@ archival remain pending.
 - The exact-copy scan confirmed the supplied title and five body lines appear
   once on each of the ten public sponsor surfaces, with exactly two
   `infistar.cc` registration links and no legacy `www` URL.
+- A focused title scan confirmed all ten surfaces use `infistar.cc` in the
+  campaign heading while the `Infistar.ai 无限星河` sponsor name in the body
+  remains unchanged.
+- Source and rendered-output scans confirmed each surface has one single-column
+  partner table with exactly one Infistar data row; the structure accepts future
+  partners as additional rows.
 - The absence scan confirmed that the removed rewritten tables, translations,
   affiliate notices, and qualification text are not present on those surfaces.
 - Prettier and `git diff --check` passed for the changed public documents and
