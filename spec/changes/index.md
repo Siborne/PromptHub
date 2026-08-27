@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 25 |
+| Active | 26 |
 | Archived | 229 |
 | Legacy | 1 |
 
@@ -23,6 +23,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `desktop-prompt-list-projection` | active | `spec/changes/active/desktop-prompt-list-projection/` |
 | `desktop-upgrade-snapshot-lock-recovery` | active | `spec/changes/active/desktop-upgrade-snapshot-lock-recovery/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
+| `infistar-sponsor-promotion` | active | `spec/changes/active/infistar-sponsor-promotion/` |
 | `legacy-upgrade-recovery-audit` | active | `spec/changes/active/legacy-upgrade-recovery-audit/` |
 | `mcp-version-history-and-projection-safety` | active | `spec/changes/active/mcp-version-history-and-projection-safety/` |
 | `mobile-prompt-persistence-hardening` | release-pending | `spec/changes/active/mobile-prompt-persistence-hardening/` |

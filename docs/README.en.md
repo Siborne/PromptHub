@@ -62,6 +62,16 @@ Your data lives on your machine.
 
 ---
 
+### Model service partner
+
+Thank you to **Infistar.ai** for sponsoring PromptHub and providing model-service support.
+
+| Partner                                                                          | Model service and use cases                                                                                                                                                                                                                                                                                                                                                                                          | PromptHub user offer                                                                                                                                                                                                                                                                                                                                         |
+| :------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **[Infistar.ai](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)** | Provides a multi-model API compatible with the OpenAI interface, covering ChatGPT, Claude, Gemini, Kimi, GLM, DeepSeek, and more for prompt testing, AI generation, translation and rewriting, Skill workflows, and model comparisons. According to the sponsor, the service uses high-concurrency routes and multi-node redundancy, with selected model pricing starting at around 10% of official-channel pricing. | **[Register through the affiliate link and view the current offer](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)**<br><sub>This is an affiliate link, and PromptHub may receive promotional benefit from qualifying registration or usage. Models, availability, pricing, credits, and promotion terms are determined by Infistar.ai.</sub> |
+
+---
+
 <div id="install"></div>
 
 ## 📥 Download

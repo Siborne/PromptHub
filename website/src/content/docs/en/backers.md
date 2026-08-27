@@ -5,7 +5,15 @@ description: Special thanks to everyone who has generously donated to PromptHub.
 
 # Special Thanks
 
-The development of PromptHub is driven by the community. We sincerely thank the following users for their generous donations. Your recognition and support are our greatest motivation to keep improving this open-source project.
+PromptHub's development is made possible by its partners and community. Thank you to everyone helping the project improve.
+
+## Model Service Partner
+
+Thank you to **Infistar.ai** for sponsoring PromptHub and providing model-service support.
+
+| Partner                                                                          | Model service and use cases                                                                                                                                                                                                                                                                                                                                                                                          | PromptHub user offer                                                                                                                                                                                                                                                                                                                                         |
+| :------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **[Infistar.ai](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)** | Provides a multi-model API compatible with the OpenAI interface, covering ChatGPT, Claude, Gemini, Kimi, GLM, DeepSeek, and more for prompt testing, AI generation, translation and rewriting, Skill workflows, and model comparisons. According to the sponsor, the service uses high-concurrency routes and multi-node redundancy, with selected model pricing starting at around 10% of official-channel pricing. | **[Register through the affiliate link and view the current offer](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)**<br><sub>This is an affiliate link, and PromptHub may receive promotional benefit from qualifying registration or usage. Models, availability, pricing, credits, and promotion terms are determined by Infistar.ai.</sub> |
 
 ## Backer List
 

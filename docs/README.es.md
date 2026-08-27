@@ -62,6 +62,16 @@ Tus datos se quedan en tu máquina.
 
 ---
 
+### Socio de servicios de modelos
+
+Gracias a **Infistar.ai** por patrocinar PromptHub y proporcionar soporte de servicios de modelos.
+
+| Socio                                                                            | Servicio de modelos y casos de uso                                                                                                                                                                                                                                                                                                                                                                                                                              | Oferta para usuarios de PromptHub                                                                                                                                                                                                                                                                                                                                                                 |
+| :------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **[Infistar.ai](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)** | Ofrece una API multimodelo compatible con la interfaz estándar de OpenAI, con acceso a ChatGPT, Claude, Gemini, Kimi, GLM, DeepSeek y otros modelos para probar prompts, generar contenido con IA, traducir y revisar textos, trabajar con Skills y comparar modelos. Según el patrocinador, el servicio utiliza canales de alta concurrencia y redundancia multinodo, con precios para algunos modelos desde aproximadamente el 10 % de los canales oficiales. | **[Registrarse mediante el enlace de afiliado y consultar la oferta actual](https://www.infistar.cc/register?aff=RX9CVLVQ&ref_source=link)**<br><sub>Este es un enlace de afiliado y PromptHub puede recibir un beneficio promocional por registros o usos que cumplan los requisitos. Los modelos, la disponibilidad, los precios, los créditos y las condiciones dependen de Infistar.ai.</sub> |
+
+---
+
 <div id="install"></div>
 
 ## 📥 Descarga
