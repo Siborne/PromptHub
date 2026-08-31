@@ -12,10 +12,13 @@ English copy and translations of the same campaign for the other languages.
 Store the Chinese image at `docs/imgs/sponsors/apimart-banner.png` and English
 image at `docs/imgs/sponsors/apimart-banner-en.png`. Root and localized documents
 use relative paths appropriate to their directories. Each row wraps the image
-in the same registration URL used by its text link.
+in the same registration URL used by its text link. The maintainer-selected
+detailed 3840 × 2160 posters replace the simplified images at these same paths;
+no Markdown or referral URL changes are needed. The earlier simplified images
+remain recoverable from commit `dee61e74`.
 
 The change adds a constant number of static rows and two shared assets
-(approximately 4.3 MiB total). It adds no application processing, service,
+(approximately 8.8 MiB total after the detailed-poster revision). It adds no application processing, service,
 dependency, migration, or background resource. Website synchronization is
 intentionally outside this README-only request.
 

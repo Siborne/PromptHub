@@ -7,5 +7,9 @@
       to the registration URL, and validate image paths and original bytes
       (`FR-APIMART-002`, `DES-APIMART-002`, `TEST-APIMART-002`).
 
+- [x] `T-APIMART-003`: Replace the two simplified images with the supplied
+      detailed posters while preserving all seven README files and links
+      (`FR-APIMART-002`, `DES-APIMART-002`, `TEST-APIMART-002`).
+
 The documentation-only submission includes the traceability record and its
 generated inventory entry. Unrelated worktree changes remain outside the commit.

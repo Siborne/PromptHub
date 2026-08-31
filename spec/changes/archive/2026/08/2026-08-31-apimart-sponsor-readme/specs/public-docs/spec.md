@@ -16,12 +16,13 @@ workflow, batch/model-switching benefits, and pay-as-you-go registration copy.
 Simplified and Traditional Chinese use the supplied Chinese banner. English,
 Japanese, German, Spanish, and French use the supplied English banner. Images
 retain their original bytes. Both the banner link and text registration link
-must point to `https://go.apimart.ai/gh-prompthub`. Full promotional posters are
-not added.
+must point to `https://go.apimart.ai/gh-prompthub`. The detailed Chinese and
+English promotional posters selected by the maintainer on 2026-08-31 replace
+the initial simplified banners. The existing localized text remains unchanged.
 
 ## Traceability
 
-| Requirement      | Design            | Verification       | Task            |
-| ---------------- | ----------------- | ------------------ | --------------- |
-| `FR-APIMART-001` | `DES-APIMART-001` | `TEST-APIMART-001` | `T-APIMART-001` |
-| `FR-APIMART-002` | `DES-APIMART-002` | `TEST-APIMART-002` | `T-APIMART-002` |
+| Requirement      | Design            | Verification       | Task                             |
+| ---------------- | ----------------- | ------------------ | -------------------------------- |
+| `FR-APIMART-001` | `DES-APIMART-001` | `TEST-APIMART-001` | `T-APIMART-001`                  |
+| `FR-APIMART-002` | `DES-APIMART-002` | `TEST-APIMART-002` | `T-APIMART-002`, `T-APIMART-003` |

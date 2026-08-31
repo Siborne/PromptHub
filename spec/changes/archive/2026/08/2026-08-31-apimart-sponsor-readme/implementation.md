@@ -4,7 +4,7 @@
 
 Completed README content and asset synchronization on 2026-08-31.
 
-## Delivered
+## Initial Delivery (`dee61e74`)
 
 - APIMart is the first partner in all seven README languages.
 - Chinese READMEs share the Chinese banner; the other five share the English
@@ -13,7 +13,7 @@ Completed README content and asset synchronization on 2026-08-31.
 - Infistar, other README content, website pages, application code, and release
   metadata remain unchanged.
 
-## Verification
+## Initial Delivery Verification
 
 - Session Node/remark/GFM assertions: passed for all seven documents; verified
   table shape, order, links, relative images, and unchanged surrounding content.
@@ -43,3 +43,25 @@ no stable application knowledge or release records need changes.
 The change is archived after document validation. The existing dirty inventory
 is preserved in the worktree; only the inventory generated from the submission's
 staged change records belongs in this commit.
+
+## Detailed Poster Revision (2026-08-31)
+
+The maintainer's GitHub screenshot showed the simplified creative already
+occupying a large area. The selected Chinese and English detailed posters now
+replace those images at the same paths, so every README language picks up the
+new creative without changing its prose, table order, or registration links.
+
+The posters retain their original 3840 × 2160 PNG bytes. Chinese remains shared
+by Simplified and Traditional Chinese; English remains shared by the other five
+languages. The embedded website text is part of the supplied creative; clicking
+either poster still uses the dedicated PromptHub registration URL.
+
+Revision verification: PNG byte equality and 3840 × 2160 dimensions passed for
+both assets. All seven README files match `dee61e74` exactly, with the expected
+language image and two registration links per campaign. The targeted traceability
+command passed before re-archival; the generated inventory check passed afterward
+without any inventory edit. The earlier application, website, browser, and
+provider acceptance limits remain unchanged.
+
+Rollback: restore the two image files from commit `dee61e74`; no data migration
+or README changes are required.
