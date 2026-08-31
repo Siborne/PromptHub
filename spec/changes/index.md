@@ -8,7 +8,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | State | Count |
 | --- | ---: |
 | Active | 26 |
-| Archived | 229 |
+| Archived | 230 |
 | Legacy | 1 |
 
 ## Active
@@ -275,6 +275,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-08-20-database-resource-lifecycle-hardening` | archived | `spec/changes/archive/2026/08/2026-08-20-database-resource-lifecycle-hardening/` |
 | `2026-08-20-windows-canonical-authority-second-launch` | archived | `spec/changes/archive/2026/08/2026-08-20-windows-canonical-authority-second-launch/` |
 | `2026-08-21-skill-package-canonical-finalization` | archived | `spec/changes/archive/2026/08/2026-08-21-skill-package-canonical-finalization/` |
+| `2026-08-31-apimart-sponsor-readme` | archived | `spec/changes/archive/2026/08/2026-08-31-apimart-sponsor-readme/` |
 
 ## Legacy
 
