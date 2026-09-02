@@ -31,6 +31,7 @@ import {
   resolvePlatformPath,
   gitClone,
   gitListRemoteBranches,
+  GitExecutableUnavailableError,
   invalidateCustomPathsCache,
 } from "../../../src/main/services/skill-installer-utils";
 
@@ -1109,12 +1110,76 @@ describe("skill-installer-utils", () => {
       expect((error as Error).message).not.toContain("alice");
       expect((error as Error).message).not.toContain("secret");
     });
+
+    it.each(["ENOENT", "EACCES"])(
+      "classifies an unavailable Git executable from %s",
+      async (code) => {
+        const errorHandlers: Array<(error: NodeJS.ErrnoException) => void> = [];
+        vi.mocked(childProcess.spawn).mockReturnValue({
+          stdout: { on: vi.fn() },
+          stderr: { on: vi.fn() },
+          on: vi.fn((event, cb) => event === "error" && errorHandlers.push(cb)),
+          kill: vi.fn(),
+        } as unknown as childProcess.ChildProcess);
+
+        const promise = gitClone("https://github.com/acme/skills", "/tmp/dest");
+        await vi.waitFor(() => expect(childProcess.spawn).toHaveBeenCalled());
+        errorHandlers[0]?.(
+          Object.assign(new Error(`spawn git ${code}`), { code }),
+        );
+
+        await expect(promise).rejects.toBeInstanceOf(
+          GitExecutableUnavailableError,
+        );
+      },
+    );
+
+    it("keeps other Git process launch failures sanitized and distinct", async () => {
+      const errorHandlers: Array<(error: NodeJS.ErrnoException) => void> = [];
+      vi.mocked(childProcess.spawn).mockReturnValue({
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => event === "error" && errorHandlers.push(cb)),
+        kill: vi.fn(),
+      } as unknown as childProcess.ChildProcess);
+
+      const promise = gitClone("https://github.com/acme/skills", "/tmp/dest");
+      await vi.waitFor(() => expect(childProcess.spawn).toHaveBeenCalled());
+      errorHandlers[0]?.(
+        Object.assign(new Error("spawn git EIO"), { code: "EIO" }),
+      );
+
+      const error = await promise.catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(GitExecutableUnavailableError);
+      expect((error as Error).message).toContain("Git clone error");
+    });
   });
 
   describe("gitListRemoteBranches", () => {
     it("rejects empty URL", () => {
       expect(() => gitListRemoteBranches("" as string)).toThrow(
         /cannot be empty/,
+      );
+    });
+
+    it("uses the same actionable error when branch discovery cannot run Git", async () => {
+      const errorHandlers: Array<(error: NodeJS.ErrnoException) => void> = [];
+      vi.mocked(childProcess.spawn).mockReturnValue({
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => event === "error" && errorHandlers.push(cb)),
+        kill: vi.fn(),
+      } as unknown as childProcess.ChildProcess);
+
+      const promise = gitListRemoteBranches("https://github.com/acme/skills");
+      await vi.waitFor(() => expect(childProcess.spawn).toHaveBeenCalled());
+      errorHandlers[0]?.(
+        Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT" }),
+      );
+
+      await expect(promise).rejects.toBeInstanceOf(
+        GitExecutableUnavailableError,
       );
     });
 

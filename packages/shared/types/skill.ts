@@ -477,10 +477,15 @@ export type SkillPackageOperationFailureCode =
   | "ROLLBACK_INCOMPLETE"
   | "OPERATION_IN_PROGRESS";
 
+export type SkillPackageOperationFailureReason =
+  | "git-unavailable"
+  | "git-http-fallback-failed";
+
 export interface SkillPackageOperationFailure {
   code: SkillPackageOperationFailureCode;
   phase: SkillPackageOperationPhase;
   summary: string;
+  reason?: SkillPackageOperationFailureReason;
   sourceLabel?: string;
 }
 

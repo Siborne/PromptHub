@@ -3,6 +3,7 @@ import type {
   SkillPackageFileInput,
   SkillPackageOperationFailure,
   SkillPackageOperationFailureCode,
+  SkillPackageOperationFailureReason,
   SkillPackageOperationRequest,
   SkillPackageOperationResult,
   SkillPackageOperationSource,
@@ -72,6 +73,22 @@ const PACKAGE_FAILURE_COPY: Record<
   },
 };
 
+const PACKAGE_FAILURE_REASON_COPY: Record<
+  SkillPackageOperationFailureReason,
+  { key: string; defaultValue: string }
+> = {
+  "git-unavailable": {
+    key: "skill.packageFailure.gitUnavailable",
+    defaultValue:
+      "Git is unavailable. Install Git or add it to PATH, then restart PromptHub.",
+  },
+  "git-http-fallback-failed": {
+    key: "skill.packageFailure.gitHttpFallbackFailed",
+    defaultValue:
+      "PromptHub could not use Git, and the HTTP archive fallback also failed. Check Git/PATH, network or proxy settings, and source access, then try again.",
+  },
+};
+
 /** Map stable lifecycle failures to localized copy without leaking diagnostics. */
 export function formatSkillPackageOperationError(
   error: unknown,
@@ -79,6 +96,10 @@ export function formatSkillPackageOperationError(
 ): string {
   if (!(error instanceof SkillPackageOperationError)) {
     return error instanceof Error ? error.message : String(error);
+  }
+  if (error.failure.reason) {
+    const reasonCopy = PACKAGE_FAILURE_REASON_COPY[error.failure.reason];
+    return t(reasonCopy.key, reasonCopy.defaultValue);
   }
   const copy = PACKAGE_FAILURE_COPY[error.failure.code];
   return t(copy.key, copy.defaultValue);

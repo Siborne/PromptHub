@@ -23,6 +23,7 @@ import {
 } from "../../../src/main/services/skill-installer";
 import { invalidateCustomPathsCache } from "../../../src/main/services/skill-installer-utils";
 import * as skillInstallerUtils from "../../../src/main/services/skill-installer-utils";
+import { GitExecutableUnavailableError } from "../../../src/main/services/skill-installer-utils";
 
 let tmpDir: string;
 
@@ -32,6 +33,12 @@ const UNSAFE_ZIP_BASE64 =
   "UEsDBBQAAAAIABeExFwEQPI4CQAAAAcAAAAOAAAALi4vb3V0c2lkZS50eHRLLU5OLEjlAgBQSwMEFAAAAAgAF4TEXLOr/W4LAAAACQAAAAgAAABTS0lMTC5tZFNWCM0rTkxL5QIAUEsBAhQAFAAAAAgAF4TEXARA8jgJAAAABwAAAA4AAAAAAAAAAAAAAAAAAAAAAC4uL291dHNpZGUudHh0UEsBAhQAFAAAAAgAF4TEXLOr/W4LAAAACQAAAAgAAAAAAAAAAAAAAAAANQAAAFNLSUxMLm1kUEsFBgAAAAACAAIAcgAAAGYAAAAAAA==";
 const UNSAFE_SKILL_ZIP_BASE64 =
   "UEsDBBQAAAAIAEeR51yEnAO/RQAAAEMAAAAIAAAAU0tJTEwubWRTVgjNK05MS1UIzs7MyeHiCirNU0hILi3KUcgoKSkottLXTy3LzNFLrUjMLchJ1c/MKy5JzMnRK85QqFFISizOSNDjAgBQSwECFAMUAAAACABHkedchJwDv0UAAABDAAAACAAAAAAAAAAAAAAAgAEAAAAAU0tJTEwubWRQSwUGAAAAAAEAAQA2AAAAawAAAAAA";
+const REPOSITORY_ARCHIVE_BASE64 =
+  "UEsDBBQAAAAIAEdWIl1+ovTOGgAAAB8AAAAiAAAAc2tpbGxzLW1haW4vc2tpbGxzL3dyaXRlci9TS0lMTC5tZNPV1eXKS8xNtVIoL8osSS3iAglwKSuEQ3gAUEsDBBQAAAAIAEdWIl2ie6YPCgAAAAgAAAAnAAAAc2tpbGxzLW1haW4vc2tpbGxzL3dyaXRlci9kb2NzL2d1aWRlLm1kU1ZwL81MSeUCAFBLAwQUAAAACABHViJdGBbw9A0AAAALAAAAKgAAAHNraWxscy1tYWluL3NraWxscy93cml0ZXIvc2NyaXB0cy9zZXR1cC5zaEtNzshXKE4tKS3gAgBQSwMEFAAAAAgAR1YiXaW+61sGAAAABAAAACkAAABza2lsbHMtbWFpbi9za2lsbHMvd3JpdGVyL2Fzc2V0cy9pY29uLnBuZ+sM8HMHAFBLAQIUABQAAAAIAEdWIl1+ovTOGgAAAB8AAAAiAAAAAAAAAAAAAAAAAAAAAABza2lsbHMtbWFpbi9za2lsbHMvd3JpdGVyL1NLSUxMLm1kUEsBAhQAFAAAAAgAR1YiXaJ7pg8KAAAACAAAACcAAAAAAAAAAAAAAAAAWgAAAHNraWxscy1tYWluL3NraWxscy93cml0ZXIvZG9jcy9ndWlkZS5tZFBLAQIUABQAAAAIAEdWIl0YFvD0DQAAAAsAAAAqAAAAAAAAAAAAAAAAAKkAAABza2lsbHMtbWFpbi9za2lsbHMvd3JpdGVyL3NjcmlwdHMvc2V0dXAuc2hQSwECFAAUAAAACABHViJdpb7rWwYAAAAEAAAAKQAAAAAAAAAAAAAAAAD+AAAAc2tpbGxzLW1haW4vc2tpbGxzL3dyaXRlci9hc3NldHMvaWNvbi5wbmdQSwUGAAAAAAQABABUAQAASwEAAAAA";
+
+function createRepositoryArchive(): Uint8Array {
+  return Buffer.from(REPOSITORY_ARCHIVE_BASE64, "base64");
+}
 
 async function listRelativeFiles(baseDir: string): Promise<string[]> {
   const files: string[] = [];
@@ -273,6 +280,43 @@ describe("SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId", () => {
       expect.stringContaining("team-skills"),
       "main",
     );
+  });
+
+  it("installs a complete public HTTPS package through HTTP when Git is absent", async () => {
+    await SkillInstaller.init();
+    vi.spyOn(skillInstallerUtils, "gitClone").mockRejectedValue(
+      new GitExecutableUnavailableError(),
+    );
+    vi.spyOn(SkillInstaller, "fetchRemoteBytes").mockResolvedValue(
+      createRepositoryArchive(),
+    );
+
+    const repoPath =
+      await SkillInstaller.saveRemoteGitSkillToLocalRepoBySkillId(
+        {
+          id: "skill-http-writer",
+          name: "writer",
+          source_id: "source-http-writer",
+          source_url: "https://github.com/acme/skills",
+          source_directory: "skills/writer",
+        },
+        {
+          repoUrl: "https://github.com/acme/skills",
+          branch: "main",
+          directory: "skills/writer",
+        },
+      );
+
+    await expect(listRelativeFiles(repoPath)).resolves.toEqual([
+      "SKILL.md",
+      "assets/icon.png",
+      "docs/guide.md",
+      "scripts/setup.sh",
+    ]);
+    expect(SkillInstaller.fetchRemoteBytes).toHaveBeenCalledWith(
+      "https://github.com/acme/skills/archive/main.zip",
+    );
+    expect(await listRemoteImportTempDirs()).toEqual([]);
   });
 
   it("uses a real local git clone fixture and excludes internal dirs and symlinks", async () => {

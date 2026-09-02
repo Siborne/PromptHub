@@ -2935,6 +2935,7 @@
     "storeDirectoryPlaceholder": "Verzeichnis (optional, z. B. skills/.curated)",
     "loadingBranches": "Branches werden geladen...",
     "branchListFallbackHint": "Remote-Branches konnten nicht geladen werden. Du kannst weiterhin manuell einen Branch eingeben.",
+    "gitUnavailableBranchHint": "Git ist nicht verfügbar. Installiere Git oder füge es zum PATH hinzu und starte PromptHub neu. Du kannst den Branch weiterhin manuell eingeben.",
     "branchSuggestions": "Vorgeschlagene Branches",
     "branchLabel": "Branch",
     "directoryLabel": "Verzeichnis",
@@ -2976,6 +2977,8 @@
     "updateApprovalFingerprintHint": "Die Genehmigung gilt nur für das geprüfte Paket. Sperren und Strukturprüfungen können nicht umgangen werden.",
     "packageFailure": {
       "sourceUnavailable": "Die Skill-Quelle ist nicht verfügbar. Prüfe sie und versuche es erneut.",
+      "gitUnavailable": "Git ist nicht verfügbar. Installiere Git oder füge es zum PATH hinzu und starte PromptHub neu.",
+      "gitHttpFallbackFailed": "PromptHub konnte Git nicht verwenden und auch der HTTP-Archiv-Fallback ist fehlgeschlagen. Prüfe Git/PATH, Netzwerk- oder Proxy-Einstellungen und den Quellenzugriff und versuche es erneut.",
       "invalidPackage": "Das Skill-Paket ist ungültig.",
       "safetyBlocked": "Die Sicherheitsprüfung hat dieses Skill-Paket blockiert.",
       "duplicateSource": "Diese genaue Skill-Quelle ist bereits installiert.",

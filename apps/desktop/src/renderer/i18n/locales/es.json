@@ -2935,6 +2935,7 @@
     "storeDirectoryPlaceholder": "Directorio (opcional, p. ej. skills/.curated)",
     "loadingBranches": "Cargando ramas...",
     "branchListFallbackHint": "No se pudieron cargar las ramas remotas. Aun puedes escribir una manualmente.",
+    "gitUnavailableBranchHint": "Git no está disponible. Instala Git o añádelo al PATH y reinicia PromptHub. Aún puedes escribir una rama manualmente.",
     "branchSuggestions": "Ramas sugeridas",
     "branchLabel": "Rama",
     "directoryLabel": "Directorio",
@@ -2976,6 +2977,8 @@
     "updateApprovalFingerprintHint": "La aprobación solo se aplica al paquete revisado. Los bloqueos y controles estructurales no se pueden omitir.",
     "packageFailure": {
       "sourceUnavailable": "La fuente del Skill no está disponible. Revísala e inténtalo de nuevo.",
+      "gitUnavailable": "Git no está disponible. Instala Git o añádelo al PATH y reinicia PromptHub.",
+      "gitHttpFallbackFailed": "PromptHub no pudo usar Git y la alternativa del archivo HTTP también falló. Revisa Git/PATH, la red o el proxy y el acceso a la fuente, e inténtalo de nuevo.",
       "invalidPackage": "El paquete de Skill no es válido.",
       "safetyBlocked": "Las comprobaciones de seguridad bloquearon este paquete de Skill.",
       "duplicateSource": "Esta fuente exacta de Skill ya está instalada.",

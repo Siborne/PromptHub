@@ -316,6 +316,33 @@ describe("renderer Skill package operation adapter", () => {
     ).toBe("CONFLICT");
   });
 
+  it.each([
+    ["git-unavailable", "skill.packageFailure.gitUnavailable"],
+    ["git-http-fallback-failed", "skill.packageFailure.gitHttpFallbackFailed"],
+  ] as const)(
+    "formats the bounded transport reason %s",
+    async (reason, key) => {
+      const { formatSkillPackageOperationError, SkillPackageOperationError } =
+        await loadService();
+      const t = vi.fn(
+        (translationKey: string) => `localized:${translationKey}`,
+      );
+      const error = new SkillPackageOperationError({
+        code: "SOURCE_UNAVAILABLE",
+        phase: "staging",
+        reason,
+        summary: "spawn git ENOENT at C:\\Users\\secret",
+      });
+
+      expect(formatSkillPackageOperationError(error, t as never)).toBe(
+        `localized:${key}`,
+      );
+      expect(formatSkillPackageOperationError(error, t as never)).not.toContain(
+        "ENOENT",
+      );
+    },
+  );
+
   it("falls back to source URL for a single-content package", async () => {
     const { buildSkillPackageOperationSource } = await loadService();
 

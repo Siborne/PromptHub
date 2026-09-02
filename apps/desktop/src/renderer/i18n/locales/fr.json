@@ -2936,6 +2936,7 @@
     "storeDirectoryPlaceholder": "Repertoire (optionnel, ex. skills/.curated)",
     "loadingBranches": "Chargement des branches...",
     "branchListFallbackHint": "Impossible de charger les branches distantes. Vous pouvez toujours en saisir une manuellement.",
+    "gitUnavailableBranchHint": "Git est indisponible. Installez Git ou ajoutez-le au PATH, puis redémarrez PromptHub. Vous pouvez toujours saisir une branche manuellement.",
     "branchSuggestions": "Branches suggerees",
     "branchLabel": "Branche",
     "directoryLabel": "Repertoire",
@@ -2977,6 +2978,8 @@
     "updateApprovalFingerprintHint": "L’approbation ne vaut que pour le paquet examiné. Les blocages et contrôles de structure ne peuvent pas être contournés.",
     "packageFailure": {
       "sourceUnavailable": "La source du Skill est indisponible. Vérifiez-la puis réessayez.",
+      "gitUnavailable": "Git est indisponible. Installez Git ou ajoutez-le au PATH, puis redémarrez PromptHub.",
+      "gitHttpFallbackFailed": "PromptHub n’a pas pu utiliser Git et le repli vers l’archive HTTP a également échoué. Vérifiez Git/PATH, le réseau ou le proxy et l’accès à la source, puis réessayez.",
       "invalidPackage": "Le paquet Skill est invalide.",
       "safetyBlocked": "Les contrôles de sécurité ont bloqué ce paquet Skill.",
       "duplicateSource": "Cette source exacte de Skill est déjà installée.",

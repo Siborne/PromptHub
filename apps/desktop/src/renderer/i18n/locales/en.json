@@ -2945,6 +2945,7 @@
     "storeDirectoryPlaceholder": "Directory (optional, e.g. skills/.curated)",
     "loadingBranches": "Loading branches...",
     "branchListFallbackHint": "Could not load remote branches. You can still type one manually.",
+    "gitUnavailableBranchHint": "Git is unavailable. Install Git or add it to PATH, then restart PromptHub. You can still type a branch manually.",
     "branchSuggestions": "Suggested branches",
     "branchLabel": "Branch",
     "directoryLabel": "Directory",
@@ -2986,6 +2987,8 @@
     "updateApprovalFingerprintHint": "Approval applies only to the reviewed package. Blocked findings and structural safety checks cannot be bypassed.",
     "packageFailure": {
       "sourceUnavailable": "The Skill source is unavailable. Check it and try again.",
+      "gitUnavailable": "Git is unavailable. Install Git or add it to PATH, then restart PromptHub.",
+      "gitHttpFallbackFailed": "PromptHub could not use Git, and the HTTP archive fallback also failed. Check Git/PATH, network or proxy settings, and source access, then try again.",
       "invalidPackage": "The Skill package is invalid.",
       "safetyBlocked": "Safety checks blocked this Skill package.",
       "duplicateSource": "This exact Skill source is already installed.",

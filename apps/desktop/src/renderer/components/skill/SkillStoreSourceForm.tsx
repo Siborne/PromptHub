@@ -6,6 +6,7 @@ import {
   normalizeGitStoreSourceInput,
 } from "../../services/skill-store-source";
 import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
+import { formatSkillBranchListError } from "../../services/skill-git-error";
 
 interface SkillStoreSourceFormProps {
   branch: string;
@@ -37,7 +38,10 @@ interface SkillStoreSourceFormProps {
   }>;
 }
 
-function prioritizeBranchSuggestions(branches: string[], currentBranch: string): string[] {
+function prioritizeBranchSuggestions(
+  branches: string[],
+  currentBranch: string,
+): string[] {
   const current = currentBranch.trim().toLowerCase();
   const priority = new Map<string, number>();
 
@@ -52,8 +56,10 @@ function prioritizeBranchSuggestions(branches: string[], currentBranch: string):
   }
 
   return [...branches].sort((left, right) => {
-    const leftPriority = priority.get(left.toLowerCase()) ?? Number.POSITIVE_INFINITY;
-    const rightPriority = priority.get(right.toLowerCase()) ?? Number.POSITIVE_INFINITY;
+    const leftPriority =
+      priority.get(left.toLowerCase()) ?? Number.POSITIVE_INFINITY;
+    const rightPriority =
+      priority.get(right.toLowerCase()) ?? Number.POSITIVE_INFINITY;
 
     if (leftPriority !== rightPriority) {
       return leftPriority - rightPriority;
@@ -63,7 +69,10 @@ function prioritizeBranchSuggestions(branches: string[], currentBranch: string):
   });
 }
 
-function buildBranchSuggestions(branches: string[], currentBranch: string): string[] {
+function buildBranchSuggestions(
+  branches: string[],
+  currentBranch: string,
+): string[] {
   const current = currentBranch.trim().toLowerCase();
 
   return prioritizeBranchSuggestions(branches, currentBranch).filter(
@@ -106,7 +115,8 @@ export function SkillStoreSourceForm({
       const shouldLoad =
         Boolean(parsedRepo) &&
         !isLikelyLocalSource(trimmedUrl) &&
-        (parsedRepo?.protocol === "ssh" || isGitHubHost(parsedRepo?.host ?? ""));
+        (parsedRepo?.protocol === "ssh" ||
+          isGitHubHost(parsedRepo?.host ?? ""));
 
       if (!shouldLoad) {
         setRemoteBranches([]);
@@ -119,14 +129,16 @@ export function SkillStoreSourceForm({
       setBranchError(null);
       try {
         const normalizedSource = normalizeGitStoreSourceInput(trimmedUrl);
-        const branches = await window.api.skill.listRemoteBranches(normalizedSource.url);
+        const branches = await window.api.skill.listRemoteBranches(
+          normalizedSource.url,
+        );
         if (!disposed) {
           setRemoteBranches(branches);
         }
       } catch (error) {
         if (!disposed) {
           setRemoteBranches([]);
-          setBranchError(error instanceof Error ? error.message : String(error));
+          setBranchError(formatSkillBranchListError(error, t));
         }
       } finally {
         if (!disposed) {
@@ -140,7 +152,7 @@ export function SkillStoreSourceForm({
     return () => {
       disposed = true;
     };
-  }, [sourceType, sourceUrl]);
+  }, [sourceType, sourceUrl, t]);
 
   const filteredBranches = useMemo(() => {
     const query = branch.trim().toLowerCase();
@@ -283,25 +295,22 @@ export function SkillStoreSourceForm({
                   {t("skill.branchSuggestions", "Suggested branches")}
                 </div>
                 <div className="max-h-40 overflow-y-auto">
-                {filteredBranches.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setBranch(item)}
-                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
-                  >
-                    <span>{item}</span>
-                  </button>
-                ))}
+                  {filteredBranches.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setBranch(item)}
+                      className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
+                    >
+                      <span>{item}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             ) : null}
             {!isLoadingBranches && branchError ? (
               <div className="text-[11px] text-muted-foreground">
-                {t(
-                  "skill.branchListFallbackHint",
-                  "Could not load remote branches. You can still type one manually.",
-                )}
+                {branchError}
               </div>
             ) : null}
           </div>
@@ -343,7 +352,8 @@ export function SkillStoreSourceForm({
               https://github.com/anthropics/skills
             </div>
             <div className="mt-1 font-mono break-all text-[11px]">
-              {t("skill.branchLabel", "Branch")}: main | {t("skill.directoryLabel", "Directory")}: skills/.curated
+              {t("skill.branchLabel", "Branch")}: main |{" "}
+              {t("skill.directoryLabel", "Directory")}: skills/.curated
             </div>
             <div className="mt-1 font-mono break-all text-[11px]">
               ~/Projects/my-skill-repo

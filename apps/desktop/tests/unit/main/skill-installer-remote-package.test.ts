@@ -4,27 +4,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SkillSafetyReport } from "@prompthub/shared/types";
 
-const mocks = vi.hoisted(() => ({
-  mkdtemp: vi.fn(),
-  readFile: vi.fn(),
-  rm: vi.fn(),
-  initSkillsDir: vi.fn(),
-  fileExists: vi.fn(),
-  isPathWithin: vi.fn(),
-  resolveSingleSkillDirFromRepo: vi.fn(),
-  resolveSkillDirFromRepo: vi.fn(),
-  readLocalRepoFileBuffersByPath: vi.fn(),
-  copyRepoByPathToDirectory: vi.fn(),
-  saveToLocalRepoBySkillId: vi.fn(),
-  fetchRemoteBytes: vi.fn(),
-  gitClone: vi.fn(),
-  validateMaterializedSkillPackage: vi.fn(),
-  extractSkillZipArchive: vi.fn(),
-  assertStagedRemoteSkillPackageSafe: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  class GitExecutableUnavailableError extends Error {}
+  return {
+    GitExecutableUnavailableError,
+    mkdtemp: vi.fn(),
+    readdir: vi.fn(),
+    readFile: vi.fn(),
+    rm: vi.fn(),
+    initSkillsDir: vi.fn(),
+    fileExists: vi.fn(),
+    isPathWithin: vi.fn(),
+    resolveSingleSkillDirFromRepo: vi.fn(),
+    resolveSkillDirFromRepo: vi.fn(),
+    readLocalRepoFileBuffersByPath: vi.fn(),
+    copyRepoByPathToDirectory: vi.fn(),
+    saveToLocalRepoBySkillId: vi.fn(),
+    fetchRemoteBytes: vi.fn(),
+    gitClone: vi.fn(),
+    validateMaterializedSkillPackage: vi.fn(),
+    extractSkillZipArchive: vi.fn(),
+    assertStagedRemoteSkillPackageSafe: vi.fn(),
+  };
+});
 
 vi.mock("fs/promises", () => ({
   mkdtemp: mocks.mkdtemp,
+  readdir: mocks.readdir,
   readFile: mocks.readFile,
   rm: mocks.rm,
 }));
@@ -55,6 +61,7 @@ vi.mock("../../../src/main/services/skill-installer-remote", () => ({
 }));
 
 vi.mock("../../../src/main/services/skill-installer-utils", () => ({
+  GitExecutableUnavailableError: mocks.GitExecutableUnavailableError,
   gitClone: mocks.gitClone,
 }));
 
@@ -78,6 +85,8 @@ import {
   saveRemoteZipSkillPackage,
   type RemotePackageSkill,
 } from "../../../src/main/services/skill-installer-remote-package";
+import { GitExecutableUnavailableError } from "../../../src/main/services/skill-installer-utils";
+import { SkillPackageTransportError } from "../../../src/main/services/skill-package-transport-error";
 
 const safeReport: SkillSafetyReport = {
   level: "safe",
@@ -106,6 +115,9 @@ describe("remote Skill package adapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mkdtemp.mockImplementation(async (prefix: string) => `${prefix}op`);
+    mocks.readdir.mockResolvedValue([
+      { name: "skills-main", isDirectory: () => true },
+    ]);
     mocks.readFile.mockResolvedValue("# Writer\n\nFrom private Gitea\n");
     mocks.rm.mockResolvedValue(undefined);
     mocks.initSkillsDir.mockResolvedValue(undefined);
@@ -224,6 +236,138 @@ describe("remote Skill package adapter", () => {
       { ifExists: "error" },
     );
     expect(onSafetyReport).toHaveBeenCalledWith(safeReport);
+  });
+
+  it("falls back to one bounded GitHub archive when Git is unavailable", async () => {
+    mocks.gitClone.mockRejectedValueOnce(new GitExecutableUnavailableError());
+
+    const result = await saveRemoteGitSkillPackage(createRemoteSkill(), {
+      repoUrl: "https://github.com/acme/skills",
+      branch: "release/v1",
+      directory: "skills/writer",
+      targetRootDir: "/target",
+    });
+
+    expect(result).toBe("/target/repo");
+    expect(mocks.fetchRemoteBytes).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchRemoteBytes).toHaveBeenCalledWith(
+      "https://github.com/acme/skills/archive/release%2Fv1.zip",
+    );
+    expect(mocks.extractSkillZipArchive).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      expect.stringContaining("http-archive"),
+    );
+    expect(mocks.fileExists).toHaveBeenCalledWith(
+      expect.stringMatching(/skills-main\/skills\/writer\/SKILL\.md$/),
+    );
+  });
+
+  it("uses the same archive fallback for source snapshots", async () => {
+    mocks.gitClone.mockRejectedValueOnce(new Error("Git TLS transport failed"));
+
+    const result = await getRemoteGitSkillPackageSnapshot({
+      repoUrl: "https://gitea.example.com/team/skills",
+      branch: "main",
+      directory: "skills/writer",
+    });
+
+    expect(result).toMatchObject({
+      content: "# Writer\n",
+      resolvedDirectory: "skills/writer",
+    });
+    expect(mocks.fetchRemoteBytes).toHaveBeenCalledWith(
+      "https://gitea.example.com/team/skills/archive/main.zip",
+    );
+  });
+
+  it("reports both failed transports without leaking source credentials", async () => {
+    mocks.gitClone.mockRejectedValueOnce(new GitExecutableUnavailableError());
+    mocks.fetchRemoteBytes.mockRejectedValueOnce(
+      new Error("HTTP 503 for https://alice:secret@example.test/archive"),
+    );
+
+    const error = await saveRemoteGitSkillPackage(createRemoteSkill(), {
+      repoUrl: "https://alice:secret@gitea.example.com/team/skills",
+      branch: "main",
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(SkillPackageTransportError);
+    expect(error).toMatchObject({ reason: "git-http-fallback-failed" });
+    expect(mocks.fetchRemoteBytes).toHaveBeenCalledWith(
+      "https://gitea.example.com/team/skills/archive/main.zip",
+    );
+    expect((error as Error).message).not.toContain("alice");
+    expect((error as Error).message).not.toContain("secret");
+  });
+
+  it("does not convert SSH sources to anonymous HTTP when Git is missing", async () => {
+    mocks.gitClone.mockRejectedValueOnce(new GitExecutableUnavailableError());
+
+    const error = await saveRemoteGitSkillPackage(createRemoteSkill(), {
+      repoUrl: "git@github.com:acme/private-skills.git",
+      branch: "main",
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(SkillPackageTransportError);
+    expect(error).toMatchObject({ reason: "git-unavailable" });
+    expect(mocks.fetchRemoteBytes).not.toHaveBeenCalled();
+  });
+
+  it("does not hide a non-availability SSH Git failure", async () => {
+    const gitError = new Error("SSH authentication failed");
+    mocks.gitClone.mockRejectedValueOnce(gitError);
+
+    await expect(
+      saveRemoteGitSkillPackage(createRemoteSkill(), {
+        repoUrl: "git@github.com:acme/private-skills.git",
+      }),
+    ).rejects.toBe(gitError);
+    expect(mocks.fetchRemoteBytes).not.toHaveBeenCalled();
+  });
+
+  it("derives the bounded GitLab HEAD archive route", async () => {
+    mocks.gitClone.mockRejectedValueOnce(new Error("Git network failed"));
+
+    await saveRemoteGitSkillPackage(createRemoteSkill(), {
+      repoUrl: "https://gitlab.com/acme/skills",
+    });
+
+    expect(mocks.fetchRemoteBytes).toHaveBeenCalledWith(
+      "https://gitlab.com/acme/skills/-/archive/HEAD/skills-HEAD.zip",
+    );
+  });
+
+  it.each([
+    { name: "no root", entries: [] },
+    {
+      name: "a root file",
+      entries: [{ name: "README.md", isDirectory: () => false }],
+    },
+  ])("rejects an archive with $name", async ({ entries }) => {
+    mocks.gitClone.mockRejectedValueOnce(new GitExecutableUnavailableError());
+    mocks.readdir.mockResolvedValueOnce(entries);
+
+    await expect(
+      saveRemoteGitSkillPackage(createRemoteSkill(), {
+        repoUrl: "https://github.com/acme/skills",
+      }),
+    ).rejects.toThrow(/one repository root/);
+  });
+
+  it("keeps archive safety failures classified as invalid packages", async () => {
+    mocks.gitClone.mockRejectedValueOnce(new GitExecutableUnavailableError());
+    mocks.extractSkillZipArchive.mockRejectedValueOnce(
+      new Error(
+        "Path traversal detected: zip entry is outside package directory",
+      ),
+    );
+
+    await expect(
+      saveRemoteGitSkillPackage(createRemoteSkill(), {
+        repoUrl: "https://github.com/acme/skills",
+        branch: "main",
+      }),
+    ).rejects.toThrow(/Path traversal detected/);
   });
 
   it("rejects a requested Git directory without SKILL.md", async () => {

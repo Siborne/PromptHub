@@ -19,6 +19,7 @@ import {
   SkillSafetyBlockedError,
   SkillSafetyReviewRequiredError,
 } from "../../../src/main/services/skill-update-safety";
+import { SkillPackageTransportError } from "../../../src/main/services/skill-package-transport-error";
 
 const registrySkill: RegistrySkill = {
   slug: "writer",
@@ -295,6 +296,25 @@ describe("Skill package lifecycle", () => {
     });
     expect(harness.db.create).not.toHaveBeenCalled();
   });
+
+  it.each(["git-unavailable", "git-http-fallback-failed"] as const)(
+    "preserves the bounded transport reason %s",
+    async (reason) => {
+      vi.mocked(harness.dependencies.stagePackage).mockRejectedValue(
+        new SkillPackageTransportError(reason, "transport failed"),
+      );
+
+      await expect(harness.service.run(request)).resolves.toMatchObject({
+        status: "source-unavailable",
+        failure: {
+          code: "SOURCE_UNAVAILABLE",
+          phase: "staging",
+          reason,
+        },
+      });
+      expect(harness.db.create).not.toHaveBeenCalled();
+    },
+  );
 
   it("falls back to the stable code when a staging error has no message", async () => {
     vi.mocked(harness.dependencies.stagePackage).mockRejectedValue(new Error());

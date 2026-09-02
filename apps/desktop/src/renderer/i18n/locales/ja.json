@@ -2935,6 +2935,7 @@
     "storeDirectoryPlaceholder": "ディレクトリ（任意、例: skills/.curated）",
     "loadingBranches": "ブランチを読み込み中...",
     "branchListFallbackHint": "リモートブランチを読み込めませんでした。手動入力は引き続き利用できます。",
+    "gitUnavailableBranchHint": "Git を利用できません。Git をインストールするか PATH に追加して PromptHub を再起動してください。ブランチは引き続き手動入力できます。",
     "branchSuggestions": "候補ブランチ",
     "branchLabel": "ブランチ",
     "directoryLabel": "ディレクトリ",
@@ -2976,6 +2977,8 @@
     "updateApprovalFingerprintHint": "承認は確認したパッケージにのみ適用されます。ブロック対象と構造安全検査は回避できません。",
     "packageFailure": {
       "sourceUnavailable": "Skill のソースを利用できません。ソースを確認して再試行してください。",
+      "gitUnavailable": "Git を利用できません。Git をインストールするか PATH に追加して PromptHub を再起動してください。",
+      "gitHttpFallbackFailed": "Git を利用できず、HTTP アーカイブへのフォールバックも失敗しました。Git/PATH、ネットワークまたはプロキシ設定、ソースへのアクセスを確認して再試行してください。",
       "invalidPackage": "Skill パッケージが無効です。",
       "safetyBlocked": "安全性チェックによりこの Skill パッケージはブロックされました。",
       "duplicateSource": "この Skill ソースはすでにインストールされています。",

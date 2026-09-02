@@ -7,7 +7,10 @@ import type {
 } from "@prompthub/shared/types";
 import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import { computeSkillPackageFingerprintV1Sync } from "@prompthub/shared/utils/skill-source-update";
-import { sanitizeSkillPackageSourceUrl } from "@prompthub/core/skills/package-operation";
+import {
+  sanitizeSkillPackageDiagnostic,
+  sanitizeSkillPackageSourceUrl,
+} from "@prompthub/core/skills/package-operation";
 import { extractSkillZipArchive } from "./skill-archive-extractor";
 import {
   resolveSkillDirBySelectorFromRepo,
@@ -26,13 +29,19 @@ import {
 } from "./skill-installer-repo";
 import { saveToLocalRepoBySkillId } from "./skill-installer-replacement";
 import { fetchRemoteBytes } from "./skill-installer-remote";
-import { gitClone } from "./skill-installer-utils";
+import {
+  GitExecutableUnavailableError,
+  gitClone,
+} from "./skill-installer-utils";
 import {
   assertStagedRemoteSkillPackageSafe,
   type RemoteSkillPackageSafetyScanOptions,
 } from "./skill-update-safety";
 import { validateMaterializedSkillPackage } from "./skill-package-validation";
 import { readSkillPackageSnapshotFromValidatedDirectory } from "./skill-package-snapshot";
+import { SkillPackageTransportError } from "./skill-package-transport-error";
+
+type FetchArchive = (url: string) => Promise<Uint8Array>;
 
 export type RemotePackageSkill = Pick<
   Skill,
@@ -163,20 +172,92 @@ async function persistStagedPackage(
   return saveToLocalRepoBySkillId(skill, skillDir, "copy");
 }
 
+function buildGitArchiveUrl(
+  repo: NonNullable<ReturnType<typeof parseGitRepo>>,
+  branch?: string,
+): string | null {
+  if (repo.protocol !== "https") return null;
+  const repositoryUrl = sanitizeSkillPackageSourceUrl(repo.repositoryUrl)
+    .replace(/\.git\/?$/iu, "")
+    .replace(/\/$/u, "");
+  const ref = encodeURIComponent(branch?.trim() || "HEAD");
+  if (repo.host === "gitlab.com") {
+    const archiveName = `${encodeURIComponent(repo.repo)}-${ref}.zip`;
+    return `${repositoryUrl}/-/archive/${ref}/${archiveName}`;
+  }
+  return `${repositoryUrl}/archive/${ref}.zip`;
+}
+
+async function resolveArchiveCheckoutRoot(extractDir: string): Promise<string> {
+  const entries = await fs.readdir(extractDir, { withFileTypes: true });
+  if (entries.length !== 1 || !entries[0]?.isDirectory()) {
+    throw new Error("Git archive must contain one repository root directory");
+  }
+  return path.join(extractDir, entries[0].name);
+}
+
+function dualTransportError(gitError: unknown, httpError: unknown) {
+  const gitDiagnostic = sanitizeSkillPackageDiagnostic(gitError);
+  const httpDiagnostic = sanitizeSkillPackageDiagnostic(httpError);
+  return new SkillPackageTransportError(
+    "git-http-fallback-failed",
+    `Git transport failed: ${gitDiagnostic}; HTTP archive fallback failed: ${httpDiagnostic}`,
+  );
+}
+
+async function materializeRemoteGitRepository(
+  repo: NonNullable<ReturnType<typeof parseGitRepo>>,
+  branch: string | undefined,
+  tempRoot: string,
+  fetchArchive: FetchArchive,
+): Promise<string> {
+  const cloneDir = path.join(tempRoot, `${repo.owner}-${repo.repo}`);
+  try {
+    await gitClone(repo.cloneUrl, cloneDir, branch);
+    return cloneDir;
+  } catch (gitError) {
+    const archiveUrl = buildGitArchiveUrl(repo, branch);
+    if (!archiveUrl) {
+      if (gitError instanceof GitExecutableUnavailableError) {
+        throw new SkillPackageTransportError(
+          "git-unavailable",
+          gitError.message,
+        );
+      }
+      throw gitError;
+    }
+
+    let archiveBytes: Uint8Array;
+    try {
+      archiveBytes = await fetchArchive(archiveUrl);
+    } catch (httpError) {
+      throw dualTransportError(gitError, httpError);
+    }
+    const extractDir = path.join(tempRoot, "http-archive");
+    await extractSkillZipArchive(archiveBytes, extractDir);
+    return resolveArchiveCheckoutRoot(extractDir);
+  }
+}
+
 /** Clone, validate, review, and materialize one Git-backed Skill package. */
 export async function saveRemoteGitSkillPackage(
   skill: RemotePackageSkill,
   options: RemoteGitPackageOptions,
+  fetchArchive: FetchArchive = fetchRemoteBytes,
 ): Promise<string> {
   await initSkillsDir();
   const parsedRepo = parseRequiredGitRepo(options.repoUrl);
   const tempRoot = await fs.mkdtemp(
     path.join(getSkillsDirAccessor(), ".remote-import-"),
   );
-  const repoDir = path.join(tempRoot, `${parsedRepo.owner}-${parsedRepo.repo}`);
 
   try {
-    await gitClone(parsedRepo.cloneUrl, repoDir, options.branch);
+    const repoDir = await materializeRemoteGitRepository(
+      parsedRepo,
+      options.branch,
+      tempRoot,
+      fetchArchive,
+    );
     const requestedDirectory =
       normalizeDirectory(options.directory) ??
       normalizeDirectory(skill.source_directory);
@@ -211,13 +292,20 @@ export async function saveRemoteGitSkillPackage(
 }
 
 /** Clone and fingerprint a complete Git-backed Skill package. */
-export async function getRemoteGitSkillPackageFingerprint(options: {
-  repoUrl: string;
-  branch?: string;
-  directory?: string;
-  skillName?: string;
-}): Promise<string | undefined> {
-  return withRemoteGitSkillPackage(options, computePackageFingerprint);
+export async function getRemoteGitSkillPackageFingerprint(
+  options: {
+    repoUrl: string;
+    branch?: string;
+    directory?: string;
+    skillName?: string;
+  },
+  fetchArchive: FetchArchive = fetchRemoteBytes,
+): Promise<string | undefined> {
+  return withRemoteGitSkillPackage(
+    options,
+    computePackageFingerprint,
+    fetchArchive,
+  );
 }
 
 async function resolveSnapshotSkillDirectory(
@@ -240,16 +328,21 @@ async function withRemoteGitSkillPackage<T>(
     "repoUrl" | "branch" | "directory" | "skillName"
   >,
   readSnapshot: (skillDir: string, repoDir: string) => Promise<T>,
+  fetchArchive: FetchArchive,
 ): Promise<T> {
   await initSkillsDir();
   const parsedRepo = parseRequiredGitRepo(options.repoUrl);
   const tempRoot = await fs.mkdtemp(
     path.join(getSkillsDirAccessor(), ".remote-fingerprint-"),
   );
-  const repoDir = path.join(tempRoot, `${parsedRepo.owner}-${parsedRepo.repo}`);
 
   try {
-    await gitClone(parsedRepo.cloneUrl, repoDir, options.branch);
+    const repoDir = await materializeRemoteGitRepository(
+      parsedRepo,
+      options.branch,
+      tempRoot,
+      fetchArchive,
+    );
     const skillDir = await resolveSnapshotSkillDirectory(repoDir, options);
     await validateMaterializedSkillPackage(skillDir);
     return await readSnapshot(skillDir, repoDir);
@@ -264,19 +357,24 @@ export async function getRemoteGitSkillPackageSnapshot(
     RemoteGitPackageOptions,
     "repoUrl" | "branch" | "directory" | "skillName"
   >,
+  fetchArchive: FetchArchive = fetchRemoteBytes,
 ): Promise<SkillPackageSnapshot> {
-  return withRemoteGitSkillPackage(options, async (skillDir, repoDir) => {
-    const snapshot =
-      await readSkillPackageSnapshotFromValidatedDirectory(skillDir);
-    const relativeDirectory = path
-      .relative(repoDir, skillDir)
-      .split(path.sep)
-      .join("/");
-    return {
-      ...snapshot,
-      resolvedDirectory: relativeDirectory || ".",
-    };
-  });
+  return withRemoteGitSkillPackage(
+    options,
+    async (skillDir, repoDir) => {
+      const snapshot =
+        await readSkillPackageSnapshotFromValidatedDirectory(skillDir);
+      const relativeDirectory = path
+        .relative(repoDir, skillDir)
+        .split(path.sep)
+        .join("/");
+      return {
+        ...snapshot,
+        resolvedDirectory: relativeDirectory || ".",
+      };
+    },
+    fetchArchive,
+  );
 }
 
 async function withRemoteZipSkillPackage<T>(

@@ -2935,6 +2935,7 @@
     "storeDirectoryPlaceholder": "目錄（選填，例如 skills/.curated）",
     "loadingBranches": "正在載入分支...",
     "branchListFallbackHint": "無法載入遠端分支列表，你仍然可以手動輸入分支名稱。",
+    "gitUnavailableBranchHint": "Git 無法使用。請安裝 Git 或將其加入 PATH，重新啟動 PromptHub 後再試；你仍然可以手動輸入分支名稱。",
     "branchSuggestions": "可選分支",
     "branchLabel": "分支",
     "directoryLabel": "目錄",
@@ -2976,6 +2977,8 @@
     "updateApprovalFingerprintHint": "核准僅適用於本次複核的套件。禁止項目和結構安全檢查無法略過。",
     "packageFailure": {
       "sourceUnavailable": "Skill 來源無法使用，請檢查來源位址後再試。",
+      "gitUnavailable": "Git 無法使用。請安裝 Git 或將其加入 PATH，然後重新啟動 PromptHub。",
+      "gitHttpFallbackFailed": "PromptHub 無法使用 Git，HTTP 壓縮套件備援也失敗。請檢查 Git/PATH、網路或代理設定以及來源存取權限後再試。",
       "invalidPackage": "Skill 套件無效。",
       "safetyBlocked": "安全檢查已封鎖此 Skill 套件。",
       "duplicateSource": "這個確切的 Skill 來源已經安裝。",

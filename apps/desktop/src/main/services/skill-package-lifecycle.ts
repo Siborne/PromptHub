@@ -4,6 +4,7 @@ import type {
   SkillFileSnapshot,
   SkillPackageOperationFailure,
   SkillPackageOperationFailureCode,
+  SkillPackageOperationFailureReason,
   SkillPackageOperationPhase,
   SkillPackageOperationRequest,
   SkillPackageOperationResult,
@@ -22,6 +23,7 @@ import {
   SkillSafetyBlockedError,
   SkillSafetyReviewRequiredError,
 } from "./skill-update-safety";
+import { SkillPackageTransportError } from "./skill-package-transport-error";
 
 const PENDING_INSTALL_MARKER = "PACKAGE_OPERATION_PENDING";
 
@@ -100,6 +102,7 @@ class LifecycleStepError extends Error {
     readonly code: SkillPackageOperationFailureCode,
     readonly phase: SkillPackageOperationPhase,
     cause: unknown,
+    readonly reason?: SkillPackageOperationFailureReason,
   ) {
     super(sanitizeSkillPackageDiagnostic(cause));
     this.name = "LifecycleStepError";
@@ -111,6 +114,7 @@ function createFailure(
   code: SkillPackageOperationFailureCode,
   phase: SkillPackageOperationPhase,
   error: unknown,
+  reason?: SkillPackageOperationFailureReason,
 ): SkillPackageOperationFailure {
   const registrySkill =
     request && typeof request === "object" && "registrySkill" in request
@@ -129,6 +133,7 @@ function createFailure(
     code,
     phase,
     summary: sanitizeSkillPackageDiagnostic(error) || code,
+    ...(reason ? { reason } : {}),
     sourceLabel,
   };
 }
@@ -151,6 +156,7 @@ function failureResult(
     error.code,
     error.phase,
     error.message,
+    error.reason,
   );
   if (error.code === "DUPLICATE_SOURCE" || error.code === "CONFLICT") {
     return { status: "conflict", operation: request.operation, failure };
@@ -208,6 +214,14 @@ function getStageFailure(
   request: SkillPackageOperationRequest,
   error: unknown,
 ): LifecycleStepError {
+  if (error instanceof SkillPackageTransportError) {
+    return new LifecycleStepError(
+      "SOURCE_UNAVAILABLE",
+      "staging",
+      error,
+      error.reason,
+    );
+  }
   const message = sanitizeSkillPackageDiagnostic(error).toLowerCase();
   const invalid = isInvalidPackageDiagnostic(message);
   const remote = ["remote-git", "remote-zip"].includes(request.source.kind);

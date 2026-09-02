@@ -763,13 +763,32 @@ export class SkillInstaller {
     skill: RemotePackageSkill,
     options: RemoteGitPackageOptions,
   ): Promise<string> {
-    return saveRemoteGitSkillPackage(skill, options);
+    return saveRemoteGitSkillPackage(skill, options, (url) =>
+      this.fetchRemoteBytes(url),
+    );
   }
 
-  static getRemoteGitSkillPackageFingerprint =
-    getRemoteGitSkillPackageFingerprint;
+  static getRemoteGitSkillPackageFingerprint(options: {
+    repoUrl: string;
+    branch?: string;
+    directory?: string;
+    skillName?: string;
+  }) {
+    return getRemoteGitSkillPackageFingerprint(options, (url) =>
+      this.fetchRemoteBytes(url),
+    );
+  }
 
-  static getRemoteGitSkillPackageSnapshot = getRemoteGitSkillPackageSnapshot;
+  static getRemoteGitSkillPackageSnapshot(options: {
+    repoUrl: string;
+    branch?: string;
+    directory?: string;
+    skillName?: string;
+  }) {
+    return getRemoteGitSkillPackageSnapshot(options, (url) =>
+      this.fetchRemoteBytes(url),
+    );
+  }
   static getLocalSkillPackageSnapshot = readValidatedSkillPackageSnapshot;
   static getRemoteZipSkillPackageSnapshot(options: { zipUrl: string }) {
     return getRemoteZipSkillPackageSnapshot(options, this.fetchRemoteBytes);

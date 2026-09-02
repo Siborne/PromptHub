@@ -436,6 +436,52 @@ describe("SkillStore custom sources", () => {
     });
   });
 
+  it("explains missing Git while keeping manual add-source branch entry available", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          listRemoteBranches: vi
+            .fn()
+            .mockRejectedValue(new Error("GIT_EXECUTABLE_UNAVAILABLE")),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <SkillStoreSourceForm
+          branch="main"
+          directory=""
+          handleAddSource={vi.fn()}
+          setBranch={vi.fn()}
+          setDirectory={vi.fn()}
+          setSourceName={vi.fn()}
+          setSourceType={vi.fn()}
+          setSourceUrl={vi.fn()}
+          sourceName="Docs Store"
+          sourceType="git-repo"
+          sourceUrl="https://github.com/example/store"
+          t={((_key: string, fallback: string) => fallback) as never}
+          typeOptions={[
+            { value: "marketplace-json", icon: <svg /> },
+            { value: "git-repo", icon: <svg /> },
+            { value: "local-dir", icon: <svg /> },
+          ]}
+        />,
+        { language: "en" },
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Git is unavailable. Install Git or add it to PATH, then restart PromptHub. You can still type a branch manually.",
+        ),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByDisplayValue("main")).toBeEnabled();
+  });
+
   it("exposes edit-source type choices as pressed buttons with decorative icons hidden", async () => {
     await act(async () => {
       await renderWithI18n(
@@ -657,6 +703,50 @@ describe("SkillStore custom sources", () => {
 
     await act(async () => {
       resolveBranches?.(["main"]);
+    });
+  });
+
+  it("explains missing Git in the edit-source branch picker", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          listRemoteBranches: vi
+            .fn()
+            .mockRejectedValue(new Error("GIT_EXECUTABLE_UNAVAILABLE")),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <SkillStoreSourceEditModal
+          isOpen
+          onClose={vi.fn()}
+          onDelete={vi.fn()}
+          onRefresh={vi.fn()}
+          onSave={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          source={{
+            id: "custom-docs",
+            name: "Docs Store",
+            type: "git-repo",
+            url: "https://github.com/example/store",
+            branch: "main",
+            enabled: true,
+            order: 0,
+            createdAt: Date.now(),
+          }}
+        />,
+        { language: "en" },
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Git is unavailable. Install Git or add it to PATH, then restart PromptHub. You can still type a branch manually.",
+        ),
+      ).toBeInTheDocument();
     });
   });
 

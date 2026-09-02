@@ -16,6 +16,7 @@
 - `active/local-github-status.md`：本地 triage / delivery 状态覆盖层，用于记录已实现但尚未发布的问题。
 - `active/ISS-20260710-001-spec-governance-debt.md`：spec-init 对齐后发现的 active-change、生命周期和索引治理欠账。
 - `active/ISS-20260809-001-remaining-open-issues-roadmap.md`：当前 open GitHub issues 的真实剩余工作分类、优先级与 authoritative change 路由。
+- `active/ISS-20260902-001-git-transport-resilience-parity.md`：Skill #211 修复后，Plugin、CLI 与显式 Git 操作仍需分别决定 archive fallback 或明确 Git 前置条件。
 - `archive/github-closed.md`：当前 `legeling/PromptHub` 仓库 closed issues 快照。
 
 ## Internal Record Index
@@ -25,6 +26,7 @@
 | `ISS-20260710-001` | Spec Governance Debt          | open   | `spec/issues/active/ISS-20260710-001-spec-governance-debt.md`          | `2026-07-10-spec-init-upstream-alignment`                              | 2026-07-10 |
 | `ISS-20260806-001` | MCP Issues 200-202 Triage     | open   | `spec/issues/active/ISS-20260806-001-mcp-issue-triage.md`              | `spec/changes/archive/2026/08/2026-08-06-mcp-issues-200-202-analysis/` | 2026-08-06 |
 | `ISS-20260809-001` | Remaining Open Issues Roadmap | open   | `spec/issues/active/ISS-20260809-001-remaining-open-issues-roadmap.md` | Multiple routed active changes                                         | 2026-08-09 |
+| `ISS-20260902-001` | Git Transport Resilience Parity  | open   | `spec/issues/active/ISS-20260902-001-git-transport-resilience-parity.md`  | `skills-issue-211-git-http-fallback`      | 2026-09-02 |
 
 ## GitHub vs Local State
 

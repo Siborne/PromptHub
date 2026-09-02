@@ -8,6 +8,7 @@ import {
 } from "@prompthub/core/skills/package-operation";
 import { getDatabase } from "../database";
 import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
+import { getErrorCode } from "./skill-installer-internal";
 import {
   isPrivateAddress,
   resolvePublicAddress,
@@ -103,6 +104,23 @@ export function validateMCPConfig(config: unknown, name: string): void {
 
 const GIT_CLONE_TIMEOUT_MS = 60_000; // 60 seconds
 const GIT_REMOTE_TIMEOUT_MS = 30_000; // 30 seconds
+
+export class GitExecutableUnavailableError extends Error {
+  constructor() {
+    super(
+      "GIT_EXECUTABLE_UNAVAILABLE: Git is not installed or is not available in PATH",
+    );
+    this.name = "GitExecutableUnavailableError";
+  }
+}
+
+function createGitLaunchError(error: unknown, operation: string): Error {
+  const code = getErrorCode(error);
+  if (code === "ENOENT" || code === "EACCES") {
+    return new GitExecutableUnavailableError();
+  }
+  return new Error(`${operation}: ${sanitizeSkillPackageDiagnostic(error)}`);
+}
 
 function normalizeRemoteGitUrl(url: string): string {
   const trimmed = url.trim();
@@ -215,11 +233,7 @@ export function gitClone(
           if (settled) return;
           settled = true;
           clearTimeout(timeout);
-          reject(
-            new Error(
-              `Git clone error: ${sanitizeSkillPackageDiagnostic(error)}`,
-            ),
-          );
+          reject(createGitLaunchError(error, "Git clone error"));
         });
       }),
   );
@@ -299,9 +313,7 @@ export function gitListRemoteBranches(url: string): Promise<string[]> {
           settled = true;
           clearTimeout(timeout);
           reject(
-            new Error(
-              `Git remote branch listing error: ${sanitizeSkillPackageDiagnostic(error)}`,
-            ),
+            createGitLaunchError(error, "Git remote branch listing error"),
           );
         });
       }),
@@ -364,7 +376,7 @@ export function gitGetCurrentBranch(repoDir: string): Promise<string | null> {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      reject(new Error(`Git current branch lookup error: ${error.message}`));
+      reject(createGitLaunchError(error, "Git current branch lookup error"));
     });
   });
 }

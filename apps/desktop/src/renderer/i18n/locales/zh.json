@@ -2945,6 +2945,7 @@
     "storeDirectoryPlaceholder": "目录（可选，例如 skills/.curated）",
     "loadingBranches": "正在加载分支...",
     "branchListFallbackHint": "无法加载远程分支列表，你仍然可以手动输入分支名。",
+    "gitUnavailableBranchHint": "Git 不可用。请安装 Git 或将其加入 PATH，重启 PromptHub 后重试；你仍然可以手动输入分支名。",
     "branchSuggestions": "可选分支",
     "branchLabel": "分支",
     "directoryLabel": "目录",
@@ -2986,6 +2987,8 @@
     "updateApprovalFingerprintHint": "批准仅适用于本次复核的软件包。禁止项和结构安全检查无法绕过。",
     "packageFailure": {
       "sourceUnavailable": "Skill 来源不可用，请检查来源地址后重试。",
+      "gitUnavailable": "Git 不可用。请安装 Git 或将其加入 PATH，然后重启 PromptHub。",
+      "gitHttpFallbackFailed": "PromptHub 无法使用 Git，HTTP 压缩包回退也失败了。请检查 Git/PATH、网络或代理设置以及来源访问权限后重试。",
       "invalidPackage": "Skill 软件包无效。",
       "safetyBlocked": "安全检查已阻止此 Skill 软件包。",
       "duplicateSource": "这个确切的 Skill 来源已经安装。",
