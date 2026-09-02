@@ -291,6 +291,7 @@ Stable product rule:
 | WorkBuddy                             | `~/.workbuddy` for user MCP config; project `.workbuddy/` for project MCP config                                                     | WorkBuddy assistant / expert / skill surfaces documented; no public single-file global rule path confirmed in current pass                                                                                    | Memory is documented as a product feature; public local memory/session paths were not confirmed in current pass                                                                                                                                                                                                                | Skill Marketplace documented; custom WorkBuddy Skills typically include `skill.yml`, implementation files, and `README`; local installed-skill directory not confirmed in current pass                                                                            | `~/.workbuddy/mcp.json`, project `.workbuddy/mcp.json`; MCP market and WeCom bot example documented                                                                                                                       | Officially documented (partial)                                 |
 | Amp                                   | `~/.config/agents`                                                                                                                   | login-gated agents manual exists                                                                                                                                                                              | not confirmed                                                                                                                                                                                                                                                                                                                  | not confirmed                                                                                                                                                                                                                                                     | not confirmed                                                                                                                                                                                                             | Evidence limited                                                |
 | Cherry Studio                         | macOS `~/Library/Application Support/CherryStudio`; Windows `%APPDATA%\CherryStudio`; Linux `~/.config/CherryStudio`                 | no stable global rule file modeled in current pass                                                                                                                                                            | Current Agent sessions are read from `Data/cherrystudio.sqlite` (`agent_session` / `agent_session_message`) with visible `data.parts` text only; verified older `Data/agents.db` (`sessions` / `session_messages`) remains a read-only fallback; normal chats, memory, credentials and other runtime state remain Cherry-owned | Canonical Skill files under `Data/Skills`; current catalog in `Data/cherrystudio.sqlite` (`skills` / `agent_skills`); compatible older databases may use `Data/agent.db`, `Data/agents.db`, or root `cherrystudio.sqlite` and legacy skill tables                 | current public path registry and Skill service define the database/Skill boundary; macOS launch allowlist covers system and user Applications directories; no single native Plugin package contract is modeled            | Official current source + verified legacy Agent DB (partial)    |
+| Doubao Work                           | macOS `~/Library/Application Support/Doubao/Default/.doubao/agent_mode/workspace`                                                    | no verified PromptHub-managed Rules surface                                                                                                                                                                   | Runtime state remains Doubao-owned; no session adapter is modeled                                                                                                                                                                                                                                                              | User Skills in `.user_skills/<name>/SKILL.md`; sibling `.skills` is product-owned and read-only to PromptHub                                                                                                                                                      | No Provider, MCP, Plugin, Config Files, Usage, or maintenance contract is modeled                                                                                                                                         | Verified local Doubao 2.27.10 Skill contract; other OS inferred |
 
 ### PromptHub-Inferred Inventory
 
@@ -1285,6 +1286,27 @@ Current support boundary:
 - Modeling note:
   - until official local skills/rules path docs are captured, treat TRAE Work variants as product-confirmed Agent clients with PromptHub-inferred `skills/` conventions.
 
+### Doubao Work
+
+- Identity: built-in platform id `doubao`, display name `Doubao Work`; the
+  desktop application remains `/Applications/Doubao.app` on verified macOS.
+- Root and Skills: verified macOS root
+  `~/Library/Application Support/Doubao/Default/.doubao/agent_mode/workspace`;
+  user Skills live in `.user_skills/<name>/SKILL.md` and use the existing
+  whole-package Skill lifecycle.
+- Ownership: `.skills` contains Doubao's bundled Skills and is never a
+  PromptHub write target. `~/Doubao/skills`, `~/.codex/skills`, and
+  `~/.agents/skills` are not Doubao's default user Skill target.
+- Detection and launch: the initialized workspace qualifies the Agent as
+  installed; the macOS launch allowlist contains the system and user
+  Applications bundle locations.
+- Visual identity: reuse the existing PromptHub Doubao provider mark; no second
+  brand asset is added.
+- Current boundary: Skills, detection, launch, and path overrides are modeled.
+  Provider, MCP, Rules, Plugins, Config Files, Sessions, Usage, and maintenance
+  remain planned until native contracts are verified. Windows/Linux roots are
+  conservative application-data templates rather than locally verified paths.
+
 ## Agent Edit Contract
 
 - Built-in Agent path editing is registry-driven. `skillsRelativePath`,
@@ -1481,6 +1503,9 @@ Current support boundary:
 ## Canonical Sources
 
 - 平台元数据源码：`packages/shared/constants/platforms.ts`
+- Doubao Work macOS evidence: local `Doubao 2.27.10` bundle metadata and its
+  bundled `workspace/.skills/skill-creator-for-work/SKILL.md` default-location
+  contract, inspected 2026-09-02.
 - Rules 注册表源码：`packages/shared/constants/rules.ts`
 - 平台路径派生逻辑：`apps/desktop/src/main/services/skill-installer-utils.ts`
 - CoPaw / QwenPaw: `https://github.com/agentscope-ai/QwenPaw`,

@@ -4372,3 +4372,30 @@ selection, editing, save, allowlist, or native file-manager behavior.
 - And the file tree remains a quieter secondary surface separated by a divider
 - And the code gutter remains subtly distinct from the editing canvas
 - And no raw light-only color overrides the dark-theme token pairing
+
+### `FR-AGENT-137`: Doubao Work Uses Its Native User Skill Directory
+
+PromptHub MUST register Doubao Work as a built-in Agent and, on macOS, resolve
+its root to `~/Library/Application Support/Doubao/Default/.doubao/agent_mode/workspace`.
+Skill discovery and distribution MUST use only the `.user_skills` child. The
+sibling `.skills` directory is product-owned and MUST NOT be used as an install,
+update, or removal target.
+
+Unverified Provider, MCP, Rules, Plugins, Config Files, Sessions, Usage, and
+maintenance contracts MUST remain planned or unavailable. PromptHub MUST NOT
+infer those capabilities from the presence of Doubao runtime files.
+
+#### Scenario: Detect an initialized macOS Doubao Work installation
+
+- Given the verified Doubao Work workspace exists
+- When PromptHub detects built-in Agents
+- Then Doubao Work appears as installed and launchable
+- And its Skills path ends in `workspace/.user_skills`
+- And no built-in `.skills` path is exposed as writable
+
+#### Scenario: Install a PromptHub Skill into Doubao Work
+
+- Given a valid managed Skill package and an initialized Doubao Work workspace
+- When the user installs the Skill for Doubao Work
+- Then PromptHub copies the complete package into `.user_skills/<skill-name>`
+- And does not modify `.skills`, `~/.codex/skills`, or `~/.agents/skills`

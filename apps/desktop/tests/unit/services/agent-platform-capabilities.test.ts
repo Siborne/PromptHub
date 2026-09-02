@@ -66,6 +66,7 @@ const expectedPlannedSessionAdapters = [
   "autoclaw",
   "codebuddy",
   "deepseek-harness",
+  "doubao",
   "qclaw",
   "qoderwork",
   "trae",
@@ -103,7 +104,7 @@ describe("Agent platform capability inventory", () => {
     const registryIds = SKILL_PLATFORMS.map((platform) => platform.id).sort();
     const inventoryIds = Object.keys(AGENT_PLATFORM_DEPTH_CAPABILITIES).sort();
 
-    expect(new Set(registryIds).size).toBe(36);
+    expect(new Set(registryIds).size).toBe(37);
     expect(inventoryIds).toEqual(registryIds);
   });
 

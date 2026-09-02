@@ -6,6 +6,36 @@
 - Status: in-progress
 - Code changes: registry, core Managed Agent query, shared workspace shell, allowlisted native config, bounded read-only session adapters, Provider Profile persistence, Provider adapter registry, three-way reconciliation and asset aggregation foundations, complete Claude/Codex/Gemini/Kimi/Qwen/OpenCode/Grok Provider adapters, current Oh My Pi compatibility, and the Codex Appearance adapter implemented
 
+## Doubao Work Skill target (2026-09-02)
+
+- `FR-AGENT-137 -> DES-AGENT-156 -> TEST-AGENT-218 -> T-AGENT-227`.
+- Registered Doubao Work as a built-in, launchable macOS Agent and routed the
+  existing whole-package Skill lifecycle to the verified
+  `workspace/.user_skills` directory. The sibling product-owned `.skills`
+  inventory and shared Codex/Agents directories remain outside the target.
+- Provider, MCP, Rules, Plugins, Config Files, Sessions, Usage, and maintenance
+  were intentionally not inferred. The UI reuses the existing Doubao provider
+  mark without adding a second brand asset. Windows/Linux application-data
+  templates remain overrideable and are not claimed as locally verified.
+- Verification passed: focused registry/capability/icon suites (3 files, 42
+  tests), the affected icon rerun after existing-asset reuse (19 tests), all 48
+  shared-package tests, Desktop and Shared typechecks, affected ESLint,
+  Prettier, file-size governance, traceability, generated change-index check,
+  diff hygiene, and the Desktop production build.
+- A live macOS cycle against Doubao 2.27.10 used the production installer
+  service to copy a temporary whole-package Skill, including a nested reference
+  file, into the real `.user_skills` target. Doubao discovered the Skill,
+  uploaded it, and reported `READY`; replacing it with a V2 package was detected
+  as a local edit and returned to `READY` after upload.
+- Production uninstall removed the local package, returned the PromptHub status
+  to not installed, and Doubao's My Skills search returned zero results. The
+  real `.user_skills` directory was restored to its empty baseline, temporary
+  fixtures were removed, and the Doubao processes started for the check were
+  stopped. Doubao attempted the associated cloud deletion, but its cached
+  record remained `DELETE_PENDING` during the bounded test window, so remote
+  deletion convergence is not yet claimed. Doubao also refreshed product-owned
+  `.skills` content while running; PromptHub never targeted that directory.
+
 ## Plugin local-source projection correction (2026-08-25)
 
 - `FR-AGENT-136 -> DES-AGENT-155 -> TEST-AGENT-217 -> T-AGENT-226`.

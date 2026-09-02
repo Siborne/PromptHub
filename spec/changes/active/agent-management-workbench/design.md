@@ -3557,3 +3557,33 @@ choices or `[待确认]` items.
 | Requirement    | Design          | Verification     | Task          |
 | -------------- | --------------- | ---------------- | ------------- |
 | `FR-AGENT-130` | `DES-AGENT-149` | `TEST-AGENT-211` | `T-AGENT-220` |
+
+## `DES-AGENT-156`: Registry-Only Doubao Work Skill Adapter
+
+Doubao Work uses the existing `SkillPlatform` registry and generic Skill
+installer. The built-in id is `doubao`, the display name is `Doubao Work`, and
+the macOS root is the verified Agent workspace under Doubao's application
+support directory. `skillsRelativePath` is `.user_skills`; no fallback points
+at the sibling product-owned `.skills` inventory or at another Agent's shared
+Skill directory.
+
+Windows and Linux retain conservative application-data templates so users may
+override them through the existing built-in Agent settings, but only the macOS
+path and launch allowlist are currently verified. No MCP, Rules, Plugin,
+Config, Provider, Session, Usage, CLI, schema, IPC, backup, sync, watcher,
+network, or secret adapter is added. The UI reuses PromptHub's existing Doubao
+provider mark instead of adding a second brand asset.
+
+Detection performs the existing constant-time parent existence check. A Skill
+scan retains the shared depth-eight and 1,000-directory bounds; installation is
+`O(F)` time and bytes for the selected package's `F` files and adds no extra
+network I/O or resident cache.
+
+Analyze gate: local Doubao `2.27.10` evidence and its bundled Skill creator both
+identify `workspace/.user_skills` as the default user creation directory and
+explicitly reject `~/.codex/skills` and `.agents/skills` as fallbacks. The
+verified boundary has no material unresolved decision.
+
+| Requirement    | Design          | Verification     | Task          |
+| -------------- | --------------- | ---------------- | ------------- |
+| `FR-AGENT-137` | `DES-AGENT-156` | `TEST-AGENT-218` | `T-AGENT-227` |

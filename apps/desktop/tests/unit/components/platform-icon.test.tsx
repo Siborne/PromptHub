@@ -13,6 +13,15 @@ const platformAssetsDir = join(
 );
 
 describe("PlatformIcon", () => {
+  it("reuses the existing Doubao brand mark for Doubao Work", () => {
+    render(<PlatformIcon platformId="doubao" size={20} />);
+
+    expect(screen.getByRole("img", { name: "doubao icon" })).toHaveAttribute(
+      "src",
+      expect.stringContaining("doubao.svg"),
+    );
+  });
+
   it("renders the official Hermes Agent portrait mark", () => {
     render(<PlatformIcon platformId="hermes" size={20} />);
 

@@ -180,6 +180,7 @@ export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "grok",
   "qwen",
   "cherry-studio",
+  "doubao",
   "windsurf",
   "kiro",
   "kilo",
@@ -333,6 +334,21 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
         "/Applications/Cherry Studio.app",
         "~/Applications/Cherry Studio.app",
       ],
+    },
+  },
+  {
+    id: "doubao",
+    name: "Doubao Work",
+    icon: "Bot",
+    rootDir: {
+      darwin:
+        "~/Library/Application Support/Doubao/Default/.doubao/agent_mode/workspace",
+      win32: "%APPDATA%\\Doubao\\Default\\.doubao\\agent_mode\\workspace",
+      linux: "~/.config/Doubao/Default/.doubao/agent_mode/workspace",
+    },
+    skillsRelativePath: ".user_skills",
+    launchPaths: {
+      darwin: ["/Applications/Doubao.app", "~/Applications/Doubao.app"],
     },
   },
   {

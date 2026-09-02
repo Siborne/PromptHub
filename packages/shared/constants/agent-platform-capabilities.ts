@@ -96,6 +96,7 @@ export const AGENT_PLATFORM_DEPTH_CAPABILITIES = {
   "cherry-studio": depthCapabilities({
     sessions: declaration("partial", "verified-cherry-agent-session-db"),
   }),
+  doubao: depthCapabilities(),
   windsurf: depthCapabilities({ sessions: VERIFIED_TRANSCRIPT_HOOK_SESSION }),
   kiro: depthCapabilities({
     providerModel: MODEL_CONFIG_ONLY,

@@ -625,3 +625,8 @@ Registry、shell、allowlisted raw config、非敏感 model config 和只读 ses
 
 - [x] `TEST-AGENT-211` 先锁定 Agent 配置页标题栏、共享文件编辑器右侧主画布和 CodeMirror host 使用 `card` 语义面；同时保留文件树的次级灰面，并禁止用 raw white 规避深色主题。
 - [x] `T-AGENT-220` 按 `FR-AGENT-130` / `DES-AGENT-149` 在共享文件编辑器边界恢复主次表面对比；不得新增 Codex 专属皮肤、嵌套卡片、状态、IPC、文件 I/O、网络请求或后台生命周期。
+
+## Doubao Work Skill Target
+
+- [x] `TEST-AGENT-218` 先锁定 Doubao Work 的 macOS workspace、`.user_skills` 写入目标、`.skills` 排除、保守 capability、应用启动白名单、内置 registry 唯一性与现有豆包图标复用。
+- [x] `T-AGENT-227` 按 `FR-AGENT-137` / `DES-AGENT-156` 复用现有 registry、检测和完整 Skill 包分发链路接入 Doubao Work；不得写内置 `.skills`、借用 Codex/Agents 共享目录、复制未授权品牌资源或宣称未验证的深度 adapter。

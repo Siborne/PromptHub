@@ -863,3 +863,18 @@ This correction belongs to the shared file-editor composition, not a
 Codex-only skin. It changes no config discovery, read/write contract, editor
 state, file allowlist, persistence, IPC, filesystem operation, network request,
 timer, watcher, or process lifecycle.
+
+## Scope Addendum 2026-09-02: Doubao Work Skill Target
+
+Doubao Work is added as a built-in Agent identity backed by the existing
+registry-driven Skill distribution flow. Current macOS `2.27.10` inspection
+confirms the active Agent workspace below the Doubao application-support root,
+with user-created Skills in `workspace/.user_skills` and product-owned Skills in
+the sibling `workspace/.skills` directory.
+
+PromptHub may detect, display, launch, scan, install, update, and remove whole
+Skill packages only through `.user_skills`. It must not write the bundled
+`.skills` inventory or treat `~/.codex/skills`, `~/.agents/skills`, or the empty
+`~/Doubao/skills` directory as Doubao's native user target. Provider, MCP,
+Rules, Plugins, Config Files, Sessions, Usage, and maintenance remain planned
+until their native contracts are independently verified.

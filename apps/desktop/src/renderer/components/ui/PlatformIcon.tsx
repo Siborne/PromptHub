@@ -56,6 +56,7 @@ import chatgptLightIcon from "../../assets/platforms/chatgpt-light.png";
 import chatgptDarkIcon from "../../assets/platforms/chatgpt-dark.png";
 import deepseekHarnessLightIcon from "../../assets/platforms/deepseek-harness-light.svg";
 import deepseekHarnessDarkIcon from "../../assets/platforms/deepseek-harness-dark.svg";
+import doubaoIcon from "../../assets/providers/doubao.svg";
 
 type PlatformIconSource = string | { light: string; dark: string };
 
@@ -111,6 +112,7 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   pi: piIcon,
   "oh-my-pi": ohMyPiIcon,
   "cherry-studio": cherryStudioIcon,
+  doubao: doubaoIcon,
   codebuddy: {
     light: codebuddyLightIcon,
     dark: codebuddyDarkIcon,
