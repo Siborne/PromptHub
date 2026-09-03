@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 26 |
+| Active | 30 |
 | Archived | 230 |
 | Legacy | 1 |
 
@@ -17,10 +17,13 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | --- | --- | --- |
 | `agent-management-workbench` | active | `spec/changes/active/agent-management-workbench/` |
 | `agent-provider-protocol-bridge` | active | `spec/changes/active/agent-provider-protocol-bridge/` |
+| `backup-safety-point-coordination` | active | `spec/changes/active/backup-safety-point-coordination/` |
 | `cloud-account-store-client` | active | `spec/changes/active/cloud-account-store-client/` |
+| `desktop-close-choice-persistence` | active | `spec/changes/active/desktop-close-choice-persistence/` |
 | `desktop-image-generation-workbench` | active | `spec/changes/active/desktop-image-generation-workbench/` |
 | `desktop-issue-192-copy-action-parity` | active | `spec/changes/active/desktop-issue-192-copy-action-parity/` |
 | `desktop-prompt-list-projection` | active | `spec/changes/active/desktop-prompt-list-projection/` |
+| `desktop-settings-authority-convergence` | active | `spec/changes/active/desktop-settings-authority-convergence/` |
 | `desktop-upgrade-snapshot-lock-recovery` | active | `spec/changes/active/desktop-upgrade-snapshot-lock-recovery/` |
 | `grok-build-platform-support` | active | `spec/changes/active/grok-build-platform-support/` |
 | `infistar-sponsor-promotion` | active | `spec/changes/active/infistar-sponsor-promotion/` |
@@ -37,6 +40,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `rules-managed-copies` | active | `spec/changes/active/rules-managed-copies/` |
 | `self-hosted-skill-sync-reliability` | active | `spec/changes/active/self-hosted-skill-sync-reliability/` |
 | `skills-issue-194-shared-global-target` | active | `spec/changes/active/skills-issue-194-shared-global-target/` |
+| `skills-issue-211-git-http-fallback` | active | `spec/changes/active/skills-issue-211-git-http-fallback/` |
 | `sync-issue-191-safety-report-contract` | active | `spec/changes/active/sync-issue-191-safety-report-contract/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
 | `web-agent-service-parity` | active | `spec/changes/active/web-agent-service-parity/` |

@@ -20,6 +20,7 @@ Official references:
 | App / connector | Authorized integration with an external service      | service identity, OAuth/auth state, connector metadata                  | Plugin child asset, future App surface |
 | Plugin          | Installable distribution bundle                      | skills, apps/connectors, MCP servers, commands, hooks, assets, metadata | Plugins                                |
 | Agent Assistant | Natural-language operator for PromptHub capabilities | calls existing PromptHub APIs with user confirmation                    | Future Assistant                       |
+| Test Agent      | Repository-scoped test-authoring subagent             | role instructions, scoped tools, Playwright Test MCP server             | Developer verification tooling         |
 
 ## Modeling Rules
 
@@ -31,6 +32,11 @@ Official references:
 - Do not auto-authorize Apps/connectors during Plugin install.
 - Do not auto-apply MCP config to agent targets during Plugin install.
 - Agent Assistant must reuse Plugin, Skill, and MCP APIs instead of inventing separate chat-only behavior.
+- A repository Test Agent is not a Skill or Plugin. It is a project-scoped
+  Codex subagent definition that may embed an MCP server configuration.
+- PromptHub's Playwright Test Agents are developer tooling only. They do not
+  appear in the product's managed Agent inventory and do not authorize changes
+  to global Codex configuration.
 
 ## Agent Bundle Adapter Matrix
 

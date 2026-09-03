@@ -60,7 +60,7 @@
 - renderer、`packages/core` 与 Web 服务的 endpoint、鉴权头和旧配置协议推断统一由 `packages/shared/utils/ai-protocol.ts` 派生；业务调用层不得维护自己的副本。URL 尾部 `#` 表示在标准化后禁止继续自动追加协议路径。
 - `Anthropic` 当前稳定行为为原生 `POST /v1/messages` 非流式聊天与 `GET /v1/models` 模型发现；在补齐原生 SSE 解析前，桌面端不应把 Claude 原生协议暴露为可流式聊天能力。
 - AI workbench 的“测试模型 / 测试默认模型 / 测试连接”是轻量探活，不是长文本生成或性能压测；聊天模型测试必须使用短 prompt、小 token 上限、非流式、关闭 thinking，并带显式测试超时，避免本地 OpenAI-compatible 模型因为继承 2048 token、stream 或 thinking 配置而被拖慢。
-- renderer persistence 迁移前，非空 `config/ai-models.json` 是模型清单的文件真相源，Zustand 默认空数组不得覆盖它。迁移后由 `config/providers.json` 与设备加密 vault 持有 canonical 配置，`ai-models.json` 仅保留脱敏兼容投影。若 beta 迁移留下“模型为空但路由仍指向模型 id”的状态，启动只可从最多五个受管升级安全点中选择包含全部路由 id 的精确候选并原子修复；无精确候选或无悬空路由时不得自动恢复。
+- renderer persistence 迁移前，非空 `config/ai-models.json` 是模型清单的文件真相源，Zustand 默认空数组不得覆盖它。迁移后由 `config/providers.json` 与设备加密 vault 持有 canonical 配置，`ai-models.json` 仅保留脱敏兼容投影。若 beta 迁移留下“模型为空但路由仍指向模型 id”的状态，启动只可从统一总量策略实际保留的最多五个受管升级安全点中选择包含全部路由 id 的精确候选并原子修复；无精确候选或无悬空路由时不得自动恢复。
 
 ### 5.1 Agent Provider And Model Configuration
 
@@ -233,6 +233,7 @@
 ### 9.16 Canonical Data Recovery
 
 - canonical 文件是本地持久数据的唯一真相源，SQLite 只是可重建目录和运行期投影。桌面启动必须先校验文件图；文件有效而 SQLite 缺失、损坏或逻辑陈旧时，应原子重建 SQLite，不展示恢复弹窗。
+- 正常 renderer 启动不得扫描恢复候选或挂载恢复来源选择弹窗；手工候选浏览只保留在设置的数据恢复入口。启动阶段由 main process 完成布局版本迁移、校验和确定性自愈。
 - 当前版本低于持久化的 last-run version 时，必须在备份迁移、数据库打开和任何 workspace 写入前拒绝启动，且不得把版本 marker 向下改写；版本比较必须遵守 prerelease 顺序。
 - canonical Prompt 图被旧版本破坏，但当前 Markdown 工作区唯一、可严格解析且媒体可确定解析时，启动应自动把 Markdown 转换为已验证的 canonical bundle 并 journal 发布；只有重复 ID、解析失败、缺失/冲突媒体、危险路径或其它文件歧义才进入显式恢复。
 - 从 SQLite 恢复时，superseded MCP metadata 只能作为有界、普通文件、只读输入参与 staged checkpoint；含凭据字段必须经设备加密 secret sink 持久化，不得先在损坏的 active root 上运行普通兼容迁移。
