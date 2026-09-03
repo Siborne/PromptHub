@@ -34,6 +34,18 @@ UI 可见变更必须在运行中的界面里被实际操作。单元测试和�
 - UI 验收必须检查主流程可用性、控件可点击、文本不重叠、不截断关键内容、状态提示位置合理、loading/empty/error 状态不破坏布局。
 - 对已经被用户指出的问题，回归验证必须操作同一个入口和同一类数据，而不能只检查代码路径。
 
+## Agent 辅助测试边界
+
+- 用户可见多步骤流程、Electron 跨进程行为、持久化/重启、安装/删除、同步/恢复和真实 UI 回归，应该优先使用仓库级 Playwright Test Agents 辅助制定 E2E 计划和生成测试；纯逻辑或单一数据边界仍优先使用最低有效层测试。
+- 已有确定性 E2E 只需重复执行时，直接运行聚焦 Playwright 测试，不得为了形式完整重复调用 Planner 或 Generator。
+- 仓库级 Playwright Test Agents 只负责测试计划、E2E 测试生成和失败诊断；它们不是发布门禁本身。
+- Agent 定义必须保存在 `.codex/agents/`，使用仓库锁定的 Playwright 版本和桌面配置，不得依赖或修改用户全局 Codex 配置。
+- 测试计划必须进入匹配的 active change，不得创建根目录 `specs/` 或其它平行文档真相源。
+- Generator 只允许写入桌面 E2E 测试范围；Healer 不得修改生产代码、降低既定断言、删除失败步骤或用 `skip` 掩盖产品缺陷。
+- Agent 生成或修改的测试必须能脱离 Agent 通过普通 `playwright test` 重复执行，才可作为自动化证据。
+- Electron Agent seed 必须使用隔离用户目录，关闭任务创建的应用进程并清理临时 profile；不得读取或写入真实用户数据。
+- 贡献者操作流程与标准提示词见 `docs/testing-playwright-agents.md`。
+
 ## 单元测试与白盒审计
 
 UI 流程背后的业务逻辑不能只靠端到端操作兜底。以下逻辑变更必须优先补最低有效层测试：

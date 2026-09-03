@@ -6,13 +6,13 @@
 
 ## 先判断你要改哪里
 
-| 区域 | 路径 | 说明 |
-| ---- | ---- | ---- |
-| 桌面端 | `apps/desktop` | Electron 桌面应用、Renderer、Main Process、CLI |
-| 自部署 Web | `apps/web` | 轻量自托管浏览器工作区 |
-| 共享包 | `packages/shared`、`packages/db` | 共享类型、协议、数据层 |
-| 对外文档 | `docs/`、根 `README.md`、根 `CONTRIBUTING.md` | 用户、部署者、贡献者可读文档 |
-| 内部 SSD | `spec/` | 稳定 spec、设计约束、活跃变更、实施记录 |
+| 区域       | 路径                                          | 说明                                           |
+| ---------- | --------------------------------------------- | ---------------------------------------------- |
+| 桌面端     | `apps/desktop`                                | Electron 桌面应用、Renderer、Main Process、CLI |
+| 自部署 Web | `apps/web`                                    | 轻量自托管浏览器工作区                         |
+| 共享包     | `packages/shared`、`packages/db`              | 共享类型、协议、数据层                         |
+| 对外文档   | `docs/`、根 `README.md`、根 `CONTRIBUTING.md` | 用户、部署者、贡献者可读文档                   |
+| 内部 SSD   | `spec/`                                       | 稳定 spec、设计约束、活跃变更、实施记录        |
 
 如果你在开发自部署 Web，请优先阅读 [docs/web-self-hosted.md](./web-self-hosted.md)。
 
@@ -48,22 +48,28 @@ pnpm --filter @prompthub/cli dev -- --help
 
 ## 常用命令
 
-| 场景 | 命令 |
-| ---- | ---- |
-| 桌面端开发 | `pnpm electron:dev` |
-| Web 开发 | `pnpm dev:web` |
-| 桌面端构建 | `pnpm build` |
-| Web 构建 | `pnpm build:web` |
-| 桌面端 lint | `pnpm lint` |
-| Web lint | `pnpm lint:web` |
-| 桌面端 typecheck | `pnpm typecheck` |
-| Web typecheck | `pnpm typecheck:web` |
-| 桌面端全量测试 | `pnpm test -- --run` |
-| Web 全量验证 | `pnpm verify:web` |
-| E2E | `pnpm test:e2e` |
-| 发布前桌面门禁 | `pnpm test:release` |
+| 场景             | 命令                 |
+| ---------------- | -------------------- |
+| 桌面端开发       | `pnpm electron:dev`  |
+| Web 开发         | `pnpm dev:web`       |
+| 桌面端构建       | `pnpm build`         |
+| Web 构建         | `pnpm build:web`     |
+| 桌面端 lint      | `pnpm lint`          |
+| Web lint         | `pnpm lint:web`      |
+| 桌面端 typecheck | `pnpm typecheck`     |
+| Web typecheck    | `pnpm typecheck:web` |
+| 桌面端全量测试   | `pnpm test -- --run` |
+| Web 全量验证     | `pnpm verify:web`    |
+| E2E              | `pnpm test:e2e`      |
+| 发布前桌面门禁   | `pnpm test:release`  |
 
 > `pnpm build` 在仓库根默认只构建桌面版；如果改动了 Web，请显式执行 `pnpm build:web` 或 `pnpm verify:web`。
+
+## 桌面 E2E 与 Test Agents
+
+涉及用户可见多步骤流程、Electron 跨进程行为、持久化/重启、安装/删除、同步/恢复或真实 UI 回归时，应优先使用仓库级 Playwright Test Agents 辅助规划和生成 E2E。纯逻辑与数据边界仍应先补最低有效层的 unit 或 integration 测试。
+
+Test Agent 不是发布门禁。生成的 `.spec.ts` 必须经过审查，并能通过普通 `playwright test` 独立重复执行。完整适用范围、Planner/Generator/Healer 提示词和运行命令见 [Playwright Test Agents 使用指南](./testing-playwright-agents.md)。
 
 ## 文档与 SSD 工作流
 

@@ -53,6 +53,11 @@ performance, E2E, and packaging gates.
 - Establish a migrated SQLite template-fixture contract for suites whose normal
   cases do not need to exercise migration itself.
 - Add executable validation for active-change traceability.
+- Install Playwright's official repository-scoped Codex test-agent definitions
+  for planning, generating, and diagnosing desktop E2E tests.
+- Adapt the generated MCP command and seed test to the desktop package without
+  creating a competing root `specs/` document tree or changing global Codex
+  configuration.
 
 ## Out of Scope
 
@@ -63,6 +68,10 @@ performance, E2E, and packaging gates.
 - Running macOS, Windows, and Linux installers from one local machine.
 - Rewriting all existing tests or moving tests between owners without a
   demonstrated boundary problem.
+- Treating AI-generated tests or healer edits as release evidence before the
+  resulting deterministic Playwright test passes the normal harness.
+- Granting the test agents permission to modify production code, weaken
+  assertions, skip failures, publish artifacts, or use a real user profile.
 
 ## Success Measures
 

@@ -4,8 +4,9 @@
 
 Implementation is locally complete for the registry, selection, executor,
 reporting, CI command ownership, built-artifact smoke boundary, traceability
-validation, and self-hosted Web SQLite fixture optimization. Release and
-platform package execution remain CI/release-candidate gates.
+validation, self-hosted Web SQLite fixture optimization, and repository-scoped
+Playwright Test Agents. Release and platform package execution remain
+CI/release-candidate gates.
 
 ## Delivered
 
@@ -35,6 +36,23 @@ platform package execution remain CI/release-candidate gates.
   retain their own explicit preconditions.
 - Registered existing real sync import/route contract suites under the
   self-hosted Web contract layer instead of creating a generic duplicate suite.
+- Upgraded the desktop package's `playwright` and `@playwright/test`
+  dependencies together to exact version `1.62.1`, which provides the official
+  `init-agents` and `run-test-mcp-server` commands.
+- Generated the official Codex planner, generator, and healer definitions in a
+  task-owned temporary directory, reviewed them into `.codex/agents/`, and
+  adapted their MCP command to the desktop package and configuration.
+- Added PromptHub-specific boundaries that route plans to the matching active
+  change, restrict generated/healed code to desktop E2E ownership, prohibit
+  concealing product failures, and require isolated test profiles.
+- Added an Electron seed fixture backed by the existing E2E launcher plus a
+  TOML regression test for identities, sandbox modes, tool allowlists, MCP
+  command arguments, and local guardrails. No global Codex configuration or
+  root `specs/` directory was created.
+- Added `docs/testing-playwright-agents.md`, routed it from the contributor and
+  docs indexes, and synchronized the stable verification rules. The documented
+  priority applies to new or changed user-visible Electron workflows; ordinary
+  lower-layer tests and deterministic Playwright execution remain mandatory.
 
 ## Verification
 
@@ -53,6 +71,14 @@ platform package execution remain CI/release-candidate gates.
 - `git diff --check`: passed after the final documentation convergence edits.
 - Resource cleanup: no verification runner, Vitest process, temporary database
   template, or temporary JSON report was retained.
+- Repository Test Agent TOML regression: 1 file / 4 tests passed.
+- Playwright `init-agents --help` and `run-test-mcp-server --help`: passed using
+  desktop-local Playwright `1.62.1`.
+- Playwright collection found the Electron seed as 1 test in 1 file without
+  launching the application.
+- Desktop TypeScript check and frozen-lockfile validation: passed.
+- `pnpm spec:traceability`: passed for 15 active changes after adding
+  `FR-HARNESS-008 -> DES-HARNESS-010 -> TEST-HARNESS-019/020 -> T-HARNESS-015`.
 
 ## Measurements
 
@@ -102,3 +128,7 @@ median remains the release acceptance source.
   recovery tests must continue to create explicit database preconditions.
 - Product issues #190 through #193 still require separate product changes and
   regression tests.
+- The focused built-app Electron seed was not executed during the installation
+  request because that would launch and control a graphical application. The
+  seed was type-checked and collected successfully; real renderer startup and
+  fixture cleanup still require an explicitly authorized desktop E2E run.

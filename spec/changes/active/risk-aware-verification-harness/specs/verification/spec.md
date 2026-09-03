@@ -123,6 +123,44 @@ consume the artifact produced earlier in the same run.
 - Then the build runs once
 - And the smoke check consumes that completed artifact
 
+### `FR-HARNESS-008`: Repository-scoped Playwright test agents
+
+PromptHub MUST install Playwright's official planner, generator, and healer as
+repository-scoped Codex agent definitions. The agents MUST use the desktop
+package's pinned Playwright dependency and configuration, MUST NOT modify
+global Codex configuration, and MUST NOT create a parallel root `specs/`
+documentation tree.
+
+Generated plans MUST be routed into the matching active change. Generated or
+healed tests MUST remain ordinary reviewable Playwright TypeScript files and
+MUST pass the deterministic verification harness without an AI runtime.
+
+#### Scenario: Repository installation is isolated
+
+- Given a developer opens PromptHub with Codex
+- When the Playwright test agents are discovered
+- Then exactly the planner, generator, and healer definitions are loaded from
+  `.codex/agents/`
+- And their MCP server resolves Playwright from `apps/desktop`
+- And no file under the user's global Codex directory is required or changed
+
+#### Scenario: Electron seed owns its runtime
+
+- Given an agent needs to inspect the desktop application
+- When the PromptHub seed test is selected
+- Then it launches Electron with an isolated temporary user-data directory
+- And the Playwright page represents the real Electron renderer
+- And fixture teardown closes the task-owned application and removes the
+  temporary profile
+
+#### Scenario: Healing cannot conceal a product failure
+
+- Given a deterministic Playwright test fails because product behavior changed
+- When the healer diagnoses the failure
+- Then it does not edit production code, weaken the expected behavior, or skip
+  the test
+- And any proposed test edit remains subject to normal review and harness gates
+
 ## Non-Functional Requirements
 
 ### `NFR-HARNESS-001`: Selection complexity

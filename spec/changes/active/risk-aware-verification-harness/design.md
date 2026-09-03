@@ -269,6 +269,47 @@ Optimization order:
 The selection algorithm is bounded by `O(P * R + C + E)` time and
 `O(P + C + E)` memory. Child-process concurrency and report size are bounded.
 
+### `DES-HARNESS-010`: Repository-scoped Playwright test-agent adapter
+
+The desktop package pins `playwright` and `@playwright/test` to the same
+version. Official Codex definitions are generated from that version and
+reviewed into `.codex/agents/` rather than installed globally.
+
+Each definition embeds one bounded stdio MCP command:
+
+```text
+pnpm --dir apps/desktop exec playwright run-test-mcp-server --config playwright.config.ts
+```
+
+The three definitions retain Playwright's role-specific tool allowlists. Local
+PromptHub guardrails are appended to the vendor instructions:
+
+- the planner writes plans only to the matching active change;
+- the generator writes only under `apps/desktop/tests/e2e/`;
+- the healer may edit E2E tests but never production code, expectations that
+  define intended behavior, or skip state;
+- all roles use isolated test data and must release task-owned processes.
+
+`apps/desktop/tests/e2e/playwright-agent-seed.spec.ts` overrides Playwright's
+`page` fixture with the first renderer page from the existing Electron E2E
+launcher. Fixture teardown closes Electron and deletes the temporary profile.
+The seed is a test-authoring entry point; ordinary CI continues to execute the
+generated `.spec.ts` files without loading an agent.
+
+The official initializer is not run directly against the repository because it
+would create a root `specs/` directory that conflicts with PromptHub's `spec/`
+document source of truth. Definitions are generated in task-owned temporary
+storage, adapted, reviewed, and then copied into the repository. Generation
+cost is constant for three small definitions. Runtime cost is bounded by one
+stdio MCP process per invoked agent and the existing single-worker Electron
+test policy.
+
+Contributor usage is documented in `docs/testing-playwright-agents.md` and
+routed from `docs/contributing.md`. Stable verification rules define Test Agent
+priority by risk: use them first for new or changed user-visible Electron flows,
+but retain lower-layer tests for logic and ordinary Playwright execution as the
+deterministic gate.
+
 ## Failure Semantics
 
 - Invalid registry, duplicate command, cycle, unknown dependency, missing
@@ -329,3 +370,4 @@ The public command names remain unchanged throughout the migration.
 | `NFR-HARNESS-002` | `DES-HARNESS-005`, `DES-HARNESS-008` | `TEST-HARNESS-010`, `TEST-HARNESS-016`                     | `T-HARNESS-008`, `T-HARNESS-009` |
 | `NFR-HARNESS-003` | `DES-HARNESS-007`, `DES-HARNESS-009` | `TEST-HARNESS-017`                                         | `T-HARNESS-001`, `T-HARNESS-012` |
 | `NFR-HARNESS-004` | `DES-HARNESS-003`, `DES-HARNESS-006` | `TEST-HARNESS-018`                                         | `T-HARNESS-013`                  |
+| `FR-HARNESS-008`  | `DES-HARNESS-010`                    | `TEST-HARNESS-019`, `TEST-HARNESS-020`                     | `T-HARNESS-015`, `T-HARNESS-016` |

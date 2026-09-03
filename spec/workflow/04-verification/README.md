@@ -58,6 +58,14 @@ UI 可见变更不能只通过截图或代码审阅验收。验证记录必须�
 - 观察结果：实际是否一致，有无布局重叠、控件无响应、状态错误、文案截断或数据不同步。
 - 证据：能用 Playwright、in-app browser、桌面自动化或截图时，应附命令或截图路径；无法自动化时记录阻塞原因。
 
+### Playwright Test Agents 优先级
+
+- 桌面端用户可见多步骤流程、跨进程行为、持久化/重启、安装/删除、同步/恢复和真实 UI 回归，优先使用仓库级 Playwright Test Agents 辅助形成计划并生成 E2E。
+- 纯逻辑、解析、数据库 primitive 和分支错误路径先使用最低有效层 unit/integration；E2E 负责证明完整用户流程，不能代替这些测试。
+- Planner 产物进入匹配 active change，Generator 只写桌面 E2E，Healer 只修已证明的测试漂移。产品缺陷不得通过放宽断言或跳过测试解决。
+- Agent 产物必须经过审核并由普通 `playwright test` 独立通过，之后才能进入 release harness 证据链。
+- 具体提示词、Seed 和命令见 `docs/testing-playwright-agents.md`。
+
 ## 复用与一致性验证
 
 涉及 Skill、Plugin、MCP、Agent、Prompt、设置、商店、分发和同步的 UI 变更，应先确认已有同类界面是否能复用。

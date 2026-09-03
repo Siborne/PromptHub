@@ -69,6 +69,14 @@
 - [x] `T-HARNESS-014` Add active-change traceability validation and its
       malformed-fixture tests
       (`FR-HARNESS-006`, `TEST-HARNESS-013`).
+- [x] `T-HARNESS-015` Install and adapt the official repository-scoped
+      Playwright planner, generator, and healer definitions; add the isolated
+      Electron seed and configuration regression test
+      (`FR-HARNESS-008`, `TEST-HARNESS-019`, `TEST-HARNESS-020`).
+- [x] `T-HARNESS-016` Document when Test Agents take priority, the reviewed
+      Planner -> Generator -> deterministic Playwright -> conditional Healer
+      workflow, invocation prompts, and Electron GUI/data boundaries
+      (`FR-HARNESS-008`, `TEST-HARNESS-019`, `TEST-HARNESS-020`).
 
 ## Convergence
 
@@ -125,3 +133,9 @@
   by at least 30%.
 - `TEST-HARNESS-018`: local and CI list the same check ids; platform package
   checks build without publishing or requiring release credentials.
+- `TEST-HARNESS-019`: parse the three repository agent TOML files and assert
+  exact identities, sandbox modes, desktop-local MCP command, required tool
+  allowlists, and PromptHub guardrails.
+- `TEST-HARNESS-020`: Playwright collects the Electron seed from the desktop
+  configuration, and a focused built-app run proves the fixture exposes the
+  renderer and releases its isolated application/profile.

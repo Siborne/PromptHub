@@ -38,6 +38,7 @@
 docs/
 ├── README.md
 ├── contributing.md
+├── testing-playwright-agents.md
 ├── web-self-hosted.md
 ├── README.en.md
 ├── README.zh-TW.md
@@ -47,6 +48,10 @@ docs/
 ├── README.fr.md
 └── imgs/
 ```
+
+## 贡献者测试指南
+
+- `docs/testing-playwright-agents.md`：仓库级 Playwright Test Agents 的适用范围、调用方法、Electron Seed、独立执行和失败诊断边界。
 
 ## 内部文档入口
 
