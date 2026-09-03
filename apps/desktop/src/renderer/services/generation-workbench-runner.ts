@@ -43,14 +43,32 @@ function isGeminiImageModel(config: AIModelConfig): boolean {
   );
 }
 
+function isGptImageModel(config: AIModelConfig): boolean {
+  const provider = config.provider?.trim().toLowerCase() ?? "";
+  const blockedProviders = new Set([
+    "flux",
+    "ideogram",
+    "recraft",
+    "replicate",
+    "stability",
+  ]);
+  return Boolean(
+    config.model?.trim().toLowerCase().startsWith("gpt-image-") &&
+    !blockedProviders.has(provider) &&
+    (provider === "openai" || config.apiProtocol === "openai"),
+  );
+}
+
 export function supportsGenerationReferenceImages(
   config: AIModelConfig,
 ): boolean {
-  return isGeminiImageModel(config);
+  return isGeminiImageModel(config) || isGptImageModel(config);
 }
 
 export function getMaxGenerationReferenceImages(config: AIModelConfig): number {
-  return supportsGenerationReferenceImages(config) ? 2 : 0;
+  if (isGeminiImageModel(config)) return 2;
+  if (isGptImageModel(config)) return 4;
+  return 0;
 }
 
 export function getSupportedGenerationAspectRatios(
@@ -85,7 +103,22 @@ async function loadReferenceAttachments(
   return Promise.all(
     references.map(async (reference) => {
       if (reference.source === "generation") {
-        throw new Error("This reference image source is not supported yet");
+        if (!reference.batchId || !reference.outputId) {
+          throw new Error(
+            "Generation reference is missing its source identity",
+          );
+        }
+        const payload = await window.api.generation.readOutputReference({
+          batchId: reference.batchId,
+          outputId: reference.outputId,
+        });
+        if (payload.fileName !== reference.fileName) {
+          throw new Error("Generation reference integrity check failed");
+        }
+        return {
+          base64: payload.base64,
+          mimeType: payload.mimeType,
+        };
       }
       const base64 = await window.electron?.readImageBase64?.(
         reference.fileName,

@@ -29,6 +29,7 @@ import type {
   FailGenerationSlotInput,
   GenerationBatchManifest,
   GenerationOutputTargetInput,
+  GenerationOutputReferencePayload,
   GenerationSlotStatus,
   SetGenerationFavoriteInput,
 } from "@prompthub/shared/types";
@@ -649,5 +650,50 @@ export class GenerationLibrary {
     await fs.mkdir(getImagesDir(), { recursive: true });
     await fs.copyFile(sourcePath, path.join(getImagesDir(), fileName));
     return fileName;
+  }
+
+  async readOutputReference(
+    input: GenerationOutputTargetInput,
+  ): Promise<GenerationOutputReferencePayload> {
+    this.assertStorageAvailable();
+    const manifest = await this.getBatch(input.batchId);
+    const output = manifest.slots.find(
+      (slot) => slot.output?.id === input.outputId,
+    )?.output;
+    if (
+      !output ||
+      path.basename(output.fileName) !== output.fileName ||
+      !MIME_EXTENSIONS[output.mimeType] ||
+      output.byteSize <= 0 ||
+      output.byteSize > MAX_IMAGE_BYTES
+    ) {
+      throw new Error("Generation output not found");
+    }
+
+    const sourcePath = path.join(
+      getGeneratedImagesDir(),
+      manifest.id,
+      output.fileName,
+    );
+    const stats = await fs.lstat(sourcePath);
+    if (
+      !stats.isFile() ||
+      stats.isSymbolicLink() ||
+      stats.size !== output.byteSize ||
+      stats.size > MAX_IMAGE_BYTES
+    ) {
+      throw new Error("Generation output integrity check failed");
+    }
+    const bytes = await fs.readFile(sourcePath);
+    const validated = validateImageBytes(bytes, output.mimeType);
+    const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
+    if (sha256 !== output.sha256 || validated.mimeType !== output.mimeType) {
+      throw new Error("Generation output integrity check failed");
+    }
+    return {
+      fileName: output.fileName,
+      mimeType: output.mimeType,
+      base64: bytes.toString("base64"),
+    };
   }
 }

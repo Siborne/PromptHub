@@ -1,9 +1,12 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArrowRightIcon,
   CheckIcon,
   CopyIcon,
   DownloadIcon,
   ImageIcon,
   LoaderCircleIcon,
+  MoreHorizontalIcon,
   StarIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -31,6 +34,7 @@ interface ImageGenerationReviewStageProps {
   onDownload: (output: GenerationOutputRecord) => void;
   onCopyPrompt: () => void;
   onAttach: (output: GenerationOutputRecord) => void;
+  onContinue: (output: GenerationOutputRecord) => void;
 }
 
 function getSlotStateLabel(
@@ -67,7 +71,7 @@ function ReviewThumbnail({
     return (
       <div
         data-testid="generation-review-thumbnail"
-        className="flex h-24 w-20 shrink-0 flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-muted/20 px-1 text-center text-muted-foreground"
+        className="flex aspect-video w-[clamp(112px,13vw,180px)] shrink-0 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border bg-muted/20 px-1 text-center text-muted-foreground"
       >
         {slot.status === "running" ? (
           <LoaderCircleIcon
@@ -97,7 +101,7 @@ function ReviewThumbnail({
   return (
     <div
       data-testid="generation-review-thumbnail"
-      className={`group relative h-24 w-20 shrink-0 overflow-hidden rounded-md border bg-card transition-colors ${focused ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-primary/60"}`}
+      className={`group relative aspect-video w-[clamp(112px,13vw,180px)] shrink-0 overflow-hidden rounded-md border bg-card transition-colors ${focused ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-primary/60"}`}
     >
       <button
         type="button"
@@ -144,26 +148,121 @@ function ReviewThumbnail({
   );
 }
 
-function ReviewAction({
+function ReviewActionsMenu({
+  output,
+  canAttach,
+  onToggleFavorite,
+  onDownload,
+  onCopyPrompt,
+  onAttach,
+  openRequest,
+}: Pick<
+  ImageGenerationReviewStageProps,
+  "canAttach" | "onToggleFavorite" | "onDownload" | "onCopyPrompt" | "onAttach"
+> & { output: GenerationOutputRecord; openRequest: number }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) close();
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("mousedown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [close, open]);
+
+  useEffect(() => {
+    if (openRequest > 0) setOpen(true);
+  }, [openRequest]);
+
+  const action = (callback: () => void) => () => {
+    callback();
+    close();
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={t("generation.moreActions")}
+        title={t("generation.moreActions")}
+        className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs shadow-sm transition-colors ${open ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-background/95 text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+      >
+        <MoreHorizontalIcon className="h-4 w-4" aria-hidden="true" />
+        {t("generation.more")}
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label={t("generation.moreActions")}
+          className="absolute left-1/2 top-full z-30 mt-2 w-48 -translate-x-1/2 rounded-lg border border-border bg-popover p-1.5 shadow-xl"
+        >
+          <MenuAction
+            label={t("generation.favorite")}
+            onClick={action(() => onToggleFavorite(output))}
+            active={output.favorite}
+            icon={
+              <StarIcon
+                className={`h-4 w-4 ${output.favorite ? "fill-current" : ""}`}
+                aria-hidden="true"
+              />
+            }
+          />
+          <MenuAction
+            label={t("generation.download")}
+            onClick={action(() => onDownload(output))}
+            icon={<DownloadIcon className="h-4 w-4" aria-hidden="true" />}
+          />
+          <MenuAction
+            label={t("generation.copyPrompt")}
+            onClick={action(onCopyPrompt)}
+            icon={<CopyIcon className="h-4 w-4" aria-hidden="true" />}
+          />
+          {canAttach && (
+            <MenuAction
+              label={t("prompt.addToPrompt")}
+              onClick={action(() => onAttach(output))}
+              icon={<ImageIcon className="h-4 w-4" aria-hidden="true" />}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuAction({
   label,
   onClick,
+  icon,
   active = false,
-  children,
 }: {
   label: string;
   onClick: () => void;
+  icon: React.ReactNode;
   active?: boolean;
-  children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={`flex h-9 w-9 items-center justify-center rounded-md border border-border transition-colors hover:bg-muted ${active ? "text-amber-500" : "text-muted-foreground hover:text-foreground"}`}
+      className={`flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-sm hover:bg-accent hover:text-accent-foreground ${active ? "text-amber-500" : "text-foreground"}`}
     >
-      {children}
+      {icon}
+      {label}
     </button>
   );
 }
@@ -172,6 +271,7 @@ export function ImageGenerationReviewStage(
   props: ImageGenerationReviewStageProps,
 ) {
   const { t } = useTranslation();
+  const [contextMenuRequested, setContextMenuRequested] = useState(0);
   const focusedSlot = props.batch.slots.find(
     (slot) => slot.output?.id === props.focusedOutputId,
   );
@@ -183,28 +283,43 @@ export function ImageGenerationReviewStage(
   );
 
   return (
-    <section className="flex h-full min-h-0 flex-col items-center overflow-y-auto px-4 py-3">
+    <section className="flex h-full min-h-0 flex-col items-center overflow-y-auto px-5 py-4">
+      <div className="relative z-20 mb-3 shrink-0">
+        <ReviewActionsMenu
+          output={output}
+          openRequest={contextMenuRequested}
+          canAttach={props.canAttach}
+          onToggleFavorite={props.onToggleFavorite}
+          onDownload={props.onDownload}
+          onCopyPrompt={props.onCopyPrompt}
+          onAttach={props.onAttach}
+        />
+      </div>
       <div className="flex min-h-0 w-full flex-1 items-center justify-center">
         <button
           type="button"
           data-testid="generation-primary-preview"
           onClick={() => props.onOpen(selection)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setContextMenuRequested((value) => value + 1);
+          }}
           aria-label={t("generation.outputAlt", {
             index: focusedSlot.index + 1,
           })}
-          className="flex h-full min-h-56 w-full items-center justify-center overflow-hidden rounded-md bg-muted/15 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="flex h-full min-h-56 w-full items-center justify-center overflow-hidden rounded-lg bg-muted/10 p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <img
             src={source}
             alt={t("generation.outputAlt", {
               index: focusedSlot.index + 1,
             })}
-            className="max-h-full max-w-full rounded-md object-contain shadow-sm"
+            className="max-h-full max-w-full rounded-lg object-contain shadow-sm"
           />
         </button>
       </div>
 
-      <div className="mt-3 flex w-full shrink-0 flex-col items-center gap-3">
+      <div className="mt-3 flex w-full shrink-0 flex-col items-center gap-2.5">
         <div className="flex max-w-full gap-2 overflow-x-auto px-1 py-1">
           {props.batch.slots.map((slot, slotIndex) => (
             <ReviewThumbnail
@@ -218,38 +333,14 @@ export function ImageGenerationReviewStage(
             />
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <ReviewAction
-            label={t("generation.favorite")}
-            active={output.favorite}
-            onClick={() => props.onToggleFavorite(output)}
-          >
-            <StarIcon
-              className={`h-4 w-4 ${output.favorite ? "fill-current" : ""}`}
-              aria-hidden="true"
-            />
-          </ReviewAction>
-          <ReviewAction
-            label={t("generation.download")}
-            onClick={() => props.onDownload(output)}
-          >
-            <DownloadIcon className="h-4 w-4" aria-hidden="true" />
-          </ReviewAction>
-          <ReviewAction
-            label={t("generation.copyPrompt")}
-            onClick={props.onCopyPrompt}
-          >
-            <CopyIcon className="h-4 w-4" aria-hidden="true" />
-          </ReviewAction>
-          {props.canAttach && (
-            <ReviewAction
-              label={t("prompt.addToPrompt")}
-              onClick={() => props.onAttach(output)}
-            >
-              <ImageIcon className="h-4 w-4" aria-hidden="true" />
-            </ReviewAction>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => props.onContinue(output)}
+          className="flex h-9 items-center gap-2 self-end rounded-lg border border-border bg-background px-3 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {t("generation.continueFromImage")}
+          <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       </div>
     </section>
   );

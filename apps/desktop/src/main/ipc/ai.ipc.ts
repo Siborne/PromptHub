@@ -7,13 +7,91 @@ import type {
 } from "@prompthub/shared/types";
 import { fetchWithNetworkProxy } from "../services/network-proxy";
 
-function normalizeHeaders(headers?: Record<string, string>): HeadersInit | undefined {
+const MAX_MULTIPART_FILES = 4;
+const MAX_MULTIPART_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_MULTIPART_BASE64_LENGTH = Math.ceil(MAX_MULTIPART_FILE_BYTES / 3) * 4;
+const BASE64_PATTERN =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
+const ALLOWED_MULTIPART_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+function normalizeHeaders(
+  headers?: Record<string, string>,
+  omitContentType = false,
+): HeadersInit | undefined {
   if (!headers) {
     return undefined;
   }
   return Object.fromEntries(
-    Object.entries(headers).filter(([, value]) => value != null),
+    Object.entries(headers).filter(
+      ([key, value]) =>
+        value != null &&
+        (!omitContentType || key.toLowerCase() !== "content-type"),
+    ),
   );
+}
+
+function decodeMultipartFile(base64: string): Buffer {
+  if (
+    !base64 ||
+    base64.length > MAX_MULTIPART_BASE64_LENGTH ||
+    !BASE64_PATTERN.test(base64)
+  ) {
+    throw new Error("Invalid multipart image payload");
+  }
+  const bytes = Buffer.from(base64, "base64");
+  if (bytes.length === 0 || bytes.length > MAX_MULTIPART_FILE_BYTES) {
+    throw new Error("Invalid multipart image payload size");
+  }
+  return bytes;
+}
+
+function buildMultipartBody(request: AITransportRequest): FormData | undefined {
+  if (!request.multipart) return undefined;
+  if (request.body !== undefined) {
+    throw new Error(
+      "AI request body and multipart body are mutually exclusive",
+    );
+  }
+  const fields = Object.entries(request.multipart.fields);
+  if (fields.length > 16) throw new Error("Too many multipart fields");
+  if (
+    request.multipart.files.length === 0 ||
+    request.multipart.files.length > MAX_MULTIPART_FILES
+  ) {
+    throw new Error("Multipart image count must be between 1 and 4");
+  }
+
+  const form = new FormData();
+  for (const [name, value] of fields) {
+    if (!name || name.length > 64 || value.length > 200_000) {
+      throw new Error("Invalid multipart field");
+    }
+    form.append(name, value);
+  }
+  for (const file of request.multipart.files) {
+    if (
+      !file.fieldName ||
+      file.fieldName.length > 64 ||
+      !file.fileName ||
+      file.fileName.length > 255 ||
+      file.fileName !== file.fileName.split(/[\\/]/u).pop() ||
+      !ALLOWED_MULTIPART_IMAGE_TYPES.has(file.mimeType)
+    ) {
+      throw new Error("Invalid multipart image metadata");
+    }
+    const bytes = decodeMultipartFile(file.base64);
+    const blobBytes = Uint8Array.from(bytes);
+    form.append(
+      file.fieldName,
+      new Blob([blobBytes], { type: file.mimeType }),
+      file.fileName,
+    );
+  }
+  return form;
 }
 
 function headersToObject(headers: Headers): Record<string, string> {
@@ -35,7 +113,9 @@ function toErrorResponse(error: unknown): AITransportResponse {
   };
 }
 
-async function requestToResponse(response: Response): Promise<AITransportResponse> {
+async function requestToResponse(
+  response: Response,
+): Promise<AITransportResponse> {
   return {
     ok: response.ok,
     status: response.status,
@@ -56,10 +136,11 @@ async function performRequest(request: AITransportRequest): Promise<Response> {
   }, timeoutMs);
 
   try {
+    const multipartBody = buildMultipartBody(request);
     return await fetchWithNetworkProxy(request.url, {
       method: request.method,
-      headers: normalizeHeaders(request.headers),
-      body: request.body,
+      headers: normalizeHeaders(request.headers, Boolean(multipartBody)),
+      body: multipartBody ?? request.body,
       signal: controller.signal,
     });
   } finally {
@@ -70,7 +151,10 @@ async function performRequest(request: AITransportRequest): Promise<Response> {
 export function registerAIIPC(): void {
   ipcMain.handle(
     IPC_CHANNELS.AI_HTTP_REQUEST,
-    async (_event, request: AITransportRequest): Promise<AITransportResponse> => {
+    async (
+      _event,
+      request: AITransportRequest,
+    ): Promise<AITransportResponse> => {
       try {
         const response = await performRequest(request);
         return await requestToResponse(response);
@@ -82,7 +166,10 @@ export function registerAIIPC(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.AI_HTTP_STREAM,
-    async (event, request: AITransportRequest): Promise<AITransportResponse> => {
+    async (
+      event,
+      request: AITransportRequest,
+    ): Promise<AITransportResponse> => {
       try {
         const response = await performRequest(request);
         if (!response.ok || !response.body) {

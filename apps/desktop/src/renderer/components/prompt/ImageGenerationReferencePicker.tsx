@@ -5,7 +5,10 @@ import type {
   PromptSummary,
 } from "@prompthub/shared/types";
 import { useTranslation } from "react-i18next";
-import { resolveLocalImageSrc } from "../../utils/media-url";
+import {
+  resolveLocalGenerationImageSrc,
+  resolveLocalImageSrc,
+} from "../../utils/media-url";
 
 interface ImageGenerationReferencePickerProps {
   prompts: PromptSummary[];
@@ -23,7 +26,16 @@ const SUPPORTED_REFERENCE_FILE_PATTERN = /\.(?:jpe?g|png|webp)$/iu;
 const PROMPT_MEDIA_PAGE_SIZE = 24;
 
 function referenceKey(reference: GenerationReferenceImage): string {
-  return `${reference.source}:${reference.promptId ?? ""}:${reference.fileName}`;
+  return `${reference.source}:${reference.promptId ?? ""}:${reference.batchId ?? ""}:${reference.outputId ?? ""}:${reference.fileName}`;
+}
+
+function resolveReferencePreview(reference: GenerationReferenceImage): string {
+  if (reference.source === "generation" && reference.batchId) {
+    return resolveLocalGenerationImageSrc(
+      `${reference.batchId}/${reference.fileName}`,
+    );
+  }
+  return resolveLocalImageSrc(reference.fileName);
 }
 
 export function ImageGenerationReferencePicker({
@@ -77,6 +89,40 @@ export function ImageGenerationReferencePicker({
         <span className="max-w-64 text-xs leading-5">
           {t("generation.referenceUnsupported")}
         </span>
+        {references.length > 0 && (
+          <div role="list" className="mt-1 w-full space-y-1.5 text-left">
+            {references.map((reference, index) => (
+              <div
+                key={referenceKey(reference)}
+                role="listitem"
+                aria-label={t("generation.referenceItem", {
+                  index: index + 1,
+                  name: reference.fileName,
+                })}
+                className="flex items-center gap-2 rounded-md border border-border bg-background p-1.5"
+              >
+                <img
+                  src={resolveReferencePreview(reference)}
+                  alt=""
+                  className="h-9 w-9 shrink-0 rounded object-cover"
+                />
+                <span className="min-w-0 flex-1 truncate text-[10px] text-foreground">
+                  {reference.fileName}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onRemove(index)}
+                  aria-label={t("generation.removeReference", {
+                    name: reference.fileName,
+                  })}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <XIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -164,7 +210,7 @@ export function ImageGenerationReferencePicker({
                 aria-hidden="true"
               />
               <img
-                src={resolveLocalImageSrc(reference.fileName)}
+                src={resolveReferencePreview(reference)}
                 alt=""
                 className="h-10 w-10 shrink-0 rounded object-cover"
               />
@@ -173,11 +219,13 @@ export function ImageGenerationReferencePicker({
                   {reference.fileName}
                 </span>
                 <span className="block truncate text-[10px] text-muted-foreground">
-                  {reference.source === "prompt"
-                    ? (prompts.find(
-                        (prompt) => prompt.id === reference.promptId,
-                      )?.title ?? t("generation.referenceSourcePrompt"))
-                    : t("generation.referenceSourceLocal")}
+                  {reference.source === "generation"
+                    ? t("generation.referenceSourceGeneration")
+                    : reference.source === "prompt"
+                      ? (prompts.find(
+                          (prompt) => prompt.id === reference.promptId,
+                        )?.title ?? t("generation.referenceSourcePrompt"))
+                      : t("generation.referenceSourceLocal")}
                 </span>
               </span>
               <button

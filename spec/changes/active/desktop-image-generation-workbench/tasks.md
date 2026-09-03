@@ -93,3 +93,36 @@
 - [x] `T-IGW-024` 按 `TEST-IGW-011` 修复工作台顶栏侧栏按钮无可见反馈的问题：进入
       工作台仍自动收起二级侧栏，但允许按钮临时展开/收起；工作台状态不得写入持久化
       偏好，离开后恢复普通 Prompt 页既有侧栏状态。
+- [x] `T-IGW-025` 按 2026-09-01 确认的轻量审阅方向收敛工作台：右侧生成设置/历史改为
+      按需抽屉，工作台筛选和批次操作收进头部菜单，图片操作收进 `More`/右键菜单；
+      保留现有生成、取消、重试、收藏、下载、加入 Prompt、IPC、存储和执行合同，补齐
+      `TEST-IGW-010` 组件回归、七语言、类型、静态检查、构建与同视口视觉 QA。
+      实现、68 个 focused tests、七语言、Desktop 类型检查、focused ESLint、生产构建、
+      文件规模与差异检查已通过；用户后续授权 GUI 检查后，使用隔离 E2E profile 与
+      5 图 fixture 完成 3 轮 `1200x740` 实际截图和归一化并排对比，P1/P2 已修复，
+      `design-qa.md` 最终结果为 passed。
+- [x] `T-IGW-026` 按 `FR-IGW-017` / `DES-IGW-011` / `TEST-IGW-012` 补齐生成与整图编辑
+      双路径：先写历史输出安全读取、GPT Image multipart edits、unsupported-provider
+      预检和组件模式反馈红测，再实现 shared/main/preload/runner/provider/UI/i18n；最后
+      运行 focused tests、类型、静态检查、生产构建和隔离 Electron 实机验收。蒙版与
+      局部重绘不在本任务范围内。
+      108 个 focused tests、Desktop typecheck、focused ESLint、生产构建、spec 索引/
+      治理/追踪和 diff check 已通过；隔离 Electron profile 在 `1200x740` 验证历史输出
+      继续编辑、GPT Image 模型、`1/4` 参考图、生成图预览、固定编辑操作和无横向溢出。
+      未调用真实付费 Provider；真实凭据/网络接受度仍需单独的用户环境验收。
+- [x] `T-IGW-027` 按用户实际截图修复右侧设置/历史面板遮挡主内容的问题：先更新
+      `FR-IGW-018` / `DES-IGW-012` / `TEST-IGW-013` 和组件红测，再把工作台重构为
+      全宽头部下的同层 Gallery/Inspector 布局；在宽与紧凑 Electron 视口验证主预览、
+      缩略图、继续入口无覆盖、无页面级横向滚动，且关闭右栏恢复全宽。
+      32 个工作台组件测试、Desktop typecheck、focused ESLint、生产构建、文件规模、
+      spec 索引/追踪和 diff check 已通过；隔离 Electron 在 `1200x740` 与 `900x650`
+      验证 Gallery/Inspector 边界不相交、头部跨满内容区、主预览/继续入口留在 Gallery
+      内、关闭面板回收完整宽度且无页面横向滚动。
+- [x] `T-IGW-028` 按 `FR-IGW-019` / `DES-IGW-013` / `TEST-IGW-014` 实现生图工作台
+      左右辅助侧栏互斥：所有右栏入口统一先收起 Prompts 二级侧栏，展开二级侧栏时关闭
+      右栏；补组件红测和紧凑 Electron 双向切换验收，确认全局模块栏、当前批次、聚焦图
+      和草稿状态不受影响。
+      62 个工作台/TopBar 组件测试、Desktop typecheck、focused ESLint、生产构建、文件
+      规模、spec 索引/追踪和 diff check 已通过；隔离 Electron 在 `900x650` 验证左右栏
+      双向互斥、全局模块栏常驻、聚焦图片不变、稳定帧无横向滚动，并修复左栏展开时的
+      头部控件挤压。

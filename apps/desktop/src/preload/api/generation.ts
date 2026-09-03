@@ -7,6 +7,7 @@ import type {
   FailGenerationSlotInput,
   GenerationBatchManifest,
   GenerationOutputTargetInput,
+  GenerationOutputReferencePayload,
   SetGenerationFavoriteInput,
 } from "@prompthub/shared/types";
 
@@ -66,4 +67,9 @@ export const generationApi = {
       IPC_CHANNELS.GENERATION_COPY_TO_PROMPT_MEDIA,
       input,
     ) as Promise<string>,
+  readOutputReference: (input: GenerationOutputTargetInput) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.GENERATION_READ_OUTPUT_REFERENCE,
+      input,
+    ) as Promise<GenerationOutputReferencePayload>,
 };

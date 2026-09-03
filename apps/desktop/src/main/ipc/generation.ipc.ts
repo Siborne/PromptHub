@@ -55,4 +55,9 @@ export function registerGenerationIPC(db: Database.Database): void {
     (_event, input: GenerationOutputTargetInput) =>
       library.copyOutputToPromptMedia(input),
   );
+  ipcMain.handle(
+    IPC_CHANNELS.GENERATION_READ_OUTPUT_REFERENCE,
+    (_event, input: GenerationOutputTargetInput) =>
+      library.readOutputReference(input),
+  );
 }

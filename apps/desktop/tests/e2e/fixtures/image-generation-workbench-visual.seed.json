@@ -1,0 +1,57 @@
+{
+  "settings": {
+    "language": "en",
+    "theme": "light",
+    "motionPreference": "reduced",
+    "aiModels": [
+      {
+        "id": "image-model-visual-qa",
+        "type": "image",
+        "provider": "openai",
+        "apiProtocol": "openai",
+        "apiKey": "e2e-placeholder",
+        "apiUrl": "https://example.invalid/v1",
+        "model": "gpt-image-1",
+        "name": "GPT Image"
+      }
+    ]
+  },
+  "prompts": [
+    {
+      "id": "image-prompt-visual-qa",
+      "title": "Editorial product study",
+      "description": "Deterministic visual-QA source Prompt.",
+      "promptType": "image",
+      "systemPrompt": "",
+      "userPrompt": "A quiet editorial living room with warm neutral materials and a red maple branch.",
+      "variables": [],
+      "tags": ["visual-qa"],
+      "folderId": null,
+      "images": [],
+      "videos": [],
+      "isFavorite": false,
+      "isPinned": false,
+      "version": 1,
+      "currentVersion": 1,
+      "usageCount": 0,
+      "source": null,
+      "notes": null,
+      "lastAiResponse": null,
+      "createdAt": "2026-09-01T08:00:00.000Z",
+      "updatedAt": "2026-09-01T08:00:00.000Z"
+    }
+  ],
+  "versions": [
+    {
+      "id": "image-prompt-visual-qa-v1",
+      "promptId": "image-prompt-visual-qa",
+      "version": 1,
+      "systemPrompt": "",
+      "userPrompt": "A quiet editorial living room with warm neutral materials and a red maple branch.",
+      "variables": [],
+      "note": "Visual QA fixture",
+      "aiResponse": null,
+      "createdAt": "2026-09-01T08:00:00.000Z"
+    }
+  ]
+}

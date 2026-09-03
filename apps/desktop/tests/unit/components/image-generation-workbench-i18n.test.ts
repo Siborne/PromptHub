@@ -10,6 +10,12 @@ import zh from "../../../src/renderer/i18n/locales/zh.json";
 const locales = { de, en, es, fr, ja, "zh-TW": zhTW, zh };
 const workbenchKeys = [
   "galleryOptions",
+  "workbenchActions",
+  "moreActions",
+  "more",
+  "details",
+  "continueFromImage",
+  "closeInspector",
   "addLocalReferences",
   "choosePromptReferences",
   "dropReferenceImages",
@@ -19,12 +25,15 @@ const workbenchKeys = [
   "referenceSelectionCount",
   "referenceSourceLocal",
   "referenceSourcePrompt",
+  "referenceSourceGeneration",
   "referenceUnsupported",
   "referenceUploadFailed",
   "removeReference",
   "selectPromptReference",
   "showMorePromptReferences",
   "newDraftEmpty",
+  "edit",
+  "editPromptPlaceholder",
 ] as const;
 
 describe("image generation workbench locales", () => {

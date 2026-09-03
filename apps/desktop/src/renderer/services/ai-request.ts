@@ -1,4 +1,7 @@
-import type { AITransportResponse } from "@prompthub/shared/types";
+import type {
+  AITransportMultipartBody,
+  AITransportResponse,
+} from "@prompthub/shared/types";
 
 export interface ResponseLike {
   ok: boolean;
@@ -45,6 +48,7 @@ export async function requestAIEndpoint(request: {
   url: string;
   headers: Record<string, string>;
   body?: string;
+  multipart?: AITransportMultipartBody;
   timeoutMs?: number;
 }): Promise<ResponseLike> {
   const transport = getAITransport();
@@ -52,11 +56,40 @@ export async function requestAIEndpoint(request: {
     return createResponseLike(await transport.request(request));
   }
 
+  if (request.body !== undefined && request.multipart) {
+    throw new Error(
+      "AI request body and multipart body are mutually exclusive",
+    );
+  }
+  const form = request.multipart ? new FormData() : undefined;
+  if (form && request.multipart) {
+    for (const [name, value] of Object.entries(request.multipart.fields)) {
+      form.append(name, value);
+    }
+    for (const file of request.multipart.files) {
+      const binary = atob(file.base64);
+      const bytes = Uint8Array.from(binary, (character) =>
+        character.charCodeAt(0),
+      );
+      form.append(
+        file.fieldName,
+        new Blob([bytes], { type: file.mimeType }),
+        file.fileName,
+      );
+    }
+  }
+  const headers = form
+    ? Object.fromEntries(
+        Object.entries(request.headers).filter(
+          ([name]) => name.toLowerCase() !== "content-type",
+        ),
+      )
+    : request.headers;
   return createFetchResponseLike(
     await fetch(request.url, {
       method: request.method,
-      headers: request.headers,
-      body: request.body,
+      headers,
+      body: form ?? request.body,
     }),
   );
 }

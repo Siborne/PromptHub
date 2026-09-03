@@ -579,4 +579,57 @@ describe("GenerationLibrary", () => {
       ),
     ).toBe(true);
   });
+
+  it("returns verified generation bytes for whole-image editing", async () => {
+    const batch = await library.createBatch({
+      prompt: "Poster",
+      model: { id: "m1", provider: "openai", model: "gpt-image-1" },
+      targetCount: 1,
+    });
+    const successful = await library.commitOutput({
+      batchId: batch.id,
+      slotIndex: 0,
+      mimeType: "image/png",
+      base64: PNG_BYTES.toString("base64"),
+    });
+    const output = successful.slots[0].output!;
+
+    await expect(
+      library.readOutputReference({ batchId: batch.id, outputId: output.id }),
+    ).resolves.toEqual({
+      fileName: output.fileName,
+      mimeType: "image/png",
+      base64: PNG_BYTES.toString("base64"),
+    });
+  });
+
+  it("rejects missing or tampered generation output references", async () => {
+    const batch = await library.createBatch({
+      prompt: "Poster",
+      model: { id: "m1", provider: "openai", model: "gpt-image-1" },
+      targetCount: 1,
+    });
+    const successful = await library.commitOutput({
+      batchId: batch.id,
+      slotIndex: 0,
+      mimeType: "image/png",
+      base64: PNG_BYTES.toString("base64"),
+    });
+    const output = successful.slots[0].output!;
+
+    await expect(
+      library.readOutputReference({
+        batchId: batch.id,
+        outputId: "missing-output",
+      }),
+    ).rejects.toThrow(/output not found/i);
+
+    fs.writeFileSync(
+      path.join(getGeneratedImagesDir(), batch.id, output.fileName),
+      JPEG_BYTES,
+    );
+    await expect(
+      library.readOutputReference({ batchId: batch.id, outputId: output.id }),
+    ).rejects.toThrow(/integrity/i);
+  });
 });

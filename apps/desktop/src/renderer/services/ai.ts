@@ -35,10 +35,10 @@ import {
   getAITransport,
   getErrorMessageFromResponse,
   getFormattedErrorMessageFromResponse,
-  isGptImageModel,
   requestAIEndpoint,
   type ResponseLike,
 } from "./ai-request";
+import { generateImageOpenAI } from "./ai-image-openai";
 import {
   normalizeAssistantContent,
   toAnthropicMessageContent,
@@ -1020,80 +1020,6 @@ async function generateImageGemini(
   throw new Error(
     `Failed to extract image from response. Response format: ${JSON.stringify(result).slice(0, 500)}`,
   );
-}
-
-// OpenAI 兼容格式
-async function generateImageOpenAI(
-  apiKey: string,
-  apiUrl: string,
-  model: string,
-  prompt: string,
-  options?: {
-    size?: string;
-    quality?: "standard" | "hd";
-    style?: "vivid" | "natural";
-    n?: number;
-    response_format?: "url" | "b64_json";
-    referenceImages?: ImageReferenceAttachment[];
-  },
-): Promise<ImageGenerationResponse> {
-  if (options?.referenceImages && options.referenceImages.length > 0) {
-    throw new Error(
-      "The selected image generation endpoint does not support reference images. Use a multimodal image generation model or Gemini-compatible endpoint.",
-    );
-  }
-
-  let endpoint = apiUrl.replace(/\/$/, "");
-
-  if (endpoint.includes("/images/generations")) {
-    // 保持原样 / Keep as is
-  } else if (endpoint.endsWith("/chat/completions")) {
-    endpoint = endpoint.replace(/\/chat\/completions$/, "/images/generations");
-  } else if (endpoint.match(/\/v\d+$/)) {
-    endpoint = endpoint + "/images/generations";
-  } else {
-    endpoint = endpoint + "/v1/images/generations";
-  }
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${apiKey}`,
-  };
-
-  const body: Record<string, any> = {
-    prompt,
-    model: model || "dall-e-3",
-  };
-  const imageCount = options?.n ?? 1;
-  if (imageCount > 1 || !isGptImageModel(model)) {
-    body.n = imageCount;
-  }
-
-  if (options?.size) body.size = options.size;
-  if (options?.quality) body.quality = options.quality;
-  if (options?.style) body.style = options.style;
-  if (options?.response_format !== undefined)
-    body.response_format = options.response_format;
-
-  const response = await requestAIEndpoint({
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    url: endpoint,
-    timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await getFormattedErrorMessageFromResponse(response, {
-        operation: "Image generation",
-        fallback: `Image generation failed (${response.status})`,
-        maxTextLength: 500,
-      }),
-    );
-  }
-
-  return await response.json();
 }
 
 // FLUX (Black Forest Labs) API

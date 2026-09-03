@@ -1,4 +1,5 @@
 import type { GenerationBatchManifest } from "@prompthub/shared/types";
+import { XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   ImageGenerationComposer,
@@ -14,6 +15,7 @@ interface ImageGenerationInspectorProps {
   selectedBatchId?: string;
   onSelectBatch: (id: string) => void;
   composerProps: ImageGenerationComposerProps;
+  onClose: () => void;
 }
 
 const MAX_VISIBLE_HISTORY_BATCHES = 100;
@@ -32,7 +34,11 @@ function statusDotClass(status: GenerationBatchManifest["status"]): string {
 function InspectorTabs({
   activeTab,
   onTabChange,
-}: Pick<ImageGenerationInspectorProps, "activeTab" | "onTabChange">) {
+  onClose,
+}: Pick<
+  ImageGenerationInspectorProps,
+  "activeTab" | "onTabChange" | "onClose"
+>) {
   const { t } = useTranslation();
   const tabs = [
     ["settings", t("generation.settings")],
@@ -42,7 +48,7 @@ function InspectorTabs({
     <div
       role="tablist"
       aria-label={t("generation.inspector")}
-      className="grid h-14 shrink-0 grid-cols-2 border-b border-border px-3"
+      className="grid h-14 shrink-0 grid-cols-[1fr_1fr_36px] items-stretch border-b border-border pl-3 pr-2"
     >
       {tabs.map(([value, label]) => (
         <button
@@ -59,6 +65,15 @@ function InspectorTabs({
           )}
         </button>
       ))}
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={t("generation.closeInspector")}
+        title={t("generation.closeInspector")}
+        className="my-auto flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <XIcon className="h-4 w-4" aria-hidden="true" />
+      </button>
     </div>
   );
 }

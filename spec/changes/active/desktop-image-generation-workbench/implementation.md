@@ -45,7 +45,7 @@
 - Remote URL results now pass through the main-process SSRF/size boundary and commit
   directly to the generation library. PNG, JPEG and WebP are detected from bytes rather
   than being recorded as a hard-coded PNG.
-- Reference images are preflighted and forwarded only for supported Gemini image
+- Reference images are preflighted and forwarded for supported Gemini and GPT Image
   adapters. Unsupported model/reference combinations are blocked before batch creation;
   provider-specific aspect ratios are normalized before request execution.
 - Per-batch mutations are serialized. Cancelling also terminalizes the running slot,
@@ -374,3 +374,130 @@
   coverage was 87.62% statements / 88.24% branches overall because the selected legacy files
   contain unrelated paths; every new workbench-toggle branch is exercised. The build retains
   the existing large-chunk and mixed static/dynamic `fflate` warnings.
+
+## Lightweight Review Surface Follow-Up (2026-09-01, `T-IGW-025`)
+
+- Replaced the persistent gallery toolbar with one header-level workbench menu. Current/all,
+  favorite/failed filtering, sort, density, cancel, and retry retain their existing handlers
+  but no longer compete with the image during ordinary review.
+- Replaced the fixed settings/history column with an overlay inspector that opens from New
+  batch, History works, Details, or Continue from this image. A loaded or newly submitted
+  batch returns to the full-width review surface; submission failure keeps the draft visible.
+- Moved focused-image favorite, download, Prompt copy, and Prompt attachment into a single
+  More actions menu. The same menu is reachable through the primary image context menu.
+- Kept the existing runner, provider adapters, IPC/preload contracts, storage layout, local
+  generation library, and Prompt media-copy boundary unchanged.
+- Added component contracts for progressive disclosure, drawer lifecycle, context-menu parity,
+  continued drafting, bounded history, and hidden batch controls. Added the new interaction copy
+  to all seven supported locales.
+- Verification passed for 32 workbench component cases and 7 locale cases. Desktop
+  `tsc --noEmit`, focused ESLint, production Vite build, focused `git diff --check`, and
+  source-file size review also passed. The workbench source remains 989 lines; the built
+  workbench chunk is 54.32 kB (14.24 kB gzip).
+- Live populated Electron comparison was not run because the current request did not
+  authorize GUI or browser control. The accepted source visuals were opened directly, but
+  automated and build evidence do not substitute for the missing same-state screenshot;
+  visual QA therefore remains blocked rather than passed.
+- The maintainer subsequently authorized live UI inspection. Pass 1 used an isolated E2E
+  profile and deterministic five-image fixture at 1200 x 740. It exposed a duplicate generic
+  Prompt top bar, portrait thumbnails that contradicted the accepted landscape strip, and a
+  drawer that covered the workbench identity actions. The implementation now suppresses the
+  generic top bar in generation mode, moves the transient sidebar toggle into the workbench
+  header, uses responsive landscape thumbnails, shortens the visible More label, and offsets
+  the drawer below the workbench header. Pass 2 confirmed those structural corrections and
+  exposed one remaining overlap: the More trigger still sat on the image edge. The trigger now
+  occupies its own centered action row above the preview. Pass 3 at 1200 x 740 passed the final
+  side-by-side comparison: one header, centered image, separate More row, five landscape
+  thumbnails, right-edge Details, and Continue from this image match the accepted hierarchy.
+- Live interactions verified the More menu, right-click parity, workbench menu, Details drawer,
+  thumbnail focus strip, and sidebar toggle. The isolated Electron harness surfaced only the
+  existing unpackaged tray-template warning; no workbench renderer error appeared. All isolated
+  Electron processes were stopped and temporary profiles were removed after capture.
+- Final automated evidence: 32 workbench component tests, 7 locale tests, and 29 TopBar tests
+  passed; Desktop typecheck, focused ESLint, production build, focused diff check, and file-size
+  review passed. The final workbench chunk is 54.81 kB (14.37 kB gzip).
+
+## Whole-Image Editing Follow-Up (2026-09-01, `T-IGW-026`)
+
+- Added an explicit generate/edit dual path without changing the existing generation history,
+  manifest, Data-root, Prompt-media-copy or batch orchestration truth sources. The presence of
+  references is the single mode source: the primary action and Prompt guidance become editing
+  copy, then return to generation copy when the final reference is removed.
+- Preserved Gemini multimodal references and added GPT Image multipart `/images/edits` with a
+  four-reference PromptHub bound. JSON generation still uses `/images/generations`; unverified
+  adapters remain blocked before batch creation. The main AI transport validates mutually
+  exclusive bodies, file count, MIME, base64, file names and 20 MiB size before creating
+  `FormData`, and lets fetch own the multipart boundary.
+- Extracted the OpenAI generation/edit adapter into `ai-image-openai.ts` instead of expanding the
+  legacy mixed-provider `ai.ts`. The final file-size gate passes: new files stay below 1,500 lines,
+  legacy files do not grow, and the 2,000-line hard limit remains intact.
+- “Continue from this image” now creates a generation reference backed by batch/output/file
+  identifiers, seeds the prior execution Prompt, chooses a compatible configured model when
+  needed, resets output count to one and opens the progressive-disclosure settings drawer.
+- Desktop main reopens generated bytes only after output lookup, basename, regular-file,
+  byte-size, MIME and SHA-256 verification. Renderer previews keep using the existing
+  `local-generation-image` protocol; no output is copied into Prompt media implicitly.
+- Product boundary: whole-image editing only. Masks, brush selection and partial inpainting are
+  deferred to a separate change.
+- Verification: 108 focused tests passed across AI provider routing, multipart IPC, generation
+  storage, runner, workbench and seven locales. Desktop typecheck and focused ESLint passed.
+  Production Vite build, `spec:index:check`, `spec:test` including traceability, and
+  `git diff --check` passed.
+- Isolated Electron acceptance used a temporary E2E profile, the existing visual seed and five
+  existing workbench design assets as local generation outputs. At `1200x740`, history loaded,
+  “Continue from this image” exposed GPT Image, `1 / 4 selected`, Generated output and the fixed
+  Edit image action; the 360 px drawer, main preview and generated-reference preview were visible
+  with no document horizontal overflow. The profile and Electron process were cleaned. Evidence:
+  `assets/workbench-edit-mode-qa.png`.
+- No real paid Provider request was made. Unit/transport evidence proves request formation and
+  local behavior, but not the user's API key, provider account, network proxy or billable model
+  acceptance.
+
+## In-Flow Inspector Follow-Up (2026-09-01, `T-IGW-027`)
+
+- Trigger: the maintainer's rendered screenshot showed the on-demand right inspector covering the
+  main preview, thumbnail strip and continuation region instead of resizing the review canvas.
+- Decision: keep progressive disclosure and the same bounded panel, but make it an in-flow sibling
+  of the gallery below a full-width workbench header. No supported Desktop width uses an overlay.
+- Implementation: the workbench root is now a vertical shell. Its 56 px identity header spans the
+  full surface; a `min-height: 0` flex row below owns the `min-width: 0` gallery and the bounded,
+  non-shrinking inspector. Closing the inspector removes that sibling and returns its complete
+  width to the gallery. Existing tabs, state, submit lifecycle and Details affordance are unchanged.
+- Verification: the revised component contract failed before implementation and then passed. The
+  complete 32-case workbench suite, Desktop typecheck, focused ESLint, production Vite build,
+  file-size gate, spec index/traceability and `git diff --check` passed.
+- Isolated Electron acceptance passed at `1200x740`: 964.57 px content width split into a
+  604.57 px gallery and 360 px inspector; the closed gallery reclaimed 1120 px. It also passed at
+  `900x650`: 820 px content split into a 500 px gallery and 320 px inspector. Both states had exact
+  sibling boundaries, a full-width header, preview and continuation controls inside the gallery,
+  and no document horizontal overflow.
+- Current-run evidence lives under `output/playwright/image-generation-workbench/`:
+  `01-inflow-wide.png`, `02-inflow-compact.png`, and `03-before-after.png`. The isolated Electron
+  process and temporary profile were cleaned after capture.
+
+## Auxiliary Sidebar Coordination Follow-Up (2026-09-02, `T-IGW-028`)
+
+- Trigger: the non-overlay inspector solved right-side occlusion, but an explicitly expanded
+  Prompts secondary panel could still combine with the 320–390 px inspector and over-compress the
+  review canvas.
+- Decision: keep the global module rail and make only the two auxiliary sidebars mutually
+  exclusive. All right-panel entry points collapse the secondary panel; expanding the secondary
+  panel closes the inspector.
+- Implementation: `openInspector(tab)` now owns every New, History, Details and Continue transition
+  and collapses the Prompts secondary panel before opening the requested right tab. The workbench
+  sidebar toggle closes the inspector before expanding the left panel. Closing either side does not
+  implicitly reopen the other or mutate the ordinary persisted Prompt sidebar preference.
+- Compact-header correction: with the left panel expanded, the secondary navigation already names
+  Image Workbench, so the duplicate main heading becomes screen-reader-only and New batch becomes
+  an icon button with the same accessible name. The batch switcher receives the remaining width;
+  ordinary labels return when the left panel collapses.
+- Verification: 62 workbench/TopBar component tests, Desktop typecheck, focused ESLint, production
+  build, file-size gate, spec index/traceability and `git diff --check` passed.
+- Isolated Electron acceptance at `900x650` passed after waiting for the existing sidebar width
+  transition to settle. Right-only state: 820 px content, 500 px gallery and 320 px inspector.
+  Left-only state: 288 px Prompts panel plus a 532 px gallery and no inspector. Reopening the right
+  panel restored the first geometry. The global module rail and focused generation source remained
+  unchanged, and every stable state had no document horizontal overflow.
+- Evidence: `output/playwright/image-generation-workbench/04-left-panel-only.png`,
+  `05-right-panel-only.png`, and `06-sidebar-mutual-exclusion.png`. Temporary scripts, profiles and
+  Electron processes were cleaned.

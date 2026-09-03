@@ -146,7 +146,7 @@ function SourceAndModelFields(
 function ExecutionPromptField(
   props: Pick<
     ImageGenerationComposerProps,
-    "prompt" | "onPromptChange" | "sourcePrompt"
+    "prompt" | "onPromptChange" | "sourcePrompt" | "references"
   >,
 ) {
   const { t } = useTranslation();
@@ -164,7 +164,11 @@ function ExecutionPromptField(
       <textarea
         value={props.prompt}
         onChange={(event) => props.onPromptChange(event.target.value)}
-        placeholder={t("generation.promptPlaceholder")}
+        placeholder={t(
+          props.references.length > 0
+            ? "generation.editPromptPlaceholder"
+            : "generation.promptPlaceholder",
+        )}
         className="h-36 w-full resize-none rounded-md border border-input bg-background px-3 py-2.5 text-sm leading-6 outline-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
       />
     </div>
@@ -385,7 +389,9 @@ function ComposerFooter(props: ImageGenerationComposerProps) {
         className="flex h-11 w-full min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <PlayIcon className="h-4 w-4" aria-hidden="true" />
-        {t("generation.start")}
+        {t(
+          props.references.length > 0 ? "generation.edit" : "generation.start",
+        )}
       </button>
     </footer>
   );

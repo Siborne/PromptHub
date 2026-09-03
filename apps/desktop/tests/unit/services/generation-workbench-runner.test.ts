@@ -56,6 +56,7 @@ describe("generation workbench runner", () => {
           failSlot: vi.fn(),
           retryFailed: vi.fn(),
           setFavorite: vi.fn(),
+          readOutputReference: vi.fn(),
         },
       },
       electron: {
@@ -231,7 +232,16 @@ describe("generation workbench runner", () => {
     );
   });
 
-  it("rejects unsupported references before creating a batch", async () => {
+  it("supports ordered references for GPT Image models", async () => {
+    const initial = batch(["pending"]);
+    vi.mocked(window.api.generation.create).mockImplementation(
+      async (input) => ({
+        ...initial,
+        resolvedPrompt: input.prompt,
+        referenceImages: input.referenceImages,
+      }),
+    );
+    vi.mocked(window.electron!.readImageBase64!).mockResolvedValue("cmVm");
     const { startGenerationBatch } =
       await import("../../../src/renderer/services/generation-workbench-runner");
     const config = {
@@ -242,6 +252,136 @@ describe("generation workbench runner", () => {
       apiKey: "key",
       apiUrl: "https://api.openai.com/v1",
       model: "gpt-image-1",
+    };
+
+    await startGenerationBatch(
+      {
+        prompt: "A poster",
+        model: {
+          id: config.id,
+          provider: config.provider,
+          model: config.model,
+        },
+        targetCount: 1,
+        referenceImages: [{ source: "prompt", fileName: "reference.png" }],
+      },
+      config,
+    );
+
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalled());
+    expect(generateImage).toHaveBeenCalledWith(
+      config,
+      "A poster",
+      expect.objectContaining({
+        referenceImages: [{ base64: "cmVm", mimeType: "image/png" }],
+      }),
+    );
+  });
+
+  it("loads a persisted generation output through the verified generation bridge", async () => {
+    const initial = batch(["pending"]);
+    vi.mocked(window.api.generation.create).mockImplementation(
+      async (input) => ({
+        ...initial,
+        resolvedPrompt: input.prompt,
+        referenceImages: input.referenceImages,
+      }),
+    );
+    vi.mocked(window.api.generation.readOutputReference).mockResolvedValue({
+      fileName: "output.webp",
+      mimeType: "image/webp",
+      base64: "Z2VuZXJhdGVk",
+    });
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+    const config = {
+      id: "openai-image",
+      type: "image" as const,
+      provider: "openai",
+      apiProtocol: "openai" as const,
+      apiKey: "key",
+      apiUrl: "https://api.openai.com/v1",
+      model: "gpt-image-1",
+    };
+
+    await startGenerationBatch(
+      {
+        prompt: "Turn the sky blue",
+        model: {
+          id: config.id,
+          provider: config.provider,
+          model: config.model,
+        },
+        targetCount: 1,
+        referenceImages: [
+          {
+            source: "generation",
+            batchId: "8fc4e265-f289-4e68-bc7b-2a23af715a87",
+            outputId: "output-1",
+            fileName: "output.webp",
+          },
+        ],
+      },
+      config,
+    );
+
+    expect(window.api.generation.readOutputReference).toHaveBeenCalledWith({
+      batchId: "8fc4e265-f289-4e68-bc7b-2a23af715a87",
+      outputId: "output-1",
+    });
+    await vi.waitFor(() =>
+      expect(generateImage).toHaveBeenCalledWith(
+        config,
+        "Turn the sky blue",
+        expect.objectContaining({
+          referenceImages: [{ base64: "Z2VuZXJhdGVk", mimeType: "image/webp" }],
+        }),
+      ),
+    );
+  });
+
+  it("rejects incomplete generation references before creating a batch", async () => {
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+    const config = {
+      id: "openai-image",
+      type: "image" as const,
+      provider: "openai",
+      apiProtocol: "openai" as const,
+      apiKey: "key",
+      apiUrl: "https://api.openai.com/v1",
+      model: "gpt-image-1",
+    };
+
+    await expect(
+      startGenerationBatch(
+        {
+          prompt: "A poster",
+          model: {
+            id: config.id,
+            provider: config.provider,
+            model: config.model,
+          },
+          targetCount: 1,
+          referenceImages: [{ source: "generation", fileName: "output.png" }],
+        },
+        config,
+      ),
+    ).rejects.toThrow(/generation reference/i);
+    expect(window.api.generation.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects references for unverified OpenAI-compatible models", async () => {
+    const { startGenerationBatch } =
+      await import("../../../src/renderer/services/generation-workbench-runner");
+    const config = {
+      id: "dall-e-image",
+      type: "image" as const,
+      provider: "openai",
+      apiProtocol: "openai" as const,
+      apiKey: "key",
+      apiUrl: "https://api.openai.com/v1",
+      model: "dall-e-3",
     };
 
     await expect(

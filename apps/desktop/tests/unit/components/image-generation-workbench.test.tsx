@@ -10,6 +10,7 @@ import { ImageGenerationReferencePicker } from "../../../src/renderer/components
 import { ImageGenerationWorkbench } from "../../../src/renderer/components/prompt/ImageGenerationWorkbench";
 import { usePromptStore } from "../../../src/renderer/stores/prompt.store";
 import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
+import { useUIStore } from "../../../src/renderer/stores/ui.store";
 import { renderWithI18n } from "../../helpers/i18n";
 
 const runner = vi.hoisted(() => ({
@@ -33,10 +34,21 @@ vi.mock("../../../src/renderer/services/generation-workbench-runner", () => ({
   setGenerationOutputFavorite: runner.favorite,
   retryGenerationBatch: runner.retry,
   copyGenerationOutputToPromptMedia: runner.copyToPrompt,
-  supportsGenerationReferenceImages: (model: { provider?: string }) =>
-    model.provider === "google",
-  getMaxGenerationReferenceImages: (model: { provider?: string }) =>
-    model.provider === "google" ? 2 : 0,
+  supportsGenerationReferenceImages: (model: {
+    provider?: string;
+    model?: string;
+  }) =>
+    model.provider === "google" ||
+    Boolean(model.model?.toLowerCase().startsWith("gpt-image-")),
+  getMaxGenerationReferenceImages: (model: {
+    provider?: string;
+    model?: string;
+  }) =>
+    model.provider === "google"
+      ? 2
+      : model.model?.toLowerCase().startsWith("gpt-image-")
+        ? 4
+        : 0,
   getSupportedGenerationAspectRatios: () => ["1:1", "4:5", "16:9", "9:16"],
   subscribeGenerationBatches: (listener: (batches: unknown[]) => void) => {
     runner.listeners.push(listener);
@@ -149,6 +161,10 @@ describe("ImageGenerationWorkbench", () => {
         },
       ],
     });
+    useUIStore.setState({
+      isSidebarCollapsed: false,
+      isWorkbenchSidebarExpanded: false,
+    });
   });
 
   it("prefills an image Prompt and submits a bounded local batch", async () => {
@@ -215,7 +231,7 @@ describe("ImageGenerationWorkbench", () => {
         name: "Select reference.webp from Architecture poster",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit image" }));
 
     await waitFor(() => expect(runner.start).toHaveBeenCalled());
     expect(runner.start.mock.calls[0][0]).toMatchObject({
@@ -357,6 +373,7 @@ describe("ImageGenerationWorkbench", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reference images" }));
     fireEvent.click(screen.getByRole("button", { name: "Add local images" }));
     expect(await screen.findByText("1 / 2 selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit image" })).toBeVisible();
     expect(window.electron!.saveImage).toHaveBeenCalledWith([
       "/tmp/reference.png",
     ]);
@@ -365,6 +382,7 @@ describe("ImageGenerationWorkbench", () => {
       screen.getByRole("button", { name: "Remove managed-reference.png" }),
     );
     expect(screen.getByText("0 / 2 selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeVisible();
   });
 
   it("does not copy unsupported picker files into managed reference storage", async () => {
@@ -469,7 +487,7 @@ describe("ImageGenerationWorkbench", () => {
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "A poster" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit image" }));
     await waitFor(() => expect(runner.start).toHaveBeenCalled());
     expect(runner.start.mock.calls[0][0].referenceImages).toEqual([
       {
@@ -538,19 +556,26 @@ describe("ImageGenerationWorkbench", () => {
     });
   });
 
-  it("renders a gallery-first two-pane layout without a permanent batch rail", async () => {
+  it("reflows the gallery beside an on-demand inspector without covering it", async () => {
     await renderWithI18n(<ImageGenerationWorkbench />);
 
     const gallery = screen.getByTestId("generation-gallery");
     const config = screen.getByTestId("generation-config-panel");
+    const content = screen.getByTestId("generation-workbench-content");
     expect(
       screen.queryByTestId("generation-batch-rail"),
     ).not.toBeInTheDocument();
-    expect(gallery.compareDocumentPosition(config)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    expect(content).toHaveClass("flex", "min-h-0", "flex-1", "overflow-hidden");
+    expect(content.previousElementSibling?.tagName).toBe("HEADER");
+    expect(gallery.parentElement).toBe(content);
+    expect(config.parentElement).toBe(content);
     expect(gallery).toHaveClass("flex-1");
-    expect(config).toHaveClass("w-[clamp(340px,28vw,390px)]");
+    expect(config).toHaveClass(
+      "w-[clamp(320px,30vw,390px)]",
+      "shrink-0",
+      "border-l",
+    );
+    expect(config).not.toHaveClass("absolute", "fixed", "top-14", "bottom-0");
     expect(
       within(config).getByRole("tab", { name: "Generation settings" }),
     ).toHaveAttribute("aria-selected", "true");
@@ -558,6 +583,53 @@ describe("ImageGenerationWorkbench", () => {
       within(config).getByRole("tab", { name: "History works" }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "New batch" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(true);
+    expect(
+      screen.queryByTestId("generation-config-panel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Image Workbench" }),
+    ).toHaveClass("sr-only");
+    const compactNewBatch = screen.getByRole("button", { name: "New batch" });
+    expect(compactNewBatch).toHaveClass("w-8", "px-0");
+    expect(within(compactNewBatch).getByText("New batch")).toHaveClass(
+      "sr-only",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(false);
+    expect(screen.getByTestId("generation-config-panel")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Image Workbench" }),
+    ).not.toHaveClass("sr-only");
+    fireEvent.click(screen.getByRole("button", { name: "Close details" }));
+    expect(
+      screen.queryByTestId("generation-config-panel"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps New and History mutually exclusive with the Prompts secondary sidebar", async () => {
+    await renderWithI18n(<ImageGenerationWorkbench />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "New batch" }));
+    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(false);
+    expect(
+      screen.getByRole("tab", { name: "Generation settings" }),
+    ).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    fireEvent.click(screen.getByRole("button", { name: "History works" }));
+    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(false);
+    expect(screen.getByRole("tab", { name: "History works" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("switches batches from the compact header menu", async () => {
@@ -603,6 +675,7 @@ describe("ImageGenerationWorkbench", () => {
     expect(
       screen.getByRole("button", { name: "Generated image 1" }),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     fireEvent.change(screen.getByLabelText("Image count"), {
       target: { value: "8" },
     });
@@ -686,6 +759,14 @@ describe("ImageGenerationWorkbench", () => {
         },
       ],
     });
+    useSettingsStore.setState({
+      aiModels: [
+        {
+          ...useSettingsStore.getState().aiModels[0],
+          model: "dall-e-3",
+        },
+      ],
+    });
     await renderWithI18n(<ImageGenerationWorkbench />);
 
     fireEvent.click(screen.getByRole("button", { name: "Reference images" }));
@@ -703,14 +784,12 @@ describe("ImageGenerationWorkbench", () => {
     );
   });
 
-  it("keeps sort and density controls inside one gallery options menu", async () => {
+  it("keeps gallery filters, sort, and density inside one workbench menu", async () => {
     await renderWithI18n(<ImageGenerationWorkbench />);
 
-    fireEvent.click(screen.getByRole("button", { name: "All works" }));
-    expect(screen.getByRole("button", { name: "All works" })).toHaveClass(
-      "text-primary",
-    );
-
+    expect(
+      screen.queryByRole("button", { name: "All works" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Latest first" }),
     ).not.toBeInTheDocument();
@@ -718,8 +797,12 @@ describe("ImageGenerationWorkbench", () => {
       screen.queryByRole("button", { name: "Compact grid" }),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Gallery options" }));
-    const menu = screen.getByRole("menu", { name: "Gallery options" });
+    fireEvent.click(screen.getByRole("button", { name: "Workbench actions" }));
+    const menu = screen.getByRole("menu", { name: "Workbench actions" });
+    fireEvent.click(within(menu).getByRole("button", { name: "All works" }));
+    expect(within(menu).getByRole("button", { name: "All works" })).toHaveClass(
+      "text-primary",
+    );
     expect(
       within(menu).getByRole("button", { name: "Latest first" }),
     ).toBeVisible();
@@ -734,7 +817,7 @@ describe("ImageGenerationWorkbench", () => {
     ).toBeVisible();
   });
 
-  it("keeps the generation settings visible after a successful submit", async () => {
+  it("returns to the focused review surface after a successful submit", async () => {
     await renderWithI18n(<ImageGenerationWorkbench />);
     expect(
       screen.getByRole("tab", { name: "Generation settings" }),
@@ -747,23 +830,29 @@ describe("ImageGenerationWorkbench", () => {
     await waitFor(() => expect(runner.start).toHaveBeenCalled());
 
     expect(
-      screen.getByRole("tab", { name: "Generation settings" }),
-    ).toBeInTheDocument();
+      screen.queryByTestId("generation-config-panel"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Details" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByTestId("generation-config-panel")).toHaveClass(
-      "w-[clamp(340px,28vw,390px)]",
+      "w-[clamp(320px,30vw,390px)]",
     );
     expect(
-      screen.queryByRole("button", { name: "Expand settings" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("tab", { name: "Generation settings" }),
+    ).toBeVisible();
   });
 
-  it("switches the right dock between generation settings and bounded history", async () => {
+  it("opens the on-demand inspector for bounded history and closes it", async () => {
     await renderWithI18n(<ImageGenerationWorkbench />);
     const batchA = makeBatch();
     const batchB = makeBatch({ id: "batch-2", title: "Neon city" });
     emitBatches([batchA, batchB]);
 
-    fireEvent.click(screen.getByRole("tab", { name: "History works" }));
+    expect(
+      screen.queryByTestId("generation-config-panel"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "History works" }));
 
     expect(screen.getByRole("tab", { name: "History works" })).toHaveAttribute(
       "aria-selected",
@@ -783,11 +872,15 @@ describe("ImageGenerationWorkbench", () => {
       "aria-selected",
       "true",
     );
+    fireEvent.click(screen.getByRole("button", { name: "Close details" }));
+    expect(
+      screen.queryByTestId("generation-config-panel"),
+    ).not.toBeInTheDocument();
   });
 
   it("bounds mounted history rows and shows an empty history state", async () => {
     await renderWithI18n(<ImageGenerationWorkbench />);
-    fireEvent.click(screen.getByRole("tab", { name: "History works" }));
+    fireEvent.click(screen.getByRole("button", { name: "History works" }));
     expect(screen.getByText("No generation history yet.")).toBeVisible();
 
     const statuses = [
@@ -828,6 +921,16 @@ describe("ImageGenerationWorkbench", () => {
     emitBatches([makeBatch()]);
 
     const primary = screen.getByTestId("generation-primary-preview");
+    const moreActions = screen.getByRole("button", { name: "More actions" });
+    expect(primary.parentElement).not.toContainElement(moreActions);
+    expect(
+      moreActions.compareDocumentPosition(primary) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getAllByTestId("generation-review-thumbnail")[0]).toHaveClass(
+      "aspect-video",
+      "w-[clamp(112px,13vw,180px)]",
+    );
     expect(within(primary).getByRole("img")).toHaveAttribute(
       "src",
       expect.stringContaining("output-1.png"),
@@ -843,7 +946,7 @@ describe("ImageGenerationWorkbench", () => {
     ).toBeVisible();
   });
 
-  it("keeps review actions and compact in-progress states on the focused stage", async () => {
+  it("keeps review actions behind More and right-click on the focused stage", async () => {
     const updatePrompt = vi.fn().mockResolvedValue(undefined);
     usePromptStore.setState({ updatePrompt });
     const anchorClick = vi
@@ -887,7 +990,15 @@ describe("ImageGenerationWorkbench", () => {
       .getByTestId("generation-primary-preview")
       .closest("section") as HTMLElement;
 
-    fireEvent.click(within(stage).getByRole("button", { name: "Favorite" }));
+    expect(
+      within(stage).queryByRole("button", { name: "Favorite" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(stage).getByRole("button", { name: "More actions" }),
+    );
+    expect(within(stage).getByText("More")).toBeVisible();
+    let menu = within(stage).getByRole("menu", { name: "More actions" });
+    fireEvent.click(within(menu).getByRole("button", { name: "Favorite" }));
     await waitFor(() =>
       expect(runner.favorite).toHaveBeenCalledWith(
         "batch-1",
@@ -895,20 +1006,45 @@ describe("ImageGenerationWorkbench", () => {
         false,
       ),
     );
-    fireEvent.click(within(stage).getByRole("button", { name: "Download" }));
+    fireEvent.contextMenu(screen.getByTestId("generation-primary-preview"));
+    menu = within(stage).getByRole("menu", { name: "More actions" });
+    fireEvent.click(within(menu).getByRole("button", { name: "Download" }));
     expect(anchorClick).toHaveBeenCalledTimes(1);
-    fireEvent.click(within(stage).getByRole("button", { name: "Copy Prompt" }));
+    fireEvent.click(
+      within(stage).getByRole("button", { name: "More actions" }),
+    );
+    menu = within(stage).getByRole("menu", { name: "More actions" });
+    fireEvent.click(within(menu).getByRole("button", { name: "Copy Prompt" }));
     await waitFor(() =>
       expect(clipboard.writeText).toHaveBeenCalledWith(
         "Minimal white concrete house",
       ),
     );
     fireEvent.click(
-      within(stage).getByRole("button", { name: "Add to Prompt" }),
+      within(stage).getByRole("button", { name: "More actions" }),
+    );
+    menu = within(stage).getByRole("menu", { name: "More actions" });
+    fireEvent.click(
+      within(menu).getByRole("button", { name: "Add to Prompt" }),
     );
     await waitFor(() =>
       expect(runner.copyToPrompt).toHaveBeenCalledWith("batch-1", "output-1"),
     );
+    act(() => {
+      useUIStore.setState({ isWorkbenchSidebarExpanded: true });
+    });
+    fireEvent.click(
+      within(stage).getByRole("button", { name: "Continue from this image" }),
+    );
+    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(false);
+    expect(screen.getByTestId("generation-config-panel")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit image" })).toBeVisible();
+    expect(screen.getByRole("textbox")).toHaveValue(
+      "Minimal white concrete house",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reference images" }));
+    expect(screen.getByText("1 / 4 selected")).toBeVisible();
+    expect(screen.getByText("Generated output")).toBeVisible();
     anchorClick.mockRestore();
   });
 
@@ -1122,8 +1258,8 @@ describe("ImageGenerationWorkbench", () => {
     await renderWithI18n(<ImageGenerationWorkbench />);
     emitBatches([makeBatch()]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Gallery options" }));
-    const menu = screen.getByRole("menu", { name: "Gallery options" });
+    fireEvent.click(screen.getByRole("button", { name: "Workbench actions" }));
+    const menu = screen.getByRole("menu", { name: "Workbench actions" });
     const compact = screen.getByRole("button", { name: "Compact grid" });
     const large = screen.getByRole("button", { name: "Large grid" });
     expect(compact).toHaveAttribute("aria-pressed", "true");
@@ -1136,13 +1272,13 @@ describe("ImageGenerationWorkbench", () => {
     ).toBeInTheDocument();
   });
 
-  it("dismisses gallery options without changing the persistent layout", async () => {
+  it("dismisses workbench actions without changing the persistent layout", async () => {
     await renderWithI18n(<ImageGenerationWorkbench />);
 
-    const options = screen.getByRole("button", { name: "Gallery options" });
+    const options = screen.getByRole("button", { name: "Workbench actions" });
     fireEvent.click(options);
     expect(
-      screen.getByRole("menu", { name: "Gallery options" }),
+      screen.getByRole("menu", { name: "Workbench actions" }),
     ).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: "Escape" });
@@ -1156,7 +1292,7 @@ describe("ImageGenerationWorkbench", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("keeps cancel and retry actions available beside the gallery options", async () => {
+  it("keeps cancel and retry actions inside the workbench menu", async () => {
     await renderWithI18n(<ImageGenerationWorkbench />);
     const running = makeBatch({
       status: "running",
@@ -1173,6 +1309,7 @@ describe("ImageGenerationWorkbench", () => {
     });
     emitBatches([running]);
 
+    fireEvent.click(screen.getByRole("button", { name: "Workbench actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel remaining" }));
     await waitFor(() => expect(runner.cancel).toHaveBeenCalledWith("batch-1"));
 
@@ -1189,6 +1326,7 @@ describe("ImageGenerationWorkbench", () => {
       },
     });
     emitBatches([failed]);
+    fireEvent.click(screen.getByRole("button", { name: "Workbench actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Retry failed" }));
 
     await waitFor(() =>

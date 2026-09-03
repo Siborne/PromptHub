@@ -66,6 +66,8 @@ export interface GenerationReferenceImage {
   source: "prompt" | "local" | "generation";
   fileName: string;
   promptId?: string;
+  batchId?: string;
+  outputId?: string;
 }
 
 export interface GenerationSlotRecord {
@@ -144,4 +146,10 @@ export interface SetGenerationFavoriteInput {
 export interface GenerationOutputTargetInput {
   batchId: string;
   outputId: string;
+}
+
+export interface GenerationOutputReferencePayload {
+  fileName: string;
+  mimeType: string;
+  base64: string;
 }

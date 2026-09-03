@@ -21,6 +21,13 @@ describe("renderer lazy workspace boundaries", () => {
     expect(source).not.toMatch(/from "\.\/components\/app\/DesktopAppCommandBridge"/);
   });
 
+  it("does not browse recovery sources during normal renderer startup", () => {
+    const source = readRendererSource("App.tsx");
+
+    expect(source).not.toContain("checkRecovery");
+    expect(source).not.toContain("DataRecoveryDialog");
+  });
+
   it("loads each Agent workspace panel only when its tab is opened", () => {
     const source = readRendererSource(
       "components/agent/AgentsWorkspace.tsx",

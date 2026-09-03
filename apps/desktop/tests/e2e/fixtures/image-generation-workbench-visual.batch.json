@@ -1,0 +1,105 @@
+{
+  "kind": "prompthub-generation-batch",
+  "version": 1,
+  "id": "11111111-1111-4111-8111-111111111111",
+  "title": "Editorial product study",
+  "status": "succeeded",
+  "sourcePromptId": "image-prompt-visual-qa",
+  "sourcePromptVersion": 1,
+  "resolvedPrompt": "A quiet editorial living room with warm neutral materials and a red maple branch.",
+  "model": {
+    "id": "image-model-visual-qa",
+    "provider": "openai",
+    "model": "gpt-image-1",
+    "name": "GPT Image"
+  },
+  "parameters": {
+    "aspectRatio": "16:9",
+    "quality": "standard"
+  },
+  "targetCount": 5,
+  "slots": [
+    {
+      "index": 0,
+      "status": "succeeded",
+      "output": {
+        "id": "visual-output-1",
+        "slotIndex": 0,
+        "fileName": "room-1.png",
+        "mimeType": "image/png",
+        "byteSize": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "createdAt": "2026-09-01T08:01:00.000Z",
+        "favorite": false
+      }
+    },
+    {
+      "index": 1,
+      "status": "succeeded",
+      "output": {
+        "id": "visual-output-2",
+        "slotIndex": 1,
+        "fileName": "room-2.png",
+        "mimeType": "image/png",
+        "byteSize": 1,
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "createdAt": "2026-09-01T08:01:10.000Z",
+        "favorite": false
+      }
+    },
+    {
+      "index": 2,
+      "status": "succeeded",
+      "output": {
+        "id": "visual-output-3",
+        "slotIndex": 2,
+        "fileName": "room-3.png",
+        "mimeType": "image/png",
+        "byteSize": 1,
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "createdAt": "2026-09-01T08:01:20.000Z",
+        "favorite": false
+      }
+    },
+    {
+      "index": 3,
+      "status": "succeeded",
+      "output": {
+        "id": "visual-output-4",
+        "slotIndex": 3,
+        "fileName": "room-4.png",
+        "mimeType": "image/png",
+        "byteSize": 1,
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "createdAt": "2026-09-01T08:01:30.000Z",
+        "favorite": false
+      }
+    },
+    {
+      "index": 4,
+      "status": "succeeded",
+      "output": {
+        "id": "visual-output-5",
+        "slotIndex": 4,
+        "fileName": "room-5.png",
+        "mimeType": "image/png",
+        "byteSize": 1,
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "createdAt": "2026-09-01T08:01:40.000Z",
+        "favorite": false
+      }
+    }
+  ],
+  "counts": {
+    "total": 5,
+    "pending": 0,
+    "running": 0,
+    "succeeded": 5,
+    "failed": 0,
+    "cancelled": 0,
+    "interrupted": 0
+  },
+  "createdAt": "2026-09-01T08:00:00.000Z",
+  "updatedAt": "2026-09-01T08:01:40.000Z",
+  "completedAt": "2026-09-01T08:01:40.000Z"
+}

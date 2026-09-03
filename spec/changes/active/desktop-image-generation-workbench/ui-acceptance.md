@@ -3,7 +3,7 @@
 ## Selected Direction
 
 The accepted visual reference is
-[`assets/workbench-ui-concept-v3.png`](./assets/workbench-ui-concept-v3.png). It defines the
+[`assets/workbench-selected-direction-v4-simplified.png`](./assets/workbench-selected-direction-v4-simplified.png). It defines the
 information architecture and relative visual hierarchy; production implementation must
 reuse the current PromptHub tokens and components rather than rasterizing the mock.
 
@@ -21,6 +21,10 @@ The Prompt store gains a distinct `generation` view mode rather than a new globa
 module. Folder/tag selection is preserved but does not filter the workbench. Selecting a
 folder, Prompt filter or relationship graph exits generation view explicitly.
 
+The global 80 px module rail remains visible. The transient Prompts secondary panel and the
+right settings/history panel are mutually exclusive: opening either closes the other without
+changing the ordinary Prompt sidebar preference.
+
 ## Wide Layout
 
 At widths `>= 1440px`:
@@ -29,8 +33,9 @@ At widths `>= 1440px`:
 - The workbench replaces normal Prompt list/detail columns with one continuous surface.
 - Current-batch results use one dominant `object-contain` preview and a fixed thumbnail
   strip. All/favorite/failed filters retain stable result-grid density modes.
-- The right inspector remains visible at approximately 340-390 px and switches between
-  generation settings and bounded history. History never reserves a permanent column.
+- Generation settings and bounded history share an on-demand in-flow right panel. The panel is
+  closed during ordinary review; when opened it reserves its own column and the review canvas
+  reflows rather than being covered.
 - Generation controls must not span the top of the result canvas.
 - The bottom selection bar stays inside the result region and never covers the right
   panel.
@@ -39,16 +44,15 @@ At widths `>= 1440px`:
 
 The Desktop minimum remains `800x600`.
 
-| Width          | Required behavior                                                       |
-| -------------- | ----------------------------------------------------------------------- |
-| `1100..1439px` | Three-column result wall with the fixed right inspector always visible. |
-| `800..1099px`  | Global rail remains; result review narrows; inspector stays visible.    |
-| Any supported  | No horizontal page scrolling; only result/content regions scroll.       |
+| Width          | Required behavior                                                     |
+| -------------- | --------------------------------------------------------------------- |
+| `1100..1439px` | Review canvas reflows beside the in-flow right panel; no overlay.     |
+| `800..1099px`  | Gallery and panel remain siblings; thumbnails scroll inside gallery.  |
+| Any supported  | No overlap or horizontal page scrolling; only content regions scroll. |
 
-At compact widths, model/ratio/quality/count controls keep stable hit targets. The right
-inspector must not collapse behind a trigger or move into a modal sheet. Secondary
-actions move into an icon menu with accessible names; the primary generate action stays
-visible. Text does not scale with viewport width.
+At compact widths, model/ratio/quality/count controls keep stable hit targets inside the
+panel. Secondary actions live in accessible menus; the primary generation action stays
+visible whenever settings are open. Text does not scale with viewport width.
 
 ## Composer States
 
@@ -64,9 +68,9 @@ visible. Text does not scale with viewport width.
 | Valid submission              | Button press creates visible queued batch immediately and clears no source data. |
 
 Source Prompt/version, model, execution Prompt, required variables, ratio/size, quality
-and count remain visible without opening another section. Count has a visible field label
-inside the configuration flow rather than appearing as an unlabeled footer stepper; the
-footer contains only the primary Generate action. Reference images live in an explicit
+and count remain visible together after opening the settings drawer. Count has a visible
+field label inside the configuration flow rather than appearing as an unlabeled footer
+stepper; the footer contains only the primary Generate action. Reference images live in an explicit
 disclosure whose collapsed summary exposes the current count. Seed, style and provider-
 specific allowlisted parameters remain secondary and appear only when supported.
 
@@ -100,8 +104,9 @@ is supplementary; icons and text communicate every non-success state.
 - Clicking an image selects it for detail; checkbox/multi-select mode supports range and
   additive keyboard selection without changing grid geometry.
 - The selected tile uses border plus check state, not color alone.
-- No selection: right panel remains dedicated to generation settings; no persistent queue
-  or empty queue placeholder is shown.
+- No selection: the right drawer stays closed unless the user requests settings or history.
+- One focused output: one `More` trigger and right-click expose image actions; those actions
+  are absent from the default canvas chrome.
 - One selection: the lightbox shows a large preview and direct image actions; provenance
   remains associated with the selected output and batch without occupying a third column.
 - Multiple selection: the contextual action bar shows aggregate count and applicable bulk

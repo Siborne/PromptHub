@@ -2,12 +2,14 @@
 
 ## Status
 
-- Phase: analyze
+- Phase: implement
 - Design maturity: detailed contracts and acceptance matrix complete
-- Implementation readiness: ready; production work not started
+- Implementation readiness: Desktop vertical slice, lightweight review and whole-image editing
+  implemented; broader stress/sync/release convergence remains open
 
 本文件记录已确认产品边界、选定 UI 方向和实现前技术设计。详细 contract、状态机和
-验收矩阵已经通过 Analyze；生产实现仍须按 `tasks.md` 先写失败测试。
+验收矩阵已经通过 Analyze；已实施批次及剩余收敛项以 `tasks.md` 和
+`implementation.md` 为准。
 
 ## Selected UI Concept
 
@@ -189,19 +191,21 @@ Desktop 能力不能因为 renderer 复用到 Web 而默认宣称 Web 支持本�
 
 ## Affected Areas
 
-## `DES-IGW-010`: Progressive-Disclosure Desktop Workbench (revised 2026-08-03)
+## `DES-IGW-010`: Progressive-Disclosure Desktop Workbench (revised 2026-09-01)
 
 Batch confirmed with the maintainer; implements `FR-IGW-016`.
 
 ### Information architecture
 
-- The workbench uses two persistent regions only: the dominant review canvas and a fixed right inspector. The inspector switches between generation settings and a bounded batch-history view, so history never reserves a third column. The existing header switcher remains a fast batch switcher; separate icon buttons start a draft or reveal history.
+- The default workbench uses one persistent region: the dominant review canvas. Generation settings and bounded history share an on-demand right drawer that is closed while reviewing an existing batch. Starting a draft or choosing the continuation entry opens settings; choosing history opens the history view; successful submission closes the drawer and submission failure leaves it open.
 - While the Prompt module is in generation mode, the global module rail remains visible and the Prompts secondary panel is suppressed on entry. The global top-bar sidebar control toggles a transient workbench-only expansion state shared by the separate rail/panel mounts. That state is excluded from persisted UI storage, while the ordinary `isSidebarCollapsed` preference remains untouched and resumes when the user leaves the workbench.
-- The header has one stable identity row and one gallery toolbar row. Primary gallery filters remain visible as tabs; sort order and density are grouped in one dismissible options menu. A slim live progress bar renders below the identity row while the selected batch is queued or running.
-- The settings inspector remains visible before and after submission. Source Prompt, model, execution Prompt, required variables, aspect ratio, quality and output count remain immediately available. Output count is a visibly labeled field in the scrollable configuration flow; the fixed footer contains only the primary generation action. Only optional reference previews live in a collapsed-by-default disclosure with a compact count summary.
-- The current-batch view promotes the first successful output into a large `object-contain` review surface and renders all slots in a horizontally scrollable, fixed-size thumbnail strip. Thumbnail selection only changes the focused output; the large preview opens the existing lightbox. All/favorite/failed filters keep the existing grid/list modes. Unsuccessful slots use compact neutral cards with status text and icons instead of destructive full-card fills.
+- The header has one stable identity row. New batch, history and a single workbench-actions menu remain available; current/all/favorite/failed filters, sort, density, cancel and retry live in that dismissible menu. A slim live progress bar renders below the identity row while the selected batch is queued or running.
+- The generic Prompt search/create top bar is suppressed while the workbench owns the surface, preventing duplicate headers and duplicate New actions. Its transient secondary-sidebar toggle moves into the workbench identity row and keeps the existing non-persistent state contract.
+- The settings drawer preserves Source Prompt, model, execution Prompt, required variables, aspect ratio, quality and output count without changing their data or submit contracts. Output count remains a visibly labeled field; the fixed footer contains only the primary generation action. Only optional reference previews live in a collapsed-by-default disclosure with a compact count summary.
+- The current-batch view promotes the first successful output into a large `object-contain` review surface and renders all slots in a horizontally scrollable, responsive landscape thumbnail strip. Thumbnail selection only changes the focused output; the large preview opens the existing lightbox. All/favorite/failed filters keep the existing grid/list modes. Unsuccessful slots use compact neutral cards with status text and icons instead of destructive full-card fills.
 - A new draft is an explicit transient UI state, not a missing batch ID that falls back to the newest batch. In this state the current-batch filter resolves to an empty result set, while the header history switcher remains available. Selecting history or successfully submitting exits draft mode.
-- Popovers close on outside pointer interaction and Escape, expose `aria-expanded`/menu semantics, and do not add a backdrop that blocks the gallery.
+- Completed-image actions no longer reserve a permanent toolbar. One `More` trigger above the primary preview and the preview's context-menu event open the same menu for favorite, download, copy execution Prompt and conditional add-to-Prompt. Workbench-level filters and batch actions remain separate in the header menu.
+- Popovers and the drawer close on outside pointer interaction or explicit controls as appropriate, Escape closes menus, and all triggers expose `aria-expanded`/menu or dialog semantics without adding a backdrop that blocks review.
 
 ### Lightbox
 
@@ -214,6 +218,68 @@ Batch confirmed with the maintainer; implements `FR-IGW-016`.
 - Reference selection is explicit draft state owned by `ImageGenerationWorkbench`; selecting a source Prompt does not mutate it. The disclosure exposes a native picker/drop target plus an on-demand Prompt media chooser. Local files are copied through the existing main-process image boundary, selected references are deduplicated by managed file name, and native drag ordering updates the immutable request order. The renderer never persists or sends an external absolute path. The Prompt media chooser scans metadata once per Prompt-list change and mounts thumbnails in pages of 24, avoiding an unbounded image DOM for large libraries.
 - Until the shared capability object is implemented, the current Gemini image adapter retains the existing conservative maximum of two references. Other adapters expose a maximum of zero and disable reference input before submission.
 - All surfaces follow the existing neutral design tokens; no new dependencies.
+
+## `DES-IGW-011`: Whole-Image Editing And Provider Routing
+
+Batch implements `FR-IGW-017` without adding a second durable workflow or storage root.
+
+- `references.length > 0` is the only edit-mode source of truth. The composer changes the
+  primary action and Prompt guidance from generation to editing, while removal of the final
+  reference returns to generation mode. No independent mode toggle is persisted.
+- A generation reference stores `batchId`, `outputId`, and the managed `fileName`. Renderer
+  previews use the existing `local-generation-image` protocol. Execution asks Desktop main
+  for the verified bytes; main resolves the manifest output, rejects traversal or identity
+  mismatch, enforces the existing 20 MiB image limit, and verifies byte size, MIME and SHA-256
+  before returning base64. Retry reuses the same persisted reference identifiers.
+- “Continue from this image” adds the focused output as a generation reference, opens the
+  settings drawer, and selects the first configured editing-capable model when the current
+  model cannot edit. The source batch remains unchanged; no implicit Prompt-media copy occurs.
+- Capability remains adapter-owned: compatible Gemini image models accept at most two ordered
+  references; GPT Image models accept at most four as a PromptHub product bound; all other
+  providers expose zero until an adapter is verified.
+- Gemini keeps its current native multimodal request. GPT Image sends a multipart `POST` to
+  `/v1/images/edits` with `model`, `prompt`, optional normalized `size`/`quality`, and repeated
+  `image[]` parts. Text-only GPT Image requests continue using `/v1/images/generations`.
+- The shared AI transport gains a bounded multipart description rather than passing renderer
+  `FormData` through IPC. Main validates mutually exclusive JSON/multipart bodies, at most four
+  PNG/JPEG/WebP files, base64 shape and 20 MiB per file, builds `FormData`, and leaves the
+  `Content-Type` boundary to `fetch`. Browser fallback constructs the equivalent form locally.
+- Mask files, canvas painting, partial inpainting, provider-specific composition controls and
+  automatic reference selection remain out of scope for this batch.
+
+## `DES-IGW-012`: In-Flow Inspector Layout
+
+Batch implements `FR-IGW-018` and replaces the overlay inspector introduced by the lightweight
+review pass.
+
+- The workbench root becomes a vertical shell: one full-width identity header followed by one
+  `min-height: 0` horizontal content row. Gallery and inspector are siblings in that row.
+- The gallery owns `min-width: 0` and `flex: 1`; the inspector owns a bounded 320–390 px width and
+  `flex-shrink: 0`. Opening the inspector therefore reflows and recenters the review stage instead
+  of painting above it. Closing it removes the sibling and returns the gallery to full width.
+- No supported Desktop width falls back to an overlay. At compact widths the main image continues
+  to use `object-contain`, landscape thumbnails stay horizontally scrollable inside the gallery,
+  and only the panel's content scrolls vertically.
+- The closed Details affordance remains an edge control within the content row. Lightbox remains
+  a true overlay because it intentionally owns focus and temporarily replaces review context.
+- Inspector data, tabs, width range, submit lifecycle, history bound and progressive-disclosure
+  state remain unchanged. This is a layout correction, not a second settings workflow.
+
+## `DES-IGW-013`: Mutually Exclusive Auxiliary Sidebars
+
+Batch implements `FR-IGW-019` with one workbench-local coordination boundary.
+
+- `openInspector(tab)` first collapses `isWorkbenchSidebarExpanded`, then selects the requested
+  inspector tab and opens the right panel. New batch, History, Details and Continue all use this
+  single entry instead of duplicating partial state transitions.
+- The workbench sidebar toggle closes the inspector before expanding the Prompts secondary panel.
+  Collapsing the Prompts panel does not reopen the inspector implicitly; the user chooses the next
+  auxiliary surface explicitly.
+- The 80 px global module rail is outside this mutual-exclusion pair and remains visible.
+- The transient workbench sidebar flag remains excluded from persisted UI state. Inspector tab,
+  draft and generation state remain owned by the workbench and are not reset by the switch.
+- This deterministic rule applies at every supported width, avoiding viewport listeners,
+  breakpoint-dependent surprises and simultaneous 288–640 px left plus 320–390 px right panels.
 
 ## Affected Areas (original)
 
@@ -269,11 +335,24 @@ Batch confirmed with the maintainer; implements `FR-IGW-016`.
   not fabricate success.
 - `TEST-IGW-010`: Desktop component and visual regression tests prove rail-only Prompt
   navigation in generation mode, the focused review stage, thumbnail focus switching,
-  fixed inspector tabs, bounded history rendering, compact failure states and the
-  accepted wide/compact viewport geometry.
+  the default-collapsed settings/history drawer, `More` and right-click image actions,
+  bounded history rendering, compact failure states and the accepted wide/compact geometry.
 - `TEST-IGW-011`: Desktop component and store regressions prove the global top-bar
   control temporarily expands and collapses the Prompt secondary panel in generation
   mode without mutating or persisting the ordinary sidebar preference.
+- `TEST-IGW-012`: Unit, component and contract tests prove edit mode derives from selected
+  references; historical outputs are reloaded only after identity, size, MIME and hash
+  verification; GPT Image uses bounded multipart `/images/edits`; text-only generation remains
+  unchanged; unsupported providers fail before batch creation; and “Continue from this image”
+  seeds the focused output and opens an actionable editing draft.
+- `TEST-IGW-013`: Desktop component and rendered Electron checks prove the shared header spans
+  both regions; gallery and inspector are in-flow siblings; the inspector has no absolute/fixed
+  positioning; opening and closing it preserves batch/focus state; and wide plus compact viewports
+  have no overlap or page-level horizontal overflow.
+- `TEST-IGW-014`: Component and Electron interaction checks prove expanding the Prompts secondary
+  panel closes the inspector; opening New/History/Details/Continue collapses the secondary panel;
+  the global module rail remains; focus/batch/draft state survives; and compact viewports never
+  render both auxiliary panels simultaneously.
 
 ## Analyze Result
 
@@ -307,5 +386,8 @@ Batch confirmed with the maintainer; implements `FR-IGW-016`.
 | `FR-IGW-013`, `FR-IGW-014`               | `DES-IGW-003`, `DES-IGW-006`, `DES-IGW-008` | `TEST-IGW-004`, `TEST-IGW-005`, `TEST-IGW-009` | `T-IGW-004`, `T-IGW-005`              |
 | `FR-IGW-015`                             | `DES-IGW-006`, `DES-IGW-009`                | `TEST-IGW-006`, `TEST-IGW-009`                 | `T-IGW-004`, `T-IGW-007`              |
 | `FR-IGW-016`                             | `DES-IGW-010`                               | `TEST-IGW-008`, `TEST-IGW-010`, `TEST-IGW-011` | `T-IGW-016`..`T-IGW-024`              |
+| `FR-IGW-017`                             | `DES-IGW-005`, `DES-IGW-011`                | `TEST-IGW-006`, `TEST-IGW-012`                 | `T-IGW-026`                           |
+| `FR-IGW-018`                             | `DES-IGW-010`, `DES-IGW-012`                | `TEST-IGW-010`, `TEST-IGW-013`                 | `T-IGW-027`                           |
+| `FR-IGW-019`                             | `DES-IGW-012`, `DES-IGW-013`                | `TEST-IGW-011`, `TEST-IGW-014`                 | `T-IGW-028`                           |
 | `NFR-IGW-001`..`NFR-IGW-008`             | `DES-IGW-002`..`DES-IGW-009`                | `TEST-IGW-003`..`TEST-IGW-009`                 | `T-IGW-004`..`T-IGW-008`              |
 | `NFR-IGW-SYNC-001`                       | `DES-IGW-009`                               | `TEST-IGW-009`                                 | `T-IGW-007`, `T-IGW-012`              |

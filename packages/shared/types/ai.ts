@@ -1,9 +1,22 @@
+export interface AITransportMultipartFile {
+  fieldName: string;
+  fileName: string;
+  mimeType: string;
+  base64: string;
+}
+
+export interface AITransportMultipartBody {
+  fields: Record<string, string>;
+  files: AITransportMultipartFile[];
+}
+
 export interface AITransportRequest {
   requestId?: string;
   method: "GET" | "POST";
   url: string;
   headers?: Record<string, string>;
   body?: string;
+  multipart?: AITransportMultipartBody;
   timeoutMs?: number;
 }
 

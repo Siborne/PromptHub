@@ -308,6 +308,7 @@ const REBINDABLE_DB_CHANNELS = [
   IPC_CHANNELS.GENERATION_SET_FAVORITE,
   IPC_CHANNELS.GENERATION_RETRY_FAILED,
   IPC_CHANNELS.GENERATION_COPY_TO_PROMPT_MEDIA,
+  IPC_CHANNELS.GENERATION_READ_OUTPUT_REFERENCE,
   // registerAllIPC re-registers these non-database groups as well, so their
   // handlers must be removed during the same recovery rebind.
   IPC_CHANNELS.DIALOG_SELECT_IMAGE,

@@ -146,6 +146,7 @@ export const IPC_CHANNELS = {
   GENERATION_SET_FAVORITE: "generation:setFavorite",
   GENERATION_RETRY_FAILED: "generation:retryFailed",
   GENERATION_COPY_TO_PROMPT_MEDIA: "generation:copyToPromptMedia",
+  GENERATION_READ_OUTPUT_REFERENCE: "generation:readOutputReference",
 
   // Import/Export
   EXPORT_PROMPTS: "export:prompts",

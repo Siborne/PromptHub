@@ -7,6 +7,7 @@ import {
   HistoryIcon,
   ImageIcon,
   LoaderCircleIcon,
+  PanelLeftIcon,
   PlusIcon,
   StarIcon,
   XCircleIcon,
@@ -22,6 +23,7 @@ import { useTranslation } from "react-i18next";
 import { usePromptStore } from "../../stores/prompt.store";
 import { usePromptDetail } from "../../hooks/usePromptDetail";
 import { useSettingsStore } from "../../stores/settings.store";
+import { useUIStore } from "../../stores/ui.store";
 import {
   cancelGenerationBatch,
   copyGenerationOutputToPromptMedia,
@@ -208,6 +210,12 @@ export function ImageGenerationWorkbench() {
   const models = useSettingsStore((state) => state.aiModels).filter(
     (model) => model.type === "image" || model.capabilities?.imageGeneration,
   );
+  const isWorkbenchSidebarExpanded = useUIStore(
+    (state) => state.isWorkbenchSidebarExpanded,
+  );
+  const setWorkbenchSidebarExpanded = useUIStore(
+    (state) => state.setWorkbenchSidebarExpanded,
+  );
   const [batches, setBatches] = useState<GenerationBatchManifest[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [draftMode, setDraftMode] = useState(false);
@@ -235,7 +243,10 @@ export function ImageGenerationWorkbench() {
   const [sortNewest, setSortNewest] = useState(true);
   const [inspectorTab, setInspectorTab] =
     useState<GenerationInspectorTab>("settings");
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [focusedOutputId, setFocusedOutputId] = useState<string | null>(null);
+  const hasShownReviewRef = useRef(false);
+  const inspectorRequestedRef = useRef(false);
 
   useEffect(
     () => subscribeGenerationBatches((next) => setBatches([...next])),
@@ -257,6 +268,11 @@ export function ImageGenerationWorkbench() {
         : (batches.find((batch) => batch.id === selectedBatchId) ?? batches[0]),
     [batches, draftMode, selectedBatchId],
   );
+  useEffect(() => {
+    if (batches.length === 0 || hasShownReviewRef.current) return;
+    hasShownReviewRef.current = true;
+    if (!inspectorRequestedRef.current) setInspectorOpen(false);
+  }, [batches.length]);
   const selectedModel = models.find((model) => model.id === modelId);
   // Full content (variables / userPrompt) is loaded on demand so the prompt
   // list projection stays light. The list itself only needs id/title.
@@ -395,9 +411,7 @@ export function ImageGenerationWorkbench() {
     // Summary does not carry content; the detail hook populates sourcePrompt
     // asynchronously. Seed from cached detail if already loaded, otherwise
     // the detail effect will fill variables when the fetch resolves.
-    const cached = usePromptStore
-      .getState()
-      .promptDetailCache[id];
+    const cached = usePromptStore.getState().promptDetailCache[id];
     setPrompt(cached?.userPrompt ?? "");
     setVariableValues(
       Object.fromEntries(
@@ -534,6 +548,8 @@ export function ImageGenerationWorkbench() {
       setSelectedBatchId(batch.id);
       setGalleryFilter("current");
       setInspectorTab("settings");
+      inspectorRequestedRef.current = false;
+      setInspectorOpen(false);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : t("common.error");
@@ -642,13 +658,54 @@ export function ImageGenerationWorkbench() {
     setPrimaryOutputKey(null);
   };
 
+  const openInspector = (tab: GenerationInspectorTab) => {
+    setWorkbenchSidebarExpanded(false);
+    setInspectorTab(tab);
+    inspectorRequestedRef.current = true;
+    setInspectorOpen(true);
+  };
+
+  const toggleWorkbenchSidebar = () => {
+    const expanded = !isWorkbenchSidebarExpanded;
+    if (expanded) {
+      inspectorRequestedRef.current = false;
+      setInspectorOpen(false);
+    }
+    setWorkbenchSidebarExpanded(expanded);
+  };
+
   const startNewBatch = () => {
     setDraftMode(true);
     setSelectedBatchId(null);
     setGalleryFilter("current");
     setLightboxKey(null);
     resetDraft();
-    setInspectorTab("settings");
+    openInspector("settings");
+  };
+
+  const continueFromOutput = (
+    batch: GenerationBatchManifest,
+    output: GenerationOutputRecord,
+  ) => {
+    const editingModel =
+      selectedModel && supportsGenerationReferenceImages(selectedModel)
+        ? selectedModel
+        : models.find((model) => supportsGenerationReferenceImages(model));
+    if (editingModel) setModelId(editingModel.id);
+    setSelectedPromptId("");
+    setVariableValues({});
+    setPrompt(batch.resolvedPrompt);
+    setCount(DEFAULT_GENERATION_COUNT);
+    setReferences([
+      {
+        source: "generation",
+        batchId: batch.id,
+        outputId: output.id,
+        fileName: output.fileName,
+      },
+    ]);
+    setSubmitError("");
+    openInspector("settings");
   };
 
   const composerProps = {
@@ -691,233 +748,287 @@ export function ImageGenerationWorkbench() {
   };
 
   return (
-    <div className="relative flex h-full min-h-0 overflow-hidden bg-card">
-      <main
-        data-testid="generation-gallery"
-        className="flex min-w-0 flex-1 flex-col overflow-hidden bg-card"
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-card">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleWorkbenchSidebar}
+            aria-label={t(
+              isWorkbenchSidebarExpanded ? "common.collapse" : "common.expand",
+            )}
+            title={t(
+              isWorkbenchSidebarExpanded ? "common.collapse" : "common.expand",
+            )}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <PanelLeftIcon className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <h1
+            className={
+              isWorkbenchSidebarExpanded
+                ? "sr-only"
+                : "shrink-0 text-lg font-semibold"
+            }
+          >
+            {t("generation.workbench")}
+          </h1>
+          {batches.length > 0 && (
+            <ImageGenerationBatchSwitcher
+              batches={batches}
+              selectedBatch={selectedBatch}
+              onSelectBatch={selectBatch}
+            />
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <ImageGenerationGalleryToolbar
+            filter={galleryFilter}
+            onFilterChange={setGalleryFilter}
+            selectedBatch={selectedBatch}
+            failedCount={batches.reduce(
+              (sum, batch) =>
+                sum + batch.counts.failed + batch.counts.interrupted,
+              0,
+            )}
+            sortNewest={sortNewest}
+            onSortNewestChange={setSortNewest}
+            density={galleryDensity}
+            onDensityChange={setGalleryDensity}
+            onCancelBatch={() =>
+              selectedBatch && void cancelGenerationBatch(selectedBatch.id)
+            }
+            onRetryFailed={() => void retryFailed()}
+          />
+          <button
+            type="button"
+            onClick={startNewBatch}
+            className={`flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary text-xs font-medium text-primary-foreground hover:bg-primary/90 ${isWorkbenchSidebarExpanded ? "w-8 px-0" : "px-3"}`}
+            aria-label={t("generation.newBatch")}
+            title={t("generation.newBatch")}
+          >
+            <PlusIcon className="h-4 w-4" aria-hidden="true" />
+            <span className={isWorkbenchSidebarExpanded ? "sr-only" : ""}>
+              {t("generation.newBatch")}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => openInspector("history")}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label={t("generation.historyWorks")}
+            title={t("generation.historyWorks")}
+          >
+            <HistoryIcon className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+
+      <div
+        data-testid="generation-workbench-content"
+        className="relative flex min-h-0 flex-1 overflow-hidden"
       >
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <h1 className="shrink-0 text-lg font-semibold">
-              {t("generation.workbench")}
-            </h1>
-            {batches.length > 0 && (
-              <ImageGenerationBatchSwitcher
-                batches={batches}
-                selectedBatch={selectedBatch}
-                onSelectBatch={selectBatch}
+        <main
+          data-testid="generation-gallery"
+          className="flex min-w-0 flex-1 flex-col overflow-hidden bg-card"
+        >
+          {selectedBatch &&
+            ["queued", "running"].includes(selectedBatch.status) && (
+              <div
+                className="h-1 shrink-0 bg-muted"
+                role="progressbar"
+                aria-label={t("generation.batchProgress")}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={getBatchProgress(selectedBatch)}
+              >
+                <div
+                  className="h-full bg-primary"
+                  style={{
+                    width: `${getBatchProgress(selectedBatch)}%`,
+                  }}
+                />
+              </div>
+            )}
+
+          <div className="min-h-0 flex-1 overflow-hidden bg-card">
+            {galleryFilter === "current" && selectedBatch && focusedOutputId ? (
+              <ImageGenerationReviewStage
+                batch={selectedBatch}
+                focusedOutputId={focusedOutputId}
+                selectedOutputKeys={selectedOutputKeys}
+                canAttach={Boolean(
+                  selectedBatch.sourcePromptId &&
+                  prompts.some(
+                    (item) => item.id === selectedBatch.sourcePromptId,
+                  ),
+                )}
+                onFocus={setFocusedOutputId}
+                onOpen={openLightbox}
+                onToggleSelect={toggleOutputSelection}
+                onToggleFavorite={(output) =>
+                  void toggleFavorites([{ batch: selectedBatch, output }])
+                }
+                onDownload={(output) =>
+                  downloadOutputs([{ batch: selectedBatch, output }])
+                }
+                onCopyPrompt={() => void copyExecutionPrompt(selectedBatch)}
+                onAttach={(output) =>
+                  void attachOutputs([{ batch: selectedBatch, output }])
+                }
+                onContinue={(output) =>
+                  continueFromOutput(selectedBatch, output)
+                }
               />
+            ) : visibleTiles.length > 0 ? (
+              <div
+                className={`grid min-h-full content-start gap-3 overflow-y-auto p-4 ${galleryDensity === "compact" ? "grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" : galleryDensity === "large" ? "grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3" : "grid-cols-1"}`}
+              >
+                {visibleTiles.map(({ batch, slotIndex }) => (
+                  <OutputTile
+                    key={`${batch.id}:${slotIndex}`}
+                    batch={batch}
+                    slotIndex={slotIndex}
+                    density={galleryDensity}
+                    selected={Boolean(
+                      batch.slots[slotIndex].output &&
+                      selectedOutputKeys.has(
+                        `${batch.id}:${batch.slots[slotIndex].output?.id}`,
+                      ),
+                    )}
+                    onOpen={openLightbox}
+                    onToggleSelect={toggleOutputSelection}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-full min-h-64 flex-col items-center justify-center gap-4 text-center text-muted-foreground">
+                <span className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed border-border bg-card">
+                  <ImageIcon className="h-6 w-6" aria-hidden="true" />
+                </span>
+                <div className="max-w-sm space-y-1.5">
+                  <p className="text-sm font-medium text-foreground">
+                    {t(
+                      draftMode
+                        ? "generation.newDraftEmpty"
+                        : "generation.empty",
+                    )}
+                  </p>
+                  <p className="flex items-center justify-center gap-1.5 text-xs">
+                    <HardDriveIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                    {t("generation.localOnly")}
+                  </p>
+                </div>
+              </div>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={startNewBatch}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label={t("generation.newBatch")}
-              title={t("generation.newBatch")}
-            >
-              <PlusIcon className="h-4 w-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setInspectorTab("history")}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label={t("generation.historyWorks")}
-              title={t("generation.historyWorks")}
-            >
-              <HistoryIcon className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </div>
-        </header>
 
-        {selectedBatch &&
-          ["queued", "running"].includes(selectedBatch.status) && (
-            <div
-              className="h-1 shrink-0 bg-muted"
-              role="progressbar"
-              aria-label={t("generation.batchProgress")}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={getBatchProgress(selectedBatch)}
-            >
-              <div
-                className="h-full bg-primary"
-                style={{
-                  width: `${getBatchProgress(selectedBatch)}%`,
-                }}
-              />
-            </div>
-          )}
-
-        <ImageGenerationGalleryToolbar
-          filter={galleryFilter}
-          onFilterChange={setGalleryFilter}
-          selectedBatch={selectedBatch}
-          failedCount={batches.reduce(
-            (sum, batch) =>
-              sum + batch.counts.failed + batch.counts.interrupted,
-            0,
-          )}
-          sortNewest={sortNewest}
-          onSortNewestChange={setSortNewest}
-          density={galleryDensity}
-          onDensityChange={setGalleryDensity}
-          onCancelBatch={() =>
-            selectedBatch && void cancelGenerationBatch(selectedBatch.id)
-          }
-          onRetryFailed={() => void retryFailed()}
-        />
-
-        <div className="min-h-0 flex-1 overflow-hidden bg-card">
-          {galleryFilter === "current" && selectedBatch && focusedOutputId ? (
-            <ImageGenerationReviewStage
-              batch={selectedBatch}
-              focusedOutputId={focusedOutputId}
-              selectedOutputKeys={selectedOutputKeys}
-              canAttach={Boolean(
-                selectedBatch.sourcePromptId &&
-                prompts.some(
-                  (item) => item.id === selectedBatch.sourcePromptId,
-                ),
-              )}
-              onFocus={setFocusedOutputId}
-              onOpen={openLightbox}
-              onToggleSelect={toggleOutputSelection}
-              onToggleFavorite={(output) =>
-                void toggleFavorites([{ batch: selectedBatch, output }])
-              }
-              onDownload={(output) =>
-                downloadOutputs([{ batch: selectedBatch, output }])
-              }
-              onCopyPrompt={() => void copyExecutionPrompt(selectedBatch)}
-              onAttach={(output) =>
-                void attachOutputs([{ batch: selectedBatch, output }])
-              }
-            />
-          ) : visibleTiles.length > 0 ? (
-            <div
-              className={`grid min-h-full content-start gap-3 overflow-y-auto p-4 ${galleryDensity === "compact" ? "grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" : galleryDensity === "large" ? "grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3" : "grid-cols-1"}`}
-            >
-              {visibleTiles.map(({ batch, slotIndex }) => (
-                <OutputTile
-                  key={`${batch.id}:${slotIndex}`}
-                  batch={batch}
-                  slotIndex={slotIndex}
-                  density={galleryDensity}
-                  selected={Boolean(
-                    batch.slots[slotIndex].output &&
-                    selectedOutputKeys.has(
-                      `${batch.id}:${batch.slots[slotIndex].output?.id}`,
-                    ),
-                  )}
-                  onOpen={openLightbox}
-                  onToggleSelect={toggleOutputSelection}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex h-full min-h-64 flex-col items-center justify-center gap-4 text-center text-muted-foreground">
-              <span className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed border-border bg-card">
-                <ImageIcon className="h-6 w-6" aria-hidden="true" />
+          {selectedOutputs.length > 0 && (
+            <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border bg-card/95 px-5 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.04)]">
+              <span className="text-sm">
+                {t("generation.selectedCount", {
+                  count: selectedOutputs.length,
+                })}
               </span>
-              <div className="max-w-sm space-y-1.5">
-                <p className="text-sm font-medium text-foreground">
-                  {t(
-                    draftMode ? "generation.newDraftEmpty" : "generation.empty",
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void toggleFavorites(selectedOutputs)}
+                  aria-pressed={selectedOutputs.every(
+                    (item) => item.output.favorite,
                   )}
-                </p>
-                <p className="flex items-center justify-center gap-1.5 text-xs">
-                  <HardDriveIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                  {t("generation.localOnly")}
-                </p>
+                  className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm"
+                >
+                  <StarIcon
+                    className={`h-4 w-4 ${selectedOutputs.every((item) => item.output.favorite) ? "fill-current text-amber-500" : ""}`}
+                  />
+                  {t("generation.favorite")}
+                </button>
+                {selectedOutputs.some(
+                  (item) =>
+                    item.batch.sourcePromptId &&
+                    prompts.some(
+                      (promptItem) =>
+                        promptItem.id === item.batch.sourcePromptId,
+                    ),
+                ) && (
+                  <button
+                    type="button"
+                    onClick={() => void attachOutputs(selectedOutputs)}
+                    className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    {t("prompt.addToPrompt")}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    primaryOutput &&
+                    void copyExecutionPrompt(primaryOutput.batch)
+                  }
+                  className="flex h-9 w-9 items-center justify-center rounded-md border border-border"
+                  title={t("generation.copyPrompt")}
+                  aria-label={t("generation.copyPrompt")}
+                >
+                  <CopyIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadOutputs(selectedOutputs)}
+                  className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm"
+                >
+                  <DownloadIcon className="h-4 w-4" />
+                  {t("generation.download")}
+                </button>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="flex h-9 w-9 items-center justify-center text-muted-foreground"
+                  aria-label={t("common.close")}
+                >
+                  <XIcon className="h-4 w-4" />
+                </button>
               </div>
             </div>
           )}
-        </div>
+        </main>
 
-        {selectedOutputs.length > 0 && (
-          <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border bg-card/95 px-5 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.04)]">
-            <span className="text-sm">
-              {t("generation.selectedCount", {
-                count: selectedOutputs.length,
-              })}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void toggleFavorites(selectedOutputs)}
-                aria-pressed={selectedOutputs.every(
-                  (item) => item.output.favorite,
-                )}
-                className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm"
-              >
-                <StarIcon
-                  className={`h-4 w-4 ${selectedOutputs.every((item) => item.output.favorite) ? "fill-current text-amber-500" : ""}`}
-                />
-                {t("generation.favorite")}
-              </button>
-              {selectedOutputs.some(
-                (item) =>
-                  item.batch.sourcePromptId &&
-                  prompts.some(
-                    (promptItem) => promptItem.id === item.batch.sourcePromptId,
-                  ),
-              ) && (
-                <button
-                  type="button"
-                  onClick={() => void attachOutputs(selectedOutputs)}
-                  className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm"
-                >
-                  <ImageIcon className="h-4 w-4" />
-                  {t("prompt.addToPrompt")}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() =>
-                  primaryOutput && void copyExecutionPrompt(primaryOutput.batch)
-                }
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-border"
-                title={t("generation.copyPrompt")}
-                aria-label={t("generation.copyPrompt")}
-              >
-                <CopyIcon className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => downloadOutputs(selectedOutputs)}
-                className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm"
-              >
-                <DownloadIcon className="h-4 w-4" />
-                {t("generation.download")}
-              </button>
-              <button
-                type="button"
-                onClick={clearSelection}
-                className="flex h-9 w-9 items-center justify-center text-muted-foreground"
-                aria-label={t("common.close")}
-              >
-                <XIcon className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+        {!inspectorOpen && (
+          <button
+            type="button"
+            onClick={() => openInspector("settings")}
+            aria-label={t("generation.details")}
+            title={t("generation.details")}
+            className="absolute right-0 top-1/2 z-20 -translate-y-1/2 rounded-l-md border border-r-0 border-border bg-background/95 px-2 py-3 text-[11px] text-muted-foreground shadow-sm [writing-mode:vertical-rl] hover:bg-muted hover:text-foreground"
+          >
+            {t("generation.details")}
+          </button>
         )}
-      </main>
 
-      <aside
-        data-testid="generation-config-panel"
-        className="flex w-[clamp(340px,28vw,390px)] min-w-[340px] shrink-0 flex-col border-l border-border bg-card"
-      >
-        <ImageGenerationInspector
-          activeTab={inspectorTab}
-          onTabChange={setInspectorTab}
-          batches={batches}
-          selectedBatchId={selectedBatch?.id}
-          onSelectBatch={selectBatch}
-          composerProps={composerProps}
-        />
-      </aside>
+        {inspectorOpen && (
+          <aside
+            data-testid="generation-config-panel"
+            className="flex w-[clamp(320px,30vw,390px)] min-w-[320px] shrink-0 flex-col border-l border-border bg-card"
+          >
+            <ImageGenerationInspector
+              activeTab={inspectorTab}
+              onTabChange={(tab) => {
+                inspectorRequestedRef.current = true;
+                setInspectorTab(tab);
+              }}
+              batches={batches}
+              selectedBatchId={selectedBatch?.id}
+              onSelectBatch={selectBatch}
+              composerProps={composerProps}
+              onClose={() => {
+                inspectorRequestedRef.current = false;
+                setInspectorOpen(false);
+              }}
+            />
+          </aside>
+        )}
+      </div>
 
       {lightboxEntry && (
         <ImageGenerationLightbox

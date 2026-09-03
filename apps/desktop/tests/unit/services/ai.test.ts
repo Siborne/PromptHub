@@ -481,7 +481,9 @@ describe("AI Service - Prompt rewrite", () => {
     expect(body.messages[0]?.role).toBe("system");
     expect(body.messages[0]?.content).toContain("Return STRICT JSON only");
     expect(body.messages[1]?.content).toContain("Prompt type: text");
-    expect(body.messages[1]?.content).toContain("Make the output more structured.");
+    expect(body.messages[1]?.content).toContain(
+      "Make the output more structured.",
+    );
     expect(body.messages[1]?.content).toContain("Focus on instruction clarity");
   });
 
@@ -687,7 +689,9 @@ describe("generateImage - Gemini routing", () => {
   });
 
   it('routes to Gemini when provider is "google"', async () => {
-    requestSpy.mockResolvedValueOnce(await responseToTransport(makeGeminiResponse()));
+    requestSpy.mockResolvedValueOnce(
+      await responseToTransport(makeGeminiResponse()),
+    );
 
     const result = await generateImage(
       {
@@ -708,11 +712,15 @@ describe("generateImage - Gemini routing", () => {
 
   it("does not log Gemini image payloads during successful generation", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
     const errorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
-    requestSpy.mockResolvedValueOnce(await responseToTransport(makeGeminiResponse()));
+    requestSpy.mockResolvedValueOnce(
+      await responseToTransport(makeGeminiResponse()),
+    );
 
     const result = await generateImage(
       {
@@ -732,7 +740,9 @@ describe("generateImage - Gemini routing", () => {
 
   it("does not log Gemini proxy image URLs during successful generation", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
     const errorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -759,7 +769,9 @@ describe("generateImage - Gemini routing", () => {
   });
 
   it('routes to Gemini when provider is "gemini"', async () => {
-    requestSpy.mockResolvedValueOnce(await responseToTransport(makeGeminiResponse()));
+    requestSpy.mockResolvedValueOnce(
+      await responseToTransport(makeGeminiResponse()),
+    );
 
     await generateImage(
       {
@@ -776,7 +788,9 @@ describe("generateImage - Gemini routing", () => {
   });
 
   it("routes to Gemini when apiUrl contains generativelanguage.googleapis.com", async () => {
-    requestSpy.mockResolvedValueOnce(await responseToTransport(makeGeminiResponse()));
+    requestSpy.mockResolvedValueOnce(
+      await responseToTransport(makeGeminiResponse()),
+    );
 
     await generateImage(
       {
@@ -793,7 +807,9 @@ describe("generateImage - Gemini routing", () => {
   });
 
   it('routes to Gemini when model name contains "gemini" and "image"', async () => {
-    requestSpy.mockResolvedValueOnce(await responseToTransport(makeGeminiResponse()));
+    requestSpy.mockResolvedValueOnce(
+      await responseToTransport(makeGeminiResponse()),
+    );
 
     await generateImage(
       {
@@ -810,7 +826,9 @@ describe("generateImage - Gemini routing", () => {
   });
 
   it("falls back to OpenAI format when no Gemini signals match", async () => {
-    requestSpy.mockResolvedValueOnce(await responseToTransport(makeOpenAIImageResponse()));
+    requestSpy.mockResolvedValueOnce(
+      await responseToTransport(makeOpenAIImageResponse()),
+    );
 
     await generateImage(
       {
@@ -825,6 +843,78 @@ describe("generateImage - Gemini routing", () => {
     const calledUrl = requestSpy.mock.calls[0][0].url as string;
     expect(calledUrl).toContain("/images/generations");
     expect(calledUrl).not.toContain(":generateContent");
+  });
+
+  it("uses multipart image edits for GPT Image references", async () => {
+    requestSpy.mockResolvedValueOnce(
+      await responseToTransport(makeOpenAIImageResponse()),
+    );
+
+    await generateImage(
+      {
+        apiKey: "key",
+        apiUrl: "https://api.openai.com/v1",
+        model: "gpt-image-1",
+        provider: "openai",
+      },
+      "Keep the room but change the sofa to blue",
+      {
+        size: "1536x1024",
+        quality: "hd",
+        response_format: "b64_json",
+        referenceImages: [
+          { base64: "cmVmLTE=", mimeType: "image/png" },
+          { base64: "cmVmLTI=", mimeType: "image/webp" },
+        ],
+      },
+    );
+
+    expect(requestSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://api.openai.com/v1/images/edits",
+        headers: { Authorization: "Bearer key" },
+        multipart: {
+          fields: {
+            model: "gpt-image-1",
+            prompt: "Keep the room but change the sofa to blue",
+            quality: "high",
+            size: "1536x1024",
+          },
+          files: [
+            expect.objectContaining({
+              fieldName: "image[]",
+              fileName: "reference-1.png",
+              mimeType: "image/png",
+              base64: "cmVmLTE=",
+            }),
+            expect.objectContaining({
+              fieldName: "image[]",
+              fileName: "reference-2.webp",
+              mimeType: "image/webp",
+              base64: "cmVmLTI=",
+            }),
+          ],
+        },
+      }),
+    );
+  });
+
+  it("keeps unsupported OpenAI-compatible reference endpoints blocked", async () => {
+    await expect(
+      generateImage(
+        {
+          apiKey: "key",
+          apiUrl: "https://api.openai.com/v1",
+          model: "dall-e-3",
+          provider: "openai",
+        },
+        "Edit this image",
+        {
+          referenceImages: [{ base64: "cmVm", mimeType: "image/png" }],
+        },
+      ),
+    ).rejects.toThrow(/does not support reference images/i);
+    expect(requestSpy).not.toHaveBeenCalled();
   });
 
   it("throws with English error when apiKey is missing", async () => {
