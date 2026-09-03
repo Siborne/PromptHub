@@ -1,9 +1,9 @@
 # Implementation Record
 
-Status: release-pending
+Status: released in `0.6.0-beta.1`
 
-The three GitHub issues remain open remotely. Local delivery is complete and
-must enter a published release before any remote issue is closed.
+The three GitHub issues were closed as completed on 2026-08-20 after the
+implementation shipped in the public `0.6.0-beta.1` prerelease.
 
 ## Delivered
 
@@ -60,3 +60,14 @@ must enter a published release before any remote issue is closed.
 - Pi runtime discovery and effective precedence remain owned by the installed
   Pi adapter/runtime. PromptHub exposes each documented layer independently and
   does not claim runtime resolution.
+
+## Publication Evidence
+
+- Release:
+  <https://github.com/legeling/PromptHub/releases/tag/v0.6.0-beta.1>
+- Desktop release workflow:
+  <https://github.com/legeling/PromptHub/actions/runs/32265536666>
+- Self-Hosted Web workflow:
+  <https://github.com/legeling/PromptHub/actions/runs/32265536642>
+- GitHub #200, #201, and #202 are remotely closed; the repository open/closed
+  snapshots and local delivery overlay were refreshed on 2026-08-20.

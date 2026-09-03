@@ -2,32 +2,35 @@
 
 ## Status
 
-- State: release_pending
+- State: closed
 - Created: 2026-08-06
+- Closed: 2026-08-20
+- Released in: `0.6.0-beta.1`
 - Owner surface: MCP management and Agent platform compatibility
 - Related change: `spec/changes/archive/2026/08/2026-08-06-mcp-issues-200-202-implementation/`
 - Remote repository: `legeling/PromptHub`
 
 ## Scope
 
-This record consolidates the analysis and local delivery state for the three
-newest MCP-related issues. The implementation is complete locally; the remote
-issues remain open until a release containing the change is published.
+This record consolidates the analysis, delivery, and publication state for the
+three MCP-related issues. The implementation shipped in public prerelease
+`0.6.0-beta.1`; all three remote issues were closed with release-specific
+explanations on 2026-08-20.
 
 ## Current issue matrix
 
-| Issue                                                    | Local state       | Current conclusion                                                                                                                                                                                               | Next implementation gate                                                                  |
-| -------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [#202](https://github.com/legeling/PromptHub/issues/202) | `release_pending` | Implemented additive direct/reference value kinds, target-specific interpolation, reference-aware health warnings, UI separation, and redaction across renderer/IPC/preview/apply/remove/backup/sync boundaries. | Publish the containing release; a future encrypted-at-rest secret store remains separate. |
-| [#201](https://github.com/legeling/PromptHub/issues/201) | `release_pending` | Implemented independent Pi MCP compatibility targets for shared, `.agents`, native Pi, and project files. PromptHub is a config writer, not the `pi-mcp-adapter` runtime.                                        | Publish the containing release; runtime discovery and precedence remain adapter-owned.    |
-| [#200](https://github.com/legeling/PromptHub/issues/200) | `release_pending` | Implemented a merged global/project target projection for My MCP detail, counts, quick/batch deployment, and target dialogs without a second storage model.                                                      | Publish the containing release.                                                           |
+| Issue                                                    | Local state | Current conclusion                                                                                                                                                                                           | Remaining boundary                                        |
+| -------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| [#202](https://github.com/legeling/PromptHub/issues/202) | `released`  | Additive direct/reference value kinds, target-specific interpolation, reference-aware health warnings, UI separation, and redaction across renderer/IPC/preview/apply/remove/backup/sync boundaries shipped. | A future encrypted-at-rest secret store remains separate. |
+| [#201](https://github.com/legeling/PromptHub/issues/201) | `released`  | Independent Pi MCP compatibility targets for shared, `.agents`, native Pi, and project files shipped. PromptHub is a config writer, not the `pi-mcp-adapter` runtime.                                        | Runtime discovery and precedence remain adapter-owned.    |
+| [#200](https://github.com/legeling/PromptHub/issues/200) | `released`  | A merged global/project target projection for My MCP detail, counts, quick/batch deployment, and target dialogs shipped without a second storage model.                                                      | No remaining boundary belongs to this issue.              |
 
 ## Related history
 
-- [#187](https://github.com/legeling/PromptHub/issues/187) is locally
-  `local_done` for the currently documented Oh My Pi registry, asset, MCP/Rules
-  target, session, and non-secret model projection work. It does not absorb the
-  later #200, #201, or #202 requests.
+- [#187](https://github.com/legeling/PromptHub/issues/187) is released and
+  remotely closed for the documented Oh My Pi registry, asset, MCP/Rules target,
+  session, and non-secret model projection work. It did not absorb the later
+  #200, #201, or #202 requests.
 - [#175](https://github.com/legeling/PromptHub/issues/175) is a released
   historical baseline for the first AGHub-style MCP management workbench.
 - `pi-agent-separation` deliberately keeps native Pi MCP unsupported until a
@@ -86,9 +89,13 @@ binding and target-file source of truth.
 - My MCP counts include every visible writable global/project preset; the
   actual target file remains the distribution source of truth.
 
-## Snapshot note
+## Closure Evidence
 
-The repository-level `github-open.md` snapshot was refreshed from GitHub CLI on
-2026-08-06 and contains 34 open issues. This record adds the MCP-specific
-interpretation; it does not replace the remote snapshot or local delivery
-overlay.
+- Public release:
+  <https://github.com/legeling/PromptHub/releases/tag/v0.6.0-beta.1>
+- Desktop release workflow:
+  <https://github.com/legeling/PromptHub/actions/runs/32265536666>
+- Self-Hosted Web workflow:
+  <https://github.com/legeling/PromptHub/actions/runs/32265536642>
+- The repository-level GitHub snapshots were refreshed on 2026-08-20 after
+  #200, #201, and #202 were closed as completed.
