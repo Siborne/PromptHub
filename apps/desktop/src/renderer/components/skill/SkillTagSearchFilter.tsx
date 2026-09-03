@@ -108,7 +108,6 @@ export function SkillTagSearchFilter({
         type="button"
         onClick={toggleOpen}
         aria-expanded={open}
-        aria-haspopup="listbox"
         aria-label={toggleAriaLabel}
         title={toggleAriaLabel}
         className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition-colors ${

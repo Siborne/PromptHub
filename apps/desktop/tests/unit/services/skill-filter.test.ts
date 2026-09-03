@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Skill } from "@prompthub/shared/types";
 import {
   filterVisibleScannedSkills,
   filterVisibleSkills,
@@ -94,14 +95,28 @@ describe("filterVisibleSkills", () => {
 });
 
 describe("filterVisibleSkills tag filter normalization", () => {
+  function skillWithTags(name: string, tags: string[]): Skill {
+    return {
+      id: `skill-${name}`,
+      name,
+      tags,
+      protocol_type: "skill",
+      is_favorite: false,
+      created_at: 1,
+      updated_at: 1,
+    };
+  }
+
   it("matches an active tag against raw skill tags that carry surrounding whitespace", () => {
-    const spacedSkills = skills.map((item) => ({ ...item }));
-    (spacedSkills[0] as { tags: string[] }).tags = ["  ops  "];
+    const spacedSkills: Skill[] = [
+      skillWithTags("alpha", ["  ops  "]),
+      skillWithTags("beta", ["docs"]),
+    ];
     const result = filterVisibleSkills({
       deployedSkillNames: new Set(),
-      filterType: "pending",
+      filterType: "all",
       filterTags: ["ops"],
-      skills: spacedSkills as any,
+      skills: spacedSkills,
       storeView: "my-skills",
     });
 
@@ -111,9 +126,12 @@ describe("filterVisibleSkills tag filter normalization", () => {
   it("ignores whitespace-only entries in the active tag list", () => {
     const result = filterVisibleSkills({
       deployedSkillNames: new Set(),
-      filterType: "pending",
+      filterType: "all",
       filterTags: ["   "],
-      skills,
+      skills: [
+        skillWithTags("alpha", ["ops"]),
+        skillWithTags("beta", ["docs"]),
+      ],
       storeView: "my-skills",
     });
 

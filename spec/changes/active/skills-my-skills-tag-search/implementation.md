@@ -13,7 +13,15 @@ New/changed files：
 - 7 个 locale `skill.*` 各 +6 键（含 parity 测试要求）。
 - 测试：`tests/unit/services/skill-tag-options.test.ts`、`tests/unit/components/skill-tag-search-filter.test.tsx`。
 - spec 记录：`spec/changes/active/skills-my-skills-tag-search/*`。
-- 分支：`feat/my-skills-tag-search`（自 `main` 创建；未提交 / 未提 PR）。
+- 分支：`feat/my-skills-tag-search`（基于 upstream `main` @ `d62134bc` 创建）。
+
+## Status（当前真实状态/日期戳）
+
+- 分支 `feat/my-skills-tag-search` 已推送到 `origin`（fork `Siborne/PromptHub`）。
+- Commits（按时间序，push 远端均同步）：
+  1. `59f2bacf` feat(skill): add tag filter search in My Skills（初始特性 + 验证）。
+  2. `c6a311fc` fix(skill): address PR #213 review finds（CodeRabbit follow-up round 1：locale 键重复 / trim 归一 / ARIA / 返回类型）。
+- PR：`legeling/PromptHub#213`（base `main`，head `Siborne:feat/my-skills-tag-search`）状态 `open`，head 已随上述 commits 更新。
 
 ## Design decisions
 
@@ -32,12 +40,12 @@ Commands run（均从 `apps/desktop`）：
 - `pnpm typecheck` → exit 0（`tsc --noEmit` clean）。
 - `pnpm exec eslint <本次新增/修改的 6 个受检文件> --max-warnings 0` → RC 0。
 
-### Known limits
+### Known limits（状态截至 round-1 提交时）
 
-- 全量 `pnpm test:run` 在本会话前台/后台多次尝试均因运行环境 2 分钟墙钟超时提前中断，
+- 全量 `pnpm test:run` 在开发会话的前台/后台多次尝试均因运行环境 2 分钟墙钟超时提前中断，
   未取得全量收尾绿单。受影响模块的针对性单测、链路上游回归、typecheck 与 lint 均绿；
-  全量 suite 建议在 CI 或本机宽松超时的终端执行确认后再进入提交/PR 环节。
-- 未提交任何 commit/未创建 PR；按约定等用户确认后方执行 push/PR。
+  全量 suite 建议在 CI 或本机宽松超时的终端执行确认。
+- 「未提交/未提 PR」仅为 round-1 提交前状态；后续已按用户确认 commit 并更新 PR #213（见上方 Status）。
 
 ## Sync
 
