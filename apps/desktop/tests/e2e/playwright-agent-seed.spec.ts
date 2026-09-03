@@ -3,10 +3,10 @@ import { expect, test as base } from "@playwright/test";
 import { closePromptHub, launchPromptHub } from "./helpers/electron";
 
 const test = base.extend({
-  page: async ({}, use) => {
+  page: async ({}, providePage) => {
     const launched = await launchPromptHub("skills-smoke.seed.json");
     try {
-      await use(launched.page);
+      await providePage(launched.page);
     } finally {
       await closePromptHub(launched.app, launched.userDataDir);
     }

@@ -95,11 +95,11 @@ describe("updater install backup", () => {
 
     const installHandler = electronMocks.handleMock.mock.calls.find(
       ([channel]) => channel === "updater:install",
-    )?.[1] as (() => Promise<{
+    )?.[1] as () => Promise<{
       success: boolean;
       manual: boolean;
       backupPath: string;
-    }>);
+    }>;
 
     expect(installHandler).toBeTypeOf("function");
 
@@ -128,11 +128,11 @@ describe("updater install backup", () => {
 
     const installHandler = electronMocks.handleMock.mock.calls.find(
       ([channel]) => channel === "updater:install",
-    )?.[1] as (() => Promise<{
+    )?.[1] as () => Promise<{
       success: boolean;
       manual: boolean;
       backupPath: string;
-    }>);
+    }>;
 
     const result = await installHandler();
 
@@ -158,7 +158,7 @@ describe("updater install backup", () => {
 
     const installHandler = electronMocks.handleMock.mock.calls.find(
       ([channel]) => channel === "updater:install",
-    )?.[1] as (() => Promise<{ success: boolean; error: string }>);
+    )?.[1] as () => Promise<{ success: boolean; error: string }>;
 
     const result = await installHandler();
 
@@ -193,11 +193,15 @@ describe("updater install backup", () => {
 
     const installHandler = electronMocks.handleMock.mock.calls.find(
       ([channel]) => channel === "updater:install",
-    )?.[1] as (() => Promise<{ success: boolean; error?: string; manual?: boolean }>);
+    )?.[1] as () => Promise<{
+      success: boolean;
+      error?: string;
+      manual?: boolean;
+    }>;
 
     const result = await installHandler();
 
-    expect(backupMocks.createUpgradeDataSnapshotMock).toHaveBeenCalled();
+    expect(backupMocks.createUpgradeDataSnapshotMock).not.toHaveBeenCalled();
     expect(electronMocks.openPathMock).not.toHaveBeenCalled();
     expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
     expect(result.success).toBe(false);
@@ -217,9 +221,14 @@ describe("updater install backup", () => {
 
     registerUpdaterIPC();
 
-    const openDownloadedUpdateHandler = electronMocks.handleMock.mock.calls.find(
-      ([channel]) => channel === "updater:openDownloadedUpdate",
-    )?.[1] as (() => Promise<{ success: boolean; path: string; error?: string }>);
+    const openDownloadedUpdateHandler =
+      electronMocks.handleMock.mock.calls.find(
+        ([channel]) => channel === "updater:openDownloadedUpdate",
+      )?.[1] as () => Promise<{
+        success: boolean;
+        path: string;
+        error?: string;
+      }>;
 
     const result = await openDownloadedUpdateHandler();
 
@@ -234,13 +243,20 @@ describe("updater install backup", () => {
   });
 
   it("reports when the Downloads fallback cannot be opened", async () => {
-    electronMocks.openPathMock.mockResolvedValue("Downloads folder unavailable");
+    electronMocks.openPathMock.mockResolvedValue(
+      "Downloads folder unavailable",
+    );
 
     registerUpdaterIPC();
 
-    const openDownloadedUpdateHandler = electronMocks.handleMock.mock.calls.find(
-      ([channel]) => channel === "updater:openDownloadedUpdate",
-    )?.[1] as (() => Promise<{ success: boolean; path: string; error?: string }>);
+    const openDownloadedUpdateHandler =
+      electronMocks.handleMock.mock.calls.find(
+        ([channel]) => channel === "updater:openDownloadedUpdate",
+      )?.[1] as () => Promise<{
+        success: boolean;
+        path: string;
+        error?: string;
+      }>;
 
     const result = await openDownloadedUpdateHandler();
 

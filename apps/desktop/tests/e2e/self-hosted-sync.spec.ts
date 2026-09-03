@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import rootPackage from "../../../../package.json";
 
 import {
   closePromptHub,
@@ -363,7 +364,7 @@ test.describe("E2E: desktop self-hosted sync", () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            clientVersion: "0.6.0-beta.1",
+            clientVersion: rootPackage.version,
             payload: {
               version: "desktop-backup-v1",
               exportedAt: "2026-04-16T00:00:00.000Z",
