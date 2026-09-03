@@ -1,0 +1,47 @@
+# Implementation — prompt-current-version-missing-self-heal
+
+## What actually shipped
+
+Root cause（已由用户本机日志定位）: 首次 canonical authority 发布会因某个 prompt 的
+`current_version` 在其 `prompt_versions` 中无对应行而在 `validateVersionSet` 抛
+"Prompt resource current version is missing"，把失败直接提升为该启动失败（不是捕获、
+不是 recovery）。
+
+Shipped:
+- New `packages/db/src/prompt-version-consistency.ts`（exported via `packages/db/src/index.ts`）:
+  `repairPromptVersionConsistency(database)` 单事务幂等修复器——逐 prompt
+  `MAX(version)`；指针陈旧/超前则收敛；无版本行则按 prompts 当前字段补一条 v1
+  快照并置 `current_version = 1`；健康 prompt 不触碰。
+- `apps/desktop/src/main/services/canonical-storage-startup.ts`：新增
+  `healPromptVersionPointers(sourceDatabasePath)`（先检验前 16 字节 SQLite 头
+  `"SQLite format 3\0"`，非 SQLite 直接跳过），在 `prepareSourceDatabase?.()`
+  之后、`publish(...)` 之前调用；打开后用 `repairPromptVersionConsistency` 修复并
+  deterministic `finally close`。
+- 未改动 core 校验 / canonical 物化；未新增 schema 文件（复用现有版本表）。
+
+## Verification (actual)
+
+Run from `apps/desktop` and `packages/db`:
+
+- `pnpm exec vitest run tests/unit/main/prompt-version-consistency.test.ts` → 1 file, 4 passed
+  (收敛到 max；无版本链补 v1 且字段即 prompts 当前值、置 1；健康数据不动；幂等)。
+- `pnpm exec vitest run tests/unit/main/canonical-storage-startup.test.ts tests/unit/main/prompt-version-consistency.test.ts` → 2 files, 15 passed
+  （startup 既有用例保持绿：mocks / 非 SQLite fixture 不被触碰、只 SQLite 头触发修复）。
+- `pnpm typecheck`（packages/db）→ exit 0。
+- `pnpm typecheck`（apps/desktop）→ completed，无 diagnostics（exit 0）。
+- `pnpm exec eslint src/main/services/canonical-storage-startup.ts tests/unit/main/prompt-version-consistency.test.ts --max-warnings 0` → exit 0。
+- `pnpm build`（desktop）→ exit 0，产出新的 `out/main/index.js`（用户可据此重新启动复测）。
+
+## Known limits / follow-ups
+
+- 全量 `pnpm test:run` 仍受本会话约 2 分钟墙钟超时限制未能一次跑完；本次仅跑相关单测、
+  typecheck、lint、build。
+- 修复“向前收敛到最大可恢复版本”而非再造“已丢失的那一版内容”：若缺失的正是最新版行
+  而其内容已丢失，当前版本会回落到最近完好的历史版本（可用性优先，无损不后退）。
+- 用户本机复测步骤：在这种已应用修复的 `out/main` 构建上直接启动，日志不再出现
+  "Prompt resource current version is missing" 即可确认。待用户确认后再提交/推送/PR。
+
+## Docs synced
+
+`spec/changes/active/prompt-current-version-missing-self-heal/`: proposal、specs/storage/spec、
+design、tasks、implementation。无跨语法 stable knowledge/rules 变更。

@@ -11,6 +11,11 @@ import {
 } from "@prompthub/core";
 
 import {
+  DatabaseAdapter,
+  repairPromptVersionConsistency,
+} from "@prompthub/db";
+
+import {
   publishCanonicalStorageAuthority,
   type PublishCanonicalStorageAuthorityOptions,
   type PublishCanonicalStorageAuthorityResult,
@@ -147,6 +152,47 @@ async function ensureExistingCanonicalAuthority(
   }
 }
 
+/**
+ * Best-effort source repair before canonical authority is projected: converge
+ * every prompt's `current_version` onto its stored version history so
+ * `validateVersionSet` no longer aborts startup with a "Prompt resource
+ * current version is missing" error. Only recognized SQLite images are opened;
+ * other/mock file contents are left untouched so unrelated recovery flows keep
+ * their behavior.
+ *
+ * 在投影 canonical authority 前对源库做尽力而为修复：把每个 prompt 的
+ * current_version 收敛到既有版本历史，从而不再因版本缺失中断启动。
+ */
+function healPromptVersionPointers(sourceDatabasePath: string): void {
+  let imagePrefix: Buffer | undefined;
+  try {
+    const descriptor = fs.openSync(sourceDatabasePath, fs.constants.O_RDONLY);
+    try {
+      imagePrefix = Buffer.alloc(16);
+      imagePrefix = imagePrefix.subarray(
+        0,
+        fs.readSync(descriptor, imagePrefix, 0, imagePrefix.length, 0),
+      ) as Buffer;
+    } finally {
+      fs.closeSync(descriptor);
+    }
+  } catch {
+    return;
+  }
+  if (
+    !imagePrefix ||
+    imagePrefix.toString("utf8", 0, 16) !== "SQLite format 3\x00"
+  ) {
+    return;
+  }
+  const database = new DatabaseAdapter(sourceDatabasePath);
+  try {
+    repairPromptVersionConsistency(database);
+  } finally {
+    database.close();
+  }
+}
+
 export async function ensureCanonicalStorageAuthorityOnStartup(
   options: EnsureCanonicalStorageAuthorityOnStartupOptions,
 ): Promise<CanonicalStorageAuthorityStartupResult> {
@@ -162,6 +208,7 @@ export async function ensureCanonicalStorageAuthorityOnStartup(
     return { status: "source-database-missing" };
   }
   await options.prepareSourceDatabase?.();
+  healPromptVersionPointers(sourceDatabasePath);
   const checkpointPath = path.resolve(
     options.checkpointPath ??
       path.join(
