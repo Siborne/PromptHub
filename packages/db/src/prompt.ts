@@ -744,6 +744,29 @@ export class PromptDB {
   }
 
   /**
+   * Count how many prompts currently reference the tag (exact array membership,
+   * mirroring deleteTag). The UI uses it to block/confirm deletion while a tag
+   * is still in use, avoiding a canonical write on an already-drifted prompt.
+   * 返回引用该标签的 prompt 数，供仍有关联时阻止删除。
+   */
+  countTagReferences(tag: string): number {
+    if (!tag) return 0;
+    const rows = this.db
+      .prepare(`SELECT tags FROM prompts WHERE tags LIKE ?`)
+      .all(`%"${tag}"%`) as { tags: string | null }[];
+    let count = 0;
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(row.tags ?? "[]") as unknown;
+        if (Array.isArray(parsed) && parsed.includes(tag)) count += 1;
+      } catch {
+        // ignore unparseable rows, matching deleteTag behavior
+      }
+    }
+    return count;
+  }
+
+  /**
    * Move a prompt under another prompt, or reorder it within the same level.
    */
   movePrompt(

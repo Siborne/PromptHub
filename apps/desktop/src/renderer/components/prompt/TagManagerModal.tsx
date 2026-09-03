@@ -128,6 +128,21 @@ export function TagManagerModal({
       return;
     }
 
+    if (!isSkillManager) {
+      const referencedBy = await window.api.prompt.countTagReferences(tag);
+      if (referencedBy > 0) {
+        showToast(
+          t('prompt.deleteBlockedByTagReference', {
+            count: referencedBy,
+            defaultValue:
+              'This tag is still used by {{count}} prompt(s) and cannot be deleted while in use.',
+          }),
+          'error',
+        );
+        return;
+      }
+    }
+
     try {
       setProcessingTag(tag);
 

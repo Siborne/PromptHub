@@ -141,6 +141,10 @@ export function registerPromptIPC(
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.PROMPT_COUNT_TAG_REFERENCES, async (_, tag: string) => {
+    return db.countTagReferences(String(tag ?? ""));
+  });
+
   ipcMain.handle(
     IPC_CHANNELS.PROMPT_UPDATE,
     async (_, id: string, data: UpdatePromptDTO) => {

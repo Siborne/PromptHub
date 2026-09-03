@@ -55,6 +55,16 @@ desktop `typecheck`、`eslint`、`pnpm build` 全部 exit 0（重建 `out/main/i
 前版本 current-version fix 章节内注的 “out of scope delete-123 follow-up” 之删除阻塞已在本推进解决，
 但仍未 commit，待用户本机确认后可启动+正常删除 prompt-123 后统一提交同一 PR（#214）。
 
+### Front-end deleteTag guard（新增，用户已本地确认）
+
+按产品决策（decision: 前端拦截并在 PR 评论留给维护者后续讨论底层可删除性），本分支追加：
+- `PromptDB.countTagReferences(tag)`（storage，精确数组匹配，忽略不可解析行）;
+- IPC `prompt:countTagReferences` + preload `window.api.prompt.countTagReferences`;
+- `TagManagerModal.handleDelete`：prompt 域删除前若引用计数>0 则提示并阻止，
+  不再进入 canonical 写导致 `prompt:deleteTag` 二次报 `current version is missing`。
+单测 `prompt-tag-references.test.ts`（2 passed）；desktop typecheck/build exit 0。
+
+
 ## Docs synced
 
 `spec/changes/active/prompt-current-version-missing-self-heal/`: proposal、specs/storage/spec、
