@@ -734,8 +734,8 @@ Current support boundary:
   - PromptHub-managed direct Profiles support only the documented `@ai-sdk/openai-compatible` Chat Completions and `@ai-sdk/openai` Responses packages; native API, OAuth, well-known, environment, file and cloud credentials remain redacted and read-only
 - State handling:
   - snapshot system is documented and configurable, but current public docs pass does not name a stable on-disk conversation-history directory
-  - PromptHub therefore lists conversations through the bounded native `opencode session list --format json --max-count` interface and reads one selected transcript through `opencode export <session-id> --sanitize`
-  - the current CLI can report its database path, but PromptHub does not couple the adapter to private SQLite tables or substitute plugin sidecars when the native session list is empty
+  - `opencode session list --format json` is project/cwd-scoped, so PromptHub lists global conversation metadata through a bounded read-only `opencode db` query and reads one selected transcript through `opencode export <session-id> --sanitize`
+  - the metadata projection is versioned against the current native session/message/part schema and fails closed if that schema changes; PromptHub does not open the database file directly or substitute plugin sidecars when the projection is empty
   - History metadata is paged and transcript rendering is progressive; a successful native result with zero rows is shown as an explicit empty data source rather than an adapter failure
 - Plugin modeling note:
   - OpenCode's documented plugin surface is a JavaScript/TypeScript or npm hook-module runtime loaded from `.opencode/plugins/`, `~/.config/opencode/plugins/`, or `opencode.json` `plugin`.
@@ -1381,7 +1381,7 @@ Current support boundary:
 - OpenCode agents: `https://opencode.ai/docs/agents`
 - OpenCode config: `https://opencode.ai/docs/config`
 - OpenCode skills: `https://opencode.ai/docs/skills`
-- OpenCode CLI session list/export: `https://opencode.ai/docs/cli/`
+- OpenCode CLI database/session/export commands: `https://opencode.ai/docs/cli/`
 - OpenClaw SOUL.md: `https://docs.openclaw.ai/concepts/soul`
 - OpenClaw workspace: `https://docs.openclaw.ai/concepts/agent-workspace.md`
 - OpenClaw memory: `https://docs.openclaw.ai/concepts/memory`

@@ -302,7 +302,7 @@ describe("Agent session service", () => {
     });
   });
 
-  it("uses OpenCode's bounded JSON CLI and sanitized export", async () => {
+  it("uses OpenCode's global bounded database projection and sanitized export", async () => {
     const run = vi
       .fn()
       .mockResolvedValueOnce({
@@ -314,12 +314,11 @@ describe("Agent session service", () => {
             created: 1783674135075,
             projectId: "project-1",
             directory: "/workspace/project",
+            sizeBytes: 4096,
+            messageCount: 3,
+            total: 1,
           },
         ]),
-        stderr: "",
-      })
-      .mockResolvedValueOnce({
-        stdout: JSON.stringify([{ id: "ses_123", sizeBytes: 4096 }]),
         stderr: "",
       })
       .mockResolvedValueOnce({
@@ -347,6 +346,7 @@ describe("Agent session service", () => {
       title: "Review Agent adapters",
       projectPath: "/workspace/project",
       sizeBytes: 4096,
+      messageCount: 3,
       nativeDeleteSupported: true,
       resume: {
         executable: "/opt/homebrew/bin/opencode",
@@ -358,24 +358,23 @@ describe("Agent session service", () => {
     expect(run).toHaveBeenNthCalledWith(
       1,
       "/opt/homebrew/bin/opencode",
-      ["session", "list", "--format", "json", "--max-count", "21"],
+      [
+        "db",
+        expect.stringMatching(/FROM session s[\s\S]*LIMIT 20 OFFSET 0/),
+        "--format",
+        "json",
+      ],
       expect.objectContaining({ maxBuffer: 2 * 1024 * 1024 }),
     );
     expect(run).toHaveBeenNthCalledWith(
       2,
-      "/opt/homebrew/bin/opencode",
-      ["db", expect.stringContaining("FROM session s"), "--format", "json"],
-      expect.objectContaining({ maxBuffer: 2 * 1024 * 1024 }),
-    );
-    expect(run).toHaveBeenNthCalledWith(
-      3,
       "/opt/homebrew/bin/opencode",
       ["export", "ses_123", "--sanitize"],
       expect.objectContaining({ maxBuffer: 2 * 1024 * 1024 }),
     );
     await service.delete("opencode", "ses_123");
     expect(run).toHaveBeenNthCalledWith(
-      4,
+      3,
       "/opt/homebrew/bin/opencode",
       ["session", "delete", "ses_123"],
       expect.objectContaining({ maxBuffer: 2 * 1024 * 1024 }),
@@ -406,14 +405,13 @@ describe("Agent session service", () => {
       title: `Session ${index}`,
       updated: 1_700_000_000_000 - index,
       directory: `/workspace/project-${index}`,
+      sizeBytes: index + 1,
+      total: 41,
     }));
     const run = vi
       .fn()
-      .mockResolvedValueOnce({ stdout: JSON.stringify(rows), stderr: "" })
       .mockResolvedValueOnce({
-        stdout: JSON.stringify(
-          rows.map((row, index) => ({ id: row.id, sizeBytes: index + 1 })),
-        ),
+        stdout: JSON.stringify(rows.slice(20, 40)),
         stderr: "",
       });
     const service = createAgentSessionService({
@@ -435,8 +433,18 @@ describe("Agent session service", () => {
     ).toBe(true);
     expect(run).toHaveBeenCalledWith(
       "/opt/homebrew/bin/opencode",
-      ["session", "list", "--format", "json", "--max-count", "41"],
+      [
+        "db",
+        expect.stringMatching(/FROM session s[\s\S]*LIMIT 20 OFFSET 20/),
+        "--format",
+        "json",
+      ],
       expect.objectContaining({ maxBuffer: 2 * 1024 * 1024 }),
+    );
+    expect(run).not.toHaveBeenCalledWith(
+      "/opt/homebrew/bin/opencode",
+      expect.arrayContaining(["session", "list"]),
+      expect.anything(),
     );
   });
 

@@ -380,7 +380,7 @@ Every batch must run its targeted failing tests first, then `pnpm typecheck`, af
 - [x] `T-AGENT-065` 接入 `RetrieveUserQuotaSummary` 的两组 weekly/5h 额度池，并增加基于 platform allowlist 的 Agent 一键打开/聚焦能力，完成 `TEST-AGENT-037`。
 - [x] `T-AGENT-067` 将 Codex、Grok Build、OpenClaw、Qwen Code 的已验证只读会话适配器接入统一 session service，翻转对应 capability，并完成 `TEST-AGENT-038`、类型检查和桌面构建。
 - [x] `T-AGENT-068` 将头部 ⋯ 菜单的设置跳转替换为 Agent 就地编辑弹窗，移除重复的头部 Skills 入口，复用现有编辑器与 settings actions，补齐 7 locales、`TEST-AGENT-039` 和构建门禁。
-- [x] `T-AGENT-069` 为 Sessions 增加 offset 分页、列表渲染隔离、长 transcript 渐进展开和原生空状态诊断，完成 `TEST-AGENT-040`、性能验证与桌面构建。
+- [x] `T-AGENT-069` 为 Sessions 增加 offset 分页、列表渲染隔离、长 transcript 渐进展开和原生空状态诊断，完成 `TEST-AGENT-040`、性能验证与桌面构建；OpenCode follow-up 将 cwd-scoped `session list` 元数据发现替换为有界全局 `opencode db` projection，并覆盖全局分页、空状态和 transcript body 排除。
 - [x] `T-AGENT-070` 在 Antigravity 桌面未运行时短暂启动安装包内的 allowlisted native helper 查询额度，并在所有结果路径中有界回收进程，完成 `TEST-AGENT-041`。
 
 ## Current Gate

@@ -177,6 +177,7 @@
 ### 9.7 Agent Conversation Ordering And Titles
 
 - 会话历史的第二个选择器是已加载清单排序，不是 PromptHub 元数据状态筛选；必须提供最近更新、最早更新、占用最大和占用最小，未知时间或大小在两个方向中都排在已知值之后，后续加载的分页按当前模式重新合并。
+- OpenCode 会话清单必须通过只读 `opencode db` 全局分页，不得使用会受 PromptHub 当前工作目录影响的 `opencode session list`；详情继续使用脱敏导出，插件 sidecar 和缓存不得冒充会话。
 - 会话显示标题的优先级固定为 PromptHub 非空改名、Agent 原生非空标题、适配器第一条可见用户消息回退、会话 id。列表、删除确认和跨 Agent 交接必须使用同一有效标题投影。
 - Codex 原生标题来自只读、至多 8 MiB 的 `session_index.jsonl` tail；同一安全 session id 取最后一条合法 `thread_name`，控制字符被清理，畸形、超限、软链接或缺失索引回退到 rollout 的第一条可见用户消息。PromptHub 不写入或迁移该索引。
 - 移除状态筛选后，PromptHub 归档元数据不得让仍存在的原生会话不可达；列表以紧凑归档图标表示该状态。会话域不存在软删除、已移除筛选或恢复动作。归档不修改原生 transcript，永久删除继续遵守适配器所有权和二次确认边界。

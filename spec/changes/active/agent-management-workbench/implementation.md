@@ -365,6 +365,16 @@
 - 新增 Claude、Codex、Gemini、OpenCode、OpenClaw 非敏感模型配置 adapter：结构化读取平台原生配置，只更新模型相关字段，保存前建立本地备份，写后重新解析验证；Codex 明示 TOML 注释/排版可能变化。
 - Provider 状态只返回供应商、脱敏 endpoint、模型和凭据 readiness；endpoint 会移除 user info、query 和 fragment，API key/token 不进入 renderer、日志或普通配置快照。
 - 新增 Claude、Gemini、OpenCode 只读 session adapter：Claude/Gemini 使用限定根目录、文件数、metadata/detail bytes 和 entry bytes 的容错文件读取；OpenCode 使用 `session list --format json` 与 `export --sanitize`，不递归扫描其数据目录。
+- OpenCode metadata listing now uses the bounded, read-only `opencode db`
+  projection because `session list` filters by the caller's working directory
+  and returned a false empty state when PromptHub launched elsewhere. The same
+  query returns one page plus total/message/size metadata; sanitized export,
+  native delete, and native resume ownership are unchanged.
+- OpenCode follow-up verification passed the 12-test session service suite,
+  desktop typecheck, targeted ESLint, `git diff --check`, traceability, and the
+  production renderer/main/preload build. A read-only live probe from `/tmp`
+  returned the current global session with 4 messages and 3,145 bytes in 0.44s,
+  while cwd-scoped `session list` returned no rows there.
 - Sessions 页支持本地列表、搜索、按需 transcript、截断提示和恢复命令复制；不编辑 transcript，不提供通用 raw-file 删除。
 - Provider & Model 和 Sessions 按 capability 启用，其他平台继续显示但对应 tab 置灰，不把“平台可见”与“深度管理已实现”混为一谈。
 - 将 Kimi 平台从旧版 `kimi-cli` 假设升级到独立 Kimi Code：保持稳定 `kimi` identity，默认根目录改为 `~/.kimi-code`，并按 PromptHub override、`KIMI_CODE_HOME`、current default、`KIMI_SHARE_DIR`、legacy `~/.kimi` 的优先级兼容已有安装。
@@ -792,7 +802,7 @@
 - Scalable session browsing batch (2026-07-22, `FR-AGENT-032`, `DES-AGENT-028`):
   - Main/preload contract: `agent:sessions:list` now accepts a validated non-negative `offset`; all supported filesystem and native adapters return the requested bounded window. Native CLIs without cursors receive only `offset + limit + 1` as the discovery bound.
   - Renderer: History loads 50 metadata records initially, advances source offsets independently of filtered/invalid rows, deduplicates appended pages by stable session id, and isolates off-screen list/transcript layout with `content-visibility: auto`. Transcript reads remain lazy and capped at 2 MiB / 64 KiB per entry; only 80 entries are mounted initially and later batches require explicit expansion.
-  - Empty state: a successful empty native source is explained separately from adapter errors and unsupported Agents. OpenCode remains owned by `opencode session list`; plugin caches and sidecars are not treated as conversations.
+  - Empty state: a successful empty native source is explained separately from adapter errors and unsupported Agents. OpenCode remains native-CLI owned through the bounded read-only `opencode db` projection; plugin caches and sidecars are not treated as conversations.
   - Verification: `TEST-AGENT-040` passed with offset validation, OpenCode native pagination, 50-of-120 metadata paging, deduplicated append, stale-page isolation during Agent changes, 80-of-120 progressive transcript mounting, truncation notice, off-screen rendering isolation, and localized native-empty guidance. The focused service/IPC/component suite passed 23 tests; the major-adapter/overview/workspace regression passed 35 tests. A read-only current-machine probe over 294 Codex sessions loaded 50 metadata rows in 170.5 ms and the second 50-row page in 252 ms. Focused coverage across the session service/adapters/panel reached 93.71% statements, 93.02% functions, and 67.84% branches; new paging/empty/stale-result conditions have direct tests, while remaining gaps are legacy parser and injected filesystem-error variants. Desktop typecheck, targeted lint, formatting, `git diff --check`, and the desktop production build passed. Live Electron inspection confirmed the current OpenCode native source displays `0 / 0` with the explicit empty explanation rather than a parser error.
 
 - Claude Code unified Provider activation and native Anthropic tests

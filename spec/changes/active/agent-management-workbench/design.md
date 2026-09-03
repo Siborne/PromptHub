@@ -1366,9 +1366,14 @@ added explicitly, and the existing truncation notice remains visible when the
 source exceeded the byte cap. This keeps list memory `O(loaded metadata)` and
 mounted transcript work `O(visible batch)` rather than `O(all native history)`.
 
-OpenCode remains native-CLI owned: an empty successful `opencode session list
---format json` response is an empty history, not an adapter failure. PromptHub
-does not query plugin sidecars as substitutes for missing session rows.
+OpenCode remains native-CLI owned, but `opencode session list --format json` is
+working-directory scoped and therefore cannot back a global Agent History
+view. PromptHub uses the read-only `opencode db` command to page session
+metadata, total count, message count, and calculated size directly from the
+current native database. Detail remains `export --sanitize`, while deletion and
+resume remain native CLI commands. An empty successful database projection is
+an empty history, not an adapter failure; plugin sidecars are never substituted
+for missing session rows.
 
 ## `DES-AGENT-027`: In-Workspace Agent Settings Dialog
 

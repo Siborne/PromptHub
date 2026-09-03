@@ -1110,10 +1110,17 @@ MUST be distinguished from a failed adapter or an unsupported Agent.
 
 #### Scenario: Installed Agent has no native sessions
 
-- Given OpenCode is installed but its native `session list` and current database contain zero sessions
+- Given OpenCode is installed but its current database contains zero sessions
 - When the user opens History
 - Then PromptHub shows an explicit native-source empty state rather than a parse failure
 - And it does not fabricate conversations from plugin caches, usage sidecars, or unrelated files
+
+#### Scenario: OpenCode is launched from a different working directory
+
+- Given OpenCode has sessions belonging to projects other than PromptHub's process working directory
+- When the user opens OpenCode History in PromptHub
+- Then PromptHub pages metadata through OpenCode's global read-only database command
+- And the list is not filtered by PromptHub's current working directory
 
 ### `FR-AGENT-031`: In-Workspace Agent Editing
 

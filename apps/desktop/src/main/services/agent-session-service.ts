@@ -145,7 +145,11 @@ const COMMAND_OPTIONS = {
   timeout: 30_000,
   maxBuffer: MAX_DETAIL_BYTES,
 };
-const OPENCODE_SIZE_QUERY = `SELECT s.id,
+function openCodeSessionListQuery(limit: number, offset: number): string {
+  return `SELECT s.id, s.title, s.directory,
+  s.time_created AS created, s.time_updated AS updated,
+  COUNT(*) OVER() AS total,
+  (SELECT COUNT(*) FROM message mc WHERE mc.session_id = s.id) AS messageCount,
   length(CAST(COALESCE(s.title, '') AS BLOB))
   + length(CAST(COALESCE(s.directory, '') AS BLOB))
   + length(CAST(COALESCE(s.metadata, '') AS BLOB))
@@ -153,7 +157,10 @@ const OPENCODE_SIZE_QUERY = `SELECT s.id,
       FROM message m WHERE m.session_id = s.id), 0)
   + COALESCE((SELECT SUM(length(CAST(COALESCE(p.data, '') AS BLOB)))
       FROM part p WHERE p.session_id = s.id), 0) AS sizeBytes
-FROM session s`;
+FROM session s
+ORDER BY s.time_updated DESC, s.id ASC
+LIMIT ${limit} OFFSET ${offset}`;
+}
 async function readPrefix(
   filePath: string,
   maxBytes: number,
@@ -574,23 +581,29 @@ function parseOpenCodeSession(
   };
 }
 
-async function openCodeSessionSizes(
+async function listOpenCodeSessions(
   commandRunner: NativeCommandRunner,
   executable: string,
-): Promise<Map<string, number>> {
+  limit: number,
+  offset: number,
+): Promise<AgentSessionListResult> {
   const result = await commandRunner.run(
     executable,
-    ["db", OPENCODE_SIZE_QUERY, "--format", "json"],
+    ["db", openCodeSessionListQuery(limit, offset), "--format", "json"],
     COMMAND_OPTIONS,
   );
   let rows: unknown;
-  try {
-    rows = JSON.parse(result.stdout);
-  } catch {
-    throw new Error("AGENT_SESSION_LIST_INVALID");
+  if (!result.stdout.trim()) {
+    rows = [];
+  } else {
+    try {
+      rows = JSON.parse(result.stdout);
+    } catch {
+      throw new Error("AGENT_SESSION_LIST_INVALID");
+    }
   }
+  if (!Array.isArray(rows)) throw new Error("AGENT_SESSION_LIST_INVALID");
   const sizes = new Map<string, number>();
-  if (!Array.isArray(rows)) return sizes;
   for (const row of rows) {
     if (!isRecord(row)) continue;
     const id = stringValue(row.id);
@@ -599,7 +612,20 @@ async function openCodeSessionSizes(
       sizes.set(id, size);
     }
   }
-  return sizes;
+  const sessions = rows
+    .map((row) => parseOpenCodeSession(row, executable, sizes))
+    .filter((row): row is AgentSessionMetadata => Boolean(row));
+  const totalRow = rows.find(
+    (row) => isRecord(row) && numberValue(row.total) !== null,
+  );
+  const total = isRecord(totalRow) ? numberValue(totalRow.total) || 0 : 0;
+  return {
+    agentId: "opencode",
+    adapter: "opencode-cli-v1",
+    sessions,
+    total,
+    hasMore: offset + sessions.length < total,
+  };
 }
 
 function parseOpenCodeDetail(
@@ -1005,47 +1031,12 @@ export function createAgentSessionService(options: AgentSessionServiceOptions) {
       if (agentId === "opencode") {
         const executable = await commandRunner.resolve("opencode");
         if (!executable) throw new Error("AGENT_SESSION_COMMAND_NOT_FOUND");
-        const result = await commandRunner.run(
+        return await listOpenCodeSessions(
+          commandRunner,
           executable,
-          [
-            "session",
-            "list",
-            "--format",
-            "json",
-            "--max-count",
-            String(offset + input.limit + 1),
-          ],
-          COMMAND_OPTIONS,
+          input.limit,
+          offset,
         );
-        let parsed: unknown;
-        if (!result.stdout.trim()) {
-          parsed = [];
-        } else {
-          try {
-            parsed = JSON.parse(result.stdout);
-          } catch {
-            throw new Error("AGENT_SESSION_LIST_INVALID");
-          }
-        }
-        const rows = Array.isArray(parsed)
-          ? parsed
-          : isRecord(parsed) && Array.isArray(parsed.sessions)
-            ? parsed.sessions
-            : [];
-        const sizes =
-          rows.length > 0
-            ? await openCodeSessionSizes(commandRunner, executable)
-            : new Map<string, number>();
-        const normalized = rows
-          .map((row) => parseOpenCodeSession(row, executable, sizes))
-          .filter((row): row is AgentSessionMetadata => Boolean(row));
-        return {
-          agentId,
-          adapter: "opencode-cli-v1",
-          sessions: normalized.slice(offset, offset + input.limit),
-          total: normalized.length,
-          hasMore: normalized.length > offset + input.limit,
-        };
       }
 
       if (agentId === "gemini") {
