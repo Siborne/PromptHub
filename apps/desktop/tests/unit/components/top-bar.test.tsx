@@ -1271,7 +1271,7 @@ describe("TopBar", () => {
     expect(useUIStore.getState().isSidebarCollapsed).toBe(true);
   });
 
-  it("temporarily expands the Prompt panel in the image workbench", async () => {
+  it("removes generic Prompt controls while the image workbench owns the header", async () => {
     useUIStore.setState({
       appModule: "prompt",
       viewMode: "prompt",
@@ -1287,14 +1287,16 @@ describe("TopBar", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
-
-    expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Expand" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("Search Prompt..."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "New" }),
+    ).not.toBeInTheDocument();
     expect(useUIStore.getState().isSidebarCollapsed).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
-
     expect(useUIStore.getState().isWorkbenchSidebarExpanded).toBe(false);
-    expect(useUIStore.getState().isSidebarCollapsed).toBe(false);
-    expect(screen.getByRole("button", { name: "Expand" })).toBeVisible();
   });
 });

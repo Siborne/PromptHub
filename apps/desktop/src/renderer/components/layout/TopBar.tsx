@@ -280,10 +280,7 @@ export function TopBar({
         if (descLower.includes(queryLower)) score += 20;
 
         // 所有关键词匹配
-        const searchableText = [
-          p.title,
-          p.description || "",
-        ]
+        const searchableText = [p.title, p.description || ""]
           .join(" ")
           .toLowerCase();
 
@@ -650,6 +647,8 @@ export function TopBar({
   const updateButtonLabel = updateVersion
     ? t("settings.newVersion", { version: updateVersion })
     : t("settings.updateAvailable");
+
+  if (isGenerationWorkbench) return null;
 
   return (
     <>

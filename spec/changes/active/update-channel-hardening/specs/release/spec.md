@@ -131,3 +131,52 @@ downloading states after the user's request.
 - When the user clicks Check updates once
 - Then one update dialog reports that the development check is unavailable
 - And no delayed demo status replaces that result or appears as another update prompt
+
+### `FR-UPDATER-007`: Update notes must retain published release content during download
+
+When the preview lookup identifies an exact published GitHub Release, the
+desktop updater must present that Release body instead of replacing it with the
+packaged full changelog. Safe Markdown headings, emoji, links, and images must
+remain readable while untrusted image origins stay blocked.
+
+#### Scenario: User reviews and downloads a rich preview release
+
+- Given the exact preview Release body contains headings, emoji, badge images, and links
+- When PromptHub shows the available update and begins downloading it
+- Then the release notes remain visible throughout the download
+- And the progress bar uses the content width and exposes one percentage
+- And only approved HTTPS image origins load inside the renderer
+
+### `FR-UPDATER-008`: Download source changes must restart visibly and remain recoverable
+
+The download UI must expose automatic, official, and mirror source modes.
+Automatic mode tries the official source first and then a bounded mirror list.
+Changing source during a download must cancel the active transfer, refresh
+metadata for the selected source, reset visible progress to zero, and start a
+new verified download. The user must also retain a manual Releases download
+action throughout the transfer.
+
+#### Scenario: User switches a stalled download to a mirror
+
+- Given an update is downloading from the automatic or official source
+- When the user selects the mirror source
+- Then PromptHub cancels the active transfer before starting another one
+- And the progress resets instead of retaining bytes from the previous source
+- And transferred size, total size, and current speed remain visible
+- And the GitHub Releases manual-download action remains available
+
+### `FR-UPDATER-009`: macOS must surface detected updates in the menu bar
+
+When the authoritative updater reports an available or downloaded version,
+the macOS menu bar must switch to a PromptHub Template Image with an update
+badge. Its native menu must replace the generic check action with the detected
+version and open the existing update dialog when selected. A not-available
+result restores the normal icon and generic action.
+
+#### Scenario: User sees an available update without opening PromptHub
+
+- Given PromptHub is running with its macOS menu bar item enabled
+- When the updater reports version `1.2.3` as available
+- Then the menu bar icon shows a monochrome upward update badge
+- And the menu contains a localized `Version 1.2.3 available` action
+- And selecting it opens the existing update dialog

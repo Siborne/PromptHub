@@ -33,8 +33,60 @@
 - `TEST-UPDATER-007`: renderer coverage reproduces a development-mode manual
   check and verifies that its real disabled result remains stable after the
   former timer window.
+- Preview discovery now retains the exact GitHub Release body already returned
+  with the prerelease tag, without adding another API request or cache. The
+  candidate version must match the tag before this rich body overrides the
+  packaged changelog fallback.
+- Release-note Markdown now displays headings, emoji, and approved GitHub or
+  Shields images. Images are HTTPS-only, lazy, referrer-free, and unapproved
+  origins degrade to alt text.
+- Download progress now spans the dialog content width, exposes an accessible
+  progressbar, renders one percentage, and keeps the last release notes visible
+  without retransmitting them on each progress event.
+- `TEST-UPDATER-008`: main-process coverage verifies that the exact preview
+  Release body reaches the available-update status.
+- `TEST-UPDATER-009`: renderer coverage verifies rich Markdown image policy,
+  continuous release notes, full-width progress, clamping, and one percentage.
+- Update checks and downloads now accept explicit automatic, official, and
+  mirror source modes. Automatic tries official first and falls back through a
+  bounded mirror list.
+- Switching source cancels the active `electron-updater` token, refreshes
+  metadata for the replacement provider, and restarts visible progress at zero.
+- Downloading now shows transferred/total size and speed, keeps source controls
+  active, and exposes the manual GitHub Releases download action.
+- `TEST-UPDATER-010`: main-process coverage verifies automatic fallback and
+  cancellation before a replacement download.
+- `TEST-UPDATER-011`: renderer coverage verifies transfer metrics, source
+  switching, progress reset, and manual download access.
+- macOS now switches between the existing PromptHub Template Image and a
+  deterministic update-badge Template Image when the authoritative updater
+  reports available, downloaded, or not-available states.
+- The native tray menu replaces its generic update check with the detected
+  version and a clickable detail sublabel that opens the existing update
+  dialog. Transient checking, downloading, and error states preserve the last
+  known actionable update.
+- `TEST-UPDATER-012`: main-process updater, tray controller, native menu, and
+  icon-resource coverage verifies status delivery, icon switching, localized
+  version actions, Retina assets, and missing-badge fallback behavior.
 
 ## Verification
+
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/tray-icon.test.ts tests/unit/main/tray-menu.test.ts tests/unit/main/tray-controller.test.ts tests/unit/main/updater.test.ts` (`TEST-UPDATER-012`: 77 tests passed)
+- `pnpm --filter @prompthub/desktop typecheck` (passed)
+- Targeted ESLint for the updater, tray modules, main-process wiring, and their tests (passed with zero warnings)
+- `pnpm --filter @prompthub/desktop build` (renderer, main, and preload production builds passed)
+- The update Template Image was rendered and inspected at `16x16` / 72 dpi and `32x32` / 144 dpi; the PromptHub mark, circular badge, and transparent upward arrow remain distinguishable.
+- After visual review, the badge gained a wider separation ring and a larger
+  `arrow.up.circle.fill`-style arrow so the update meaning survives 16px
+  rasterization instead of reading as an indistinct circular cutout.
+- Targeted Prettier validation passed for this change's owned tray source, tests, and docs. The already-modified `updater.test.ts` still has pre-existing formatting differences outside `TEST-UPDATER-012`; they were not rewritten to avoid mixing unrelated work.
+- Live macOS menu bar acceptance was not run because this request did not authorize desktop GUI control; native menu state and icon switching were verified at the main-process boundary.
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/updater.test.ts tests/unit/components/update-dialog.test.tsx` (31 tests passed for source switching and transfer telemetry)
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/renderer-i18n-smoke.test.tsx` (2 tests passed across the renderer locale loader)
+- `pnpm --filter @prompthub/desktop typecheck` (passed)
+- Targeted ESLint for updater main/preload/renderer/tests (passed with zero warnings)
+- `pnpm spec:traceability` (15 active changes passed)
+- `pnpm --filter @prompthub/desktop build` (renderer, main, and preload production builds passed)
 
 - `pnpm test -- --run tests/unit/main/updater.test.ts tests/unit/components/update-dialog.test.tsx tests/unit/components/about-settings.test.tsx tests/unit/main/updater-real-scenario.test.ts`
 - `pnpm lint`
@@ -48,6 +100,12 @@
 - `pnpm --filter @prompthub/desktop test -- tests/unit/components/update-dialog.test.tsx --run`
 - `pnpm --filter @prompthub/desktop lint`
 - `pnpm --filter @prompthub/desktop build`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/updater.test.ts tests/unit/components/update-dialog.test.tsx` (28 tests passed for `TEST-UPDATER-008` and `TEST-UPDATER-009`)
+- `pnpm --filter @prompthub/desktop typecheck` (passed for the rich release-note and progress change)
+- Targeted ESLint for `updater.ts`, `UpdateDialog.tsx`, and their two test files (passed with zero warnings)
+- `pnpm spec:traceability` (14 active changes passed)
+- `pnpm --filter @prompthub/desktop build` (renderer, main, and preload production builds passed)
+- GUI screenshot acceptance was not run because this task did not authorize browser or desktop control; component behavior, generated CSS, and production compilation were verified without starting a persistent process.
 
 ## Synced Docs
 

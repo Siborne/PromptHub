@@ -1455,11 +1455,12 @@ app.whenReady().then(async () => {
     }
     agentDeepLinkRouter.connect(dispatchFromTray);
     agentDeepLinkRouter.acceptArgv(process.argv);
-
     // Init updater (production only)
     // 初始化更新器（仅在生产环境）
     if (!isDev && !isE2E && mainWindow) {
-      initUpdater(mainWindow);
+      initUpdater(mainWindow, (status) => {
+        trayController.setUpdateStatus(status.status, status.info?.version);
+      });
     }
 
     // macOS: show window when clicking Dock icon

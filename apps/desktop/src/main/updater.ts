@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain, app, shell } from "electron";
 import type { UpdateInfo as ElectronUpdateInfo } from "electron-updater";
-import { autoUpdater } from "electron-updater";
+import { autoUpdater, CancellationToken } from "electron-updater";
 import fs from "fs";
 import path from "path";
 import https from "https";
@@ -27,6 +27,7 @@ interface ProgressInfo {
 export type MacInstallSource = "direct" | "homebrew" | "unknown";
 
 type UpdateChannel = "stable" | "preview";
+export type UpdateSource = "automatic" | "official" | "mirror";
 
 export function resolveDesktopVersion(
   isPackaged = app.isPackaged,
@@ -41,7 +42,13 @@ export function resolveDesktopVersion(
 
 interface UpdateRequestOptions {
   useMirror?: boolean;
+  source?: UpdateSource;
   channel?: UpdateChannel;
+}
+
+interface NormalizedUpdateOptions {
+  source: UpdateSource;
+  channel: UpdateChannel;
 }
 
 const OFFICIAL_REPO = {
@@ -53,12 +60,24 @@ const OFFICIAL_REPO = {
 
 function normalizeUpdateOptions(
   input?: boolean | UpdateRequestOptions,
-): Required<UpdateRequestOptions> {
+): NormalizedUpdateOptions {
   if (typeof input === "boolean") {
-    return { useMirror: input, channel: "stable" };
+    return { source: input ? "mirror" : "official", channel: "stable" };
   }
+
+  const source =
+    input?.source === "automatic" ||
+    input?.source === "official" ||
+    input?.source === "mirror"
+      ? input.source
+      : input?.useMirror === true
+        ? "mirror"
+        : input && "useMirror" in input
+          ? "official"
+          : "automatic";
+
   return {
-    useMirror: Boolean(input?.useMirror),
+    source,
     channel: input?.channel === "preview" ? "preview" : "stable",
   };
 }
@@ -111,12 +130,46 @@ function applyMirrorDownloadSettings(useMirror: boolean) {
 interface FeedContext {
   channel: UpdateChannel;
   releaseTag?: string;
+  releaseNotes?: string;
 }
 
 let lastFeedContext: FeedContext = { channel: "stable" };
 
-async function fetchLatestPreviewReleaseTag(): Promise<string | null> {
-  return await new Promise<string | null>((resolve, reject) => {
+interface GithubReleaseMetadata {
+  tagName: string;
+  body?: string;
+}
+
+function parseLatestPreviewRelease(body: string): GithubReleaseMetadata | null {
+  const releases = JSON.parse(body) as Array<{
+    body?: string;
+    draft?: boolean;
+    prerelease?: boolean;
+    tag_name?: string;
+  }>;
+  const latestPreview = releases.find(
+    (release) =>
+      release.prerelease === true &&
+      release.draft !== true &&
+      typeof release.tag_name === "string" &&
+      release.tag_name.length > 0,
+  );
+
+  if (!latestPreview?.tag_name) {
+    return null;
+  }
+
+  return {
+    tagName: latestPreview.tag_name,
+    body:
+      typeof latestPreview.body === "string" && latestPreview.body.trim()
+        ? latestPreview.body.trim()
+        : undefined,
+  };
+}
+
+async function fetchLatestPreviewRelease(): Promise<GithubReleaseMetadata | null> {
+  return await new Promise<GithubReleaseMetadata | null>((resolve, reject) => {
     const request = https.get(
       {
         hostname: "api.github.com",
@@ -146,19 +199,7 @@ async function fetchLatestPreviewReleaseTag(): Promise<string | null> {
           }
 
           try {
-            const releases = JSON.parse(body) as Array<{
-              draft?: boolean;
-              prerelease?: boolean;
-              tag_name?: string;
-            }>;
-            const latestPreview = releases.find(
-              (release) =>
-                release.prerelease === true &&
-                release.draft !== true &&
-                typeof release.tag_name === "string" &&
-                release.tag_name.length > 0,
-            );
-            resolve(latestPreview?.tag_name || null);
+            resolve(parseLatestPreviewRelease(body));
           } catch (error) {
             reject(error instanceof Error ? error : new Error(String(error)));
           }
@@ -182,14 +223,18 @@ async function resolveFeedContext(
 
   // Preview channel is intentionally prerelease-only. Stable releases are not
   // fallback candidates; users return to stable updates by switching channels.
-  const releaseTag = await fetchLatestPreviewReleaseTag();
-  if (!releaseTag) {
+  const release = await fetchLatestPreviewRelease();
+  if (!release) {
     throw new Error(
       "Update check failed: No published prerelease preview release is currently available.",
     );
   }
 
-  return { channel, releaseTag };
+  return {
+    channel,
+    releaseTag: release.tagName,
+    releaseNotes: release.body,
+  };
 }
 
 function applyUpdaterPreferences(channel: UpdateChannel): void {
@@ -243,6 +288,30 @@ function applyFeedContext(
   autoUpdater.setFeedURL(
     getOfficialFeedConfig(context.channel, context.releaseTag),
   );
+}
+
+interface FeedCandidate {
+  useMirror: boolean;
+  url?: string;
+}
+
+function getFeedCandidates(
+  source: UpdateSource,
+  context: FeedContext,
+): FeedCandidate[] {
+  const official = { useMirror: false };
+  const mirrors = getMirrorSources(context.channel, context.releaseTag).map(
+    (url) => ({ useMirror: true, url }),
+  );
+
+  if (source === "official") return [official];
+  if (source === "mirror") return mirrors;
+  return [official, ...mirrors];
+}
+
+function applyFeedCandidate(candidate: FeedCandidate, context: FeedContext) {
+  applyMirrorDownloadSettings(candidate.useMirror);
+  applyFeedContext(candidate.useMirror, context, candidate.url);
 }
 
 function toCheckResult(result: unknown): {
@@ -368,12 +437,36 @@ export function getChangelogForVersionRange(
 
 // Convert from electron-updater's UpdateInfo to simplified format
 // 从 electron-updater 的 UpdateInfo 转换为简化格式
-function toSimpleInfo(info: ElectronUpdateInfo): SimpleUpdateInfo {
+function getExactReleaseNotes(
+  info: ElectronUpdateInfo,
+  context: FeedContext,
+): string {
+  if (
+    !context.releaseTag ||
+    !context.releaseNotes ||
+    compareVersions(context.releaseTag, info.version) !== 0
+  ) {
+    return "";
+  }
+
+  return context.releaseNotes;
+}
+
+function toSimpleInfo(
+  info: ElectronUpdateInfo,
+  context: FeedContext = lastFeedContext,
+): SimpleUpdateInfo {
   const currentVersion = app.getVersion();
 
-  // Prefer reading version range changelog from CHANGELOG.md
-  // 优先从 CHANGELOG.md 读取版本区间的更新日志
-  let releaseNotes = getChangelogForVersionRange(info.version, currentVersion);
+  // Preview lookup already returns the exact published GitHub Release body.
+  // Reuse it so badges, images, emoji, and release-specific notices are not
+  // replaced by the packaged full changelog. Other lanes keep the bounded
+  // local changelog and manifest fallback below without another API request.
+  let releaseNotes = getExactReleaseNotes(info, context);
+
+  if (!releaseNotes) {
+    releaseNotes = getChangelogForVersionRange(info.version, currentVersion);
+  }
 
   // If CHANGELOG has no content, fallback to GitHub Release notes
   // 如果 CHANGELOG 没有内容，回退到 GitHub Release 的说明
@@ -469,6 +562,111 @@ function extractVersionRange(
 
 let mainWindow: BrowserWindow | null = null;
 let lastPercent = 0; // Track last progress to prevent regression
+let suppressedUpdaterStatusCount = 0;
+let suppressedUpdaterErrorCount = 0;
+let latestDownloadRequestId = 0;
+let downloadedUpdateVersion: string | undefined;
+let activeDownload:
+  | {
+      token: CancellationToken;
+      promise: Promise<DownloadResult>;
+    }
+  | undefined;
+
+interface DownloadResult {
+  success: boolean;
+  cancelled?: boolean;
+  error?: string;
+}
+
+const EMPTY_DOWNLOAD_PROGRESS: ProgressInfo = {
+  percent: 0,
+  bytesPerSecond: 0,
+  transferred: 0,
+  total: 0,
+};
+
+function isDownloadCancelled(token: CancellationToken): boolean {
+  return token.cancelled;
+}
+
+async function downloadFromSource(
+  source: UpdateSource,
+  context: FeedContext,
+  token: CancellationToken,
+): Promise<DownloadResult> {
+  let lastError: unknown;
+
+  for (const candidate of getFeedCandidates(source, context)) {
+    if (isDownloadCancelled(token)) {
+      return { success: false, cancelled: true };
+    }
+
+    lastPercent = 0;
+    sendStatusToWindow({
+      status: "downloading",
+      progress: EMPTY_DOWNLOAD_PROGRESS,
+    });
+    suppressedUpdaterStatusCount += 1;
+    suppressedUpdaterErrorCount += 1;
+    try {
+      applyFeedCandidate(candidate, context);
+      await autoUpdater.checkForUpdates();
+      await autoUpdater.downloadUpdate(token);
+      return { success: true };
+    } catch (error) {
+      if (isDownloadCancelled(token)) {
+        return { success: false, cancelled: true };
+      }
+      lastError = error;
+      console.warn(
+        `[Updater] ${candidate.useMirror ? "Mirror" : "Official"} download attempt failed${candidate.url ? `: ${candidate.url}` : ""}`,
+      );
+    } finally {
+      suppressedUpdaterStatusCount -= 1;
+      suppressedUpdaterErrorCount -= 1;
+    }
+  }
+
+  const message =
+    lastError instanceof Error ? lastError.message : String(lastError);
+  return {
+    success: false,
+    error:
+      source === "official"
+        ? `Download update failed: ${message}`
+        : `All configured update sources failed: ${message}`,
+  };
+}
+
+async function restartDownload(
+  source: UpdateSource,
+  context: FeedContext,
+  requestId: number,
+): Promise<DownloadResult> {
+  const previousDownload = activeDownload;
+  if (previousDownload) {
+    previousDownload.token.cancel();
+    await previousDownload.promise.catch(() => undefined);
+  }
+
+  if (requestId !== latestDownloadRequestId) {
+    return { success: false, cancelled: true };
+  }
+
+  const token = new CancellationToken();
+  const promise = downloadFromSource(source, context, token);
+  activeDownload = { token, promise };
+
+  try {
+    return await promise;
+  } finally {
+    if (activeDownload?.token === token) {
+      activeDownload = undefined;
+    }
+    token.dispose();
+  }
+}
 // 跟踪上次进度，防止进度回退
 
 function isMacPlatform(): boolean {
@@ -533,8 +731,16 @@ export interface UpdateStatus {
   error?: string;
 }
 
-export function initUpdater(win: BrowserWindow) {
+let nativeUpdateStatusConsumer: (status: UpdateStatus) => void = () =>
+  undefined;
+
+export function initUpdater(
+  win: BrowserWindow,
+  onStatus: (status: UpdateStatus) => void = () => undefined,
+) {
   mainWindow = win;
+  nativeUpdateStatusConsumer = onStatus;
+  downloadedUpdateVersion = undefined;
 
   // Disable auto download, let user choose
   // 禁用自动下载，让用户选择
@@ -563,6 +769,10 @@ export function initUpdater(win: BrowserWindow) {
   // Update check error
   // 检查更新出错
   autoUpdater.on("error", (error) => {
+    if (suppressedUpdaterErrorCount > 0) {
+      console.warn("[Updater] Suppressed recoverable source error");
+      return;
+    }
     console.error("Update error:", error);
     let message = (error && (error as Error).message) || String(error);
     // Handle 404 error for missing yml files
@@ -599,6 +809,7 @@ export function initUpdater(win: BrowserWindow) {
   // Checking for update
   // 检查更新中
   autoUpdater.on("checking-for-update", () => {
+    if (suppressedUpdaterStatusCount > 0) return;
     console.info("Checking for update...");
     sendStatusToWindow({ status: "checking" });
   });
@@ -606,6 +817,7 @@ export function initUpdater(win: BrowserWindow) {
   // Update available
   // 有可用更新
   autoUpdater.on("update-available", (info) => {
+    if (suppressedUpdaterStatusCount > 0) return;
     if (!filterDowngradeStatus(info)) {
       sendStatusToWindow({
         status: "not-available",
@@ -624,6 +836,7 @@ export function initUpdater(win: BrowserWindow) {
   // No update available
   // 没有可用更新
   autoUpdater.on("update-not-available", (info) => {
+    if (suppressedUpdaterStatusCount > 0) return;
     console.info("Update not available, current version is latest");
     sendStatusToWindow({
       status: "not-available",
@@ -656,6 +869,7 @@ export function initUpdater(win: BrowserWindow) {
   // 下载完成
   autoUpdater.on("update-downloaded", (info) => {
     console.info("Update downloaded:", info.version);
+    downloadedUpdateVersion = info.version;
     sendStatusToWindow({
       status: "downloaded",
       info: toSimpleInfo(info),
@@ -664,6 +878,11 @@ export function initUpdater(win: BrowserWindow) {
 }
 
 function sendStatusToWindow(status: UpdateStatus) {
+  try {
+    nativeUpdateStatusConsumer(status);
+  } catch {
+    console.error("Failed to publish updater status to native consumers");
+  }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("updater:status", status);
   }
@@ -713,9 +932,8 @@ export function registerUpdaterIPC() {
         };
       }
 
-      const { useMirror, channel } = normalizeUpdateOptions(request);
+      const { source, channel } = normalizeUpdateOptions(request);
       applyUpdaterPreferences(channel);
-      applyMirrorDownloadSettings(useMirror);
       let context: FeedContext;
 
       try {
@@ -728,47 +946,26 @@ export function registerUpdaterIPC() {
         };
       }
 
-      // If mirror is enabled, use mirror sources directly
-      // 如果启用了镜像，直接使用镜像源（不先尝试官方）
-      if (useMirror) {
-        for (const mirrorUrl of getMirrorSources(
-          context.channel,
-          context.releaseTag,
-        )) {
-          try {
-            console.log(
-              `[Updater] Using ${context.channel} mirror for check: ${mirrorUrl}`,
-            );
-            applyFeedContext(true, context, mirrorUrl);
-            const result = await autoUpdater.checkForUpdates();
-            console.log(`[Updater] Mirror check succeeded: ${mirrorUrl}`);
-            return toCheckResult(result);
-          } catch (mirrorError) {
-            console.warn(`[Updater] Mirror check failed: ${mirrorUrl}`);
-          }
+      let lastError: unknown;
+      for (const candidate of getFeedCandidates(source, context)) {
+        suppressedUpdaterErrorCount += 1;
+        try {
+          applyFeedCandidate(candidate, context);
+          const result = await autoUpdater.checkForUpdates();
+          return toCheckResult(result);
+        } catch (error) {
+          lastError = error;
+          console.warn(
+            `[Updater] ${candidate.useMirror ? "Mirror" : "Official"} check failed${candidate.url ? `: ${candidate.url}` : ""}`,
+          );
+        } finally {
+          suppressedUpdaterErrorCount -= 1;
         }
-        // All mirrors failed
-        return {
-          success: false,
-          error:
-            "All mirror sources failed. Please try disabling mirror acceleration.",
-        };
       }
 
-      // Mirror disabled, use official source
-      // 未启用镜像，使用官方源
-      try {
-        console.log(
-          `[Updater] Using official ${context.channel} source for check`,
-        );
-        applyFeedContext(false, context);
-        const result = await autoUpdater.checkForUpdates();
-        return toCheckResult(result);
-      } catch (officialError) {
-        const errMsg =
-          (officialError as Error).message || String(officialError);
-        return { success: false, error: `Update check failed: ${errMsg}` };
-      }
+      const message =
+        lastError instanceof Error ? lastError.message : String(lastError);
+      return { success: false, error: `Update check failed: ${message}` };
     },
   );
 
@@ -784,9 +981,8 @@ export function registerUpdaterIPC() {
         };
       }
 
-      const { useMirror, channel } = normalizeUpdateOptions(request);
+      const { source, channel } = normalizeUpdateOptions(request);
       applyUpdaterPreferences(channel);
-      lastPercent = 0;
       let context: FeedContext;
 
       try {
@@ -811,50 +1007,11 @@ export function registerUpdaterIPC() {
         };
       }
 
-      // All direct installs use electron-updater's verified package workflow.
-      applyMirrorDownloadSettings(useMirror);
-
-      // If mirror is enabled, use mirror sources directly
-      // 如果启用了镜像，直接使用镜像源
-      if (useMirror) {
-        for (const mirrorUrl of getMirrorSources(
-          context.channel,
-          context.releaseTag,
-        )) {
-          try {
-            console.log(
-              `[Updater] Using ${context.channel} mirror for download: ${mirrorUrl}`,
-            );
-            applyFeedContext(true, context, mirrorUrl);
-            await autoUpdater.downloadUpdate();
-            return { success: true };
-          } catch (mirrorError) {
-            console.warn(`[Updater] Mirror download failed: ${mirrorUrl}`);
-            lastPercent = 0; // Reset progress for next attempt
-          }
-        }
-        // All mirrors failed
-        return {
-          success: false,
-          error:
-            "All mirror sources failed. Please try disabling mirror acceleration.",
-        };
-      }
-
-      // Mirror disabled, use official source
-      // 未启用镜像，使用官方源
-      try {
-        console.log(
-          `[Updater] Using official ${context.channel} source for download`,
-        );
-        applyFeedContext(false, context);
-        await autoUpdater.downloadUpdate();
-        return { success: true };
-      } catch (officialError) {
-        const errMsg =
-          (officialError as Error).message || String(officialError);
-        return { success: false, error: `Download update failed: ${errMsg}` };
-      }
+      // Refresh update metadata for the selected source before downloading.
+      // This is required when a running download switches from official to a
+      // mirror (or back), because electron-updater caches the previous provider.
+      const requestId = ++latestDownloadRequestId;
+      return await restartDownload(source, context, requestId);
     },
   );
 
@@ -865,22 +1022,20 @@ export function registerUpdaterIPC() {
       return { success: false, error: "Install disabled in development mode" };
     }
 
+    if (isMacPlatform() && getMacInstallSource() === "homebrew") {
+      return {
+        success: false,
+        manual: true,
+        installSource: "homebrew",
+        error: getHomebrewUpgradeMessage(),
+      };
+    }
+
     try {
-      // At install time the new binary hasn't run yet, so we only know
-      // `fromVersion` (the currently-running version being replaced).
       const backup = await createUpgradeDataSnapshot(app.getPath("userData"), {
         fromVersion: app.getVersion(),
+        toVersion: downloadedUpdateVersion,
       });
-
-      if (isMacPlatform() && getMacInstallSource() === "homebrew") {
-        return {
-          success: false,
-          manual: true,
-          installSource: "homebrew",
-          error: getHomebrewUpgradeMessage(),
-          backupPath: backup.backupPath,
-        };
-      }
 
       // Direct installations restart through electron-updater after the snapshot.
       autoUpdater.quitAndInstall(false, true);

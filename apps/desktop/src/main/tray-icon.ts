@@ -1,6 +1,7 @@
 import path from "path";
 
 const MAC_TRAY_TEMPLATE_FILENAME = "PromptHubStatusTemplate.png";
+const MAC_TRAY_UPDATE_TEMPLATE_FILENAME = "PromptHubStatusUpdateTemplate.png";
 
 interface MacTrayIconPathOptions {
   dirname: string;
@@ -25,6 +26,7 @@ export function resolveMacTrayIconPaths({
 }: MacTrayIconPathOptions): {
   fallbackPath: string;
   templatePath: string;
+  updateTemplatePath: string;
 } {
   const resourceRoot = isDev
     ? path.join(dirname, "../../resources")
@@ -33,6 +35,11 @@ export function resolveMacTrayIconPaths({
   return {
     fallbackPath: path.join(resourceRoot, "icon.iconset/icon_16x16@2x.png"),
     templatePath: path.join(resourceRoot, "tray", MAC_TRAY_TEMPLATE_FILENAME),
+    updateTemplatePath: path.join(
+      resourceRoot,
+      "tray",
+      MAC_TRAY_UPDATE_TEMPLATE_FILENAME,
+    ),
   };
 }
 

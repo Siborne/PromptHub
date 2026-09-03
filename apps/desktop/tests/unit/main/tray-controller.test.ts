@@ -11,6 +11,7 @@ function createHarness(
     isDev?: boolean;
     platform?: NodeJS.Platform;
     preferredEmpty?: boolean;
+    updateEmpty?: boolean;
     alternateEmpty?: boolean;
     withoutProviderLoader?: boolean;
     withoutUsageLoader?: boolean;
@@ -31,6 +32,13 @@ function createHarness(
     }),
     setTemplateImage: vi.fn(),
   };
+  const updateImage = {
+    isEmpty: () => overrides.updateEmpty ?? false,
+    resize: vi.fn(function resize() {
+      return updateImage;
+    }),
+    setTemplateImage: vi.fn(),
+  };
   const alternateImage = {
     isEmpty: () => overrides.alternateEmpty ?? false,
     resize: vi.fn(function resize() {
@@ -41,6 +49,7 @@ function createHarness(
   const createFromPath = vi.fn((filePath: string) => {
     if (filePath.includes("icon.iconset")) return fallbackImage;
     if (filePath.includes("app.asar.unpacked")) return alternateImage;
+    if (filePath.includes("StatusUpdateTemplate")) return updateImage;
     return preferredImage;
   });
   const tray = {
@@ -52,6 +61,7 @@ function createHarness(
     getBounds: vi.fn(() => ({ x: 500, y: 0, width: 24, height: 24 })),
     popUpContextMenu: vi.fn(),
     setContextMenu: vi.fn(),
+    setImage: vi.fn(),
     setToolTip: vi.fn(),
   };
   const buildMenu = vi.fn((template) => ({ template }));
@@ -111,6 +121,7 @@ function createHarness(
     onToggleWindow,
     preferredImage,
     tray,
+    updateImage,
   };
 }
 
@@ -122,7 +133,11 @@ describe("tray controller", () => {
     expect(harness.createFromPath).toHaveBeenCalledWith(
       "/repo/apps/desktop/resources/tray/PromptHubStatusTemplate.png",
     );
+    expect(harness.createFromPath).toHaveBeenCalledWith(
+      "/repo/apps/desktop/resources/tray/PromptHubStatusUpdateTemplate.png",
+    );
     expect(harness.preferredImage.setTemplateImage).toHaveBeenCalledWith(true);
+    expect(harness.updateImage.setTemplateImage).toHaveBeenCalledWith(true);
     expect(harness.preferredImage.resize).not.toHaveBeenCalled();
     expect(harness.tray.setToolTip).toHaveBeenCalledWith("PromptHub");
     expect(harness.handlers.has("mouse-down")).toBe(true);
@@ -158,13 +173,87 @@ describe("tray controller", () => {
     expect(harness.onToggleWindow).toHaveBeenCalledOnce();
   });
 
+  it("shows and clears the macOS update icon and native update action", () => {
+    const harness = createHarness();
+    harness.controller.create();
+
+    harness.controller.setUpdateStatus("available", "1.2.3");
+
+    expect(harness.tray.setImage).toHaveBeenLastCalledWith(harness.updateImage);
+    let template = harness.buildMenu.mock.calls.at(-1)?.[0];
+    expect(
+      template.find(
+        (item: { label?: string }) => item.label === "Version 1.2.3 available",
+      ),
+    ).toMatchObject({ sublabel: "Click to view update details…" });
+
+    for (const status of ["checking", "downloading", "error"] as const) {
+      harness.controller.setUpdateStatus(status);
+    }
+    expect(harness.tray.setImage).toHaveBeenLastCalledWith(harness.updateImage);
+
+    harness.controller.setUpdateStatus("not-available");
+    expect(harness.tray.setImage).toHaveBeenLastCalledWith(
+      harness.preferredImage,
+    );
+    template = harness.buildMenu.mock.calls.at(-1)?.[0];
+    expect(
+      template.some(
+        (item: { label?: string }) => item.label === "Check for Updates…",
+      ),
+    ).toBe(true);
+  });
+
+  it("retains an update detected before the macOS tray is created", () => {
+    const harness = createHarness();
+
+    harness.controller.setUpdateStatus("downloaded", " 1.2.3 ");
+    harness.controller.setUpdateStatus("downloaded", "1.2.3");
+    harness.controller.create();
+
+    expect(harness.createTray).toHaveBeenCalledWith(harness.updateImage);
+    const template = harness.buildMenu.mock.calls.at(-1)?.[0];
+    expect(
+      template.some(
+        (item: { label?: string }) =>
+          item.label === "Version 1.2.3 ready to install",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps the update menu available when its optional badge asset is missing", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const harness = createHarness({ updateEmpty: true });
+    harness.controller.create();
+
+    harness.controller.setUpdateStatus("available", "1.2.3");
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to load macOS update tray icon",
+    );
+    expect(harness.tray.setImage).toHaveBeenLastCalledWith(
+      harness.preferredImage,
+    );
+    const template = harness.buildMenu.mock.calls.at(-1)?.[0];
+    expect(
+      template.some(
+        (item: { label?: string }) => item.label === "Version 1.2.3 available",
+      ),
+    ).toBe(true);
+  });
+
   it("resolves the development platform icon path", () => {
     const harness = createHarness({ platform: "linux", isDev: true });
     harness.controller.create();
 
+    harness.controller.setUpdateStatus("available", "1.2.3");
+
     expect(harness.createFromPath).toHaveBeenCalledWith(
       "/repo/apps/desktop/resources/icon.ico",
     );
+    expect(harness.tray.setImage).not.toHaveBeenCalled();
   });
 
   it("uses the unpacked platform icon when the packaged icon is empty", () => {

@@ -135,6 +135,52 @@ or an explicit story harness; the runtime component must not create delayed
 demo timers. This removes the three competing development states that replaced
 the real `Update check disabled in development mode` result after one click.
 
+### `DES-UPDATER-007`: Rich release notes and continuous download layout
+
+Preview channel discovery already requests the GitHub Releases API to identify
+the newest prerelease tag. That bounded response also contains the exact
+published Release body, so `FeedContext` carries it alongside the tag and uses
+it only when the candidate version matches that tag. This adds no request,
+retry, or unbounded cache. Stable checks keep the existing packaged changelog
+and manifest fallback.
+
+The renderer continues to sanitize Markdown. Release-note images are restricted
+to HTTPS hosts owned by GitHub or Shields, load lazily, and send no referrer;
+blocked images degrade to alt text. The dialog retains the last available update
+metadata locally while progress events arrive, avoiding repeated IPC
+serialization of a large release body. The progress track spans the content
+width and the right-aligned value is the only visible percentage.
+
+### `DES-UPDATER-008`: Explicit source policy and cancellable replacement
+
+Updater requests accept `automatic`, `official`, or `mirror` while retaining
+the legacy boolean input for compatibility. Automatic mode is a bounded linear
+sequence: one official candidate followed by four configured mirrors. A source
+change cancels the current `electron-updater` `CancellationToken`, waits for the
+old promise to settle, resets progress, refreshes metadata for the replacement
+provider, and starts a new verified download. This adds at most one metadata
+request per attempted source and keeps memory constant.
+
+Renderer state owns only the user's current source selection and formatting of
+the existing `bytesPerSecond`, `transferred`, and `total` progress fields. The
+main process remains authoritative for transfer lifecycle and provider state.
+
+### `DES-UPDATER-009`: Native macOS update affordance
+
+`initUpdater` forwards its existing status stream to one trusted main-process
+consumer in addition to renderer IPC. The tray controller retains only the
+last actionable `{ status, version }` value: `available` and `downloaded`
+activate it, `not-available` clears it, and transient checking, downloading,
+or error states leave the last known result unchanged.
+
+The macOS tray loads one additional fixed Template Image next to the current
+icon. It is a deterministic black/transparent 16px and 32px Retina asset with
+an upward-arrow badge, so macOS still owns light, dark, selected, and
+accessibility tinting. The native menu uses one clickable item with a macOS
+`sublabel`; it opens the existing update dialog rather than duplicating update
+logic. State changes are constant-time, allocate one small object, and add no
+polling, network request, cache, or unbounded work.
+
 ## Tradeoffs
 
 - 采用 semver prerelease 版本号后，preview 版本编号会变长，但换来更稳定的更新语义与自动推断能力。
@@ -142,7 +188,10 @@ the real `Update check disabled in development mode` result after one click.
 
 ## Traceability
 
-| Requirement | Design | Verification | Task |
-| --- | --- | --- | --- |
+| Requirement      | Design            | Verification                           | Task                             |
+| ---------------- | ----------------- | -------------------------------------- | -------------------------------- |
 | `FR-UPDATER-005` | `DES-UPDATER-005` | `TEST-UPDATER-005`, `TEST-UPDATER-006` | `T-UPDATER-009`, `T-UPDATER-010` |
-| `FR-UPDATER-006` | `DES-UPDATER-006` | `TEST-UPDATER-007` | `T-UPDATER-011` |
+| `FR-UPDATER-006` | `DES-UPDATER-006` | `TEST-UPDATER-007`                     | `T-UPDATER-011`                  |
+| `FR-UPDATER-007` | `DES-UPDATER-007` | `TEST-UPDATER-008`, `TEST-UPDATER-009` | `T-UPDATER-012`, `T-UPDATER-013` |
+| `FR-UPDATER-008` | `DES-UPDATER-008` | `TEST-UPDATER-010`, `TEST-UPDATER-011` | `T-UPDATER-014`, `T-UPDATER-015` |
+| `FR-UPDATER-009` | `DES-UPDATER-009` | `TEST-UPDATER-012`                     | `T-UPDATER-016`                  |

@@ -403,6 +403,53 @@ describe("tray asset menu", () => {
     expect(onQuit).toHaveBeenCalledOnce();
   });
 
+  it("replaces the generic update check with an actionable available version", () => {
+    const labels = getTrayMenuLabels("zh");
+    const onCommand = vi.fn<(command: AppCommand) => void>();
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: false,
+      isWindowVisible: true,
+      labels,
+      onCommand,
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+      updateState: { status: "available", version: "1.2.3" },
+    });
+
+    const updateItem = template.find(
+      (entry) => entry.label === "版本 1.2.3 可用",
+    );
+    expect(updateItem).toMatchObject({ sublabel: "点击查看更新详情…" });
+    expect(template.some((entry) => entry.label === labels.checkUpdates)).toBe(
+      false,
+    );
+    expect(updateItem?.click).toBeTypeOf("function");
+    (updateItem?.click as () => void)();
+    expect(onCommand).toHaveBeenCalledWith({ type: "updater:open" });
+  });
+
+  it("distinguishes a downloaded update that is ready to install", () => {
+    const labels = getTrayMenuLabels("en");
+    const template = buildTrayMenuTemplate({
+      agentManagementEnabled: false,
+      isWindowVisible: true,
+      labels,
+      onCommand: vi.fn(),
+      onQuit: vi.fn(),
+      onToggleWindow: vi.fn(),
+      updateState: { status: "downloaded", version: "1.2.3" },
+    });
+
+    expect(template).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Version 1.2.3 ready to install",
+          sublabel: "Click to view update details…",
+        }),
+      ]),
+    );
+  });
+
   it("uses a dynamic visibility label", () => {
     const labels = getTrayMenuLabels("en");
     const common = {

@@ -27,6 +27,16 @@ export interface ProgressInfo {
 }
 
 type MacInstallSource = 'direct' | 'homebrew' | 'unknown';
+type UpdateSource = 'automatic' | 'official' | 'mirror';
+
+function formatTransferBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const mebibytes = bytes / (1024 * 1024);
+  if (mebibytes >= 1) return `${mebibytes.toFixed(1)} MB`;
+  const kibibytes = bytes / 1024;
+  if (kibibytes >= 1) return `${kibibytes.toFixed(1)} KB`;
+  return `${Math.round(bytes)} B`;
+}
 
 const releaseNoteMarkdownComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
   a: ({
@@ -52,7 +62,54 @@ const releaseNoteMarkdownComponents: ComponentProps<typeof ReactMarkdown>["compo
       </a>
     );
   },
+  img: ({
+    alt,
+    node: _node,
+    src,
+    ...props
+  }: ComponentProps<"img"> & { node?: unknown }) => {
+    const safeSrc = resolveReleaseNoteImageSrc(src);
+
+    if (!safeSrc) {
+      return alt ? <span className="text-muted-foreground">{alt}</span> : null;
+    }
+
+    return (
+      <img
+        {...props}
+        src={safeSrc}
+        alt={alt || ""}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
+    );
+  },
 };
+
+const RELEASE_NOTE_IMAGE_HOSTS = new Set([
+  "avatars.githubusercontent.com",
+  "github.com",
+  "img.shields.io",
+  "private-user-images.githubusercontent.com",
+  "raw.githubusercontent.com",
+  "user-images.githubusercontent.com",
+]);
+
+function resolveReleaseNoteImageSrc(src: unknown): string | undefined {
+  if (typeof src !== "string" || !src.trim()) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(src.trim());
+    return parsed.protocol === "https:" &&
+      RELEASE_NOTE_IMAGE_HOSTS.has(parsed.hostname.toLowerCase())
+      ? parsed.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export type UpdateStatus =
   | { status: 'checking' }
@@ -82,7 +139,14 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
   const updateChannel = useSettingsStore((state) => state.updateChannel);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(initialStatus || null);
   const updateStatusRef = useRef<UpdateStatus | null>(initialStatus || null);
-  const [useMirror, setUseMirror] = useState<boolean>(useUpdateMirror);
+  const lastUpdateInfoRef = useRef<UpdateInfo | null>(
+    initialStatus?.status === 'available' || initialStatus?.status === 'downloaded'
+      ? initialStatus.info
+      : null,
+  );
+  const [downloadSource, setDownloadSource] = useState<UpdateSource>(
+    useUpdateMirror ? 'mirror' : 'automatic',
+  );
   const [currentVersion, setCurrentVersion] = useState<string>('');
   const [platform, setPlatform] = useState<string>('');
   const [installSource, setInstallSource] = useState<MacInstallSource>('unknown');
@@ -92,6 +156,12 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
   const [isInstalling, setIsInstalling] = useState(false);
   const [hasAcknowledgedBackup, setHasAcknowledgedBackup] = useState(false);
   const [isManualRefreshPending, setIsManualRefreshPending] = useState(false);
+  const [isChangingDownloadSource, setIsChangingDownloadSource] = useState(false);
+  const downloadRequestRef = useRef(0);
+
+  useEffect(() => {
+    setDownloadSource(useUpdateMirror ? 'mirror' : 'automatic');
+  }, [useUpdateMirror]);
 
   useEffect(() => {
     // Keep the ref in sync with the `initialStatus` prop, including `null`
@@ -102,6 +172,14 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
     // computation would both misbehave on the next open.
     setUpdateStatus(initialStatus ?? null);
     updateStatusRef.current = initialStatus ?? null;
+    if (
+      initialStatus?.status === 'available' ||
+      initialStatus?.status === 'downloaded'
+    ) {
+      lastUpdateInfoRef.current = initialStatus.info;
+    } else if (initialStatus === null) {
+      lastUpdateInfoRef.current = null;
+    }
   }, [initialStatus]);
 
   useEffect(() => {
@@ -136,6 +214,14 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
       }
 
       updateStatusRef.current = status;
+      if (status.status === 'downloading' && status.progress.percent > 0) {
+        setIsChangingDownloadSource(false);
+      }
+      if (status.status === 'available' || status.status === 'downloaded') {
+        lastUpdateInfoRef.current = status.info;
+      } else if (status.status === 'not-available') {
+        lastUpdateInfoRef.current = null;
+      }
       setUpdateStatus(status);
       if (status.status !== 'checking') {
         setIsManualRefreshPending(false);
@@ -171,23 +257,23 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
         setLastManualBackupAt(status.lastManualBackupAt);
         setLastManualBackupVersion(status.lastManualBackupVersion);
       });
-      void handleCheckUpdate(useUpdateMirror, {
+      void handleCheckUpdate(useUpdateMirror ? 'mirror' : 'automatic', {
         preserveVisibleStatus: isStableUpgradeState(updateStatusRef.current),
       });
     }
   }, [isOpen, updateChannel, useUpdateMirror]);
 
   const handleCheckUpdate = async (
-    mirror: boolean,
+    source: UpdateSource,
     options?: { preserveVisibleStatus?: boolean },
   ) => {
-    setUseMirror(mirror);
+    setDownloadSource(source);
     setIsManualRefreshPending(true);
     if (!options?.preserveVisibleStatus) {
       setUpdateStatus({ status: 'checking' });
     }
     const result = await window.electron?.updater?.check({
-      useMirror: mirror,
+      source,
       channel: updateChannel,
     });
     // If update check returns an error (e.g. in dev), set error status
@@ -203,7 +289,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
     // 注意：成功的情况会通过 onStatus 回调处理
   };
 
-  const handleDownload = async () => {
+  const handleDownload = async (source: UpdateSource = downloadSource) => {
     if (platform === 'darwin' && installSource === 'homebrew') {
       setUpdateStatus({
         status: 'error',
@@ -211,10 +297,42 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
       });
       return;
     }
-    await window.electron?.updater?.download({
-      useMirror,
+    const requestId = ++downloadRequestRef.current;
+    const result = await window.electron?.updater?.download({
+      source,
       channel: updateChannel,
     });
+    if (
+      requestId === downloadRequestRef.current &&
+      result &&
+      !result.success &&
+      !result.cancelled
+    ) {
+      setUpdateStatus({
+        status: 'error',
+        error: result.error || t('settings.updateDownloadFailed'),
+      });
+    }
+  };
+
+  const handleDownloadSourceChange = async (source: UpdateSource) => {
+    if (source === downloadSource) return;
+    setDownloadSource(source);
+
+    if (updateStatusRef.current?.status !== 'downloading') return;
+
+    const resetStatus: UpdateStatus = {
+      status: 'downloading',
+      progress: { percent: 0, bytesPerSecond: 0, transferred: 0, total: 0 },
+    };
+    updateStatusRef.current = resetStatus;
+    setUpdateStatus(resetStatus);
+    setIsChangingDownloadSource(true);
+    try {
+      await handleDownload(source);
+    } finally {
+      setIsChangingDownloadSource(false);
+    }
   };
 
   const handleInstall = async () => {
@@ -350,14 +468,14 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
   };
 
   const renderReleaseNotes = (releaseNotes: string) => (
-    <section className="rounded-xl border border-border/60 bg-muted/30">
-      <div className="border-b border-border/50 px-4 py-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <section aria-label={t('settings.releaseNotes')} className="min-h-0">
+      <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+        <p className="text-sm font-semibold text-foreground">
           {t('settings.releaseNotes')}
         </p>
       </div>
-      <div className="max-h-[360px] overflow-y-auto px-4 py-3 sm:max-h-[440px]">
-        <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-headings:text-foreground prose-h1:text-base prose-h1:font-semibold prose-h2:text-sm prose-h2:font-semibold prose-h3:text-sm prose-h3:font-medium prose-p:my-2 prose-p:text-[13px] prose-p:text-foreground/85 prose-li:text-[13px] prose-li:text-foreground/85 prose-pre:overflow-x-auto prose-pre:border prose-pre:border-border prose-pre:bg-background/80 prose-code:text-primary">
+      <div className="max-h-[min(52vh,480px)] overflow-y-auto pt-3 pr-2">
+        <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-headings:text-foreground prose-h1:text-lg prose-h1:font-semibold prose-h2:text-base prose-h2:font-semibold prose-h3:text-sm prose-h3:font-medium prose-p:my-2 prose-p:text-[13px] prose-p:text-foreground/85 prose-li:text-[13px] prose-li:text-foreground/85 prose-img:my-2 prose-img:max-w-full prose-img:rounded-md prose-blockquote:border-primary/40 prose-blockquote:text-foreground/80 prose-pre:overflow-x-auto prose-pre:border prose-pre:border-border prose-pre:bg-background/80 prose-code:text-primary prose-table:block prose-table:max-w-full prose-table:overflow-x-auto">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeSanitize]}
@@ -386,6 +504,42 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
     return Math.min(100, Math.max(0, progress.percent));
   };
 
+  const renderDownloadSourceControl = () => (
+    <section className="space-y-2" aria-label={t('settings.downloadSource')}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          {t('settings.downloadSource')}
+        </span>
+        {isChangingDownloadSource ? (
+          <span className="text-xs text-muted-foreground">
+            {t('settings.downloadRestarting')}
+          </span>
+        ) : null}
+      </div>
+      <div
+        role="group"
+        aria-label={t('settings.downloadSource')}
+        className="grid grid-cols-3 overflow-hidden rounded-md border border-border bg-muted/30 p-1"
+      >
+        {(['automatic', 'official', 'mirror'] as const).map((source) => (
+          <button
+            key={source}
+            type="button"
+            aria-pressed={downloadSource === source}
+            onClick={() => void handleDownloadSourceChange(source)}
+            className={`min-w-0 rounded px-3 py-2 text-xs font-medium transition-colors ${
+              downloadSource === source
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {t(`settings.downloadSource${source[0].toUpperCase()}${source.slice(1)}`)}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+
   const renderContent = () => {
     if (!updateStatus) {
       return (
@@ -395,7 +549,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
           </p>
           <button
             type="button"
-            onClick={() => handleCheckUpdate(useUpdateMirror)}
+            onClick={() => handleCheckUpdate(useUpdateMirror ? 'mirror' : 'automatic')}
             className={primaryButtonClass}
           >
             <RefreshCwIcon aria-hidden="true" className="w-4 h-4" />
@@ -411,7 +565,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
           <div className="flex min-h-[320px] flex-col items-center justify-center text-center">
             <Loader2Icon className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
             <p className="text-sm text-muted-foreground">
-              {useMirror ? t('settings.usingMirrorSource') : t('settings.checking')}
+              {downloadSource === 'mirror' ? t('settings.usingMirrorSource') : t('settings.checking')}
             </p>
           </div>
         );
@@ -434,6 +588,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
             {updateStatus.info?.releaseNotes && (
               renderReleaseNotes(updateStatus.info.releaseNotes)
             )}
+            {!isMacHomebrew ? renderDownloadSourceControl() : null}
             {isMacHomebrew && (
               <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
                 <p className="text-sm text-amber-600 dark:text-amber-400 whitespace-pre-line">
@@ -452,7 +607,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={isMacHomebrew ? () => window.electron?.updater?.openReleases() : handleDownload}
+                onClick={isMacHomebrew ? () => window.electron?.updater?.openReleases() : () => void handleDownload()}
                 disabled={isCreatingBackup}
                 className={primaryButtonClass}
               >
@@ -492,23 +647,48 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
 
       case 'downloading':
         const percent = getProgressPercent(updateStatus.progress);
+        const releaseNotes = lastUpdateInfoRef.current?.releaseNotes;
         return (
-          <div className="flex min-h-[320px] flex-col items-center justify-center py-4">
-            <div className="w-full max-w-md mb-4">
-              <div className="flex justify-between text-sm mb-2">
-                <span>{t('settings.downloading')}</span>
-                <span>{percent.toFixed(1)}%</span>
+          <div className="flex min-h-[320px] flex-col gap-6 py-2">
+            <section aria-live="polite" className="w-full">
+              <div className="mb-3 flex items-baseline justify-between gap-4">
+                <span className="text-sm font-medium text-foreground">
+                  {t('settings.downloading')}
+                </span>
+                <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                  {percent.toFixed(1)}%
+                </span>
               </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                role="progressbar"
+                aria-label={t('settings.downloading')}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={percent}
+                className="h-2.5 w-full overflow-hidden rounded-full bg-muted"
+              >
                 <div
-                  className="h-full bg-primary transition-all duration-smooth"
+                  className="h-full rounded-full bg-primary transition-all duration-smooth"
                   style={{ width: `${percent}%` }}
                 />
               </div>
-            </div>
-            <p className="text-center text-sm text-muted-foreground">
-              {t('settings.downloadProgress', { percent: percent.toFixed(1) })}
-            </p>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs tabular-nums text-muted-foreground">
+                <span>
+                  {formatTransferBytes(updateStatus.progress.transferred)} / {formatTransferBytes(updateStatus.progress.total)}
+                </span>
+                <span>{formatTransferBytes(updateStatus.progress.bytesPerSecond)}/s</span>
+              </div>
+            </section>
+            {renderDownloadSourceControl()}
+            <button
+              type="button"
+              onClick={() => window.electron?.updater?.openReleases()}
+              className={`${secondaryButtonClass} self-start`}
+            >
+              <ExternalLinkIcon aria-hidden="true" className="h-4 w-4" />
+              {t('settings.manualDownload')}
+            </button>
+            {releaseNotes ? renderReleaseNotes(releaseNotes) : null}
           </div>
         );
 
@@ -529,6 +709,9 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
                 </p>
               </div>
             </div>
+            {updateStatus.info?.releaseNotes
+              ? renderReleaseNotes(updateStatus.info.releaseNotes)
+              : null}
             {!isMacHomebrewDownloaded && (
               <p className="text-xs text-muted-foreground">
                 {t('settings.installRestartHint')}
@@ -663,7 +846,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
           </span>
           <button
             type="button"
-            onClick={() => void handleCheckUpdate(useUpdateMirror, {
+            onClick={() => void handleCheckUpdate(useUpdateMirror ? 'mirror' : 'automatic', {
               preserveVisibleStatus: isStableUpgradeState(updateStatus),
             })}
             disabled={isManualRefreshPending}

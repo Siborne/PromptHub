@@ -24,6 +24,16 @@
 - 修复预览包默认通道、降级误报、preview manifest 缺失、UI 闪烁问题
 - Signed and notarized direct-install macOS builds use the native `electron-updater`
   download and restart path instead of a manually opened DMG.
+- Preview update notes reuse the exact published GitHub Release body so its
+  headings, emoji, badges, images, links, and release-specific notices survive
+  the updater metadata path.
+- The download state keeps the release notes visible, uses the available modal
+  width for progress, and presents one authoritative percentage.
+- Download source selection is explicit (`automatic`, `official`, `mirror`),
+  can restart an active transfer from zero, and keeps size, speed, and manual
+  download information visible.
+- macOS surfaces a detected update directly in the menu bar icon and native
+  menu, with one action that opens the existing update dialog.
 - 明确 preview release 与 stable release 的发布策略，并同步到 release 规则
 - 补充主进程 updater、renderer 更新状态流、发布约束测试
 
@@ -31,6 +41,7 @@
 - Web 自部署版本发布策略
 - Homebrew 发布逻辑重构
 - 网站下载页视觉改版
+- Windows and Linux tray icon redesign
 
 ## Risks
 

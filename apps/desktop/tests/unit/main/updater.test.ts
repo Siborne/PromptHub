@@ -14,8 +14,21 @@ const networkProxyMocks = vi.hoisted(() => ({
   getHttpRequestAgentMock: vi.fn(() => ({ kind: "proxy-agent" })),
 }));
 
+const upgradeBackupMocks = vi.hoisted(() => ({
+  createUpgradeDataSnapshotMock: vi.fn(async () => ({
+    backupId: "upgrade-point",
+    backupPath: "/tmp/upgrade-point",
+    manifest: {},
+  })),
+}));
+
 function mockGithubReleases(
-  releases: Array<{ tag_name: string; prerelease: boolean; draft?: boolean }>,
+  releases: Array<{
+    tag_name: string;
+    prerelease: boolean;
+    draft?: boolean;
+    body?: string;
+  }>,
 ) {
   httpsGetMock.mockImplementation((_options, callback) => {
     const response = {
@@ -66,10 +79,32 @@ vi.mock("../../../src/main/services/network-proxy", () => ({
   getHttpRequestAgent: networkProxyMocks.getHttpRequestAgentMock,
 }));
 
+vi.mock("../../../src/main/services/upgrade-backup", () => ({
+  createUpgradeDataSnapshot: upgradeBackupMocks.createUpgradeDataSnapshotMock,
+}));
+
 // Mock electron-updater behavior
 vi.mock("electron-updater", () => {
   const handlers: Record<string, Function> = {};
+  class CancellationToken {
+    cancelled = false;
+    private cancelHandlers: Array<() => void> = [];
+
+    cancel() {
+      this.cancelled = true;
+      for (const handler of this.cancelHandlers) handler();
+    }
+
+    on(event: string, handler: () => void) {
+      if (event === "cancel") this.cancelHandlers.push(handler);
+    }
+
+    dispose() {
+      this.cancelHandlers = [];
+    }
+  }
   return {
+    CancellationToken,
     autoUpdater: {
       on: vi.fn((event, handler) => {
         handlers[event] = handler;
@@ -119,6 +154,9 @@ describe("Updater Service (Main Process)", () => {
     autoUpdater.allowPrerelease = false;
     // @ts-ignore
     autoUpdater.allowDowngrade = false;
+    vi.mocked(autoUpdater.checkForUpdates).mockResolvedValue({} as never);
+    vi.mocked(autoUpdater.downloadUpdate).mockResolvedValue([]);
+    upgradeBackupMocks.createUpgradeDataSnapshotMock.mockClear();
 
     httpsGetMock.mockReset();
     mockGithubReleases([
@@ -143,6 +181,63 @@ describe("Updater Service (Main Process)", () => {
 
     expect(autoUpdater.autoDownload).toBe(false);
     expect(autoUpdater.autoInstallOnAppQuit).toBe(false);
+  });
+
+  it("publishes real updater states to the native tray consumer", () => {
+    const onStatus = vi.fn();
+    initUpdater(mockWindow, onStatus);
+
+    // @ts-ignore test-only electron-updater event trigger
+    autoUpdater._trigger?.("update-available", {
+      version: "1.1.0",
+      releaseNotes: "Ready",
+    });
+
+    expect(onStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "available",
+        info: expect.objectContaining({ version: "1.1.0" }),
+      }),
+    );
+  });
+
+  it("keeps renderer update delivery working when the tray consumer fails", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    initUpdater(mockWindow, () => {
+      throw new Error("private tray failure");
+    });
+
+    // @ts-ignore test-only electron-updater event trigger
+    autoUpdater._trigger?.("update-not-available", { version: "1.0.0" });
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to publish updater status to native consumers",
+    );
+    expect(mockWindow.webContents.send).toHaveBeenCalledWith(
+      "updater:status",
+      expect.objectContaining({ status: "not-available" }),
+    );
+  });
+
+  it("binds the downloaded target version to the install safety point", async () => {
+    initUpdater(mockWindow);
+    registerUpdaterIPC();
+    // @ts-ignore test-only electron-updater event trigger
+    autoUpdater._trigger?.("update-downloaded", { version: "1.1.0" });
+    const installHandler = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.find(([channel]) => channel === "updater:install")?.[1] as () => Promise<{
+      success: boolean;
+    }>;
+
+    await expect(installHandler()).resolves.toMatchObject({ success: true });
+    expect(upgradeBackupMocks.createUpgradeDataSnapshotMock).toHaveBeenCalledWith(
+      "/tmp",
+      { fromVersion: "1.0.0", toVersion: "1.1.0" },
+    );
+    expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
   });
 
   it("reports the product package version when Electron is unpackaged", () => {
@@ -210,6 +305,85 @@ describe("Updater Service (Main Process)", () => {
     expect(result).toEqual({ success: true });
   });
 
+  it("falls back from the official source to a mirror in automatic mode", async () => {
+    registerUpdaterIPC();
+    vi.mocked(autoUpdater.checkForUpdates)
+      .mockRejectedValueOnce(new Error("official unavailable"))
+      .mockResolvedValue({} as never);
+
+    const downloadHandler = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.find(([channel]) => channel === "updater:download")?.[1] as (
+      event: unknown,
+      options: { source: "automatic"; channel: "stable" },
+    ) => Promise<{ success: boolean }>;
+
+    const result = await downloadHandler({}, {
+      source: "automatic",
+      channel: "stable",
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ provider: "github" }),
+    );
+    expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        provider: "generic",
+        url: expect.stringContaining("ghfast.top"),
+      }),
+    );
+    expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels the active download and starts only the latest replacement", async () => {
+    initUpdater(mockWindow);
+    registerUpdaterIPC();
+    let rejectActiveDownload: ((error: Error) => void) | undefined;
+    vi.mocked(autoUpdater.downloadUpdate)
+      .mockImplementationOnce((token: any) =>
+        new Promise((_resolve, reject) => {
+          rejectActiveDownload = reject;
+          token.on("cancel", () => reject(new Error("cancelled")));
+        }),
+      )
+      .mockResolvedValueOnce([]);
+
+    const downloadHandler = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.find(([channel]) => channel === "updater:download")?.[1] as (
+      event: unknown,
+      options: { source: "official" | "mirror"; channel: "stable" },
+    ) => Promise<{ success: boolean; cancelled?: boolean }>;
+
+    const first = downloadHandler({}, { source: "official", channel: "stable" });
+    await vi.waitFor(() => {
+      expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1);
+    });
+    const second = downloadHandler({}, { source: "official", channel: "stable" });
+    const latest = downloadHandler({}, { source: "mirror", channel: "stable" });
+
+    await expect(first).resolves.toEqual({ success: false, cancelled: true });
+    await expect(second).resolves.toEqual({ success: false, cancelled: true });
+    await expect(latest).resolves.toEqual({ success: true });
+    expect(rejectActiveDownload).toBeTypeOf("function");
+    expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(2);
+    expect(mockWindow.webContents.send).toHaveBeenCalledWith(
+      "updater:status",
+      {
+        status: "downloading",
+        progress: {
+          percent: 0,
+          bytesPerSecond: 0,
+          transferred: 0,
+          total: 0,
+        },
+      },
+    );
+  });
+
   it('should send "available" status to window when update found', () => {
     initUpdater(mockWindow);
 
@@ -227,6 +401,47 @@ describe("Updater Service (Main Process)", () => {
       expect.objectContaining({
         status: "available",
         info: info,
+      }),
+    );
+  });
+
+  it("uses the exact preview release body for rich update notes", async () => {
+    const releaseBody = [
+      "## 📦 Download",
+      "[![Windows](https://img.shields.io/badge/Windows-x64-blue)](https://github.com/legeling/PromptHub/releases)",
+    ].join("\n\n");
+    mockGithubReleases([
+      {
+        tag_name: "v1.1.0-beta.2",
+        prerelease: true,
+        draft: false,
+        body: releaseBody,
+      },
+    ]);
+    initUpdater(mockWindow);
+    registerUpdaterIPC();
+    const checkHandler = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.find(([channel]) => channel === "updater:check")?.[1] as (
+      event: unknown,
+      options: { useMirror: boolean; channel: "preview" },
+    ) => Promise<unknown>;
+
+    await checkHandler({}, { useMirror: false, channel: "preview" });
+    // @ts-ignore test-only electron-updater event trigger
+    autoUpdater._trigger?.("update-available", {
+      version: "1.1.0-beta.2",
+      releaseNotes: "manifest fallback",
+    });
+
+    expect(mockWindow.webContents.send).toHaveBeenLastCalledWith(
+      "updater:status",
+      expect.objectContaining({
+        status: "available",
+        info: expect.objectContaining({
+          version: "1.1.0-beta.2",
+          releaseNotes: releaseBody,
+        }),
       }),
     );
   });

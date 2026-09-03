@@ -293,12 +293,20 @@ contextBridge.exposeInMainWorld("electron", {
     check: (
       options?:
         | boolean
-        | { useMirror?: boolean; channel?: "stable" | "preview" },
+        | {
+            useMirror?: boolean;
+            source?: "automatic" | "official" | "mirror";
+            channel?: "stable" | "preview";
+          },
     ) => ipcRenderer.invoke("updater:check", options),
     download: (
       options?:
         | boolean
-        | { useMirror?: boolean; channel?: "stable" | "preview" },
+        | {
+            useMirror?: boolean;
+            source?: "automatic" | "official" | "mirror";
+            channel?: "stable" | "preview";
+          },
     ) => ipcRenderer.invoke("updater:download", options),
     install: () => ipcRenderer.invoke("updater:install"),
     getInstallSource: () => ipcRenderer.invoke("updater:installSource"),
@@ -619,13 +627,21 @@ declare global {
         check: (
           options?:
             | boolean
-            | { useMirror?: boolean; channel?: "stable" | "preview" },
+            | {
+                useMirror?: boolean;
+                source?: "automatic" | "official" | "mirror";
+                channel?: "stable" | "preview";
+              },
         ) => Promise<{ success: boolean; result?: any; error?: string }>;
         download: (
           options?:
             | boolean
-            | { useMirror?: boolean; channel?: "stable" | "preview" },
-        ) => Promise<{ success: boolean; error?: string }>;
+            | {
+                useMirror?: boolean;
+                source?: "automatic" | "official" | "mirror";
+                channel?: "stable" | "preview";
+              },
+        ) => Promise<{ success: boolean; cancelled?: boolean; error?: string }>;
         install: () => Promise<{
           success: boolean;
           manual?: boolean;

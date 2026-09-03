@@ -12,7 +12,11 @@ import type {
 } from "@prompthub/shared/types";
 
 import { loadMacTrayTemplateIcon, resolveMacTrayIconPaths } from "./tray-icon";
-import { buildTrayMenuTemplate, getTrayMenuLabels } from "./tray-menu";
+import {
+  buildTrayMenuTemplate,
+  getTrayMenuLabels,
+  type TrayUpdateState,
+} from "./tray-menu";
 import type { AgentProviderTrayGroup } from "./services/agent-provider-tray-service";
 import {
   createAgentUsageTrayProjection,
@@ -48,6 +52,16 @@ export interface TrayController {
   refresh: () => void;
   reloadAgentProviders: () => Promise<void>;
   reloadAgentUsage: (forceRefresh?: boolean) => Promise<void>;
+  setUpdateStatus: (
+    status:
+      | "checking"
+      | "available"
+      | "not-available"
+      | "downloading"
+      | "downloaded"
+      | "error",
+    version?: string,
+  ) => void;
 }
 
 function loadPlatformTrayIcon(options: TrayControllerOptions): NativeImage {
@@ -92,6 +106,9 @@ export function createTrayController(
   options: TrayControllerOptions,
 ): TrayController {
   let tray: Tray | null = null;
+  let baseIcon: NativeImage | null = null;
+  let updateIcon: NativeImage | null = null;
+  let updateState: TrayUpdateState = null;
   let agentProviderGroups: AgentProviderTrayGroup[] = [];
   let providerLoadGeneration = 0;
   let usageProjection: AgentUsageTrayProjection | null = null;
@@ -113,6 +130,7 @@ export function createTrayController(
       onRefreshAgentUsage: () => void reloadAgentUsage(true),
       onQuit: options.onQuit,
       onToggleWindow: options.onToggleWindow,
+      updateState,
     });
     tray.setContextMenu(options.buildMenu(template));
   };
@@ -149,8 +167,25 @@ export function createTrayController(
       icon = loadFallbackTrayIcon(options);
     }
 
+    baseIcon = icon;
+    if (options.platform === "darwin") {
+      const { updateTemplatePath } = resolveMacTrayIconPaths({
+        dirname: options.dirname,
+        isDev: options.isDev,
+        resourcesPath: options.getResourcesPath(),
+      });
+      try {
+        updateIcon = loadMacTrayTemplateIcon({
+          createFromPath: options.createFromPath,
+          templatePath: updateTemplatePath,
+        });
+      } catch {
+        console.error("Failed to load macOS update tray icon");
+      }
+    }
+
     ensureUsageProjection();
-    tray = options.createTray(icon);
+    tray = options.createTray(updateState && updateIcon ? updateIcon : icon);
     tray.setToolTip("PromptHub");
     refresh();
     void reloadAgentProviders();
@@ -172,6 +207,38 @@ export function createTrayController(
     usageProjection = null;
     tray?.destroy();
     tray = null;
+    baseIcon = null;
+    updateIcon = null;
+  };
+
+  const setUpdateStatus: TrayController["setUpdateStatus"] = (
+    status,
+    version,
+  ) => {
+    let nextState = updateState;
+    if (
+      (status === "available" || status === "downloaded") &&
+      version?.trim()
+    ) {
+      nextState = { status, version: version.trim() };
+    } else if (status === "not-available") {
+      nextState = null;
+    } else {
+      return;
+    }
+    if (
+      nextState?.status === updateState?.status &&
+      nextState?.version === updateState?.version
+    ) {
+      return;
+    }
+
+    updateState = nextState;
+    if (!tray) return;
+    if (options.platform === "darwin" && baseIcon) {
+      tray.setImage(updateState && updateIcon ? updateIcon : baseIcon);
+    }
+    refresh();
   };
 
   return {
@@ -180,5 +247,6 @@ export function createTrayController(
     refresh,
     reloadAgentProviders,
     reloadAgentUsage,
+    setUpdateStatus,
   };
 }

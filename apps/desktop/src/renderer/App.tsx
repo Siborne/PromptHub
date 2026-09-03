@@ -445,7 +445,7 @@ function App() {
 
       isUpdateCheckInFlightRef.current = true;
       const p = window.electron?.updater?.check({
-        useMirror: settings.useUpdateMirror,
+        source: settings.useUpdateMirror ? "mirror" : "automatic",
         channel: settings.updateChannel,
       });
       if (p && typeof (p as Promise<unknown>).finally === "function") {

@@ -72,6 +72,9 @@ export interface TrayMenuLabels {
   showPromptHub: string;
   hidePromptHub: string;
   checkUpdates: string;
+  updateAvailable: string;
+  updateReady: string;
+  updateDetails: string;
   settings: string;
   quitPromptHub: string;
 }
@@ -126,6 +129,9 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     showPromptHub: "Show PromptHub",
     hidePromptHub: "Hide PromptHub",
     checkUpdates: "Check for Updates…",
+    updateAvailable: "Version {version} available",
+    updateReady: "Version {version} ready to install",
+    updateDetails: "Click to view update details…",
     settings: "Settings…",
     quitPromptHub: "Quit PromptHub",
   },
@@ -178,6 +184,9 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     showPromptHub: "显示 PromptHub",
     hidePromptHub: "隐藏 PromptHub",
     checkUpdates: "检查更新…",
+    updateAvailable: "版本 {version} 可用",
+    updateReady: "版本 {version} 已可安装",
+    updateDetails: "点击查看更新详情…",
     settings: "设置…",
     quitPromptHub: "退出 PromptHub",
   },
@@ -230,6 +239,9 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     showPromptHub: "顯示 PromptHub",
     hidePromptHub: "隱藏 PromptHub",
     checkUpdates: "檢查更新…",
+    updateAvailable: "版本 {version} 可用",
+    updateReady: "版本 {version} 已可安裝",
+    updateDetails: "點擊查看更新詳情…",
     settings: "設定…",
     quitPromptHub: "結束 PromptHub",
   },
@@ -282,6 +294,9 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     showPromptHub: "PromptHub を表示",
     hidePromptHub: "PromptHub を隠す",
     checkUpdates: "アップデートを確認…",
+    updateAvailable: "バージョン {version} を利用できます",
+    updateReady: "バージョン {version} をインストールできます",
+    updateDetails: "クリックして更新の詳細を表示…",
     settings: "設定…",
     quitPromptHub: "PromptHub を終了",
   },
@@ -334,6 +349,9 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     showPromptHub: "Afficher PromptHub",
     hidePromptHub: "Masquer PromptHub",
     checkUpdates: "Rechercher des mises à jour…",
+    updateAvailable: "Version {version} disponible",
+    updateReady: "Version {version} prête à installer",
+    updateDetails: "Cliquez pour afficher les détails…",
     settings: "Réglages…",
     quitPromptHub: "Quitter PromptHub",
   },
@@ -386,6 +404,9 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     showPromptHub: "PromptHub anzeigen",
     hidePromptHub: "PromptHub ausblenden",
     checkUpdates: "Nach Updates suchen…",
+    updateAvailable: "Version {version} verfügbar",
+    updateReady: "Version {version} ist installationsbereit",
+    updateDetails: "Klicken, um Updatedetails anzuzeigen…",
     settings: "Einstellungen…",
     quitPromptHub: "PromptHub beenden",
   },
@@ -438,6 +459,9 @@ const LABELS: Record<Language, TrayMenuLabels> = {
     showPromptHub: "Mostrar PromptHub",
     hidePromptHub: "Ocultar PromptHub",
     checkUpdates: "Buscar actualizaciones…",
+    updateAvailable: "Versión {version} disponible",
+    updateReady: "Versión {version} lista para instalar",
+    updateDetails: "Haz clic para ver los detalles…",
     settings: "Ajustes…",
     quitPromptHub: "Salir de PromptHub",
   },
@@ -627,6 +651,11 @@ function buildNativeUsageEntry(
   return { label, submenu };
 }
 
+export type TrayUpdateState = {
+  status: "available" | "downloaded";
+  version: string;
+} | null;
+
 interface BuildTrayMenuTemplateOptions {
   agentManagementEnabled: boolean;
   agentProviderGroups?: AgentProviderTrayGroup[];
@@ -639,6 +668,7 @@ interface BuildTrayMenuTemplateOptions {
   onRefreshAgentUsage?: () => void;
   onQuit: () => void;
   onToggleWindow: () => void;
+  updateState?: TrayUpdateState;
 }
 
 export function buildTrayMenuTemplate({
@@ -653,6 +683,7 @@ export function buildTrayMenuTemplate({
   onRefreshAgentUsage = () => undefined,
   onQuit,
   onToggleWindow,
+  updateState = null,
 }: BuildTrayMenuTemplateOptions): MenuItemConstructorOptions[] {
   const template: MenuItemConstructorOptions[] = [
     {
@@ -755,16 +786,31 @@ export function buildTrayMenuTemplate({
     }
   }
 
+  const updateItem: MenuItemConstructorOptions = updateState
+    ? {
+        label: formatNativeTemplate(
+          updateState.status === "downloaded"
+            ? labels.updateReady
+            : labels.updateAvailable,
+          {
+            version: sanitizeNativeMenuLabel(updateState.version, ""),
+          },
+        ),
+        sublabel: labels.updateDetails,
+        click: () => onCommand({ type: "updater:open" }),
+      }
+    : {
+        label: labels.checkUpdates,
+        click: () => onCommand({ type: "updater:open" }),
+      };
+
   template.push(
     { type: "separator" },
     {
       label: isWindowVisible ? labels.hidePromptHub : labels.showPromptHub,
       click: onToggleWindow,
     },
-    {
-      label: labels.checkUpdates,
-      click: () => onCommand({ type: "updater:open" }),
-    },
+    updateItem,
     {
       label: labels.settings,
       click: () => onCommand({ type: "settings:open" }),

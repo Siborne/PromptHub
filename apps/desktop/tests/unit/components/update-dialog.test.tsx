@@ -253,6 +253,166 @@ describe("UpdateDialog", () => {
     );
   });
 
+  it("renders rich release notes while blocking untrusted remote images", async () => {
+    const status: UpdateStatus = {
+      status: "available",
+      info: {
+        version: "0.6.0-beta.1",
+        releaseNotes: [
+          "## 📦 Download",
+          "[![Windows x64](https://img.shields.io/badge/Windows_x64-blue)](https://github.com/legeling/PromptHub/releases)",
+          "![tracking pixel](https://tracker.example/pixel.png)",
+        ].join("\n\n"),
+      },
+    };
+
+    installWindowMocks({
+      electron: {
+        updater: {
+          check: vi.fn().mockResolvedValue({ success: true }),
+          getVersion: vi.fn().mockResolvedValue("0.5.9"),
+          getPlatform: vi.fn().mockResolvedValue("win32"),
+          onStatus: vi.fn(() => vi.fn()),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <UpdateDialog isOpen={true} onClose={vi.fn()} initialStatus={status} />,
+        { language: "en" },
+      );
+    });
+
+    expect(screen.getByRole("heading", { name: "📦 Download" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Windows x64" })).toHaveAttribute(
+      "src",
+      "https://img.shields.io/badge/Windows_x64-blue",
+    );
+    expect(screen.getByRole("img", { name: "Windows x64" })).toHaveAttribute(
+      "referrerpolicy",
+      "no-referrer",
+    );
+    expect(screen.queryByRole("img", { name: "tracking pixel" })).toBeNull();
+    expect(screen.getByText("tracking pixel")).toBeVisible();
+  });
+
+  it("keeps release notes visible during download and shows progress once", async () => {
+    let statusHandler: ((status: UpdateStatus) => void) | undefined;
+    const richAvailableStatus: UpdateStatus = {
+      status: "available",
+      info: {
+        version: "0.6.0-beta.1",
+        releaseNotes: "## 🔄 What's new\n\n![Preview](https://img.shields.io/badge/Preview-ready-purple)",
+      },
+    };
+
+    installWindowMocks({
+      electron: {
+        updater: {
+          check: vi.fn().mockResolvedValue({ success: true }),
+          getVersion: vi.fn().mockResolvedValue("0.5.9"),
+          getPlatform: vi.fn().mockResolvedValue("win32"),
+          onStatus: vi.fn((callback: (status: UpdateStatus) => void) => {
+            statusHandler = callback;
+            return vi.fn();
+          }),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <UpdateDialog
+          isOpen={true}
+          onClose={vi.fn()}
+          initialStatus={richAvailableStatus}
+        />,
+        { language: "en" },
+      );
+    });
+
+    await act(async () => {
+      statusHandler?.({
+        status: "downloading",
+        progress: {
+          percent: 42.5,
+          bytesPerSecond: 1024,
+          total: 2048,
+          transferred: 1024,
+        },
+      });
+    });
+
+    expect(screen.getByRole("heading", { name: "🔄 What's new" })).toBeVisible();
+    expect(screen.getAllByText("42.5%")).toHaveLength(1);
+    const progressbar = screen.getByRole("progressbar", {
+      name: "Downloading...",
+    });
+    expect(progressbar).toHaveAttribute("aria-valuenow", "42.5");
+    expect(progressbar).toHaveClass("w-full");
+    expect(progressbar).not.toHaveClass("max-w-md");
+  });
+
+  it("shows transfer metrics and restarts the download when its source changes", async () => {
+    let statusHandler: ((status: UpdateStatus) => void) | undefined;
+    const download = vi.fn().mockResolvedValue({ success: true });
+    const openReleases = vi.fn().mockResolvedValue(undefined);
+    installWindowMocks({
+      electron: {
+        updater: {
+          check: vi.fn().mockResolvedValue({ success: true }),
+          download,
+          getVersion: vi.fn().mockResolvedValue("0.5.9"),
+          getPlatform: vi.fn().mockResolvedValue("win32"),
+          openReleases,
+          onStatus: vi.fn((callback: (status: UpdateStatus) => void) => {
+            statusHandler = callback;
+            callback(availableStatus);
+            return vi.fn();
+          }),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <UpdateDialog isOpen={true} onClose={vi.fn()} initialStatus={availableStatus} />,
+        { language: "en" },
+      );
+    });
+    await act(async () => {
+      statusHandler?.({
+        status: "downloading",
+        progress: {
+          percent: 40,
+          bytesPerSecond: 3.5 * 1024 * 1024,
+          transferred: 48 * 1024 * 1024,
+          total: 120 * 1024 * 1024,
+        },
+      });
+    });
+
+    expect(screen.getByText("48.0 MB / 120.0 MB")).toBeVisible();
+    expect(screen.getByText("3.5 MB/s")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Automatic" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Mirror" }));
+    await waitFor(() => {
+      expect(download).toHaveBeenCalledWith({
+        source: "mirror",
+        channel: "stable",
+      });
+    });
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
+
+    fireEvent.click(screen.getByRole("button", { name: "Manual Download" }));
+    expect(openReleases).toHaveBeenCalledTimes(1);
+  });
+
   it("hides install backup gating for Homebrew-managed available updates", async () => {
     installWindowMocks({
       electron: {
@@ -506,9 +666,7 @@ describe("UpdateDialog", () => {
       );
     });
 
-    expect(screen.getAllByText(/100\.0%/).length).toBeGreaterThanOrEqual(
-      1,
-    );
+    expect(screen.getAllByText(/100\.0%/)).toHaveLength(1);
   });
 
   // Regression guard for the flickering loop reported in #117/#118.
