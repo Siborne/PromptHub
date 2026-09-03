@@ -11,7 +11,6 @@ export const IPC_CHANNELS = {
   PROMPT_GET_ALL_TAGS: "prompt:getAllTags",
   PROMPT_RENAME_TAG: "prompt:renameTag",
   PROMPT_DELETE_TAG: "prompt:deleteTag",
-  PROMPT_COUNT_TAG_REFERENCES: "prompt:countTagReferences",
   PROMPT_UPDATE: "prompt:update",
   PROMPT_DELETE: "prompt:delete",
   PROMPT_SEARCH: "prompt:search",

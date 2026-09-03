@@ -8,7 +8,7 @@ import path from "node:path";
 import { DatabaseAdapter, SCHEMA_TABLES, PromptDB } from "@prompthub/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-describe("PromptDB.countTagReferences", () => {
+describe("PromptDB.deleteTagIfUnreferenced", () => {
   let tempDir: string;
   let db: PromptDB;
   let dirDb: DatabaseAdapter.Database;
@@ -34,23 +34,58 @@ describe("PromptDB.countTagReferences", () => {
       .run(id, id, "content", JSON.stringify(tags), Date.now(), Date.now());
   }
 
-  it("counts only exact array matches and ignores unparseable rows", () => {
+  function tagsOf(id: string): string[] {
+    const row = dirDb
+      .prepare("SELECT tags FROM prompts WHERE id = ?")
+      .get(id) as { tags: string };
+    return JSON.parse(row.tags) as string[];
+  }
+
+  it("refuses deletion while any prompt still references the tag", () => {
     addPrompt("p1", ["ops", "cli"]);
     addPrompt("p2", ["ops"]);
-    addPrompt("p3", ["opsx"]);
+
+    const result = db.deleteTagIfUnreferenced("ops");
+
+    expect(result).toEqual({ deleted: false, referenced: 2 });
+    // Rows still own the tag and were not touched.
+    expect(tagsOf("p1")).toEqual(["ops", "cli"]);
+    expect(tagsOf("p2")).toEqual(["ops"]);
+  });
+
+  it("allows deletion (reports removed) when nothing references the tag", () => {
+    addPrompt("p1", ["cli"]);
+
+    const result = db.deleteTagIfUnreferenced("remote-only");
+
+    expect(result).toEqual({ deleted: true, referenced: 0 });
+    expect(tagsOf("p1")).toEqual(["cli"]);
+  });
+
+  it("matches exact arrays only and ignores unparseable rows", () => {
+    addPrompt("p1", ["ops"]);
+    addPrompt("p2", ["opsx"]);
     dirDb
       .prepare(
         `INSERT INTO prompts (id, title, user_prompt, tags, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run("p4", "p4", "c", "not-json", Date.now(), Date.now());
+      .run("p3", "p3", "c", "not-json", Date.now(), Date.now());
 
-    expect(db.countTagReferences("ops")).toBe(2);
-    expect(db.countTagReferences("opsx")).toBe(1);
-    expect(db.countTagReferences("missing")).toBe(0);
+    expect(db.deleteTagIfUnreferenced("ops")).toEqual({
+      deleted: false,
+      referenced: 1,
+    });
+    expect(db.deleteTagIfUnreferenced("opsx")).toEqual({
+      deleted: false,
+      referenced: 1,
+    });
   });
 
-  it("returns zero for an empty tag", () => {
-    expect(db.countTagReferences("")).toBe(0);
+  it("treats an empty tag as deletable without a transactional write", () => {
+    expect(db.deleteTagIfUnreferenced("")).toEqual({
+      deleted: true,
+      referenced: 0,
+    });
   });
 });

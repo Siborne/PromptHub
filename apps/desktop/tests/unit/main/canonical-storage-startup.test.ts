@@ -85,6 +85,28 @@ describe("prompt workspace trash relocation from the canonical root", () => {
     relocateTrashedPromptWorkspaceFromCanonicalRoot(dataRoot2, activeRoot2);
     expect(fs.existsSync(canonicalTrashSnapshot())).toBe(false);
   });
+
+  it("does not throw when relocation fails and keeps the snapshot in place", () => {
+    const source = canonicalTrashSnapshot();
+    fs.mkdirSync(path.join(source, "keep"), { recursive: true });
+    fs.writeFileSync(path.join(source, "keep", "note.txt"), "preserve me");
+
+    // Make the recovery target unusable so mkdir/rename raises (e.g. EACCES/EXDEV).
+    const recoveryRoot = path.join(
+      activeRoot2,
+      "recovery",
+      "canonical-prompt-trash",
+    );
+    fs.mkdirSync(path.dirname(recoveryRoot), { recursive: true });
+    fs.writeFileSync(recoveryRoot, "not-a-directory", "utf8");
+
+    expect(() =>
+      relocateTrashedPromptWorkspaceFromCanonicalRoot(dataRoot2, activeRoot2),
+    ).not.toThrow();
+
+    // Stale snapshot is preserved; startup can continue without this heal.
+    expect(fs.existsSync(path.join(source, "keep", "note.txt"))).toBe(true);
+  });
 });
 
 describe("canonical storage startup", () => {

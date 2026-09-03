@@ -218,23 +218,37 @@ export function relocateTrashedPromptWorkspaceFromCanonicalRoot(
     "cache",
     "prompt-workspace",
   );
-  let sourceStat: fs.Stats;
   try {
-    sourceStat = fs.lstatSync(leftoverRoot);
+    let sourceStat: fs.Stats;
+    try {
+      sourceStat = fs.lstatSync(leftoverRoot);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+    if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
+      return; // not the well-known snapshot dir; leave other shapes untouched
+    }
+    const destRoot = path.join(
+      activeRoot,
+      "recovery",
+      "canonical-prompt-trash",
+    );
+    fs.mkdirSync(destRoot, { recursive: true, mode: 0o700 });
+    const dest = path.join(
+      destRoot,
+      `prompt-workspace-${Date.now()}-${process.pid}`,
+    );
+    fs.renameSync(leftoverRoot, dest);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
+    // Best-effort relocation: a stale snapshot must never block canonical
+    // authority publication (e.g. EACCES on the recovery root or EXDEV across
+    // filesystems). Record the full error and continue startup.
+    console.warn(
+      "[startup] failed to relocate stray canonical prompt-workspace snapshot:",
+      error,
+    );
   }
-  if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
-    return; // not the well-known snapshot dir; leave other shapes untouched
-  }
-  const destRoot = path.join(activeRoot, "recovery", "canonical-prompt-trash");
-  fs.mkdirSync(destRoot, { recursive: true, mode: 0o700 });
-  const dest = path.join(
-    destRoot,
-    `prompt-workspace-${Date.now()}-${process.pid}`,
-  );
-  fs.renameSync(leftoverRoot, dest);
 }
 
 export async function ensureCanonicalStorageAuthorityOnStartup(

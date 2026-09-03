@@ -136,13 +136,19 @@ export function registerPromptIPC(
   );
 
   ipcMain.handle(IPC_CHANNELS.PROMPT_DELETE_TAG, async (_, tag: string) => {
-    db.deleteTag(tag);
-    syncWorkspace();
-    return true;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.PROMPT_COUNT_TAG_REFERENCES, async (_, tag: string) => {
-    return db.countTagReferences(String(tag ?? ""));
+    if (typeof tag !== "string" || !tag.trim()) {
+      throw new Error("PROMPT_TAG_DELETE_INVALID_TAG");
+    }
+    try {
+      const result = db.deleteTagIfUnreferenced(tag);
+      if (result.deleted) {
+        syncWorkspace();
+      }
+      return result;
+    } catch (error) {
+      console.error("Failed to delete tag:", error);
+      throw new Error("PROMPT_TAG_DELETE_FAILED");
+    }
   });
 
   ipcMain.handle(

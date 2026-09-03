@@ -744,26 +744,50 @@ export class PromptDB {
   }
 
   /**
-   * Count how many prompts currently reference the tag (exact array membership,
-   * mirroring deleteTag). The UI uses it to block/confirm deletion while a tag
-   * is still in use, avoiding a canonical write on an already-drifted prompt.
-   * 返回引用该标签的 prompt 数，供仍有关联时阻止删除。
+   * Atomically delete a tag only when no prompt currently references it.
+   * Runs the reference check and the removal inside one SQLite transaction so
+   * a concurrent writer cannot slip a new reference between a separate
+   * "count then delete" call pair. Returns how many prompts still reference the
+   * tag when deletion is refused (0 when the tag is gone/unreferenced).
+   *
+   * 事务化：仅当没有任何 prompt 引用该标签时才删除，防止竞态；返回仍引用数。
    */
-  countTagReferences(tag: string): number {
-    if (!tag) return 0;
-    const rows = this.db
-      .prepare(`SELECT tags FROM prompts WHERE tags LIKE ?`)
-      .all(`%"${tag}"%`) as { tags: string | null }[];
-    let count = 0;
-    for (const row of rows) {
-      try {
-        const parsed = JSON.parse(row.tags ?? "[]") as unknown;
-        if (Array.isArray(parsed) && parsed.includes(tag)) count += 1;
-      } catch {
-        // ignore unparseable rows, matching deleteTag behavior
+  deleteTagIfUnreferenced(tag: string): {
+    deleted: boolean;
+    referenced: number;
+  } {
+    if (!tag) return { deleted: true, referenced: 0 };
+
+    const result = {
+      deleted: false,
+      referenced: 0,
+    };
+    const run = this.db.transaction(() => {
+      const rows = this.db
+        .prepare(`SELECT id, tags FROM prompts WHERE tags LIKE ?`)
+        .all(`%"${tag}"%`) as { id: string; tags: string }[];
+
+      const matched: Array<{ id: string; tags: string[] }> = [];
+      for (const row of rows) {
+        try {
+          const parsed = JSON.parse(row.tags ?? "[]") as unknown;
+          if (Array.isArray(parsed) && parsed.includes(tag)) {
+            matched.push({ id: row.id, tags: parsed as string[] });
+          }
+        } catch {
+          // ignore unparseable rows, mirroring deleteTag behavior
+        }
       }
-    }
-    return count;
+
+      if (matched.length > 0) {
+        result.referenced = matched.length;
+        return;
+      }
+
+      result.deleted = true;
+    });
+    run();
+    return result;
   }
 
   /**

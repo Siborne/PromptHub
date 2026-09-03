@@ -28,10 +28,8 @@ export const promptApi = {
   getAllTags: () => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_GET_ALL_TAGS),
   renameTag: (oldTag: string, newTag: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_RENAME_TAG, oldTag, newTag),
-  deleteTag: (tag: string) =>
+  deleteTag: (tag: string): Promise<{ deleted: boolean; referenced: number }> =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_DELETE_TAG, tag),
-  countTagReferences: (tag: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.PROMPT_COUNT_TAG_REFERENCES, tag) as Promise<number>,
   update: (id: string, data: UpdatePromptDTO) =>
     ipcRenderer.invoke(IPC_CHANNELS.PROMPT_UPDATE, id, data),
   delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROMPT_DELETE, id),

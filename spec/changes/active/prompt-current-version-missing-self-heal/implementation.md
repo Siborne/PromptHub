@@ -55,14 +55,19 @@ desktop `typecheck`、`eslint`、`pnpm build` 全部 exit 0（重建 `out/main/i
 前版本 current-version fix 章节内注的 “out of scope delete-123 follow-up” 之删除阻塞已在本推进解决，
 但仍未 commit，待用户本机确认后可启动+正常删除 prompt-123 后统一提交同一 PR（#214）。
 
-### Front-end deleteTag guard（新增，用户已本地确认）
+### Front-end deleteTag guard（新增，用户已本地确认；经 CodeRabbit 回合调整）
 
-按产品决策（decision: 前端拦截并在 PR 评论留给维护者后续讨论底层可删除性），本分支追加：
-- `PromptDB.countTagReferences(tag)`（storage，精确数组匹配，忽略不可解析行）;
-- IPC `prompt:countTagReferences` + preload `window.api.prompt.countTagReferences`;
-- `TagManagerModal.handleDelete`：prompt 域删除前若引用计数>0 则提示并阻止，
-  不再进入 canonical 写导致 `prompt:deleteTag` 二次报 `current version is missing`。
-单测 `prompt-tag-references.test.ts`（2 passed）；desktop typecheck/build exit 0。
+按产品决策（decision: 前端拦截并在 PR 评论留给维护者后续讨论底层可删除性）：
+- `PromptDB.deleteTagIfUnreferenced(tag)`（原子事务）：仅当没有任何 prompt 引用时才允许删除，返回
+  `{ deleted, referenced }`；参照数组精确匹配、忽略不可解析行，避免“先查再删”的两步竞态（CodeRabbit #4）。
+- `prompt:deleteTag` IPC：先校验 tag 为非空 string、失败以统一错误抛拒；捕获 DB 异常返回结构化
+  `{ deleted, referenced }` 或统一错误（CodeRabbit #2）；preload 对 `deleteTag` 声明显式返回类型
+  `Promise<{ deleted: boolean; referenced: number }>`（CodeRabbit #3）。
+- `TagManagerModal.handleDelete`：prompt 域单次调用 `deleteTag`，若返回 `referenced>0` 则提示并阻止，
+  否则（deleted）更新目录/同步；删除不再触发 canonical 写或 `current_version` 二次报错。
+- canonical relocate 清理改为 **best-effort**：任何失败（EACCES/EXDEV）仅记录完整错误、不再阻断启动
+  （CodeRabbit #1），且快照原样保留。
+单测 `prompt-tag-references` 4 passed + relocate 失败路径 case；desktop typecheck/build、eslint exit 0。
 
 
 ## Docs synced
