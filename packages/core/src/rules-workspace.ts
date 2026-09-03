@@ -29,6 +29,7 @@ import type {
 } from "@prompthub/shared/types";
 
 import { RuleDB } from "./database";
+import { createRuleBackupImporter } from "./rules-workspace-import";
 export type {
   ExtraGlobalRuleTemplate,
   RulesWorkspaceService,
@@ -66,7 +67,6 @@ import {
   slugify,
   writeJsonFile,
   writeTextFileAtomic,
-  type ImportRuleBackupRecordsOptions,
   type ExtraGlobalRuleTemplate,
   type ProjectRuleId,
   type RuleSyncInspection,
@@ -86,6 +86,7 @@ interface ReadRuleVersionsResult {
   versions: RuleVersionSnapshot[];
   repaired: boolean;
 }
+
 export function createRulesWorkspaceService(
   deps: RulesWorkspaceServiceDeps,
 ): RulesWorkspaceService {
@@ -1401,48 +1402,23 @@ export function createRulesWorkspaceService(
     );
   }
 
-  async function importRuleBackupRecords(
-    records: RuleBackupRecord[],
-    options: ImportRuleBackupRecordsOptions = {},
-  ): Promise<void> {
-    await bootstrapRuleWorkspace();
-
-    if (options.replace) {
-      await removeProjectRulesMissingFromImport(records);
-    }
-
-    for (const record of records) {
-      if (isProjectRuleFileId(record.id)) {
-        const projectId = record.id.slice("project:".length);
-        const existing = await getProjectMetaById(record.id);
-        if (!existing) {
-          await createProjectRule({
-            id: projectId,
-            kind: record.platformId === "cursor" ? "cursor" : "workspace",
-            name:
-              record.platformId === "cursor"
-                ? record.platformName.replace(/ \/ Cursor$/u, "")
-                : record.platformName,
-            rootPath:
-              record.projectRootPath ??
-              path.dirname(record.targetPath ?? record.path),
-          });
-        }
-      }
-
-      const meta = await resolveRuleMeta(record.id);
-      await writeManagedRule(meta, record.content);
-      const restoredSyncStatus = await writeTargetRule(meta, record.content);
-      const index = await replaceRuleVersions(record.id, record.versions);
-      const nextMeta: StoredRuleMeta = {
-        ...meta,
-        syncStatus: restoredSyncStatus,
-        updatedAt: new Date().toISOString(),
-      };
-      await writeMeta(nextMeta);
-      await syncRuleIndex(nextMeta);
-    }
-  }
+  const importRuleBackupRecords = createRuleBackupImporter({
+    bootstrapRuleWorkspace,
+    getRuleProjectsRoot,
+    getRuleVersionsDir,
+    getRuleMetaPath,
+    resolveRuleMeta,
+    getProjectMetaById,
+    createProjectRule,
+    writeManagedRule,
+    writeMeta,
+    syncStatusForMeta,
+    replaceRuleVersions,
+    syncRuleIndexWithData,
+    readRuleVersions,
+    createRuleDb: getRuleDb,
+    removeProjectRulesMissingFromImport,
+  });
 
   return {
     listRuleDescriptors,

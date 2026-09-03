@@ -32,3 +32,10 @@
 - [x] `T-RULES-COPY-022` Normalize legacy/hydrated Rule version indexes, assign
       chronological SQLite version numbers, emit newest-first compatibility
       indexes, and verify the real three-version failure shape.
+- [x] `T-RULES-COPY-023A` Fix GitHub #210 across Core import, Desktop IPC
+      fallback, CLI Rules import, and CLI workspace/sync restore. Keep external
+      targets byte-for-byte unchanged, merge recoverable history within the
+      20-version limit, and roll back partial managed-state publication.
+- [ ] `T-RULES-COPY-023B` Reproduce GitHub #209's exact close, external edit,
+      and reopen sequence on the current build; identify any remaining startup
+      caller before deciding whether it shares #210's historical trigger.

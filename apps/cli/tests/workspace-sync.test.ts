@@ -254,7 +254,6 @@ describe("CLI workspace sync snapshots", () => {
           ])
         ).exitCode,
       ).toBe(0);
-
       const importResult = await execCli([
         ...dataArgs(targetRoot),
         "workspace",
@@ -467,6 +466,35 @@ describe("CLI workspace sync snapshots", () => {
           ])
         ).exitCode,
       ).toBe(0);
+      const sourceRuleRoot = path.join(sourceRoot, "remote-rule");
+      fs.mkdirSync(sourceRuleRoot, { recursive: true });
+      expect(
+        (
+          await execCli([
+            ...dataArgs(sourceRoot),
+            "rules",
+            "add-project",
+            "--id",
+            "remote-rule",
+            "--name",
+            "Remote Rule",
+            "--root-path",
+            sourceRuleRoot,
+          ])
+        ).exitCode,
+      ).toBe(0);
+      expect(
+        (
+          await execCli([
+            ...dataArgs(sourceRoot),
+            "rules",
+            "save",
+            "project:remote-rule",
+            "--content",
+            "# remote managed",
+          ])
+        ).exitCode,
+      ).toBe(0);
       seedMcpAndPluginLibraries(sourceRoot);
       seedMcpAndPluginLibraries(targetRoot, "target-secret");
       expect(
@@ -480,6 +508,11 @@ describe("CLI workspace sync snapshots", () => {
           ])
         ).exitCode,
       ).toBe(0);
+      fs.writeFileSync(
+        path.join(sourceRuleRoot, "AGENTS.md"),
+        "# target changed externally",
+        "utf8",
+      );
 
       const remoteBundle = JSON.parse(fs.readFileSync(exportFile, "utf8"));
       vi.stubGlobal(
@@ -526,6 +559,20 @@ describe("CLI workspace sync snapshots", () => {
           () => new CoreMcpLibraryService().read().servers[0]?.env,
         ),
       ).toEqual({ API_TOKEN: "target-secret" });
+      const importedRule = await execCli([
+        ...dataArgs(targetRoot),
+        "rules",
+        "read",
+        "project:remote-rule",
+      ]);
+      expect(importedRule.exitCode).toBe(0);
+      expect(importedRule.stdout).toMatchObject({
+        content: "# remote managed",
+        syncStatus: "out-of-sync",
+      });
+      expect(
+        fs.readFileSync(path.join(sourceRuleRoot, "AGENTS.md"), "utf8"),
+      ).toBe("# target changed externally");
     },
     WORKSPACE_SYNC_TEST_TIMEOUT_MS,
   );

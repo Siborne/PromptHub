@@ -68,3 +68,12 @@ Rules 首次读取必须兼容 canonical hydration 曾产生的“旧到新”co
 version index，以及正常写入产生的“新到旧”index。读取时应无损归一化为运行期
 “新到旧”顺序，写入 SQLite 时按时间分配递增 version number，canonical bundle
 始终发布“旧到新”历史。旧索引顺序不得导致整个 `rules:list` 失败或隐藏规则。
+
+## `FR-RULES-COPY-023` Conflict-Safe Rule Restore
+
+备份、快照、WebDAV 或 CLI restore 导入 Rule 时，PromptHub 必须先恢复自己的
+managed state，不得把导入正文静默写入内容不同的外部 target。空导入正文不得把
+现有 target 清零；target 为 symlink 时不得通过普通 import 路径写穿链接。导入
+成功时必须把导入前 managed 正文与既有历史合并进现有的 20 版本有界历史；导入
+失败时，导入前 managed 正文、元数据和可恢复版本历史必须仍然可读。重启或延迟
+同步也不得绕过同一冲突边界。

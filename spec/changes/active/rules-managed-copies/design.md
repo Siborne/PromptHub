@@ -260,3 +260,32 @@ Rules 应改成与当前 `data/` 架构一致的“文件真相源、数据库�
 | Requirement         | Design               | Verification          | Task               |
 | ------------------- | -------------------- | --------------------- | ------------------ |
 | `FR-RULES-COPY-022` | `DES-RULES-COPY-022` | `TEST-RULES-COPY-022` | `T-RULES-COPY-022` |
+
+## `DES-RULES-COPY-023` Managed-First Restore Boundary
+
+- Rule import must preflight the existing managed body, version index, target
+  existence/type, and managed/target digest before publishing imported state.
+- Import publishes only PromptHub-owned managed data. It derives
+  `synced`/`target-missing`/`out-of-sync` after publication but does not call the
+  external-target writer; only the existing explicit conflict-resolution or
+  deployment action may write that target.
+- Managed body, metadata, and versions must be staged and published atomically.
+  Failure retains the complete pre-import readable state.
+- Successful replace semantics retain a recoverable pre-import state through a
+  bounded history merge. Before publishing imported content, the current managed
+  body is captured as a recoverable version when it is not already represented;
+  existing and imported versions are then merged by content identity with stable
+  ordering and reduced to the existing 20-version limit. This reuses the current
+  Rule history surface and does not introduce a second snapshot layout or cleanup
+  policy.
+- A restore handles `R` records and at most the existing bounded `V` versions
+  per record in `O(R * V log V + B)` time and `O(V + b)` working space per
+  record, where `B` is total imported bytes and `b` is one record's staged
+  bytes. Callers remain sequential or use an explicitly bounded queue; no
+  network call or long-lived watcher is introduced.
+
+## Rule Restore Traceability
+
+| Requirement         | Design               | Verification          | Task                                     |
+| ------------------- | -------------------- | --------------------- | ---------------------------------------- |
+| `FR-RULES-COPY-023` | `DES-RULES-COPY-023` | `TEST-RULES-COPY-023` | `T-RULES-COPY-023A`, `T-RULES-COPY-023B` |

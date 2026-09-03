@@ -3,11 +3,43 @@
 ## Status
 
 Needs convergence. Core implementation is present, but the remaining Rules
-sync-status and deployment-action copy/test follow-up is now tracked explicitly
-as `T-RULES-COPY-019`; this change is not archive-eligible.
+sync-status and deployment-action copy/test follow-up is tracked as
+`T-RULES-COPY-019`. The #210 backup-import defect is fixed locally under
+`T-RULES-COPY-023A`; #209's exact reopen trigger remains under
+`T-RULES-COPY-023B`, so this change is not archive-eligible.
+
+`importRuleBackupRecords()` now publishes only PromptHub-managed state and
+derives target status by inspection; it no longer calls the external target
+writer. The selected recoverability policy is a content-deduplicated bounded
+merge that captures the pre-import managed body and imported current body inside
+the existing 20-version Rule history. Per-Rule publication failures restore the
+previous managed body, metadata, version files, and rebuilt SQLite projection.
+The reopen-time trigger reported by #209 still requires focused reproduction.
+
+## `TEST-RULES-COPY-023` Restore Regression
+
+Tests were authored before the production fix and executed after the complete
+implementation batch. Coverage includes divergent, empty, symlink, and missing
+targets; bounded and identity-stable history merge; managed/version/metadata/DB
+rollback; delayed replace cleanup; direct CLI Rules import; and CLI workspace
+sync pull. The #209 reopen sequence remains outside this completed #210 batch.
 
 ## Shipped
 
+- Rule backup import no longer writes or creates external targets. Ordinary
+  files, empty-body imports, symlink referents, and missing targets remain
+  untouched until an explicit save, deploy, or conflict-resolution action.
+- Imported and existing Rule history is content-deduplicated with protected
+  pre-import and imported-current bodies, bounded to 20 versions, and processed
+  with bounded per-Rule memory even for oversized imported history arrays.
+- Failed per-Rule publication restores managed content, metadata, version files,
+  and SQLite paths; replace cleanup runs only after every imported record has
+  published successfully.
+- Desktop IPC fallback, direct CLI import, and CLI workspace/sync restore reuse
+  the same managed-only Core contract.
+- Import history, rollback, and project preparation now live in
+  `packages/core/src/rules-workspace-import.ts`; the owning workspace service
+  stays below the repository's 1,500-line preferred limit.
 - Canonical project Rule metadata now retains `targetPath` and
   `projectRootPath`; global targets remain device-derived. Catalog rebuild no
   longer points external targets back at `data/rules/<id>/rule.md`.
@@ -117,6 +149,19 @@ as `T-RULES-COPY-019`; this change is not archive-eligible.
   Desktop lint/typechecks/unit shards, and governance checks. The only failure
   was the CLI wall-clock budget: all 16 files and 123 tests passed, but the
   86.237-second run exceeded the 75-second budget. No Rules assertion failed.
+- `TEST-RULES-COPY-023` final focused verification passed 42/42 Desktop Rules
+  tests and 8/8 CLI Rules/workspace-sync tests.
+- `packages/core/src/rules-workspace-import.ts` reached 100% coverage for lines
+  (379/379), functions (21/21), branches (89/89), and statements (379/379).
+- Core, Desktop, and CLI typechecks passed. Targeted ESLint, Prettier, and
+  `git diff --check` passed.
+- The first current `pnpm verify:release:quick` run passed 28/29 checks and
+  exposed only `governance-file-size` for the initial 1,863-line workspace
+  implementation. The importer extraction reduced `rules-workspace.ts` to
+  1,440 lines; the affected tests/typechecks and `pnpm lint:file-size` then
+  passed. The other 28 release-quick checks were not repeated unchanged.
+- `pnpm spec:test` passed after the parallel storage change converged its active
+  change inventory; change traceability passed for all 15 checked changes.
 
 - 方案已对齐现有 PromptHub 数据布局：内部持久化资源集中在 `userData/data/`，例如 `data/skills`、`data/assets/images`、`data/assets/videos`。
 - 当前实现已新增 `data/rules/` 真相源目录，并将 Rules 纳入 ZIP 导出和 JSON backup 载荷。
@@ -151,3 +196,4 @@ as `T-RULES-COPY-019`; this change is not archive-eligible.
 ## Follow-ups
 
 - 仍需补做规则同步状态和部署动作的更完整 UI 文案与测试。
+- GitHub #209 仍需在当前构建中完成关闭、外部编辑和重新打开的独立复现。

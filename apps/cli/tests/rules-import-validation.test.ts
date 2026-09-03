@@ -57,6 +57,12 @@ describe("CLI rules import and validation", () => {
     expect(exportRes.exitCode).toBe(0);
     expect(fs.existsSync(exportFile)).toBe(true);
 
+    fs.writeFileSync(
+      path.join(projectRoot, "AGENTS.md"),
+      "# External rule that must survive import",
+      "utf8",
+    );
+
     const importRes = await execCli([
       ...withDataDir(targetRoot),
       "rules",
@@ -76,6 +82,9 @@ describe("CLI rules import and validation", () => {
     ]);
     expect(readImportedRes.exitCode).toBe(0);
     expect(readImportedRes.json.content).toBe("# Project A Rule");
+    expect(fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8")).toBe(
+      "# External rule that must survive import",
+    );
   }, 30_000);
 
   it("requires content for rules save", async () => {

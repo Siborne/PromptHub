@@ -48,3 +48,19 @@ Rules 需要升级为与现有 `data/` 真相源架构一致的“文件真相�
 - 新方案应以新增 `rules` / `rule_versions` 与 `data/rules/` 副本目录为主，不直接删除外部目标文件，因此回退时用户外部规则文件仍保留。
 - 从旧模型迁移时，首次只做“导入到 PromptHub”，不立即重写目标文件；如需回退，仍可继续使用磁盘原文件。
 - 若新同步状态模型出现问题，可先退回“DB + managed copy 可用，外部部署手动触发”，不影响规则正文留存在 PromptHub 内部。
+
+## Issue Addendum 2026-08-20
+
+- GitHub #210 confirms that `importRuleBackupRecords()` still bypasses the
+  accepted restore boundary: it writes imported managed content directly to a
+  divergent external target and replaces the local version set in the same
+  loop.
+- GitHub #209 reports the same user-visible class of external `CLAUDE.md`
+  overwrite after reopening PromptHub. Normal materialization only detects
+  drift, so the exact deferred restore/sync caller must be reproduced before
+  deciding whether #209 and #210 share one trigger.
+- The stable specification and design remain authoritative: backup import must
+  restore PromptHub-managed state first and must not silently overwrite an
+  external target. The two issues remain open until the data-loss path,
+  recoverable history behavior, and all Desktop/CLI restore callers pass
+  regression coverage.

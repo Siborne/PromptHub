@@ -129,9 +129,17 @@
   Hydration and reads must normalize that boundary before rebuilding SQLite;
   an older reversed compatibility index is repaired atomically without
   changing any Rule body or durable version file.
-- Backup import version restoration must stage the replacement version
-  directory before publishing it; failed version writes must preserve the
-  previous readable version history.
+- Backup, snapshot, Desktop fallback, and CLI Rule imports publish only
+  PromptHub-managed state. They never write or create the external target;
+  target status is derived after publication, and only explicit save, deploy,
+  or conflict resolution may write the target.
+- Successful import merges existing and incoming history by content, protects
+  the pre-import managed body and imported current body, and retains at most 20
+  versions. Imported history selection uses bounded per-Rule memory.
+- Rule import stages version replacement and treats managed body, metadata,
+  versions, and SQLite projection as one recoverable publication unit. A failed
+  publish restores readable pre-import state, and replace cleanup starts only
+  after every imported record publishes successfully.
 - Web rule workspace imports must preserve the previous readable rule record
   when a rewrite fails: managed content, `_rule.json`, version files, and
   `index.json` must not be left in a half-new/half-old state after an
@@ -207,6 +215,8 @@
 
 - `packages/shared/constants/rules.ts`
 - `packages/shared/constants/platforms.ts`
+- `packages/core/src/rules-workspace.ts`
+- `packages/core/src/rules-workspace-import.ts`
 - `apps/desktop/src/main/ipc/rules.ipc.ts`
 - `apps/desktop/src/main/services/rules-workspace.ts`
 - `apps/desktop/src/main/services/skill-installer-utils.ts`
