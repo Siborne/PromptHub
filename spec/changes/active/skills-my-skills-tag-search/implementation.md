@@ -44,3 +44,25 @@ Commands run（均从 `apps/desktop`）：
 - 稳定文档/规则无跨界变化：本次为 renderer 视图内入口新增，无 IPC、shared 类型、
   schema/持久化变更，故无需改动 `spec/knowledge/*` 或 `spec/rules/*`。
 - 验收映射：`FR-TAGSEARCH-001~003` → DESIGN → TEST（上列 UI + service + parity 测试）→ T（tasks list）已闭环。
+
+## CodeRabbit follow-up（PR #213 review fixes）
+
+Review 后追加修复（已在后续 commit 提交）：
+
+- **locale 键重复**：首轮新增的 `skill.removeTag`（带 `{{tag}}`）与既有 `skill.removeTag`
+  同层键重复，JSON 后者覆盖并触发 Biome `noDuplicateObjectKeys`。删除新增行，组件改用
+  既有的唯一键 `skill.removeTagWithName`。
+- **统一 trim 语义**：候选值 trim 而 `filterVisibleSkills` 用原始值 `includes`，空白标签
+  显示却点不中。在 `skill-filter.ts` 对 `filterTags` 与 `skill.tags` 两侧归一 trim（忽略空），
+  并在 filter 单测补空格回归用例。
+- **显式返回类型**：`SkillTagSearchFilter` 增加 `: JSX.Element`。
+- **ARIA 语义**：原 `role="listbox"`/`role="option"` 内嵌可聚焦 `checkbox` 无效组合，
+  改为 `role="group"` + 直接 `role="checkbox"` 按钮，并新增 `skill.tagFilterOptions` 文案键（7 语言）。
+- **全量 suite**仍需宽松超时环境执行；本次定向回归 + typecheck + lint 全绿。
+
+Follow-up verification（同前执行方式）：
+- `vitest skill-filter + skill-tag-options`：13 passed
+- `vitest skill-tag-search-filter + skill-i18n-manager + sidebar-skills`：42 passed
+- `pnpm typecheck`：exit 0；`eslint`（本次改动文件）：RC 0
+- 7 locales JSON：解析合法、无重复键
+

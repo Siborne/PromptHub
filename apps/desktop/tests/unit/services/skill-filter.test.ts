@@ -92,3 +92,31 @@ describe("filterVisibleSkills", () => {
     expect(result.map((skill) => skill.name)).toEqual(["slide-deck-generator"]);
   });
 });
+
+describe("filterVisibleSkills tag filter normalization", () => {
+  it("matches an active tag against raw skill tags that carry surrounding whitespace", () => {
+    const spacedSkills = skills.map((item) => ({ ...item }));
+    (spacedSkills[0] as { tags: string[] }).tags = ["  ops  "];
+    const result = filterVisibleSkills({
+      deployedSkillNames: new Set(),
+      filterType: "pending",
+      filterTags: ["ops"],
+      skills: spacedSkills as any,
+      storeView: "my-skills",
+    });
+
+    expect(result.map((skill) => skill.name)).toEqual(["alpha"]);
+  });
+
+  it("ignores whitespace-only entries in the active tag list", () => {
+    const result = filterVisibleSkills({
+      deployedSkillNames: new Set(),
+      filterType: "pending",
+      filterTags: ["   "],
+      skills,
+      storeView: "my-skills",
+    });
+
+    expect(result.map((skill) => skill.name)).toEqual(["alpha", "beta"]);
+  });
+});

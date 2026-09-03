@@ -48,7 +48,7 @@ export function SkillTagSearchFilter({
   selected,
   onToggle,
   onClear,
-}: SkillTagSearchFilterProps) {
+}: SkillTagSearchFilterProps): JSX.Element {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -86,6 +86,9 @@ export function SkillTagSearchFilter({
     };
   }, [open]);
 
+  /**
+   * Shows the panel (and clears the in-panel search query) when triggered.
+   */
   function toggleOpen() {
     setOpen((current) => !current);
     setQuery("");
@@ -150,46 +153,49 @@ export function SkillTagSearchFilter({
             </label>
           </div>
 
-          <ul className="max-h-60 overflow-y-auto px-1 py-1" role="listbox">
+          <div
+            role="group"
+            aria-label={t("skill.tagFilterOptions", "Tag options")}
+            className="max-h-60 overflow-y-auto px-1 py-1"
+          >
             {visibleOptions.length === 0 ? (
-              <li className="px-2.5 py-2 text-sm text-muted-foreground">
+              <div className="px-2.5 py-2 text-sm text-muted-foreground">
                 {t("skill.noTagMatches", "No matching tags")}
-              </li>
+              </div>
             ) : (
               visibleOptions.map((tag) => {
                 const isSelected = selected.includes(tag);
                 return (
-                  <li key={tag} role="option" aria-selected={isSelected}>
-                    <button
-                      type="button"
-                      role="checkbox"
-                      aria-checked={isSelected}
-                      onClick={() => onToggle(tag)}
-                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${
+                  <button
+                    key={tag}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    onClick={() => onToggle(tag)}
+                    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${
+                      isSelected
+                        ? "bg-primary/10 text-primary"
+                        : "text-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                         isSelected
-                          ? "bg-primary/10 text-primary"
-                          : "text-foreground hover:bg-accent"
+                          ? "border-primary bg-primary text-white"
+                          : "border-border"
                       }`}
+                      aria-hidden="true"
                     >
-                      <span
-                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                          isSelected
-                            ? "border-primary bg-primary text-white"
-                            : "border-border"
-                        }`}
-                        aria-hidden="true"
-                      >
-                        {isSelected ? (
-                          <CheckIcon aria-hidden="true" className="h-3 w-3" />
-                        ) : null}
-                      </span>
-                      <span className="truncate">{tag}</span>
-                    </button>
-                  </li>
+                      {isSelected ? (
+                        <CheckIcon aria-hidden="true" className="h-3 w-3" />
+                      ) : null}
+                    </span>
+                    <span className="truncate">{tag}</span>
+                  </button>
                 );
               })
             )}
-          </ul>
+          </div>
 
           {hasSelection ? (
             <div className="border-t border-border p-1.5">
@@ -199,7 +205,7 @@ export function SkillTagSearchFilter({
                     <button
                       type="button"
                       onClick={() => onToggle(tag)}
-                      aria-label={t("skill.removeTag", {
+                      aria-label={t("skill.removeTagWithName", {
                         tag,
                         defaultValue: 'Remove tag "{{tag}}"',
                       })}

@@ -15,3 +15,11 @@
 - [x] 相关回归（sidebar-skills、skill-filter、skill-i18n-manager 的 SkillManager/Header 挂载 smoke）53 passed。
 - [ ] 全量 `pnpm test:run`——本会话多次被运行环境 2min 墙钟超时打断（记录于 implementation.md），交 CI/本机执行。
 - [ ] 汇报用户；确认后提交 / push / 开 PR（绝不自动 commit）。
+
+## CodeRabbit follow-up（添加到 tasks 供追溯）
+
+- [x] 删除新增的重复 `skill.removeTag` 键，组件改用既有唯一键 `removeTagWithName`（7 locales JSON 合法、无重复）。
+- [x] `skill-filter.ts` 对 `filterTags` 与 `skill.tags` 两侧统一 trim（忽略空），并补空格标签跨层回归测试。
+- [x] `SkillTagSearchFilter` 补显式返回类型 `: JSX.Element`，ARIA 改为 `role="group"` + `role="checkbox"`。
+- [x] 新增 `skill.tagFilterOptions` 文案键（7 语言）。
+- [x] follow-up 定向回归 13+42 passed、`typecheck` exit 0、`eslint` RC 0。
