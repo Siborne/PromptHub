@@ -119,6 +119,5 @@ this change has no visible product UI delta.
   promoted together.
 - The `v0.6.0-beta.1` replacement publication is complete; it does not promote
   any stable-facing surface from `0.5.9`.
-- The beta.2 candidate is tracked independently under
-  `release-0-6-0-beta-2-readiness`; no beta.2 tag or Release exists at local
-  preparation time.
+- The beta.2 prerelease was published independently through
+  `release-0-6-0-beta-2-readiness`; stable `0.6.0` preparation remains active.

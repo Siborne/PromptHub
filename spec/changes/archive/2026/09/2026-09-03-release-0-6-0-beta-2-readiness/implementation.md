@@ -3,7 +3,7 @@
 ## Status
 
 - Phase: converge
-- Status: local candidate ready; publication pending
+- Status: published and completed
 
 ## Baseline
 
@@ -50,11 +50,12 @@
 
 ## Publication Boundary
 
-- No tag, GitHub Release, package, installer, update manifest, or container
-  image is created by this preparation batch.
-- Stable-facing `0.5.9` metadata and downloads remain unchanged.
-- Tag-triggered Windows x64 two-launch, macOS signing/notarization, artifact,
-  updater-manifest, GHCR, and public URL checks remain publication-stage gates.
+- `v0.6.0-beta.2` peels to candidate commit
+  `b7854508c3c69eb99cc2d1b6207db02ce5a25ddc`.
+- The GitHub release was published as a prerelease at
+  2026-09-03 09:52:55 UTC after all publication gates passed.
+- Stable-facing `v0.5.9` metadata, downloads, Homebrew, GitHub Latest, and GHCR
+  `latest` remain unchanged.
 
 ## Tag-Triggered Verification
 
@@ -67,6 +68,31 @@
 - The Doubao test now derives the expected workspace from the current platform
   template through the existing path resolver; its focused three-test suite,
   lint, formatting, and diff hygiene checks pass locally.
-- Because beta.2 remains unpublished, the corrected release retry may replace
+- At retry time beta.2 was still unpublished, so the corrected release replaced
   only the observed beta.2 tag object with an expected-old-value lease. An
-  unbounded force update is not permitted.
+  unbounded force update was not permitted.
+- The retry replaced tag object `dda368b4828bdcd9a5a552df986fa24633cd7d2e`
+  with `900c842d64e4f0d629d14989cc0151ac7f70a9e8` using that bounded lease.
+- Final Desktop Build and Release run `33738828038` passed the 42-check release
+  profile, Linux, Windows x64/arm64, signed/notarized macOS x64/arm64, and the
+  release job. Windows x64 passed the packaged two-launch startup smoke.
+- Release job `100602404548` verified hashes and uploaded 20 assets to the
+  Draft release.
+- Final Self-Hosted Web run `33738827888` passed verification and published the
+  beta.2 GHCR manifest without moving `latest`.
+- After the workflows passed, the Draft release was published as a prerelease.
+  Public checks returned HTTP 200 for the release page, update manifest,
+  Windows x64 installer, and macOS arm64 DMG.
+- GitHub Latest remains `v0.5.9`. GHCR `latest` and `0.5.9` both resolve to
+  `sha256:110d9c320236a7bc41fc624b564db58b1f71c13a110ee02b198e0024abc3784e`;
+  beta.2 resolves to
+  `sha256:677e4d9e6239e53d0a704490bf5b48727ffbe58caa0ec56ee464b9d669e73068`.
+
+## Converge Result
+
+- Release identity, public state, workflow evidence, asset inventory, and
+  stable-channel boundaries agree.
+- Issue #211 was already closed by the reporter after installing Git. Its
+  specific packaged Git-less Windows UI path still requires acceptance;
+  general packaged Windows startup passed.
+- The change is complete and ready for archival.

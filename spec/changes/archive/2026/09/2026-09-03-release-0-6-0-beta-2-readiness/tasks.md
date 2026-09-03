@@ -10,6 +10,7 @@
       (`FR-BETA2-002`, `DES-BETA2-002`, `TEST-BETA2-003`,
       `TEST-BETA2-004`).
 - [x] `T-BETA2-003` Run local quick and full release gates, record skipped
-      platform/publication evidence, and freeze the candidate for explicit
-      tag authorization (`FR-BETA2-003`, `DES-BETA2-003`,
-      `TEST-BETA2-005`, `TEST-BETA2-006`).
+      platform evidence, freeze the candidate for explicit authorization, then
+      verify the tag-triggered matrix and publish the prerelease without moving
+      stable aliases (`FR-BETA2-003`, `DES-BETA2-003`, `TEST-BETA2-005`,
+      `TEST-BETA2-006`).

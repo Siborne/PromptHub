@@ -7,8 +7,8 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 31 |
-| Archived | 230 |
+| Active | 30 |
+| Archived | 231 |
 | Legacy | 1 |
 
 ## Active
@@ -34,7 +34,6 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `plugin-issue-190-multi-native-manifests` | active | `spec/changes/active/plugin-issue-190-multi-native-manifests/` |
 | `plugin-management` | active | `spec/changes/active/plugin-management/` |
 | `r2-direct-downloads` | active | `spec/changes/active/r2-direct-downloads/` |
-| `release-0-6-0-beta-2-readiness` | active | `spec/changes/active/release-0-6-0-beta-2-readiness/` |
 | `release-0-6-0-version-alignment` | active | `spec/changes/active/release-0-6-0-version-alignment/` |
 | `risk-aware-verification-harness` | active | `spec/changes/active/risk-aware-verification-harness/` |
 | `rules-issue-193-missing-project-reconciliation` | active | `spec/changes/active/rules-issue-193-missing-project-reconciliation/` |
@@ -281,6 +280,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `2026-08-20-windows-canonical-authority-second-launch` | archived | `spec/changes/archive/2026/08/2026-08-20-windows-canonical-authority-second-launch/` |
 | `2026-08-21-skill-package-canonical-finalization` | archived | `spec/changes/archive/2026/08/2026-08-21-skill-package-canonical-finalization/` |
 | `2026-08-31-apimart-sponsor-readme` | archived | `spec/changes/archive/2026/08/2026-08-31-apimart-sponsor-readme/` |
+| `2026-09-03-release-0-6-0-beta-2-readiness` | archived | `spec/changes/archive/2026/09/2026-09-03-release-0-6-0-beta-2-readiness/` |
 
 ## Legacy
 

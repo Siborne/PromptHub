@@ -25,14 +25,16 @@ the generated website release constant and default downloads remain `0.5.9`.
 
 ### `FR-BETA2-003`: Publication Gate
 
-The candidate MUST NOT be tagged or published until the full release profile,
-packaged Windows two-launch gate, macOS signing/notarization checks, release
-asset validation, and prerelease-only container tagging pass.
+The full local release profile MUST pass before tagging. The tag-triggered
+GitHub Release MUST remain a draft until the packaged Windows two-launch gate,
+macOS signing/notarization checks, release asset validation, and
+prerelease-only container tagging pass.
 
 #### `AC-BETA2-003`
 
-Local preparation records skipped platform and publication evidence explicitly;
-the tag-triggered jobs remain the authority for those gates.
+Local preparation records skipped platform evidence explicitly. The
+tag-triggered jobs remain the authority for those gates, and publication occurs
+only after their success is verified.
 
 ## Traceability
 

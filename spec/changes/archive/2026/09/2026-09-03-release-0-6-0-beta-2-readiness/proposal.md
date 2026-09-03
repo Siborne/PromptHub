@@ -2,8 +2,8 @@
 
 ## Phase And Status
 
-- Phase: implement
-- Status: preparing
+- Phase: converge
+- Status: completed
 - Primary requirement: `FR-BETA2-001`
 
 ## Why
@@ -23,14 +23,17 @@ another same-version replacement.
   `latest` identity.
 - Run the quick release profile locally and record the full release profile as
   the mandatory pre-tag gate.
+- After explicit publication authorization, create the beta.2 tag, run the
+  platform release workflows, publish the GitHub prerelease, and preserve all
+  stable-facing aliases.
 
 ## Out Of Scope
 
-- Creating or pushing `v0.6.0-beta.2`.
-- Creating or publishing the GitHub prerelease or container images.
 - Promoting `0.6.0` or moving any stable-facing download.
-- Claiming packaged Windows, signed/notarized macOS, paid Provider, or public
-  asset acceptance before the corresponding release jobs pass.
+- Reopening or otherwise changing issue #211 remote state; the reporter already
+  closed it after installing Git.
+- Claiming packaged Git-less Windows UI or paid Provider acceptance without a
+  real run.
 
 ## Risks And Rollback
 
@@ -39,5 +42,6 @@ another same-version replacement.
 - The candidate includes storage, recovery, installer, updater, and Rules
   changes. Source checks do not replace packaged Windows two-launch, macOS
   signing/notarization, or updater-manifest verification.
-- Before tagging, rollback is limited to reverting the version and release
-  documentation batch. No user data or remote release state is changed here.
+- Before publication, rollback is limited to keeping the generated GitHub
+  release as a draft. After publication, withdrawal requires returning the
+  release to draft without moving stable aliases.

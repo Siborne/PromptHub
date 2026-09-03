@@ -15,12 +15,12 @@ existing website sync command, whose stable-record selector continues to derive
 public download metadata from `0.5.9`. The work is linear in the bounded set
 of manifests and documentation files and adds no runtime I/O or network cost.
 
-## `DES-BETA2-003`: Preparation Is Not Publication
+## `DES-BETA2-003`: Draft Before Publication
 
 Local preparation may run deterministic source, test, build, and smoke gates.
-It does not create a tag, upload artifacts, mutate GHCR aliases, or claim
-platform signing. The full release profile and tag-triggered platform jobs are
-separate blocking evidence.
+The full local profile blocks tag creation. The tag-triggered workflow may
+upload artifacts to a Draft release, but the draft is published only after the
+platform, signing, startup, asset, manifest, and container checks pass.
 
 ## Affected Areas
 
@@ -33,14 +33,18 @@ separate blocking evidence.
 
 ## Failure And Rollback
 
-- Any failed local gate leaves the candidate untagged and unpublished.
-- Revert the bounded version/documentation batch to return to beta.1 metadata.
-- Stable `0.5.9` downloads and GHCR aliases are never mutated by preparation.
+- Any failed local gate leaves the candidate untagged and unpublished. Any
+  failed tag-triggered gate leaves the GitHub release as a draft.
+- Before publication, delete or replace only beta.2 draft assets using an
+  expected-old-value tag lease. After publication, withdrawal returns the
+  prerelease to draft without moving stable aliases.
+- Stable `0.5.9` downloads and GHCR aliases are never mutated by beta
+  publication.
 
 ## Analyze Result
 
 - The user selected a new beta.2 identity, resolving the earlier beta.1
   same-version replacement exception.
-- The current remote has no `v0.6.0-beta.2` tag or GitHub Release.
+- The remote had no `v0.6.0-beta.2` tag or GitHub Release at preparation time.
 - The implementation, verification, and task chain is complete with no
   unresolved product or data decision.
