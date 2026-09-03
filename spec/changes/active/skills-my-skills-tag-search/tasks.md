@@ -13,8 +13,8 @@
 - [x] desktop `pnpm typecheck`（`tsc --noEmit`）→ exit 0。
 - [x] 受检文件 `eslint --max-warnings 0` → RC 0。
 - [x] 相关回归（sidebar-skills、skill-filter、skill-i18n-manager 的 SkillManager/Header 挂载 smoke）53 passed。
-- [ ] 全量 `pnpm test:run`——本会话多次被运行环境 2min 墙钟超时打断（记录于 implementation.md），交 CI/本机执行。
-- [ ] 汇报用户；确认后提交 / push / 开 PR（绝不自动 commit）。
+- [ ] 全量 `pnpm test:run`——本开发会话多次受约 2min 墙钟限制中断；后续曾在宽松后台尝试跑通，早期可见失败均为与本分支无关的既有环境用例（agent/cli/mcp presets），最终结果见 implementation/CI。
+- [x] 汇报用户；确认后提交 / push / 开 PR（两次确认；commits `c6a311fc`、`0a3a0e67` 已推送并更新 #213）。
 
 ## CodeRabbit follow-up（添加到 tasks 供追溯）
 
@@ -23,3 +23,10 @@
 - [x] `SkillTagSearchFilter` 补显式返回类型 `: JSX.Element`，ARIA 改为 `role="group"` + `role="checkbox"`。
 - [x] 新增 `skill.tagFilterOptions` 文案键（7 语言）。
 - [x] follow-up 定向回归 13+42 passed、`typecheck` exit 0、`eslint` RC 0。
+
+## CodeRabbit follow-up round 2（compl 02）
+
+- [x] 移除与 `role="group"` 失配的 `aria-haspopup="listbox"`（a11y trigger 语义同步）。
+- [x] `skill-filter.test.ts` 新回归用例改用类型化 `Skill[]` fixture，去掉 `spacedSkills as any`（符合 No-any）。
+- [x] `implementation.md`「未提交/未建 PR」等旧状态已统一为真实分支/commit/PR（并补 Status 小节、提交时间戳）。
+- [x] round-2 定向验证：related vitest 19 passed；typecheck exit 0；eslint RC 0；全量跑进行中或已见本章开头说明。

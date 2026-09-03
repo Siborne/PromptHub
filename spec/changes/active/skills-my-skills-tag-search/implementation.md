@@ -21,6 +21,7 @@ New/changed files：
 - Commits（按时间序，push 远端均同步）：
   1. `59f2bacf` feat(skill): add tag filter search in My Skills（初始特性 + 验证）。
   2. `c6a311fc` fix(skill): address PR #213 review finds（CodeRabbit follow-up round 1：locale 键重复 / trim 归一 / ARIA / 返回类型）。
+  3. `0a3a0e67` fix(skill): align a11y, docs status and tests in PR #213 (round 2)（移除失配 `aria-haspopup` / 测试去掉 `as any` / 统一文档状态）。
 - PR：`legeling/PromptHub#213`（base `main`，head `Siborne:feat/my-skills-tag-search`）状态 `open`，head 已随上述 commits 更新。
 
 ## Design decisions
