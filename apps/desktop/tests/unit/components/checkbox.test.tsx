@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
+import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { Checkbox } from "../../../src/renderer/components/ui/Checkbox";
 
@@ -16,7 +17,9 @@ describe("Checkbox", () => {
         ariaLabel="Select export item"
       />,
     );
-    expect(screen.getByRole("checkbox", { name: "Select export item" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "Select export item" }),
+    ).toBeInTheDocument();
   });
 
   it("toggles via the underlying label click and reports the new value", () => {
@@ -43,6 +46,21 @@ describe("Checkbox", () => {
 
     rerender(<Checkbox checked onChange={vi.fn()} label="Sync" />);
     expect(input.checked).toBe(true);
+  });
+
+  it("keeps controlled visual state after a native click", () => {
+    function ControlledCheckbox() {
+      const [checked, setChecked] = useState(false);
+      return (
+        <Checkbox checked={checked} onChange={setChecked} label="Remember" />
+      );
+    }
+    render(<ControlledCheckbox />);
+
+    const input = screen.getByRole("checkbox", { name: "Remember" });
+    fireEvent.click(input);
+
+    expect(input).toBeChecked();
   });
 
   it("does not double-toggle when the native input change event fires", () => {

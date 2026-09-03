@@ -51,6 +51,7 @@ type GeneralActionKey =
   | "setLaunchAtStartup"
   | "setMinimizeOnLaunch"
   | "setCloseAction"
+  | "persistCloseAction"
   | "setDebugMode"
   | "setShortcutMode"
   | "setEnableNotifications"
@@ -299,7 +300,8 @@ function createEditorActions(context: SettingsActionContext) {
 }
 
 function createDesktopIntegrationActions(context: SettingsActionContext) {
-  const { get, setTouched, syncSettingsToMain } = context;
+  const { get, persistSettingsToMain, setTouched, syncSettingsToMain } =
+    context;
   return {
     setLaunchAtStartup: (launchAtStartup) => {
       setTouched({ launchAtStartup });
@@ -318,6 +320,20 @@ function createDesktopIntegrationActions(context: SettingsActionContext) {
       const closeAction = normalizeCloseAction(action);
       setTouched({ closeAction });
       window.electron?.setCloseAction?.(closeAction);
+      void syncSettingsToMain({ closeAction });
+    },
+    persistCloseAction: async (action) => {
+      const previousCloseAction = get().closeAction;
+      const closeAction = normalizeCloseAction(action);
+      setTouched({ closeAction });
+      window.electron?.setCloseAction?.(closeAction);
+      try {
+        await persistSettingsToMain({ closeAction });
+      } catch (error) {
+        setTouched({ closeAction: previousCloseAction });
+        window.electron?.setCloseAction?.(previousCloseAction);
+        throw error;
+      }
     },
     setDebugMode: (debugMode) => {
       setTouched({ debugMode });
@@ -327,6 +343,7 @@ function createDesktopIntegrationActions(context: SettingsActionContext) {
     | "setLaunchAtStartup"
     | "setMinimizeOnLaunch"
     | "setCloseAction"
+    | "persistCloseAction"
     | "setDebugMode"
   >;
 }

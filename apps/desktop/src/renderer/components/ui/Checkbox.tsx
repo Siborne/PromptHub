@@ -18,22 +18,17 @@ export function Checkbox({
   disabled = false,
 }: CheckboxProps) {
   return (
-    <label 
+    <label
       className={`flex items-center gap-2 cursor-pointer select-none ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
-      onClick={(e) => {
-        if (disabled) return;
-        e.preventDefault();
-        onChange(!checked);
-      }}
     >
       <div className="relative flex items-center">
         <input
           type="checkbox"
           className="peer sr-only"
           checked={checked}
-          readOnly
           disabled={disabled}
           aria-label={label ? undefined : ariaLabel}
+          onChange={(event) => onChange(event.currentTarget.checked)}
         />
         <span
           className={`
@@ -63,4 +58,3 @@ export function Checkbox({
     </label>
   );
 }
-

@@ -7,6 +7,7 @@ export interface SettingsActionContext {
   get: StoreApi<SettingsState>["getState"];
   setTouched: (partial: Partial<SettingsState>) => void;
   commitAISettings: (partial: Partial<SettingsState>) => void;
+  persistSettingsToMain: (settings: Partial<Settings>) => Promise<void>;
   syncSettingsToMain: (settings: Partial<Settings>) => Promise<void>;
   syncSettingsToMainThenRefreshRules: (settings: Partial<Settings>) => void;
 }

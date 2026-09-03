@@ -17,15 +17,21 @@ export function CloseDialog({ isOpen, onClose }: CloseDialogProps) {
   const titleId = useId();
   const messageId = useId();
   const [rememberChoice, setRememberChoice] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rememberError, setRememberError] = useState(false);
   // Only subscribe to the action we need, not the entire store
   // 只订阅需要的 action，而不是整个 store
-  const setCloseAction = useSettingsStore((state) => state.setCloseAction);
+  const persistCloseAction = useSettingsStore(
+    (state) => state.persistCloseAction,
+  );
 
   // Reset checkbox state each time dialog opens to avoid residual state
   // 每次打开都重置勾选状态，避免上次残留
   useEffect(() => {
     if (isOpen) {
       setRememberChoice(false);
+      setIsSubmitting(false);
+      setRememberError(false);
     }
   }, [isOpen]);
 
@@ -58,6 +64,7 @@ export function CloseDialog({ isOpen, onClose }: CloseDialogProps) {
   }, [isOpen]);
 
   const handleCancel = () => {
+    if (isSubmitting) return;
     // Important: User only closed the dialog (didn't choose minimize/exit)
     // Need to notify main process to reset pendingCloseAction, otherwise next close click won't show dialog again
     // 重要：用户只是关闭了弹窗（没有选择最小化/退出）
@@ -85,21 +92,21 @@ export function CloseDialog({ isOpen, onClose }: CloseDialogProps) {
       document.removeEventListener('keydown', handleEsc);
       document.body.style.overflow = previousOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, isSubmitting, onClose]);
 
-  const handleMinimize = () => {
+  const handleAction = async (action: 'minimize' | 'exit') => {
+    setRememberError(false);
     if (rememberChoice) {
-      setCloseAction('minimize');
+      setIsSubmitting(true);
+      try {
+        await persistCloseAction(action);
+      } catch {
+        setRememberError(true);
+        setIsSubmitting(false);
+        return;
+      }
     }
-    window.electron?.sendCloseDialogResult?.('minimize', rememberChoice);
-    onClose();
-  };
-
-  const handleExit = () => {
-    if (rememberChoice) {
-      setCloseAction('exit');
-    }
-    window.electron?.sendCloseDialogResult?.('exit', rememberChoice);
+    window.electron?.sendCloseDialogResult?.(action, rememberChoice);
     onClose();
   };
 
@@ -141,8 +148,9 @@ export function CloseDialog({ isOpen, onClose }: CloseDialogProps) {
           <button
             type="button"
             onClick={handleCancel}
+            disabled={isSubmitting}
             aria-label={t('common.close', 'Close')}
-            className="p-2 -mr-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="p-2 -mr-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <XIcon aria-hidden="true" className="w-5 h-5" />
           </button>
@@ -160,8 +168,9 @@ export function CloseDialog({ isOpen, onClose }: CloseDialogProps) {
           <div className="space-y-3">
             <button
               type="button"
-              onClick={handleMinimize}
-              className="w-full flex items-center gap-3 p-4 rounded-xl border border-border hover:bg-accent hover:border-primary/50 transition-all group"
+              onClick={() => void handleAction('minimize')}
+              disabled={isSubmitting}
+              className="w-full flex items-center gap-3 p-4 rounded-xl border border-border hover:bg-accent hover:border-primary/50 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                 <MinusIcon aria-hidden="true" className="w-5 h-5" />
@@ -173,8 +182,9 @@ export function CloseDialog({ isOpen, onClose }: CloseDialogProps) {
 
             <button
               type="button"
-              onClick={handleExit}
-              className="w-full flex items-center gap-3 p-4 rounded-xl border border-border hover:bg-accent hover:border-destructive/50 transition-all group"
+              onClick={() => void handleAction('exit')}
+              disabled={isSubmitting}
+              className="w-full flex items-center gap-3 p-4 rounded-xl border border-border hover:bg-accent hover:border-destructive/50 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="p-2 rounded-lg bg-destructive/10 text-destructive group-hover:bg-destructive group-hover:text-destructive-foreground transition-colors">
                 <LogOutIcon aria-hidden="true" className="w-5 h-5" />
@@ -193,8 +203,14 @@ export function CloseDialog({ isOpen, onClose }: CloseDialogProps) {
               onChange={setRememberChoice}
               label={t('closeDialog.rememberChoice')}
               className="text-muted-foreground"
+              disabled={isSubmitting}
             />
           </div>
+          {rememberError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {t('closeDialog.rememberFailed')}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

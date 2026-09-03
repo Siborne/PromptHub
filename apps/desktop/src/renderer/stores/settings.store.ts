@@ -82,6 +82,14 @@ export type {
   TranslationMode,
 } from "./settings/settings-types";
 
+function persistSettingsToMain(settings: Partial<Settings>): Promise<void> {
+  const setSettings = window.api?.settings?.set;
+  if (typeof setSettings !== "function") {
+    return Promise.reject(new Error("Settings persistence is unavailable"));
+  }
+  return setSettings(settings).then(() => undefined);
+}
+
 function syncSettingsToMain(settings: Partial<Settings>): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
   const setSettings = window.api?.settings?.set;
@@ -134,6 +142,7 @@ export const useSettingsStore = create<SettingsState>()(
         get,
         setTouched,
         commitAISettings,
+        persistSettingsToMain,
         syncSettingsToMain,
         syncSettingsToMainThenRefreshRules,
       };
@@ -306,6 +315,7 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
     ),
     networkProxy,
   });
+  window.electron?.setCloseAction?.(useSettingsStore.getState().closeAction);
 
   if (typeof settings.launchAtStartup !== "boolean")
     void syncSettingsToMain({ launchAtStartup });

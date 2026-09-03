@@ -30,6 +30,16 @@
 - 一级模块的显隐与顺序使用同一份持久化偏好。恢复旧快照时必须过滤未知项与重复项；当前模块被隐藏时必须回退到第一个可见模块。
 - 收起侧栏时只保留一级 rail，二级模块面板整体隐藏，主内容区使用释放后的空间；二级面板不得维护另一份一级模块选择状态。
 
+### 2.3 Windows Close Choice
+
+- Windows 关闭窗口对话框的“记住我的选择”必须先把 `ask | minimize | exit` 写入 main
+  process 拥有的 canonical renderer settings，并同步 SQLite 兼容设置，再执行最小化或
+  退出；不得依赖可能在进程退出后才完成的 renderer 后台订阅。
+- 下次启动从 canonical settings hydrate 后必须立即把规范化 close action 重新应用到
+  main process 内存；不得继续使用 renderer hydrate 之前的默认 `ask`。
+- 未勾选记住时只执行本次选择，不改变持久 close action。持久化失败时必须保留对话框、
+  恢复之前的 renderer/main 内存值并显示可重试错误，不得假装记忆成功后继续退出。
+
 ### 3. Stable Internal Sources
 
 - 长期工程边界和代码结构治理见 `spec/knowledge/structure/code-structure-guidelines.md`。

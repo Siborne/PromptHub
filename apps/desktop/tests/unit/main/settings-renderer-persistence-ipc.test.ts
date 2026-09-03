@@ -228,4 +228,187 @@ describe("settings renderer persistence IPC", () => {
       redactLegacyKeys: ["prompthub-settings"],
     });
   });
+
+  it("persists a remembered close action to canonical settings before SQLite", async () => {
+    const order: string[] = [];
+    const run = vi.fn(() => order.push("sqlite"));
+    const persistence = {
+      readHydratedStateSync: vi.fn(() => ({
+        migrationComplete: true,
+        settings: { language: "de", closeAction: "ask" },
+      })),
+      replaceSettings: vi.fn(async () => {
+        order.push("canonical");
+      }),
+    };
+    const database = {
+      prepare: vi.fn(() => ({ run })),
+      transaction: vi.fn((callback: () => void) => callback),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC(database as never, {
+      rendererPersistence: persistence as never,
+    });
+
+    await handlers.get(IPC_CHANNELS.SETTINGS_SET)?.(
+      {},
+      { closeAction: "minimize" },
+    );
+
+    expect(persistence.replaceSettings).toHaveBeenCalledWith({
+      language: "de",
+      closeAction: "minimize",
+    });
+    expect(run).toHaveBeenCalledWith("closeAction", '"minimize"');
+    expect(order).toEqual(["canonical", "sqlite"]);
+  });
+
+  it("keeps pre-migration close action writes in SQLite", async () => {
+    const run = vi.fn();
+    const persistence = {
+      readHydratedStateSync: vi.fn(() => ({
+        migrationComplete: false,
+        settings: {},
+      })),
+      replaceSettings: vi.fn(),
+    };
+    const database = {
+      prepare: vi.fn(() => ({ run })),
+      transaction: vi.fn((callback: () => void) => callback),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC(database as never, {
+      rendererPersistence: persistence as never,
+    });
+
+    await handlers.get(IPC_CHANNELS.SETTINGS_SET)?.(
+      {},
+      { closeAction: "exit" },
+    );
+
+    expect(persistence.replaceSettings).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledWith("closeAction", '"exit"');
+  });
+
+  it("rejects invalid close actions before durable writes", async () => {
+    const run = vi.fn();
+    const persistence = {
+      readHydratedStateSync: vi.fn(),
+      replaceSettings: vi.fn(),
+    };
+    const database = {
+      prepare: vi.fn(() => ({ run })),
+      transaction: vi.fn((callback: () => void) => callback),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC(database as never, {
+      rendererPersistence: persistence as never,
+    });
+
+    await expect(
+      handlers.get(IPC_CHANNELS.SETTINGS_SET)?.({}, { closeAction: "destroy" }),
+    ).rejects.toThrow(/closeAction/u);
+    expect(persistence.readHydratedStateSync).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("does not write SQLite when canonical close action publication fails", async () => {
+    const run = vi.fn();
+    const persistence = {
+      readHydratedStateSync: vi.fn(() => ({
+        migrationComplete: true,
+        settings: { closeAction: "ask" },
+      })),
+      replaceSettings: vi.fn().mockRejectedValue(new Error("publish failed")),
+    };
+    const database = {
+      prepare: vi.fn(() => ({ run })),
+      transaction: vi.fn((callback: () => void) => callback),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC(database as never, {
+      rendererPersistence: persistence as never,
+    });
+
+    await expect(
+      handlers.get(IPC_CHANNELS.SETTINGS_SET)?.({}, { closeAction: "exit" }),
+    ).rejects.toThrow("publish failed");
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("restores canonical settings when the SQLite compatibility write fails", async () => {
+    const run = vi.fn(() => {
+      throw new Error("sqlite unavailable");
+    });
+    const persistence = {
+      readHydratedStateSync: vi.fn(() => ({
+        migrationComplete: true,
+        settings: { language: "de", closeAction: "ask" },
+      })),
+      replaceSettings: vi.fn().mockResolvedValue(undefined),
+    };
+    const database = {
+      prepare: vi.fn(() => ({ run })),
+      transaction: vi.fn((callback: () => void) => callback),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC(database as never, {
+      rendererPersistence: persistence as never,
+    });
+
+    await expect(
+      handlers.get(IPC_CHANNELS.SETTINGS_SET)?.({}, { closeAction: "exit" }),
+    ).rejects.toThrow("sqlite unavailable");
+    expect(persistence.replaceSettings).toHaveBeenNthCalledWith(1, {
+      language: "de",
+      closeAction: "exit",
+    });
+    expect(persistence.replaceSettings).toHaveBeenNthCalledWith(2, {
+      language: "de",
+      closeAction: "ask",
+    });
+  });
+
+  it("accepts ask through the SQLite-only compatibility path", async () => {
+    const run = vi.fn();
+    const database = {
+      prepare: vi.fn(() => ({ run })),
+      transaction: vi.fn((callback: () => void) => callback),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC(database as never);
+
+    await handlers.get(IPC_CHANNELS.SETTINGS_SET)?.({}, { closeAction: "ask" });
+
+    expect(run).toHaveBeenCalledWith("closeAction", '"ask"');
+  });
+
+  it("does not republish canonical settings for unrelated patches", async () => {
+    const run = vi.fn();
+    const persistence = {
+      readHydratedStateSync: vi.fn(),
+      replaceSettings: vi.fn(),
+    };
+    const database = {
+      prepare: vi.fn(() => ({ run })),
+      transaction: vi.fn((callback: () => void) => callback),
+    };
+    const { registerSettingsIPC } =
+      await import("../../../src/main/ipc/settings.ipc");
+    registerSettingsIPC(database as never, {
+      rendererPersistence: persistence as never,
+    });
+
+    await handlers.get(IPC_CHANNELS.SETTINGS_SET)?.({}, { language: "fr" });
+
+    expect(persistence.readHydratedStateSync).not.toHaveBeenCalled();
+    expect(persistence.replaceSettings).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledWith("language", '"fr"');
+  });
 });

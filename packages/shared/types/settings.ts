@@ -46,6 +46,8 @@ export type NetworkProxyMode = "system" | "direct" | "manual";
 
 export type NetworkProxyProtocol = "http" | "https" | "socks5";
 
+export type CloseAction = "ask" | "minimize" | "exit";
+
 export interface NetworkProxySettings {
   mode: NetworkProxyMode;
   protocol: NetworkProxyProtocol;
@@ -84,6 +86,7 @@ export interface Settings {
   // Startup behavior — main process reads these to honor "minimize on launch"
   launchAtStartup?: boolean;
   minimizeOnLaunch?: boolean;
+  closeAction?: CloseAction;
   // GitHub personal access token (optional). Used to authenticate GitHub
   // API calls in the skill store so the user isn't limited to 60 req/h.
   // Never sent to third-party hosts; only attached for api.github.com and

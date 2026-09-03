@@ -6,7 +6,7 @@ import {
   getPlatformById,
   normalizeLegacySkillPathToRootTemplate,
 } from '@prompthub/shared/constants/platforms';
-import type { Settings } from '@prompthub/shared/types';
+import type { CloseAction, Settings } from '@prompthub/shared/types';
 import { DEFAULT_SETTINGS } from '@prompthub/shared/types';
 import type {
   CoreAIConfigFile,
@@ -29,6 +29,27 @@ export {
   getMinimizeOnLaunchSetting,
   readGithubTokenSetting as getGithubTokenSetting,
 } from '../settings/settings-readers';
+
+function closeActionFromPatch(settings: Partial<Settings>): CloseAction | undefined {
+  if (!Object.prototype.hasOwnProperty.call(settings, 'closeAction')) return undefined;
+  const action = settings.closeAction;
+  if (action !== 'ask' && action !== 'minimize' && action !== 'exit') {
+    throw new Error("closeAction must be 'ask', 'minimize', or 'exit'");
+  }
+  return action;
+}
+
+async function persistCanonicalCloseAction(
+  persistence: RendererPersistenceStore | undefined,
+  settings: Partial<Settings>,
+): Promise<Record<string, unknown> | undefined> {
+  const closeAction = closeActionFromPatch(settings);
+  if (!persistence || closeAction === undefined) return undefined;
+  const current = persistence.readHydratedStateSync();
+  if (!current.migrationComplete) return undefined;
+  await persistence.replaceSettings({ ...current.settings, closeAction });
+  return current.settings;
+}
 
 function isTraeCnLikePath(value: string | undefined): boolean {
   if (typeof value !== 'string') {
@@ -366,6 +387,10 @@ export function registerSettingsIPC(
 
   // Save settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, async (_event, newSettings: Partial<Settings>) => {
+    const previousCanonicalSettings = await persistCanonicalCloseAction(
+      options.rendererPersistence,
+      newSettings,
+    );
     if (!options.rendererPersistence) persistSharedAIConfig(newSettings);
     const dbSettings = options.rendererPersistence
       ? stripRendererSecretSettingsPayload(newSettings)
@@ -380,7 +405,14 @@ export function registerSettingsIPC(
       }
     });
 
-    transaction();
+    try {
+      transaction();
+    } catch (error) {
+      if (previousCanonicalSettings && options.rendererPersistence) {
+        await options.rendererPersistence.replaceSettings(previousCanonicalSettings);
+      }
+      throw error;
+    }
     if (
       Object.prototype.hasOwnProperty.call(newSettings, 'builtinAgentOverrides') ||
       Object.prototype.hasOwnProperty.call(newSettings, 'customPlatformRootPaths') ||

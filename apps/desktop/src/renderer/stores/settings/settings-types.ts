@@ -3,6 +3,7 @@ import type {
   AgentIdentityPreferences,
   AutoSyncHistoryEntry,
   BuiltinAgentOverrideConfig,
+  CloseAction,
   CustomAgentConfig,
   NetworkProxySettings,
   SkillProject,
@@ -142,7 +143,7 @@ export interface SettingsState {
   launchAtStartup: boolean;
   minimizeOnLaunch: boolean;
   debugMode: boolean;
-  closeAction: "ask" | "minimize" | "exit";
+  closeAction: CloseAction;
   shortcutModes: Record<string, "global" | "local">;
   enableNotifications: boolean;
   showCopyNotification: boolean;
@@ -258,7 +259,8 @@ export interface SettingsState {
   setMinimizeOnLaunch: (enabled: boolean) => void;
   setDebugMode: (enabled: boolean) => void;
   setEnableNotifications: (enabled: boolean) => void;
-  setCloseAction: (action: "ask" | "minimize" | "exit") => void;
+  setCloseAction: (action: CloseAction) => void;
+  persistCloseAction: (action: Exclude<CloseAction, "ask">) => Promise<void>;
   setShortcutMode: (key: string, mode: "global" | "local") => void;
   setShowCopyNotification: (enabled: boolean) => void;
   setShowSaveNotification: (enabled: boolean) => void;

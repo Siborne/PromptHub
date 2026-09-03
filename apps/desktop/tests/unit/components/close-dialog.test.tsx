@@ -1,12 +1,14 @@
-import { screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 import { CloseDialog } from "../../../src/renderer/components/ui/CloseDialog";
+import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
 import { renderWithI18n } from "../../helpers/i18n";
 
 describe("CloseDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     document.body.style.overflow = "";
+    useSettingsStore.setState({ closeAction: "ask" });
   });
 
   afterEach(() => {
@@ -47,8 +49,9 @@ describe("CloseDialog", () => {
   it("notifies main process and closes on cancel (X / backdrop / Esc)", async () => {
     const onClose = vi.fn();
     const cancelMock = vi.fn();
-    (window.electron as unknown as { sendCloseDialogCancel: typeof cancelMock })
-      .sendCloseDialogCancel = cancelMock;
+    (
+      window.electron as unknown as { sendCloseDialogCancel: typeof cancelMock }
+    ).sendCloseDialogCancel = cancelMock;
 
     const { container } = await renderWithI18n(
       <CloseDialog isOpen onClose={onClose} />,
@@ -130,16 +133,21 @@ describe("CloseDialog", () => {
       screen.getByRole("button", { name: "Exit App" }),
     ].forEach((button) => {
       expect(button).toHaveAttribute("type", "button");
-      expect(button.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+      expect(button.querySelector("svg")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
     });
   });
 
   it("sends 'minimize' / 'exit' results with the rememberChoice flag", async () => {
     const onClose = vi.fn();
     const sendResult = vi.fn();
-    (window.electron as unknown as {
-      sendCloseDialogResult: typeof sendResult;
-    }).sendCloseDialogResult = sendResult;
+    (
+      window.electron as unknown as {
+        sendCloseDialogResult: typeof sendResult;
+      }
+    ).sendCloseDialogResult = sendResult;
 
     await renderWithI18n(<CloseDialog isOpen onClose={onClose} />, {
       language: "en",
@@ -161,5 +169,99 @@ describe("CloseDialog", () => {
     fireEvent.click(exitButton);
     expect(sendResult).toHaveBeenCalledWith("exit", false);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("visibly remembers and persists the choice before minimizing", async () => {
+    let resolvePersistence: (() => void) | undefined;
+    const persist = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePersistence = resolve;
+        }),
+    );
+    const sendResult = vi.fn();
+    const setMainCloseAction = vi.fn();
+    const onClose = vi.fn();
+    window.api.settings = { ...(window.api.settings ?? {}), set: persist };
+    window.electron!.sendCloseDialogResult = sendResult;
+    window.electron!.setCloseAction = setMainCloseAction;
+
+    await renderWithI18n(<CloseDialog isOpen onClose={onClose} />, {
+      language: "en",
+    });
+
+    const remember = screen.getByRole("checkbox", {
+      name: "Remember my choice",
+    });
+    fireEvent.click(remember);
+    expect(remember).toBeChecked();
+
+    const minimize = screen.getByRole("button", {
+      name: "Minimize to Tray",
+    });
+    fireEvent.click(minimize);
+
+    expect(persist).toHaveBeenCalledWith({ closeAction: "minimize" });
+    expect(setMainCloseAction).toHaveBeenCalledWith("minimize");
+    expect(sendResult).not.toHaveBeenCalled();
+    expect(minimize).toBeDisabled();
+    expect(remember).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+
+    resolvePersistence?.();
+    await waitFor(() =>
+      expect(sendResult).toHaveBeenCalledWith("minimize", true),
+    );
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the dialog open and restores ask when persistence fails", async () => {
+    const persist = vi.fn().mockRejectedValue(new Error("disk unavailable"));
+    const sendResult = vi.fn();
+    const onClose = vi.fn();
+    const setMainCloseAction = vi.fn();
+    window.api.settings = { ...(window.api.settings ?? {}), set: persist };
+    window.electron!.sendCloseDialogResult = sendResult;
+    window.electron!.setCloseAction = setMainCloseAction;
+
+    await renderWithI18n(<CloseDialog isOpen onClose={onClose} />, {
+      language: "en",
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Remember my choice" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Exit App" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not save this choice. Please try again.",
+    );
+    expect(useSettingsStore.getState().closeAction).toBe("ask");
+    expect(setMainCloseAction).toHaveBeenLastCalledWith("ask");
+    expect(sendResult).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("does not exit when the settings persistence contract is unavailable", async () => {
+    const sendResult = vi.fn();
+    const onClose = vi.fn();
+    const setMainCloseAction = vi.fn();
+    window.api.settings = { ...(window.api.settings ?? {}), set: undefined };
+    window.electron!.sendCloseDialogResult = sendResult;
+    window.electron!.setCloseAction = setMainCloseAction;
+
+    await renderWithI18n(<CloseDialog isOpen onClose={onClose} />, {
+      language: "en",
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Remember my choice" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Exit App" }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(setMainCloseAction).toHaveBeenLastCalledWith("ask");
+    expect(sendResult).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
