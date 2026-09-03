@@ -7,10 +7,11 @@
 
 ## Shipped
 
-- Root, Desktop, CLI, self-hosted Web, Cloudflare Worker, Mobile package, and
-  Expo application manifests now report `0.6.0`.
-- The project context in `AGENTS.md` now reports `0.6.0`.
-- The standalone CLI runtime reports `0.6.0`.
+- The 0.6 line advanced through `0.6.0-beta.1`; the current release candidate
+  uses `0.6.0-beta.2` across Root, Desktop, CLI, self-hosted Web, Cloudflare
+  Worker, Mobile package, Expo metadata, project context, and CLI runtime.
+- Stable promotion will replace the prerelease identity with `0.6.0` only
+  after the explicit stable release gate.
 - Website release synchronization now selects explicit stable release records
   instead of treating the root build version as published.
 - The `0.6.0` preparation record and unreleased changelog note are synchronized.
@@ -118,3 +119,6 @@ this change has no visible product UI delta.
   promoted together.
 - The `v0.6.0-beta.1` replacement publication is complete; it does not promote
   any stable-facing surface from `0.5.9`.
+- The beta.2 candidate is tracked independently under
+  `release-0-6-0-beta-2-readiness`; no beta.2 tag or Release exists at local
+  preparation time.

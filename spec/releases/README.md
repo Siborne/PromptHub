@@ -16,6 +16,7 @@
 
 | Version        | Status                                            | Path                            | Updated    |
 | -------------- | ------------------------------------------------- | ------------------------------- | ---------- |
+| `0.6.0-beta.2` | local candidate ready; unpublished                | `spec/releases/0.6.0-beta.2.md` | 2026-09-03 |
 | `0.6.0-beta.1` | published prerelease; Skill mutation fix replaced | `spec/releases/0.6.0-beta.1.md` | 2026-08-21 |
 | `0.6.0`        | preparation                                       | `spec/releases/0.6.0.md`        | 2026-07-30 |
 | `0.5.9`        | stable record                                     | `spec/releases/0.5.9.md`        | 2026-08-19 |

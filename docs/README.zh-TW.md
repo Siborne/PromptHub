@@ -83,7 +83,7 @@ PromptHub 把你的 Prompt、SKILL.md 和專案級 AI 編程資產放進一個�
 | Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.9-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.9-arm64.exe) | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.9-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.9-arm64.exe) |
 | macOS   | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-x64.dmg)     | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-x64.dmg)     |
 | Linux   | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-amd64.deb)              | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.9-amd64.deb)              |
-| 預覽版  | [![目前預覽版](https://img.shields.io/badge/Preview-v0.6.0--beta.1-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases/tag/v0.6.0-beta.1)                                                                                                                                                                                                                                           | [GitHub Prerelease v0.6.0-beta.1](https://github.com/legeling/PromptHub/releases/tag/v0.6.0-beta.1)                                                                                                                                                                                                                                                                                                                                     |
+| 預覽版  | [![目前預覽版](https://img.shields.io/badge/Preview-v0.6.0--beta.2-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases/tag/v0.6.0-beta.2)                                                                                                                                                                                                                                           | [GitHub Prerelease v0.6.0-beta.2](https://github.com/legeling/PromptHub/releases/tag/v0.6.0-beta.2)                                                                                                                                                                                                                                                                                                                                     |
 
 > **macOS 選哪個？** Apple Silicon（M1/M2/M3/M4）選 `arm64`，Intel Mac 選 `x64`。
 > **Windows 選哪個？** 絕大多數選 `x64`，只有 Surface Pro X 這類 ARM 裝置選 `arm64`。
@@ -330,6 +330,15 @@ Skill 匯入、版本快照與分發會統一套用內建忽略規則和根目�
 ## 更新日誌
 
 完整版本說明：**[CHANGELOG.md](../CHANGELOG.md)**
+
+### v0.6.0-beta.2（2026-09-03，預覽版）
+
+- 生圖工作台新增整圖編輯、生成結果接續創作、GPT Image 編輯與不遮擋畫布的詳情面板
+- Git 缺失時，公開 GitHub、GitLab.com 與相容 Gitea Skill 可回退到安全的 HTTPS 歸檔下載
+- Rules 還原保留外部編輯與可恢復歷史，並加固升級安全點、備份保留及混合 Prompt 版面恢復
+- 更新器新增自動/官方/鏡像來源切換、發行說明、傳輸指標與 macOS 選單列更新狀態
+- 新增 Doubao Work Skill 目標，修正關閉選擇持久化與 OpenCode 全域工作階段探索
+- 最新穩定版仍為 `v0.5.9`
 
 ### v0.6.0-beta.1（2026-08-20，替換預覽版）
 

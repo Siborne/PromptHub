@@ -7,7 +7,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 
 | State | Count |
 | --- | ---: |
-| Active | 30 |
+| Active | 31 |
 | Archived | 230 |
 | Legacy | 1 |
 
@@ -34,6 +34,7 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `plugin-issue-190-multi-native-manifests` | active | `spec/changes/active/plugin-issue-190-multi-native-manifests/` |
 | `plugin-management` | active | `spec/changes/active/plugin-management/` |
 | `r2-direct-downloads` | active | `spec/changes/active/r2-direct-downloads/` |
+| `release-0-6-0-beta-2-readiness` | active | `spec/changes/active/release-0-6-0-beta-2-readiness/` |
 | `release-0-6-0-version-alignment` | active | `spec/changes/active/release-0-6-0-version-alignment/` |
 | `risk-aware-verification-harness` | active | `spec/changes/active/risk-aware-verification-harness/` |
 | `rules-issue-193-missing-project-reconciliation` | active | `spec/changes/active/rules-issue-193-missing-project-reconciliation/` |

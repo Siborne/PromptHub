@@ -1,5 +1,36 @@
 ## [Unreleased]
 
+## [0.6.0-beta.2] - 2026-09-03
+
+### 新功能 / Features
+
+- **整图生成与编辑工作台**：生图工作台支持生成/编辑双模式、将已有生成结果继续作为参考图、GPT Image multipart 编辑、批次历史和不遮挡画布的右侧详情面板
+  - **Whole-Image Generation And Editing Workbench**: The image workbench now supports generate/edit modes, generated-output references, GPT Image multipart editing, batch history, and an in-flow details panel that does not cover the canvas
+- **Doubao Work Skill 支持**：新增内置 Doubao Work Agent 目标，复用完整 Skill 包安装、更新和卸载流程，并保持未验证的 Provider、MCP、Rules 和会话能力关闭
+  - **Doubao Work Skill Support**: Added a built-in Doubao Work Agent target using the complete Skill package install, update, and removal lifecycle while leaving unverified Provider, MCP, Rules, and session capabilities disabled
+
+### 问题修复 / Fixes
+
+- **无 Git 环境可安装公开 Skill**：Git 不可用时，公开 GitHub、GitLab.com 和兼容 Gitea 的 HTTPS Skill 来源会回退到有界归档下载；SSH、私有网络、历史和写入操作继续明确要求 Git
+  - **Public Skill Installation Without Git**: When Git is unavailable, public GitHub, GitLab.com, and compatible Gitea HTTPS Skill sources fall back to bounded archive downloads; SSH, private-network, history, and write workflows still require Git
+- **Rules 恢复不再覆盖外部编辑**：备份导入只恢复 PromptHub 管理副本，保留不同的外部目标与可恢复历史，并在部分发布失败时回滚
+  - **Rules Restore Preserves External Edits**: Backup import now restores only PromptHub-managed copies, preserves divergent external targets and recoverable history, and rolls back partial publication
+- **升级恢复与备份保留协调**：启动迁移复用有效安全点，跨备份家族执行有界保留，修复混合 Prompt 布局，并把普通启动恢复选择留在 main process 的确定性路径
+  - **Coordinated Upgrade Recovery And Backup Retention**: Startup migration now reuses valid safety points, applies bounded retention across backup families, repairs mixed Prompt layouts, and keeps normal startup recovery on the deterministic main-process path
+- **更新下载来源与托盘状态**：更新器支持自动、官方和镜像来源切换与取消，保留发布说明和传输指标，并把可用版本投影到 macOS 托盘状态
+  - **Update Sources And Tray Status**: The updater now supports cancellable automatic, official, and mirror sources, preserves release notes and transfer metrics, and projects available versions into the macOS tray
+- **关闭选择可靠持久化**：Windows “记住我的选择”会在最小化或退出前等待 canonical 设置落盘，失败时保留对话框并恢复先前状态
+  - **Reliable Remembered Close Choice**: Windows now waits for canonical settings persistence before applying a remembered minimize or exit action, retaining the dialog and restoring prior state on failure
+- **Agent、Plugin 与 MCP 边界加固**：OpenCode 历史改用全局只读分页，并修复 Plugin 来源投影/快照/物化、非 secret MCP 写入、未安装 Agent 额度副作用、Provider 重名和会话删除索引
+  - **Agent, Plugin, And MCP Boundary Hardening**: OpenCode history now uses global read-only paging, with fixes for Plugin source projection/snapshots/materialization, non-secret MCP writes, undetected Agent usage side effects, duplicate Provider names, and deleted-session indexes
+
+### 维护 / Maintenance
+
+- **仓库级 Playwright Test Agents**：加入受限的 Planner、Generator 和 Healer 配置、Electron seed 与独立回归约束，不替代普通 Playwright 和发布门禁
+  - **Repository Playwright Test Agents**: Added scoped Planner, Generator, and Healer configurations, an Electron seed, and standalone regression boundaries without replacing ordinary Playwright or release gates
+- **0.6.0-beta.2 候选版本对齐**：Desktop、CLI、自部署 Web、Cloudflare Worker 和 Mobile 使用新的 prerelease 身份；稳定徽标、默认下载、Homebrew 和 GHCR `latest` 继续保持 `0.5.9`
+  - **0.6.0-beta.2 Candidate Alignment**: Desktop, CLI, self-hosted Web, Cloudflare Worker, and Mobile use the new prerelease identity while stable badges, default downloads, Homebrew, and GHCR `latest` remain on `0.5.9`
+
 ## [0.6.0-beta.1] - 2026-08-20
 
 ### 新功能 / Features
