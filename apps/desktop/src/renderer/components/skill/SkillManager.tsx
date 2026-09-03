@@ -34,6 +34,7 @@ import type { Skill, ScannedSkill } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
 import { filterVisibleSkills } from "../../services/skill-filter";
+import { collectSkillTagOptions } from "../../services/skill-tag-options";
 import { buildMySkillSourceBadges } from "../../services/skill-source-badges";
 import { getRemoteStoreSkills } from "../../services/remote-store-entry";
 import { getSkillsWithStoreUpdates } from "../../services/skill-library-update-status";
@@ -125,6 +126,8 @@ export function SkillManager() {
   const deployedSkillNames = useSkillStore((state) => state.deployedSkillNames);
   const loadDeployedStatus = useSkillStore((state) => state.loadDeployedStatus);
   const skillFilterTags = useSkillStore((state) => state.filterTags);
+  const toggleSkillFilterTag = useSkillStore((state) => state.toggleFilterTag);
+  const clearSkillFilterTags = useSkillStore((state) => state.clearFilterTags);
   const pendingPluginChildDeploySkillIds = useSkillStore(
     (state) => state.pendingPluginChildDeploySkillIds ?? [],
   );
@@ -273,6 +276,28 @@ export function SkillManager() {
     setFilterType(nextFilter);
     selectSkill(null);
   };
+
+  const handleToggleSkillTag = (tag: string) => {
+    setStoreView("my-skills");
+    toggleSkillFilterTag(tag);
+    selectSkill(null);
+  };
+
+  const handleClearSkillTags = () => {
+    setStoreView("my-skills");
+    clearSkillFilterTags();
+    selectSkill(null);
+  };
+
+  // Candidate tags for the My-Skills tag filter control (unique + sorted).
+  // Reuses the same list shape shown in the sidebar tag panel so both the
+  // sidebar and the main content stay consistent from one derived source.
+  // “我的 Skill”标签过滤控件的候选标签（去重排序），与侧栏标签面板共用同一种
+  // 派生结果，让侧栏与主内容从同一个候选中保持一致。
+  const skillTagOptions = useMemo(
+    () => collectSkillTagOptions(skills),
+    [skills],
+  );
 
   const [sourceFilterKey, setSourceFilterKey] = useState(
     ALL_SKILL_SOURCE_FILTER,
@@ -1274,6 +1299,10 @@ export function SkillManager() {
           onBatchDeploy={handleBatchDeploy}
           onBatchFavorite={() => void handleBatchFavorite()}
           onBatchTags={handleBatchTags}
+          onClearSkillTags={handleClearSkillTags}
+          onToggleSkillTag={handleToggleSkillTag}
+          skillActiveTags={skillFilterTags}
+          skillTagOptions={skillTagOptions}
           onFilterChange={handleMySkillFilterChange}
           onGalleryColumnsChange={setGalleryColumns}
           onRefresh={() => void handleRefreshLibrary()}

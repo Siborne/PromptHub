@@ -1,0 +1,46 @@
+# Implementation — skills-my-skills-tag-search
+
+## What shipped
+
+在“我的 Skill”主内容头部新增可键入搜索的多选标签过滤（OR）交互；选中状态与
+侧栏标签面板共用 skill-store `filterTags`（single source of truth）。
+
+New/changed files：
+- 新增 `src/renderer/services/skill-tag-options.ts`——候选 tags 收集（unique/trim/sorted）与键入收窄纯函数。
+- 新增 `src/renderer/components/skill/SkillTagSearchFilter.tsx`——presentation-only 的搜索多选下拉控件。
+- `src/renderer/components/skill/SkillManagerLibraryHeader.tsx`——新增受控 props，在 my-skills filter bar 渲染控件（无 tags 时隐藏）。
+- `src/renderer/components/skill/SkillManager.tsx`——绑定 store `toggleFilterTag/clearFilterTags`，派生 `skillTagOptions` 并传 props。
+- 7 个 locale `skill.*` 各 +6 键（含 parity 测试要求）。
+- 测试：`tests/unit/services/skill-tag-options.test.ts`、`tests/unit/components/skill-tag-search-filter.test.tsx`。
+- spec 记录：`spec/changes/active/skills-my-skills-tag-search/*`。
+- 分支：`feat/my-skills-tag-search`（自 `main` 创建；未提交 / 未提 PR）。
+
+## Design decisions
+
+- 不新增 store 字段/持久化；复用 `filterTags`/`filterVisibleSkills` 得到 OR + 与侧栏联动。
+- 候选列表与侧栏同一形状（unique、trim、sorted），派生自容器数据，避免重复状态。
+- 纯逻辑抽到 service 以脱离组件树做单测；控件为无状态受控组件，交互经回调。
+
+## What was verified
+
+Commands run（均从 `apps/desktop`）：
+- `pnpm exec vitest run tests/unit/services/skill-tag-options.test.ts` → 1 file，7 passed。
+- `pnpm exec vitest run tests/unit/components/skill-tag-search-filter.test.tsx` → 1 file，6 passed。
+- `pnpm exec vitest run`（5 文件，含 skill-i18n-manager parity、sidebar-skills、skill-filter）→ 5 files，53 passed；
+  其中包含经 `SkillManagerLibraryHeader`/`SkillManager` 挂载路径的头端 smoke（“My Skills header filters”、“filter by source”）
+  与跨 6 locale `skill` 键对齐断言。
+- `pnpm typecheck` → exit 0（`tsc --noEmit` clean）。
+- `pnpm exec eslint <本次新增/修改的 6 个受检文件> --max-warnings 0` → RC 0。
+
+### Known limits
+
+- 全量 `pnpm test:run` 在本会话前台/后台多次尝试均因运行环境 2 分钟墙钟超时提前中断，
+  未取得全量收尾绿单。受影响模块的针对性单测、链路上游回归、typecheck 与 lint 均绿；
+  全量 suite 建议在 CI 或本机宽松超时的终端执行确认后再进入提交/PR 环节。
+- 未提交任何 commit/未创建 PR；按约定等用户确认后方执行 push/PR。
+
+## Sync
+
+- 稳定文档/规则无跨界变化：本次为 renderer 视图内入口新增，无 IPC、shared 类型、
+  schema/持久化变更，故无需改动 `spec/knowledge/*` 或 `spec/rules/*`。
+- 验收映射：`FR-TAGSEARCH-001~003` → DESIGN → TEST（上列 UI + service + parity 测试）→ T（tasks list）已闭环。
