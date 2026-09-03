@@ -6,7 +6,6 @@ import {
   lazy,
   Suspense,
 } from "react";
-import type { RecoveryCandidate } from "@prompthub/shared/types";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { usePromptStore } from "./stores/prompt.store";
 import { useFolderStore } from "./stores/folder.store";
@@ -81,11 +80,6 @@ const EditPromptModal = lazy(() =>
 const CloseDialog = lazy(() =>
   import("./components/ui/CloseDialog").then((m) => ({
     default: m.CloseDialog,
-  })),
-);
-const DataRecoveryDialog = lazy(() =>
-  import("./components/ui/DataRecoveryDialog").then((m) => ({
-    default: m.DataRecoveryDialog,
   })),
 );
 const BackupImportConfirmDialog = lazy(() =>
@@ -175,12 +169,6 @@ function App() {
   // Close dialog state (Windows)
   // 关闭对话框状态（Windows）
   const [showCloseDialog, setShowCloseDialog] = useState(false);
-
-  // Data recovery state
-  const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
-  const [recoverableDatabases, setRecoverableDatabases] = useState<
-    RecoveryCandidate[]
-  >([]);
 
   // Update status (used for TopBar indicator)
   // 更新状态（用于顶部栏显示更新提示）
@@ -1009,29 +997,6 @@ function App() {
         await fetchFolders();
         logWhenDebugEnabled("✅ App initialized");
 
-        // IMPORTANT: We MUST NOT auto-execute performRecovery here. Historically
-        // this code auto-picked the best candidate and called performRecovery
-        // directly, which triggered an unconditional relaunch+quit inside the
-        // main process. On Windows upgrades, combined with electron-updater's
-        // `autoInstallOnAppQuit=true` and empty workspace scenarios, this
-        // produced an instant restart loop with no user-visible data.
-        //
-        // The renderer never starts recovery automatically. Main-process
-        // startup may self-heal deterministic file-authoritative cases before
-        // SQLite opens; this dialog is reserved for ambiguous candidates that
-        // still require an explicit user choice.
-        // See: https://github.com/legeling/PromptHub v0.5.2 regression.
-        if (!isWebRuntime()) {
-          try {
-            const recoverable = await window.electron?.checkRecovery?.();
-            if (recoverable && recoverable.length > 0) {
-              setRecoverableDatabases(recoverable);
-              setShowRecoveryDialog(true);
-            }
-          } catch (recoveryErr) {
-            console.warn("Recovery check failed:", recoveryErr);
-          }
-        }
       } catch (error) {
         console.error("❌ Init failed:", error);
         // Retry once for timeout errors
@@ -1254,24 +1219,6 @@ function App() {
           <CloseDialog
             isOpen={showCloseDialog}
             onClose={() => setShowCloseDialog(false)}
-          />
-        </Suspense>
-      ) : null}
-
-      {/* Data recovery dialog */}
-      {showRecoveryDialog ? (
-        <Suspense fallback={null}>
-          <DataRecoveryDialog
-            isOpen={showRecoveryDialog}
-            onClose={() => setShowRecoveryDialog(false)}
-            databases={recoverableDatabases}
-            allowStartFresh={
-              !recoverableDatabases.some(
-                (candidate) =>
-                  candidate.sourceType === "current-canonical-db" ||
-                  candidate.sourceType === "current-file-workspace",
-              )
-            }
           />
         </Suspense>
       ) : null}

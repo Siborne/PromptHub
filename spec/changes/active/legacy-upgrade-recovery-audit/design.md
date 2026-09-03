@@ -193,6 +193,18 @@ application fails closed and must not rewrite the marker downward. Version
 comparison must use the repository's prerelease-aware version utility rather
 than numeric splitting.
 
+The main-process recovery handler carries the startup diagnosis into an explicit
+`prompt-graph` or `canonical-storage` recovery scope. The authority service keeps
+`prompt-graph` as its default and refuses to replace a valid Prompt graph unless
+the user selected the current SQLite candidate after an
+`invalid-canonical-storage` diagnosis. This preserves file authority for all
+ordinary callers while allowing the selected catalog to repair non-Prompt
+canonical damage. Candidate discovery is not part of normal renderer startup:
+the main process owns migration, validation, and deterministic self-heal before
+SQLite opens, while the existing recovery browser is mounted only from the Data
+Settings workflow. Canonical invalidity continues to ignore any legacy dismiss
+marker, so no durable validation gate is bypassed.
+
 An existing canonical authority marker is necessary but not sufficient. Startup
 validates the complete file graph before opening SQLite. SQLite is a derived
 catalog: a valid canonical graph is staged into a fresh catalog on startup and
@@ -233,6 +245,24 @@ process. The staged catalog exists only to reuse the established canonical
 projector for validated supplemental history and non-Prompt domains; it is not
 allowed to choose or overwrite current Prompt content.
 
+The observed installed-version layout contains both the superseded canonical
+Prompt bundle directories and the legacy Markdown tree in `data/prompts`.
+During this repair only, the strict Markdown scanner skips a top-level directory
+when both `manifest.json` and `prompt.json` are regular non-symlink files. These
+directories are never imported as Markdown input: they remain in the preserved
+recovery artifact and are removed only inside the staged replacement before the
+new graph is materialized. Partial lookalikes, nested undeclared files outside
+that exact shape, symlinks, and special files remain fail-closed.
+
+Media resolution still prefers the exact filename across the active asset root
+and allowlisted recovery roots. When no filename copy exists, it may consult
+only the superseded canonical bundle with the same Prompt id. The generic bundle
+reader validates every payload and identity; the Prompt schema validates the
+kind/reference mapping; the object reader then verifies the declared SHA-256 and
+byte size from `data/assets/objects`. The validated source map is cached once per
+Prompt for the repair run. This immutable-object fallback supplies bytes only
+and cannot select canonical Prompt text or metadata over Markdown.
+
 Prompt media resolution uses a fixed list: active assets, validated recovery
 artifacts, and validated upgrade safety points. Resolution is by safe relative
 reference and regular file only. Every existing copy is streamed through
@@ -245,9 +275,9 @@ journaled authority boundary, which preserves the damaged active root.
 The repair runs automatically only when the Markdown set is unique, strictly
 parseable, bounded, and all referenced media resolve to identical hashes across
 allowlisted roots. Any ambiguity returns `recovery-required` without modifying
-the active tree. In that exceptional UI, file candidates sort ahead of SQLite
-regardless of modification time. SQLite-only recovery remains a lower-priority
-explicit fallback.
+the active tree. When the user explicitly opens recovery in Settings, file
+candidates sort ahead of SQLite regardless of modification time. SQLite-only
+recovery remains a lower-priority explicit fallback.
 
 Strict workspace staging treats the file Folder and Prompt parent graphs as
 exact sets and imports both in linear parent-before-child order. It rejects
@@ -303,7 +333,7 @@ document.
 
 Already-affected beta roots have an exact corruption signature: canonical
 models are empty while one or more route ids remain. Startup inspects at most
-the existing five managed upgrade safety points, newest first, reading only a
+five upgrade safety points retained by the aggregate policy, newest first, reading only a
 regular `config/ai-models.json` no larger than 8 MiB. A candidate is eligible
 only when its model ids contain the complete routed-id set. The selected
 provider/model inventory is republished through `RendererPersistenceStore`, so
@@ -352,17 +382,17 @@ most one startup summary rather than one exception per dangling link.
 
 ## Traceability
 
-| Requirement         | Design                                   | Verification                                                     | Task              |
-| ------------------- | ---------------------------------------- | ---------------------------------------------------------------- | ----------------- |
-| `FR-LEGACYREC-001`  | `DES-LEGACYREC-001`                      | `TEST-LEGACYREC-089`, `TEST-LEGACYREC-097`, `TEST-LEGACYREC-098` | `T-LEGACYREC-002` |
-| `FR-LEGACYREC-002`  | `DES-LEGACYREC-002`, `DES-LEGACYREC-003` | `TEST-LEGACYREC-089`                                             | `T-LEGACYREC-003` |
-| `FR-LEGACYREC-003`  | `DES-LEGACYREC-004`, `DES-LEGACYREC-006` | `TEST-LEGACYREC-097`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-004` |
-| `FR-LEGACYREC-004`  | `DES-LEGACYREC-005`, `DES-LEGACYREC-006` | `TEST-LEGACYREC-098`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-005` |
-| `FR-LEGACYREC-005`  | `DES-LEGACYREC-001`, `DES-LEGACYREC-006` | `TEST-LEGACYREC-089`, `TEST-LEGACYREC-097`, `TEST-LEGACYREC-098` | `T-LEGACYREC-006` |
-| `FR-LEGACYREC-006`  | `DES-LEGACYREC-008`                      | `TEST-LEGACYREC-006`                                             | `T-LEGACYREC-009` |
-| `FR-LEGACYREC-007`  | `DES-LEGACYREC-008`, `DES-LEGACYREC-009` | `TEST-LEGACYREC-007`                                             | `T-LEGACYREC-010` |
-| `FR-LEGACYREC-008`  | `DES-LEGACYREC-010`                      | `TEST-LEGACYREC-008`                                             | `T-LEGACYREC-011` |
-| `FR-LEGACYREC-009`  | `DES-LEGACYREC-011`                      | `TEST-LEGACYREC-009`                                             | `T-LEGACYREC-013` |
-| `FR-LEGACYREC-010`  | `DES-LEGACYREC-012`                      | `TEST-LEGACYREC-010`                                             | `T-LEGACYREC-014` |
-| `FR-LEGACYREC-011`  | `DES-LEGACYREC-013`                      | `TEST-LEGACYREC-011`                                             | `T-LEGACYREC-015` |
-| `NFR-LEGACYREC-001` | `DES-LEGACYREC-007`                      | `TEST-LEGACYREC-005`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-007` |
+| Requirement         | Design                                   | Verification                                                     | Task                                                    |
+| ------------------- | ---------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
+| `FR-LEGACYREC-001`  | `DES-LEGACYREC-001`                      | `TEST-LEGACYREC-089`, `TEST-LEGACYREC-097`, `TEST-LEGACYREC-098` | `T-LEGACYREC-002`                                       |
+| `FR-LEGACYREC-002`  | `DES-LEGACYREC-002`, `DES-LEGACYREC-003` | `TEST-LEGACYREC-089`                                             | `T-LEGACYREC-003`                                       |
+| `FR-LEGACYREC-003`  | `DES-LEGACYREC-004`, `DES-LEGACYREC-006` | `TEST-LEGACYREC-097`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-004`                                       |
+| `FR-LEGACYREC-004`  | `DES-LEGACYREC-005`, `DES-LEGACYREC-006` | `TEST-LEGACYREC-098`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-005`                                       |
+| `FR-LEGACYREC-005`  | `DES-LEGACYREC-001`, `DES-LEGACYREC-006` | `TEST-LEGACYREC-089`, `TEST-LEGACYREC-097`, `TEST-LEGACYREC-098` | `T-LEGACYREC-006`                                       |
+| `FR-LEGACYREC-006`  | `DES-LEGACYREC-008`                      | `TEST-LEGACYREC-006`                                             | `T-LEGACYREC-009`                                       |
+| `FR-LEGACYREC-007`  | `DES-LEGACYREC-008`, `DES-LEGACYREC-009` | `TEST-LEGACYREC-007`                                             | `T-LEGACYREC-010`                                       |
+| `FR-LEGACYREC-008`  | `DES-LEGACYREC-010`                      | `TEST-LEGACYREC-008`                                             | `T-LEGACYREC-011`                                       |
+| `FR-LEGACYREC-009`  | `DES-LEGACYREC-011`                      | `TEST-LEGACYREC-009`                                             | `T-LEGACYREC-013`, `T-LEGACYREC-016`, `T-LEGACYREC-017`, `T-LEGACYREC-018` |
+| `FR-LEGACYREC-010`  | `DES-LEGACYREC-012`                      | `TEST-LEGACYREC-010`                                             | `T-LEGACYREC-014`                                       |
+| `FR-LEGACYREC-011`  | `DES-LEGACYREC-013`                      | `TEST-LEGACYREC-011`                                             | `T-LEGACYREC-015`                                       |
+| `NFR-LEGACYREC-001` | `DES-LEGACYREC-007`                      | `TEST-LEGACYREC-005`, `TEST-LEGACYREC-004`                       | `T-LEGACYREC-007`                                       |

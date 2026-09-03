@@ -45,6 +45,13 @@ to test those existing boundaries, not to add a second recovery framework.
   migration replaces legacy slug-based managed repositories with stable
   id-based workspaces. Rebind only links proven by both the platform activation
   record and the exact legacy PromptHub target layout.
+- Repair an older writer's mixed Prompt directory when validated canonical
+  bundle directories remain beside the complete legacy Markdown workspace;
+  reuse only hash-verified same-Prompt media objects when the legacy file name
+  is no longer present, and modify neither source before publication succeeds.
+- Keep recovery-source browsing as an explicit Settings action. Normal startup
+  performs versioned migration, validation, and deterministic self-heal without
+  scanning candidates or opening a recovery-source picker.
 - Reuse current database, recovery, IPC, and renderer boundaries; change
   production behavior only where a fixture exposes a current failure.
 
@@ -69,7 +76,8 @@ to test those existing boundaries, not to add a second recovery framework.
 - Every applied recovery uses the existing pre-recovery/insurance snapshot and
   atomic publish boundary. A failed attempt leaves the active data unchanged and
   cleans task-owned staging resources.
-- AI model repair never scans outside the five managed upgrade safety points,
+- AI model repair never scans outside the up to five retained managed upgrade
+  safety points,
   never selects a candidate that lacks any currently routed model id, and
   republishes recovered credentials only through the encrypted renderer vault.
 - Skill link repair never adopts an arbitrary external dangling link, never

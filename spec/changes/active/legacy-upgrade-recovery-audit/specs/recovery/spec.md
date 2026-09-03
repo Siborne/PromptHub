@@ -101,11 +101,24 @@ same-id Prompt history and non-authoritative operational rows only; it MUST NOT
 select current Prompt content. Explicit recovery selection is required only
 when the file inputs are missing, unsafe, malformed, duplicate, or divergent.
 Modification time and SQLite row count MUST NOT outrank a valid file source.
+The strict Markdown scan MUST tolerate a top-level superseded canonical Prompt
+bundle only when that directory contains regular, non-symlink `manifest.json`
+and `prompt.json` files. Incomplete bundle-shaped directories and every other
+undeclared legacy workspace file MUST remain fail-closed.
 
 Canonical recovery MUST accept existing MCP target-binding identities derived
 from an absolute target path. If recovery fails after SQLite is closed, the
 application MUST reopen the original database and rebind database-backed IPC
 handlers before reporting the retryable failure to the renderer.
+
+When startup records `invalid-canonical-storage` while the Prompt graph itself
+is valid, an explicitly selected current SQLite catalog MAY rebuild the complete
+canonical authority. This broader replacement MUST be scoped by the recorded
+startup reason and MUST NOT weaken the default refusal to replace a valid file
+authority. Normal renderer startup MUST NOT scan recovery candidates or open a
+recovery-source dialog. Recovery candidate discovery and source selection MUST
+remain an explicit action under Settings; unresolved canonical invalidity MUST
+still be checked on the next startup and MUST NOT be hidden by a dismiss marker.
 
 When the selected SQLite catalog is projected while canonical MCP bundles are
 empty, recovery MUST read the exact superseded `data/mcp/library.json` as a
@@ -125,10 +138,14 @@ Prompt ids still present in the file workspace and MUST NOT overwrite current
 file content or resurrect database-only Prompts. Candidate validation and
 recovery MUST NOT move, rewrite, or delete the source Markdown files. Missing
 Prompt media MAY be sourced only from the active asset root or validated,
-allowlisted recovery/upgrade artifacts. Multiple copies of one reference MUST
-have the same SHA-256 digest; missing, unsafe, or divergent copies MUST fail
-before publication. The rebuilt graph MUST still use staged validation and the
-journaled authority publication boundary.
+allowlisted recovery/upgrade artifacts. When those filename-based sources are
+absent, recovery MAY use the same Prompt id's superseded canonical bundle only
+after validating the complete bundle, its kind/reference media mapping, declared
+object hash, object byte size, and SHA-256 object content. Multiple filename
+copies of one reference MUST have the same SHA-256 digest; missing, unsafe,
+divergent, or damaged sources MUST fail before publication. The rebuilt graph
+MUST still use staged validation and the journaled authority publication
+boundary.
 
 Automatic repair MUST reject malformed or cyclic Folder/Prompt parent graphs,
 undeclared workspace files, symlinks, oversized files, and unbounded
@@ -259,6 +276,15 @@ directory or load a complete database or media archive into memory.
   invalid MCP secret value cannot block Prompt self-heal. Assert exact legacy
   Folder ownership, parent-before-child import, bounded workspace inspection,
   missing-SQLite candidate discovery, and live-client replacement refusal.
+  Reproduce the installed-version layout where a complete canonical Prompt
+  bundle remains beside the same complete Markdown workspace, and assert the
+  automatic repair replaces the superseded bundle set, recovers missing legacy
+  media from a hash-verified same-id canonical object, and rejects an incomplete
+  bundle-shaped directory or damaged object.
+  With a valid Prompt graph, assert ordinary SQLite recovery remains refused,
+  while an explicitly scoped `invalid-canonical-storage` selection can rebuild
+  the authority. Assert normal renderer startup does not scan recovery sources
+  or mount the recovery dialog; the Settings recovery action remains available.
 - `TEST-LEGACYREC-010`: migrate default-empty renderer provider/model arrays
   beside a populated file-owned AI config and assert the complete inventory,
   routes, and encrypted credentials survive. Reproduce the completed-migration

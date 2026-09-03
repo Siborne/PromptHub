@@ -1,10 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import {
-  copyStorageInventory,
-  createStorageInventory,
-} from "@prompthub/core";
+import { copyStorageInventory, createStorageInventory } from "@prompthub/core";
 import { createConsistentDatabaseImage } from "@prompthub/db";
 
 /**
@@ -121,6 +118,14 @@ export interface UpgradeBackupEntry {
   sizeBytes: number;
 }
 
+export interface UpgradeBackupRetentionEntry {
+  backupPath: string;
+  backupId: string;
+  manifest: UpgradeBackupManifest;
+  /** Manifest-declared payload bytes, or a legacy filesystem fallback. */
+  retentionBytes: number;
+}
+
 export interface CreateUpgradeDataSnapshotOptions {
   /** Version of the data being backed up (required). */
   fromVersion: string;
@@ -132,6 +137,14 @@ export interface CreateUpgradeDataSnapshotOptions {
   allowEmpty?: boolean;
   /** Test seam for capacity failures; production uses statfs on the backup root. */
   getAvailableBytes?: (targetPath: string) => number;
+  /** Deterministic timestamp for retention and transition-reuse tests. */
+  now?: Date;
+}
+
+export interface ReusableUpgradeSnapshotQuery {
+  fromVersion: string;
+  toVersion: string;
+  createdAfter: string;
 }
 
 interface PruneUpgradeBackupOptions {
@@ -200,7 +213,26 @@ function isValidBackupId(backupId: string): boolean {
 }
 
 function isTransientDatabaseEntry(entryName: string): boolean {
-  return TRANSIENT_DATABASE_ENTRY_PATTERNS.some((pattern) => pattern.test(entryName));
+  return TRANSIENT_DATABASE_ENTRY_PATTERNS.some((pattern) =>
+    pattern.test(entryName),
+  );
+}
+
+function transientDatabaseRelativePaths(
+  rootPath: string,
+  layoutEpoch: 0 | 1,
+): string[] {
+  if (layoutEpoch === 0) return [];
+  const dataPath = path.join(rootPath, "data");
+  try {
+    return fs
+      .readdirSync(dataPath, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && isTransientDatabaseEntry(entry.name))
+      .map((entry) => `data/${entry.name}`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
 }
 
 function shouldCopySnapshotPath(sourcePath: string): boolean {
@@ -210,7 +242,9 @@ function shouldCopySnapshotPath(sourcePath: string): boolean {
 
   const stats = fs.lstatSync(sourcePath);
   if (stats.isSymbolicLink()) {
-    throw new Error(`Cannot copy upgrade backup path from symbolic link: ${sourcePath}`);
+    throw new Error(
+      `Cannot copy upgrade backup path from symbolic link: ${sourcePath}`,
+    );
   }
 
   return true;
@@ -250,7 +284,9 @@ function copyRawDatabaseEvidence(
 ): { sizeBytes: number; sha256: string } {
   const sourceStats = fs.lstatSync(sourcePath);
   if (!sourceStats.isFile() || sourceStats.isSymbolicLink()) {
-    throw new Error(`Legacy database evidence is not a regular file: ${sourcePath}`);
+    throw new Error(
+      `Legacy database evidence is not a regular file: ${sourcePath}`,
+    );
   }
   fs.mkdirSync(path.dirname(targetPath), { recursive: true, mode: 0o700 });
   fs.copyFileSync(sourcePath, targetPath, fs.constants.COPYFILE_EXCL);
@@ -341,9 +377,7 @@ function parseManifest(raw: unknown): UpgradeBackupManifest | null {
     runIdentity:
       typeof obj.runIdentity === "string" ? obj.runIdentity : undefined,
     inventoryDigest:
-      typeof obj.inventoryDigest === "string"
-        ? obj.inventoryDigest
-        : undefined,
+      typeof obj.inventoryDigest === "string" ? obj.inventoryDigest : undefined,
     totalBytes:
       typeof obj.totalBytes === "number" && Number.isSafeInteger(obj.totalBytes)
         ? obj.totalBytes
@@ -414,12 +448,15 @@ export async function createUpgradeDataSnapshot(
     );
   }
 
-  const createdAt = new Date().toISOString();
+  const createdAt = (options.now ?? new Date()).toISOString();
   const runIdentity = crypto.randomUUID();
   const backupRoot = getUpgradeBackupRoot(resolvedUserDataPath);
   const backupId = `v${sanitizeVersion(options.fromVersion)}-${formatTimestampForPath(createdAt)}`;
   const backupPath = path.join(backupRoot, backupId);
-  const stagingPath = path.join(backupRoot, `.stage-${backupId}-${runIdentity}`);
+  const stagingPath = path.join(
+    backupRoot,
+    `.stage-${backupId}-${runIdentity}`,
+  );
   if (fs.existsSync(backupPath) || fs.existsSync(stagingPath)) {
     throw new Error(`Upgrade backup already exists: ${backupId}`);
   }
@@ -443,7 +480,13 @@ export async function createUpgradeDataSnapshot(
     const inventory = createStorageInventory(resolvedUserDataPath, {
       detachedLayoutEpoch,
       includeSecrets: true,
-      excludeRelativePaths: databasePath ? [databaseRelativePath] : [],
+      excludeRelativePaths: [
+        ...(databasePath ? [databaseRelativePath] : []),
+        ...transientDatabaseRelativePaths(
+          resolvedUserDataPath,
+          detachedLayoutEpoch,
+        ),
+      ],
     });
     if (inventory.files.length === 0 && !databasePath && !options.allowEmpty) {
       throw new Error(
@@ -457,9 +500,9 @@ export async function createUpgradeDataSnapshot(
       inventory.totalBytes +
       databaseSourceBytes +
       UPGRADE_BACKUP_CAPACITY_HEADROOM_BYTES;
-    const availableBytes = (
-      options.getAvailableBytes ?? defaultAvailableBytes
-    )(backupRoot);
+    const availableBytes = (options.getAvailableBytes ?? defaultAvailableBytes)(
+      backupRoot,
+    );
     if (availableBytes < requiredBytes) {
       throw new Error(
         `Insufficient space for upgrade backup: required=${requiredBytes}, available=${availableBytes}`,
@@ -479,7 +522,10 @@ export async function createUpgradeDataSnapshot(
         ...databaseRelativePath.split("/"),
       );
       if (hasSqliteHeader(databasePath)) {
-        const image = createConsistentDatabaseImage(databasePath, targetDatabase);
+        const image = createConsistentDatabaseImage(
+          databasePath,
+          targetDatabase,
+        );
         databaseBytes = image.sizeBytes;
         databaseImageSha256 = image.sha256;
         databaseCaptureMode = "consistent-image";
@@ -511,9 +557,7 @@ export async function createUpgradeDataSnapshot(
       totalBytes: inventory.totalBytes + databaseBytes,
       ...(databaseCaptureMode ? { databaseCaptureMode } : {}),
       ...(databaseImageSha256 ? { databaseImageSha256 } : {}),
-      ...(databaseRawEvidenceSha256
-        ? { databaseRawEvidenceSha256 }
-        : {}),
+      ...(databaseRawEvidenceSha256 ? { databaseRawEvidenceSha256 } : {}),
       secretPolicy: "encrypted-device-bound-only",
     };
 
@@ -574,7 +618,8 @@ export async function pruneUpgradeBackups(
 
   for (const backup of backups) {
     if (keptBackupIds.has(backup.backupId)) continue;
-    const tooOld = Date.now() - Date.parse(backup.manifest.createdAt) > maxAgeMs;
+    const tooOld =
+      Date.now() - Date.parse(backup.manifest.createdAt) > maxAgeMs;
     if (
       !tooOld &&
       keptBackupIds.size < maxSnapshots &&
@@ -589,18 +634,15 @@ export async function pruneUpgradeBackups(
   }
 }
 
-/**
- * List all valid managed upgrade safety points, newest first.
- * Directories without a readable manifest are ignored silently.
- */
-export async function listUpgradeBackups(
+/** Read valid managed manifests without traversing snapshot payloads. */
+async function listUpgradeBackupManifests(
   userDataPath: string,
-): Promise<UpgradeBackupEntry[]> {
+): Promise<Omit<UpgradeBackupEntry, "sizeBytes">[]> {
   const root = getUpgradeBackupRoot(userDataPath);
   if (!fs.existsSync(root)) return [];
 
   const dirEntries = await fs.promises.readdir(root, { withFileTypes: true });
-  const results: UpgradeBackupEntry[] = [];
+  const results: Omit<UpgradeBackupEntry, "sizeBytes">[] = [];
 
   for (const entry of dirEntries) {
     if (!entry.isDirectory()) continue;
@@ -610,18 +652,10 @@ export async function listUpgradeBackups(
     const manifest = await readManifest(backupPath);
     if (!manifest) continue;
 
-    let sizeBytes = 0;
-    try {
-      sizeBytes = await directorySize(backupPath);
-    } catch {
-      sizeBytes = 0;
-    }
-
     results.push({
       backupPath,
       backupId: entry.name,
       manifest,
-      sizeBytes,
     });
   }
 
@@ -629,6 +663,105 @@ export async function listUpgradeBackups(
     b.manifest.createdAt.localeCompare(a.manifest.createdAt),
   );
   return results;
+}
+
+/**
+ * List all valid managed upgrade safety points, newest first, with their full
+ * filesystem size. Directories without a readable manifest are ignored.
+ */
+export async function listUpgradeBackups(
+  userDataPath: string,
+): Promise<UpgradeBackupEntry[]> {
+  const entries = await listUpgradeBackupManifests(userDataPath);
+  return await Promise.all(
+    entries.map(async (entry) => {
+      let sizeBytes = 0;
+      try {
+        sizeBytes = await directorySize(entry.backupPath);
+      } catch {
+        sizeBytes = 0;
+      }
+      return { ...entry, sizeBytes };
+    }),
+  );
+}
+
+/**
+ * List bounded accounting metadata for startup retention. Modern immutable
+ * snapshots use their declared payload bytes; only legacy manifests fall back
+ * to a filesystem traversal.
+ */
+export async function listUpgradeBackupRetentionEntries(
+  userDataPath: string,
+): Promise<UpgradeBackupRetentionEntry[]> {
+  const entries = await listUpgradeBackupManifests(userDataPath);
+  return await Promise.all(
+    entries.map(async (entry) => {
+      const declaredBytes = entry.manifest.totalBytes;
+      if (
+        typeof declaredBytes === "number" &&
+        Number.isSafeInteger(declaredBytes) &&
+        declaredBytes >= 0
+      ) {
+        return { ...entry, retentionBytes: declaredBytes };
+      }
+      let retentionBytes = 0;
+      try {
+        retentionBytes = await directorySize(entry.backupPath);
+      } catch {
+        retentionBytes = 0;
+      }
+      return { ...entry, retentionBytes };
+    }),
+  );
+}
+
+function normalizeVersionIdentity(version: string): string {
+  return version.trim().replace(/^v(?=\d)/iu, "");
+}
+
+function isModernReusableManifest(manifest: UpgradeBackupManifest): boolean {
+  if (
+    manifest.schemaVersion < MANIFEST_SCHEMA_VERSION ||
+    !manifest.runIdentity ||
+    !/^[a-f0-9]{64}$/u.test(manifest.inventoryDigest ?? "") ||
+    !Number.isSafeInteger(manifest.totalBytes) ||
+    (manifest.totalBytes ?? -1) < 0 ||
+    manifest.databaseCaptureMode === "raw-recovery-evidence"
+  ) {
+    return false;
+  }
+  return (
+    manifest.databaseCaptureMode !== "consistent-image" ||
+    /^[a-f0-9]{64}$/u.test(manifest.databaseImageSha256 ?? "")
+  );
+}
+
+export async function findReusableUpgradeSnapshot(
+  userDataPath: string,
+  query: ReusableUpgradeSnapshotQuery,
+): Promise<UpgradeBackupSnapshot | null> {
+  const createdAfterMs = Date.parse(query.createdAfter);
+  if (!Number.isFinite(createdAfterMs)) return null;
+  const fromVersion = normalizeVersionIdentity(query.fromVersion);
+  const toVersion = normalizeVersionIdentity(query.toVersion);
+  const match = (await listUpgradeBackups(userDataPath)).find((backup) => {
+    const createdAtMs = Date.parse(backup.manifest.createdAt);
+    return (
+      isModernReusableManifest(backup.manifest) &&
+      Number.isFinite(createdAtMs) &&
+      createdAtMs >= createdAfterMs &&
+      normalizeVersionIdentity(backup.manifest.fromVersion) === fromVersion &&
+      normalizeVersionIdentity(backup.manifest.toVersion ?? "") === toVersion
+    );
+  });
+  return match
+    ? {
+        backupPath: match.backupPath,
+        backupId: match.backupId,
+        manifest: match.manifest,
+      }
+    : null;
 }
 
 /**
@@ -723,10 +856,13 @@ export async function migrateLegacyUpgradeBackups(
   ];
   for (const sourceRoot of sourceRoots) {
     if (!fs.existsSync(sourceRoot)) continue;
-    const entries = await fs.promises.readdir(sourceRoot, { withFileTypes: true });
+    const entries = await fs.promises.readdir(sourceRoot, {
+      withFileTypes: true,
+    });
     for (const entry of entries) {
       if (
-        sourceRoot === getPreviousInRootUpgradeBackupRoot(resolvedUserDataPath) &&
+        sourceRoot ===
+          getPreviousInRootUpgradeBackupRoot(resolvedUserDataPath) &&
         entry.name === "safety-points"
       ) {
         continue;
@@ -736,7 +872,9 @@ export async function migrateLegacyUpgradeBackups(
         continue;
       }
       const sourceBackupPath = path.join(sourceRoot, entry.name);
-      if (path.resolve(sourceBackupPath) === path.resolve(path.dirname(newRoot))) {
+      if (
+        path.resolve(sourceBackupPath) === path.resolve(path.dirname(newRoot))
+      ) {
         skipped += 1;
         continue;
       }

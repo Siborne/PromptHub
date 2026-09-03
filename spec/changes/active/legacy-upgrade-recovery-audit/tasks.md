@@ -99,3 +99,17 @@
       canonical workspace by activation Skill id, with bounded state parsing,
       atomic replacement, idempotency, and adversarial filesystem coverage
       (`FR-LEGACYREC-011`, `DES-LEGACYREC-013`, `TEST-LEGACYREC-011`).
+- [x] `T-LEGACYREC-016` Carry the startup recovery scope into explicit SQLite
+      recovery, preserve the valid-authority refusal for ordinary callers, and
+      keep a failed mandatory recovery dialog non-destructively escapable
+      (`FR-LEGACYREC-009`, `DES-LEGACYREC-011`, `TEST-LEGACYREC-009`).
+- [x] `T-LEGACYREC-017` Reproduce the installed-version mixed Prompt layout,
+      allow complete superseded canonical bundles beside authoritative Markdown
+      during staged self-heal, reuse only hash-verified same-id canonical media
+      objects when legacy files are absent, and keep damaged or partial inputs
+      fail-closed
+      (`FR-LEGACYREC-009`, `DES-LEGACYREC-011`, `TEST-LEGACYREC-009`).
+- [x] `T-LEGACYREC-018` Remove recovery candidate discovery and the recovery
+      picker from normal renderer startup while retaining the explicit Data
+      Settings recovery workflow
+      (`FR-LEGACYREC-009`, `DES-LEGACYREC-011`, `TEST-LEGACYREC-009`).

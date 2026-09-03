@@ -127,6 +127,7 @@ describe("canonical storage recovery orchestration", () => {
       sourceDatabasePath: "/root/data/prompthub.db",
       sourcePath: "/root/data/prompthub.db",
       encryption,
+      recoveryReason: "invalid-canonical-storage",
       scheduleRelaunch,
       onSuccess,
       onFailure,
@@ -153,6 +154,7 @@ describe("canonical storage recovery orchestration", () => {
         activeRoot: "/root",
         sourceDatabasePath: "/root/data/prompthub.db",
         deviceId: "device-test",
+        recoveryScope: "canonical-storage",
         checkpointPath: expect.any(String),
         mcpLibrary: expect.objectContaining({
           kind: "prompthub-mcp-library",

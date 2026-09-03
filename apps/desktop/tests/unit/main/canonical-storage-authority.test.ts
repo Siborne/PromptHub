@@ -261,6 +261,35 @@ describe("canonical storage authority publication", () => {
     ).rejects.toThrow("does not require recovery");
   });
 
+  it("rebuilds a valid Prompt graph only for an explicitly scoped canonical-storage recovery", async () => {
+    const input = fixture();
+    await publishCanonicalStorageAuthority(options(input));
+
+    const database = new DatabaseAdapter(input.sourceDatabasePath);
+    const recoveredPrompt = new PromptDB(database).create({
+      title: "Recovered canonical storage",
+      userPrompt: "Selected from the current SQLite catalog",
+    });
+    database.close();
+
+    const result = await recoverCanonicalStorageAuthorityFromDatabase({
+      ...options(input),
+      recoveryScope: "canonical-storage",
+      operationId: "canonical-storage-recovery-test",
+    });
+
+    expect(result.status).toBe("committed");
+    expect(
+      readCanonicalStorageShadow(path.join(input.activeRoot, "data"))
+        .promptGraph.snapshot.prompts,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: input.prompt.id }),
+        expect.objectContaining({ id: recoveredPrompt.id }),
+      ]),
+    );
+  });
+
   it("refuses recovery without a published authority marker", async () => {
     const input = fixture();
 

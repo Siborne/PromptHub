@@ -31,6 +31,7 @@ export interface RecoveryArtifactRetention {
   maxCount?: number;
   maxAgeMs?: number;
   maxBytes?: number;
+  removeInvalid?: boolean;
 }
 
 export interface RecoveryArtifactScanLimits {
@@ -238,12 +239,14 @@ export function pruneRecoveryArtifacts(
   );
   const removed: string[] = [];
 
-  for (const invalid of scan.invalid) {
-    if (protectedIds.has(invalid.id)) continue;
-    const stats = fs.lstatSync(invalid.directoryPath);
-    if (stats.isSymbolicLink() || !stats.isDirectory()) continue;
-    fs.rmSync(invalid.directoryPath, { recursive: true, force: true });
-    removed.push(invalid.id);
+  if (retention.removeInvalid !== false) {
+    for (const invalid of scan.invalid) {
+      if (protectedIds.has(invalid.id)) continue;
+      const stats = fs.lstatSync(invalid.directoryPath);
+      if (stats.isSymbolicLink() || !stats.isDirectory()) continue;
+      fs.rmSync(invalid.directoryPath, { recursive: true, force: true });
+      removed.push(invalid.id);
+    }
   }
 
   for (const artifact of artifacts) {

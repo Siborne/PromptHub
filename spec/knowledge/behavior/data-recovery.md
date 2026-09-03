@@ -15,6 +15,12 @@
 
 - 在高风险布局迁移或升级前，应具备保险快照、预备份或等价的可回滚手段。
 - 恢复或迁移失败后，不应把用户留在半恢复或半迁移状态。
+- 启动恢复判定必须把故障范围传递给用户明确选择的恢复操作；仅当启动已判定完整
+  canonical storage 无效且用户选择当前 SQLite 时，才可在 Prompt 图仍有效的情况下
+  重建完整文件权威。普通恢复调用仍必须拒绝覆盖有效文件权威。
+- 正常启动只执行版本化迁移、校验和可证明确定的自动修复，不扫描恢复候选，也不弹出
+  恢复来源选择。恢复候选浏览和来源选择只可由用户在设置的数据恢复入口显式触发；
+  unresolved canonical 故障必须在下一次启动重新检查，不能用 dismiss marker 永久跳过。
 - Rule 恢复只发布 PromptHub 托管正文、元数据、历史和 SQLite 投影，不得隐式写入、
   创建或跟随符号链接改写外部 target。导入后只派生同步状态，外部写入必须由显式保存、
   部署或冲突解决触发；失败时恢复导入前的可读托管状态。
@@ -31,6 +37,16 @@
   按数量、年龄和总字节限制清理。正在使用的 operation ID 必须受保护；损坏、未完成
   或越界 artifact 不得被当作可恢复快照，并应在确认其为 registry 直接管理的普通
   目录后由 retention 清理；不得跟随符号链接或清理受保护 operation ID。
+- Desktop 在启动过程新建或采用 upgrade/layout safety point 时，必须在各自 registry
+  的格式和删除所有权不变的前提下，统一协调 upgrade safety point、recovery artifact
+  与数据库 safety point 的总量；没有新建或采用安全点的普通启动不得扫描备份树。
+  至少保留每类最新一个、pinned artifact 与未完成布局迁移引用的有效点；额外历史按新到旧进入
+  `max(512 MiB, active durable bytes * 3)`、最多八个、30 天的总预算。受保护最小集合
+  可以超过预算；无 manifest 或无法证明所有权的历史目录不得由该协调器自动删除。
+- 同一次应用升级只应创建一个可复用的完整 safety point。应用内安装必须记录精确
+  target version；首次启动仅可复用 last-run marker 之后创建、版本转换完全匹配且具备
+  现代完整 manifest 的点。紧随其后的布局迁移和带有效 marker 引用的残留重试必须
+  复用该完整点，不得再创建整树或稀疏重试副本。
 - recovery artifact 发布必须先持久化 operation-owned `preparing` manifest，再移动
   prior tree，最后原子发布 `complete` manifest。移动 prior tree 后中断时，启动恢复
   必须按 manifest 身份继续发布，不能把已提交的新数据回滚掉，也不能遗失唯一 prior
@@ -54,6 +70,9 @@
   条目（`SingletonCookie`、`SingletonLock`、`SingletonSocket`）。这些条目不是
   用户数据，不得导致布局迁移快照失败；但用户数据 payload 内的其它符号链接
   仍必须拒绝。
+- canonical 预升级快照必须保存当前一致 SQLite image，但不得把 `data/` 中独立的
+  `prompthub.db.backup-*`、`prompthub.db.pre-*` 或 `prompthub.db.corrupt-*` 恢复源再次
+  嵌套复制。原文件仍由数据库恢复候选发现，不因快照净化而删除。
 - 预升级备份、legacy 预升级备份迁移、以及从预升级备份恢复必须拒绝符号链接；
   不得把 `userData` 外部引用作为快照内容保存、迁移或恢复进当前数据目录。
 - 数据库恢复合并附带资产、工作区文件或浏览器存储目录时必须跳过符号链接；
@@ -124,7 +143,12 @@
   旧写入器破坏但当前 Markdown workspace 唯一、严格可解析且媒体来源确定时，启动应
   自动 stage、验证并 journal 发布修复结果；重复 ID、解析错误、危险路径、缺失或
   digest 冲突等歧义才进入 recovery-required。canonical 模式不得再执行 DB 到旧
-  Markdown workspace 的反向导出。
+  Markdown workspace 的反向导出。混合目录自愈可跳过同时含普通非符号链接
+  `manifest.json` 与 `prompt.json` 的顶层旧 canonical Prompt bundle；这些目录只保留
+  于恢复 artifact，并在 stage 内由新图替换。旧媒体文件名已不存在时，只可从同一
+  Prompt ID 的完整已验证 bundle 读取 kind/reference 到对象哈希映射，并在对象库再次
+  校验声明哈希与字节数；不得借此采用旧 bundle 的 Prompt 正文或元数据。残缺伪装目录、
+  损坏对象和其它未声明文件仍须拒绝。
 - 文件自愈对 Prompt 与 Folder 父子图执行线性依赖排序，并拒绝缺失父项、环、
   符号链接、特殊文件、未声明文件、超限文件和超限清单；SQLite 缺失或不可读
   时仍可展示有效文件候选。替换 SQLite 前必须持有迁移/维护意图且没有活跃或

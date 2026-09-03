@@ -87,6 +87,18 @@ describe("recovery artifact registry", () => {
     expect(fs.existsSync(invalidPath)).toBe(false);
   });
 
+  it("can retain invalid directories when a cross-family coordinator lacks ownership", () => {
+    const root = fixture();
+    const invalidPath = path.join(root, "backups", "recovery", "unowned");
+    fs.mkdirSync(invalidPath, { recursive: true });
+    fs.writeFileSync(path.join(invalidPath, "user-file.txt"), "preserve");
+
+    expect(pruneRecoveryArtifacts(root, { removeInvalid: false })).toEqual([]);
+    expect(
+      fs.readFileSync(path.join(invalidPath, "user-file.txt"), "utf8"),
+    ).toBe("preserve");
+  });
+
   it("preserves an invalid artifact while its operation id is protected", () => {
     const root = fixture();
     const invalidPath = path.join(

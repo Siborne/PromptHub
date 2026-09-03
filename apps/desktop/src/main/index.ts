@@ -87,6 +87,7 @@ import {
 } from "./services/data-layout-migration";
 import { listUpgradeBackups } from "./services/upgrade-backup";
 import { runUpgradeBackupStartupTasks } from "./services/upgrade-backup-startup";
+import { runManagedBackupRetentionAtStartup } from "./services/managed-backup-retention";
 import * as packagedStartupSmokeProfile from "./testing/release-smoke-profile";
 import { performJournaledDatabaseRecovery } from "./services/journaled-database-recovery";
 import { registerPortableSnapshotIPC } from "./services/portable-snapshot-ipc";
@@ -751,8 +752,7 @@ ipcMain.handle(
       results.push(residualCandidate);
     }
     const isDbEmpty = !!appDb && isDatabaseEmpty(appDb);
-    // When the user explicitly requests a scan (ignoreDismissMarker: true) from
-    // the Settings page, always scan all candidate paths regardless of DB state.
+    // A Settings scan checks all candidate paths regardless of DB state.
     // Without this, users whose DB has any data can never surface recovery candidates.
     const shouldScanCandidates =
       canonicalRecoveryRequired || isDbEmpty || ignoreDismissMarker;
@@ -924,6 +924,7 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
       sourceDatabasePath: getDatabasePath(),
       sourcePath,
       encryption: safeStorage,
+      recoveryReason: canonicalRecoveryReason,
       scheduleRelaunch: scheduleAppRelaunch,
       onSuccess: () => {
         canonicalRecoveryRequired = false;
@@ -1232,10 +1233,10 @@ app.whenReady().then(async () => {
           `Upgrade safety snapshot failed: ${backupStartup.snapshotError || "unknown error"}`,
         );
       }
-
       const layoutMigration = await migrateLegacyDataLayout(
         app.getPath("userData"),
         app.getVersion(),
+        { safetySnapshot: backupStartup.snapshot },
       );
       logStartupEvent({
         event: "startup:data_layout_migration",
@@ -1245,13 +1246,11 @@ app.whenReady().then(async () => {
         failedEntries: layoutMigration.failedEntries,
         markerPath: scrubPath(layoutMigration.markerPath),
       });
-
-      // Warn about residual legacy entries that could not be moved.
-      // These entries will be shown in DataRecoveryDialog so users are not
-      // silently left with inaccessible data.
-      //
-      // 若有旧版条目因迁移失败而残留在根目录，记录警告。
-      // DataRecoveryDialog 会读取此条目向用户展示，避免数据静默不可访问。
+      await runManagedBackupRetentionAtStartup(
+        app.getPath("userData"),
+        logStartupEvent,
+        Boolean(backupStartup.snapshot || layoutMigration.backupId),
+      );
       if (layoutMigration.failedEntries.length > 0) {
         const residual = detectResidualLegacyEntries(app.getPath("userData"));
         if (residual.length > 0) {

@@ -5,6 +5,7 @@ import { compareVersions } from "../../utils/version";
 
 import {
   createUpgradeDataSnapshot,
+  findReusableUpgradeSnapshot,
   getUpgradeBackupRoot,
   type MigrateLegacyResult,
   migrateLegacyUpgradeBackups,
@@ -28,6 +29,7 @@ export interface UpgradeBackupStartupResult {
     | "first-run"
     | "not-an-upgrade"
     | "snapshot-created"
+    | "snapshot-reused"
     | "user-data-empty"
     | "user-data-missing"
     | "snapshot-failed";
@@ -43,7 +45,7 @@ export function getLastRunVersionMarkerPath(userDataPath: string): string {
 
 async function readLastRunVersion(
   userDataPath: string,
-): Promise<string | null> {
+): Promise<{ version: string; updatedAt: string | null } | null> {
   const markerPath = getLastRunVersionMarkerPath(userDataPath);
   try {
     if (!fs.existsSync(markerPath)) {
@@ -60,7 +62,14 @@ async function readLastRunVersion(
       return null;
     }
 
-    return parsed.version;
+    return {
+      version: parsed.version,
+      updatedAt:
+        typeof parsed.updatedAt === "string" &&
+        Number.isFinite(Date.parse(parsed.updatedAt))
+          ? parsed.updatedAt
+          : null,
+    };
   } catch {
     return null;
   }
@@ -106,7 +115,8 @@ export async function runUpgradeBackupStartupTasks(
   userDataPath: string,
   currentVersion: string,
 ): Promise<UpgradeBackupStartupResult> {
-  const previousVersion = await readLastRunVersion(userDataPath);
+  const lastRun = await readLastRunVersion(userDataPath);
+  const previousVersion = lastRun?.version ?? null;
   if (
     previousVersion &&
     compareAppVersions(currentVersion, previousVersion) < 0
@@ -140,6 +150,25 @@ export async function runUpgradeBackupStartupTasks(
       snapshotError: null,
       status: "not-an-upgrade",
     };
+  }
+
+  if (lastRun?.updatedAt) {
+    const reusable = await findReusableUpgradeSnapshot(userDataPath, {
+      fromVersion: previousVersion,
+      toVersion: currentVersion,
+      createdAfter: lastRun.updatedAt,
+    });
+    if (reusable) {
+      await writeLastRunVersion(userDataPath, currentVersion);
+      return {
+        migration,
+        previousVersion,
+        currentVersion,
+        snapshot: reusable,
+        snapshotError: null,
+        status: "snapshot-reused",
+      };
+    }
   }
 
   try {

@@ -171,6 +171,11 @@ PromptHub 账号或 self-hosted 同步，MCP bindings 也必须完整进入 chec
   按 durable journal 发布；任一阶段失败都回滚，不返回 partial success。
 - 恢复候选统一登记在有界 registry，旧 MCP sidecar、原始相邻 DB 副本和升级快照不再
   作为无限增长的隐式历史。
+- Desktop 不再把上述三类安全数据当作互不相关的无限历史。升级快照、recovery
+  artifact 与数据库 safety point 保持各自格式和 owner，但由启动协调器在一个总字节
+  预算内选择保留集合；每类最新点、pin 与未完成迁移引用优先于可选历史。
+- 应用内升级、目标版本首次启动与紧随其后的布局迁移共享同一个精确版本转换 safety
+  point。布局迁移 marker 的有效完整引用也是重试的 safety point，不生成稀疏副本。
 - portable ZIP 使用版本化 envelope 和 streaming archive。选择性导出只读取所选域；
   只有完整 durable scope 才能附带完整 canonical checkpoint。
 - 完整导出在一个 maintenance intent 内关闭 writer、创建一致 DB image、生成 canonical

@@ -16,7 +16,11 @@ import {
   getDataLayoutMigrationMarkerPath,
   migrateLegacyDataLayout,
 } from "../../../src/main/services/data-layout-migration";
-import { getUpgradeBackupRoot } from "../../../src/main/services/upgrade-backup";
+import {
+  createUpgradeDataSnapshot,
+  getUpgradeBackupRoot,
+  listUpgradeBackups,
+} from "../../../src/main/services/upgrade-backup";
 import {
   configureRuntimePaths,
   getDatabasePath,
@@ -155,6 +159,30 @@ describe("data-layout-migration", () => {
     expect(
       fs.existsSync(path.join(backupDir, "skills", "demo-skill", "SKILL.md")),
     ).toBe(true);
+  });
+
+  it("reuses the startup safety point instead of snapshotting the same layout again", async () => {
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    fs.mkdirSync(path.join(userDataPath, "workspace", "prompts"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(userDataPath, "workspace", "prompts", "prompt.md"),
+      "before-layout",
+      "utf8",
+    );
+    const startupSnapshot = await createUpgradeDataSnapshot(userDataPath, {
+      fromVersion: "0.5.9",
+      toVersion: "0.6.0",
+    });
+
+    const result = await migrateLegacyDataLayout(userDataPath, "0.6.0", {
+      safetySnapshot: startupSnapshot,
+    });
+
+    expect(result.status).toBe("migrated");
+    expect(result.backupId).toBe(startupSnapshot.backupId);
+    expect(await listUpgradeBackups(userDataPath)).toHaveLength(1);
   });
 
   it("is a no-op when the marker already exists", async () => {
@@ -431,7 +459,6 @@ describe("data-layout-migration", () => {
 
   it("retries residual entries even when a migration marker already exists", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
-    const canonicalBackupId = "backup-initial-full";
     fs.mkdirSync(path.join(userDataPath, "skills", "demo"), {
       recursive: true,
     });
@@ -440,6 +467,11 @@ describe("data-layout-migration", () => {
       "# retried skill",
       "utf8",
     );
+    const initialSnapshot = await createUpgradeDataSnapshot(userDataPath, {
+      fromVersion: "0.5.5-pre-layout-migration",
+      toVersion: "0.5.5",
+    });
+    const canonicalBackupId = initialSnapshot.backupId;
     fs.writeFileSync(
       getDataLayoutMigrationMarkerPath(userDataPath),
       JSON.stringify({
@@ -456,6 +488,7 @@ describe("data-layout-migration", () => {
 
     expect(result.status).toBe("migrated");
     expect(result.backupId).toBe(canonicalBackupId);
+    expect(await listUpgradeBackups(userDataPath)).toHaveLength(1);
     expect(result.movedEntries).toEqual(
       expect.arrayContaining(["workspace", "skills"]),
     );
@@ -506,7 +539,7 @@ describe("data-layout-migration", () => {
 
   it("cleans an empty legacy root database while retrying skill residual migration", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
-    const canonicalBackupId = "backup-before-empty-db-cleanup";
+    const missingBackupId = "backup-before-empty-db-cleanup";
     fs.mkdirSync(path.join(userDataPath, "skills", "demo"), {
       recursive: true,
     });
@@ -531,7 +564,7 @@ describe("data-layout-migration", () => {
         migratedAt: new Date().toISOString(),
         movedEntries: [],
         failedEntries: ["skills", "prompthub.db"],
-        backupId: canonicalBackupId,
+        backupId: missingBackupId,
       }),
       "utf8",
     );
@@ -539,7 +572,9 @@ describe("data-layout-migration", () => {
     const result = await migrateLegacyDataLayout(userDataPath, "0.5.7");
 
     expect(result.status).toBe("migrated");
-    expect(result.backupId).toBe(canonicalBackupId);
+    expect(result.backupId).not.toBe(missingBackupId);
+    expect(result.backupId).toBeTruthy();
+    expect(await listUpgradeBackups(userDataPath)).toHaveLength(1);
     expect(result.failedEntries).toEqual([]);
     expect(result.movedEntries).toEqual(
       expect.arrayContaining(["skills", "prompthub.db"]),
@@ -554,7 +589,12 @@ describe("data-layout-migration", () => {
 
     const markerRecord = JSON.parse(
       fs.readFileSync(getDataLayoutMigrationMarkerPath(userDataPath), "utf8"),
-    ) as { dbLayoutVersion?: string; failedEntries?: string[] };
+    ) as {
+      backupId?: string;
+      dbLayoutVersion?: string;
+      failedEntries?: string[];
+    };
+    expect(markerRecord.backupId).toBe(result.backupId);
     expect(markerRecord.dbLayoutVersion).toBe("0.5.7");
     expect(markerRecord.failedEntries).toBeUndefined();
   });

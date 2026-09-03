@@ -162,6 +162,107 @@ describe("DataRecoveryDialog", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps failed mandatory recovery escapable without claiming to start fresh", async () => {
+    const onClose = vi.fn();
+    performRecoveryMock.mockResolvedValue({
+      success: false,
+      error: "Canonical storage rebuild failed",
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <DataRecoveryDialog
+          isOpen={true}
+          onClose={onClose}
+          allowStartFresh={false}
+          databases={[
+            {
+              sourcePath: "/root/data/prompthub.db",
+              sourceType: "current-canonical-db",
+              displayName: "Current SQLite catalog",
+              displayPath: "/root/data/prompthub.db",
+              promptCount: 3,
+              folderCount: 1,
+              skillCount: 2,
+              dbSizeBytes: 8192,
+              lastModified: "2026-08-21T00:00:00.000Z",
+              previewAvailable: true,
+              dataSources: ["sqlite"],
+            },
+          ]}
+        />,
+        { language: "en" },
+      );
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Start Fresh" }),
+    ).not.toBeInTheDocument();
+    const continueButton = screen.getByRole("button", {
+      name: "Continue Without Recovery",
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Restore Selected Source" }),
+      );
+    });
+
+    expect(
+      await screen.findByText(
+        "Recovery failed: Canonical storage rebuild failed",
+      ),
+    ).toBeInTheDocument();
+    expect(continueButton).toBeEnabled();
+
+    await act(async () => {
+      fireEvent.click(continueButton);
+    });
+
+    expect(dismissRecoveryMock).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("continues without persisting dismissal when the caller opts out", async () => {
+    const onClose = vi.fn();
+
+    await act(async () => {
+      await renderWithI18n(
+        <DataRecoveryDialog
+          isOpen={true}
+          onClose={onClose}
+          allowStartFresh={false}
+          persistDismiss={false}
+          databases={[
+            {
+              sourcePath: "/root/data/prompts",
+              sourceType: "current-file-workspace",
+              displayName: "Current Markdown workspace",
+              displayPath: "/root/data/prompts",
+              promptCount: 3,
+              folderCount: 1,
+              skillCount: 2,
+              dbSizeBytes: 0,
+              lastModified: "2026-08-21T00:00:00.000Z",
+              previewAvailable: true,
+              dataSources: ["workspace"],
+            },
+          ]}
+        />,
+        { language: "en" },
+      );
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Continue Without Recovery" }),
+      );
+    });
+
+    expect(dismissRecoveryMock).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("shows a clear database status and compact shell for skills-only residuals", async () => {
     await act(async () => {
       await renderWithI18n(

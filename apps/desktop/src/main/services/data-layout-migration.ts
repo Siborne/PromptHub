@@ -3,7 +3,11 @@ import path from "path";
 import crypto from "crypto";
 
 import DatabaseAdapter from "../database/sqlite";
-import { createUpgradeDataSnapshot } from "./upgrade-backup";
+import {
+  createUpgradeDataSnapshot,
+  getUpgradeBackup,
+  type UpgradeBackupSnapshot,
+} from "./upgrade-backup";
 
 const LAYOUT_MIGRATION_MARKER = ".data-layout-v0.5.5.json";
 
@@ -32,6 +36,10 @@ export interface DataLayoutMigrationResult {
   movedEntries: string[];
   failedEntries: string[];
   markerPath: string;
+}
+
+export interface DataLayoutMigrationOptions {
+  safetySnapshot?: UpgradeBackupSnapshot | null;
 }
 
 interface LayoutMarkerRecord {
@@ -95,7 +103,10 @@ function readTableColumns(
   }
 }
 
-function stableRowString(row: Record<string, unknown>, columns: string[]): string {
+function stableRowString(
+  row: Record<string, unknown>,
+  columns: string[],
+): string {
   return JSON.stringify(columns.map((column) => row[column] ?? null));
 }
 
@@ -274,7 +285,11 @@ function ensureDir(targetPath: string): void {
   fs.mkdirSync(targetPath, { recursive: true });
 }
 
-function assertPathWithinRoot(rootPath: string, targetPath: string, label: string): void {
+function assertPathWithinRoot(
+  rootPath: string,
+  targetPath: string,
+  label: string,
+): void {
   const resolvedRoot = path.resolve(rootPath);
   const resolvedTarget = path.resolve(targetPath);
   if (
@@ -298,7 +313,10 @@ function readLinkSafeStats(targetPath: string): fs.Stats | null {
   }
 }
 
-function assertPathIsNotSymlink(targetPath: string, label: string): fs.Stats | null {
+function assertPathIsNotSymlink(
+  targetPath: string,
+  label: string,
+): fs.Stats | null {
   const stats = readLinkSafeStats(targetPath);
   if (stats?.isSymbolicLink()) {
     throw new Error(
@@ -329,7 +347,9 @@ function assertMigratablePathTree(
 ): fs.Stats {
   const sourceStats = assertPathIsNotSymlink(sourcePath, "source");
   if (!sourceStats) {
-    throw new Error(`[data-layout-migration] Missing source path: ${sourcePath}`);
+    throw new Error(
+      `[data-layout-migration] Missing source path: ${sourcePath}`,
+    );
   }
 
   const targetStats = assertPathIsNotSymlink(targetPath, "target");
@@ -374,7 +394,10 @@ function ensureSameFileContents(sourcePath: string, targetPath: string): void {
   }
 }
 
-function areFilesByteIdentical(sourcePath: string, targetPath: string): boolean {
+function areFilesByteIdentical(
+  sourcePath: string,
+  targetPath: string,
+): boolean {
   if (!fs.existsSync(sourcePath) || !fs.existsSync(targetPath)) {
     return false;
   }
@@ -643,7 +666,8 @@ function writeMarker(
   backupId: string | null,
 ): string {
   const dbLayoutVersion =
-    movedEntries.includes("prompthub.db") && !failedEntries.includes("prompthub.db")
+    movedEntries.includes("prompthub.db") &&
+    !failedEntries.includes("prompthub.db")
       ? "0.5.7"
       : undefined;
   const markerPath = getMarkerPath(userDataPath);
@@ -667,7 +691,9 @@ function readMarker(userDataPath: string): Partial<LayoutMarkerRecord> | null {
   }
 
   try {
-    return JSON.parse(fs.readFileSync(markerPath, "utf8")) as Partial<LayoutMarkerRecord>;
+    return JSON.parse(
+      fs.readFileSync(markerPath, "utf8"),
+    ) as Partial<LayoutMarkerRecord>;
   } catch {
     return null;
   }
@@ -749,6 +775,7 @@ export function detectResidualLegacyEntries(userDataPath: string): string[] {
 export async function migrateLegacyDataLayout(
   userDataPath: string,
   currentVersion: string,
+  options: DataLayoutMigrationOptions = {},
 ): Promise<DataLayoutMigrationResult> {
   const resolvedUserDataPath = path.resolve(userDataPath);
   const markerPath = getMarkerPath(resolvedUserDataPath);
@@ -756,10 +783,17 @@ export async function migrateLegacyDataLayout(
   const previousMarker = readMarker(resolvedUserDataPath);
   const residualEntries = detectResidualLegacyEntries(resolvedUserDataPath);
   const legacyEntries =
-    previousMarker !== null ? residualEntries : detectLegacyEntries(resolvedUserDataPath);
-  const previousDbMigrationComplete = previousMarker?.dbLayoutVersion === "0.5.7";
+    previousMarker !== null
+      ? residualEntries
+      : detectLegacyEntries(resolvedUserDataPath);
+  const previousDbMigrationComplete =
+    previousMarker?.dbLayoutVersion === "0.5.7";
 
-  if (previousMarker !== null && legacyEntries.length === 0 && previousDbMigrationComplete) {
+  if (
+    previousMarker !== null &&
+    legacyEntries.length === 0 &&
+    previousDbMigrationComplete
+  ) {
     return {
       status: "already-migrated",
       backupId: null,
@@ -795,12 +829,29 @@ export async function migrateLegacyDataLayout(
     };
   }
 
-  let snapshot: Awaited<ReturnType<typeof createUpgradeDataSnapshot>>;
+  const suppliedSnapshot = options.safetySnapshot
+    ? await getUpgradeBackup(
+        resolvedUserDataPath,
+        options.safetySnapshot.backupId,
+      )
+    : null;
+  const markerSnapshot =
+    !suppliedSnapshot && previousMarker?.backupId
+      ? await getUpgradeBackup(resolvedUserDataPath, previousMarker.backupId)
+      : null;
+  let snapshot: UpgradeBackupSnapshot;
   try {
-    snapshot = await createUpgradeDataSnapshot(resolvedUserDataPath, {
-      fromVersion: `${currentVersion}-pre-layout-migration`,
-      toVersion: currentVersion,
-    });
+    const existingSnapshot = suppliedSnapshot ?? markerSnapshot;
+    snapshot = existingSnapshot
+      ? {
+          backupId: existingSnapshot.backupId,
+          backupPath: existingSnapshot.backupPath,
+          manifest: existingSnapshot.manifest,
+        }
+      : await createUpgradeDataSnapshot(resolvedUserDataPath, {
+          fromVersion: `${currentVersion}-pre-layout-migration`,
+          toVersion: currentVersion,
+        });
   } catch (error) {
     if (!isSymlinkSnapshotFailure(error)) {
       throw error;
@@ -852,7 +903,10 @@ export async function migrateLegacyDataLayout(
       //
       // 单条目失败：记录日志并继续。部分迁移优于崩溃。
       // 失败时源目录得到保留，数据安全。失败条目会写入标记供 UI 展示警告。
-      console.error(`[data-layout-migration] Failed to move "${entryName}":`, err);
+      console.error(
+        `[data-layout-migration] Failed to move "${entryName}":`,
+        err,
+      );
       failedEntries.push(entryName);
     }
   }
@@ -871,14 +925,10 @@ export async function migrateLegacyDataLayout(
     new Set([...(previousMarker?.movedEntries ?? []), ...movedEntries]),
   );
 
-  // Preserve the original backup reference from the first run.
-  // The first snapshot captures the complete pre-migration state; retry snapshots
-  // only cover residual entries and are sparse — they must NOT replace the
-  // canonical reference stored by the initial run.
-  //
-  // 保留首次运行时的备份 ID。初次快照涵盖完整迁移前状态；重试快照只包含残留条目，
-  // 不得用稀疏快照覆盖首次完整备份的引用。
-  const canonicalBackupId = previousMarker?.backupId ?? snapshot.backupId;
+  // A valid initial point remains the rollback authority for retries. If the
+  // marker reference disappeared or became invalid, the fresh complete point
+  // replaces that stale reference before any migrated state is reported.
+  const canonicalBackupId = snapshot.backupId;
 
   const writtenMarkerPath = writeMarker(
     resolvedUserDataPath,

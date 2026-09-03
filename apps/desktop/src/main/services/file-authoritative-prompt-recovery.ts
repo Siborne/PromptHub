@@ -2,7 +2,13 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { getUserDataPath } from "@prompthub/core";
+import {
+  encodeCanonicalResourceDirectory,
+  getUserDataPath,
+  parsePromptResourceDocuments,
+  readContentAddressedObject,
+  readResourceBundle,
+} from "@prompthub/core";
 import {
   closeDatabase,
   cleanupOwnedTemporaryDatabase,
@@ -48,7 +54,26 @@ function assertWorkspaceFile(filePath: string, allowedName: RegExp): void {
   }
 }
 
-function assertWorkspaceTree(rootPath: string, allowedName: RegExp): void {
+function isSupersededCanonicalPromptBundle(
+  rootPath: string,
+  directoryPath: string,
+): boolean {
+  if (path.dirname(directoryPath) !== rootPath) return false;
+  return ["manifest.json", "prompt.json"].every((fileName) => {
+    try {
+      const stats = fs.lstatSync(path.join(directoryPath, fileName));
+      return stats.isFile() && !stats.isSymbolicLink();
+    } catch {
+      return false;
+    }
+  });
+}
+
+function assertWorkspaceTree(
+  rootPath: string,
+  allowedName: RegExp,
+  ignoreSupersededPromptBundles = false,
+): void {
   if (!fs.existsSync(rootPath)) return;
   const rootStats = fs.lstatSync(rootPath);
   if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
@@ -67,8 +92,16 @@ function assertWorkspaceTree(rootPath: string, allowedName: RegExp): void {
       if (entry.isSymbolicLink()) {
         throw new Error(`Prompt workspace contains a symlink: ${entryPath}`);
       }
-      if (entry.isDirectory()) queue.push(entryPath);
-      else assertWorkspaceFile(entryPath, allowedName);
+      if (entry.isDirectory()) {
+        if (
+          !ignoreSupersededPromptBundles ||
+          !isSupersededCanonicalPromptBundle(rootPath, entryPath)
+        ) {
+          queue.push(entryPath);
+        }
+      } else {
+        assertWorkspaceFile(entryPath, allowedName);
+      }
     }
   }
 }
@@ -78,6 +111,7 @@ function assertSafePromptWorkspace(activeRoot: string): void {
   assertWorkspaceTree(
     path.join(dataPath, "prompts"),
     /^(?:.+\.md|_folder\.json|\.DS_Store|Thumbs\.db)$/u,
+    true,
   );
   assertWorkspaceTree(
     path.join(dataPath, ".versions"),
@@ -311,6 +345,72 @@ function candidateMediaDirectories(
   ];
 }
 
+function readCanonicalPromptMediaObjects(bundlePath: string, promptId: string) {
+  const bundle = readResourceBundle(bundlePath, {
+    expectedResourceType: "prompt",
+    expectedResourceId: promptId,
+  });
+  const current = bundle.manifest.payloadFiles.find(
+    (file) => file.role === "current",
+  );
+  const versions = bundle.manifest.payloadFiles.filter(
+    (file) => file.role === "version",
+  );
+  if (
+    current?.path !== "prompt.json" ||
+    versions.length + 1 !== bundle.payloadFileCount
+  ) {
+    throw new Error(`Canonical Prompt bundle roles are invalid: ${promptId}`);
+  }
+  const parsed = parsePromptResourceDocuments(
+    fs.readFileSync(path.join(bundlePath, "prompt.json"), "utf8"),
+    versions.map((file) => ({
+      path: file.path,
+      text: fs.readFileSync(
+        path.join(bundlePath, ...file.path.split("/")),
+        "utf8",
+      ),
+    })),
+  );
+  if (parsed.prompt.id !== promptId) {
+    throw new Error("Canonical Prompt id does not match its bundle path");
+  }
+  return {
+    declaredObjectHashes: new Set(bundle.manifest.objectHashes),
+    mediaObjects: parsed.promptDocument.mediaObjects ?? [],
+  };
+}
+
+function loadCanonicalPromptMediaSources(
+  activeRoot: string,
+  promptId: string,
+): Map<string, string> | null {
+  const bundlePath = path.join(
+    activeRoot,
+    "data",
+    "prompts",
+    encodeCanonicalResourceDirectory(promptId),
+  );
+  if (!fs.existsSync(bundlePath)) return null;
+  const bundle = readCanonicalPromptMediaObjects(bundlePath, promptId);
+  const sources = new Map<string, string>();
+  for (const object of bundle.mediaObjects) {
+    if (!bundle.declaredObjectHashes.has(object.sha256)) {
+      throw new Error("Canonical Prompt media object is not declared");
+    }
+    const stored = readContentAddressedObject(
+      path.join(activeRoot, "data", "assets", "objects"),
+      object.sha256,
+      { maxBytes: object.byteSize },
+    );
+    if (stored.size !== object.byteSize) {
+      throw new Error("Canonical Prompt media object size does not match");
+    }
+    sources.set(`${object.kind}\0${object.reference}`, stored.path);
+  }
+  return sources;
+}
+
 export function createVerifiedPromptMediaResolver(options: {
   activeRoot: string;
   trustedRoots: readonly string[];
@@ -332,7 +432,12 @@ export function createVerifiedPromptMediaResolver(options: {
     }
   }
 
-  return (_prompt, kind, reference) => {
+  const canonicalSourcesByPromptId = new Map<
+    string,
+    Map<string, string> | null
+  >();
+
+  return (prompt, kind, reference) => {
     const segments = assertSafeReference(reference);
     const candidates = Array.from(
       new Set(
@@ -343,6 +448,24 @@ export function createVerifiedPromptMediaResolver(options: {
         ),
       ),
     ).filter((filePath) => fs.existsSync(filePath));
+    if (
+      candidates.length === 0 &&
+      prompt !== null &&
+      typeof prompt === "object" &&
+      typeof Reflect.get(prompt, "id") === "string"
+    ) {
+      const promptId = Reflect.get(prompt, "id") as string;
+      if (!canonicalSourcesByPromptId.has(promptId)) {
+        canonicalSourcesByPromptId.set(
+          promptId,
+          loadCanonicalPromptMediaSources(options.activeRoot, promptId),
+        );
+      }
+      const source = canonicalSourcesByPromptId
+        .get(promptId)
+        ?.get(`${kind}\0${reference}`);
+      if (source) candidates.push(source);
+    }
     if (candidates.length === 0) {
       throw new Error(`Prompt media source is missing: ${reference}`);
     }

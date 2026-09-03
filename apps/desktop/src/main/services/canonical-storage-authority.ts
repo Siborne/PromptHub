@@ -41,6 +41,14 @@ export interface PublishCanonicalStorageAuthorityResult {
   recoveryArtifactPath: string;
 }
 
+export type CanonicalStorageAuthorityRecoveryScope =
+  | "prompt-graph"
+  | "canonical-storage";
+
+export interface RecoverCanonicalStorageAuthorityOptions extends PublishCanonicalStorageAuthorityOptions {
+  recoveryScope?: CanonicalStorageAuthorityRecoveryScope;
+}
+
 function copyCompletedMigrationState(
   activeRoot: string,
   candidateData: string,
@@ -299,8 +307,9 @@ async function publishCanonicalStorageAuthorityInternal(
 }
 
 export async function recoverCanonicalStorageAuthorityFromDatabase(
-  options: PublishCanonicalStorageAuthorityOptions,
+  options: RecoverCanonicalStorageAuthorityOptions,
 ): Promise<PublishCanonicalStorageAuthorityResult> {
+  const { recoveryScope = "prompt-graph", ...publicationOptions } = options;
   const activeRoot = path.resolve(options.activeRoot);
   if (!readCanonicalStorageAuthority(activeRoot)) {
     throw new Error(
@@ -313,8 +322,8 @@ export async function recoverCanonicalStorageAuthorityFromDatabase(
   } catch {
     graphIsInvalid = true;
   }
-  if (!graphIsInvalid) {
+  if (!graphIsInvalid && recoveryScope !== "canonical-storage") {
     throw new Error("Canonical file authority does not require recovery");
   }
-  return publishCanonicalStorageAuthorityInternal(options, true);
+  return publishCanonicalStorageAuthorityInternal(publicationOptions, true);
 }

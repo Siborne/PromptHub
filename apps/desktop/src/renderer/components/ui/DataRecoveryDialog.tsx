@@ -258,6 +258,16 @@ export function DataRecoveryDialog({
     onClose();
   };
 
+  const handleContinueWithoutRecovery = async (): Promise<void> => {
+    try {
+      if (persistDismiss) {
+        await window.electron?.dismissRecovery?.();
+      }
+    } finally {
+      onClose();
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -557,6 +567,15 @@ export function DataRecoveryDialog({
                   className="px-4 py-2 rounded-lg border border-border bg-background text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
                 >
                   {t("recovery.dismiss")}
+                </button>
+              ) : !allowWindowClose ? (
+                <button
+                  type="button"
+                  onClick={handleContinueWithoutRecovery}
+                  disabled={isRecovering}
+                  className="px-4 py-2 rounded-lg border border-border bg-background text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                >
+                  {t("recovery.continueWithoutRecovery")}
                 </button>
               ) : null}
               <button

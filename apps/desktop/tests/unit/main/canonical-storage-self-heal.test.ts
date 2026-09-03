@@ -47,15 +47,44 @@ describe("canonical storage startup self-heal", () => {
     writeRuntimeLayoutState(activeRoot);
     const dataPath = path.join(activeRoot, "data");
     const graphPath = path.join(activeRoot, "empty-graph");
+    const canonicalMediaPath = path.join(activeRoot, "canonical-media.jpeg");
+    fs.writeFileSync(canonicalMediaPath, "canonical image bytes", "utf8");
     materializeCanonicalStorageShadow({
       targetPath: graphPath,
       prompts: {
-        prompts: [],
-        promptVersions: [],
+        prompts: [
+          {
+            id: "shared-prompt",
+            title: "Superseded canonical title",
+            userPrompt: "Superseded canonical content.",
+            variables: [],
+            tags: [],
+            images: ["missing-legacy-image.jpeg"],
+            videos: [],
+            isFavorite: false,
+            isPinned: false,
+            version: 1,
+            currentVersion: 1,
+            usageCount: 0,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        promptVersions: [
+          {
+            id: "superseded-version-1",
+            promptId: "shared-prompt",
+            version: 1,
+            userPrompt: "Superseded canonical content.",
+            variables: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
         folders: [],
         promptRelations: [],
         outputFormatItems: [],
       },
+      resolvePromptMediaSource: () => canonicalMediaPath,
       skills: [
         {
           skill: {
@@ -88,6 +117,7 @@ describe("canonical storage startup self-heal", () => {
 
     const promptsPath = path.join(dataPath, "prompts");
     fs.mkdirSync(promptsPath, { recursive: true });
+    fs.mkdirSync(path.join(promptsPath, "empty-workspace-folder"));
     const markdownPath = path.join(promptsPath, "file-prompt.md");
     fs.writeFileSync(
       markdownPath,
@@ -95,6 +125,7 @@ describe("canonical storage startup self-heal", () => {
 id: "shared-prompt"
 title: "File title"
 currentVersion: 2
+images: ["missing-legacy-image.jpeg"]
 createdAt: "2026-01-01T00:00:00.000Z"
 updatedAt: "2026-08-18T00:00:00.000Z"
 ---
@@ -201,6 +232,35 @@ File current content.
     expect(graph.snapshot.promptVersions.map((item) => item.version)).toEqual([
       1, 2,
     ]);
+    const mediaObject = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          input.activeRoot,
+          "data",
+          "prompts",
+          "shared-prompt",
+          "prompt.json",
+        ),
+        "utf8",
+      ),
+    ).mediaObjects[0];
+    expect(mediaObject).toMatchObject({
+      kind: "image",
+      reference: "missing-legacy-image.jpeg",
+    });
+    expect(
+      fs.existsSync(
+        path.join(
+          input.activeRoot,
+          "data",
+          "assets",
+          "objects",
+          "sha256",
+          mediaObject.sha256.slice(0, 2),
+          mediaObject.sha256,
+        ),
+      ),
+    ).toBe(true);
     expect(fs.readFileSync(input.appearancePath, "utf8")).toBe(
       "keep appearance",
     );
@@ -346,6 +406,87 @@ File current content.
     expect(
       fs.readFileSync(path.join(input.activeRoot, "data", "catalog.json")),
     ).toEqual(catalogBefore);
+  });
+
+  it("rejects incomplete bundle-shaped directories beside Markdown", async () => {
+    const input = fixture();
+    const typeSubstitutedPath = path.join(
+      input.activeRoot,
+      "data",
+      "prompts",
+      "type-substituted-bundle",
+    );
+    fs.mkdirSync(path.join(typeSubstitutedPath, "prompt.json"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(typeSubstitutedPath, "manifest.json"),
+      "{}\n",
+      "utf8",
+    );
+    const unexpectedPath = path.join(
+      input.activeRoot,
+      "data",
+      "prompts",
+      "incomplete-bundle",
+      "unexpected.json",
+    );
+    fs.mkdirSync(path.dirname(unexpectedPath), { recursive: true });
+    fs.writeFileSync(
+      path.join(path.dirname(unexpectedPath), "manifest.json"),
+      "{}\n",
+      "utf8",
+    );
+    fs.writeFileSync(unexpectedPath, "{}\n", "utf8");
+
+    await expect(
+      repairCanonicalStorageFromPromptWorkspace({
+        activeRoot: input.activeRoot,
+        sourceDatabasePath: input.databasePath,
+        trustedRoots: [],
+      }),
+    ).rejects.toThrow(/unexpected file/iu);
+    expect(fs.existsSync(input.markdownPath)).toBe(true);
+    expect(fs.existsSync(unexpectedPath)).toBe(true);
+  });
+
+  it("rejects a damaged canonical media fallback", async () => {
+    const input = fixture();
+    const promptDocument = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          input.activeRoot,
+          "data",
+          "prompts",
+          "shared-prompt",
+          "prompt.json",
+        ),
+        "utf8",
+      ),
+    );
+    const hash = promptDocument.mediaObjects[0].sha256 as string;
+    fs.writeFileSync(
+      path.join(
+        input.activeRoot,
+        "data",
+        "assets",
+        "objects",
+        "sha256",
+        hash.slice(0, 2),
+        hash,
+      ),
+      "damaged image bytes",
+      "utf8",
+    );
+
+    await expect(
+      repairCanonicalStorageFromPromptWorkspace({
+        activeRoot: input.activeRoot,
+        sourceDatabasePath: input.databasePath,
+        trustedRoots: [],
+      }),
+    ).rejects.toThrow(/content-addressed .*object/iu);
+    expect(fs.existsSync(input.markdownPath)).toBe(true);
   });
 
   it("rolls back a publication failure and remains retryable", async () => {

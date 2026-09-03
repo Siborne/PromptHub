@@ -9,8 +9,10 @@ import {
 
 import { closeDatabase } from "../database";
 import { logStartupEvent, scrubPath } from "../startup-log";
-import type { PublishCanonicalStorageAuthorityResult } from "./canonical-storage-authority";
-import { recoverCanonicalStorageAuthorityFromDatabase } from "./canonical-storage-authority";
+import {
+  recoverCanonicalStorageAuthorityFromDatabase,
+  type PublishCanonicalStorageAuthorityResult,
+} from "./canonical-storage-authority";
 import { repairCanonicalStorageFromPromptWorkspace } from "./canonical-storage-self-heal";
 import { createVerifiedPromptMediaResolver } from "./file-authoritative-prompt-recovery";
 import {
@@ -33,6 +35,7 @@ interface CanonicalDatabaseRecoveryOptions {
   sourceDatabasePath: string;
   sourcePath: string;
   encryption: McpResourceSecretEncryption;
+  recoveryReason?: string | null;
   scheduleRelaunch: (delayMs: number) => void;
   onSuccess: () => void;
   onFailure: () => void | Promise<void>;
@@ -91,6 +94,10 @@ function recoverSelectedDatabase(
       `.canonical-checkpoint-${crypto.randomUUID()}`,
     ),
     deviceId: deriveLocalResourceDeviceId(options.activeRoot),
+    recoveryScope:
+      options.recoveryReason === "invalid-canonical-storage"
+        ? "canonical-storage"
+        : "prompt-graph",
     mcpLibrary,
     resolvePromptMediaSource,
     persistExtractedMcpSecrets: (secrets) =>

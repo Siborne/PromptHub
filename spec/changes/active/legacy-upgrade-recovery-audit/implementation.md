@@ -390,6 +390,69 @@ action was selected in the renderer.
 - The final 0.6.0 quick release profile passed all 29 gates in 484.4 seconds
   after the symlink migration repair.
 
+### Mandatory recovery lockout repair
+
+- Startup now carries the diagnosed recovery scope into a manually selected
+  current SQLite recovery. `invalid-canonical-storage` can rebuild the complete
+  authority even when its Prompt graph is valid, while the default recovery
+  scope still rejects replacing a valid file authority.
+- A startup recovery dialog that intentionally hides the destructive
+  start-fresh action now exposes a separate continue action. It closes only the
+  current prompt and does not rewrite or delete any recovery source; unresolved
+  canonical invalidity is checked again on the next launch.
+- Focused verification passed 24 tests across canonical authority publication,
+  recovery orchestration, and renderer dialog behavior. Desktop TypeScript,
+  targeted ESLint, Prettier, locale JSON parsing, file-size limits, and change
+  traceability also passed. The Desktop renderer, main, and preload production
+  build completed successfully.
+- Targeted V8 coverage exercised every new decision outcome: default valid-file
+  refusal, explicitly scoped canonical replacement, both startup-reason mapping
+  arms, recovery failure, and both dismiss-persistence arms. The touched legacy
+  files remain below whole-file 100% coverage: authority 87.77% statements /
+  69.23% branches, recovery orchestration 93.70% / 95.23%, and dialog 87.84% /
+  73.17%; the uncovered lines belong to pre-existing publication, source-type,
+  preview, and start-fresh paths rather than this changed behavior.
+
+### Mixed Prompt layout startup repair
+
+- A normal development launch against the installed profile reproduced
+  `invalid-canonical-prompt-graph`: the older writer had placed 127 Markdown
+  Prompts beside 127 canonical Prompt bundles. The self-heal scanner rejected
+  the first bundle's `manifest.json`, so startup showed mandatory recovery even
+  though SQLite `quick_check` was `ok` and both sources reported 127 Prompts.
+- The repair scanner now treats only top-level directories with regular
+  non-symlink `manifest.json` and `prompt.json` files as superseded canonical
+  bundles. Incomplete lookalikes remain rejected. Missing legacy media filenames
+  may fall back only to the same Prompt id's fully validated bundle and immutable
+  object, including manifest declaration, byte-size, and SHA-256 verification.
+- Seven focused filesystem/SQLite tests passed, including mixed-layout repair,
+  damaged-object refusal, duplicate-id refusal, rollback, catalog idempotency,
+  and live-client lockout. Desktop TypeScript, targeted ESLint, production build,
+  change traceability, and spec-index checks passed.
+- A copy-on-write clone of the installed profile completed the full journaled
+  repair without touching live data. The rebuilt canonical graph and SQLite both
+  contained 127 Prompts, 10 folders, and 137 Prompt versions; the temporary
+  profile and its generated recovery artifact were removed after verification.
+- The repository-wide file-size gate remains blocked by the unrelated dirty
+  `apps/desktop/src/main/index.ts` at 1,502 lines versus its 1,500-line preferred
+  limit. Neither this repair nor its tests modify that file.
+
+### Normal startup recovery UI removal
+
+- Normal renderer startup no longer calls recovery candidate discovery or
+  mounts `DataRecoveryDialog`. Versioned layout migration, validation, catalog
+  reconciliation, and deterministic self-heal remain main-process startup work.
+- The recovery browser and its source-selection safeguards remain available
+  only from Data Settings for explicit user-directed recovery.
+- A renderer orchestration regression asserts that `App.tsx` contains neither
+  the startup recovery scan nor the recovery dialog boundary.
+- Verification passed 29 focused renderer, Settings recovery, canonical
+  startup, and mixed-layout self-heal tests; Desktop TypeScript, targeted
+  ESLint, production renderer/main/preload build, traceability, spec index, and
+  whitespace checks also passed. The repository-wide file-size gate remains
+  blocked only by the unrelated dirty `apps/desktop/src/main/index.ts` at 1,502
+  lines versus its 1,500-line preferred limit.
+
 ## Remaining Risk
 
 Current recovery code and tests now prove the shared SQLite migration slice for

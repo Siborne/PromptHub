@@ -12,8 +12,10 @@ import {
   runUpgradeBackupStartupTasks,
 } from "../../../src/main/services/upgrade-backup-startup";
 import {
+  createUpgradeDataSnapshot,
   getLegacyUpgradeBackupRoot,
   getUpgradeBackupRoot,
+  listUpgradeBackups,
 } from "../../../src/main/services/upgrade-backup";
 
 function makeTmpDir(prefix: string): string {
@@ -194,6 +196,48 @@ describe("upgrade-backup-startup", () => {
 
     expect(result.status).toBe("not-an-upgrade");
     expect(result.snapshot).toBeNull();
+  });
+
+  it("reuses a modern install-time snapshot for the exact first-start transition", async () => {
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    const databasePath = path.join(userDataPath, "data", "prompthub.db");
+    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+    const database = new Database(databasePath);
+    database.exec("CREATE TABLE snapshot_marker (value TEXT NOT NULL)");
+    database.exec("INSERT INTO snapshot_marker (value) VALUES ('preserved')");
+    database.close();
+    await runUpgradeBackupStartupTasks(userDataPath, "0.6.0");
+    const installSnapshot = await createUpgradeDataSnapshot(userDataPath, {
+      fromVersion: "0.6.0",
+      toVersion: "0.6.1",
+    });
+
+    const result = await runUpgradeBackupStartupTasks(userDataPath, "0.6.1");
+
+    expect(result.status).toBe("snapshot-reused");
+    expect(result.snapshot?.backupId).toBe(installSnapshot.backupId);
+    expect(await listUpgradeBackups(userDataPath)).toHaveLength(1);
+  });
+
+  it("does not reuse a transition snapshot older than the last-run marker", async () => {
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    const databasePath = path.join(userDataPath, "data", "prompthub.db");
+    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+    const database = new Database(databasePath);
+    database.exec("CREATE TABLE snapshot_marker (value TEXT NOT NULL)");
+    database.close();
+    await runUpgradeBackupStartupTasks(userDataPath, "0.6.0");
+    const staleSnapshot = await createUpgradeDataSnapshot(userDataPath, {
+      fromVersion: "0.6.0",
+      toVersion: "0.6.1",
+    });
+    await runUpgradeBackupStartupTasks(userDataPath, "0.6.0");
+
+    const result = await runUpgradeBackupStartupTasks(userDataPath, "0.6.1");
+
+    expect(result.status).toBe("snapshot-created");
+    expect(result.snapshot?.backupId).not.toBe(staleSnapshot.backupId);
+    expect(await listUpgradeBackups(userDataPath)).toHaveLength(2);
   });
 
   it("refuses an older writer before migration and leaves the marker unchanged", async () => {
