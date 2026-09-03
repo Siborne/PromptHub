@@ -1,4 +1,3 @@
-import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { buildManagedAgents } from "@prompthub/core";
@@ -7,6 +6,7 @@ import {
   getPlatformById,
 } from "@prompthub/shared/constants/platforms";
 import { detectInstalledPlatforms } from "../../../src/main/services/skill-installer-platform";
+import { resolvePlatformPath } from "../../../src/main/services/skill-installer-utils";
 
 describe("Doubao Work platform support", () => {
   it("uses the verified user Skill workspace without exposing built-in Skills", () => {
@@ -68,9 +68,10 @@ describe("Doubao Work platform support", () => {
   });
 
   it("detects Doubao from the native workspace parent", async () => {
-    const workspace = path.join(
-      process.env.HOME || "",
-      "Library/Application Support/Doubao/Default/.doubao/agent_mode/workspace",
+    const platform = getPlatformById("doubao")!;
+    const osKey = process.platform as "darwin" | "win32" | "linux";
+    const workspace = resolvePlatformPath(
+      platform.rootDir[osKey] || platform.rootDir.linux,
     );
     const pathExists = vi.fn(
       async (candidate: string) => candidate === workspace,

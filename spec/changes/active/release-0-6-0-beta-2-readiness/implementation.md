@@ -55,3 +55,18 @@
 - Stable-facing `0.5.9` metadata and downloads remain unchanged.
 - Tag-triggered Windows x64 two-launch, macOS signing/notarization, artifact,
   updater-manifest, GHCR, and public URL checks remain publication-stage gates.
+
+## Tag-Triggered Verification
+
+- The first Desktop workflow run `33737348676` stopped in the Linux verify job
+  before packaging because the Doubao detection test hard-coded a macOS
+  workspace while the detector correctly selected the runner's native path.
+  No Draft Release or desktop artifact was created by that run.
+- Self-Hosted Web workflow run `33737348914` passed verification and published
+  the prerelease-specific GHCR image without moving `latest`.
+- The Doubao test now derives the expected workspace from the current platform
+  template through the existing path resolver; its focused three-test suite,
+  lint, formatting, and diff hygiene checks pass locally.
+- Because beta.2 remains unpublished, the corrected release retry may replace
+  only the observed beta.2 tag object with an expected-old-value lease. An
+  unbounded force update is not permitted.
