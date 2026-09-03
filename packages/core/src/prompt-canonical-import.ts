@@ -247,6 +247,17 @@ function inventoryRoot(
         }
         continue;
       }
+      if (relativePath === ".trash") {
+        // Non-manifest recovery/conflict leftovers parked under the canonical
+        // root (e.g. an old cache prompt-workspace snapshot). They are not part
+        // of the authoritative graph. Mirroring how `.versions` is tolerated,
+        // skip the directory so reconciliation does not fail on an undeclared
+        // extra file; the authoritative prompt copies live under `prompts/`.
+        if (!stat.isDirectory()) {
+          throw new Error("canonical graph trash path is invalid");
+        }
+        continue;
+      }
       if (relativePath === "agent-appearance") {
         if (!stat.isDirectory()) {
           throw new Error(

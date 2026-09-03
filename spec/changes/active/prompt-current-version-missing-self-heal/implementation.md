@@ -41,6 +41,20 @@ Run from `apps/desktop` and `packages/db`:
 - 用户本机复测步骤：在这种已应用修复的 `out/main` 构建上直接启动，日志不再出现
   "Prompt resource current version is missing" 即可确认。待用户确认后再提交/推送/PR。
 
+## Follow-up in same PR branch (uncommitted, awaiting local confirm)
+- `apps/desktop/src/main/services/canonical-storage-startup.ts`
+  `relocateTrashedPromptWorkspaceFromCanonicalRoot(dataRoot, activeRoot)`：
+  仅当 canonical 根存在 `data/.trash/cache/prompt-workspace`（旧 file-workspace 快照被误放入
+  权威根）时，非破坏 rename 到 `<activeRoot>/recovery/canonical-prompt-trash/prompt-workspace-<时间戳>-<pid>`，
+  从而让 `verifyInventory` 不再因未声明文件在每次 prompt 写操作（如删除 prompt 123）时抛
+  `canonical graph file inventory count mismatch`。
+  其它 `.trash` 形态（如 conflicts）不受影响；目标无非 SQLite 探测才跳过）。
+- 单测 3 例（relocate no-delete、其余 trash 不动、异常不存在时 no-op）。
+验证：`vitest` canonical-storage-startup + prompt-version-consistency → 2 files 18 passed；
+desktop `typecheck`、`eslint`、`pnpm build` 全部 exit 0（重建 `out/main/index.js`）。
+前版本 current-version fix 章节内注的 “out of scope delete-123 follow-up” 之删除阻塞已在本推进解决，
+但仍未 commit，待用户本机确认后可启动+正常删除 prompt-123 后统一提交同一 PR（#214）。
+
 ## Docs synced
 
 `spec/changes/active/prompt-current-version-missing-self-heal/`: proposal、specs/storage/spec、

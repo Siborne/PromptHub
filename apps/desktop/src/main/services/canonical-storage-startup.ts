@@ -193,6 +193,50 @@ function healPromptVersionPointers(sourceDatabasePath: string): void {
   }
 }
 
+/**
+ * Relocate a stale `data/.trash/cache/prompt-workspace` leftover out of the
+ * canonical authority root without deleting it. In canonical-files mode every
+ * file under `data/` must be declared by the Prompt graph manifest (or be a
+ * trusted domain/asset prefix); an old file-workspace snapshot that ended up
+ * nested under the canonical root makes `verifyInventory` fail on every prompt
+ * mutation (`canonical graph file inventory count mismatch`). A non-destructive
+ * move to `<activeRoot>/recovery/...` clears the root while preserving the
+ * archived snapshot for the user. Idempotent: once moved, the source path no
+ * longer exists.
+ *
+ * 把旧版误入 canonical 根的 `data/.trash/cache/prompt-workspace` 快照非破坏地
+ * 搬迁到 recovery 目录再删除 prompt，避免每次 reconcile 时的 inventory mismatch；
+ * 仅当该子路径确实存在时才动作，绝不改动、删除快照内容。
+ */
+export function relocateTrashedPromptWorkspaceFromCanonicalRoot(
+  dataRoot: string,
+  activeRoot: string,
+): void {
+  const leftoverRoot = path.join(
+    dataRoot,
+    ".trash",
+    "cache",
+    "prompt-workspace",
+  );
+  let sourceStat: fs.Stats;
+  try {
+    sourceStat = fs.lstatSync(leftoverRoot);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
+    return; // not the well-known snapshot dir; leave other shapes untouched
+  }
+  const destRoot = path.join(activeRoot, "recovery", "canonical-prompt-trash");
+  fs.mkdirSync(destRoot, { recursive: true, mode: 0o700 });
+  const dest = path.join(
+    destRoot,
+    `prompt-workspace-${Date.now()}-${process.pid}`,
+  );
+  fs.renameSync(leftoverRoot, dest);
+}
+
 export async function ensureCanonicalStorageAuthorityOnStartup(
   options: EnsureCanonicalStorageAuthorityOnStartupOptions,
 ): Promise<CanonicalStorageAuthorityStartupResult> {
@@ -209,6 +253,10 @@ export async function ensureCanonicalStorageAuthorityOnStartup(
   }
   await options.prepareSourceDatabase?.();
   healPromptVersionPointers(sourceDatabasePath);
+  relocateTrashedPromptWorkspaceFromCanonicalRoot(
+    path.dirname(sourceDatabasePath),
+    activeRoot,
+  );
   const checkpointPath = path.resolve(
     options.checkpointPath ??
       path.join(
