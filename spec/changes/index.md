@@ -40,11 +40,11 @@ file manually. Run the generator after adding, moving, or archiving a change.
 | `rules-managed-copies` | active | `spec/changes/active/rules-managed-copies/` |
 | `self-hosted-skill-sync-reliability` | active | `spec/changes/active/self-hosted-skill-sync-reliability/` |
 | `skill-canonical-prompthub-bundle-recovery` | active | `spec/changes/active/skill-canonical-prompthub-bundle-recovery/` |
-| `skill-sync-fromrepo-rm-eph-permission` | missing implementation | `spec/changes/active/skill-sync-fromrepo-rm-eph-permission/` |
+| `skill-sync-fromrepo-rm-eph-permission` | active | `spec/changes/active/skill-sync-fromrepo-rm-eph-permission/` |
 | `skills-issue-194-shared-global-target` | active | `spec/changes/active/skills-issue-194-shared-global-target/` |
 | `skills-issue-211-git-http-fallback` | active | `spec/changes/active/skills-issue-211-git-http-fallback/` |
 | `skills-my-skills-tag-search` | active | `spec/changes/active/skills-my-skills-tag-search/` |
-| `skills-tag-list-glance-display` | missing implementation | `spec/changes/active/skills-tag-list-glance-display/` |
+| `skills-tag-list-glance-display` | active | `spec/changes/active/skills-tag-list-glance-display/` |
 | `sync-issue-191-safety-report-contract` | active | `spec/changes/active/sync-issue-191-safety-report-contract/` |
 | `update-channel-hardening` | active | `spec/changes/active/update-channel-hardening/` |
 | `web-agent-service-parity` | active | `spec/changes/active/web-agent-service-parity/` |
