@@ -95,3 +95,21 @@ Follow-up verification（同前执行方式）：
 - tasks 第 10 行渲染条件措辞同步为“候选与 active 均空才不渲染；候选空但有 active 仍渲染”。
 - 全量套件仍在宽松后台运行；**尚未取到 `EXIT=` 汇总**，等它跑完把实际 pass/fail 数字、lint 错误数、typecheck 错误数补录到本文件与 tasks 并打勾。
 - Round-4 验证（当前）：`vitest skill-i18n-manager.test.tsx` → 16 passed（含修正后的 stale 用例）；typecheck/eslint 复跑随全量结束一并确认。
+
+## Feature round 5（设置开关：frontmatter 标签纳入候选）
+
+用户反馈“我的 Skill”标签过滤框消失。根因：`packages/db/src/init.ts` 迁移把无 `original_tags` 的既有 skill 回填为 `original_tags = tags`，导致本地创建 skill 的标签被判为“来源自带（original）”并被 `buildSkillTagCandidates` 默认排除 → 候选为空 → 控件按“候选与 active 均空”隐藏。
+
+按用户确认的语义，维护者第 2 条“只显用户标签”保留为默认；新增设置 `settings.skillTagFilterIncludeFrontmatter`（默认 false）：
+- 关闭（默认）：候选 = `buildSkillTagCandidates(skills, false)` = `buildSkillStats(...).uniqueUserTags`（用户标签），与侧栏一致。
+- 开启：候选 = 用户标签 ∪ SKILL.md frontmatter（`original_tags`）标签，使本地标签重新可筛，不丢弃平台侧用户标签。
+
+落地：`settings-types/defaults/general-actions/normalizers/persistence` 贯穿新布尔字段；`skill-stats.ts` 新增导出 `buildSkillTagCandidates(skills, includeFrontmatter)`（复用私有 `getUserSkillTags`/`inferOriginalSkillTags`，单一来源）；`SkillManager` 读设置并用它派生候选；`SkillSettings` 新增一个 `ToggleSwitch` section；7 个 locale 增 `settings.skillTagFilter*` 三个 key；spec 增 `FR-TAGSEARCH-005`。
+
+### Round-5 verification
+- `vitest skill-stats.test.ts`：4 passed（含 `buildSkillTagCandidates` 默认 user-tags / 开启并集 / registry 标签仅开启出现，3 个新用例）。
+- `vitest skill-i18n-manager.test.tsx`：16 passed（SkillManager 默认关闭不回归）。
+- 7 个 locale 的 `settings.skillTagFilter*` 三键齐全、JSON 合法。
+- `pnpm typecheck`：exit 0；`eslint`（改动文件，max-warnings 0）：RC 0。
+- UI 开关为与文件内其它 `ToggleSwitch` 同构的受控绑定；行为核心由 `buildSkillTagCandidates` 单测覆盖。
+- 全量 `pnpm test:run` 仍为跨环境长跑（本 feature 改动后需 CI/宽松环境最终确认）。

@@ -44,3 +44,12 @@
 - [x] stale-selection 回归改为显式 `original_tags: ["general"]` 的 `registryOnlySkill`，确保 user-tag 候选确实为空，仅由 active tags 驱动控件保留（避免依赖 `registry_slug` 隐性推导）。
 - [x] tasks 第 10 行渲染条件措辞已改为“候选与 active 均空才不渲染；候选空但有 active 仍渲染”。
 - [ ] 全量 `pnpm test:run` 最终汇总（仍在宽松后台运行；完成后把实际 pass/fail 数字、lint 错误数、typecheck 错误数写入 implementation.md 并打勾本项）。
+
+## Feature round 5（frontmatter 标签开关）
+
+- [x] `settings.skillTagFilterIncludeFrontmatter`（默认 false）：settings-types/defaults/general-actions/normalizers/persistence 贯穿字段与 setter。
+- [x] `skill-stats.ts` 新增 `buildSkillTagCandidates(skills, includeFrontmatter)`（默认 user-tags；开启并集 original_tags），并补 3 个单测。
+- [x] `SkillManager` 读设置并用 `buildSkillTagCandidates` 派生候选。
+- [x] `SkillSettings` 新增 `ToggleSwitch` section；7 个 locale 增 `settings.skillTagFilter*` 三键。
+- [x] 根因记录：`packages/db/init.ts` 回填 `original_tags = tags` 导致本地标签被排除。
+- [x] round-5 验证：skill-stats 4 passed、skill-i18n-manager 16 passed、7 locale 键齐全、typecheck exit 0、eslint RC 0。

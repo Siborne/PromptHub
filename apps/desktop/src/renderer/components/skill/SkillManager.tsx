@@ -34,7 +34,7 @@ import type { Skill, ScannedSkill } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
 import { filterVisibleSkills } from "../../services/skill-filter";
-import { buildSkillStats } from "../../services/skill-stats";
+import { buildSkillTagCandidates } from "../../services/skill-stats";
 import { buildMySkillSourceBadges } from "../../services/skill-source-badges";
 import { getRemoteStoreSkills } from "../../services/remote-store-entry";
 import { getSkillsWithStoreUpdates } from "../../services/skill-library-update-status";
@@ -139,6 +139,9 @@ export function SkillManager() {
   );
   const setSkillListPageSize = useSettingsStore(
     (state) => state.setSkillListPageSize,
+  );
+  const skillTagFilterIncludeFrontmatter = useSettingsStore(
+    (state) => state.skillTagFilterIncludeFrontmatter,
   );
   const disabledPlatformIds =
     useSettingsStore((state) => state.disabledPlatformIds) ?? [];
@@ -293,12 +296,12 @@ export function SkillManager() {
   // Reuses the exact user-tag derivation the sidebar tag panel shows
   // (`buildSkillStats(...).uniqueUserTags`), so both entry points expose the
   // same candidate set and stay consistent without a second collection path.
-  // “我的 Skill”标签过滤控件的候选标签（用户标签，排序）。直接复用侧栏标签面板
-  // 展示的同一 user-tag 推导（`buildSkillStats(...).uniqueUserTags`），保证两个
-  // 入口的候选集合一致，不另起第二套收集逻辑。
+  // 候选标签：默认与侧栏标签面板共用的 user-tag 推导一致；开启
+  // `skillTagFilterIncludeFrontmatter` 后并集 SKILL.md frontmatter (original_tags)
+  // 标签，使本地创建技能因迁移回填 original_tags 的标签也能被筛选。
   const skillTagOptions = useMemo(
-    () => buildSkillStats(skills, deployedSkillNames).uniqueUserTags,
-    [deployedSkillNames, skills],
+    () => buildSkillTagCandidates(skills, skillTagFilterIncludeFrontmatter),
+    [skillTagFilterIncludeFrontmatter, skills],
   );
 
   const [sourceFilterKey, setSourceFilterKey] = useState(
