@@ -22,6 +22,7 @@ New/changed files：
   1. `59f2bacf` feat(skill): add tag filter search in My Skills（初始特性 + 验证）。
   2. `c6a311fc` fix(skill): address PR #213 review finds（CodeRabbit follow-up round 1：locale 键重复 / trim 归一 / ARIA / 返回类型）。
   3. `0a3a0e67` fix(skill): align a11y, docs status and tests in PR #213 (round 2)（移除失配 `aria-haspopup` / 测试去掉 `as any` / 统一文档状态）。
+  4. `dc246512` fix(skill): align My Skills tag filter with sidebar on owner review (round 3)（幽灵筛选可清除 / 候选与侧栏同源 user-tags / 已选列表有界滚动 / spec 验收同步）。
 - PR：`legeling/PromptHub#213`（base `main`，head `Siborne:feat/my-skills-tag-search`）状态 `open`，head 已随上述 commits 更新。
 
 ## Design decisions
@@ -75,3 +76,14 @@ Follow-up verification（同前执行方式）：
 - `pnpm typecheck`：exit 0；`eslint`（本次改动文件）：RC 0
 - 7 locales JSON：解析合法、无重复键
 
+## Owner review round 3（PR #213 maintainer feedback）
+
+- **幽灵筛选 toggling**：header 控件原先仅当候选非空渲染；若激活标签来自已被移除的来源（`filterTags` 残留、候选空），列表会被旧标签过滤为空且无入口清除。
+  改为 `skillTagOptions.length > 0 || skillActiveTags.length > 0` 渲染；补 “stale active tag 仍可清除/移除” 集成回归（skill-i18n-manager）。
+- **候选语义对齐**：控件改为直接复用侧栏同源推导 `buildSkillStats(skills, deployedSkillNames).uniqueUserTags`（仅用户标签），删掉第二套 `collectSkillTagOptions` 收集逻辑及其单测；spec 增 `FR-TAGSEARCH-004` 与验收场景。
+- **已选列表有界滚动**：selected `<ul>` 增加 `max-h-40 overflow-y-auto`；补“多选（40 tags）列表有界滚动”组件回归。
+
+### Owner round 3 verification
+- `vitest skill-tag-search-filter + skill-i18n-manager + skill-tag-options`：26 passed（含两条新增回归）。
+- `pnpm typecheck`：exit 0；`eslint`（改动文件）：RC 0。
+- 对应代码 commit：`dc246512`（详见上方 Status）。

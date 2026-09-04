@@ -30,3 +30,11 @@
 - [x] `skill-filter.test.ts` 新回归用例改用类型化 `Skill[]` fixture，去掉 `spacedSkills as any`（符合 No-any）。
 - [x] `implementation.md`「未提交/未建 PR」等旧状态已统一为真实分支/commit/PR（并补 Status 小节、提交时间戳）。
 - [x] round-2 定向验证：related vitest 19 passed；typecheck exit 0；eslint RC 0；全量跑进行中或已见本章开头说明。
+
+## Owner review round 3（maintainer feedback on #213）
+
+- [x] header 在 “候选为空但有 active tags” 时仍渲染，令残留激活标签可清除/移除（防“幽灵筛选”）。
+- [x] 控件候选改用 `buildSkillStats(...).uniqueUserTags`（与侧栏同源 user-tags），删除第二套 `collectSkillTagOptions` 收集逻辑。
+- [x] 已选标签 `<ul>` 有界滚动（`max-h-40 overflow-y-auto`）。
+- [x] 两条新增回归：stale active 可清、40 tags 列表滚动。
+- [x] round-3 定向验证（vitest 26、typecheck、eslint）通过；代码 commit `dc246512` 已推送到 PR #213。（状态同步见 implementation.md）
