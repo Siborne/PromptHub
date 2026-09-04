@@ -264,7 +264,7 @@ function LibraryFilterBar(props: HeaderProps) {
           </button>
         );
       })}
-      {props.skillTagOptions.length > 0 ? (
+      {props.skillTagOptions.length > 0 || props.skillActiveTags.length > 0 ? (
         <SkillTagSearchFilter
           options={props.skillTagOptions}
           selected={props.skillActiveTags}

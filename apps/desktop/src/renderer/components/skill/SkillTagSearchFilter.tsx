@@ -198,7 +198,7 @@ export function SkillTagSearchFilter({
 
           {hasSelection ? (
             <div className="border-t border-border p-1.5">
-              <ul className="space-y-1">
+              <ul className="max-h-40 space-y-1 overflow-y-auto pr-0.5">
                 {selected.map((tag) => (
                   <li key={tag}>
                     <button

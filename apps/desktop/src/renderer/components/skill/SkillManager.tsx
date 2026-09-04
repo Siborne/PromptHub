@@ -34,7 +34,7 @@ import type { Skill, ScannedSkill } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
 import { filterVisibleSkills } from "../../services/skill-filter";
-import { collectSkillTagOptions } from "../../services/skill-tag-options";
+import { buildSkillStats } from "../../services/skill-stats";
 import { buildMySkillSourceBadges } from "../../services/skill-source-badges";
 import { getRemoteStoreSkills } from "../../services/remote-store-entry";
 import { getSkillsWithStoreUpdates } from "../../services/skill-library-update-status";
@@ -289,14 +289,16 @@ export function SkillManager() {
     selectSkill(null);
   };
 
-  // Candidate tags for the My-Skills tag filter control (unique + sorted).
-  // Reuses the same list shape shown in the sidebar tag panel so both the
-  // sidebar and the main content stay consistent from one derived source.
-  // “我的 Skill”标签过滤控件的候选标签（去重排序），与侧栏标签面板共用同一种
-  // 派生结果，让侧栏与主内容从同一个候选中保持一致。
+  // Candidate tags for the My-Skills tag filter control (user tags, sorted).
+  // Reuses the exact user-tag derivation the sidebar tag panel shows
+  // (`buildSkillStats(...).uniqueUserTags`), so both entry points expose the
+  // same candidate set and stay consistent without a second collection path.
+  // “我的 Skill”标签过滤控件的候选标签（用户标签，排序）。直接复用侧栏标签面板
+  // 展示的同一 user-tag 推导（`buildSkillStats(...).uniqueUserTags`），保证两个
+  // 入口的候选集合一致，不另起第二套收集逻辑。
   const skillTagOptions = useMemo(
-    () => collectSkillTagOptions(skills),
-    [skills],
+    () => buildSkillStats(skills, deployedSkillNames).uniqueUserTags,
+    [deployedSkillNames, skills],
   );
 
   const [sourceFilterKey, setSourceFilterKey] = useState(

@@ -115,6 +115,29 @@ describe("SkillTagSearchFilter", () => {
     await waitFor(() => expect(onClear).toHaveBeenCalledTimes(1));
   });
 
+  it("bounds the selected-tag list height so long selections scroll instead of overflowing", async () => {
+    const manyTags = Array.from({ length: 40 }, (_, i) => `tag-${i + 1}`);
+    const user = userEvent.setup();
+    await renderWithI18n(
+      <SkillTagSearchFilter
+        options={manyTags}
+        selected={manyTags}
+        onToggle={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Filter by tag (40 active)" }),
+    );
+
+    const removeButtons = screen.getAllByRole("button", { name: /^Remove / });
+    expect(removeButtons.length).toBe(40);
+    const list = removeButtons[0].closest("ul");
+    expect(list).not.toBeNull();
+    expect(list?.className).toContain("max-h-40");
+    expect(list?.className).toContain("overflow-y-auto");
+  });
+
   it("shows a trigger without opening when there are no tags passed", async () => {
     await renderWithI18n(
       <SkillTagSearchFilter

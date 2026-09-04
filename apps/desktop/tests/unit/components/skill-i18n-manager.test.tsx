@@ -751,6 +751,40 @@ describe("skill i18n smoke", () => {
     expect(selectSkill).toHaveBeenCalledWith(null);
   });
 
+  it("keeps the tag filter reachable so a stale active tag can still be cleared", () => {
+    // Base skill resolves to no *user* tags (registry-owned), so no candidate
+    // options are shown. A left-over active tag (e.g. previously selected then
+    // removed from the library) must still keep the header control mounted so
+    // the user can clear it instead of being trapped by an invisible filter.
+    const clearSkillFilterTags = vi.fn();
+    const skillStoreState = createSkillStoreState({
+      filterTags: ["ghost"],
+      toggleFilterTag: vi.fn(),
+      clearFilterTags: clearSkillFilterTags,
+      skills: [baseSkill],
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
+
+    render(<SkillManager />);
+
+    // Header control is still rendered because an active tag exists, even with
+    // an empty candidate list.
+    const trigger = screen.getByRole("button", {
+      name: /Filter by tag \(1 active\)/i,
+    });
+    expect(trigger).toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Clear all tag filters$/i }),
+    );
+
+    expect(clearSkillFilterTags).toHaveBeenCalledTimes(1);
+  });
+
   it("filters My Skills by source badge from the header dropdown", async () => {
     const skillStoreState = createSkillStoreState({
       skills: [
