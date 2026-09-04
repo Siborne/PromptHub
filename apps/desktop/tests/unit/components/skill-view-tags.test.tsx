@@ -334,6 +334,38 @@ describe("skill view tags", () => {
     expect(screen.queryByText("extra")).not.toBeInTheDocument();
   });
 
+  it("shows migrated frontmatter tags in list rows without opening detail", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([]),
+          detectPlatforms: vi.fn().mockResolvedValue([]),
+          getMdInstallStatusBatch: vi.fn().mockResolvedValue({}),
+        },
+      },
+    });
+    const importedSkill = {
+      ...baseSkill,
+      tags: [],
+      original_tags: ["agentic", "github", "review"],
+    };
+
+    await act(async () => {
+      await renderWithI18n(
+        <SkillListView
+          skills={[importedSkill as any]}
+          onQuickInstall={vi.fn()}
+        />,
+        { language: "en" },
+      );
+    });
+
+    expect(screen.getByText("agentic")).toBeInTheDocument();
+    expect(screen.getByText("github")).toBeInTheDocument();
+    expect(screen.getByText("review")).toBeInTheDocument();
+  });
+
+
   it("shows the blue update badge in list view rows", async () => {
     installWindowMocks({
       api: {

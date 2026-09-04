@@ -315,7 +315,16 @@ export function SkillListView({
           const installCount = getInstallCount(skill.id);
           const totalPlatforms = availablePlatforms.length;
           const hasStoreUpdate = skillsWithStoreUpdates.has(skill.id);
-          const visibleTags = normalizeStringArray(skill.tags).slice(0, 3);
+          // Show user-assigned tags together with the SKILL.md frontmatter
+          // (source) tags the import migrated into original_tags, de-duplicated,
+          // so a freshly imported skill already carries its tags in the list
+          // without requiring a detail-view round trip. This only affects tag
+          // badge display; filtering semantics stay unchanged.
+          const sourceTags = normalizeStringArray(skill.original_tags);
+          const seenRowTags = new Set(normalizeStringArray(skill.tags));
+          const visibleTags = normalizeStringArray(skill.tags)
+            .concat(sourceTags.filter((tag) => !seenRowTags.has(tag)))
+            .slice(0, 3);
           const sourceBadges = buildMySkillSourceBadges(skill, t);
           const hasMetadata = sourceBadges.length > 0 || visibleTags.length > 0;
           const isFirstRow = virtualRow.index === 0;
