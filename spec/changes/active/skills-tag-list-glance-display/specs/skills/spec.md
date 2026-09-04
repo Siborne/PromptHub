@@ -3,16 +3,26 @@ related: feat/my-skills-tag-search（同分支、独立 commit）
 
 ## 行为
 
-导入的 Skill 若 frontmatter/first-sync 携带 tags，其在列表行/卡片行的元信息区域应
-与详情页最终见到的一致——不应要求先打开详情（触发一次完整 sync/投影）才可见。
+SKILL.md frontmatter(source)标签存于 `original_tags`；用户/DB 标签存于 `tags`。
+My Skills 列表行的标签徽标显示与 `skillTagFilterIncludeFrontmatter` 设置一致：
 
-## 当前差异（待确认根因）
+- 设置**关闭**（默认）：列表行**不显示** `original_tags`（frontmatter 源标签），
+  仅显示用户/DB `tags`；打开技能详情再返回，列表行仍不显示这些 frontmatter 标签。
+- 设置**开启**：列表行显示 `tags` 与 `original_tags` 的去重并集（上限 3 条）。
 
-- 列表行（`SkillListView`）直接渲染 `skill.tags`（一个来源）。
-- 用户报告列表为空、点详情后 tags 才出现，暗示列表初始行对象的 tags 为空或
-  过期，detail-first 的 fetch/sync 才补到正确 tags。
+## 不变量
 
-## 验收草案
+- `syncFromRepo`（及详情/更新触发的 repo 同步）**不得**把 SKILL.md frontmatter
+  标签写入技能 `tags`（frontmatter 标签只能写入 `original_tags`），否则即使开关
+  关闭，打开详情返回后这些标签仍会在列表出现、与设置不一致。
+- 筛选候选（`buildSkillTagCandidates`/stats）与行徽标同受该开关约束，二者一致。
 
-- 同一次导入后，在不打开详情/不额外 sync 的前提下，列表行已显示该技能 frontmatter tags。
-- 详情打开后的 tags 与列表一致，无“先详情后列表才更新”的一阶差异。
+## 验收
+
+AC1：`buildSkillSyncUpdateFromRepo` 对 frontmatter 带 tags 的 SKILL.md，
+返回的更新含 `original_tags` 且不含 `tags`（不覆盖用户标签）。
+
+AC2：设置关闭时，导入技能列表行不渲染 frontmatter 标签（tags 为空或为用户标签）；
+打开详情再返回后列表行仍不渲染它们。
+
+AC3：设置开启时，列表行渲染 `tags ∪ original_tags`（去重、上限 3）。
