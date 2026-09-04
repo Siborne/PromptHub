@@ -178,13 +178,45 @@ function removeDeprecatedTree(targetPath: string): void {
   }
 }
 
-// Replaces the live workspace without ever tearing it: the new tree is fully
-// built in `staged` first, the existing one is moved aside with a single
-// atomic rename, and only then is the staged tree renamed into place. Deleting
-// the superseded tree afterwards is best-effort, so a transient Windows EPERM
-// there never turns a healthy hydration into a failed sync. If the rollover
-// itself cannot move the old tree it is left untouched and the error bubbles to
-// the caller (the prior behavior), who restores/retries consistently.
+// Synchronous short backoff for a transient Windows file-lock hold. Mirrors the
+// pattern already used in database-migration-intent.ts; a few milliseconds of
+// busy-wait lets a closing handle / AV scan release before we retry the rename.
+function syncWaitMs(milliseconds: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+const OWNED_REMOVE_MAX_ATTEMPTS = 5;
+
+// Removing the superseded live workspace. This mirrors the original main-branch
+// strategy (rm -rf the old tree, then rename the staged replacement in) instead
+// of first renaming the old tree aside: on Windows, renaming a directory that
+// contains a held file is far more likely to EPERM than deleting it, and the
+// rename-first approach reintroduced a regression. A transient hold (AV scan /
+// indexer) is retried briefly; if it persists we rethrow so the caller keeps
+// the (possibly partially removed) existing tree and restores consistently.
+function removeOwnedTreeWithRetry(targetPath: string): void {
+  for (let attempt = 0; attempt < OWNED_REMOVE_MAX_ATTEMPTS; attempt++) {
+    try {
+      fs.rmSync(targetPath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (
+        !isTransientOwnershipCode((error as NodeJS.ErrnoException).code) ||
+        attempt === OWNED_REMOVE_MAX_ATTEMPTS - 1
+      ) {
+        throw error;
+      }
+      syncWaitMs(50 * (attempt + 1));
+    }
+  }
+}
+
+// Replaces the live workspace: build the full replacement into `staged`, remove
+// the old `workspacePath` tree (with a brief transient-hold retry), then rename
+// the staged tree into place. This is the original main-branch structure; it
+// does not rename the old tree aside, avoiding the Windows EPERM on a held
+// directory. Removing the old tree is authoritative, so a persistent hold still
+// throws (keeping whatever remains and letting the caller restore/retry).
 function replaceOwnedWorkspace(
   workspacePath: string,
   stagedPath: string,
@@ -195,22 +227,8 @@ function replaceOwnedWorkspace(
     fs.renameSync(stagedPath, workspacePath);
     return;
   }
-  const priorPath = `${workspacePath}.prior-${process.pid}-${Date.now().toString(36)}`;
-  fs.renameSync(workspacePath, priorPath);
-  try {
-    fs.renameSync(stagedPath, workspacePath);
-  } catch (error) {
-    removeDeprecatedTree(stagedPath);
-    if (!fs.existsSync(workspacePath) && fs.existsSync(priorPath)) {
-      try {
-        fs.renameSync(priorPath, workspacePath);
-      } catch {
-        // Current workspace is unavailable; surface the original failure.
-      }
-    }
-    throw error;
-  }
-  removeDeprecatedTree(priorPath);
+  removeOwnedTreeWithRetry(workspacePath);
+  fs.renameSync(stagedPath, workspacePath);
 }
 
 export function hydrateCanonicalSkillWorkspace(skillId: string): string | null {

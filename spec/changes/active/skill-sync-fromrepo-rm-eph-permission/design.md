@@ -1,36 +1,36 @@
-# Design — EPERM-safe canonical skill workspace replacement
+# Design — EPERM-safe canonical skill workspace replacement (final)
 
-Status: pre-implementation; design notes for the pending coding pass.
+Status: implemented. The earlier rename-first design was rejected after a
+Windows regression and reverted to the main-branch structure.
 
-## Current behavior
+## Current (main-branch) behavior
 
 `hydrateCanonicalSkillWorkspace`（packages/core/src/canonical-skill-library.ts）：
 - `fs.rmSync(workspacePath, { recursive: true, force: true })`
-- 再 mkdir + 逐个 `COPYFILE_EXCL` + 写 `.canonical-bundle-hash` + rename 进入。
+- 再 mkdir + 逐个 `COPYFILE_EXCL` + 写 `.canonical-bundle-hash` + `rename` 进。
 
-即先删旧树再建新树；删除若被 Windows 占用（EPERM on `SKILL.md`）即整体失败，
-并把错误带进 `skill:syncFromRepo`/`restore`，而下一次回收又在同一路径重试。
+即先删旧树再建新树；删除若被 Windows 占用（EPERM on a contained file）即整体
+失败，并把错误带进 `skill:syncFromRepo`/`restore`。
 
-## 比选
+## 比选（已做）
 
-1. 建栈替换（推荐）：
-   - 在带 PID/salt 的 `workspacePath.<nonce>.stage` 里完整建好新树（含
-     `.canonical-bundle-hash`）；
-   - 就绪后把当前 `workspacePath` rename 为 `.prior`，再把 stage rename 成目标，
-     失败则把 prior 换回；
-   - prior 清理失败（EPERM）不应标记同步失败：仅记录并留待下次启动回收
-     （与项目既有 journal/prior 回收语义一致）。
-   - 好处：不做成对 DB 一致性的写，占用只影响无害 prior 延迟删除。
-2. 直接对 `rmSync` 做有限重试/延迟——治标，占用若持续仍失败。
+1. **rename-first（已否决）**：先把旧 `workspacePath` rename 到 `.prior`，再把
+   stage rename 成目标。**Windows 实测回归**：把一个含被占用文件的目录整体
+   `rename` 走比直接删除更容易抛 `EPERM: rename`，导致“添加标签保存”失败。
+2. **main 原版结构 + 短暂占用重试（选定）**：保留 `rmSync` 删旧树 +
+   `renameSync` 放新树（与 main 基线一致，`out/main` 已验证可工作），仅给旧树
+   `rmSync` 加 50/100/150/200/250ms 的 transient（EPERM/EBUSY）重试，覆盖
+   Defender/索引器这类短时扫描。持续占用仍抛，交给调用方恢复。
 
 ## Owner / 不改点
 
-- 仅 core `canonical-skill-library` workspace 替换时序与启动期回收 hook；
-  不触碰 `resource-bundle` 只读完整性校验。
-- `packages/shared`/IPC 对外契约不变（sync 结果类型不变，仅在失败根因归一化）。
+- 仅 core `canonical-skill-library` workspace 替换时序；不触碰
+  `resource-bundle` 只读完整性校验。
+- `packages/shared`/IPC 对外契约不变（sync 结果类型不变）。
 
-## 验证草案
+## 验证草案 / 已做
 
-- 集成/单测注入「对某文件持有 fd / 令删除抛 EPERM」的 hook：旧树在失败后仍存在、
-  新树未半写、后续调用可收敛。
-- covered lines/branches 目标 100%（node:fs rm/rename 边界用 stub+真实 tmpfs 混合）。
+- `packages/core` `tsc --noEmit` 通过；canonical-skill-db 6 passed（1 failure 为
+  Windows `fs.symlinkSync` 环境问题）。
+- 设备验收：Windows 上多次添加标签 / `syncFromRepo` 不再 EPERM。若仍失败且为
+  持续占用，转“workspace 刷新失败不阻断已存 DB 标签”的降级方案（另行确认）。
