@@ -19,7 +19,7 @@ import { getCacheDir, getDataDir, getUserDataPath } from "./runtime-paths";
 const OPERATION_KEY = "skill-library";
 const MAX_PACKAGE_FILES = 4_000;
 const MAX_PACKAGE_FILE_BYTES = 16 * 1024 * 1024;
-const IGNORED_ROOTS = new Set([".git", ".package-lifecycle"]);
+const IGNORED_ROOTS = new Set([".git", ".package-lifecycle", ".prompthub"]);
 
 function bundlePath(skillId: string): string {
   return path.join(
