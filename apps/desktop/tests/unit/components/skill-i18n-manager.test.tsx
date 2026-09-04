@@ -757,11 +757,18 @@ describe("skill i18n smoke", () => {
     // removed from the library) must still keep the header control mounted so
     // the user can clear it instead of being trapped by an invisible filter.
     const clearSkillFilterTags = vi.fn();
+    // Force an empty *user-tag* candidate set explicitly (original_tags holds
+    // the registry-owned tags), so this regression only proves the control is
+    // kept alive because a stale active tag exists — not because candidates do.
+    const registryOnlySkill: Skill = {
+      ...baseSkill,
+      original_tags: ["general"],
+    };
     const skillStoreState = createSkillStoreState({
       filterTags: ["ghost"],
       toggleFilterTag: vi.fn(),
       clearFilterTags: clearSkillFilterTags,
-      skills: [baseSkill],
+      skills: [registryOnlySkill],
     });
     const settingsState = createSettingsState();
 

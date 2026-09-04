@@ -7,7 +7,7 @@
 - [x] 实现 `components/skill/SkillTagSearchFilter.tsx`（presentation、受控）。
 - [x] 组件单测 `skill-tag-search-filter.test.tsx`（6 passed）：展开列出、查询收窄、toggle、移除 chip、
       清除全部、可访问性状态。
-- [x] `SkillManagerLibraryHeader` 注入 props 并在 my-skills filter bar 渲染（无 tags 时不渲染）。
+- [x] `SkillManagerLibraryHeader` 注入 props 并在 my-skills filter bar 渲染：仅当候选 tags 与 active tags **都为空**时不渲染；候选为空但仍存在 active tags 时渲染控件以支持清除筛选。
 - [x] `SkillManager` 绑定动作、派生候选并传 props。
 - [x] i18n：`skill.*` 6 个新键覆盖 7 语言；parity 测试绿。
 - [x] desktop `pnpm typecheck`（`tsc --noEmit`）→ exit 0。
@@ -38,3 +38,9 @@
 - [x] 已选标签 `<ul>` 有界滚动（`max-h-40 overflow-y-auto`）。
 - [x] 两条新增回归：stale active 可清、40 tags 列表滚动。
 - [x] round-3 定向验证（vitest 26、typecheck、eslint）通过；代码 commit `dc246512` 已推送到 PR #213。（状态同步见 implementation.md）
+
+## CodeRabbit round 4（latest review on stale-fixture）
+
+- [x] stale-selection 回归改为显式 `original_tags: ["general"]` 的 `registryOnlySkill`，确保 user-tag 候选确实为空，仅由 active tags 驱动控件保留（避免依赖 `registry_slug` 隐性推导）。
+- [x] tasks 第 10 行渲染条件措辞已改为“候选与 active 均空才不渲染；候选空但有 active 仍渲染”。
+- [ ] 全量 `pnpm test:run` 最终汇总（仍在宽松后台运行；完成后把实际 pass/fail 数字、lint 错误数、typecheck 错误数写入 implementation.md 并打勾本项）。

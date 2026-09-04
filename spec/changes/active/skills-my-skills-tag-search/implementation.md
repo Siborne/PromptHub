@@ -24,6 +24,7 @@ New/changed files：
   3. `0a3a0e67` fix(skill): align a11y, docs status and tests in PR #213 (round 2)（移除失配 `aria-haspopup` / 测试去掉 `as any` / 统一文档状态）。
   4. `dc246512` fix(skill): align My Skills tag filter with sidebar on owner review (round 3)（幽灵筛选可清除 / 候选与侧栏同源 user-tags / 已选列表有界滚动 / spec 验收同步）。
 - PR：`legeling/PromptHub#213`（base `main`，head `Siborne:feat/my-skills-tag-search`）状态 `open`，head 已随上述 commits 更新。
+- Pending（本轮待推送，未列于上方 commits）：codeRabbit round-4 的 `registryOnlySkill` 测试 fixture 修正 + 对应 tasks/implementation round-4 记录；全量 `pnpm test:run` 仍在宽松后台运行，结果待 `EXIT=` 出现后补录。
 
 ## Design decisions
 
@@ -87,3 +88,10 @@ Follow-up verification（同前执行方式）：
 - `vitest skill-tag-search-filter + skill-i18n-manager + skill-tag-options`：26 passed（含两条新增回归）。
 - `pnpm typecheck`：exit 0；`eslint`（改动文件）：RC 0。
 - 对应代码 commit：`dc246512`（详见上方 Status）。
+
+## CodeRabbit round 4（stale-fixture 显式化）
+
+- 将 stale-selection 回归改为显式 `original_tags: ["general"]` 的 `registryOnlySkill`（经 `Skill` 对象的 `original_tags` 字段），使 user-tag 候选确定为空——不再依赖 `baseSkill.registry_slug` 的隐性推导——从而只验证“存在 active tags 时控件仍保留/可清除”。
+- tasks 第 10 行渲染条件措辞同步为“候选与 active 均空才不渲染；候选空但有 active 仍渲染”。
+- 全量套件仍在宽松后台运行；**尚未取到 `EXIT=` 汇总**，等它跑完把实际 pass/fail 数字、lint 错误数、typecheck 错误数补录到本文件与 tasks 并打勾。
+- Round-4 验证（当前）：`vitest skill-i18n-manager.test.tsx` → 16 passed（含修正后的 stale 用例）；typecheck/eslint 复跑随全量结束一并确认。
