@@ -43,18 +43,32 @@ const UPDATE_CURRENT_VERSION = `
   UPDATE prompts SET current_version = ? WHERE id = ?
 `;
 
+const DELETE_NON_POSITIVE_VERSIONS = `
+  DELETE FROM prompt_versions WHERE prompt_id = ? AND version <= 0
+`;
+
+const SELECT_MAX_POSITIVE_VERSION = `
+  SELECT MAX(version) AS maxVersion
+  FROM prompt_versions
+  WHERE prompt_id = ? AND version > 0
+`;
+
 /**
- * Make every prompt version set consistent with the canonical graph
- * invariant `max(prompt_versions.version) == prompts.current_version`:
+ * Make every prompt version set consistent with the canonical graph invariant
+ * `max(prompt_versions.version) == prompts.current_version` using only positive
+ * version numbers:
  *
- * - when the prompt has version rows but `current_version` is missing,
- *   stale, or ahead, converge it to the stored maximum version number;
- * - when the prompt has content but no version rows at all, create a v1
- *   snapshot from the current prompt row and set `current_version = 1`.
+ * - legacy rows numbered `<= 0` are removed first (canonical schema only admits
+ *   positive versions, so a v0-only chain can never be valid);
+ * - when the prompt has positive version rows but `current_version` is missing,
+ *   stale, or ahead, converge it to the maximum stored version number;
+ * - when the prompt has no positive version rows, create a v1 snapshot from the
+ *   current prompt row and set `current_version = 1`.
  *
  * The repair runs inside a single transaction. Healthy prompts are left
  * untouched, and a second pass is a no-op. Prompt content and metadata other
- * than the version pointer are never modified.
+ * than the version pointer and non-positive legacy version rows are never
+ * modified.
  */
 export function repairPromptVersionConsistency(
   database: Database,
@@ -67,14 +81,18 @@ export function repairPromptVersionConsistency(
       .prepare(SELECT_PROMPT_VERSION_SOURCES)
       .all() as PromptVersionSourceRow[];
     for (const prompt of prompts) {
+      // Canonical prompt resources only accept positive version numbers. Any
+      // legacy `version <= 0` row cannot be represented and is removed first.
+      database
+        .prepare(DELETE_NON_POSITIVE_VERSIONS)
+        .run(prompt.id);
+
       const maxRow = database
-        .prepare(
-          "SELECT MAX(version) AS maxVersion FROM prompt_versions WHERE prompt_id = ?",
-        )
+        .prepare(SELECT_MAX_POSITIVE_VERSION)
         .get(prompt.id) as { maxVersion: number | null };
       const maxVersion = maxRow.maxVersion;
       if (maxVersion === null) {
-        // No version rows: snapshot the current prompt content as version 1.
+        // No positive version rows: snapshot the current prompt content as v1.
         database
           .prepare(INSERT_INITIAL_VERSION)
           .run(

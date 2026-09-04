@@ -208,17 +208,40 @@ function healPromptVersionPointers(sourceDatabasePath: string): void {
  * 搬迁到 recovery 目录再删除 prompt，避免每次 reconcile 时的 inventory mismatch；
  * 仅当该子路径确实存在时才动作，绝不改动、删除快照内容。
  */
+/**
+ * Returns true when any already-existing segment under `root` is a symbolic
+ * link or a non-directory. Missing trailing segments are safe (they will be
+ * created as real directories). Used to guarantee relocation never moves a
+ * path that resolves outside the canonical root through a symlink ancestor.
+ */
+function hasUnsafeDirectoryChain(root: string, segments: string[]): boolean {
+  let current = root;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) return true;
+  }
+  return false;
+}
+
 export function relocateTrashedPromptWorkspaceFromCanonicalRoot(
   dataRoot: string,
   activeRoot: string,
 ): void {
-  const leftoverRoot = path.join(
-    dataRoot,
-    ".trash",
-    "cache",
-    "prompt-workspace",
-  );
+  const leftoverSegments = [".trash", "cache", "prompt-workspace"];
+  const leftoverRoot = path.join(dataRoot, ...leftoverSegments);
   try {
+    if (hasUnsafeDirectoryChain(dataRoot, leftoverSegments)) {
+      // A symlinked or non-directory ancestor means leftoverRoot may resolve
+      // outside the canonical root. Never relocate such a path.
+      return;
+    }
     let sourceStat: fs.Stats;
     try {
       sourceStat = fs.lstatSync(leftoverRoot);
@@ -229,11 +252,11 @@ export function relocateTrashedPromptWorkspaceFromCanonicalRoot(
     if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
       return; // not the well-known snapshot dir; leave other shapes untouched
     }
-    const destRoot = path.join(
-      activeRoot,
-      "recovery",
-      "canonical-prompt-trash",
-    );
+    const destSegments = ["recovery", "canonical-prompt-trash"];
+    if (hasUnsafeDirectoryChain(activeRoot, destSegments)) {
+      return;
+    }
+    const destRoot = path.join(activeRoot, ...destSegments);
     fs.mkdirSync(destRoot, { recursive: true, mode: 0o700 });
     const dest = path.join(
       destRoot,
@@ -256,6 +279,16 @@ export async function ensureCanonicalStorageAuthorityOnStartup(
 ): Promise<CanonicalStorageAuthorityStartupResult> {
   const activeRoot = path.resolve(options.activeRoot);
   if (readCanonicalStorageAuthority(activeRoot)) {
+    // Existing authority: relocate any leftover prompt-workspace snapshot found
+    // under the canonical root. Pure filesystem relocation is safe here; do NOT
+    // open the operational SQLite (an app-held WAL lock must not block startup).
+    const sourceDatabasePath = path.resolve(options.sourceDatabasePath);
+    if (assertRegularDatabaseOrMissing(sourceDatabasePath)) {
+      relocateTrashedPromptWorkspaceFromCanonicalRoot(
+        path.dirname(sourceDatabasePath),
+        activeRoot,
+      );
+    }
     return ensureExistingCanonicalAuthority(options, activeRoot);
   }
   if (!readRendererPersistenceMigrationMarker(activeRoot)) {

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   DatabaseAdapter,
+  PromptDB,
   SCHEMA_TABLES,
   repairPromptVersionConsistency,
 } from "@prompthub/db";
@@ -139,5 +140,98 @@ describe("repairPromptVersionConsistency", () => {
     expect(second.repairedPromptIds).toEqual([]);
     const row = allPrompts().find((p) => p.id === "repeat");
     expect(row?.current_version).toBe(1);
+  });
+
+  it("treats a v0-only chain as invalid and promotes the prompt to v1", () => {
+    insertPrompt({ id: "zero-only", current_version: 0 });
+    insertVersion("zero-only", 0);
+
+    const result = repairPromptVersionConsistency(database);
+
+    expect(result.createdInitialVersionPromptIds).toContain("zero-only");
+    const row = database
+      .prepare("SELECT current_version FROM prompts WHERE id = ?")
+      .get("zero-only") as { current_version: number };
+    expect(row.current_version).toBe(1);
+    const versions = database
+      .prepare("SELECT version FROM prompt_versions WHERE prompt_id = ?")
+      .all("zero-only") as { version: number }[];
+    expect(versions.map((v) => v.version)).toEqual([1]);
+  });
+});
+
+describe("PromptDB tag mutations keep version rows in sync", () => {
+  let tempDir2: string;
+  let database2: DatabaseAdapter.Database;
+  let db2: PromptDB;
+
+  function addPromptRaw(id: string, tags: string, currentVersion = 1): void {
+    database2
+      .prepare(
+        `INSERT INTO prompts (id, title, user_prompt, tags, current_version, created_at, updated_at)
+         VALUES (?, 't', 'c', ?, ?, ?, ?)`,
+      )
+      .run(id, tags, currentVersion, Date.now(), Date.now());
+  }
+
+  beforeEach(() => {
+    tempDir2 = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-metaver-"));
+    database2 = new DatabaseAdapter(path.join(tempDir2, "m.db"));
+    database2.exec(SCHEMA_TABLES);
+    db2 = new PromptDB(database2);
+  });
+
+  afterEach(() => {
+    database2.close();
+    fs.rmSync(tempDir2, { recursive: true, force: true });
+  });
+
+  function versionNumbers(promptId: string): number[] {
+    return (
+      database2
+        .prepare("SELECT version FROM prompt_versions WHERE prompt_id = ?")
+        .all(promptId) as { version: number }[]
+    ).map((row) => row.version);
+  }
+
+  it("renameTag records a matching positive version row before advancing", () => {
+    addPromptRaw("p-rn", JSON.stringify(["old"]), 1);
+    database2
+      .prepare(
+        `INSERT INTO prompt_versions (id, prompt_id, version, user_prompt, variables, created_at)
+         VALUES (?, 'p-rn', 1, 'c', '[]', ?)`,
+      )
+      .run("v1", Date.now());
+
+    db2.renameTag("old", "new");
+
+    const current = database2
+      .prepare("SELECT current_version FROM prompts WHERE id = 'p-rn'")
+      .get() as { current_version: number };
+    expect(current.current_version).toBe(2);
+    expect(versionNumbers("p-rn")).toContain(2);
+
+    const tagsRow = database2
+      .prepare("SELECT tags FROM prompts WHERE id = 'p-rn'")
+      .get() as { tags: string };
+    expect(JSON.parse(tagsRow.tags)).toEqual(["new"]);
+  });
+
+  it("deleteTag records a matching positive version row before advancing", () => {
+    addPromptRaw("p-del", JSON.stringify(["gone", "keep"]), 1);
+    database2
+      .prepare(
+        `INSERT INTO prompt_versions (id, prompt_id, version, user_prompt, variables, created_at)
+         VALUES (?, 'p-del', 1, 'c', '[]', ?)`,
+      )
+      .run("v1", Date.now());
+
+    db2.deleteTag("gone");
+
+    const current = database2
+      .prepare("SELECT current_version FROM prompts WHERE id = 'p-del'")
+      .get() as { current_version: number };
+    expect(current.current_version).toBe(2);
+    expect(versionNumbers("p-del")).toContain(2);
   });
 });
